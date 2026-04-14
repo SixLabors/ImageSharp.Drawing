@@ -507,7 +507,11 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
         Instance* instance = null;
         Surface* surface = null;
         Adapter* adapter = null;
-        Device* device = null;
+        WebGPUInstanceHandle? instanceHandle = null;
+        WebGPUSurfaceHandle? surfaceHandle = null;
+        WebGPUAdapterHandle? adapterHandle = null;
+        WebGPUDeviceHandle? deviceHandle = null;
+        WebGPUQueueHandle? queueHandle = null;
         WebGPUDeviceContext<TPixel>? graphics = null;
 
         try
@@ -519,23 +523,26 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
                 throw new InvalidOperationException("WebGPU instance creation failed.");
             }
 
+            instanceHandle = new WebGPUInstanceHandle(api, (nint)instance, ownsHandle: true);
             surface = this.window.CreateWebGPUSurface(api, instance);
             if (surface is null)
             {
                 throw new InvalidOperationException("WebGPU surface creation failed.");
             }
 
+            surfaceHandle = new WebGPUSurfaceHandle(api, (nint)surface, ownsHandle: true);
             if (!TryRequestAdapter(api, instance, surface, out adapter, out string? adapterError))
             {
                 throw new InvalidOperationException(adapterError);
             }
 
+            adapterHandle = new WebGPUAdapterHandle(api, (nint)adapter, ownsHandle: true);
             if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out _, out FeatureName requiredFeature))
             {
                 throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' is not supported by the WebGPU backend.");
             }
 
-            if (!TryRequestDevice(api, adapter, requiredFeature, out device, out string? deviceError))
+            if (!TryRequestDevice(api, adapter, requiredFeature, out Device* device, out string? deviceError))
             {
                 throw new InvalidOperationException(deviceError);
             }
@@ -546,30 +553,33 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
                 throw new InvalidOperationException("WebGPU queue acquisition failed.");
             }
 
-            graphics = new WebGPUDeviceContext<TPixel>(this.Configuration, (nint)device, (nint)queue);
-            WindowResources resources = new(api, instance, surface, adapter, device, graphics);
+            deviceHandle = new WebGPUDeviceHandle(api, (nint)device, ownsHandle: true);
+            queueHandle = new WebGPUQueueHandle(api, (nint)queue, ownsHandle: true);
+            graphics = new WebGPUDeviceContext<TPixel>(this.Configuration, deviceHandle, queueHandle);
+            WindowResources resources = new(api, instanceHandle, surfaceHandle, adapterHandle, deviceHandle, queueHandle, graphics);
             this.ConfigureSurface(resources);
             return resources;
         }
         catch
         {
             graphics?.Dispose();
-            if (device is not null)
-            {
-                api.DeviceRelease(device);
-            }
+            queueHandle?.Dispose();
+            deviceHandle?.Dispose();
+            adapterHandle?.Dispose();
+            surfaceHandle?.Dispose();
+            instanceHandle?.Dispose();
 
-            if (adapter is not null)
+            if (adapterHandle is null && adapter is not null)
             {
                 api.AdapterRelease(adapter);
             }
 
-            if (surface is not null)
+            if (surfaceHandle is null && surface is not null)
             {
                 api.SurfaceRelease(surface);
             }
 
-            if (instance is not null)
+            if (instanceHandle is null && instance is not null)
             {
                 api.InstanceRelease(instance);
             }
@@ -605,7 +615,10 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
         }
 
         SurfaceTexture surfaceTexture = default;
-        resources.Api.SurfaceGetCurrentTexture(resources.Surface, &surfaceTexture);
+        using (WebGPUHandle.HandleReference surfaceReference = resources.SurfaceHandle.AcquireReference())
+        {
+            resources.Api.SurfaceGetCurrentTexture((Surface*)surfaceReference.Handle, &surfaceTexture);
+        }
 
         switch (surfaceTexture.Status)
         {
@@ -637,11 +650,15 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
             throw new InvalidOperationException("WebGPU texture view creation failed.");
         }
 
+        WebGPUTextureHandle? textureHandle = null;
+        WebGPUTextureViewHandle? textureViewHandle = null;
         try
         {
+            textureHandle = new WebGPUTextureHandle(resources.Api, (nint)surfaceTexture.Texture, ownsHandle: true);
+            textureViewHandle = new WebGPUTextureViewHandle(resources.Api, (nint)textureView, ownsHandle: true);
             DrawingCanvas<TPixel> canvas = resources.Graphics.CreateCanvas(
-                (nint)surfaceTexture.Texture,
-                (nint)textureView,
+                textureHandle,
+                textureViewHandle,
                 this.Format,
                 framebufferSize.Width,
                 framebufferSize.Height,
@@ -649,9 +666,9 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
 
             frame = new WebGPUWindowFrame<TPixel>(
                 resources.Api,
-                resources.Surface,
-                surfaceTexture.Texture,
-                textureView,
+                resources.SurfaceHandle,
+                textureHandle,
+                textureViewHandle,
                 canvas,
                 new Rectangle(0, 0, framebufferSize.Width, framebufferSize.Height),
                 this.ClientSize,
@@ -663,8 +680,19 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
         }
         catch
         {
-            resources.Api.TextureViewRelease(textureView);
-            resources.Api.TextureRelease(surfaceTexture.Texture);
+            textureViewHandle?.Dispose();
+            textureHandle?.Dispose();
+
+            if (textureViewHandle is null)
+            {
+                resources.Api.TextureViewRelease(textureView);
+            }
+
+            if (textureHandle is null)
+            {
+                resources.Api.TextureRelease(surfaceTexture.Texture);
+            }
+
             throw;
         }
     }
@@ -682,12 +710,14 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
             Usage = TextureUsage.RenderAttachment | TextureUsage.CopyDst | TextureUsage.TextureBinding,
             Format = WebGPUTextureFormatMapper.ToSilk(this.Format),
             PresentMode = ToSilk(this.presentMode),
-            Device = resources.Device,
             Width = (uint)framebufferSize.Width,
             Height = (uint)framebufferSize.Height,
         };
 
-        resources.Api.SurfaceConfigure(resources.Surface, ref surfaceConfiguration);
+        using WebGPUHandle.HandleReference surfaceReference = resources.SurfaceHandle.AcquireReference();
+        using WebGPUHandle.HandleReference deviceReference = resources.DeviceHandle.AcquireReference();
+        surfaceConfiguration.Device = (Device*)deviceReference.Handle;
+        resources.Api.SurfaceConfigure((Surface*)surfaceReference.Handle, ref surfaceConfiguration);
     }
 
     private void OnFramebufferResize(Vector2D<int> size)
@@ -849,39 +879,44 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
     {
         public WindowResources(
             WebGPU api,
-            Instance* instance,
-            Surface* surface,
-            Adapter* adapter,
-            Device* device,
+            WebGPUInstanceHandle instanceHandle,
+            WebGPUSurfaceHandle surfaceHandle,
+            WebGPUAdapterHandle adapterHandle,
+            WebGPUDeviceHandle deviceHandle,
+            WebGPUQueueHandle queueHandle,
             WebGPUDeviceContext<TPixel> graphics)
         {
             this.Api = api;
-            this.Instance = instance;
-            this.Surface = surface;
-            this.Adapter = adapter;
-            this.Device = device;
+            this.InstanceHandle = instanceHandle;
+            this.SurfaceHandle = surfaceHandle;
+            this.AdapterHandle = adapterHandle;
+            this.DeviceHandle = deviceHandle;
+            this.QueueHandle = queueHandle;
             this.Graphics = graphics;
         }
 
         public WebGPU Api { get; }
 
-        public Instance* Instance { get; }
+        public WebGPUInstanceHandle InstanceHandle { get; }
 
-        public Surface* Surface { get; }
+        public WebGPUSurfaceHandle SurfaceHandle { get; }
 
-        public Adapter* Adapter { get; }
+        public WebGPUAdapterHandle AdapterHandle { get; }
 
-        public Device* Device { get; }
+        public WebGPUDeviceHandle DeviceHandle { get; }
+
+        public WebGPUQueueHandle QueueHandle { get; }
 
         public WebGPUDeviceContext<TPixel> Graphics { get; }
 
         public void Dispose()
         {
             this.Graphics.Dispose();
-            this.Api.DeviceRelease(this.Device);
-            this.Api.AdapterRelease(this.Adapter);
-            this.Api.SurfaceRelease(this.Surface);
-            this.Api.InstanceRelease(this.Instance);
+            this.QueueHandle.Dispose();
+            this.DeviceHandle.Dispose();
+            this.AdapterHandle.Dispose();
+            this.SurfaceHandle.Dispose();
+            this.InstanceHandle.Dispose();
         }
     }
 

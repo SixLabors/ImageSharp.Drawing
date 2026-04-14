@@ -22,8 +22,8 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     private WebGPURenderTarget(
         WebGPUDeviceContext<TPixel> graphics,
         bool ownsGraphics,
-        nint textureHandle,
-        nint textureViewHandle,
+        WebGPUTextureHandle textureHandle,
+        WebGPUTextureViewHandle textureViewHandle,
         NativeSurface surface,
         WebGPUTextureFormatId format,
         Rectangle bounds)
@@ -72,14 +72,14 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Gets the owned opaque <c>WGPUTexture*</c> handle.
+    /// Gets the owned wrapped texture handle behind this render target.
     /// </summary>
-    public nint TextureHandle { get; private set; }
+    internal WebGPUTextureHandle TextureHandle { get; }
 
     /// <summary>
-    /// Gets the owned opaque <c>WGPUTextureView*</c> handle.
+    /// Gets the owned wrapped texture-view handle bound when this render target is used as a native surface.
     /// </summary>
-    public nint TextureViewHandle { get; private set; }
+    internal WebGPUTextureViewHandle TextureViewHandle { get; }
 
     /// <summary>
     /// Gets the graphics device context used by this target.
@@ -129,13 +129,19 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
                     width,
                     height,
                     out NativeSurface surface,
-                    out nint textureHandle,
-                    out nint textureViewHandle,
+                    out WebGPUTextureHandle? textureHandle,
+                    out WebGPUTextureViewHandle? textureViewHandle,
                     out WebGPUTextureFormatId format,
                     out string allocationError))
             {
                 graphics.Dispose();
                 throw new InvalidOperationException(allocationError);
+            }
+
+            if (textureHandle is null || textureViewHandle is null)
+            {
+                graphics.Dispose();
+                throw new InvalidOperationException("WebGPU render-target allocation succeeded without returning both owned texture handles.");
             }
 
             return new OwnedTarget(
@@ -240,7 +246,7 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Releases the owned texture and texture view.
+    /// Releases the owned texture view and texture.
     /// </summary>
     public void Dispose()
     {
@@ -249,9 +255,9 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
             return;
         }
 
-        WebGPUTextureTransfer.Release(this.TextureHandle, this.TextureViewHandle);
-        this.TextureHandle = 0;
-        this.TextureViewHandle = 0;
+        this.TextureViewHandle.Dispose();
+        this.TextureHandle.Dispose();
+
         if (this.ownsGraphics)
         {
             this.Graphics.Dispose();
@@ -286,12 +292,17 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
                 width,
                 height,
                 out NativeSurface surface,
-                out nint textureHandle,
-                out nint textureViewHandle,
+                out WebGPUTextureHandle? textureHandle,
+                out WebGPUTextureViewHandle? textureViewHandle,
                 out WebGPUTextureFormatId format,
                 out string error))
         {
             throw new InvalidOperationException(error);
+        }
+
+        if (textureHandle is null || textureViewHandle is null)
+        {
+            throw new InvalidOperationException("WebGPU render-target allocation succeeded without returning both owned texture handles.");
         }
 
         return new WebGPURenderTarget<TPixel>(
@@ -314,8 +325,8 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     {
         public OwnedTarget(
             WebGPUDeviceContext<TPixel> graphics,
-            nint textureHandle,
-            nint textureViewHandle,
+            WebGPUTextureHandle textureHandle,
+            WebGPUTextureViewHandle textureViewHandle,
             NativeSurface surface,
             WebGPUTextureFormatId format,
             Rectangle bounds)
@@ -330,9 +341,9 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
 
         public WebGPUDeviceContext<TPixel> Graphics { get; }
 
-        public nint TextureHandle { get; }
+        public WebGPUTextureHandle TextureHandle { get; }
 
-        public nint TextureViewHandle { get; }
+        public WebGPUTextureViewHandle TextureViewHandle { get; }
 
         public NativeSurface Surface { get; }
 

@@ -24,12 +24,14 @@ public class WebGPUDeviceContextTests
         using WebGPUDeviceContext<Rgba32> drawing = new();
         using WebGPURenderTarget<Rgba32> target = drawing.CreateRenderTarget(8, 8);
         using WebGPUDeviceContext<Bgra32> mismatched = new();
+        using WebGPUHandle.HandleReference textureReference = target.TextureHandle.AcquireReference();
+        using WebGPUHandle.HandleReference textureViewReference = target.TextureViewHandle.AcquireReference();
 
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => drawing.CreateFrame(0, target.TextureViewHandle, target.Format, 8, 8));
+            () => drawing.CreateFrame(0, textureViewReference.Handle, target.Format, 8, 8));
 
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => drawing.CreateFrame(target.TextureHandle, 0, target.Format, 8, 8));
+            () => drawing.CreateFrame(textureReference.Handle, 0, target.Format, 8, 8));
 
         Assert.Throws<ArgumentException>(
             () => mismatched.CreateFrame(target.TextureHandle, target.TextureViewHandle, target.Format, 8, 8));
@@ -87,11 +89,11 @@ public class WebGPUDeviceContextTests
         using WebGPUDeviceContext<Rgba32> drawing = new();
         using WebGPURenderTarget<Rgba32> target = drawing.CreateRenderTarget(12, 10);
 
-        nint textureHandle = target.TextureHandle;
+        WebGPUTextureHandle textureHandle = target.TextureHandle;
         drawing.Dispose();
 
         Assert.True(
-            WebGPUTextureTransfer.TryReadTexture(textureHandle, 12, 10, out Image<Rgba32>? image, out string readError),
+            WebGPUTextureTransfer.TryReadTexture(textureHandle, 12, 10, out Image<Rgba32> image, out string readError),
             readError);
 
         image?.Dispose();

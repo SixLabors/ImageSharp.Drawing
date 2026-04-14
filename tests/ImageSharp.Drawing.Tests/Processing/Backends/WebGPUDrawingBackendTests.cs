@@ -556,8 +556,8 @@ public partial class WebGPUDrawingBackendTests
                 defaultImage.Width,
                 defaultImage.Height,
                 out NativeSurface nativeSurface,
-                out nint textureHandle,
-                out nint textureViewHandle,
+                out WebGPUTextureHandle textureHandle,
+                out WebGPUTextureViewHandle textureViewHandle,
                 out string createError),
             createError);
 
@@ -665,7 +665,7 @@ public partial class WebGPUDrawingBackendTests
                 innerHeight / 2F);
     }
 
-    private static Brush CreateClipReduceLayerBrush(int layerIndex)
+    private static SolidBrush CreateClipReduceLayerBrush(int layerIndex)
         => Brushes.Solid((layerIndex & 3) switch
         {
             0 => Color.Red.WithAlpha(0.55F),
@@ -730,8 +730,8 @@ public partial class WebGPUDrawingBackendTests
                 width,
                 height,
                 out NativeSurface nativeSurface,
-                out nint textureHandle,
-                out nint textureViewHandle,
+                out WebGPUTextureHandle textureHandle,
+                out WebGPUTextureViewHandle textureViewHandle,
                 out string createError),
             createError);
 
@@ -1324,8 +1324,8 @@ public partial class WebGPUDrawingBackendTests
                 defaultImage.Width,
                 defaultImage.Height,
                 out NativeSurface nativeSurface,
-                out nint textureHandle,
-                out nint textureViewHandle,
+                out WebGPUTextureHandle textureHandle,
+                out WebGPUTextureViewHandle textureViewHandle,
                 out string createError),
             createError);
 

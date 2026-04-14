@@ -257,7 +257,7 @@ internal static class SvgBenchmarkHelper
         SKSurface skSurface,
         Bitmap sdBitmap,
         Image<Rgba32> isImage,
-        nint webGpuTextureHandle)
+        WebGPUTextureHandle webGpuTextureHandle)
     {
         string outDir = System.IO.Path.Combine(AppContext.BaseDirectory, $"{name}-verify");
         Directory.CreateDirectory(outDir);

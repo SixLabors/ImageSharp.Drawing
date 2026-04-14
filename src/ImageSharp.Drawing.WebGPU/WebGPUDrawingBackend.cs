@@ -236,8 +236,11 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         Rectangle? compositionBounds)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        _ = target.TryGetNativeSurface(out NativeSurface? nativeSurface);
-        _ = nativeSurface!.TryGetCapability(out WebGPUSurfaceCapability? capability);
+        if (!target.TryGetNativeSurface(out NativeSurface? nativeSurface) ||
+            !nativeSurface.TryGetCapability(out WebGPUSurfaceCapability? capability))
+        {
+            return;
+        }
 
         Rectangle targetBounds = target.Bounds;
         using Buffer2D<TPixel> stagingBuffer =
@@ -258,6 +261,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         this.fallbackBackend.FlushCompositions(configuration, stagingFrame, compositionScene);
 
         WebGPU api = WebGPURuntime.GetApi();
+        using WebGPUHandle.HandleReference queueReference = capability.QueueHandle.AcquireReference();
+
         Buffer2DRegion<TPixel> uploadRegion = compositionBounds is Rectangle cb && cb.Width > 0 && cb.Height > 0
             ? stagingRegion.GetSubRegion(cb)
             : stagingRegion;
@@ -265,10 +270,11 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         uint destX = compositionBounds is Rectangle cbx ? (uint)cbx.X : 0;
         uint destY = compositionBounds is Rectangle cby ? (uint)cby.Y : 0;
 
+        using WebGPUHandle.HandleReference textureReference = capability.TargetTextureHandle.AcquireReference();
         WebGPUFlushContext.UploadTextureFromRegion(
             api,
-            (Queue*)capability!.Queue,
-            (Texture*)capability.TargetTexture,
+            (Queue*)queueReference.Handle,
+            (Texture*)textureReference.Handle,
             uploadRegion,
             configuration.MemoryAllocator,
             destX,

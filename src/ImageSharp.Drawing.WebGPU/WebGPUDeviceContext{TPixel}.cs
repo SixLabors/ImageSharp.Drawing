@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Silk.NET.WebGPU;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -14,8 +13,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     where TPixel : unmanaged, IPixel<TPixel>
 {
-    private readonly nint deviceHandle;
-    private readonly nint queueHandle;
     private bool isDisposed;
 
     /// <summary>
@@ -30,7 +27,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     /// Initializes a new instance of the <see cref="WebGPUDeviceContext{TPixel}"/> class over the shared process-level WebGPU device.
     /// </summary>
     /// <param name="configuration">The configuration instance to bind to the created backend.</param>
-    public unsafe WebGPUDeviceContext(Configuration configuration)
+    public WebGPUDeviceContext(Configuration configuration)
     {
         Guard.NotNull(configuration, nameof(configuration));
         EnsurePixelTypeSupported();
@@ -39,13 +36,15 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
 
         try
         {
-            if (!WebGPURuntime.TryGetOrCreateDevice(out Device* device, out Queue* queue, out string? error))
+            if (!WebGPURuntime.TryGetOrCreateDevice(out WebGPUDeviceHandle? deviceHandle, out WebGPUQueueHandle? queueHandle, out string? error)
+                || deviceHandle is null
+                || queueHandle is null)
             {
                 throw new InvalidOperationException(error);
             }
 
-            this.deviceHandle = (nint)device;
-            this.queueHandle = (nint)queue;
+            this.DeviceHandle = deviceHandle;
+            this.QueueHandle = queueHandle;
             this.Configuration = configuration;
         }
         catch
@@ -58,8 +57,12 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUDeviceContext{TPixel}"/> class over externally-owned device and queue handles.
     /// </summary>
-    /// <param name="deviceHandle">The opaque <c>WGPUDevice*</c> handle.</param>
-    /// <param name="queueHandle">The opaque <c>WGPUQueue*</c> handle.</param>
+    /// <param name="deviceHandle">The external WebGPU device handle.</param>
+    /// <param name="queueHandle">The external WebGPU queue handle.</param>
+    /// <remarks>
+    /// These handles must originate from the same process WebGPU runtime used by ImageSharp.Drawing.WebGPU.
+    /// The context does not take ownership of them.
+    /// </remarks>
     public WebGPUDeviceContext(nint deviceHandle, nint queueHandle)
         : this(Configuration.Default, deviceHandle, queueHandle)
     {
@@ -69,25 +72,52 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     /// Initializes a new instance of the <see cref="WebGPUDeviceContext{TPixel}"/> class over externally-owned device and queue handles.
     /// </summary>
     /// <param name="configuration">The configuration instance to bind to the created backend.</param>
-    /// <param name="deviceHandle">The opaque <c>WGPUDevice*</c> handle.</param>
-    /// <param name="queueHandle">The opaque <c>WGPUQueue*</c> handle.</param>
+    /// <param name="deviceHandle">The external WebGPU device handle.</param>
+    /// <param name="queueHandle">The external WebGPU queue handle.</param>
+    /// <remarks>
+    /// These handles must originate from the same process WebGPU runtime used by ImageSharp.Drawing.WebGPU.
+    /// The context does not take ownership of them.
+    /// </remarks>
     public WebGPUDeviceContext(Configuration configuration, nint deviceHandle, nint queueHandle)
+        : this(configuration, CreateExternalDeviceHandle(deviceHandle), CreateExternalQueueHandle(queueHandle))
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUDeviceContext{TPixel}"/> class over wrapped device and queue handles using the default configuration.
+    /// </summary>
+    /// <param name="deviceHandle">The wrapped WebGPU device handle.</param>
+    /// <param name="queueHandle">The wrapped WebGPU queue handle.</param>
+    internal WebGPUDeviceContext(WebGPUDeviceHandle deviceHandle, WebGPUQueueHandle queueHandle)
+        : this(Configuration.Default, deviceHandle, queueHandle)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUDeviceContext{TPixel}"/> class over externally-owned device and queue handles.
+    /// </summary>
+    /// <param name="configuration">The configuration instance to bind to the created backend.</param>
+    /// <param name="deviceHandle">The wrapped WebGPU device handle.</param>
+    /// <param name="queueHandle">The wrapped WebGPU queue handle.</param>
+    internal WebGPUDeviceContext(Configuration configuration, WebGPUDeviceHandle deviceHandle, WebGPUQueueHandle queueHandle)
     {
         Guard.NotNull(configuration, nameof(configuration));
+        Guard.NotNull(deviceHandle, nameof(deviceHandle));
+        Guard.NotNull(queueHandle, nameof(queueHandle));
         EnsurePixelTypeSupported();
 
-        if (deviceHandle == 0)
+        if (deviceHandle.IsInvalid)
         {
             throw new ArgumentOutOfRangeException(nameof(deviceHandle), "Device handle must be non-zero.");
         }
 
-        if (queueHandle == 0)
+        if (queueHandle.IsInvalid)
         {
             throw new ArgumentOutOfRangeException(nameof(queueHandle), "Queue handle must be non-zero.");
         }
 
-        this.deviceHandle = deviceHandle;
-        this.queueHandle = queueHandle;
+        this.DeviceHandle = deviceHandle;
+        this.QueueHandle = queueHandle;
         this.Backend = new WebGPUDrawingBackend();
         this.Configuration = configuration;
     }
@@ -103,28 +133,14 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     public WebGPUDrawingBackend Backend { get; }
 
     /// <summary>
-    /// Gets the opaque <c>WGPUDevice*</c> handle used by this context.
+    /// Gets the wrapped WebGPU device handle used by frames, canvases, and render-target allocation created from this context.
     /// </summary>
-    public nint DeviceHandle
-    {
-        get
-        {
-            this.ThrowIfDisposed();
-            return this.deviceHandle;
-        }
-    }
+    internal WebGPUDeviceHandle DeviceHandle { get; }
 
     /// <summary>
-    /// Gets the opaque <c>WGPUQueue*</c> handle used by this context.
+    /// Gets the wrapped WebGPU queue handle paired with <see cref="DeviceHandle"/> for uploads, readback, and command submission.
     /// </summary>
-    public nint QueueHandle
-    {
-        get
-        {
-            this.ThrowIfDisposed();
-            return this.queueHandle;
-        }
-    }
+    internal WebGPUQueueHandle QueueHandle { get; }
 
     /// <summary>
     /// Creates an owned offscreen WebGPU render target for this context.
@@ -135,16 +151,8 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     public WebGPURenderTarget<TPixel> CreateRenderTarget(int width, int height)
     {
         this.ThrowIfDisposed();
-
-        if (width <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(width), "Width must be greater than zero.");
-        }
-
-        if (height <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(height), "Height must be greater than zero.");
-        }
+        Guard.MustBeGreaterThan(width, 0, nameof(width));
+        Guard.MustBeGreaterThan(height, 0, nameof(height));
 
         return WebGPURenderTarget<TPixel>.CreateFromContext(this, width, height);
     }
@@ -152,8 +160,8 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     /// <summary>
     /// Creates a native-only frame over an externally-owned WebGPU texture and view.
     /// </summary>
-    /// <param name="textureHandle">The opaque <c>WGPUTexture*</c> handle.</param>
-    /// <param name="textureViewHandle">The opaque <c>WGPUTextureView*</c> handle.</param>
+    /// <param name="textureHandle">The external WebGPU texture handle.</param>
+    /// <param name="textureViewHandle">The external WebGPU texture-view handle.</param>
     /// <param name="format">The texture format identifier.</param>
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
@@ -164,13 +172,13 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         WebGPUTextureFormatId format,
         int width,
         int height)
-        => new(CreateBounds(width, height), this.CreateSurface(textureHandle, textureViewHandle, format, width, height));
+        => this.CreateFrame(CreateExternalTextureHandle(textureHandle), CreateExternalTextureViewHandle(textureViewHandle), format, width, height);
 
     /// <summary>
     /// Creates a drawing canvas over an externally-owned WebGPU texture.
     /// </summary>
-    /// <param name="textureHandle">The opaque <c>WGPUTexture*</c> handle.</param>
-    /// <param name="textureViewHandle">The opaque <c>WGPUTextureView*</c> handle.</param>
+    /// <param name="textureHandle">The external WebGPU texture handle.</param>
+    /// <param name="textureViewHandle">The external WebGPU texture-view handle.</param>
     /// <param name="format">The texture format identifier.</param>
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
@@ -181,13 +189,13 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         WebGPUTextureFormatId format,
         int width,
         int height)
-        => new(this.Configuration, this.Backend, this.CreateFrame(textureHandle, textureViewHandle, format, width, height), new DrawingOptions());
+        => this.CreateCanvas(CreateExternalTextureHandle(textureHandle), CreateExternalTextureViewHandle(textureViewHandle), format, width, height, new DrawingOptions());
 
     /// <summary>
     /// Creates a drawing canvas over an externally-owned WebGPU texture.
     /// </summary>
-    /// <param name="textureHandle">The opaque <c>WGPUTexture*</c> handle.</param>
-    /// <param name="textureViewHandle">The opaque <c>WGPUTextureView*</c> handle.</param>
+    /// <param name="textureHandle">The external WebGPU texture handle.</param>
+    /// <param name="textureViewHandle">The external WebGPU texture-view handle.</param>
     /// <param name="format">The texture format identifier.</param>
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
@@ -200,7 +208,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         int width,
         int height,
         DrawingOptions options)
-        => new(this.Configuration, this.Backend, this.CreateFrame(textureHandle, textureViewHandle, format, width, height), options);
+        => this.CreateCanvas(CreateExternalTextureHandle(textureHandle), CreateExternalTextureViewHandle(textureViewHandle), format, width, height, options);
 
     /// <summary>
     /// Disposes the drawing backend owned by this context.
@@ -222,6 +230,45 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     internal void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
 
+    /// <summary>
+    /// Creates a native-only frame over wrapped texture handles that are already in this assembly's ownership model.
+    /// </summary>
+    /// <param name="textureHandle">The wrapped texture handle.</param>
+    /// <param name="textureViewHandle">The wrapped texture-view handle.</param>
+    /// <param name="format">The texture format identifier.</param>
+    /// <param name="width">The frame width in pixels.</param>
+    /// <param name="height">The frame height in pixels.</param>
+    /// <returns>A native-only frame over the supplied handles.</returns>
+    internal NativeCanvasFrame<TPixel> CreateFrame(
+        WebGPUTextureHandle textureHandle,
+        WebGPUTextureViewHandle textureViewHandle,
+        WebGPUTextureFormatId format,
+        int width,
+        int height)
+        => new(new Rectangle(0, 0, width, height), this.CreateSurface(textureHandle, textureViewHandle, format, width, height));
+
+    /// <summary>
+    /// Creates a drawing canvas over wrapped texture handles that are already in this assembly's ownership model.
+    /// </summary>
+    /// <param name="textureHandle">The wrapped texture handle.</param>
+    /// <param name="textureViewHandle">The wrapped texture-view handle.</param>
+    /// <param name="format">The texture format identifier.</param>
+    /// <param name="width">The frame width in pixels.</param>
+    /// <param name="height">The frame height in pixels.</param>
+    /// <param name="options">The initial drawing options.</param>
+    /// <returns>A drawing canvas targeting the supplied handles.</returns>
+    internal DrawingCanvas<TPixel> CreateCanvas(
+        WebGPUTextureHandle textureHandle,
+        WebGPUTextureViewHandle textureViewHandle,
+        WebGPUTextureFormatId format,
+        int width,
+        int height,
+        DrawingOptions options)
+        => new(this.Configuration, this.Backend, this.CreateFrame(textureHandle, textureViewHandle, format, width, height), options);
+
+    /// <summary>
+    /// Validates that <typeparamref name="TPixel"/> can be represented by the WebGPU backend.
+    /// </summary>
     private static void EnsurePixelTypeSupported()
     {
         if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out _))
@@ -230,28 +277,39 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         }
     }
 
+    /// <summary>
+    /// Creates the wrapped native surface over the supplied texture handles.
+    /// </summary>
+    /// <param name="textureHandle">The wrapped texture handle.</param>
+    /// <param name="textureViewHandle">The wrapped texture-view handle.</param>
+    /// <param name="format">The texture format identifier.</param>
+    /// <param name="width">The surface width in pixels.</param>
+    /// <param name="height">The surface height in pixels.</param>
+    /// <returns>The wrapped native surface.</returns>
     private NativeSurface CreateSurface(
-        nint textureHandle,
-        nint textureViewHandle,
+        WebGPUTextureHandle textureHandle,
+        WebGPUTextureViewHandle textureViewHandle,
         WebGPUTextureFormatId format,
         int width,
         int height)
     {
         this.ThrowIfDisposed();
+        Guard.NotNull(textureHandle, nameof(textureHandle));
+        Guard.NotNull(textureViewHandle, nameof(textureViewHandle));
 
-        if (textureHandle == 0)
+        if (textureHandle.IsInvalid)
         {
             throw new ArgumentOutOfRangeException(nameof(textureHandle), "Texture handle must be non-zero.");
         }
 
-        if (textureViewHandle == 0)
+        if (textureViewHandle.IsInvalid)
         {
             throw new ArgumentOutOfRangeException(nameof(textureViewHandle), "Texture view handle must be non-zero.");
         }
 
         return WebGPUNativeSurfaceFactory.Create<TPixel>(
-            this.deviceHandle,
-            this.queueHandle,
+            this.DeviceHandle,
+            this.QueueHandle,
             textureHandle,
             textureViewHandle,
             format,
@@ -259,18 +317,35 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
             height);
     }
 
-    private static Rectangle CreateBounds(int width, int height)
-    {
-        if (width <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(width), "Width must be greater than zero.");
-        }
+    /// <summary>
+    /// Wraps one externally-owned device handle without taking ownership.
+    /// </summary>
+    /// <param name="deviceHandle">The external device handle.</param>
+    /// <returns>The wrapped non-owning device handle.</returns>
+    private static WebGPUDeviceHandle CreateExternalDeviceHandle(nint deviceHandle)
+        => new(deviceHandle, ownsHandle: false);
 
-        if (height <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(height), "Height must be greater than zero.");
-        }
+    /// <summary>
+    /// Wraps one externally-owned queue handle without taking ownership.
+    /// </summary>
+    /// <param name="queueHandle">The external queue handle.</param>
+    /// <returns>The wrapped non-owning queue handle.</returns>
+    private static WebGPUQueueHandle CreateExternalQueueHandle(nint queueHandle)
+        => new(queueHandle, ownsHandle: false);
 
-        return new Rectangle(0, 0, width, height);
-    }
+    /// <summary>
+    /// Wraps one externally-owned texture handle without taking ownership.
+    /// </summary>
+    /// <param name="textureHandle">The external texture handle.</param>
+    /// <returns>The wrapped non-owning texture handle.</returns>
+    private static WebGPUTextureHandle CreateExternalTextureHandle(nint textureHandle)
+        => new(textureHandle, ownsHandle: false);
+
+    /// <summary>
+    /// Wraps one externally-owned texture-view handle without taking ownership.
+    /// </summary>
+    /// <param name="textureViewHandle">The external texture-view handle.</param>
+    /// <returns>The wrapped non-owning texture-view handle.</returns>
+    private static WebGPUTextureViewHandle CreateExternalTextureViewHandle(nint textureViewHandle)
+        => new(textureViewHandle, ownsHandle: false);
 }

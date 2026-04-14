@@ -45,12 +45,12 @@ internal static unsafe partial class WebGPURuntime
     /// <summary>
     /// Lazily provisioned device handle for CPU-backed frames.
     /// </summary>
-    private static nint autoDeviceHandle;
+    private static WebGPUDeviceHandle? autoDeviceHandle;
 
     /// <summary>
     /// Lazily provisioned queue handle for CPU-backed frames.
     /// </summary>
-    private static nint autoQueueHandle;
+    private static WebGPUQueueHandle? autoQueueHandle;
 
     /// <summary>
     /// Tracks whether the process-exit hook has been installed.
@@ -113,15 +113,15 @@ internal static unsafe partial class WebGPURuntime
     /// <param name="queue">Receives the queue pointer on success.</param>
     /// <param name="error">Receives an error message on failure.</param>
     /// <returns><see langword="true"/> when handles are available; otherwise <see langword="false"/>.</returns>
-    internal static bool TryGetOrCreateDevice(out Device* device, out Queue* queue, out string? error)
+    internal static bool TryGetOrCreateDevice(out WebGPUDeviceHandle? device, out WebGPUQueueHandle? queue, out string? error)
     {
         lock (Sync)
         {
             // Fast path: return cached handles.
-            if (autoDeviceHandle != 0 && autoQueueHandle != 0)
+            if (autoDeviceHandle is not null && autoQueueHandle is not null)
             {
-                device = (Device*)autoDeviceHandle;
-                queue = (Queue*)autoQueueHandle;
+                device = autoDeviceHandle;
+                queue = autoQueueHandle;
                 error = null;
                 return true;
             }
@@ -176,10 +176,10 @@ internal static unsafe partial class WebGPURuntime
                 }
 
                 // Cache for subsequent calls.
-                autoDeviceHandle = (nint)requestedDevice;
-                autoQueueHandle = (nint)requestedQueue;
-                device = requestedDevice;
-                queue = requestedQueue;
+                autoDeviceHandle = new WebGPUDeviceHandle(api, (nint)requestedDevice, ownsHandle: true);
+                autoQueueHandle = new WebGPUQueueHandle(api, (nint)requestedQueue, ownsHandle: true);
+                device = autoDeviceHandle;
+                queue = autoQueueHandle;
                 error = null;
                 initialized = true;
                 return true;
@@ -211,6 +211,18 @@ internal static unsafe partial class WebGPURuntime
         }
     }
 
+    /// <summary>
+    /// Probes whether the current process can initialize WebGPU and provision a device/queue pair.
+    /// </summary>
+    /// <param name="error">Receives the cached probe failure when WebGPU is unavailable.</param>
+    /// <returns><see langword="true"/> when basic WebGPU device acquisition succeeds; otherwise <see langword="false"/>.</returns>
+    /// <remarks>
+    /// This is the broad availability check. It answers only "can this process get far enough to open WebGPU at all?"
+    /// and deliberately stops before shader-module or pipeline creation. Callers that only need to know whether native
+    /// WebGPU interop exists should use this probe. Callers that need the staged compute backend must additionally use
+    /// <see cref="TryProbeComputePipelineSupport(out string?)"/>, because successful device acquisition does not guarantee
+    /// that compute-pipeline creation is actually usable on the active runtime/driver stack.
+    /// </remarks>
     internal static bool TryProbeAvailability(out string? error)
     {
         lock (ProbeSync)
@@ -237,6 +249,18 @@ internal static unsafe partial class WebGPURuntime
         }
     }
 
+    /// <summary>
+    /// Probes whether the staged WebGPU backend can create a trivial compute pipeline.
+    /// </summary>
+    /// <param name="error">Receives the cached probe failure when compute-pipeline support is unavailable.</param>
+    /// <returns><see langword="true"/> when the compute path is usable; otherwise <see langword="false"/>.</returns>
+    /// <remarks>
+    /// This probe is intentionally separate from <see cref="TryProbeAvailability(out string?)"/>. Some environments can
+    /// create a device successfully and still fail, or even crash natively, when the first compute pipeline is created.
+    /// The availability probe remains the cheaper prerequisite check, while this method performs the stronger staged-backend
+    /// validation and isolates the actual pipeline creation in a remote process when possible so a native failure becomes
+    /// a probe result instead of taking down the caller.
+    /// </remarks>
     internal static bool TryProbeComputePipelineSupport(out string? error)
     {
         lock (ProbeSync)
@@ -273,18 +297,26 @@ internal static unsafe partial class WebGPURuntime
         }
     }
 
+    /// <summary>
+    /// Executes one isolated compute-pipeline creation probe for <see cref="TryProbeComputePipelineSupport(out string?)"/>.
+    /// </summary>
+    /// <returns><c>0</c> when compute-pipeline creation succeeded; otherwise a non-zero exit code.</returns>
     internal static int ProbeComputePipelineSupport()
     {
         try
         {
-            if (!TryGetOrCreateDevice(out Device* device, out _, out _))
+            if (!TryGetOrCreateDevice(out WebGPUDeviceHandle? deviceHandle, out _, out _)
+                || deviceHandle is null)
             {
                 return 1;
             }
 
             WebGPU api = GetApi();
+            using WebGPUHandle.HandleReference deviceReference = deviceHandle.AcquireReference();
+            Device* device = (Device*)deviceReference.Handle;
 
             ReadOnlySpan<byte> probeShader = "@compute @workgroup_size(1) fn main() {}\0"u8;
+
             fixed (byte* shaderCodePtr = probeShader)
             {
                 ShaderModuleWGSLDescriptor wgslDescriptor = new()
@@ -384,19 +416,12 @@ internal static unsafe partial class WebGPURuntime
 
         if (api is not null)
         {
-            if (autoQueueHandle != 0)
-            {
-                api.QueueRelease((Queue*)autoQueueHandle);
-            }
-
-            if (autoDeviceHandle != 0)
-            {
-                api.DeviceRelease((Device*)autoDeviceHandle);
-            }
+            autoQueueHandle?.Dispose();
+            autoDeviceHandle?.Dispose();
         }
 
-        autoDeviceHandle = 0;
-        autoQueueHandle = 0;
+        autoDeviceHandle = null;
+        autoQueueHandle = null;
 
         lock (ProbeSync)
         {

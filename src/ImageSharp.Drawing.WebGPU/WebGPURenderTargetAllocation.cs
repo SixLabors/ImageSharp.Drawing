@@ -16,41 +16,41 @@ internal static unsafe class WebGPURenderTargetAllocation
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="api">The WebGPU API instance used to allocate native resources.</param>
-    /// <param name="deviceHandle">The opaque <c>WGPUDevice*</c> handle.</param>
-    /// <param name="queueHandle">The opaque <c>WGPUQueue*</c> handle.</param>
+    /// <param name="deviceHandle">The wrapped <c>WGPUDevice*</c> handle.</param>
+    /// <param name="queueHandle">The wrapped <c>WGPUQueue*</c> handle.</param>
     /// <param name="width">The texture width in pixels.</param>
     /// <param name="height">The texture height in pixels.</param>
     /// <param name="surface">Receives the native surface wrapping the allocated texture.</param>
-    /// <param name="textureHandle">Receives the allocated opaque <c>WGPUTexture*</c> handle.</param>
-    /// <param name="textureViewHandle">Receives the allocated opaque <c>WGPUTextureView*</c> handle.</param>
+    /// <param name="textureHandle">Receives the allocated wrapped <c>WGPUTexture*</c> handle.</param>
+    /// <param name="textureViewHandle">Receives the allocated wrapped <c>WGPUTextureView*</c> handle.</param>
     /// <param name="formatId">Receives the allocated texture format identifier.</param>
     /// <param name="error">Receives the failure reason when allocation fails.</param>
     /// <returns><see langword="true"/> when allocation succeeds; otherwise <see langword="false"/>.</returns>
     internal static bool TryCreateRenderTarget<TPixel>(
         WebGPU api,
-        nint deviceHandle,
-        nint queueHandle,
+        WebGPUDeviceHandle deviceHandle,
+        WebGPUQueueHandle queueHandle,
         int width,
         int height,
         out NativeSurface surface,
-        out nint textureHandle,
-        out nint textureViewHandle,
+        out WebGPUTextureHandle? textureHandle,
+        out WebGPUTextureViewHandle? textureViewHandle,
         out WebGPUTextureFormatId formatId,
         out string error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         surface = new NativeSurface(TPixel.GetPixelTypeInfo());
-        textureHandle = 0;
-        textureViewHandle = 0;
+        textureHandle = null;
+        textureViewHandle = null;
         formatId = default;
 
-        if (deviceHandle == 0)
+        if (deviceHandle.IsInvalid)
         {
             error = "Device handle must be non-zero.";
             return false;
         }
 
-        if (queueHandle == 0)
+        if (queueHandle.IsInvalid)
         {
             error = "Queue handle must be non-zero.";
             return false;
@@ -74,9 +74,11 @@ internal static unsafe class WebGPURenderTargetAllocation
             return false;
         }
 
-        Device* device = (Device*)deviceHandle;
+        using WebGPUHandle.HandleReference deviceReference = deviceHandle.AcquireReference();
+
+        Device* device = (Device*)deviceReference.Handle;
         if (requiredFeature != FeatureName.Undefined &&
-            !WebGPURuntime.GetOrCreateDeviceState(api, device).HasFeature(requiredFeature))
+            !WebGPURuntime.GetOrCreateDeviceState(api, deviceHandle).HasFeature(requiredFeature))
         {
             error = $"Device does not support required feature '{requiredFeature}' for pixel type '{typeof(TPixel).Name}'.";
             return false;
@@ -119,17 +121,42 @@ internal static unsafe class WebGPURenderTargetAllocation
             return false;
         }
 
-        textureHandle = (nint)texture;
-        textureViewHandle = (nint)textureView;
-        surface = WebGPUNativeSurfaceFactory.Create<TPixel>(
-            deviceHandle,
-            queueHandle,
-            textureHandle,
-            textureViewHandle,
-            formatId,
-            width,
-            height);
-        error = string.Empty;
-        return true;
+        WebGPUTextureHandle? createdTextureHandle = null;
+        WebGPUTextureViewHandle? createdTextureViewHandle = null;
+        try
+        {
+            createdTextureHandle = new WebGPUTextureHandle(api, (nint)texture, ownsHandle: true);
+            createdTextureViewHandle = new WebGPUTextureViewHandle(api, (nint)textureView, ownsHandle: true);
+            surface = WebGPUNativeSurfaceFactory.Create<TPixel>(
+                deviceHandle,
+                queueHandle,
+                createdTextureHandle,
+                createdTextureViewHandle,
+                formatId,
+                width,
+                height);
+            textureHandle = createdTextureHandle;
+            textureViewHandle = createdTextureViewHandle;
+            error = string.Empty;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            createdTextureViewHandle?.Dispose();
+            createdTextureHandle?.Dispose();
+
+            if (createdTextureViewHandle is null)
+            {
+                api.TextureViewRelease(textureView);
+            }
+
+            if (createdTextureHandle is null)
+            {
+                api.TextureRelease(texture);
+            }
+
+            error = ex.Message;
+            return false;
+        }
     }
 }

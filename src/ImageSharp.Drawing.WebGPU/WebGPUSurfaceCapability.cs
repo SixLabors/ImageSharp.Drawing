@@ -7,7 +7,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// Native WebGPU surface capability attached to <see cref="NativeSurface"/>.
 /// </summary>
 /// <remarks>
-/// The <see cref="Device"/> handle must remain valid for the lifetime of any
+/// The backing WebGPU device handle must remain valid for the lifetime of any
 /// <see cref="IDrawingBackend"/> that processes frames using this capability.
 /// The backend caches per-device GPU resources (pipelines, buffers) that reference
 /// the device internally. Ensure the device is not released while any backend
@@ -15,53 +15,53 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </remarks>
 public sealed class WebGPUSurfaceCapability
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUSurfaceCapability"/> class.
-    /// </summary>
-    /// <param name="device">Opaque <c>WGPUDevice*</c> handle. Must remain valid for the lifetime of any backend that uses this capability.</param>
-    /// <param name="queue">Opaque <c>WGPUQueue*</c> handle.</param>
-    /// <param name="targetTexture">Opaque <c>WGPUTexture*</c> handle for the current frame when writable upload is supported.</param>
-    /// <param name="targetTextureView">Opaque <c>WGPUTextureView*</c> handle for the current frame.</param>
-    /// <param name="targetFormat">Native render target texture format identifier.</param>
-    /// <param name="width">Surface width in pixels.</param>
-    /// <param name="height">Surface height in pixels.</param>
-    public WebGPUSurfaceCapability(
-        nint device,
-        nint queue,
-        nint targetTexture,
-        nint targetTextureView,
+    private readonly WebGPUDeviceHandle deviceHandle;
+    private readonly WebGPUQueueHandle queueHandle;
+    private readonly WebGPUTextureHandle targetTextureHandle;
+    private readonly WebGPUTextureViewHandle targetTextureViewHandle;
+
+    internal WebGPUSurfaceCapability(
+        WebGPUDeviceHandle deviceHandle,
+        WebGPUQueueHandle queueHandle,
+        WebGPUTextureHandle targetTextureHandle,
+        WebGPUTextureViewHandle targetTextureViewHandle,
         WebGPUTextureFormatId targetFormat,
         int width,
         int height)
     {
-        this.Device = device;
-        this.Queue = queue;
-        this.TargetTexture = targetTexture;
-        this.TargetTextureView = targetTextureView;
+        Guard.NotNull(deviceHandle, nameof(deviceHandle));
+        Guard.NotNull(queueHandle, nameof(queueHandle));
+        Guard.NotNull(targetTextureHandle, nameof(targetTextureHandle));
+        Guard.NotNull(targetTextureViewHandle, nameof(targetTextureViewHandle));
+
+        this.deviceHandle = deviceHandle;
+        this.queueHandle = queueHandle;
+        this.targetTextureHandle = targetTextureHandle;
+        this.targetTextureViewHandle = targetTextureViewHandle;
         this.TargetFormat = targetFormat;
         this.Width = width;
         this.Height = height;
     }
 
     /// <summary>
-    /// Gets the opaque <c>WGPUDevice*</c> handle.
+    /// Gets the wrapped device handle that owns the target texture.
     /// </summary>
-    public nint Device { get; }
+    internal WebGPUDeviceHandle DeviceHandle => this.deviceHandle;
 
     /// <summary>
-    /// Gets the opaque <c>WGPUQueue*</c> handle.
+    /// Gets the wrapped queue handle used to submit work against the target texture.
     /// </summary>
-    public nint Queue { get; }
+    internal WebGPUQueueHandle QueueHandle => this.queueHandle;
 
     /// <summary>
-    /// Gets the opaque <c>WGPUTexture*</c> handle for the current frame.
+    /// Gets the wrapped target texture handle exposed by this surface capability.
     /// </summary>
-    public nint TargetTexture { get; }
+    internal WebGPUTextureHandle TargetTextureHandle => this.targetTextureHandle;
 
     /// <summary>
-    /// Gets the opaque <c>WGPUTextureView*</c> handle for the current frame.
+    /// Gets the wrapped target texture-view handle exposed by this surface capability.
     /// </summary>
-    public nint TargetTextureView { get; }
+    internal WebGPUTextureViewHandle TargetTextureViewHandle => this.targetTextureViewHandle;
 
     /// <summary>
     /// Gets the native render target texture format identifier.

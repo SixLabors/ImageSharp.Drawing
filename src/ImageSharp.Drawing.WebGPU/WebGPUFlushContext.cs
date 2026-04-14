@@ -31,6 +31,14 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     private bool disposed;
     private bool ownsTargetTexture;
     private bool ownsTargetView;
+    private readonly WebGPUDeviceHandle deviceHandle;
+    private readonly WebGPUQueueHandle queueHandle;
+    private readonly WebGPUTextureHandle targetTextureHandle;
+    private readonly WebGPUTextureViewHandle targetTextureViewHandle;
+    private WebGPUHandle.HandleReference? deviceReference;
+    private WebGPUHandle.HandleReference? queueReference;
+    private WebGPUHandle.HandleReference? targetTextureReference;
+    private WebGPUHandle.HandleReference? targetTextureViewReference;
     private readonly List<nint> transientBindGroups = [];
     private readonly List<nint> transientBuffers = [];
     private readonly List<nint> transientTextureViews = [];
@@ -44,8 +52,10 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     private WebGPUFlushContext(
         WebGPU api,
         Wgpu wgpuExtension,
-        Device* device,
-        Queue* queue,
+        WebGPUDeviceHandle deviceHandle,
+        WebGPUQueueHandle queueHandle,
+        WebGPUTextureHandle targetTextureHandle,
+        WebGPUTextureViewHandle targetTextureViewHandle,
         in Rectangle targetBounds,
         TextureFormat textureFormat,
         MemoryAllocator memoryAllocator,
@@ -53,8 +63,10 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     {
         this.Api = api;
         this.WgpuExtension = wgpuExtension;
-        this.Device = device;
-        this.Queue = queue;
+        this.deviceHandle = deviceHandle;
+        this.queueHandle = queueHandle;
+        this.targetTextureHandle = targetTextureHandle;
+        this.targetTextureViewHandle = targetTextureViewHandle;
         this.TargetBounds = targetBounds;
         this.TextureFormat = textureFormat;
         this.MemoryAllocator = memoryAllocator;
@@ -74,12 +86,12 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <summary>
     /// Gets the device used to create and execute GPU resources.
     /// </summary>
-    public Device* Device { get; }
+    public Device* Device { get; private set; }
 
     /// <summary>
     /// Gets the queue used to submit GPU work.
     /// </summary>
-    public Queue* Queue { get; }
+    public Queue* Queue { get; private set; }
 
     /// <summary>
     /// Gets the target bounds for this flush context.
@@ -168,12 +180,10 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
 
         WebGPU api = WebGPURuntime.GetApi();
-        Device* device = (Device*)nativeCapability.Device;
-        Queue* queue = (Queue*)nativeCapability.Queue;
         TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeCapability.TargetFormat);
         Rectangle bounds = frame.Bounds;
         Rectangle nativeBounds = new(0, 0, nativeCapability.Width, nativeCapability.Height);
-        WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(api, device);
+        WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(api, nativeCapability.DeviceHandle);
 
         if (requiredFeature != FeatureName.Undefined && !deviceState.HasFeature(requiredFeature))
         {
@@ -191,13 +201,28 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         WebGPUFlushContext context = new(
             api,
             WebGPURuntime.GetWgpuExtension(),
-            device,
-            queue,
+            nativeCapability.DeviceHandle,
+            nativeCapability.QueueHandle,
+            nativeCapability.TargetTextureHandle,
+            nativeCapability.TargetTextureViewHandle,
             in bounds,
             textureFormat,
             memoryAllocator,
             deviceState);
-        context.InitializeNativeTarget(nativeCapability);
+        try
+        {
+            if (!context.InitializeNativeTarget())
+            {
+                context.Dispose();
+                return null;
+            }
+        }
+        catch
+        {
+            context.Dispose();
+            throw;
+        }
+
         return context;
     }
 
@@ -486,6 +511,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.TargetTexture = null;
         this.ownsTargetView = false;
         this.ownsTargetTexture = false;
+        this.DisposeNativeHandleReferences();
 
         this.disposed = true;
     }
@@ -493,13 +519,38 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <summary>
     /// Adopts the texture and texture view provided by a native WebGPU surface capability.
     /// </summary>
-    /// <param name="capability">The native surface capability describing the externally owned target.</param>
-    private void InitializeNativeTarget(WebGPUSurfaceCapability capability)
+    /// <returns><see langword="true"/> when all required native handles were acquired successfully; otherwise, <see langword="false"/>.</returns>
+    private bool InitializeNativeTarget()
     {
-        this.TargetTexture = (Texture*)capability.TargetTexture;
-        this.TargetView = (TextureView*)capability.TargetTextureView;
+        // The flush context caches raw native pointers and reuses them across the full flush,
+        // so each safe handle must stay add-ref'd until the context is disposed. These fields are
+        // assigned immediately so Dispose can unwind partial initialization if a later acquire throws.
+        this.deviceReference = this.deviceHandle.AcquireReference();
+        this.queueReference = this.queueHandle.AcquireReference();
+        this.targetTextureReference = this.targetTextureHandle.AcquireReference();
+        this.targetTextureViewReference = this.targetTextureViewHandle.AcquireReference();
+        this.Device = (Device*)this.deviceReference.Handle;
+        this.Queue = (Queue*)this.queueReference.Handle;
+        this.TargetTexture = (Texture*)this.targetTextureReference.Handle;
+        this.TargetView = (TextureView*)this.targetTextureViewReference.Handle;
         this.ownsTargetTexture = false;
         this.ownsTargetView = false;
+        return true;
+    }
+
+    /// <summary>
+    /// Releases the scoped safe-handle references that keep the cached raw pointers valid for this flush.
+    /// </summary>
+    private void DisposeNativeHandleReferences()
+    {
+        this.targetTextureViewReference?.Dispose();
+        this.targetTextureViewReference = null;
+        this.targetTextureReference?.Dispose();
+        this.targetTextureReference = null;
+        this.queueReference?.Dispose();
+        this.queueReference = null;
+        this.deviceReference?.Dispose();
+        this.deviceReference = null;
     }
 
     /// <summary>
@@ -518,9 +569,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             return null;
         }
 
-        if (capability.Device == 0 ||
-            capability.Queue == 0 ||
-            capability.TargetTextureView == 0 ||
+        if (capability.DeviceHandle.IsInvalid ||
+            capability.QueueHandle.IsInvalid ||
+            capability.TargetTextureViewHandle.IsInvalid ||
             WebGPUTextureFormatMapper.ToSilk(capability.TargetFormat) != expectedTextureFormat)
         {
             return null;

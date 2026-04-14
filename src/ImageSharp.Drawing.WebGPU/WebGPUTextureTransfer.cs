@@ -21,16 +21,17 @@ internal static unsafe class WebGPUTextureTransfer
     /// Tries to upload CPU pixel data to an existing native WebGPU texture handle.
     /// </summary>
     internal static bool TryWriteTexture<TPixel>(
-        nint textureHandle,
+        WebGPUTextureHandle textureHandle,
         int width,
         int height,
         Image<TPixel> image,
         out string error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        Guard.NotNull(textureHandle, nameof(textureHandle));
         Guard.NotNull(image, nameof(image));
 
-        if (textureHandle == 0)
+        if (textureHandle.IsInvalid)
         {
             error = "Texture handle is zero.";
             return false;
@@ -43,19 +44,23 @@ internal static unsafe class WebGPUTextureTransfer
         }
 
         WebGPU api = WebGPURuntime.GetApi();
-        if (!WebGPURuntime.TryGetOrCreateDevice(out _, out Queue* queue, out string? deviceError))
+        if (!WebGPURuntime.TryGetOrCreateDevice(out _, out WebGPUQueueHandle? queueHandle, out string? deviceError)
+            || queueHandle is null)
         {
             error = deviceError ?? "WebGPU device auto-provisioning failed.";
             return false;
         }
+
+        using WebGPUHandle.HandleReference queueReference = queueHandle.AcquireReference();
+        using WebGPUHandle.HandleReference textureReference = textureHandle.AcquireReference();
 
         try
         {
             Buffer2DRegion<TPixel> sourceRegion = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
             WebGPUFlushContext.UploadTextureFromRegion(
                 api,
-                queue,
-                (Texture*)textureHandle,
+                (Queue*)queueReference.Handle,
+                (Texture*)textureReference.Handle,
                 sourceRegion,
                 Configuration.Default.MemoryAllocator);
             error = string.Empty;
@@ -72,15 +77,17 @@ internal static unsafe class WebGPUTextureTransfer
     /// Tries to read pixels from a native WebGPU texture handle into an <see cref="Image{TPixel}"/>.
     /// </summary>
     internal static bool TryReadTexture<TPixel>(
-        nint textureHandle,
+        WebGPUTextureHandle textureHandle,
         int width,
         int height,
         out Image<TPixel>? image,
         out string error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        Guard.NotNull(textureHandle, nameof(textureHandle));
+
         image = null;
-        if (textureHandle == 0)
+        if (textureHandle.IsInvalid)
         {
             error = "Texture handle is zero.";
             return false;
@@ -94,143 +101,154 @@ internal static unsafe class WebGPUTextureTransfer
 
         WebGPU api = WebGPURuntime.GetApi();
         Wgpu wgpuExtension = WebGPURuntime.GetWgpuExtension();
-        if (!WebGPURuntime.TryGetOrCreateDevice(out Device* device, out Queue* queue, out string? deviceError))
+        if (!WebGPURuntime.TryGetOrCreateDevice(out WebGPUDeviceHandle? deviceHandle, out WebGPUQueueHandle? queueHandle, out string? deviceError)
+            || deviceHandle is null
+            || queueHandle is null)
         {
             error = deviceError ?? "WebGPU device auto-provisioning failed.";
             return false;
         }
 
-        int pixelSizeInBytes = Unsafe.SizeOf<TPixel>();
-        int packedRowBytes = checked(width * pixelSizeInBytes);
-        int readbackRowBytes = Align(packedRowBytes, 256);
-        int packedByteCount = checked(packedRowBytes * height);
-        ulong readbackByteCount = checked((ulong)readbackRowBytes * (ulong)height);
-
-        Silk.NET.WebGPU.Buffer* readbackBuffer = null;
-        CommandEncoder* commandEncoder = null;
-        CommandBuffer* commandBuffer = null;
-        try
+        using WebGPUHandle.HandleReference deviceReference = deviceHandle.AcquireReference();
+        using WebGPUHandle.HandleReference queueReference = queueHandle.AcquireReference();
+        using WebGPUHandle.HandleReference textureReference = textureHandle.AcquireReference();
         {
-            BufferDescriptor bufferDescriptor = new()
-            {
-                Usage = BufferUsage.CopyDst | BufferUsage.MapRead,
-                Size = readbackByteCount,
-                MappedAtCreation = false,
-            };
+            Device* device = (Device*)deviceReference.Handle;
+            Queue* queue = (Queue*)queueReference.Handle;
+            Texture* texture = (Texture*)textureReference.Handle;
 
-            readbackBuffer = api.DeviceCreateBuffer(device, in bufferDescriptor);
-            if (readbackBuffer is null)
-            {
-                error = "WebGPU.DeviceCreateBuffer returned null for readback.";
-                return false;
-            }
+            int pixelSizeInBytes = Unsafe.SizeOf<TPixel>();
+            int packedRowBytes = checked(width * pixelSizeInBytes);
+            int readbackRowBytes = Align(packedRowBytes, 256);
+            int packedByteCount = checked(packedRowBytes * height);
+            ulong readbackByteCount = checked((ulong)readbackRowBytes * (ulong)height);
 
-            CommandEncoderDescriptor encoderDescriptor = default;
-            commandEncoder = api.DeviceCreateCommandEncoder(device, in encoderDescriptor);
-            if (commandEncoder is null)
-            {
-                error = "WebGPU.DeviceCreateCommandEncoder returned null.";
-                return false;
-            }
-
-            ImageCopyTexture source = new()
-            {
-                Texture = (Texture*)textureHandle,
-                MipLevel = 0,
-                Origin = new Origin3D(0, 0, 0),
-                Aspect = TextureAspect.All,
-            };
-
-            ImageCopyBuffer destination = new()
-            {
-                Buffer = readbackBuffer,
-                Layout = new TextureDataLayout
-                {
-                    Offset = 0,
-                    BytesPerRow = (uint)readbackRowBytes,
-                    RowsPerImage = (uint)height,
-                },
-            };
-
-            Extent3D copySize = new((uint)width, (uint)height, 1);
-            api.CommandEncoderCopyTextureToBuffer(commandEncoder, in source, in destination, in copySize);
-
-            CommandBufferDescriptor commandBufferDescriptor = default;
-            commandBuffer = api.CommandEncoderFinish(commandEncoder, in commandBufferDescriptor);
-            if (commandBuffer is null)
-            {
-                error = "WebGPU.CommandEncoderFinish returned null.";
-                return false;
-            }
-
-            api.QueueSubmit(queue, 1, ref commandBuffer);
-            api.CommandBufferRelease(commandBuffer);
-            commandBuffer = null;
-            api.CommandEncoderRelease(commandEncoder);
-            commandEncoder = null;
-
-            BufferMapAsyncStatus mapStatus = BufferMapAsyncStatus.Unknown;
-            using ManualResetEventSlim mapReady = new(false);
-
-            void Callback(BufferMapAsyncStatus status, void* userData)
-            {
-                _ = userData;
-                mapStatus = status;
-                mapReady.Set();
-            }
-
-            using PfnBufferMapCallback callback = PfnBufferMapCallback.From(Callback);
-            api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, (nuint)readbackByteCount, callback, null);
-            if (!WaitForSignal(wgpuExtension, device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
-            {
-                error = $"WebGPU readback map failed with status '{mapStatus}'.";
-                return false;
-            }
-
-            void* mapped = api.BufferGetConstMappedRange(readbackBuffer, 0, (nuint)readbackByteCount);
-            if (mapped is null)
-            {
-                api.BufferUnmap(readbackBuffer);
-                error = "WebGPU.BufferGetConstMappedRange returned null.";
-                return false;
-            }
-
+            Silk.NET.WebGPU.Buffer* readbackBuffer = null;
+            CommandEncoder* commandEncoder = null;
+            CommandBuffer* commandBuffer = null;
             try
             {
-                ReadOnlySpan<byte> readback = new(mapped, checked((int)readbackByteCount));
-                byte[] packed = new byte[packedByteCount];
-                Span<byte> packedSpan = packed;
-                for (int y = 0; y < height; y++)
+                BufferDescriptor bufferDescriptor = new()
                 {
-                    readback
-                        .Slice(y * readbackRowBytes, packedRowBytes)
-                        .CopyTo(packedSpan.Slice(y * packedRowBytes, packedRowBytes));
+                    Usage = BufferUsage.CopyDst | BufferUsage.MapRead,
+                    Size = readbackByteCount,
+                    MappedAtCreation = false,
+                };
+
+                readbackBuffer = api.DeviceCreateBuffer(device, in bufferDescriptor);
+                if (readbackBuffer is null)
+                {
+                    error = "WebGPU.DeviceCreateBuffer returned null for readback.";
+                    return false;
                 }
 
-                image = Image.LoadPixelData<TPixel>(packed, width, height);
-                error = string.Empty;
-                return true;
+                CommandEncoderDescriptor encoderDescriptor = default;
+                commandEncoder = api.DeviceCreateCommandEncoder(device, in encoderDescriptor);
+                if (commandEncoder is null)
+                {
+                    error = "WebGPU.DeviceCreateCommandEncoder returned null.";
+                    return false;
+                }
+
+                ImageCopyTexture source = new()
+                {
+                    Texture = texture,
+                    MipLevel = 0,
+                    Origin = new Origin3D(0, 0, 0),
+                    Aspect = TextureAspect.All,
+                };
+
+                ImageCopyBuffer destination = new()
+                {
+                    Buffer = readbackBuffer,
+                    Layout = new TextureDataLayout
+                    {
+                        Offset = 0,
+                        BytesPerRow = (uint)readbackRowBytes,
+                        RowsPerImage = (uint)height,
+                    },
+                };
+
+                Extent3D copySize = new((uint)width, (uint)height, 1);
+                api.CommandEncoderCopyTextureToBuffer(commandEncoder, in source, in destination, in copySize);
+
+                CommandBufferDescriptor commandBufferDescriptor = default;
+                commandBuffer = api.CommandEncoderFinish(commandEncoder, in commandBufferDescriptor);
+                if (commandBuffer is null)
+                {
+                    error = "WebGPU.CommandEncoderFinish returned null.";
+                    return false;
+                }
+
+                api.QueueSubmit(queue, 1, ref commandBuffer);
+                api.CommandBufferRelease(commandBuffer);
+                commandBuffer = null;
+                api.CommandEncoderRelease(commandEncoder);
+                commandEncoder = null;
+
+                BufferMapAsyncStatus mapStatus = BufferMapAsyncStatus.Unknown;
+                using ManualResetEventSlim mapReady = new(false);
+
+                void Callback(BufferMapAsyncStatus status, void* userData)
+                {
+                    _ = userData;
+                    mapStatus = status;
+                    mapReady.Set();
+                }
+
+                using PfnBufferMapCallback callback = PfnBufferMapCallback.From(Callback);
+                api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, (nuint)readbackByteCount, callback, null);
+                if (!WaitForSignal(wgpuExtension, device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
+                {
+                    error = $"WebGPU readback map failed with status '{mapStatus}'.";
+                    return false;
+                }
+
+                void* mapped = api.BufferGetConstMappedRange(readbackBuffer, 0, (nuint)readbackByteCount);
+                if (mapped is null)
+                {
+                    api.BufferUnmap(readbackBuffer);
+                    error = "WebGPU.BufferGetConstMappedRange returned null.";
+                    return false;
+                }
+
+                try
+                {
+                    ReadOnlySpan<byte> readback = new(mapped, checked((int)readbackByteCount));
+                    byte[] packed = new byte[packedByteCount];
+                    Span<byte> packedSpan = packed;
+                    for (int y = 0; y < height; y++)
+                    {
+                        readback
+                            .Slice(y * readbackRowBytes, packedRowBytes)
+                            .CopyTo(packedSpan.Slice(y * packedRowBytes, packedRowBytes));
+                    }
+
+                    image = Image.LoadPixelData<TPixel>(packed, width, height);
+                    error = string.Empty;
+                    return true;
+                }
+                finally
+                {
+                    api.BufferUnmap(readbackBuffer);
+                }
             }
             finally
             {
-                api.BufferUnmap(readbackBuffer);
-            }
-        }
-        finally
-        {
-            if (commandBuffer is not null)
-            {
-                api.CommandBufferRelease(commandBuffer);
-            }
+                if (commandBuffer is not null)
+                {
+                    api.CommandBufferRelease(commandBuffer);
+                }
 
-            if (commandEncoder is not null)
-            {
-                api.CommandEncoderRelease(commandEncoder);
-            }
+                if (commandEncoder is not null)
+                {
+                    api.CommandEncoderRelease(commandEncoder);
+                }
 
-            if (readbackBuffer is not null)
-            {
-                api.BufferRelease(readbackBuffer);
+                if (readbackBuffer is not null)
+                {
+                    api.BufferRelease(readbackBuffer);
+                }
             }
         }
     }
@@ -238,24 +256,13 @@ internal static unsafe class WebGPUTextureTransfer
     /// <summary>
     /// Releases native texture and texture-view handles.
     /// </summary>
-    internal static void Release(nint textureHandle, nint textureViewHandle)
+    internal static void Release(WebGPUTextureHandle textureHandle, WebGPUTextureViewHandle textureViewHandle)
     {
-        if (textureHandle == 0 && textureViewHandle == 0)
-        {
-            return;
-        }
+        Guard.NotNull(textureHandle, nameof(textureHandle));
+        Guard.NotNull(textureViewHandle, nameof(textureViewHandle));
 
-        WebGPU api = WebGPURuntime.GetApi();
-
-        if (textureViewHandle != 0)
-        {
-            api.TextureViewRelease((TextureView*)textureViewHandle);
-        }
-
-        if (textureHandle != 0)
-        {
-            api.TextureRelease((Texture*)textureHandle);
-        }
+        textureViewHandle.Dispose();
+        textureHandle.Dispose();
     }
 
     /// <summary>

@@ -15,17 +15,17 @@ internal static unsafe partial class WebGPURuntime
     /// Gets or creates process-scoped shared resources for the specified device.
     /// </summary>
     /// <param name="api">The WebGPU API facade used to manage native resources.</param>
-    /// <param name="device">The device key and owner for the shared state.</param>
-    /// <returns>The shared device state instance for <paramref name="device"/>.</returns>
-    internal static DeviceSharedState GetOrCreateDeviceState(WebGPU api, Device* device)
+    /// <param name="deviceHandle">The device key and owner for the shared state.</param>
+    /// <returns>The shared device state instance for <paramref name="deviceHandle"/>.</returns>
+    internal static DeviceSharedState GetOrCreateDeviceState(WebGPU api, WebGPUDeviceHandle deviceHandle)
     {
-        nint cacheKey = (nint)device;
+        nint cacheKey = deviceHandle.DangerousGetHandle();
         if (DeviceStateCache.TryGetValue(cacheKey, out DeviceSharedState? existing))
         {
             return existing;
         }
 
-        DeviceSharedState created = new(api, device);
+        DeviceSharedState created = new(api, deviceHandle);
         DeviceSharedState winner = DeviceStateCache.GetOrAdd(cacheKey, created);
         if (!ReferenceEquals(winner, created))
         {
@@ -58,14 +58,25 @@ internal static unsafe partial class WebGPURuntime
         private readonly ConcurrentDictionary<string, CompositeComputePipelineInfrastructure> compositeComputePipelines = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, SharedBufferInfrastructure> sharedBuffers = new(StringComparer.Ordinal);
         private readonly HashSet<FeatureName> deviceFeatures;
+        private readonly WebGPUHandle.HandleReference deviceReference;
         private bool disposed;
 
-        internal DeviceSharedState(WebGPU api, Device* device)
+        internal DeviceSharedState(WebGPU api, WebGPUDeviceHandle deviceHandle)
         {
             this.Api = api;
-            this.Device = device;
-            this.deviceFeatures = EnumerateDeviceFeatures(api, device);
-            this.MaxStorageBufferBindingSize = QueryMaxStorageBufferBindingSize(api, device);
+            this.deviceReference = deviceHandle.AcquireReference();
+
+            try
+            {
+                this.Device = (Device*)this.deviceReference.Handle;
+                this.deviceFeatures = EnumerateDeviceFeatures(api, this.Device);
+                this.MaxStorageBufferBindingSize = QueryMaxStorageBufferBindingSize(api, this.Device);
+            }
+            catch
+            {
+                this.deviceReference.Dispose();
+                throw;
+            }
         }
 
         /// <summary>
@@ -456,6 +467,7 @@ internal static unsafe partial class WebGPURuntime
 
             this.sharedBuffers.Clear();
 
+            this.deviceReference.Dispose();
             this.disposed = true;
         }
 

@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </summary>
 /// <remarks>
 /// Only formats with storage texture binding support are included.
-/// Numeric values match the WebGPU <c>WGPUTextureFormat</c> constants.
+/// Numeric values match the WebGPU texture-format constants.
 /// </remarks>
 public enum WebGPUTextureFormatId
 {

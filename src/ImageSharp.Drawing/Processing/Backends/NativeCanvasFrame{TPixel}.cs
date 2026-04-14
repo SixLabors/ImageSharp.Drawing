@@ -23,6 +23,9 @@ public sealed class NativeCanvasFrame<TPixel> : ICanvasFrame<TPixel>
     public NativeCanvasFrame(Rectangle bounds, NativeSurface surface)
     {
         Guard.NotNull(surface, nameof(surface));
+        Guard.MustBeGreaterThan(bounds.Width, 0, nameof(bounds));
+        Guard.MustBeGreaterThan(bounds.Height, 0, nameof(bounds));
+
         this.Bounds = bounds;
         this.surface = surface;
     }

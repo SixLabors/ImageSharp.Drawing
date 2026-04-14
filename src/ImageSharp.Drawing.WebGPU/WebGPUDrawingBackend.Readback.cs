@@ -58,9 +58,9 @@ public sealed unsafe partial class WebGPUDrawingBackend
         // Readback is only available for native WebGPU targets with valid interop handles.
         if (!target.TryGetNativeSurface(out NativeSurface? nativeSurface) ||
             !nativeSurface.TryGetCapability(out WebGPUSurfaceCapability? capability) ||
-            capability.Device == 0 ||
-            capability.Queue == 0 ||
-            capability.TargetTexture == 0)
+            capability.DeviceHandle.IsInvalid ||
+            capability.QueueHandle.IsInvalid ||
+            capability.TargetTextureHandle.IsInvalid)
         {
             error = "The target does not expose a native WebGPU surface with valid device, queue, and texture handles for readback.";
             return false;
@@ -91,16 +91,21 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
         WebGPU api = WebGPURuntime.GetApi();
         Wgpu wgpuExtension = WebGPURuntime.GetWgpuExtension();
-        Device* device = (Device*)capability.Device;
+        using WebGPUHandle.HandleReference deviceReference = capability.DeviceHandle.AcquireReference();
+        using WebGPUHandle.HandleReference queueReference = capability.QueueHandle.AcquireReference();
+        using WebGPUHandle.HandleReference textureReference = capability.TargetTextureHandle.AcquireReference();
+
+        Device* device = (Device*)deviceReference.Handle;
 
         if (requiredFeature != FeatureName.Undefined
-            && !WebGPURuntime.GetOrCreateDeviceState(api, device).HasFeature(requiredFeature))
+            && !WebGPURuntime.GetOrCreateDeviceState(api, capability.DeviceHandle).HasFeature(requiredFeature))
         {
             error = $"The target device does not support WebGPU feature '{requiredFeature}' required to read back pixel type '{typeof(TPixel).Name}'.";
             return false;
         }
 
-        Queue* queue = (Queue*)capability.Queue;
+        Queue* queue = (Queue*)queueReference.Handle;
+        Texture* texture = (Texture*)textureReference.Handle;
 
         int pixelSizeInBytes = Unsafe.SizeOf<TPixel>();
         int packedRowBytes = checked(source.Width * pixelSizeInBytes);
@@ -139,7 +144,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             // Copy only the requested source rect from the target texture into the readback buffer.
             ImageCopyTexture sourceCopy = new()
             {
-                Texture = (Texture*)capability.TargetTexture,
+                Texture = texture,
                 MipLevel = 0,
                 Origin = new Origin3D((uint)source.X, (uint)source.Y, 0),
                 Aspect = TextureAspect.All

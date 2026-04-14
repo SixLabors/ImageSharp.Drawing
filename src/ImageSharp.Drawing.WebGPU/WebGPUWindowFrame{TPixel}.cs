@@ -15,17 +15,17 @@ public sealed unsafe class WebGPUWindowFrame<TPixel> : IDisposable
     where TPixel : unmanaged, IPixel<TPixel>
 {
     private readonly WebGPU api;
-    private readonly Surface* surface;
-    private readonly Texture* texture;
-    private readonly TextureView* textureView;
+    private readonly WebGPUHandle.HandleReference surfaceReference;
+    private readonly WebGPUTextureHandle textureHandle;
+    private readonly WebGPUTextureViewHandle textureViewHandle;
     private bool isDisposed;
     private bool presented;
 
     internal WebGPUWindowFrame(
         WebGPU api,
-        Surface* surface,
-        Texture* texture,
-        TextureView* textureView,
+        WebGPUSurfaceHandle surfaceHandle,
+        WebGPUTextureHandle textureHandle,
+        WebGPUTextureViewHandle textureViewHandle,
         DrawingCanvas<TPixel> canvas,
         Rectangle bounds,
         Size clientSize,
@@ -34,9 +34,9 @@ public sealed unsafe class WebGPUWindowFrame<TPixel> : IDisposable
         long frameIndex)
     {
         this.api = api;
-        this.surface = surface;
-        this.texture = texture;
-        this.textureView = textureView;
+        this.surfaceReference = surfaceHandle.AcquireReference();
+        this.textureHandle = textureHandle;
+        this.textureViewHandle = textureViewHandle;
         this.Canvas = canvas;
         this.Bounds = bounds;
         this.ClientSize = clientSize;
@@ -90,7 +90,7 @@ public sealed unsafe class WebGPUWindowFrame<TPixel> : IDisposable
         }
 
         this.Canvas.Flush();
-        this.api.SurfacePresent(this.surface);
+        this.api.SurfacePresent((Surface*)this.surfaceReference.Handle);
         this.presented = true;
     }
 
@@ -104,16 +104,22 @@ public sealed unsafe class WebGPUWindowFrame<TPixel> : IDisposable
             return;
         }
 
-        if (!this.presented)
+        try
         {
-            this.Canvas.Flush();
-            this.api.SurfacePresent(this.surface);
-            this.presented = true;
+            if (!this.presented)
+            {
+                this.Canvas.Flush();
+                this.api.SurfacePresent((Surface*)this.surfaceReference.Handle);
+                this.presented = true;
+            }
         }
-
-        this.Canvas.Dispose();
-        this.api.TextureViewRelease(this.textureView);
-        this.api.TextureRelease(this.texture);
-        this.isDisposed = true;
+        finally
+        {
+            this.Canvas.Dispose();
+            this.textureViewHandle.Dispose();
+            this.textureHandle.Dispose();
+            this.surfaceReference.Dispose();
+            this.isDisposed = true;
+        }
     }
 }
