@@ -10,7 +10,7 @@ A sample application that demonstrates the core vector drawing capabilities of I
 - **Curves** — Ellipses via `EllipsePolygon` and cubic Bezier arcs via `CubicBezierLineSegment`.
 - **Text as paths** — Converting text to vector outlines using `TextBuilder.GeneratePaths()` with system fonts, including text laid out along a curved path.
 - **Serialized glyph data** — Rendering OpenSans letter shapes ('a' and 'o') from serialized coordinate data as `ComplexPolygon` instances.
-- **Canvas API** — `Fill` for solid backgrounds and shape rendering via `ProcessWithCanvas`.
+- **Canvas API** — `Fill` for solid backgrounds and shape rendering via `Paint`.
 
 ## Running
 

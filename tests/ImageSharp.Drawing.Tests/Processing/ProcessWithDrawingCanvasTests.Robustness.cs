@@ -40,7 +40,7 @@ public partial class ProcessWithDrawingCanvasTests
     private static void CompareToSkiaResultsImpl(TestImageProvider<Rgba32> provider, IPath shape)
     {
         using Image<Rgba32> image = provider.GetImage();
-        image.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Fill(Brushes.Solid(Color.White), shape)));
+        image.Mutate(c => c.Paint(canvas => canvas.Fill(Brushes.Solid(Color.White), shape)));
         image.DebugSave(provider, "ImageSharp", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
 
         using SKBitmap bitmap = new(new SKImageInfo(image.Width, image.Height));
@@ -90,7 +90,7 @@ public partial class ProcessWithDrawingCanvasTests
             GraphicsOptions = new GraphicsOptions { Antialias = aa > 0 },
         };
 
-        image.Mutate(c => c.ProcessWithCanvas(options, canvas =>
+        image.Mutate(c => c.Paint(options, canvas =>
         {
             Pen pen = Pens.Solid(Color.White, 1.0F);
             foreach (PointF[] loop in points)
@@ -133,7 +133,7 @@ public partial class ProcessWithDrawingCanvasTests
         Random rnd = new(42);
         byte[] rgb = new byte[3];
 
-        image.Mutate(c => c.ProcessWithCanvas(options, canvas =>
+        image.Mutate(c => c.Paint(options, canvas =>
         {
             foreach (PointF[] loop in points)
             {
@@ -164,7 +164,7 @@ public partial class ProcessWithDrawingCanvasTests
         IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
 
         using Image<Rgba32> image = provider.GetImage();
-        image.Mutate(c => c.ProcessWithCanvas(canvas =>
+        image.Mutate(c => c.Paint(canvas =>
         {
             Pen pen = Pens.Solid(Color.White, 1.0F);
             foreach (PointF[] loop in points)
@@ -200,7 +200,7 @@ public partial class ProcessWithDrawingCanvasTests
         using Image<Rgba32> image = provider.GetImage();
         SolidPen pen = new(new SolidBrush(Color.White), scale);
 
-        image.Mutate(c => c.ProcessWithCanvas(canvas =>
+        image.Mutate(c => c.Paint(canvas =>
         {
             foreach (PointF[] loop in points)
             {
@@ -290,7 +290,7 @@ public partial class ProcessWithDrawingCanvasTests
 
         using Image<Rgba32> image = provider.GetImage();
 
-        image.Mutate(c => c.ProcessWithCanvas(canvas =>
+        image.Mutate(c => c.Paint(canvas =>
         {
             Pen pen = Pens.Solid(Color.White, thickness);
             foreach (PointF[] loop in points)
@@ -327,7 +327,7 @@ public partial class ProcessWithDrawingCanvasTests
 
         using Image<Rgba32> image = provider.GetImage();
 
-        image.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Draw(Pens.Solid(Color.White, thickness), path)));
+        image.Mutate(c => c.Paint(canvas => canvas.Draw(Pens.Solid(Color.White, thickness), path)));
 
         image.DebugSave(provider, $"Benchmark_{thickness}", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
     }
@@ -342,7 +342,7 @@ public partial class ProcessWithDrawingCanvasTests
 
         using Image<Rgba32> image = provider.GetImage();
 
-        image.Mutate(c => c.ProcessWithCanvas(options, canvas =>
+        image.Mutate(c => c.Paint(options, canvas =>
         {
             Pen pen = Pens.Solid(Color.White, thickness);
             foreach (PointF[] loop in points)

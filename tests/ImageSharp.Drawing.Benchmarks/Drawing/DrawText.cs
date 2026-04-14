@@ -84,7 +84,7 @@ public class DrawText
             Origin = new PointF(10, 10)
         };
 
-        this.image.Mutate(x => x.ProcessWithCanvas(
+        this.image.Mutate(x => x.Paint(
             canvas => canvas.DrawText(textOptions, this.TextToRender, Processing.Brushes.Solid(Color.HotPink), pen: null)));
     }
 

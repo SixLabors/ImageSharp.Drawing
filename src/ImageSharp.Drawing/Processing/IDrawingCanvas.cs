@@ -49,7 +49,7 @@ public interface IDrawingCanvas : IDisposable
     /// Saves the current drawing state and begins an isolated compositing layer.
     /// Subsequent draw commands are recorded into an isolated logical layer. When
     /// <see cref="Restore"/> closes the layer, that layer becomes eligible for
-    /// composition during the next <see cref="Flush"/> or <see cref="System.IDisposable.Dispose"/>.
+    /// composition during the next <see cref="Flush"/> or <see cref="IDisposable.Dispose"/>.
     /// </summary>
     /// <returns>The save count after the layer state has been pushed.</returns>
     public int SaveLayer();
@@ -58,7 +58,7 @@ public interface IDrawingCanvas : IDisposable
     /// Saves the current drawing state and begins an isolated compositing layer.
     /// Subsequent draw commands are recorded into an isolated logical layer. When
     /// <see cref="Restore"/> closes the layer, that layer is composed during the next
-    /// <see cref="Flush"/> or <see cref="System.IDisposable.Dispose"/> using the specified
+    /// <see cref="Flush"/> or <see cref="IDisposable.Dispose"/> using the specified
     /// <paramref name="layerOptions"/> (blend mode, alpha composition, opacity).
     /// </summary>
     /// <param name="layerOptions">
@@ -71,7 +71,7 @@ public interface IDrawingCanvas : IDisposable
     /// Saves the current drawing state and begins an isolated compositing layer
     /// bounded to a subregion. Subsequent draw commands are recorded into that isolated
     /// logical layer. When <see cref="Restore"/> closes the layer, it is composed during
-    /// the next <see cref="Flush"/> or <see cref="System.IDisposable.Dispose"/> using the specified
+    /// the next <see cref="Flush"/> or <see cref="IDisposable.Dispose"/> using the specified
     /// <paramref name="layerOptions"/>.
     /// </summary>
     /// <param name="layerOptions">
@@ -89,7 +89,7 @@ public interface IDrawingCanvas : IDisposable
     /// <remarks>
     /// If the most recently saved state was created by a <c>SaveLayer</c> overload,
     /// the layer is closed in the deferred scene. Actual composition happens during the
-    /// next <see cref="Flush"/> or <see cref="System.IDisposable.Dispose"/>.
+    /// next <see cref="Flush"/> or <see cref="IDisposable.Dispose"/>.
     /// </remarks>
     public void Restore();
 
@@ -101,7 +101,7 @@ public interface IDrawingCanvas : IDisposable
     /// and the last discarded frame becomes the current state.
     /// If any discarded state was created by a <c>SaveLayer</c> overload,
     /// those layers are closed in the deferred scene and are composed during the next
-    /// <see cref="Flush"/> or <see cref="System.IDisposable.Dispose"/>.
+    /// <see cref="Flush"/> or <see cref="IDisposable.Dispose"/>.
     /// </remarks>
     /// <param name="saveCount">The save count to restore to.</param>
     public void RestoreTo(int saveCount);

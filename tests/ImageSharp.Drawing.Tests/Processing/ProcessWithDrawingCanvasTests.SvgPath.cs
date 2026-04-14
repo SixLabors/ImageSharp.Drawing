@@ -24,7 +24,7 @@ public partial class ProcessWithDrawingCanvasTests
         Assert.True(parsed);
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(canvas =>
+            c => c.Paint(canvas =>
             {
                 canvas.Fill(Brushes.Solid(Color.White));
                 canvas.Draw(Pens.Solid(Color.Red, 5), path);

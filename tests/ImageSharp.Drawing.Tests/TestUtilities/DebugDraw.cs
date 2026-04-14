@@ -32,7 +32,7 @@ internal class DebugDraw
         gridSize *= scale;
 
         using Image img = new Image<Rgba32>((int)(bounds.Right + (2 * gridSize)), (int)(bounds.Bottom + (2 * gridSize)));
-        img.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+        img.Mutate(ctx => ctx.Paint(canvas =>
         {
             canvas.Fill(TestBrush, path);
             DrawGrid(canvas, bounds, gridSize);

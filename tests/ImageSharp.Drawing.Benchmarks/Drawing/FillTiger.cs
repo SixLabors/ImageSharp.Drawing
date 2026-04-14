@@ -139,7 +139,7 @@ public class FillTiger
 
     [Benchmark]
     public void ImageSharp()
-        => this.image.Mutate(c => c.ProcessWithCanvas(canvas =>
+        => this.image.Mutate(c => c.Paint(canvas =>
         {
             foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
             {
@@ -160,7 +160,7 @@ public class FillTiger
     {
         Configuration configuration = this.image.Configuration.Clone();
         configuration.MaxDegreeOfParallelism = 1;
-        this.image.Mutate(configuration, c => c.ProcessWithCanvas(canvas =>
+        this.image.Mutate(configuration, c => c.Paint(canvas =>
         {
             foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
             {

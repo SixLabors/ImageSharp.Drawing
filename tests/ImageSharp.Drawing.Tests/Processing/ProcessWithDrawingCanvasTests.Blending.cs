@@ -37,12 +37,12 @@ public partial class ProcessWithDrawingCanvasTests
 
         DrawingOptions blendOptions = CreateBlendOptions(blending, composition);
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+        image.Mutate(ctx => ctx.Paint(canvas =>
         {
             canvas.Fill(Brushes.Solid(Color.DarkBlue), new Rectangle(0 * scaleX, 40 * scaleY, 100 * scaleX, 20 * scaleY));
         }));
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas(blendOptions, canvas =>
+        image.Mutate(ctx => ctx.Paint(blendOptions, canvas =>
         {
             canvas.Fill(Brushes.Solid(Color.HotPink), new Rectangle(20 * scaleX, 0 * scaleY, 30 * scaleX, 100 * scaleY));
         }));
@@ -64,17 +64,17 @@ public partial class ProcessWithDrawingCanvasTests
 
         DrawingOptions blendOptions = CreateBlendOptions(blending, composition);
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+        image.Mutate(ctx => ctx.Paint(canvas =>
         {
             canvas.Fill(Brushes.Solid(Color.DarkBlue), new Rectangle(0 * scaleX, 40 * scaleY, 100 * scaleX, 20 * scaleY));
         }));
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas(blendOptions, canvas =>
+        image.Mutate(ctx => ctx.Paint(blendOptions, canvas =>
         {
             canvas.Fill(Brushes.Solid(Color.HotPink), new Rectangle(20 * scaleX, 0 * scaleY, 30 * scaleX, 100 * scaleY));
         }));
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas(blendOptions, canvas =>
+        image.Mutate(ctx => ctx.Paint(blendOptions, canvas =>
         {
             canvas.Fill(Brushes.Solid(Color.Transparent), new EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY));
         }));
@@ -97,18 +97,18 @@ public partial class ProcessWithDrawingCanvasTests
         DrawingOptions blendOptions = CreateBlendOptions(blending, composition);
         Color transparentRed = Color.Red.WithAlpha(0.5F);
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+        image.Mutate(ctx => ctx.Paint(canvas =>
         {
             // Keep legacy shape coordinates identical to the original test.
             canvas.Fill(Brushes.Solid(Color.DarkBlue), new Rectangle(0 * scaleX, 40, 100 * scaleX, 20 * scaleY));
         }));
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas(blendOptions, canvas =>
+        image.Mutate(ctx => ctx.Paint(blendOptions, canvas =>
         {
             canvas.Fill(Brushes.Solid(Color.HotPink), new Rectangle(20 * scaleX, 0, 30 * scaleX, 100 * scaleY));
         }));
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas(blendOptions, canvas =>
+        image.Mutate(ctx => ctx.Paint(blendOptions, canvas =>
         {
             canvas.Fill(Brushes.Solid(transparentRed), new EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY));
         }));
@@ -132,17 +132,17 @@ public partial class ProcessWithDrawingCanvasTests
 
         DrawingOptions blendOptions = CreateBlendOptions(blending, composition);
 
-        destinationImage.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+        destinationImage.Mutate(ctx => ctx.Paint(canvas =>
         {
             canvas.Fill(Brushes.Solid(Color.DarkBlue), new Rectangle(0 * scaleX, 40 * scaleY, 100 * scaleX, 20 * scaleY));
         }));
 
-        sourceImage.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+        sourceImage.Mutate(ctx => ctx.Paint(canvas =>
         {
             canvas.Fill(Brushes.Solid(Color.Black), new EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY));
         }));
 
-        destinationImage.Mutate(ctx => ctx.ProcessWithCanvas(blendOptions, canvas =>
+        destinationImage.Mutate(ctx => ctx.Paint(blendOptions, canvas =>
         {
             canvas.DrawImage(
                 sourceImage,

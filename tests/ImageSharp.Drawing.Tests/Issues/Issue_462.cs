@@ -42,7 +42,7 @@ public class Issue_462
         };
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(canvas => canvas.DrawText(options, text, Brushes.Solid(Color.Black), pen: null)),
+            c => c.Paint(canvas => canvas.DrawText(options, text, Brushes.Solid(Color.Black), pen: null)),
             testOutputDetails: $"{support}-draw",
             comparer: ImageComparer.TolerantPercentage(0.002f));
 
@@ -50,7 +50,7 @@ public class Issue_462
             c =>
             {
                 Pen pen = Pens.Solid(Color.Black, 2);
-                c.ProcessWithCanvas(canvas => canvas.DrawGlyphs(pen.StrokeFill, pen, TextBuilder.GenerateGlyphs(text, options)));
+                c.Paint(canvas => canvas.DrawGlyphs(pen.StrokeFill, pen, TextBuilder.GenerateGlyphs(text, options)));
             },
             testOutputDetails: $"{support}-fill",
             comparer: ImageComparer.TolerantPercentage(0.002f));

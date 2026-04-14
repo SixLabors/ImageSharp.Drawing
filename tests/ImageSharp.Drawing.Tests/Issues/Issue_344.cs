@@ -13,7 +13,7 @@ public class Issue_344
     public void CanDrawWhereSegmentsOverlap<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(canvas =>
+            c => c.Paint(canvas =>
                 {
                     Pen pen = Pens.Solid(Color.Aqua.WithAlpha(.3F), 1);
                     canvas.DrawLine(pen, new PointF(10, 10), new PointF(90, 10), new PointF(20, 10));
@@ -24,7 +24,7 @@ public class Issue_344
     public void CanDrawWhereSegmentsOverlap_PathBuilder<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(canvas =>
+            c => c.Paint(canvas =>
             {
                 PathBuilder pathBuilder = new();
                 pathBuilder.MoveTo(10, 10);

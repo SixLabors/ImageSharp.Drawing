@@ -25,7 +25,7 @@ public partial class ProcessWithDrawingCanvasTests
 
                 PathGradientBrush brush = new(points, colors);
 
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+                image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
             });
 
@@ -42,7 +42,7 @@ public partial class ProcessWithDrawingCanvasTests
 
                 PathGradientBrush brush = new(points, colors);
 
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+                image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
             });
 
@@ -64,7 +64,7 @@ public partial class ProcessWithDrawingCanvasTests
 
                 PathGradientBrush brush = new(points, colors);
 
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+                image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
             });
 
@@ -81,7 +81,7 @@ public partial class ProcessWithDrawingCanvasTests
 
                 PathGradientBrush brush = new(points, colors, Color.White);
 
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+                image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
             });
 
@@ -97,7 +97,7 @@ public partial class ProcessWithDrawingCanvasTests
 
         PathGradientBrush brush = new(points, colors);
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+        image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
         image.ComparePixelBufferTo(Color.Red);
     }
 
@@ -114,7 +114,7 @@ public partial class ProcessWithDrawingCanvasTests
 
                 PathGradientBrush brush = new(points, colors);
 
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+                image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
             });
 
@@ -131,7 +131,7 @@ public partial class ProcessWithDrawingCanvasTests
 
                 PathGradientBrush brush = new(points, colors, Color.White);
 
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+                image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
             });
 
@@ -194,7 +194,7 @@ public partial class ProcessWithDrawingCanvasTests
                 ];
 
                 PathGradientBrush brush = new(points, colors, Color.White);
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+                image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
             },
             appendSourceFileOrDescription: false,
             appendPixelTypeToFileName: false);

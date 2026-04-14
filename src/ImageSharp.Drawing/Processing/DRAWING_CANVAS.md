@@ -59,6 +59,9 @@ Before looking at the flow, it helps to define the major terms in the sense used
 
 It is not the rasterizer. It is the object that makes the public drawing model coherent.
 
+Most callers reach that model through `IImageProcessingContext.Paint(...)`, while lower-level code can
+also create a canvas directly with the `CreateCanvas(...)` extension methods.
+
 ### Batcher
 
 `DrawingCanvasBatcher<TPixel>` is the deferred command queue. It stores pending `CompositionCommand` values, prepares them during flush, builds a `CompositionScene`, and calls `IDrawingBackend.FlushCompositions(...)`.
@@ -99,7 +102,8 @@ There are two backend-selection paths in the architecture:
 - the ordinary public `DrawingCanvas<TPixel>` constructors resolve the backend from `Configuration`
 - specialized infrastructure can construct a canvas with an explicit backend
 
-The ordinary CPU entry points also include the `CreateCanvas(...)` extension methods on `Image<TPixel>` and `ImageFrame<TPixel>`, which route into those same constructors.
+The ordinary CPU entry points include `Paint(...)` on `IImageProcessingContext` and the `CreateCanvas(...)`
+extension methods on `Image<TPixel>` and `ImageFrame<TPixel>`, which route into those same constructors.
 
 That explicit-backend path matters for the WebGPU helpers. `WebGPUWindow<TPixel>`, `WebGPURenderTarget<TPixel>`, and `WebGPUDeviceContext<TPixel>` create canvases that point directly at their owned `WebGPUDrawingBackend` instance instead of storing that backend on the caller's `Configuration`.
 

@@ -30,7 +30,7 @@ public class Issue_134
                     AntialiasThreshold = .33F
                 });
 
-            c.ProcessWithCanvas(canvas =>
+            c.Paint(canvas =>
             {
                 Brush brush = Brushes.Solid(Color.Black);
                 Font font = SystemFonts.Get("Tahoma").CreateFont(8);

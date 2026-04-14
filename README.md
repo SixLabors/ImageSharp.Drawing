@@ -15,6 +15,17 @@ SixLabors.ImageSharp.Drawing
 </div>
 
 **ImageSharp.Drawing** is a cross-platform 2D drawing library built on top of [ImageSharp](https://github.com/SixLabors/ImageSharp). It provides path construction, polygon manipulation, fills, strokes, gradient brushes, pattern brushes, and text rendering. Built against [.NET 8](https://docs.microsoft.com/en-us/dotnet/standard/net-standard).
+
+## Quick Start
+
+```csharp
+image.Mutate(ctx => ctx.Paint(canvas =>
+{
+    canvas.Fill(Brushes.Solid(Color.White));
+    canvas.Fill(Brushes.Solid(Color.Red), new EllipsePolygon(200, 200, 100));
+    canvas.Draw(Pens.Solid(Color.Blue, 3F), new RectangularPolygon(50, 50, 200, 100));
+}));
+```
   
 ## License
   

@@ -34,7 +34,7 @@ public class FillWithPattern
     public void DrawPatternPolygon3Core()
     {
         using Image<Rgba32> image = new(800, 800);
-        image.Mutate(x => x.ProcessWithCanvas(
+        image.Mutate(x => x.Paint(
             canvas => canvas.Fill(CoreBrushes.BackwardDiagonal(Color.HotPink))));
 
         using MemoryStream stream = new();

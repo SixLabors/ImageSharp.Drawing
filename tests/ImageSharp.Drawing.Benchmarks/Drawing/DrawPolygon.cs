@@ -161,7 +161,7 @@ public abstract class DrawPolygon
 
     [Benchmark]
     public void ImageSharp()
-        => this.image.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Draw(this.isPen, this.imageSharpPath)));
+        => this.image.Mutate(c => c.Paint(canvas => canvas.Draw(this.isPen, this.imageSharpPath)));
 
     [Benchmark]
     public void ImageSharpWebGPU()

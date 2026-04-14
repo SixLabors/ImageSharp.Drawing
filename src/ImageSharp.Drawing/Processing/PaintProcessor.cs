@@ -6,16 +6,17 @@ using SixLabors.ImageSharp.Processing.Processors;
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Defines a processor that executes a canvas callback for each image frame.
+/// Defines the image processor used by <see cref="PaintExtensions.Paint(IImageProcessingContext, DrawingOptions, CanvasAction)"/>
+/// to execute a canvas callback for each image frame.
 /// </summary>
-public sealed class ProcessWithCanvasProcessor : IImageProcessor
+public sealed class PaintProcessor : IImageProcessor
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="ProcessWithCanvasProcessor"/> class.
+    /// Initializes a new instance of the <see cref="PaintProcessor"/> class.
     /// </summary>
-    /// <param name="options">The drawing options.</param>
-    /// <param name="action">The per-frame canvas callback.</param>
-    public ProcessWithCanvasProcessor(DrawingOptions options, CanvasAction action)
+    /// <param name="options">The drawing options used when creating each frame canvas.</param>
+    /// <param name="action">The per-frame painting callback.</param>
+    public PaintProcessor(DrawingOptions options, CanvasAction action)
     {
         Guard.NotNull(options, nameof(options));
         Guard.NotNull(action, nameof(action));
@@ -25,10 +26,13 @@ public sealed class ProcessWithCanvasProcessor : IImageProcessor
     }
 
     /// <summary>
-    /// Gets the drawing options.
+    /// Gets the drawing options used when creating each frame canvas.
     /// </summary>
     public DrawingOptions Options { get; }
 
+    /// <summary>
+    /// Gets the per-frame painting callback.
+    /// </summary>
     internal CanvasAction Action { get; }
 
     /// <inheritdoc />
@@ -37,5 +41,5 @@ public sealed class ProcessWithCanvasProcessor : IImageProcessor
         Image<TPixel> source,
         Rectangle sourceRectangle)
         where TPixel : unmanaged, IPixel<TPixel>
-        => new ProcessWithCanvasProcessor<TPixel>(configuration, this, source, sourceRectangle);
+        => new PaintProcessor<TPixel>(configuration, this, source, sourceRectangle);
 }

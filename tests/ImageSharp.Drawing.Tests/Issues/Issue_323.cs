@@ -26,7 +26,7 @@ public class Issue_323
         ];
 
         provider.RunValidatingProcessorTest(
-            x => x.ProcessWithCanvas(canvas => canvas.Draw(Pens.Solid(color, scale), new Polygon(points))),
+            x => x.Paint(canvas => canvas.Draw(Pens.Solid(color, scale), new Polygon(points))),
             new { scale });
     }
 
@@ -49,7 +49,7 @@ public class Issue_323
 
         PatternPen pen = Pens.DashDot(color, scale);
         provider.RunValidatingProcessorTest(
-            x => x.ProcessWithCanvas(canvas => canvas.Draw(pen, new Polygon(points))),
+            x => x.Paint(canvas => canvas.Draw(pen, new Polygon(points))),
             new { scale });
     }
 }

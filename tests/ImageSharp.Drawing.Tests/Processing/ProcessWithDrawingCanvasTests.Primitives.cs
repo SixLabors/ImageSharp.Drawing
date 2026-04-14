@@ -49,7 +49,7 @@ public partial class ProcessWithDrawingCanvasTests
         DrawingOptions options = new();
 
         using Image<TPixel> image = provider.GetImage();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.DrawBezier(Pens.Solid(color, 5F), points)));
+        image.Mutate(ctx => ctx.Paint(options, canvas => canvas.DrawBezier(Pens.Solid(color, 5F), points)));
         image.DebugSave(
             provider,
             testDetails,
@@ -80,7 +80,7 @@ public partial class ProcessWithDrawingCanvasTests
         SolidBrush brush = Brushes.Solid(Color.HotPink);
 
         provider.RunValidatingProcessorTest(
-            ctx => ctx.ProcessWithCanvas(canvas =>
+            ctx => ctx.Paint(canvas =>
             {
                 canvas.Clear(Brushes.Solid(Color.Blue));
                 canvas.Fill(brush, polygon);
@@ -104,7 +104,7 @@ public partial class ProcessWithDrawingCanvasTests
         SolidBrush brush = Brushes.Solid(Color.HotPink.WithAlpha(150 / 255F));
 
         provider.RunValidatingProcessorTest(
-            ctx => ctx.ProcessWithCanvas(canvas =>
+            ctx => ctx.Paint(canvas =>
             {
                 canvas.Clear(Brushes.Solid(Color.Blue));
                 canvas.Fill(brush, polygon);
@@ -143,7 +143,7 @@ public partial class ProcessWithDrawingCanvasTests
         FormattableString outputDetails = $"T({thickness}){aa}";
 
         using Image<TPixel> image = provider.GetImage();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.DrawLine(pen, path)));
+        image.Mutate(ctx => ctx.Paint(options, canvas => canvas.DrawLine(pen, path)));
         image.DebugSave(provider, outputDetails, appendSourceFileOrDescription: false);
         image.CompareToReferenceOutput(
             ImageComparer.TolerantPercentage(0.001F),
@@ -322,7 +322,7 @@ public partial class ProcessWithDrawingCanvasTests
         DrawingOptions options = new();
 
         using Image<TPixel> image = provider.GetImage();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Draw(pen, clipped)));
+        image.Mutate(ctx => ctx.Paint(options, canvas => canvas.Draw(pen, clipped)));
         image.DebugSave(
             provider,
             testDetails,
@@ -374,7 +374,7 @@ public partial class ProcessWithDrawingCanvasTests
         DrawingOptions options = new();
 
         using Image<TPixel> image = provider.GetImage();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(color), clipped)));
+        image.Mutate(ctx => ctx.Paint(options, canvas => canvas.Fill(Brushes.Solid(color), clipped)));
         image.DebugSave(
             provider,
             testDetails,
@@ -414,7 +414,7 @@ public partial class ProcessWithDrawingCanvasTests
         FormattableString outputDetails = $"{colorName}_A({alpha})_T({thickness}){aa}";
 
         using Image<TPixel> image = provider.GetImage();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Draw(Pens.Solid(color, thickness), polygon)));
+        image.Mutate(ctx => ctx.Paint(options, canvas => canvas.Draw(Pens.Solid(color, thickness), polygon)));
         image.DebugSave(provider, outputDetails, appendSourceFileOrDescription: false);
         image.CompareToReferenceOutput(
             ImageComparer.TolerantPercentage(0.001F),
@@ -445,7 +445,7 @@ public partial class ProcessWithDrawingCanvasTests
         };
 
         using Image<TPixel> image = provider.GetImage();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Draw(Pens.Solid(Color.White, 2.5F), polygon)));
+        image.Mutate(ctx => ctx.Paint(options, canvas => canvas.Draw(Pens.Solid(Color.White, 2.5F), polygon)));
         image.DebugSave(provider);
         image.CompareToReferenceOutput(ImageComparer.TolerantPercentage(0.001F), provider);
     }
@@ -462,7 +462,7 @@ public partial class ProcessWithDrawingCanvasTests
         };
 
         using Image<TPixel> image = provider.GetImage();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Draw(Pens.Solid(Color.White, 2.5F), polygon)));
+        image.Mutate(ctx => ctx.Paint(options, canvas => canvas.Draw(Pens.Solid(Color.White, 2.5F), polygon)));
         image.DebugSave(provider);
         image.CompareToReferenceOutput(ImageComparer.TolerantPercentage(0.001F), provider);
     }
@@ -491,7 +491,7 @@ public partial class ProcessWithDrawingCanvasTests
         DrawingOptions options = new();
 
         using Image<TPixel> image = provider.GetImage();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Draw(Pens.Solid(color, thickness), path)));
+        image.Mutate(ctx => ctx.Paint(options, canvas => canvas.Draw(Pens.Solid(color, thickness), path)));
         image.DebugSave(
             provider,
             testDetails,
@@ -514,7 +514,7 @@ public partial class ProcessWithDrawingCanvasTests
         DrawingOptions options = new();
 
         using Image<TPixel> image = provider.GetImage();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas =>
+        image.Mutate(ctx => ctx.Paint(options, canvas =>
         {
             for (int i = 0; i < 300; i += 20)
             {
@@ -549,7 +549,7 @@ public partial class ProcessWithDrawingCanvasTests
         DrawingOptions options = new();
 
         using Image<TPixel> image = provider.GetImage();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Draw(Pens.Solid(Color.Black, 1F), path)));
+        image.Mutate(ctx => ctx.Paint(options, canvas => canvas.Draw(Pens.Solid(Color.Black, 1F), path)));
         image.DebugSave(
             provider,
             appendPixelTypeToFileName: false,
@@ -570,7 +570,7 @@ public partial class ProcessWithDrawingCanvasTests
         DrawingOptions options = new();
 
         using Image<TPixel> image = provider.GetImage();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Draw(Pens.Solid(Color.Black, 1F), path)));
+        image.Mutate(ctx => ctx.Paint(options, canvas => canvas.Draw(Pens.Solid(Color.Black, 1F), path)));
         image.DebugSave(
             provider,
             $"{sweep}",
@@ -594,7 +594,7 @@ public partial class ProcessWithDrawingCanvasTests
         DrawingOptions options = new();
 
         using Image<TPixel> image = provider.GetImage();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Draw(Pens.Solid(Color.Black, 1F), path)));
+        image.Mutate(ctx => ctx.Paint(options, canvas => canvas.Draw(Pens.Solid(Color.Black, 1F), path)));
         image.DebugSave(
             provider,
             $"{sweep}",
@@ -626,7 +626,7 @@ public partial class ProcessWithDrawingCanvasTests
         FormattableString outputDetails = $"{colorName}_A({alpha})_T({thickness}){aa}";
 
         using Image<TPixel> image = provider.GetImage();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.DrawLine(pen, simplePath)));
+        image.Mutate(ctx => ctx.Paint(options, canvas => canvas.DrawLine(pen, simplePath)));
         image.DebugSave(provider, outputDetails, appendSourceFileOrDescription: false);
         image.CompareToReferenceOutput(
             ImageComparer.TolerantPercentage(0.001F),

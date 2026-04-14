@@ -15,7 +15,7 @@ public class ProcessWithCanvasExtensionsTests
         using Image<Rgba32> image = new(24, 16);
         image.Frames.AddFrame(image.Frames.RootFrame);
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Clear(Brushes.Solid(Color.OrangeRed))));
+        image.Mutate(ctx => ctx.Paint(canvas => canvas.Clear(Brushes.Solid(Color.OrangeRed))));
 
         Assert.Equal(Color.OrangeRed.ToPixel<Rgba32>(), image.Frames.RootFrame[8, 6]);
         Assert.Equal(Color.OrangeRed.ToPixel<Rgba32>(), image.Frames[1][8, 6]);
@@ -26,10 +26,10 @@ public class ProcessWithCanvasExtensionsTests
     {
         using Image<Rgba32> source = new(24, 16);
         source.Frames.AddFrame(source.Frames.RootFrame);
-        source.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Clear(Brushes.Solid(Color.White))));
+        source.Mutate(ctx => ctx.Paint(canvas => canvas.Clear(Brushes.Solid(Color.White))));
 
         using Image<Rgba32> clone = source.Clone(
-            ctx => ctx.ProcessWithCanvas(canvas => canvas.Clear(Brushes.Solid(Color.MediumPurple))));
+            ctx => ctx.Paint(canvas => canvas.Clear(Brushes.Solid(Color.MediumPurple))));
 
         Assert.Equal(Color.White.ToPixel<Rgba32>(), source.Frames.RootFrame[8, 6]);
         Assert.Equal(Color.White.ToPixel<Rgba32>(), source.Frames[1][8, 6]);
@@ -48,7 +48,7 @@ public class ProcessWithCanvasExtensionsTests
         Rectangle sourceRect = new(2, 1, 4, 5);
         RectangleF destinationRect = new(6, 4, 10, 6);
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+        image.Mutate(ctx => ctx.Paint(canvas =>
         {
             canvas.Clear(Brushes.Solid(Color.White));
             canvas.DrawImage(source, sourceRect, destinationRect);

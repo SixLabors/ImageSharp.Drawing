@@ -244,7 +244,7 @@ public partial class ProcessWithDrawingCanvasTests
             ImageComparer.Exact,
             image =>
             {
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+                image.Mutate(ctx => ctx.Paint(canvas =>
                 {
                     canvas.Fill(Brushes.Solid(Color.Blue));
                     canvas.Fill(brush);

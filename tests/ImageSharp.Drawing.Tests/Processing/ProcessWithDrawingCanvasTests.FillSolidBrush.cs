@@ -52,7 +52,7 @@ public partial class ProcessWithDrawingCanvasTests
         Color color = Color.HotPink;
         DrawingOptions options = new();
 
-        image.Mutate(c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(color))));
+        image.Mutate(c => c.Paint(options, canvas => canvas.Fill(Brushes.Solid(color))));
 
         image.DebugSave(provider, appendPixelTypeToFileName: false);
         image.ComparePixelBufferTo(color);
@@ -67,7 +67,7 @@ public partial class ProcessWithDrawingCanvasTests
         Color color = Color.HotPink;
         DrawingOptions options = new();
 
-        image.Mutate(c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(color))));
+        image.Mutate(c => c.Paint(options, canvas => canvas.Fill(Brushes.Solid(color))));
 
         image.DebugSave(provider, appendSourceFileOrDescription: false);
         image.ComparePixelBufferTo(color);
@@ -85,7 +85,7 @@ public partial class ProcessWithDrawingCanvasTests
         Color color = TestUtils.GetColorByName(newColorName);
         DrawingOptions options = new();
 
-        image.Mutate(c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(color))));
+        image.Mutate(c => c.Paint(options, canvas => canvas.Fill(Brushes.Solid(color))));
 
         image.DebugSave(
             provider,
@@ -106,7 +106,7 @@ public partial class ProcessWithDrawingCanvasTests
         Color color = Color.Blue;
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(canvas => canvas.Fill(Brushes.Solid(color), region)),
+            c => c.Paint(canvas => canvas.Fill(Brushes.Solid(color), region)),
             testDetails,
             ImageComparer.Exact);
     }
@@ -127,7 +127,7 @@ public partial class ProcessWithDrawingCanvasTests
         Color color = Color.Blue;
 
         provider.RunValidatingProcessorTestOnWrappedMemoryImage(
-            c => c.ProcessWithCanvas(canvas => canvas.Fill(Brushes.Solid(color), region)),
+            c => c.Paint(canvas => canvas.Fill(Brushes.Solid(color), region)),
             testDetails,
             ImageComparer.Exact,
             useReferenceOutputFrom: nameof(this.FillSolidBrush_Region));
@@ -161,11 +161,11 @@ public partial class ProcessWithDrawingCanvasTests
         if (triggerFillRegion)
         {
             RectangularPolygon path = new(0, 0, 16, 16);
-            image.Mutate(c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(fillColor), path)));
+            image.Mutate(c => c.Paint(options, canvas => canvas.Fill(Brushes.Solid(fillColor), path)));
         }
         else
         {
-            image.Mutate(c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(fillColor))));
+            image.Mutate(c => c.Paint(options, canvas => canvas.Fill(Brushes.Solid(fillColor))));
         }
 
         var testOutputDetails = new

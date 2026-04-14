@@ -21,7 +21,7 @@ public partial class ProcessWithDrawingCanvasTests
         RecolorBrush brush = new(sourceColor, targetColor, threshold);
 
         FormattableString testInfo = $"{sourceColorName}-{targetColorName}-{threshold}";
-        provider.RunValidatingProcessorTest(x => x.ProcessWithCanvas(canvas => canvas.Fill(brush)), testInfo);
+        provider.RunValidatingProcessorTest(x => x.Paint(canvas => canvas.Fill(brush)), testInfo);
     }
 
     [Theory]
@@ -36,7 +36,7 @@ public partial class ProcessWithDrawingCanvasTests
 
         FormattableString testInfo = $"{sourceColorName}-{targetColorName}-{threshold}";
         provider.RunValidatingProcessorTest(
-            x => x.ProcessWithCanvas(canvas =>
+            x => x.Paint(canvas =>
             {
                 Rectangle bounds = canvas.Bounds;
                 Rectangle region = new(0, (bounds.Height / 2) - (bounds.Height / 4), bounds.Width, bounds.Height / 2);

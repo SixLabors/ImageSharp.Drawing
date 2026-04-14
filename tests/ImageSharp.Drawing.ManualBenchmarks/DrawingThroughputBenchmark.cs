@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
 using System.Diagnostics;
@@ -129,7 +129,7 @@ public sealed class DrawingThroughputBenchmark
     private int Tiger()
     {
         using Image<Rgba32> image = new(this.options.Width, this.options.Height);
-        image.Mutate(this.configuration, c => c.ProcessWithCanvas(canvas =>
+        image.Mutate(this.configuration, c => c.Paint(canvas =>
         {
             foreach ((IPath path, SolidBrush fill, SolidPen stroke) in this.elements)
             {

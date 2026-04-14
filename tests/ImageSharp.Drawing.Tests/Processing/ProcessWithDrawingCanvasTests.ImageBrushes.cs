@@ -17,8 +17,8 @@ public partial class ProcessWithDrawingCanvasTests
             ImageBrush<Rgba32> brush = new(source);
             using (Image<Rgba32> destination = new(10, 10))
             {
-                destination.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush, new Rectangle(0, 0, 10, 10))));
-                destination.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush, new Rectangle(0, 0, 10, 10))));
+                destination.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush, new Rectangle(0, 0, 10, 10))));
+                destination.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush, new Rectangle(0, 0, 10, 10))));
             }
         }
     }
@@ -34,13 +34,13 @@ public partial class ProcessWithDrawingCanvasTests
         {
             using Image<Bgra32> overlay = Image.Load<Bgra32>(data);
             Brush brush = new ImageBrush<Bgra32>(overlay);
-            background.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+            background.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
         }
         else
         {
             using Image<Rgba32> overlay = Image.Load<Rgba32>(data);
             Brush brush = new ImageBrush<Rgba32>(overlay);
-            background.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+            background.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
         }
 
         background.DebugSave(provider, appendSourceFileOrDescription: false);
@@ -59,7 +59,7 @@ public partial class ProcessWithDrawingCanvasTests
         overlay.Mutate(ctx => ctx.Crop(new Rectangle(0, 0, 125, 90)));
 
         ImageBrush<Rgba32> brush = new(overlay);
-        background.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+        background.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
 
         background.DebugSave(provider, appendSourceFileOrDescription: false);
         background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
@@ -77,7 +77,7 @@ public partial class ProcessWithDrawingCanvasTests
         overlay.Mutate(ctx => ctx.Crop(new Rectangle(0, 0, 90, 125)));
 
         ImageBrush<Rgba32> brush = new(overlay);
-        background.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+        background.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
 
         background.DebugSave(provider, appendSourceFileOrDescription: false);
         background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
@@ -93,7 +93,7 @@ public partial class ProcessWithDrawingCanvasTests
         using Image<Rgba32> overlay = Image.Load<Rgba32>(data);
 
         ImageBrush<Rgba32> brush = new(overlay);
-        background.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+        background.Mutate(ctx => ctx.Paint(canvas =>
         {
             canvas.Fill(brush, new Rectangle(0, 0, 400, 200));
             canvas.Fill(brush, new Rectangle(-100, 200, 500, 200));
@@ -115,7 +115,7 @@ public partial class ProcessWithDrawingCanvasTests
         ImageBrush<Rgba32> brush = new(overlay);
         ImageBrush<Rgba32> brushOffset = new(overlay, new Point(100, 0));
 
-        background.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+        background.Mutate(ctx => ctx.Paint(canvas =>
         {
             canvas.Fill(brush, new Rectangle(0, 0, 400, 200));
             canvas.Fill(brushOffset, new Rectangle(0, 200, 400, 200));
@@ -139,7 +139,7 @@ public partial class ProcessWithDrawingCanvasTests
         finalTexture.Mutate(ctx => ctx.Resize(100, 200));
 
         ImageBrush<Rgba32> brush = new(finalTexture);
-        background.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+        background.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
 
         background.DebugSave(provider, appendSourceFileOrDescription: false);
         background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
@@ -174,7 +174,7 @@ public partial class ProcessWithDrawingCanvasTests
         ImageBrush<Rgba32> halfBrush = new(overlay, new RectangleF(50, 0, 50, 100));
         ImageBrush<Rgba32> fullBrush = new(overlay);
 
-        background.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+        background.Mutate(ctx => ctx.Paint(canvas =>
             FillImageBrushDrawFull(canvas, new Size(100, 100), fullBrush, halfBrush, background.Width, background.Height)));
 
         background.DebugSave(provider, appendSourceFileOrDescription: false);

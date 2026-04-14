@@ -26,7 +26,7 @@ public class Issue_37
             DrawingOptions drawingOptions = new() { GraphicsOptions = graphicsOptions };
             RichTextOptions textOptions = new(font) { Origin = new PointF(50, 50) };
             image.Mutate(
-                x => x.ProcessWithCanvas(
+                x => x.Paint(
                     drawingOptions,
                     canvas =>
                     {

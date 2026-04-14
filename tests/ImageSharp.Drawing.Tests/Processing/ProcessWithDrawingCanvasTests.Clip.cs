@@ -22,7 +22,7 @@ public partial class ProcessWithDrawingCanvasTests
     {
         FormattableString testDetails = $"offset_x{dx}_y{dy}";
         provider.RunValidatingProcessorTest(
-            x => x.ProcessWithCanvas(canvas =>
+            x => x.Paint(canvas =>
             {
                 Rectangle bounds = canvas.Bounds;
                 int outerRadii = (int)(Math.Min(bounds.Width, bounds.Height) * sizeMult);
@@ -40,7 +40,7 @@ public partial class ProcessWithDrawingCanvasTests
     public void ClipConstrainsOperationToClipBounds<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => provider.RunValidatingProcessorTest(
-            x => x.ProcessWithCanvas(canvas =>
+            x => x.Paint(canvas =>
             {
                 Rectangle bounds = canvas.Bounds;
                 RectangleF rect = new(0, 0, bounds.Width / 2F, bounds.Height / 2F);

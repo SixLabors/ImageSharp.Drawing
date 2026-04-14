@@ -38,7 +38,7 @@ public class DrawBeziers
     public void DrawLinesCore()
     {
         using Image<Rgba32> image = new(800, 800);
-        image.Mutate(x => x.ProcessWithCanvas(canvas => canvas.DrawBezier(
+        image.Mutate(x => x.Paint(canvas => canvas.DrawBezier(
             Processing.Pens.Solid(Color.HotPink, 10),
             new PointF(10, 500),
             new PointF(30, 10),

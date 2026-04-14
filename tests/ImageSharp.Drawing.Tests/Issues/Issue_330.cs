@@ -19,7 +19,7 @@ public class Issue_330
         Font bibfont = fontFamily.CreateFont(600, FontStyle.Bold);
         Font namefont = fontFamily.CreateFont(140, FontStyle.Bold);
 
-        provider.RunValidatingProcessorTest(p => p.ProcessWithCanvas(canvas =>
+        provider.RunValidatingProcessorTest(p => p.Paint(canvas =>
             {
                 canvas.DrawText(
                     new RichTextOptions(bibfont)

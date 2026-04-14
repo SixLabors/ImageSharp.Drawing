@@ -51,7 +51,7 @@ public partial class ProcessWithDrawingCanvasTests
         IPath path4 = pb.Build();
 
         using Image<TPixel> image = provider.GetImage();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+        image.Mutate(ctx => ctx.Paint(canvas =>
         {
             canvas.Fill(Brushes.Solid(Color.Green), path);
             canvas.Fill(Brushes.Solid(Color.Red), path2);
@@ -71,7 +71,7 @@ public partial class ProcessWithDrawingCanvasTests
     {
         using Image<TPixel> image = provider.GetImage();
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+        image.Mutate(ctx => ctx.Paint(canvas =>
         {
             for (int i = 0; i <= 3; i++)
             {
@@ -139,7 +139,7 @@ public partial class ProcessWithDrawingCanvasTests
         IPath path2 = pb.Build();
 
         using Image<TPixel> image = provider.GetImage();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+        image.Mutate(ctx => ctx.Paint(canvas =>
         {
             canvas.Fill(Brushes.Solid(Color.Yellow), path);
             canvas.Fill(Brushes.Solid(Color.Red.WithAlpha(.5F)), path2);

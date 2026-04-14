@@ -26,7 +26,7 @@ public class FillParisTests
     public void FillParis_ImageSharp_CPU()
     {
         using Image<Rgba32> image = new(Width, Height);
-        image.Mutate(c => c.ProcessWithCanvas(canvas =>
+        image.Mutate(c => c.Paint(canvas =>
         {
             foreach ((IPath path, SolidBrush fill, SolidPen stroke) in isElements)
             {

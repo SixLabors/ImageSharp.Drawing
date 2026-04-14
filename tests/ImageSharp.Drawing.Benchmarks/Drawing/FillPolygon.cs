@@ -100,7 +100,7 @@ public abstract class FillPolygon
 
     [Benchmark]
     public void ImageSharp()
-        => this.image.Mutate(c => c.ProcessWithCanvas(canvas =>
+        => this.image.Mutate(c => c.Paint(canvas =>
         {
             foreach (Polygon polygon in this.polygons)
             {
@@ -113,7 +113,7 @@ public abstract class FillPolygon
     {
         Configuration configuration = this.image.Configuration.Clone();
         configuration.MaxDegreeOfParallelism = 1;
-        this.image.Mutate(configuration, c => c.ProcessWithCanvas(canvas =>
+        this.image.Mutate(configuration, c => c.Paint(canvas =>
         {
             foreach (Polygon polygon in this.polygons)
             {

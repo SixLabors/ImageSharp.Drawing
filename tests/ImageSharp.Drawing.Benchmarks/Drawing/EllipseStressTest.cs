@@ -24,7 +24,7 @@ public class EllipseStressTest
     [Benchmark]
     public void DrawImageSharp()
         => this.image.Mutate(
-            m => m.ProcessWithCanvas(canvas =>
+            m => m.Paint(canvas =>
             {
                 for (int i = 0; i < 20_000; i++)
                 {

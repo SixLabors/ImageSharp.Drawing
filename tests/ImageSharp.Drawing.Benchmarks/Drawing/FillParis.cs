@@ -140,7 +140,7 @@ public class FillParis
 
     [Benchmark]
     public void ImageSharp()
-        => this.image.Mutate(c => c.ProcessWithCanvas(canvas =>
+        => this.image.Mutate(c => c.Paint(canvas =>
         {
             foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
             {

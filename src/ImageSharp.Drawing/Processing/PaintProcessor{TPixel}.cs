@@ -6,25 +6,26 @@ using SixLabors.ImageSharp.Processing.Processors;
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Executes a per-frame canvas callback for a specific pixel type.
+/// Executes the <see cref="PaintProcessor"/> callback for a specific pixel type by creating a
+/// <see cref="DrawingCanvas{TPixel}"/> over each frame.
 /// </summary>
 /// <typeparam name="TPixel">The pixel format.</typeparam>
-internal sealed class ProcessWithCanvasProcessor<TPixel> : ImageProcessor<TPixel>
+internal sealed class PaintProcessor<TPixel> : ImageProcessor<TPixel>
     where TPixel : unmanaged, IPixel<TPixel>
 {
-    private readonly ProcessWithCanvasProcessor definition;
+    private readonly PaintProcessor definition;
     private readonly CanvasAction action;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ProcessWithCanvasProcessor{TPixel}"/> class.
+    /// Initializes a new instance of the <see cref="PaintProcessor{TPixel}"/> class.
     /// </summary>
     /// <param name="configuration">The processing configuration.</param>
-    /// <param name="definition">The processor definition.</param>
+    /// <param name="definition">The non-generic processor definition that owns the drawing options and callback.</param>
     /// <param name="source">The source image.</param>
-    /// <param name="sourceRectangle">The source bounds.</param>
-    public ProcessWithCanvasProcessor(
+    /// <param name="sourceRectangle">The source bounds passed through the processing pipeline.</param>
+    public PaintProcessor(
         Configuration configuration,
-        ProcessWithCanvasProcessor definition,
+        PaintProcessor definition,
         Image<TPixel> source,
         Rectangle sourceRectangle)
         : base(configuration, source, sourceRectangle)

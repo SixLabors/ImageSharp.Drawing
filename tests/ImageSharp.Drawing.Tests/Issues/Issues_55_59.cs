@@ -24,7 +24,7 @@ public class Issues_55_59
         ];
 
         using Image<Rgba32> image = new(100, 100);
-        image.Mutate(imageContext => imageContext.ProcessWithCanvas(
+        image.Mutate(imageContext => imageContext.Paint(
             canvas => canvas.DrawLine(Pens.Solid(Color.FromPixel(new Rgba32(255, 0, 0)), 1), line)));
     }
 
@@ -38,7 +38,7 @@ public class Issues_55_59
             new LinearLineSegment(new PointF(592.916f, 1155.754f), new PointF(592.0153f, 1156.238f)));
 
         using Image<Rgba32> image = new(2000, 2000);
-        image.Mutate(imageContext => imageContext.ProcessWithCanvas(
+        image.Mutate(imageContext => imageContext.Paint(
             canvas => canvas.Draw(Pens.Solid(Color.FromPixel(new Rgba32(255, 0, 0)), 1), path)));
     }
 }

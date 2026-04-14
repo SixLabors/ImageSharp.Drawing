@@ -43,7 +43,7 @@ public partial class ProcessWithDrawingCanvasTests
                     new ColorStop(0.75F, Color.Blue),
                     new ColorStop(1, Color.Red));
 
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+                image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
             },
             $"start({start},end{end})",
             false,
@@ -65,7 +65,7 @@ public partial class ProcessWithDrawingCanvasTests
                 new ColorStop(0, red),
                 new ColorStop(1, red));
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+        image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
         image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
 
         // No reference image needed: the whole output should be a single color.
@@ -94,7 +94,7 @@ public partial class ProcessWithDrawingCanvasTests
                     new ColorStop(0, Color.Red),
                     new ColorStop(1, Color.Yellow));
 
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+                image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
             },
             $"center({centerX},{centerY})",
             false,
@@ -229,7 +229,7 @@ public partial class ProcessWithDrawingCanvasTests
                 new ColorStop(1, red));
 
         DrawingOptions options = new();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Fill(unicolorEllipticGradientBrush)));
+        image.Mutate(ctx => ctx.Paint(options, canvas => canvas.Fill(unicolorEllipticGradientBrush)));
         image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
 
         // No reference image needed: the whole output should be a single color.
@@ -264,7 +264,7 @@ public partial class ProcessWithDrawingCanvasTests
 
         FormattableString outputDetails = $"{ratio:F2}";
         DrawingOptions options = new();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Fill(brush)));
+        image.Mutate(ctx => ctx.Paint(options, canvas => canvas.Fill(brush)));
         image.DebugSave(provider, outputDetails, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
         image.CompareToReferenceOutput(
             EllipticGradientTolerantComparer,
@@ -324,7 +324,7 @@ public partial class ProcessWithDrawingCanvasTests
 
         FormattableString outputDetails = $"{ratio:F2}_AT_{rotationInDegree:00}deg";
         DrawingOptions options = new();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Fill(brush)));
+        image.Mutate(ctx => ctx.Paint(options, canvas => canvas.Fill(brush)));
         image.DebugSave(provider, outputDetails, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
         image.CompareToReferenceOutput(
             EllipticGradientTolerantComparer,
@@ -357,7 +357,7 @@ public partial class ProcessWithDrawingCanvasTests
             new ColorStop(0, red),
             new ColorStop(1, red));
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+        image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
 
         image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
 
@@ -382,7 +382,7 @@ public partial class ProcessWithDrawingCanvasTests
                     new ColorStop(0, Color.Blue),
                     new ColorStop(1, Color.Yellow));
 
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+                image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
             },
             appendSourceFileOrDescription: false);
 
@@ -401,7 +401,7 @@ public partial class ProcessWithDrawingCanvasTests
                     new ColorStop(0, Color.Red),
                     new ColorStop(1, Color.Yellow));
 
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+                image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
             },
             false,
             false);
@@ -426,7 +426,7 @@ public partial class ProcessWithDrawingCanvasTests
                     new ColorStop(0, Color.Red),
                     new ColorStop(1, Color.Yellow));
 
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+                image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
             },
             $"{repetitionMode}",
             false,
@@ -470,7 +470,7 @@ public partial class ProcessWithDrawingCanvasTests
                 GradientRepetitionMode.None,
                 colorStops);
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+        image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
 
         image.DebugSave(
             provider,
@@ -507,7 +507,7 @@ public partial class ProcessWithDrawingCanvasTests
                     new ColorStop(0, Color.Red),
                     new ColorStop(1, Color.Yellow));
 
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+                image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
 
                 VerifyAllRowsAreUnicolor(image);
             },
@@ -557,7 +557,7 @@ public partial class ProcessWithDrawingCanvasTests
                 new ColorStop(0, Color.Red),
                 new ColorStop(1, Color.Yellow));
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+        image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
         image.DebugSave(
             provider,
             startCorner,
@@ -628,7 +628,7 @@ public partial class ProcessWithDrawingCanvasTests
                     GradientRepetitionMode.None,
                     colorStops);
 
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+                image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
             },
             variant,
             false,
@@ -675,7 +675,7 @@ public partial class ProcessWithDrawingCanvasTests
                     GradientRepetitionMode.None,
                     colorStops);
 
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+                image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
             },
             variant,
             false,
@@ -695,7 +695,7 @@ public partial class ProcessWithDrawingCanvasTests
 
                 image.Mutate(ctx =>
                 {
-                    ctx.ProcessWithCanvas(canvas => canvas.Fill(Brushes.Solid(Color.Red)));
+                    ctx.Paint(canvas => canvas.Fill(Brushes.Solid(Color.Red)));
 
                     DrawingOptions glossOptions = new()
                     {
@@ -715,7 +715,7 @@ public partial class ProcessWithDrawingCanvasTests
                         new ColorStop(0, Color.White.WithAlpha(0.5f)),
                         new ColorStop(1, Color.White.WithAlpha(0.25f)));
 
-                    ctx.ProcessWithCanvas(glossOptions, canvas => canvas.Fill(linearGradientBrush, glossPath));
+                    ctx.Paint(glossOptions, canvas => canvas.Fill(linearGradientBrush, glossPath));
                 });
             });
 
@@ -745,7 +745,7 @@ public partial class ProcessWithDrawingCanvasTests
                     [new PointF(0, 0), new PointF(200, 0), new PointF(200, 200), new PointF(0, 200), new PointF(0, 0)],
                     [Color.Red, Color.Yellow, Color.Green, Color.DarkCyan, Color.Red]);
 
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+                image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
             },
             false,
             false);
@@ -765,7 +765,7 @@ public partial class ProcessWithDrawingCanvasTests
                     new ColorStop(0, Color.Red),
                     new ColorStop(1, Color.Yellow));
 
-                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+                image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(brush)));
             },
             false,
             false);

@@ -18,7 +18,7 @@ public class Issue_28_108
     {
         using Image<Rgba32> image = new(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
         DrawingOptions options = CreateAliasedDrawingOptions();
-        image.Mutate(x => x.ProcessWithCanvas(
+        image.Mutate(x => x.Paint(
             options,
             canvas => canvas.DrawLine(
                 Pens.Solid(Color.Red, stroke),
@@ -38,7 +38,7 @@ public class Issue_28_108
     {
         using Image<Rgba32> image = new(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
         DrawingOptions options = CreateAliasedDrawingOptions();
-        image.Mutate(x => x.ProcessWithCanvas(
+        image.Mutate(x => x.Paint(
             options,
             canvas => canvas.DrawLine(
                 Pens.Solid(Color.Red, stroke),
@@ -58,7 +58,7 @@ public class Issue_28_108
     {
         using Image<Rgba32> image = new(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
         DrawingOptions options = CreateAliasedDrawingOptions();
-        image.Mutate(x => x.ProcessWithCanvas(
+        image.Mutate(x => x.Paint(
             options,
             canvas => canvas.DrawLine(
                 Pens.Solid(Color.Red, stroke),
@@ -78,7 +78,7 @@ public class Issue_28_108
     {
         using Image<Rgba32> image = new(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
         DrawingOptions options = CreateAliasedDrawingOptions();
-        image.Mutate(x => x.ProcessWithCanvas(
+        image.Mutate(x => x.Paint(
             options,
             canvas => canvas.DrawLine(
                 Pens.Solid(Color.Red, stroke),

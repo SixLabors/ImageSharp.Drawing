@@ -32,7 +32,7 @@ public partial class ProcessWithDrawingCanvasTests
         using Image<Rgba32> image = new(width, height, Color.Red.ToPixel<Rgba32>());
 
         Rectangle rectangle = new(xpos, 0, width, height);
-        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(Brushes.Solid(Color.Black), rectangle)));
+        image.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(Brushes.Solid(Color.Black), rectangle)));
     }
 
     [Theory]
@@ -45,7 +45,7 @@ public partial class ProcessWithDrawingCanvasTests
         EllipsePolygon circle = new(xpos, ypos, width, height);
 
         provider.RunValidatingProcessorTest(
-            ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(Brushes.Solid(Color.Black), circle)),
+            ctx => ctx.Paint(canvas => canvas.Fill(Brushes.Solid(Color.Black), circle)),
             $"({xpos}_{ypos})",
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);

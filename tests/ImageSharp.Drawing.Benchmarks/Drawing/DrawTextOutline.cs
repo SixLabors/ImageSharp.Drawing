@@ -60,7 +60,7 @@ public class DrawTextOutline
             Origin = new PointF(10, 10)
         };
 
-        image.Mutate(x => x.ProcessWithCanvas(canvas => canvas.DrawText(
+        image.Mutate(x => x.Paint(canvas => canvas.DrawText(
             textOptions,
             this.TextToRender,
             brush: null,
@@ -80,7 +80,7 @@ public class DrawTextOutline
             };
 
             image.Mutate(
-                x => x.ProcessWithCanvas(canvas => DrawTextOldVersion(
+                x => x.Paint(canvas => DrawTextOldVersion(
                     canvas,
                     new DrawingOptions { GraphicsOptions = { Antialias = true } },
                     textOptions,

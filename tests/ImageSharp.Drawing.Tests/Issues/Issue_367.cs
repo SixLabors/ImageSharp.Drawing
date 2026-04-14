@@ -20,7 +20,7 @@ public class Issue_367
         }
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(canvas =>
+            c => c.Paint(canvas =>
             {
                 Pen pen = Pens.Solid(Color.Green, 1);
                 Brush brush = Brushes.Solid(Color.Red);

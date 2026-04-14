@@ -13,9 +13,9 @@ public class ProcessWithCanvas : BaseImageOperationsExtensionTest
     [Fact]
     public void CanvasActionDefaultOptions()
     {
-        this.operations.ProcessWithCanvas(canvas => canvas.Clear(Brushes.Solid(Color.Red)));
+        this.operations.Paint(canvas => canvas.Clear(Brushes.Solid(Color.Red)));
 
-        ProcessWithCanvasProcessor processor = this.Verify<ProcessWithCanvasProcessor>();
+        PaintProcessor processor = this.Verify<PaintProcessor>();
 
         GraphicsOptions expectedOptions = this.graphicsOptions;
         Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
@@ -27,11 +27,11 @@ public class ProcessWithCanvas : BaseImageOperationsExtensionTest
     [Fact]
     public void CanvasActionWithOptions()
     {
-        this.operations.ProcessWithCanvas(
+        this.operations.Paint(
             this.nonDefaultOptions,
             canvas => canvas.Clear(Brushes.Solid(Color.Red)));
 
-        ProcessWithCanvasProcessor processor = this.Verify<ProcessWithCanvasProcessor>();
+        PaintProcessor processor = this.Verify<PaintProcessor>();
         Assert.Equal(this.nonDefaultOptions, processor.Options);
     }
 }

@@ -37,7 +37,7 @@ public class Issue_54
             string text = "sample text";
 
             // Draw the text
-            image.Mutate(x => x.ProcessWithCanvas(canvas => canvas.DrawText(textOptions, text, brush, pen)));
+            image.Mutate(x => x.Paint(canvas => canvas.DrawText(textOptions, text, brush, pen)));
         }
     }
 

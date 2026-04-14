@@ -46,7 +46,7 @@ public partial class ProcessWithDrawingCanvasTests
         };
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(options, canvas =>
+            c => c.Paint(options, canvas =>
             {
                 canvas.Fill(Brushes.Solid(Color.White), shape1);
                 canvas.Fill(Brushes.Solid(Color.White), shape2);
@@ -79,7 +79,7 @@ public partial class ProcessWithDrawingCanvasTests
         FormattableString outputDetails = $"{colorName}_A{alpha}{aa}";
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(color), polygon)),
+            c => c.Paint(options, canvas => canvas.Fill(Brushes.Solid(color), polygon)),
             outputDetails,
             appendSourceFileOrDescription: false);
     }
@@ -100,7 +100,7 @@ public partial class ProcessWithDrawingCanvasTests
         };
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(Color.White), polygon)));
+            c => c.Paint(options, canvas => canvas.Fill(Brushes.Solid(Color.White), polygon)));
     }
 
     [Theory]
@@ -115,7 +115,7 @@ public partial class ProcessWithDrawingCanvasTests
         };
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(Color.White), polygon)));
+            c => c.Paint(options, canvas => canvas.Fill(Brushes.Solid(Color.White), polygon)));
     }
 
     [Theory]
@@ -130,7 +130,7 @@ public partial class ProcessWithDrawingCanvasTests
         };
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(Color.White), polygon)));
+            c => c.Paint(options, canvas => canvas.Fill(Brushes.Solid(Color.White), polygon)));
     }
 
     [Theory]
@@ -157,7 +157,7 @@ public partial class ProcessWithDrawingCanvasTests
         };
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(Color.White), polygon)),
+            c => c.Paint(options, canvas => canvas.Fill(Brushes.Solid(Color.White), polygon)),
             testOutputDetails: $"Reverse({reverse})_IntersectionRule({intersectionRule})",
             comparer: ImageComparer.TolerantPercentage(0.01f),
             appendPixelTypeToFileName: false,
@@ -188,7 +188,7 @@ public partial class ProcessWithDrawingCanvasTests
         Color color = Color.LightGreen;
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(canvas => canvas.Fill(Brushes.Solid(color), polygon)),
+            c => c.Paint(canvas => canvas.Fill(Brushes.Solid(color), polygon)),
             testOutputDetails: $"Reverse({reverse})",
             comparer: ImageComparer.TolerantPercentage(0.01f),
             appendPixelTypeToFileName: false,
@@ -204,7 +204,7 @@ public partial class ProcessWithDrawingCanvasTests
         IPath shape = circle.Clip(star);
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(canvas => canvas.Fill(Brushes.Solid(Color.White), shape)),
+            c => c.Paint(canvas => canvas.Fill(Brushes.Solid(Color.White), shape)),
             comparer: ImageComparer.TolerantPercentage(0.01f),
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
@@ -226,7 +226,7 @@ public partial class ProcessWithDrawingCanvasTests
         DrawingOptions options = new() { ShapeOptions = shapeOptions };
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(options, canvas =>
+            c => c.Paint(options, canvas =>
             {
                 canvas.Fill(Brushes.Solid(Color.DeepPink), circle);
                 canvas.Fill(Brushes.Solid(Color.LightGray), star);
@@ -251,7 +251,7 @@ public partial class ProcessWithDrawingCanvasTests
         PatternBrush brush = Brushes.Horizontal(Color.Yellow);
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(canvas => canvas.Fill(brush, polygon)),
+            c => c.Paint(canvas => canvas.Fill(brush, polygon)),
             appendSourceFileOrDescription: false);
     }
 
@@ -271,7 +271,7 @@ public partial class ProcessWithDrawingCanvasTests
         ImageBrush<TPixel> brush = new(brushImage);
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(canvas => canvas.Fill(brush, polygon)),
+            c => c.Paint(canvas => canvas.Fill(brush, polygon)),
             System.IO.Path.GetFileNameWithoutExtension(brushImageName),
             appendSourceFileOrDescription: false);
     }
@@ -298,7 +298,7 @@ public partial class ProcessWithDrawingCanvasTests
         ImageBrush<TPixel> brush = new(brushImage, new RectangleF(left, top, width, height));
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(canvas => canvas.Fill(brush, polygon)),
+            c => c.Paint(canvas => canvas.Fill(brush, polygon)),
             System.IO.Path.GetFileNameWithoutExtension(brushImageName) + "_rect",
             appendSourceFileOrDescription: false);
     }
@@ -312,7 +312,7 @@ public partial class ProcessWithDrawingCanvasTests
         Color color = Color.White;
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(canvas => canvas.Fill(Brushes.Solid(color), polygon)),
+            c => c.Paint(canvas => canvas.Fill(Brushes.Solid(color), polygon)),
             appendSourceFileOrDescription: false);
     }
 
@@ -330,7 +330,7 @@ public partial class ProcessWithDrawingCanvasTests
 
         FormattableString testOutput = $"V({vertices})_R({radius})_Ang({angleDeg})";
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(canvas => canvas.Fill(Brushes.Solid(color), polygon)),
+            c => c.Paint(canvas => canvas.Fill(Brushes.Solid(color), polygon)),
             testOutput,
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
@@ -354,7 +354,7 @@ public partial class ProcessWithDrawingCanvasTests
         };
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(color), polygon)),
+            c => c.Paint(options, canvas => canvas.Fill(Brushes.Solid(color), polygon)),
             testOutputDetails: $"Reverse({reverse})_IntersectionRule({intersectionRule})",
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
@@ -384,7 +384,7 @@ public partial class ProcessWithDrawingCanvasTests
         };
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(Color.HotPink), poly)),
+            c => c.Paint(options, canvas => canvas.Fill(Brushes.Solid(Color.HotPink), poly)),
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
     }
@@ -413,7 +413,7 @@ public partial class ProcessWithDrawingCanvasTests
         };
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(Color.HotPink), poly)),
+            c => c.Paint(options, canvas => canvas.Fill(Brushes.Solid(Color.HotPink), poly)),
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
     }
