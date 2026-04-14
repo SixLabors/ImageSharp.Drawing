@@ -379,13 +379,13 @@ internal class InternalPath
     }
 
     /// <summary>
-    /// Merges the specified source2.
+    /// Determines whether two points are within the specified coordinate threshold of one another.
     /// </summary>
-    /// <param name="source1">The source1.</param>
-    /// <param name="source2">The source2.</param>
-    /// <param name="threshold">The threshold.</param>
+    /// <param name="source1">The first point.</param>
+    /// <param name="source2">The second point.</param>
+    /// <param name="threshold">The per-axis distance threshold.</param>
     /// <returns>
-    /// the Merged arrays
+    /// <see langword="true"/> when both coordinates are within <paramref name="threshold"/>; otherwise, <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool Equivalent(PointF source1, PointF source2, float threshold)

@@ -34,7 +34,7 @@ public sealed class LinearLineSegment : ILineSegment
     /// <param name="point2">The point2.</param>
     /// <param name="additionalPoints">Additional points</param>
     public LinearLineSegment(PointF point1, PointF point2, params PointF[] additionalPoints)
-        : this(new[] { point1, point2 }.Merge(additionalPoints))
+        : this(new[] { point1, point2 }.Concat(additionalPoints))
     {
     }
 

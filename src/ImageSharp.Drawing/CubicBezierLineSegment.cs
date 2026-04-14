@@ -46,7 +46,7 @@ public sealed class CubicBezierLineSegment : ILineSegment
     /// <param name="end">The end.</param>
     /// <param name="additionalPoints">The additional points.</param>
     public CubicBezierLineSegment(PointF start, PointF controlPoint1, PointF controlPoint2, PointF end, params PointF[] additionalPoints)
-        : this(new[] { start, controlPoint1, controlPoint2, end }.Merge(additionalPoints))
+        : this(new[] { start, controlPoint1, controlPoint2, end }.Concat(additionalPoints))
     {
     }
 
