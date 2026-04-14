@@ -48,7 +48,7 @@ internal static class ParallelExecutionHelper
     /// <param name="partitionCount">The computed number of useful partitions for the operation.</param>
     /// <returns>The <see cref="ParallelOptions"/> instance for the operation.</returns>
     public static ParallelOptions CreateParallelOptions(int maxDegreeOfParallelism, int partitionCount)
-        => new() { MaxDegreeOfParallelism = maxDegreeOfParallelism == -1 ? -1 : Math.Min(maxDegreeOfParallelism, partitionCount) };
+        => new() { MaxDegreeOfParallelism = Math.Min(maxDegreeOfParallelism, partitionCount) };
 
     /// <summary>
     /// Computes the internal partition-planning cap for the configured parallelism setting.
