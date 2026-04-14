@@ -108,6 +108,20 @@ public abstract class FillPolygon
             }
         }));
 
+    [Benchmark]
+    public void ImageSharp_SingleThreaded()
+    {
+        Configuration configuration = this.image.Configuration.Clone();
+        configuration.MaxDegreeOfParallelism = 1;
+        this.image.Mutate(configuration, c => c.ProcessWithCanvas(canvas =>
+        {
+            foreach (Polygon polygon in this.polygons)
+            {
+                canvas.Fill(Processing.Brushes.Solid(Color.White), polygon);
+            }
+        }));
+    }
+
     [Benchmark(Baseline = true)]
     public void SkiaSharp()
     {

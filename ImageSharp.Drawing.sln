@@ -333,6 +333,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImageSharp.Drawing.WebGPU",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImageSharp.Drawing.WebGPU.ShaderGen", "src\ImageSharp.Drawing.WebGPU.ShaderGen\ImageSharp.Drawing.WebGPU.ShaderGen.csproj", "{C7606104-5D58-4670-912C-3F336606B02D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImageSharp.Drawing.ManualBenchmarks", "tests\ImageSharp.Drawing.ManualBenchmarks\ImageSharp.Drawing.ManualBenchmarks.csproj", "{70193989-E587-451A-AF34-4C74FEE5DA5A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -403,6 +405,18 @@ Global
 		{C7606104-5D58-4670-912C-3F336606B02D}.Release|x64.Build.0 = Release|Any CPU
 		{C7606104-5D58-4670-912C-3F336606B02D}.Release|x86.ActiveCfg = Release|Any CPU
 		{C7606104-5D58-4670-912C-3F336606B02D}.Release|x86.Build.0 = Release|Any CPU
+		{70193989-E587-451A-AF34-4C74FEE5DA5A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{70193989-E587-451A-AF34-4C74FEE5DA5A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{70193989-E587-451A-AF34-4C74FEE5DA5A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{70193989-E587-451A-AF34-4C74FEE5DA5A}.Debug|x64.Build.0 = Debug|Any CPU
+		{70193989-E587-451A-AF34-4C74FEE5DA5A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{70193989-E587-451A-AF34-4C74FEE5DA5A}.Debug|x86.Build.0 = Debug|Any CPU
+		{70193989-E587-451A-AF34-4C74FEE5DA5A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{70193989-E587-451A-AF34-4C74FEE5DA5A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{70193989-E587-451A-AF34-4C74FEE5DA5A}.Release|x64.ActiveCfg = Release|Any CPU
+		{70193989-E587-451A-AF34-4C74FEE5DA5A}.Release|x64.Build.0 = Release|Any CPU
+		{70193989-E587-451A-AF34-4C74FEE5DA5A}.Release|x86.ActiveCfg = Release|Any CPU
+		{70193989-E587-451A-AF34-4C74FEE5DA5A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -431,6 +445,7 @@ Global
 		{23859314-5693-4E6C-BE5C-80A433439D2A} = {1799C43E-5C54-4A8F-8D64-B1475241DB0D}
 		{061582C2-658F-40AE-A978-7D74A4EB2C0A} = {815C0625-CD3D-440F-9F80-2D83856AB7AE}
 		{C7606104-5D58-4670-912C-3F336606B02D} = {815C0625-CD3D-440F-9F80-2D83856AB7AE}
+		{70193989-E587-451A-AF34-4C74FEE5DA5A} = {56801022-D71A-4FBE-BC5B-CBA08E2284EC}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {5F8B9D1F-CD8B-4CC5-8216-D531E25BD795}
