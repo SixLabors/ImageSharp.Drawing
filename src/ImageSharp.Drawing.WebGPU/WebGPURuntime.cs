@@ -57,10 +57,8 @@ internal static unsafe partial class WebGPURuntime
     /// </summary>
     private static bool processExitHooked;
 
-    private static bool? availabilityProbeResult;
-    private static string? availabilityProbeError;
-    private static bool? computePipelineProbeResult;
-    private static string? computePipelineProbeError;
+    private static WebGPUEnvironmentError? availabilityProbeResult;
+    private static WebGPUEnvironmentError? computePipelineProbeResult;
 
     /// <summary>
     /// Timeout for asynchronous WebGPU callbacks.
@@ -111,9 +109,12 @@ internal static unsafe partial class WebGPURuntime
     /// </summary>
     /// <param name="device">Receives the device pointer on success.</param>
     /// <param name="queue">Receives the queue pointer on success.</param>
-    /// <param name="error">Receives an error message on failure.</param>
+    /// <param name="errorCode">Receives the stable failure code on error.</param>
     /// <returns><see langword="true"/> when handles are available; otherwise <see langword="false"/>.</returns>
-    internal static bool TryGetOrCreateDevice(out WebGPUDeviceHandle? device, out WebGPUQueueHandle? queue, out string? error)
+    internal static bool TryGetOrCreateDevice(
+        out WebGPUDeviceHandle? device,
+        out WebGPUQueueHandle? queue,
+        out WebGPUEnvironmentError errorCode)
     {
         lock (Sync)
         {
@@ -122,16 +123,27 @@ internal static unsafe partial class WebGPURuntime
             {
                 device = autoDeviceHandle;
                 queue = autoQueueHandle;
-                error = null;
+                errorCode = WebGPUEnvironmentError.Success;
                 return true;
             }
 
-            EnsureInitialized();
+            try
+            {
+                EnsureInitialized();
+            }
+            catch
+            {
+                device = null;
+                queue = null;
+                errorCode = WebGPUEnvironmentError.ApiInitializationFailed;
+                return false;
+            }
+
             if (api is null)
             {
                 device = null;
                 queue = null;
-                error = "WebGPU API is not initialized.";
+                errorCode = WebGPUEnvironmentError.ApiInitializationFailed;
                 return false;
             }
 
@@ -142,7 +154,7 @@ internal static unsafe partial class WebGPURuntime
             {
                 device = null;
                 queue = null;
-                error = "WebGPU.CreateInstance returned null.";
+                errorCode = WebGPUEnvironmentError.InstanceCreationFailed;
                 return false;
             }
 
@@ -152,14 +164,14 @@ internal static unsafe partial class WebGPURuntime
             bool initialized = false;
             try
             {
-                if (!TryRequestAdapter(api, instance, out adapter, out error))
+                if (!TryRequestAdapter(api, instance, out adapter, out errorCode))
                 {
                     device = null;
                     queue = null;
                     return false;
                 }
 
-                if (!TryRequestDevice(api, adapter, out requestedDevice, out error))
+                if (!TryRequestDevice(api, adapter, out requestedDevice, out errorCode))
                 {
                     device = null;
                     queue = null;
@@ -171,7 +183,7 @@ internal static unsafe partial class WebGPURuntime
                 {
                     device = null;
                     queue = null;
-                    error = "WebGPU.DeviceGetQueue returned null.";
+                    errorCode = WebGPUEnvironmentError.QueueAcquisitionFailed;
                     return false;
                 }
 
@@ -180,7 +192,7 @@ internal static unsafe partial class WebGPURuntime
                 autoQueueHandle = new WebGPUQueueHandle(api, (nint)requestedQueue, ownsHandle: true);
                 device = autoDeviceHandle;
                 queue = autoQueueHandle;
-                error = null;
+                errorCode = WebGPUEnvironmentError.Success;
                 initialized = true;
                 return true;
             }
@@ -214,37 +226,38 @@ internal static unsafe partial class WebGPURuntime
     /// <summary>
     /// Probes whether the current process can initialize WebGPU and provision a device/queue pair.
     /// </summary>
-    /// <param name="error">Receives the cached probe failure when WebGPU is unavailable.</param>
-    /// <returns><see langword="true"/> when basic WebGPU device acquisition succeeds; otherwise <see langword="false"/>.</returns>
+    /// <returns><see cref="WebGPUEnvironmentError.Success"/> when basic WebGPU device acquisition succeeds; otherwise the failure code.</returns>
     /// <remarks>
     /// This is the broad availability check. It answers only "can this process get far enough to open WebGPU at all?"
     /// and deliberately stops before shader-module or pipeline creation. Callers that only need to know whether native
     /// WebGPU interop exists should use this probe. Callers that need the staged compute backend must additionally use
-    /// <see cref="TryProbeComputePipelineSupport(out string?)"/>, because successful device acquisition does not guarantee
+    /// <see cref="WebGPUEnvironment.ProbeComputePipelineSupport()"/>, because successful device acquisition does not guarantee
     /// that compute-pipeline creation is actually usable on the active runtime/driver stack.
     /// </remarks>
-    internal static bool TryProbeAvailability(out string? error)
+    internal static WebGPUEnvironmentError ProbeAvailability()
     {
         lock (ProbeSync)
         {
             if (availabilityProbeResult.HasValue)
             {
-                error = availabilityProbeError;
                 return availabilityProbeResult.Value;
             }
 
             try
             {
-                availabilityProbeResult = TryGetOrCreateDevice(out _, out _, out string? deviceError);
-                availabilityProbeError = availabilityProbeResult.Value ? null : deviceError ?? "WebGPU device acquisition failed.";
+                availabilityProbeResult = TryGetOrCreateDevice(out _, out _, out WebGPUEnvironmentError errorCode)
+                    ? WebGPUEnvironmentError.Success
+                    : errorCode;
             }
-            catch (Exception ex)
+            catch (InvalidOperationException)
             {
-                availabilityProbeResult = false;
-                availabilityProbeError = ex.Message;
+                availabilityProbeResult = WebGPUEnvironmentError.ApiInitializationFailed;
+            }
+            catch
+            {
+                availabilityProbeResult = WebGPUEnvironmentError.DeviceAcquisitionFailed;
             }
 
-            error = availabilityProbeError;
             return availabilityProbeResult.Value;
         }
     }
@@ -252,56 +265,55 @@ internal static unsafe partial class WebGPURuntime
     /// <summary>
     /// Probes whether the staged WebGPU backend can create a trivial compute pipeline.
     /// </summary>
-    /// <param name="error">Receives the cached probe failure when compute-pipeline support is unavailable.</param>
-    /// <returns><see langword="true"/> when the compute path is usable; otherwise <see langword="false"/>.</returns>
+    /// <returns><see cref="WebGPUEnvironmentError.Success"/> when the compute path is usable; otherwise the failure code.</returns>
     /// <remarks>
-    /// This probe is intentionally separate from <see cref="TryProbeAvailability(out string?)"/>. Some environments can
+    /// This probe is intentionally separate from <see cref="WebGPUEnvironment.ProbeAvailability()"/>. Some environments can
     /// create a device successfully and still fail, or even crash natively, when the first compute pipeline is created.
     /// The availability probe remains the cheaper prerequisite check, while this method performs the stronger staged-backend
     /// validation and isolates the actual pipeline creation in a remote process when possible so a native failure becomes
     /// a probe result instead of taking down the caller.
     /// </remarks>
-    internal static bool TryProbeComputePipelineSupport(out string? error)
+    internal static WebGPUEnvironmentError ProbeComputePipelineSupport()
     {
         lock (ProbeSync)
         {
             if (computePipelineProbeResult.HasValue)
             {
-                error = computePipelineProbeError;
                 return computePipelineProbeResult.Value;
             }
 
-            if (!TryProbeAvailability(out string? availabilityError))
+            WebGPUEnvironmentError availabilityResult = ProbeAvailability();
+            if (availabilityResult != WebGPUEnvironmentError.Success)
             {
-                computePipelineProbeResult = false;
-                computePipelineProbeError = availabilityError;
-                error = computePipelineProbeError;
-                return false;
+                computePipelineProbeResult = availabilityResult;
+                return computePipelineProbeResult.Value;
             }
 
             if (!RemoteExecutor.IsSupported)
             {
-                computePipelineProbeResult = true;
-                computePipelineProbeError = null;
-                error = null;
-                return true;
+                computePipelineProbeResult = WebGPUEnvironmentError.Success;
+                return computePipelineProbeResult.Value;
             }
 
-            int exitCode = RemoteExecutor.Invoke(ProbeComputePipelineSupport);
-            computePipelineProbeResult = exitCode == 0;
-            computePipelineProbeError = computePipelineProbeResult.Value
-                ? null
-                : $"WebGPU compute pipeline probe failed with exit code {exitCode}.";
-            error = computePipelineProbeError;
+            int exitCode = RemoteExecutor.Invoke(RunComputePipelineSupportProbe);
+            computePipelineProbeResult = exitCode switch
+            {
+                0 => WebGPUEnvironmentError.Success,
+                1 => WebGPUEnvironmentError.ComputePipelineCreationFailed,
+                _ => WebGPUEnvironmentError.ComputePipelineProbeProcessFailed,
+            };
             return computePipelineProbeResult.Value;
         }
     }
 
     /// <summary>
-    /// Executes one isolated compute-pipeline creation probe for <see cref="TryProbeComputePipelineSupport(out string?)"/>.
+    /// Executes one isolated compute-pipeline creation probe for <see cref="WebGPUEnvironment.ProbeComputePipelineSupport()"/>.
     /// </summary>
-    /// <returns><c>0</c> when compute-pipeline creation succeeded; otherwise a non-zero exit code.</returns>
-    internal static int ProbeComputePipelineSupport()
+    /// <returns>
+    /// <c>0</c> when compute-pipeline creation succeeded; <c>1</c> when the probe completed and reported failure.
+    /// Any other value means the isolated probe process terminated before the probe could return normally.
+    /// </returns>
+    internal static int RunComputePipelineSupportProbe()
     {
         try
         {
@@ -426,9 +438,7 @@ internal static unsafe partial class WebGPURuntime
         lock (ProbeSync)
         {
             availabilityProbeResult = null;
-            availabilityProbeError = null;
             computePipelineProbeResult = null;
-            computePipelineProbeError = null;
         }
 
         // By the time process-exit teardown reaches the shared loader wrappers, the runtime may
@@ -483,14 +493,40 @@ internal static unsafe partial class WebGPURuntime
     }
 
     /// <summary>
+    /// Creates one explicit exception message for a WebGPU environment failure code.
+    /// </summary>
+    /// <param name="errorCode">The environment failure code.</param>
+    /// <returns>The exception message describing that failure.</returns>
+    internal static string CreateEnvironmentExceptionMessage(WebGPUEnvironmentError errorCode)
+        => errorCode switch
+        {
+            WebGPUEnvironmentError.Success => "The WebGPU operation did not report an error.",
+            WebGPUEnvironmentError.ApiInitializationFailed => "Failed to initialize the WebGPU runtime.",
+            WebGPUEnvironmentError.InstanceCreationFailed => "The WebGPU runtime could not create an instance.",
+            WebGPUEnvironmentError.AdapterRequestTimedOut => "Timed out while waiting for the WebGPU adapter request callback.",
+            WebGPUEnvironmentError.AdapterRequestFailed => "The WebGPU runtime failed to acquire a WebGPU adapter.",
+            WebGPUEnvironmentError.DeviceRequestTimedOut => "Timed out while waiting for the WebGPU device request callback.",
+            WebGPUEnvironmentError.DeviceRequestFailed => "The WebGPU runtime failed to acquire a WebGPU device.",
+            WebGPUEnvironmentError.QueueAcquisitionFailed => "The WebGPU runtime acquired a device but could not retrieve its default queue.",
+            WebGPUEnvironmentError.DeviceAcquisitionFailed => "The WebGPU runtime failed to provision a WebGPU device and queue.",
+            WebGPUEnvironmentError.ComputePipelineCreationFailed => "The isolated WebGPU compute-pipeline probe reported failure.",
+            WebGPUEnvironmentError.ComputePipelineProbeProcessFailed => "The isolated WebGPU compute-pipeline probe process terminated before it could report a result.",
+            _ => "The WebGPU runtime failed for an unknown reason."
+        };
+
+    /// <summary>
     /// Requests a high-performance adapter from the current WebGPU instance.
     /// </summary>
     /// <param name="api">The WebGPU API wrapper.</param>
     /// <param name="instance">The instance that issues the request.</param>
     /// <param name="adapter">Receives the returned adapter on success.</param>
-    /// <param name="error">Receives the failure reason when the request fails.</param>
+    /// <param name="errorCode">Receives the stable failure code when the request fails.</param>
     /// <returns><see langword="true"/> when an adapter was acquired; otherwise, <see langword="false"/>.</returns>
-    private static bool TryRequestAdapter(WebGPU api, Instance* instance, out Adapter* adapter, out string? error)
+    private static bool TryRequestAdapter(
+        WebGPU api,
+        Instance* instance,
+        out Adapter* adapter,
+        out WebGPUEnvironmentError errorCode)
     {
         RequestAdapterStatus callbackStatus = RequestAdapterStatus.Unknown;
         Adapter* callbackAdapter = null;
@@ -515,18 +551,18 @@ internal static unsafe partial class WebGPURuntime
         if (!callbackReady.Wait(CallbackTimeoutMilliseconds))
         {
             adapter = null;
-            error = "Timed out while waiting for WebGPU adapter request callback.";
+            errorCode = WebGPUEnvironmentError.AdapterRequestTimedOut;
             return false;
         }
 
         adapter = callbackAdapter;
         if (callbackStatus != RequestAdapterStatus.Success || callbackAdapter is null)
         {
-            error = $"WebGPU adapter request failed with status '{callbackStatus}'.";
+            errorCode = WebGPUEnvironmentError.AdapterRequestFailed;
             return false;
         }
 
-        error = null;
+        errorCode = WebGPUEnvironmentError.Success;
         return true;
     }
 
@@ -536,9 +572,13 @@ internal static unsafe partial class WebGPURuntime
     /// <param name="api">The WebGPU API wrapper.</param>
     /// <param name="adapter">The adapter to request the device from.</param>
     /// <param name="device">Receives the returned device on success.</param>
-    /// <param name="error">Receives the failure reason when the request fails.</param>
+    /// <param name="errorCode">Receives the stable failure code when the request fails.</param>
     /// <returns><see langword="true"/> when a device was acquired; otherwise, <see langword="false"/>.</returns>
-    private static bool TryRequestDevice(WebGPU api, Adapter* adapter, out Device* device, out string? error)
+    private static bool TryRequestDevice(
+        WebGPU api,
+        Adapter* adapter,
+        out Device* device,
+        out WebGPUEnvironmentError errorCode)
     {
         RequestDeviceStatus callbackStatus = RequestDeviceStatus.Unknown;
         Device* callbackDevice = null;
@@ -589,18 +629,18 @@ internal static unsafe partial class WebGPURuntime
         if (!callbackReady.Wait(CallbackTimeoutMilliseconds))
         {
             device = null;
-            error = "Timed out while waiting for WebGPU device request callback.";
+            errorCode = WebGPUEnvironmentError.DeviceRequestTimedOut;
             return false;
         }
 
         device = callbackDevice;
         if (callbackStatus != RequestDeviceStatus.Success || callbackDevice is null)
         {
-            error = $"WebGPU device request failed with status '{callbackStatus}'.";
+            errorCode = WebGPUEnvironmentError.DeviceRequestFailed;
             return false;
         }
 
-        error = null;
+        errorCode = WebGPUEnvironmentError.Success;
         return true;
     }
 }

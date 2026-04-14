@@ -15,7 +15,7 @@ Depending on what the machine can initialize, the sample can show:
 - `SkiaSharp (GPU)`: Skia using a GPU-backed `GRContext` when the hidden GL host is available
 - `WebGPU`: the offscreen `ImageSharp.Drawing.WebGPU` backend
 
-The sample always starts with the CPU and Skia CPU paths. The WebGPU backend is added only when `WebGPUEnvironment.TryProbeComputePipelineSupport(...)` succeeds. The Skia GPU backend is added once the hidden `SKGLControl` has produced a usable `GRContext`.
+The sample always starts with the CPU and Skia CPU paths. The WebGPU backend is added only when `WebGPUEnvironment.ProbeComputePipelineSupport()` returns `WebGPUEnvironmentError.Success`. The Skia GPU backend is added once the hidden `SKGLControl` has produced a usable `GRContext`.
 
 ## What the UI shows
 
@@ -77,7 +77,7 @@ This keeps the benchmark focused on scene rendering rather than repeated target 
 
 The WebGPU backend is intentionally small:
 
-- it probes support up front with `WebGPUEnvironment.TryProbeComputePipelineSupport(...)`
+- it probes support up front with `WebGPUEnvironment.ProbeComputePipelineSupport()`
 - it renders into an owned offscreen `WebGPURenderTarget<Bgra32>`
 - it draws through `CreateCanvas(...)`, not a hybrid CPU plus GPU canvas
 - it reads back the final frame only when the UI requests the last-iteration preview

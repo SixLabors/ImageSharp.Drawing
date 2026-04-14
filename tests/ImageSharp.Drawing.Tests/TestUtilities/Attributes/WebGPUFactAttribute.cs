@@ -41,5 +41,5 @@ internal static class WebGPUProbe
     private static bool? computeSupported;
 
     internal static bool IsComputeSupported
-        => computeSupported ??= WebGPUEnvironment.TryProbeComputePipelineSupport(out _);
+        => computeSupported ??= WebGPUEnvironment.ProbeComputePipelineSupport() == WebGPUEnvironmentError.Success;
 }

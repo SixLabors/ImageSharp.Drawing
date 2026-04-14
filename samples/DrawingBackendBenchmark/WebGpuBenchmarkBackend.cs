@@ -23,9 +23,11 @@ internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend
 
     public static bool TryCreate([NotNullWhen(true)] out WebGpuBenchmarkBackend? result, [NotNullWhen(false)] out string? error)
     {
-        if (!WebGPUEnvironment.TryProbeComputePipelineSupport(out error))
+        WebGPUEnvironmentError probeError = WebGPUEnvironment.ProbeComputePipelineSupport();
+        if (probeError != WebGPUEnvironmentError.Success)
         {
             result = null;
+            error = $"WebGPU unavailable: {probeError}.";
             return false;
         }
 

@@ -28,8 +28,8 @@ Those types all exist to get a `DrawingCanvas<TPixel>` over a native WebGPU targ
 
 The support probes also live outside the backend:
 
-- `WebGPUEnvironment.TryProbeAvailability(...)` checks whether the library-managed WebGPU device and queue can be acquired
-- `WebGPUEnvironment.TryProbeComputePipelineSupport(...)` runs the crash-isolated trivial compute-pipeline probe
+- `WebGPUEnvironment.ProbeAvailability()` checks whether the library-managed WebGPU device and queue can be acquired
+- `WebGPUEnvironment.ProbeComputePipelineSupport()` runs the crash-isolated trivial compute-pipeline probe
 
 That split keeps support probing separate from flush execution. `WebGPUDrawingBackend` is the flush executor, not the public support API. The WebGPU constructors create their objects directly; callers use `WebGPUEnvironment` when they want explicit preflight checks.
 

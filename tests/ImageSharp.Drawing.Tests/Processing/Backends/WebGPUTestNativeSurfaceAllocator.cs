@@ -27,14 +27,14 @@ internal static class WebGPUTestNativeSurfaceAllocator
         where TPixel : unmanaged, IPixel<TPixel>
     {
         WebGPU api = WebGPURuntime.GetApi();
-        if (!WebGPURuntime.TryGetOrCreateDevice(out WebGPUDeviceHandle deviceHandle, out WebGPUQueueHandle queueHandle, out string deviceError)
+        if (!WebGPURuntime.TryGetOrCreateDevice(out WebGPUDeviceHandle deviceHandle, out WebGPUQueueHandle queueHandle, out WebGPUEnvironmentError errorCode)
             || deviceHandle is null
             || queueHandle is null)
         {
             surface = new NativeSurface(TPixel.GetPixelTypeInfo());
             textureHandle = null;
             textureViewHandle = null;
-            error = deviceError ?? "WebGPU device auto-provisioning failed.";
+            error = $"WebGPU device auto-provisioning failed with '{errorCode}'.";
             return false;
         }
 

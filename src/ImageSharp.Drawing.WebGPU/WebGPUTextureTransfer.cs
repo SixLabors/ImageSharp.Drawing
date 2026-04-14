@@ -44,10 +44,10 @@ internal static unsafe class WebGPUTextureTransfer
         }
 
         WebGPU api = WebGPURuntime.GetApi();
-        if (!WebGPURuntime.TryGetOrCreateDevice(out _, out WebGPUQueueHandle? queueHandle, out string? deviceError)
+        if (!WebGPURuntime.TryGetOrCreateDevice(out _, out WebGPUQueueHandle? queueHandle, out WebGPUEnvironmentError errorCode)
             || queueHandle is null)
         {
-            error = deviceError ?? "WebGPU device auto-provisioning failed.";
+            error = $"WebGPU device auto-provisioning failed with '{errorCode}'.";
             return false;
         }
 
@@ -101,11 +101,11 @@ internal static unsafe class WebGPUTextureTransfer
 
         WebGPU api = WebGPURuntime.GetApi();
         Wgpu wgpuExtension = WebGPURuntime.GetWgpuExtension();
-        if (!WebGPURuntime.TryGetOrCreateDevice(out WebGPUDeviceHandle? deviceHandle, out WebGPUQueueHandle? queueHandle, out string? deviceError)
+        if (!WebGPURuntime.TryGetOrCreateDevice(out WebGPUDeviceHandle? deviceHandle, out WebGPUQueueHandle? queueHandle, out WebGPUEnvironmentError errorCode)
             || deviceHandle is null
             || queueHandle is null)
         {
-            error = deviceError ?? "WebGPU device auto-provisioning failed.";
+            error = $"WebGPU device auto-provisioning failed with '{errorCode}'.";
             return false;
         }
 

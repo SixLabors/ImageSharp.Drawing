@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Diagnostics.CodeAnalysis;
-
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -12,18 +10,22 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 public static class WebGPUEnvironment
 {
     /// <summary>
-    /// Tries to acquire the library-managed WebGPU device and queue.
+    /// Probes whether the library-managed WebGPU device and queue are available.
     /// </summary>
-    /// <param name="error">Receives the failure reason when the probe fails.</param>
-    /// <returns><see langword="true"/> when the library-managed WebGPU device and queue are available; otherwise, <see langword="false"/>.</returns>
-    public static bool TryProbeAvailability([NotNullWhen(false)] out string? error)
-        => WebGPURuntime.TryProbeAvailability(out error);
+    /// <returns>
+    /// <see cref="WebGPUEnvironmentError.Success"/> when the library-managed WebGPU device and queue are available;
+    /// otherwise, the stable failure code describing why the probe failed.
+    /// </returns>
+    public static WebGPUEnvironmentError ProbeAvailability()
+        => WebGPURuntime.ProbeAvailability();
 
     /// <summary>
-    /// Tries to create a trivial compute pipeline using the library-managed WebGPU device.
+    /// Probes whether the library-managed WebGPU device can create a trivial compute pipeline.
     /// </summary>
-    /// <param name="error">Receives the failure reason when the probe fails.</param>
-    /// <returns><see langword="true"/> when compute pipeline creation succeeds; otherwise, <see langword="false"/>.</returns>
-    public static bool TryProbeComputePipelineSupport([NotNullWhen(false)] out string? error)
-        => WebGPURuntime.TryProbeComputePipelineSupport(out error);
+    /// <returns>
+    /// <see cref="WebGPUEnvironmentError.Success"/> when compute pipeline creation succeeds;
+    /// otherwise, the stable failure code describing why the probe failed.
+    /// </returns>
+    public static WebGPUEnvironmentError ProbeComputePipelineSupport()
+        => WebGPURuntime.ProbeComputePipelineSupport();
 }

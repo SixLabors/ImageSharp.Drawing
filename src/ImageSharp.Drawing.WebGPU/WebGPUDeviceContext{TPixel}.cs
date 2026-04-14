@@ -36,11 +36,11 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
 
         try
         {
-            if (!WebGPURuntime.TryGetOrCreateDevice(out WebGPUDeviceHandle? deviceHandle, out WebGPUQueueHandle? queueHandle, out string? error)
+            if (!WebGPURuntime.TryGetOrCreateDevice(out WebGPUDeviceHandle? deviceHandle, out WebGPUQueueHandle? queueHandle, out WebGPUEnvironmentError errorCode)
                 || deviceHandle is null
                 || queueHandle is null)
             {
-                throw new InvalidOperationException(error);
+                throw new InvalidOperationException(WebGPURuntime.CreateEnvironmentExceptionMessage(errorCode));
             }
 
             this.DeviceHandle = deviceHandle;
