@@ -151,14 +151,14 @@ public interface IDrawingCanvas : IDisposable
     /// </summary>
     /// <param name="region">The local region to process.</param>
     /// <param name="operation">The image-processing operation to apply to the region.</param>
-    public void Process(Rectangle region, Action<IImageProcessingContext> operation);
+    public void Apply(Rectangle region, Action<IImageProcessingContext> operation);
 
     /// <summary>
     /// Applies an image-processing operation to a region described by a path builder.
     /// </summary>
     /// <param name="pathBuilder">The path builder describing the region to process.</param>
     /// <param name="operation">The image-processing operation to apply to the region.</param>
-    public void Process(PathBuilder pathBuilder, Action<IImageProcessingContext> operation);
+    public void Apply(PathBuilder pathBuilder, Action<IImageProcessingContext> operation);
 
     /// <summary>
     /// Applies an image-processing operation to a path region.
@@ -168,7 +168,7 @@ public interface IDrawingCanvas : IDisposable
     /// </remarks>
     /// <param name="path">The path region to process.</param>
     /// <param name="operation">The image-processing operation to apply to the region.</param>
-    public void Process(IPath path, Action<IImageProcessingContext> operation);
+    public void Apply(IPath path, Action<IImageProcessingContext> operation);
 
     /// <summary>
     /// Draws a polyline outline using the provided pen and drawing options.

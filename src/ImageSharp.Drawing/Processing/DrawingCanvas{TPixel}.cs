@@ -317,18 +317,18 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public void Process(Rectangle region, Action<IImageProcessingContext> operation)
-        => this.Process(new RectangularPolygon(region.X, region.Y, region.Width, region.Height), operation);
+    public void Apply(Rectangle region, Action<IImageProcessingContext> operation)
+        => this.Apply(new RectangularPolygon(region.X, region.Y, region.Width, region.Height), operation);
 
     /// <inheritdoc />
-    public void Process(PathBuilder pathBuilder, Action<IImageProcessingContext> operation)
+    public void Apply(PathBuilder pathBuilder, Action<IImageProcessingContext> operation)
     {
         Guard.NotNull(pathBuilder, nameof(pathBuilder));
-        this.Process(pathBuilder.Build(), operation);
+        this.Apply(pathBuilder.Build(), operation);
     }
 
     /// <inheritdoc />
-    public void Process(IPath path, Action<IImageProcessingContext> operation)
+    public void Apply(IPath path, Action<IImageProcessingContext> operation)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(path, nameof(path));

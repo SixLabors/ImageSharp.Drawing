@@ -443,8 +443,8 @@ public partial class WebGPUDrawingBackendTests
         void DrawAction(DrawingCanvas<TPixel> canvas)
         {
             DrawProcessScenario(canvas);
-            canvas.Process(blurPath, ctx => ctx.GaussianBlur(6F));
-            canvas.Process(pixelatePath, ctx => ctx.Pixelate(10));
+            canvas.Apply(blurPath, ctx => ctx.GaussianBlur(6F));
+            canvas.Apply(pixelatePath, ctx => ctx.Pixelate(10));
         }
 
         using Image<TPixel> defaultImage = provider.GetImage();

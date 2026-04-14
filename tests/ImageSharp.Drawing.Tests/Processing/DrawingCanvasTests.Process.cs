@@ -32,8 +32,8 @@ public partial class DrawingCanvasTests
         using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
         {
             DrawProcessScenario(canvas);
-            canvas.Process(blurBuilder, ctx => ctx.GaussianBlur(6F));
-            canvas.Process(pixelateBuilder, ctx => ctx.Pixelate(10));
+            canvas.Apply(blurBuilder, ctx => ctx.GaussianBlur(6F));
+            canvas.Apply(pixelateBuilder, ctx => ctx.Pixelate(10));
             canvas.Flush();
         }
 
@@ -53,8 +53,8 @@ public partial class DrawingCanvasTests
         using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
         {
             DrawProcessScenario(canvas);
-            canvas.Process(blurPath, ctx => ctx.GaussianBlur(6F));
-            canvas.Process(pixelatePath, ctx => ctx.Pixelate(10));
+            canvas.Apply(blurPath, ctx => ctx.GaussianBlur(6F));
+            canvas.Apply(pixelatePath, ctx => ctx.Pixelate(10));
             canvas.Flush();
         }
 
@@ -85,8 +85,8 @@ public partial class DrawingCanvasTests
                    new DrawingOptions()))
         {
             DrawProcessScenario(canvas);
-            canvas.Process(blurPath, ctx => ctx.GaussianBlur(6F));
-            canvas.Process(pixelatePath, ctx => ctx.Pixelate(10));
+            canvas.Apply(blurPath, ctx => ctx.GaussianBlur(6F));
+            canvas.Apply(pixelatePath, ctx => ctx.Pixelate(10));
             canvas.Flush();
         }
 
@@ -108,7 +108,7 @@ public partial class DrawingCanvasTests
         bool sameConfiguration = false;
 
         canvas.Fill(Brushes.Solid(Color.CornflowerBlue));
-        canvas.Process(new Rectangle(8, 6, 28, 20), ctx =>
+        canvas.Apply(new Rectangle(8, 6, 28, 20), ctx =>
         {
             callbackInvoked = true;
             sameConfiguration = ReferenceEquals(configuration, ctx.Configuration);

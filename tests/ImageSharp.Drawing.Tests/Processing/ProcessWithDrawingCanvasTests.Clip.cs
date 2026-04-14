@@ -28,7 +28,7 @@ public partial class ProcessWithDrawingCanvasTests
                 int outerRadii = (int)(Math.Min(bounds.Width, bounds.Height) * sizeMult);
                 Star star = new(new PointF(bounds.Width / 2F, bounds.Height / 2F), 5, outerRadii / 2F, outerRadii);
                 Matrix4x4 builder = Matrix4x4.CreateTranslation(dx, dy, 0);
-                canvas.Process(star.Transform(builder), ctx => ctx.DetectEdges());
+                canvas.Apply(star.Transform(builder), ctx => ctx.DetectEdges());
             }),
             testOutputDetails: testDetails,
             appendPixelTypeToFileName: false,
@@ -45,7 +45,7 @@ public partial class ProcessWithDrawingCanvasTests
                 Rectangle bounds = canvas.Bounds;
                 RectangleF rect = new(0, 0, bounds.Width / 2F, bounds.Height / 2F);
                 RectangularPolygon clipRect = new(rect);
-                canvas.Process(clipRect, ctx => ctx.Flip(FlipMode.Vertical));
+                canvas.Apply(clipRect, ctx => ctx.Flip(FlipMode.Vertical));
             }),
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
