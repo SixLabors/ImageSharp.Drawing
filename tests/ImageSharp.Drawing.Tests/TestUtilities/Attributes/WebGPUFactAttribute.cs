@@ -14,21 +14,7 @@ public class WebGPUFactAttribute : FactAttribute
     {
         if (!WebGPUProbe.IsComputeSupported)
         {
-            this.Skip = "WebGPU compute is not available on this system.";
-        }
-    }
-}
-
-/// <summary>
-/// A <see cref="TheoryAttribute"/> that skips when WebGPU compute is not available on the current system.
-/// </summary>
-public class WebGPUTheoryAttribute : TheoryAttribute
-{
-    public WebGPUTheoryAttribute()
-    {
-        if (!WebGPUProbe.IsComputeSupported)
-        {
-            this.Skip = "WebGPU compute is not available on this system.";
+            this.Skip = WebGPUProbe.ComputeUnsupportedSkipMessage;
         }
     }
 }
@@ -38,8 +24,23 @@ public class WebGPUTheoryAttribute : TheoryAttribute
 /// </summary>
 internal static class WebGPUProbe
 {
-    private static bool? computeSupported;
+    private static WebGPUEnvironmentError? computeProbeResult;
 
+    /// <summary>
+    /// Gets the cached WebGPU compute-pipeline probe result.
+    /// </summary>
+    internal static WebGPUEnvironmentError ComputeProbeResult
+        => computeProbeResult ??= WebGPUEnvironment.ProbeComputePipelineSupport();
+
+    /// <summary>
+    /// Gets a value indicating whether WebGPU compute is supported on the current system.
+    /// </summary>
     internal static bool IsComputeSupported
-        => computeSupported ??= WebGPUEnvironment.ProbeComputePipelineSupport() == WebGPUEnvironmentError.Success;
+        => ComputeProbeResult == WebGPUEnvironmentError.Success;
+
+    /// <summary>
+    /// Gets the skip message used when WebGPU compute is unavailable.
+    /// </summary>
+    internal static string ComputeUnsupportedSkipMessage
+        => $"WebGPU compute is not available on this system: {ComputeProbeResult}.";
 }
