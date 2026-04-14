@@ -37,15 +37,14 @@ internal static class ParallelExecutionHelper
         => Math.Min(GetPartitionLimit(maxDegreeOfParallelism), Math.Min(workItemCount, secondaryLimit));
 
     /// <summary>
-    /// Creates the <see cref="ParallelOptions"/> for a partitioned operation while preserving the
-    /// special meaning of <c>-1</c> in <see cref="ParallelOptions.MaxDegreeOfParallelism"/>.
+    /// Creates the <see cref="ParallelOptions"/> for a partitioned operation.
     /// </summary>
     /// <param name="maxDegreeOfParallelism">
-    /// The configured maximum degree of parallelism. A value of <c>-1</c> is propagated directly
-    /// to <see cref="ParallelOptions.MaxDegreeOfParallelism"/>; positive values are capped to the
-    /// smaller of the configured limit and the useful partition count.
+    /// The configured maximum degree of parallelism. A value of <c>-1</c> retains the runtime's
+    /// unbounded sentinel because <paramref name="partitionCount"/> is always positive; positive
+    /// values are capped to the smaller of the configured limit and the useful partition count.
     /// </param>
-    /// <param name="partitionCount">The computed number of useful partitions for the operation.</param>
+    /// <param name="partitionCount">The computed positive number of useful partitions for the operation.</param>
     /// <returns>The <see cref="ParallelOptions"/> instance for the operation.</returns>
     public static ParallelOptions CreateParallelOptions(int maxDegreeOfParallelism, int partitionCount)
         => new() { MaxDegreeOfParallelism = Math.Min(maxDegreeOfParallelism, partitionCount) };
