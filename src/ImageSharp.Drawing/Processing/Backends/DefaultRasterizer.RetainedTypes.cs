@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -256,25 +255,19 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Represents one retained 32-bit-X line block.
     /// </summary>
-    internal sealed class LineArrayX32Y16Block : ILineBlock<LineArrayX32Y16Block>, IDisposable
+    internal sealed class LineArrayX32Y16Block : ILineBlock<LineArrayX32Y16Block>
     {
-        // These retained line blocks are one of the few places where direct native allocation
-        // consistently outperforms the upstream allocator on larger retained-fill workloads.
-        // Keep this isolated to the retained block storage rather than broadening native allocation usage.
-        private readonly unsafe PackedLineX32Y16* lines;
+        private const int BlockLineCount = 32;
+        private PackedLineX32Y16Buffer lines;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="LineArrayX32Y16Block"/> class.
         /// </summary>
         /// <param name="next">The next block in the retained chain.</param>
-        public unsafe LineArrayX32Y16Block(LineArrayX32Y16Block? next)
-        {
-            this.lines = (PackedLineX32Y16*)NativeMemory.Alloc((nuint)LineCount, (nuint)sizeof(PackedLineX32Y16));
-            this.Next = next;
-        }
+        public LineArrayX32Y16Block(LineArrayX32Y16Block? next) => this.Next = next;
 
         /// <inheritdoc />
-        public static int LineCount => 32;
+        public static int LineCount => BlockLineCount;
 
         /// <inheritdoc />
         public LineArrayX32Y16Block? Next { get; }
@@ -287,7 +280,7 @@ internal static partial class DefaultRasterizer
         /// <param name="x0">The starting X coordinate in 24.8 fixed-point.</param>
         /// <param name="x1">The ending X coordinate in 24.8 fixed-point.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public unsafe void Set(int index, int packedY0Y1, int x0, int x1)
+        public void Set(int index, int packedY0Y1, int x0, int x1)
         {
             ref PackedLineX32Y16 line = ref this.lines[index];
             line.PackedY0Y1 = packedY0Y1;
@@ -297,12 +290,11 @@ internal static partial class DefaultRasterizer
 
         /// <inheritdoc />
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public unsafe void Rasterize(int count, ref Context context)
+        public void Rasterize(int count, ref Context context)
         {
-            ReadOnlySpan<PackedLineX32Y16> lines = new(this.lines, LineCount);
             for (int i = 0; i < count; i++)
             {
-                PackedLineX32Y16 line = lines[i];
+                PackedLineX32Y16 line = this.lines[i];
                 context.RasterizeLineSegment(line.X0, UnpackLo(line.PackedY0Y1), line.X1, UnpackHi(line.PackedY0Y1));
             }
         }
@@ -325,11 +317,6 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
-        /// Releases the native block storage.
-        /// </summary>
-        public unsafe void Dispose() => NativeMemory.Free(this.lines);
-
-        /// <summary>
         /// Unpacks the low signed 16-bit value from a packed endpoint pair.
         /// </summary>
         /// <param name="packed">The packed endpoint pair.</param>
@@ -346,7 +333,7 @@ internal static partial class DefaultRasterizer
         private static int UnpackHi(int packed) => packed >> 16;
 
         /// <summary>
-        /// Holds one retained 32-bit-X line record in native block storage.
+        /// Holds one retained 32-bit-X line record in block-local storage.
         /// </summary>
         private struct PackedLineX32Y16
         {
@@ -364,6 +351,15 @@ internal static partial class DefaultRasterizer
             /// Gets or sets the ending X coordinate.
             /// </summary>
             public int X1;
+        }
+
+        /// <summary>
+        /// Holds the fixed-capacity retained line payload inline with the block object.
+        /// </summary>
+        [InlineArray(BlockLineCount)]
+        private struct PackedLineX32Y16Buffer
+        {
+            private PackedLineX32Y16 element0;
         }
     }
 
@@ -432,24 +428,19 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Represents one retained 16-bit-X line block.
     /// </summary>
-    internal sealed class LineArrayX16Y16Block : ILineBlock<LineArrayX16Y16Block>, IDisposable
+    internal sealed class LineArrayX16Y16Block : ILineBlock<LineArrayX16Y16Block>
     {
-        // Match the X32 block rationale above: this tiny retained block is hot enough that
-        // direct native backing beats allocator-owned storage on larger retained-fill workloads.
-        private readonly unsafe PackedLineX16Y16* lines;
+        private const int BlockLineCount = 32;
+        private PackedLineX16Y16Buffer lines;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="LineArrayX16Y16Block"/> class.
         /// </summary>
         /// <param name="next">The next block in the retained chain.</param>
-        public unsafe LineArrayX16Y16Block(LineArrayX16Y16Block? next)
-        {
-            this.lines = (PackedLineX16Y16*)NativeMemory.Alloc((nuint)LineCount, (nuint)sizeof(PackedLineX16Y16));
-            this.Next = next;
-        }
+        public LineArrayX16Y16Block(LineArrayX16Y16Block? next) => this.Next = next;
 
         /// <inheritdoc />
-        public static int LineCount => 32;
+        public static int LineCount => BlockLineCount;
 
         /// <inheritdoc />
         public LineArrayX16Y16Block? Next { get; }
@@ -461,7 +452,7 @@ internal static partial class DefaultRasterizer
         /// <param name="packedY0Y1">The packed 16-bit Y endpoints.</param>
         /// <param name="packedX0X1">The packed 16-bit X endpoints.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public unsafe void Set(int index, int packedY0Y1, int packedX0X1)
+        public void Set(int index, int packedY0Y1, int packedX0X1)
         {
             ref PackedLineX16Y16 line = ref this.lines[index];
             line.PackedY0Y1 = packedY0Y1;
@@ -470,12 +461,11 @@ internal static partial class DefaultRasterizer
 
         /// <inheritdoc />
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public unsafe void Rasterize(int count, ref Context context)
+        public void Rasterize(int count, ref Context context)
         {
-            ReadOnlySpan<PackedLineX16Y16> lines = new(this.lines, LineCount);
             for (int i = 0; i < count; i++)
             {
-                PackedLineX16Y16 line = lines[i];
+                PackedLineX16Y16 line = this.lines[i];
                 context.RasterizeLineSegment(
                     UnpackLo(line.PackedX0X1),
                     UnpackLo(line.PackedY0Y1),
@@ -502,11 +492,6 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
-        /// Releases the native block storage.
-        /// </summary>
-        public unsafe void Dispose() => NativeMemory.Free(this.lines);
-
-        /// <summary>
         /// Unpacks the low signed 16-bit value from a packed endpoint pair.
         /// </summary>
         /// <param name="packed">The packed endpoint pair.</param>
@@ -523,7 +508,7 @@ internal static partial class DefaultRasterizer
         private static int UnpackHi(int packed) => packed >> 16;
 
         /// <summary>
-        /// Holds one retained 16-bit-X line record in native block storage.
+        /// Holds one retained 16-bit-X line record in block-local storage.
         /// </summary>
         private struct PackedLineX16Y16
         {
@@ -536,6 +521,15 @@ internal static partial class DefaultRasterizer
             /// Gets or sets the packed X endpoints.
             /// </summary>
             public int PackedX0X1;
+        }
+
+        /// <summary>
+        /// Holds the fixed-capacity retained line payload inline with the block object.
+        /// </summary>
+        [InlineArray(BlockLineCount)]
+        private struct PackedLineX16Y16Buffer
+        {
+            private PackedLineX16Y16 element0;
         }
     }
 }

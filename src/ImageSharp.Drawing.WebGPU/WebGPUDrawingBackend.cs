@@ -20,13 +20,20 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </remarks>
 public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisposable
 {
-    // A single flush can rerun the staged path a small number of times while the scratch
-    // buffers converge on the capacity reported by the scheduling stages.
-    // The prepare shader cancels early when any single buffer overflows, so each
-    // retry only discovers one new overflow. 8 attempts covers all 7 bump buffers
-    // plus the final successful run. Only needed on the first flush; subsequent
-    // flushes reuse the persisted GPU-reported sizes and need zero retries.
-    private const int MaxDynamicGrowthAttempts = 8;
+    // Number of independently sized scratch buffers tracked by WebGPUSceneBumpSizes.
+    // A first-use flush can expose at most one newly visible allocator overflow per
+    // failed pass, so the retry budget is expressed in terms of this count. The
+    // tracked allocators are Lines, Binning, PathTiles, SegCounts, Segments,
+    // BlendSpill, and Ptcl.
+    private const int ScratchAllocatorCount = 7;
+
+    // A first flush can rerun the staged path while the GPU-reported scratch capacities
+    // converge. Earlier scheduling overflows can prevent later stages from reporting
+    // their own demand, so one failed pass can be needed per tracked allocator. A
+    // Failed-only report can also require one conservative force-growth pass when no
+    // individual counter exceeded its current capacity. Add one final pass for the
+    // successful render after the last growth.
+    private const int MaxDynamicGrowthAttempts = ScratchAllocatorCount + 2;
 
     private readonly DefaultDrawingBackend fallbackBackend;
 
@@ -155,12 +162,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         WebGPUSceneResourceArena? resourceArena = Interlocked.Exchange(ref this.cachedResourceArena, null);
         try
         {
-            // Retry loop: bump allocators start small (Vello defaults) and the GPU discovers
-            // the actual sizes needed. Each overflow grows the failing buffers. The prepare
-            // shader does not cancel on overflow so all stages report true demand per pass,
-            // but data dependencies mean later stages report zero when earlier ones overflow.
-            // Typically converges in 3-5 attempts on first use, then zero retries thereafter
-            // because successful sizes are persisted in this.bumpSizes.
+            // Retry loop: scratch allocators start small and the GPU reports actual demand.
+            // Earlier scheduling overflows can hide later-stage demand, so a first-use flush
+            // can require several passes before the capacities converge. Successful sizes are
+            // persisted in this.bumpSizes, so later flushes usually run without retries.
             for (int attempt = 0; attempt < MaxDynamicGrowthAttempts; attempt++)
             {
                 if (!WebGPUSceneDispatch.TryCreateStagedScene(configuration, target, compositionScene, currentBumpSizes, ref resourceArena, out bool exceedsBindingLimit, out WebGPUSceneDispatch.BindingLimitFailure bindingLimitFailure, out WebGPUStagedScene stagedScene, out string? error))

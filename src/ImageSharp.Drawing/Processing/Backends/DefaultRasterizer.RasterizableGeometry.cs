@@ -154,31 +154,14 @@ internal static partial class DefaultRasterizer
         /// </summary>
         public void Dispose()
         {
-            if (this.IsX16)
+            if (this.linesX16 is not null)
             {
-                for (int i = 0; i < this.linesX16!.Length; i++)
-                {
-                    LineArrayX16Y16Block? block = this.linesX16[i];
-                    while (block is not null)
-                    {
-                        LineArrayX16Y16Block? next = block.Next;
-                        block.Dispose();
-                        block = next;
-                    }
-                }
+                Array.Clear(this.linesX16);
             }
-            else
+
+            if (this.linesX32 is not null)
             {
-                for (int i = 0; i < this.linesX32!.Length; i++)
-                {
-                    LineArrayX32Y16Block? block = this.linesX32[i];
-                    while (block is not null)
-                    {
-                        LineArrayX32Y16Block? next = block.Next;
-                        block.Dispose();
-                        block = next;
-                    }
-                }
+                Array.Clear(this.linesX32);
             }
 
             for (int i = 0; i < this.startCoverTable.Length; i++)

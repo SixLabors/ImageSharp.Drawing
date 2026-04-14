@@ -894,8 +894,10 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        // Overflow: fine output is garbage but bump counters report true demand for all
-        // buffers. Prepare shader never cancels, so one retry with doubled sizes suffices.
+        // Overflow: the fine output is discarded, but the scheduling readback still reports
+        // the scratch usage visible to this pass. Later-stage demand can stay hidden until
+        // earlier overflows are resolved, so the backend retries with larger buffers until
+        // the capacities converge or the bounded attempt budget is exhausted.
         if (RequiresScratchReallocation(in bumpAllocators, stagedScene.Config.BumpSizes))
         {
             requiresGrowth = true;
