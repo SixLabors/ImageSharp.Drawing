@@ -87,12 +87,10 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         }
 
         int requestedParallelism = configuration.MaxDegreeOfParallelism;
-        int partitionCount = ParallelExecutionHelper.GetPartitionCount(requestedParallelism, scene.RowCount);
-
         _ = Parallel.For(
             fromInclusive: 0,
             toExclusive: scene.RowCount,
-            parallelOptions: ParallelExecutionHelper.CreateParallelOptions(requestedParallelism, partitionCount),
+            parallelOptions: ParallelExecutionHelper.CreateParallelOptions(requestedParallelism, scene.RowCount),
             localInit: () => new WorkerState<TPixel>(configuration.MemoryAllocator, destinationFrame.Width, scene.MaxLayerDepth + 1),
             body: (rowIndex, _, state) =>
             {
