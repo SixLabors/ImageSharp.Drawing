@@ -27,8 +27,10 @@ public interface IPath
     public IEnumerable<ISimplePath> Flatten();
 
     /// <summary>
-    /// Converts this path into retained linear geometry for backend consumption.
+    /// Converts this path to a retained linear-geometry representation, applying the specified
+    /// projective transform to each point during flattening.
     /// </summary>
+    /// <param name="transform">The transform to apply to each point.</param>
     /// <remarks>
     /// <para>
     /// The returned <see cref="LinearGeometry"/> is the canonical lowered representation for backend scene building.
@@ -45,14 +47,6 @@ public interface IPath
     /// contract.
     /// </para>
     /// </remarks>
-    /// <returns>The retained linear geometry for this path.</returns>
-    public LinearGeometry ToLinearGeometry();
-
-    /// <summary>
-    /// Converts this path to a retained linear-geometry representation, applying the specified
-    /// projective transform to each point during flattening.
-    /// </summary>
-    /// <param name="transform">The transform to apply to each point.</param>
     /// <returns>The retained linear geometry with transformed points.</returns>
     public LinearGeometry ToLinearGeometry(Matrix4x4 transform);
 

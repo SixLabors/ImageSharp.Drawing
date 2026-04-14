@@ -3,6 +3,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
+using System.Threading;
 
 namespace SixLabors.ImageSharp.Drawing;
 
@@ -99,14 +100,33 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
         return paths;
     }
 
-    /// <inheritdoc />
-    public LinearGeometry ToLinearGeometry()
+    /// <inheritdoc/>
+    public LinearGeometry ToLinearGeometry(Matrix4x4 transform)
+        => transform.IsIdentity ? this.GetLinearGeometryCore() : this.CreateTransformedLinearGeometryCore(transform);
+
+    /// <summary>
+    /// Returns the retained identity geometry, publishing it once for concurrent readers.
+    /// </summary>
+    /// <returns>The retained identity geometry.</returns>
+    private LinearGeometry GetLinearGeometryCore()
     {
-        if (this.linearGeometry is not null)
+        LinearGeometry? cached = Volatile.Read(ref this.linearGeometry);
+        if (cached is not null)
         {
-            return this.linearGeometry;
+            return cached;
         }
 
+        LinearGeometry geometry = this.CreateLinearGeometryCore();
+        LinearGeometry? published = Interlocked.CompareExchange(ref this.linearGeometry, geometry, null);
+        return published ?? geometry;
+    }
+
+    /// <summary>
+    /// Materializes the retained identity geometry for the composed contours.
+    /// </summary>
+    /// <returns>The retained identity geometry.</returns>
+    private LinearGeometry CreateLinearGeometryCore()
+    {
         int pointCount = 0;
         int contourCount = 0;
         int segmentCount = 0;
@@ -121,7 +141,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
 
         foreach (IPath path in this.paths)
         {
-            LinearGeometry geometry = path.ToLinearGeometry();
+            LinearGeometry geometry = path.ToLinearGeometry(Matrix4x4.Identity);
 
             if (geometry.Info.PointCount == 0)
             {
@@ -150,7 +170,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
 
         foreach (IPath path in this.paths)
         {
-            LinearGeometry geometry = path.ToLinearGeometry();
+            LinearGeometry geometry = path.ToLinearGeometry(Matrix4x4.Identity);
             if (geometry.Info.PointCount == 0)
             {
                 continue;
@@ -181,7 +201,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
 
         RectangleF bounds = hasBounds ? RectangleF.FromLTRB(minX, minY, maxX, maxY) : RectangleF.Empty;
 
-        this.linearGeometry = new LinearGeometry(
+        return new LinearGeometry(
             new LinearGeometryInfo
             {
                 Bounds = bounds,
@@ -193,18 +213,15 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
             },
             contours,
             points);
-
-        return this.linearGeometry;
     }
 
-    /// <inheritdoc/>
-    public LinearGeometry ToLinearGeometry(Matrix4x4 transform)
+    /// <summary>
+    /// Materializes transformed linear geometry without caching the transformed result.
+    /// </summary>
+    /// <param name="transform">The transform to apply to each emitted point.</param>
+    /// <returns>The transformed retained geometry.</returns>
+    private LinearGeometry CreateTransformedLinearGeometryCore(Matrix4x4 transform)
     {
-        if (transform.IsIdentity)
-        {
-            return this.ToLinearGeometry();
-        }
-
         int pointCount = 0;
         int contourCount = 0;
         int segmentCount = 0;

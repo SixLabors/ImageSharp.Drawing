@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
+using System.Threading;
 
 namespace SixLabors.ImageSharp.Drawing;
 
@@ -219,14 +220,33 @@ public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
         yield return this;
     }
 
-    /// <inheritdoc />
-    public LinearGeometry ToLinearGeometry()
+    /// <inheritdoc/>
+    public LinearGeometry ToLinearGeometry(Matrix4x4 transform)
+        => transform.IsIdentity ? this.GetLinearGeometryCore() : this.CreateTransformedLinearGeometryCore(transform);
+
+    /// <summary>
+    /// Returns the retained identity geometry, publishing it once for concurrent readers.
+    /// </summary>
+    /// <returns>The retained identity geometry.</returns>
+    private LinearGeometry GetLinearGeometryCore()
     {
-        if (this.linearGeometry is not null)
+        LinearGeometry? cached = Volatile.Read(ref this.linearGeometry);
+        if (cached is not null)
         {
-            return this.linearGeometry;
+            return cached;
         }
 
+        LinearGeometry geometry = this.CreateLinearGeometryCore();
+        LinearGeometry? published = Interlocked.CompareExchange(ref this.linearGeometry, geometry, null);
+        return published ?? geometry;
+    }
+
+    /// <summary>
+    /// Materializes the retained identity geometry for the rectangle.
+    /// </summary>
+    /// <returns>The retained identity geometry.</returns>
+    private LinearGeometry CreateLinearGeometryCore()
+    {
         PointF[] points =
         [
             this.points[0],
@@ -247,7 +267,7 @@ public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
             }
         ];
 
-        this.linearGeometry = new LinearGeometry(
+        return new LinearGeometry(
             new LinearGeometryInfo
             {
                 Bounds = this.Bounds,
@@ -259,18 +279,15 @@ public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
             },
             contours,
             points);
-
-        return this.linearGeometry;
     }
 
-    /// <inheritdoc/>
-    public LinearGeometry ToLinearGeometry(Matrix4x4 transform)
+    /// <summary>
+    /// Materializes transformed linear geometry without caching the transformed result.
+    /// </summary>
+    /// <param name="transform">The transform to apply to the rectangle corners.</param>
+    /// <returns>The transformed retained geometry.</returns>
+    private LinearGeometry CreateTransformedLinearGeometryCore(Matrix4x4 transform)
     {
-        if (transform.IsIdentity)
-        {
-            return this.ToLinearGeometry();
-        }
-
         PointF p0 = PointF.Transform(this.points[0], transform);
         PointF p1 = PointF.Transform(this.points[1], transform);
         PointF p2 = PointF.Transform(this.points[2], transform);

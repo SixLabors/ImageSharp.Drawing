@@ -17,7 +17,7 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Creates retained row-local raster payload for one stroked centerline geometry.
     /// </summary>
-    /// <param name="path">The source stroke path.</param>
+    /// <param name="geometry">The source stroke centerline geometry.</param>
     /// <param name="pen">The stroke metadata.</param>
     /// <param name="translateX">The destination-space X translation applied at composition time.</param>
     /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
@@ -26,7 +26,7 @@ internal static partial class DefaultRasterizer
     /// <param name="allocator">The allocator used for retained raster storage.</param>
     /// <returns>The retained rasterizable geometry for the stroke, or <see langword="null"/> when the stroke produces no coverage.</returns>
     internal static StrokeRasterizableGeometry? CreatePathStrokeRasterizableGeometry(
-        IPath path,
+        LinearGeometry geometry,
         Pen pen,
         int translateX,
         int translateY,
@@ -39,7 +39,6 @@ internal static partial class DefaultRasterizer
             return null;
         }
 
-        LinearGeometry geometry = path.ToLinearGeometry();
         return CreateRetainedStrokeRasterizableGeometry(
             geometry,
             new StrokeStyle(pen),
@@ -1913,4 +1912,3 @@ internal static partial class DefaultRasterizer
 }
 
 #pragma warning restore SA1201 // Elements should appear in the correct order
-

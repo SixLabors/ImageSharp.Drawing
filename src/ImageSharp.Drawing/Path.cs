@@ -4,6 +4,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
+using System.Threading;
 
 namespace SixLabors.ImageSharp.Drawing;
 
@@ -130,17 +131,36 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
         yield return this;
     }
 
-    /// <inheritdoc />
-    public virtual LinearGeometry ToLinearGeometry()
+    /// <inheritdoc/>
+    public virtual LinearGeometry ToLinearGeometry(Matrix4x4 transform)
+        => transform.IsIdentity ? this.GetLinearGeometryCore() : this.CreateTransformedLinearGeometryCore(transform);
+
+    /// <summary>
+    /// Returns the retained identity geometry, publishing it once for concurrent readers.
+    /// </summary>
+    /// <returns>The retained identity geometry.</returns>
+    private LinearGeometry GetLinearGeometryCore()
     {
-        if (this.linearGeometry is not null)
+        LinearGeometry? cached = Volatile.Read(ref this.linearGeometry);
+        if (cached is not null)
         {
-            return this.linearGeometry;
+            return cached;
         }
 
+        LinearGeometry geometry = this.CreateLinearGeometryCore();
+        LinearGeometry? published = Interlocked.CompareExchange(ref this.linearGeometry, geometry, null);
+        return published ?? geometry;
+    }
+
+    /// <summary>
+    /// Materializes the retained identity geometry for this path.
+    /// </summary>
+    /// <returns>The retained identity geometry.</returns>
+    private LinearGeometry CreateLinearGeometryCore()
+    {
         if (this.lineSegments.Length == 0)
         {
-            this.linearGeometry = new LinearGeometry(
+            return new LinearGeometry(
                 new LinearGeometryInfo
                 {
                     Bounds = RectangleF.Empty,
@@ -152,8 +172,6 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
                 },
                 [],
                 []);
-
-            return this.linearGeometry;
         }
 
         PointF? lastEndPoint = null;
@@ -220,7 +238,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
 
         RectangleF bounds = hasBounds ? RectangleF.FromLTRB(minX, minY, maxX, maxY) : RectangleF.Empty;
 
-        this.linearGeometry = new LinearGeometry(
+        return new LinearGeometry(
             new LinearGeometryInfo
             {
                 Bounds = bounds,
@@ -232,34 +250,15 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
             },
             contours,
             points);
-
-        return this.linearGeometry;
     }
 
-    /// <inheritdoc/>
-    public virtual LinearGeometry ToLinearGeometry(Matrix4x4 transform)
+    /// <summary>
+    /// Materializes transformed linear geometry without caching the transformed result.
+    /// </summary>
+    /// <param name="transform">The transform to apply to each emitted point.</param>
+    /// <returns>The transformed retained geometry.</returns>
+    private LinearGeometry CreateTransformedLinearGeometryCore(Matrix4x4 transform)
     {
-        if (transform.IsIdentity)
-        {
-            return this.ToLinearGeometry();
-        }
-
-        if (this.lineSegments.Length == 0)
-        {
-            return new LinearGeometry(
-                new LinearGeometryInfo
-                {
-                    Bounds = RectangleF.Empty,
-                    ContourCount = 0,
-                    PointCount = 0,
-                    SegmentCount = 0,
-                    NonHorizontalSegmentCountPixelBoundary = 0,
-                    NonHorizontalSegmentCountPixelCenter = 0
-                },
-                [],
-                []);
-        }
-
         PointF? lastEndPoint = null;
         int pointCount = 0;
 

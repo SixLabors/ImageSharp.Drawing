@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Memory;
 
@@ -732,12 +733,14 @@ internal sealed partial class FlushScene : IDisposable
         out PreparedFillItem prepared)
     {
         IPath path = command.SourcePath;
-        bool hasTransform = !command.Transform.IsIdentity;
-        Brush sourceBrush = hasTransform ? command.Brush.Transform(command.Transform) : command.Brush;
+        Matrix4x4 transform = command.Transform;
+        bool hasTransform = !transform.IsIdentity;
+        LinearGeometry geometry = path.ToLinearGeometry(transform);
+        Brush sourceBrush = hasTransform ? command.Brush.Transform(transform) : command.Brush;
 
         if (!TryResolveRasterization(
                 sourceBrush,
-                hasTransform ? RectangleF.Transform(path.Bounds, command.Transform) : path.Bounds,
+                geometry.Info.Bounds,
                 command.RasterizerOptions,
                 command.DestinationOffset,
                 command.TargetBounds,
@@ -750,7 +753,7 @@ internal sealed partial class FlushScene : IDisposable
         }
 
         DefaultRasterizer.RasterizableGeometry? rasterizable = DefaultRasterizer.CreateRasterizableGeometry(
-            hasTransform ? path.ToLinearGeometry(command.Transform) : path.ToLinearGeometry(),
+            geometry,
             command.DestinationOffset.X,
             command.DestinationOffset.Y,
             rasterizerOptions,
@@ -772,12 +775,15 @@ internal sealed partial class FlushScene : IDisposable
         out PreparedStrokeItem prepared)
     {
         IPath path = command.SourcePath;
-        bool hasTransform = !command.Transform.IsIdentity;
-        Brush sourceBrush = hasTransform ? command.Brush.Transform(command.Transform) : command.Brush;
+        Matrix4x4 transform = command.Transform;
+        bool hasTransform = !transform.IsIdentity;
+        LinearGeometry geometry = path.ToLinearGeometry(Matrix4x4.Identity);
+        RectangleF strokeBounds = GetStrokeBounds(geometry.Info.Bounds, command.Pen);
+        Brush sourceBrush = hasTransform ? command.Brush.Transform(transform) : command.Brush;
 
         if (!TryResolveRasterization(
                 sourceBrush,
-                hasTransform ? RectangleF.Transform(GetStrokeBounds(path.Bounds, command.Pen), command.Transform) : GetStrokeBounds(path.Bounds, command.Pen),
+                hasTransform ? RectangleF.Transform(strokeBounds, transform) : strokeBounds,
                 command.RasterizerOptions,
                 command.DestinationOffset,
                 command.TargetBounds,
@@ -792,12 +798,12 @@ internal sealed partial class FlushScene : IDisposable
         // Retained-scene preparation preserves the stroke centerline and forwards the drawing
         // transform into the CPU stroke rasterizer so expansion still happens before transform.
         DefaultRasterizer.StrokeRasterizableGeometry? rasterizable = DefaultRasterizer.CreatePathStrokeRasterizableGeometry(
-            path,
+            geometry,
             command.Pen,
             command.DestinationOffset.X,
             command.DestinationOffset.Y,
             rasterizerOptions,
-            command.Transform,
+            transform,
             allocator);
         if (rasterizable is null)
         {

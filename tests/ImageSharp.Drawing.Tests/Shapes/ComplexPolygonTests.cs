@@ -19,7 +19,7 @@ public class ComplexPolygonTests
 
         Matrix4x4 transform = Matrix4x4.CreateScale(2F);
 
-        LinearGeometry identity = complex.ToLinearGeometry();
+        LinearGeometry identity = complex.ToLinearGeometry(Matrix4x4.Identity);
         LinearGeometry transformed = complex.ToLinearGeometry(transform);
 
         // Same structure.

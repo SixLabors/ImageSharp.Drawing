@@ -472,7 +472,7 @@ internal static class WebGPUSceneEncoder
             int pathDataCheckpoint = this.PathData.Count;
             int styleCheckpoint = this.Styles.Count;
             bool appendStyle = !this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1 || style2 != this.lastStyle2;
-            LinearGeometry geometry = command.Path.ToLinearGeometry();
+            LinearGeometry geometry = command.Path.ToLinearGeometry(Matrix4x4.Identity);
 
             // Reserve the exact words/tags this item can append before encoding so the
             // subsequent Add calls stay on the already-allocated contiguous spans.
@@ -531,7 +531,7 @@ internal static class WebGPUSceneEncoder
         /// </summary>
         private void AppendPlainStroke(in ResolvedPathCommand command, Pen pen)
         {
-            LinearGeometry geometry = command.Path.ToLinearGeometry();
+            LinearGeometry geometry = command.Path.ToLinearGeometry(Matrix4x4.Identity);
             uint drawTag = GetDrawTag(command.Brush);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
             (uint style0, uint style1, uint style2) = GetStrokeStyle(command.GraphicsOptions, pen);
