@@ -74,11 +74,7 @@ internal static class PolygonFactory
         GetGeoJsonPoints(geoJsonContent, Matrix3x2.Identity);
 
     public static Polygon CreatePolygon(params (float X, float Y)[] coords)
-        => new(new LinearLineSegment(CreatePointArray(coords)))
-        {
-            // The default epsilon is too large for test code, we prefer the vertices not to be changed
-            RemoveCloseAndCollinearPoints = false
-        };
+        => new(new LinearLineSegment(CreatePointArray(coords)));
 
     public static (PointF Start, PointF End) CreateHorizontalLine(float y)
         => (new PointF(-Inf, y), new PointF(Inf, y));

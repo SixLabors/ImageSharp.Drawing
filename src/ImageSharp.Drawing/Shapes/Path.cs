@@ -145,7 +145,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     public static bool TryParseSvgPath(string svgPath, [NotNullWhen(true)] out IPath? value)
         => TryParseSvgPath(svgPath.AsSpan(), out value);
 
-    /// <summary>
+     /// <summary>
     /// Converts an SVG path string into an <see cref="IPath"/>.
     /// </summary>
     /// <param name="svgPath">The string containing the SVG path data.</param>
@@ -381,10 +381,42 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
         str = TrimSeparator(str);
         scaler = 0;
 
+        bool hasDot = false;
         for (int i = 0; i < str.Length; i++)
         {
-            if (IsSeparator(str[i]) || i == str.Length)
+            char ch = str[i];
+
+            if (IsSeparator(ch))
             {
+                scaler = ParseFloat(str[..i]);
+                return str[i..];
+            }
+
+            if (ch == '.')
+            {
+                if (hasDot)
+                {
+                    // Second decimal point starts a new number.
+                    scaler = ParseFloat(str[..i]);
+                    return str[i..];
+                }
+
+                hasDot = true;
+            }
+            else if ((ch is '-' or '+') && i > 0)
+            {
+                // A sign character mid-number starts a new number,
+                // unless it follows an exponent indicator.
+                char prev = str[i - 1];
+                if (prev is not 'e' and not 'E')
+                {
+                    scaler = ParseFloat(str[..i]);
+                    return str[i..];
+                }
+            }
+            else if (char.IsLetter(ch))
+            {
+                // Hit a command letter; end this number.
                 scaler = ParseFloat(str[..i]);
                 return str[i..];
             }
@@ -395,7 +427,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
             scaler = ParseFloat(str);
         }
 
-        return ReadOnlySpan<char>.Empty;
+        return Array.Empty<char>();
     }
 
     private static bool IsSeparator(char ch)

@@ -11,6 +11,7 @@ public class SvgTests
 {
     [Theory]
     [WithBlankImage(200, 200, PixelTypes.Rgba32, 1f)]
+    [WithBlankImage(1000, 1000, PixelTypes.Rgba32, 5f)]
     public void Tiger<TPixel>(TestImageProvider<TPixel> provider, float scale)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -32,5 +33,6 @@ public class SvgTests
                 }
             }
         });
+        image.DebugSave(provider, $"s{scale}");
     }
 }
