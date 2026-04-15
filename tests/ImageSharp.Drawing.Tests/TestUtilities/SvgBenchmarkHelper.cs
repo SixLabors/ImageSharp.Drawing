@@ -7,7 +7,6 @@ using System.Globalization;
 using System.Numerics;
 using System.Xml.Linq;
 using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.PixelFormats;
 using SkiaSharp;
 using ISColor = SixLabors.ImageSharp.Color;
@@ -33,7 +32,7 @@ internal static class SvgBenchmarkHelper
         ISColor Fill,
         ISColor Stroke,
         float StrokeWidth,
-        Matrix4x4? Transform);
+        Matrix3x2? Transform);
 
     /// <summary>
     /// Parses an SVG file into a list of <see cref="SvgElement"/>s.
@@ -117,7 +116,7 @@ internal static class SvgBenchmarkHelper
             }
 
             // Resolve transform: compose per-path transform with ancestor group transforms.
-            Matrix4x4? transform = ResolveTransform(pathEl, ns);
+            Matrix3x2? transform = ResolveTransform(pathEl, ns);
 
             result.Add(new SvgElement(d, fill, stroke, strokeWidth, transform));
         }
@@ -144,8 +143,8 @@ internal static class SvgBenchmarkHelper
             SKMatrix skMatrix = SKMatrix.CreateScale(scale, scale);
             if (el.Transform.HasValue)
             {
-                Matrix4x4 m = el.Transform.Value;
-                SKMatrix elMatrix = new(m.M11, m.M21, m.M41, m.M12, m.M22, m.M42, 0, 0, 1);
+                Matrix3x2 m = el.Transform.Value;
+                SKMatrix elMatrix = new(m.M11, m.M21, m.M31, m.M12, m.M22, m.M32, 0, 0, 1);
                 skMatrix = SKMatrix.Concat(skMatrix, elMatrix);
             }
 
@@ -248,59 +247,6 @@ internal static class SvgBenchmarkHelper
     }
 
     /// <summary>
-    /// Saves a verification image from each backend.
-    /// </summary>
-    internal static void VerifyOutput(
-        string name,
-        int width,
-        int height,
-        SKSurface skSurface,
-        Bitmap sdBitmap,
-        Image<Rgba32> isImage,
-        nint webGpuTextureHandle)
-    {
-        string outDir = System.IO.Path.Combine(AppContext.BaseDirectory, $"{name}-verify");
-        Directory.CreateDirectory(outDir);
-
-        // SkiaSharp
-        using (SKImage skImage = skSurface.Snapshot())
-        using (SKData skData = skImage.Encode(SKEncodedImageFormat.Png, 100))
-        using (FileStream fs = File.Create(System.IO.Path.Combine(outDir, $"{name}-skia.png")))
-        {
-            skData.SaveTo(fs);
-        }
-
-        Console.WriteLine($"Saved {name}-skia.png");
-
-        // System.Drawing
-        sdBitmap.Save(System.IO.Path.Combine(outDir, $"{name}-systemdrawing.png"));
-        Console.WriteLine($"Saved {name}-systemdrawing.png");
-
-        // ImageSharp (CPU)
-        isImage.SaveAsPng(System.IO.Path.Combine(outDir, $"{name}-imagesharp.png"));
-        Console.WriteLine($"Saved {name}-imagesharp.png");
-
-        // ImageSharp (WebGPU)
-        if (WebGPUTextureTransfer.TryReadTexture(
-                webGpuTextureHandle,
-                width,
-                height,
-                out Image<Rgba32> gpuImage,
-                out string readError))
-        {
-            gpuImage.SaveAsPng(System.IO.Path.Combine(outDir, $"{name}-webgpu.png"));
-            gpuImage.Dispose();
-            Console.WriteLine($"Saved {name}-webgpu.png");
-        }
-        else
-        {
-            Console.WriteLine($"WebGPU readback failed: {readError}");
-        }
-
-        Console.WriteLine($"Output saved to: {outDir}");
-    }
-
-    /// <summary>
     /// Writes a spatial neighborhood SVG for the requested path using the parsed SVG elements.
     /// </summary>
     internal static void WriteNeighborhoodSvg(
@@ -368,15 +314,15 @@ internal static class SvgBenchmarkHelper
 
     // ---- SVG transform resolution ----
 
-    private static Matrix4x4? ResolveTransform(XElement element, XNamespace ns)
+    private static Matrix3x2? ResolveTransform(XElement element, XNamespace ns)
     {
         // Walk up the tree, collecting transforms from path → root.
-        List<Matrix4x4> transforms = null;
+        List<Matrix3x2> transforms = null;
         XElement current = element;
         while (current is not null)
         {
             string transformStr = current.Attribute("transform")?.Value;
-            if (transformStr is not null && TryParseTransform(transformStr, out Matrix4x4 m))
+            if (transformStr is not null && TryParseTransform(transformStr, out Matrix3x2 m))
             {
                 transforms ??= [];
                 transforms.Add(m);
@@ -391,7 +337,7 @@ internal static class SvgBenchmarkHelper
         }
 
         // Compose from root → leaf (reverse of collection order).
-        Matrix4x4 result = Matrix4x4.Identity;
+        Matrix3x2 result = Matrix3x2.Identity;
         for (int i = transforms.Count - 1; i >= 0; i--)
         {
             result *= transforms[i];
@@ -400,9 +346,9 @@ internal static class SvgBenchmarkHelper
         return result;
     }
 
-    private static bool TryParseTransform(string value, out Matrix4x4 result)
+    private static bool TryParseTransform(string value, out Matrix3x2 result)
     {
-        result = Matrix4x4.Identity;
+        result = Matrix3x2.Identity;
         ReadOnlySpan<char> span = value.AsSpan().Trim();
 
         if (span.StartsWith("matrix(") && span.EndsWith(")"))
@@ -462,19 +408,18 @@ internal static class SvgBenchmarkHelper
                     return false;
                 }
 
-                values[i] = float.Parse(span[..end], CultureInfo.InvariantCulture);
+                values[i] = float.Parse(span[..end], NumberStyles.Any, CultureInfo.InvariantCulture);
                 span = span[end..];
             }
 
             // SVG matrix(a,b,c,d,e,f) maps to:
-            // | a c e |     M11=a  M21=c  M41=e
-            // | b d f |  →  M12=b  M22=d  M42=f
+            // | a c e |     M11=a  M21=c  M31=e
+            // | b d f |  →  M12=b  M22=d  M32=f
             // | 0 0 1 |     rest = identity
-            result = new Matrix4x4(
-                values[0], values[1], 0, 0,
-                values[2], values[3], 0, 0,
-                0, 0, 1, 0,
-                values[4], values[5], 0, 1);
+            result = new Matrix3x2(
+                values[0], values[1],
+                values[2], values[3],
+                values[4], values[5]);
             return true;
         }
 
@@ -483,9 +428,9 @@ internal static class SvgBenchmarkHelper
             span = span[10..^1];
             ReadOnlySpan<char> trimmed = span.Trim();
             int sep = trimmed.IndexOfAny(',', ' ');
-            float tx = float.Parse(sep < 0 ? trimmed : trimmed[..sep], CultureInfo.InvariantCulture);
-            float ty = sep < 0 ? 0 : float.Parse(trimmed[(sep + 1)..].Trim(), CultureInfo.InvariantCulture);
-            result = Matrix4x4.CreateTranslation(tx, ty, 0);
+            float tx = float.Parse(sep < 0 ? trimmed : trimmed[..sep], NumberStyles.Any, CultureInfo.InvariantCulture);
+            float ty = sep < 0 ? 0 : float.Parse(trimmed[(sep + 1)..].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture);
+            result = Matrix3x2.CreateTranslation(tx, ty);
             return true;
         }
 
@@ -494,9 +439,9 @@ internal static class SvgBenchmarkHelper
             span = span[6..^1];
             ReadOnlySpan<char> trimmed = span.Trim();
             int sep = trimmed.IndexOfAny(',', ' ');
-            float sx = float.Parse(sep < 0 ? trimmed : trimmed[..sep], CultureInfo.InvariantCulture);
-            float sy = sep < 0 ? sx : float.Parse(trimmed[(sep + 1)..].Trim(), CultureInfo.InvariantCulture);
-            result = Matrix4x4.CreateScale(sx, sy, 1);
+            float sx = float.Parse(sep < 0 ? trimmed : trimmed[..sep], NumberStyles.Any, CultureInfo.InvariantCulture);
+            float sy = sep < 0 ? sx : float.Parse(trimmed[(sep + 1)..].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture);
+            result = Matrix3x2.CreateScale(sx, sy);
             return true;
         }
 
@@ -609,12 +554,12 @@ internal static class SvgBenchmarkHelper
             }
         }
 
-        if (element.Transform is Matrix4x4 transform)
+        if (element.Transform is Matrix3x2 transform)
         {
             path.SetAttributeValue(
                 "transform",
                 FormattableString.Invariant(
-                    $"matrix({transform.M11:0.######} {transform.M12:0.######} {transform.M21:0.######} {transform.M22:0.######} {transform.M41:0.######} {transform.M42:0.######})"));
+                    $"matrix({transform.M11:0.######} {transform.M12:0.######} {transform.M21:0.######} {transform.M22:0.######} {transform.M31:0.######} {transform.M32:0.######})"));
         }
 
         return path;
@@ -638,7 +583,7 @@ internal static class SvgBenchmarkHelper
             return false;
         }
 
-        if (element.Transform is Matrix4x4 transform)
+        if (element.Transform is Matrix3x2 transform)
         {
             path = path.Transform(transform);
         }
@@ -648,7 +593,7 @@ internal static class SvgBenchmarkHelper
     }
 
     // ---- System.Drawing SVG path parser ----
-    internal static GraphicsPath SvgPathDataToGraphicsPath(string pathData, float scale, Matrix4x4? elementTransform)
+    internal static GraphicsPath SvgPathDataToGraphicsPath(string pathData, float scale, Matrix3x2? elementTransform)
     {
         GraphicsPath gp = new(FillMode.Winding);
         float cx = 0, cy = 0;
@@ -941,8 +886,8 @@ internal static class SvgBenchmarkHelper
         // Apply per-element transform via System.Drawing matrix.
         if (elementTransform.HasValue)
         {
-            Matrix4x4 m = elementTransform.Value;
-            using Matrix sdMatrix = new(m.M11, m.M12, m.M21, m.M22, m.M41 * scale, m.M42 * scale);
+            Matrix3x2 m = elementTransform.Value;
+            using Matrix sdMatrix = new(m.M11, m.M12, m.M21, m.M22, m.M31 * scale, m.M32 * scale);
             gp.Transform(sdMatrix);
         }
 

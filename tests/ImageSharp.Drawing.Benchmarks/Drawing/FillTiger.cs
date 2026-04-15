@@ -5,7 +5,6 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using BenchmarkDotNet.Attributes;
 using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Tests;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -35,8 +34,6 @@ public class FillTiger
     private Image<Rgba32> image;
     private List<(IPath Path, Processing.SolidBrush Fill, SolidPen Stroke)> isElements;
 
-    private WebGPURenderTarget<Rgba32> webGpuTarget;
-
     [Params(1000, 100)]
     public int Dimensions { get; set; }
 
@@ -64,8 +61,6 @@ public class FillTiger
 
         this.image = new Image<Rgba32>(width, height);
         this.isElements = SvgBenchmarkHelper.BuildImageSharpElements(elements, scale);
-
-        this.webGpuTarget = new WebGPURenderTarget<Rgba32>(width, height);
     }
 
     [IterationSetup]
@@ -98,8 +93,6 @@ public class FillTiger
         this.sdBitmap.Dispose();
 
         this.image.Dispose();
-
-        this.webGpuTarget.Dispose();
     }
 
     [Benchmark(Baseline = true)]
@@ -139,83 +132,19 @@ public class FillTiger
 
     [Benchmark]
     public void ImageSharp()
-        => this.image.Mutate(c => c.ProcessWithCanvas(canvas =>
+        => this.image.Mutate(c =>
         {
             foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
             {
                 if (fill is not null)
                 {
-                    canvas.Fill(fill, path);
+                    c.Fill(fill, path);
                 }
 
                 if (stroke is not null)
                 {
-                    canvas.Draw(stroke, path);
+                    c.Draw(stroke, path);
                 }
             }
-        }));
-
-    [Benchmark]
-    public void ImageSharp_SingleThreaded()
-    {
-        Configuration configuration = this.image.Configuration.Clone();
-        configuration.MaxDegreeOfParallelism = 1;
-        this.image.Mutate(configuration, c => c.ProcessWithCanvas(canvas =>
-        {
-            foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
-            {
-                if (fill is not null)
-                {
-                    canvas.Fill(fill, path);
-                }
-
-                if (stroke is not null)
-                {
-                    canvas.Draw(stroke, path);
-                }
-            }
-        }));
-    }
-
-    [Benchmark]
-    public void ImageSharpWebGPU()
-    {
-        using DrawingCanvas<Rgba32> canvas = this.webGpuTarget.CreateCanvas();
-        foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
-        {
-            if (fill is not null)
-            {
-                canvas.Fill(fill, path);
-            }
-
-            if (stroke is not null)
-            {
-                canvas.Draw(stroke, path);
-            }
-        }
-
-        canvas.Flush();
-    }
-
-    public static void VerifyOutput()
-    {
-        FillTiger bench = new();
-        bench.Setup();
-
-        bench.SkiaSharp();
-        bench.SystemDrawing();
-        bench.ImageSharp();
-        bench.ImageSharpWebGPU();
-
-        //SvgBenchmarkHelper.VerifyOutput(
-        //    "tiger",
-        //    Width,
-        //    Height,
-        //    bench.skSurface,
-        //    bench.sdBitmap,
-        //    bench.image,
-        //    bench.webGpuTarget.TextureHandle);
-
-        bench.Cleanup();
-    }
+        });
 }

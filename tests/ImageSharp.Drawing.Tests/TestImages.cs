@@ -394,4 +394,10 @@ public static class TestImages
     {
         public const string States = "GeoJson/States.json";
     }
+
+    public static class Svg
+    {
+        public const string GhostscriptTiger = "Svg/Ghostscript_Tiger.svg";
+        public const string Paris30k = "Svg/paris-30k.svg";
+    }
 }
