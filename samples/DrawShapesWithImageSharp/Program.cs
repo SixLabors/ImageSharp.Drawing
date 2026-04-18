@@ -136,12 +136,11 @@ public static class Program
         => new EllipsePolygon(0, 0, 10, 20).Scale(5).SaveImage("Curves", "Ellipse.png");
 
     private static void DrawArc() => new Polygon(new CubicBezierLineSegment(
-    [
-        new(10, 400),
-                new(30, 10),
-                new(240, 30),
-                new(300, 400)
-    ])).SaveImage(500, 500, "Curves", "Arc.png");
+        [new PointF(10, 400),
+            new PointF(30, 10),
+            new PointF(240, 30),
+            new PointF(300, 400)]))
+        .SaveImage(500, 500, "Curves", "Arc.png");
 
     private static void OutputDrawnShape()
     {
@@ -237,7 +236,7 @@ public static class Program
         int height = (int)(collection.Bounds.Top + collection.Bounds.Bottom);
         using Image<Rgba32> img = new(width, height);
 
-        img.Mutate(i => i.ProcessWithCanvas(canvas =>
+        img.Mutate(i => i.Paint(canvas =>
         {
             // Fill the canvas background and draw our shape.
             canvas.Fill(Brushes.Solid(Color.DarkBlue));
@@ -263,7 +262,7 @@ public static class Program
 
         using Image<Rgba32> img = new(width, height);
 
-        img.Mutate(i => i.ProcessWithCanvas(canvas =>
+        img.Mutate(i => i.Paint(canvas =>
         {
             // Fill the canvas background and draw our shape.
             canvas.Fill(Brushes.Solid(Color.DarkBlue));
@@ -285,7 +284,7 @@ public static class Program
     public static void SaveImage(this IPathCollection shape, int width, int height, params string[] path)
     {
         using Image<Rgba32> img = new(width, height);
-        img.Mutate(i => i.ProcessWithCanvas(canvas =>
+        img.Mutate(i => i.Paint(canvas =>
         {
             canvas.Fill(Brushes.Solid(Color.DarkBlue));
             canvas.Fill(Brushes.Solid(Color.HotPink), shape);
