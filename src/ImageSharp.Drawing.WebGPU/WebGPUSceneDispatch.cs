@@ -1317,11 +1317,24 @@ internal static class WebGPUSceneDispatch
         => Math.Max(1U, checked((uint)Math.Max(1UL, ((ulong)Math.Max(value, 1U) * numerator) / Math.Max(denominator, 1U))));
 
     /// <summary>
-    /// Aligns a chunk height down to one coarse bin when possible so tile-local scratch buffers stay bin-shaped.
+    /// Aligns a chunk height to one coarse bin (16 tile rows) so the next chunk's tile-y start stays bin-aligned.
     /// </summary>
     /// <param name="tileHeight">The candidate real chunk height, in tile rows.</param>
     /// <param name="maximumTileHeight">The maximum tile height allowed for this chunk.</param>
-    /// <returns>The aligned chunk height, preserving short tail chunks when necessary.</returns>
+    /// <returns>The aligned chunk height, preserving short tail chunks only when there are no further rows to render.</returns>
+    /// <remarks>
+    /// <para>
+    /// Coarse rasterization reads the global binning grid using <c>chunk_tile_y_start / N_TILE_Y</c> and lays its
+    /// per-bin tiles out starting at <c>chunk_tile_y_start</c>. If a chunk's height is not a multiple of
+    /// <c>N_TILE_Y</c> (16), the next chunk's <c>chunk_tile_y_start</c> ends up bin-misaligned and the coarse
+    /// dispatch reads the wrong bin's content for the misaligned rows, dropping coverage in those rows.
+    /// </para>
+    /// <para>
+    /// This method therefore rounds non-final chunks up to the next multiple of 16 (the smallest legal chunk size
+    /// that preserves bin alignment) and only permits a sub-bin tail when <paramref name="maximumTileHeight"/>
+    /// itself is a sub-bin remainder — i.e., this is the final chunk and there are no further rows to render.
+    /// </para>
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint AlignChunkTileHeight(uint tileHeight, uint maximumTileHeight)
     {
@@ -1330,13 +1343,9 @@ internal static class WebGPUSceneDispatch
             return maximumTileHeight;
         }
 
-        if (tileHeight <= 16U)
-        {
-            return tileHeight;
-        }
-
-        uint alignedTileHeight = tileHeight & ~15U;
-        return alignedTileHeight > 0U ? alignedTileHeight : 16U;
+        // Round up to a full bin row so the next chunk starts on a bin boundary.
+        uint alignedTileHeight = AlignUp(Math.Max(tileHeight, 1U), 16U);
+        return alignedTileHeight >= maximumTileHeight ? maximumTileHeight : alignedTileHeight;
     }
 
     /// <summary>
