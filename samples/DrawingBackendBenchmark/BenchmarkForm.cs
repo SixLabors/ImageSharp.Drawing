@@ -14,9 +14,6 @@ namespace DrawingBackendBenchmark;
 /// </summary>
 internal sealed class BenchmarkForm : Form
 {
-    private const int BenchmarkWidth = 600;
-    private const int BenchmarkHeight = 400;
-
     private readonly ComboBox backendSelector;
     private readonly NumericUpDown iterationSelector;
     private readonly TextBox statusTextBox;
@@ -31,7 +28,7 @@ internal sealed class BenchmarkForm : Form
     public BenchmarkForm()
     {
         this.Text = "Drawing Backend Benchmark";
-        this.ClientSize = new System.Drawing.Size(780, 560);
+        this.ClientSize = new System.Drawing.Size(1600, 1200);
         this.StartPosition = FormStartPosition.CenterScreen;
 
         FlowLayoutPanel toolbar = new()
@@ -63,6 +60,7 @@ internal sealed class BenchmarkForm : Form
         toolbar.Controls.Add(this.CreateRunButton("1k", 1_000));
         toolbar.Controls.Add(this.CreateRunButton("10k", 10_000));
         toolbar.Controls.Add(this.CreateRunButton("100k", 100_000));
+        toolbar.Controls.Add(this.CreateRunButton("200k", 200_000));
 
         this.statusTextBox = new TextBox
         {
@@ -80,23 +78,23 @@ internal sealed class BenchmarkForm : Form
         {
             Dock = DockStyle.Fill,
             AutoScroll = true,
-            BackColor = System.Drawing.Color.FromArgb(24, 36, 56),
+            BackColor = System.Drawing.Color.FromArgb(50, 36, 56),
             Padding = new Padding(12),
         };
 
         this.previewBox = new PictureBox
         {
+            Dock = DockStyle.Fill,
             BackColor = System.Drawing.Color.FromArgb(24, 36, 56),
-            SizeMode = PictureBoxSizeMode.Normal,
-            Size = new System.Drawing.Size(BenchmarkWidth, BenchmarkHeight),
+            SizeMode = PictureBoxSizeMode.Normal
         };
         this.previewHost.Controls.Add(this.previewBox);
 
         this.Controls.Add(this.previewHost);
         this.Controls.Add(this.statusTextBox);
         this.Controls.Add(toolbar);
-        this.Resize += (_, _) => this.LayoutPreview();
 
+        // Fake 1x1 SKGLControl to create a GRContext
         this.glControl = new SKGLControl
         {
             Size = new System.Drawing.Size(1, 1),
@@ -139,7 +137,6 @@ internal sealed class BenchmarkForm : Form
             this.backendSelector.SelectedIndex = 0;
         }
 
-        this.LayoutPreview();
         this.Shown += (_, _) => this.backendSelector.Focus();
     }
 
@@ -157,6 +154,10 @@ internal sealed class BenchmarkForm : Form
 
         base.Dispose(disposing);
     }
+
+    private int BenchmarkWidth => this.previewBox.Width;
+
+    private int BenchmarkHeight => this.previewBox.Height;
 
     /// <summary>
     /// Creates one toolbar button that runs the benchmark with the requested line count.
@@ -195,13 +196,14 @@ internal sealed class BenchmarkForm : Form
 
         Cursor previousCursor = this.Cursor;
         this.Cursor = Cursors.WaitCursor;
+        VisualLine[] lines = GenerateLines(lineCount, this.BenchmarkWidth, this.BenchmarkHeight, rng);
+
         try
         {
             for (int i = 0; i < iterations; i++)
             {
-                VisualLine[] lines = GenerateLines(lineCount, BenchmarkWidth, BenchmarkHeight, rng);
                 bool capturePreview = i == iterations - 1;
-                using BenchmarkRenderResult result = backend.Render(lines, BenchmarkWidth, BenchmarkHeight, capturePreview);
+                using BenchmarkRenderResult result = backend.Render(lines, this.BenchmarkWidth, this.BenchmarkHeight, capturePreview);
 
                 samples.Add(result.RenderMilliseconds);
                 this.UpdatePreview(result, capturePreview);
@@ -219,16 +221,6 @@ internal sealed class BenchmarkForm : Form
         {
             this.Cursor = previousCursor;
         }
-    }
-
-    /// <summary>
-    /// Lays out the fixed-size preview surface in the middle of the scroll host.
-    /// </summary>
-    private void LayoutPreview()
-    {
-        int x = Math.Max(this.previewHost.Padding.Left, (this.previewHost.ClientSize.Width - this.previewBox.Width) / 2);
-        int y = Math.Max(this.previewHost.Padding.Top, (this.previewHost.ClientSize.Height - this.previewBox.Height) / 2);
-        this.previewBox.Location = new System.Drawing.Point(x, y);
     }
 
     /// <summary>

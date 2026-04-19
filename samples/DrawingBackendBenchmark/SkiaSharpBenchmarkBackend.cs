@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.PixelFormats;
 using SkiaSharp;
 
@@ -60,15 +61,26 @@ internal sealed class SkiaSharpBenchmarkBackend : IBenchmarkBackend
         if (capturePreview)
         {
             preview = new Image<Bgra32>(width, height);
-            if (preview.DangerousTryGetSinglePixelMemory(out Memory<Bgra32> memory))
+            int rowBytes = width * 4;
+            byte[] readbackBuffer = new byte[height * rowBytes];
+            SKImageInfo readbackInfo = new(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
+            unsafe
             {
-                SKImageInfo readbackInfo = new(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
-                using System.Buffers.MemoryHandle pin = memory.Pin();
-                unsafe
+                fixed (byte* ptr = readbackBuffer)
                 {
-                    this.surface.ReadPixels(readbackInfo, (nint)pin.Pointer, width * 4, 0, 0);
+                    this.surface.ReadPixels(readbackInfo, (nint)ptr, rowBytes, 0, 0);
                 }
             }
+
+            preview.ProcessPixelRows(accessor =>
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    System.Runtime.InteropServices.MemoryMarshal
+                        .Cast<byte, Bgra32>(readbackBuffer.AsSpan(y * rowBytes, rowBytes))
+                        .CopyTo(accessor.GetRowSpan(y));
+                }
+            });
         }
 
         return new BenchmarkRenderResult(stopwatch.Elapsed.TotalMilliseconds, preview, usedGpu: this.context != null);
