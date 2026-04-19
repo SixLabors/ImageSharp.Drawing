@@ -17,7 +17,8 @@ using SDSolidBrush = System.Drawing.SolidBrush;
 namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing;
 
 /// <summary>
-/// Benchmarks rendering the Ghostscript Tiger SVG (~240 path elements with fills and strokes)
+/// Benchmarks rendering the Ghostscript Tiger SVG (138 parsed path elements yielding
+/// 182 draw commands: 86 fill-only, 44 fill-and-stroke, and 8 stroke-only)
 /// across SkiaSharp, System.Drawing, ImageSharp (CPU), and ImageSharp (WebGPU).
 /// </summary>
 public class FillTiger

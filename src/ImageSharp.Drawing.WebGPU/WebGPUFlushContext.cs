@@ -529,10 +529,10 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.queueReference = this.queueHandle.AcquireReference();
         this.targetTextureReference = this.targetTextureHandle.AcquireReference();
         this.targetTextureViewReference = this.targetTextureViewHandle.AcquireReference();
-        this.Device = (Device*)this.deviceReference.Handle;
-        this.Queue = (Queue*)this.queueReference.Handle;
-        this.TargetTexture = (Texture*)this.targetTextureReference.Handle;
-        this.TargetView = (TextureView*)this.targetTextureViewReference.Handle;
+        this.Device = (Device*)this.deviceReference.Value.Handle;
+        this.Queue = (Queue*)this.queueReference.Value.Handle;
+        this.TargetTexture = (Texture*)this.targetTextureReference.Value.Handle;
+        this.TargetView = (TextureView*)this.targetTextureViewReference.Value.Handle;
         this.ownsTargetTexture = false;
         this.ownsTargetView = false;
         return true;

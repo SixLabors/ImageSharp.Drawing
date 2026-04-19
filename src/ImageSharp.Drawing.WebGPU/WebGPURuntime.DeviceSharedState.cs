@@ -58,7 +58,7 @@ internal static unsafe partial class WebGPURuntime
         private readonly ConcurrentDictionary<string, CompositeComputePipelineInfrastructure> compositeComputePipelines = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, SharedBufferInfrastructure> sharedBuffers = new(StringComparer.Ordinal);
         private readonly HashSet<FeatureName> deviceFeatures;
-        private readonly WebGPUHandle.HandleReference deviceReference;
+        private WebGPUHandle.HandleReference deviceReference;
         private bool disposed;
 
         internal DeviceSharedState(WebGPU api, WebGPUDeviceHandle deviceHandle)

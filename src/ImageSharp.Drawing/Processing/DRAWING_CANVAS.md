@@ -76,9 +76,10 @@ The command remains relatively close to the original user request. It may hold t
 
 ### Preparation
 
-Preparation is the flush-time normalization step. In code this lives in `CompositionCommand.Prepare(...)` and the surrounding `CompositionCommandPreparer`.
+Preparation is the flush-time normalization step that turns recorded intent into backend-ready geometry and metadata. It is split across two stages:
 
-Preparation turns recorded intent into backend-ready geometry and metadata. That is where path transforms are applied, strokes become outlines, clip paths are applied, prepared geometry is built or reused, and raster interest is recomputed.
+1. `DrawingCanvasBatcher<TPixel>.PrepareCommands(...)` runs first and only when needed. It applies command transforms, expands strokes to fill paths, and applies clip paths so that clipped commands reach the backend as ordinary fills. It also expands dashed strokes when a stroke pattern is present.
+2. The CPU backend then calls `FlushScene.Create(...)`, which lowers each command into a row-oriented retained representation through `TryPrepareFillPath` / `TryPrepareStrokePath`. That is where prepared rasterizable geometry is built, brushes are bound to the prepared coordinate space, and bounds and raster interest are recomputed.
 
 Preparation is where the architecture moves from "what the caller asked for" to "what the backend can execute".
 
@@ -363,12 +364,11 @@ If you want to move from the architecture into the code, this is the best order.
 2. `DrawingCanvasExtensions.cs`
 3. `DrawingCanvasBatcher{TPixel}.cs`
 4. `CompositionCommand.cs`
-5. `CompositionCommandPreparer.cs`
-6. `DefaultDrawingBackend.cs`
-7. `FlushScene.cs`
-8. `WebGPUEnvironment.cs`
-9. `WebGPUWindow{TPixel}.cs`, `WebGPURenderTarget{TPixel}.cs`, and `WebGPUDeviceContext{TPixel}.cs`
-10. `WebGPUDrawingBackend` and its scene/dispatch types
+5. `DefaultDrawingBackend.cs`
+6. `FlushScene.cs`
+7. `WebGPUEnvironment.cs`
+8. `WebGPUWindow{TPixel}.cs`, `WebGPURenderTarget{TPixel}.cs`, and `WebGPUDeviceContext{TPixel}.cs`
+9. `WebGPUDrawingBackend` and its scene/dispatch types
 
 That path follows the real runtime flow:
 

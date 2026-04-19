@@ -51,25 +51,16 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
     /// <param name="configuration">The configuration instance to bind to the created backend.</param>
     /// <param name="options">The window creation options.</param>
     public WebGPUWindow(Configuration configuration, WebGPUWindowOptions options)
-        : this(CreateConstruction(configuration, options))
     {
-    }
+        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId expectedFormat))
+        {
+            throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' is not supported by the WebGPU backend.");
+        }
 
-    private WebGPUWindow(WindowConstruction construction)
-        : this(construction.Window, construction.Configuration, construction.Format, construction.PresentMode)
-    {
-    }
-
-    private WebGPUWindow(
-        IWindow window,
-        Configuration configuration,
-        WebGPUTextureFormatId format,
-        WebGPUPresentMode presentMode)
-    {
-        this.window = window;
+        this.window = Window.Create(CreateSilkOptions(options));
         this.Configuration = configuration;
-        this.Format = format;
-        this.presentMode = presentMode;
+        this.Format = expectedFormat;
+        this.presentMode = options.PresentMode;
 
         try
         {
@@ -588,17 +579,6 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
         }
     }
 
-    private static WindowConstruction CreateConstruction(Configuration configuration, WebGPUWindowOptions options)
-    {
-        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId expectedFormat))
-        {
-            throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' is not supported by the WebGPU backend.");
-        }
-
-        IWindow window = Window.Create(CreateSilkOptions(options));
-        return new WindowConstruction(window, configuration, expectedFormat, options.PresentMode);
-    }
-
     private bool TryAcquireFrameCore(
         TimeSpan deltaTime,
         [NotNullWhen(true)] out WebGPUWindowFrame<TPixel>? frame,
@@ -918,28 +898,5 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
             this.SurfaceHandle.Dispose();
             this.InstanceHandle.Dispose();
         }
-    }
-
-    private sealed class WindowConstruction
-    {
-        public WindowConstruction(
-            IWindow window,
-            Configuration configuration,
-            WebGPUTextureFormatId format,
-            WebGPUPresentMode presentMode)
-        {
-            this.Window = window;
-            this.Configuration = configuration;
-            this.Format = format;
-            this.PresentMode = presentMode;
-        }
-
-        public IWindow Window { get; }
-
-        public Configuration Configuration { get; }
-
-        public WebGPUTextureFormatId Format { get; }
-
-        public WebGPUPresentMode PresentMode { get; }
     }
 }

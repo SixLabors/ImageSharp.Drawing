@@ -77,9 +77,11 @@ internal abstract class WebGPUHandle : SafeHandle
     /// <remarks>
     /// This token exists so callers can use a normal <c>using</c> scope around raw WebGPU pointers
     /// without carrying a separate success flag beside the handle. Disposing it releases the
-    /// reference acquired by <see cref="AcquireReference"/>.
+    /// reference acquired by <see cref="AcquireReference"/>. Modeled after
+    /// <see cref="System.Buffers.MemoryHandle"/>: a lightweight scoped value that should not be
+    /// copied or stored beyond the immediate native-call scope.
     /// </remarks>
-    internal sealed class HandleReference : IDisposable
+    internal struct HandleReference : IDisposable
     {
         private WebGPUHandle? owner;
 

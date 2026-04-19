@@ -15,7 +15,7 @@ public sealed unsafe class WebGPUWindowFrame<TPixel> : IDisposable
     where TPixel : unmanaged, IPixel<TPixel>
 {
     private readonly WebGPU api;
-    private readonly WebGPUHandle.HandleReference surfaceReference;
+    private WebGPUHandle.HandleReference surfaceReference;
     private readonly WebGPUTextureHandle textureHandle;
     private readonly WebGPUTextureViewHandle textureViewHandle;
     private bool isDisposed;
