@@ -65,14 +65,16 @@ internal static unsafe class WebGPUSceneResources
         if (arena is not null && arena.CanReuse(flushContext, config.BufferSizes, infoBinDataByteLength, sceneByteLength))
         {
             // Upload new scene data and header into the existing arena buffers.
+            using WebGPUHandle.HandleReference reuseQueueReference = flushContext.QueueHandle.AcquireReference();
+            Queue* reuseQueue = (Queue*)reuseQueueReference.Handle;
             ReadOnlySpan<uint> sceneData = scene.SceneData.Span;
             fixed (uint* sceneDataPtr = sceneData)
             {
-                flushContext.Api.QueueWriteBuffer(flushContext.Queue, arena.SceneBuffer, 0, sceneDataPtr, (nuint)(sceneData.Length * sizeof(uint)));
+                flushContext.Api.QueueWriteBuffer(reuseQueue, arena.SceneBuffer, 0, sceneDataPtr, (nuint)(sceneData.Length * sizeof(uint)));
             }
 
             GpuSceneConfig header = CreateHeader(scene, config, baseColor);
-            flushContext.Api.QueueWriteBuffer(flushContext.Queue, arena.HeaderBuffer, 0, &header, (nuint)sizeof(GpuSceneConfig));
+            flushContext.Api.QueueWriteBuffer(reuseQueue, arena.HeaderBuffer, 0, &header, (nuint)sizeof(GpuSceneConfig));
 
             resources = new WebGPUSceneResourceSet(
                 arena.HeaderBuffer,
@@ -192,7 +194,7 @@ internal static unsafe class WebGPUSceneResources
         // These buffers are NOT tracked by the flush context — the arena owns them.
         arena = new WebGPUSceneResourceArena(
             flushContext.Api,
-            flushContext.Device,
+            flushContext.DeviceHandle,
             config.BufferSizes,
             infoBinDataByteLength,
             sceneByteLength,
@@ -359,7 +361,12 @@ internal static unsafe class WebGPUSceneResources
             SampleCount = 1
         };
 
-        Texture* texture = flushContext.Api.DeviceCreateTexture(flushContext.Device, in textureDescriptor);
+        Texture* texture;
+        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
+        {
+            texture = flushContext.Api.DeviceCreateTexture((Device*)deviceReference.Handle, in textureDescriptor);
+        }
+
         if (texture is null)
         {
             textureView = null;
@@ -404,8 +411,9 @@ internal static unsafe class WebGPUSceneResources
         fixed (uint* pixelPtr = scene.GradientPixels.Span)
         {
             Extent3D extent = new(512, (uint)scene.GradientRowCount, 1);
+            using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
             flushContext.Api.QueueWriteTexture(
-                flushContext.Queue,
+                (Queue*)queueReference.Handle,
                 in destination,
                 pixelPtr,
                 (nuint)(scene.GradientPixels.Length * sizeof(uint)),
@@ -543,7 +551,11 @@ internal static unsafe class WebGPUSceneResources
             Size = totalByteLength
         };
 
-        buffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in descriptor);
+        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
+        {
+            buffer = flushContext.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in descriptor);
+        }
+
         if (buffer is null)
         {
             error = "Failed to create the staged-scene info/bin-data buffer.";
@@ -574,7 +586,11 @@ internal static unsafe class WebGPUSceneResources
             SampleCount = 1
         };
 
-        texture = flushContext.Api.DeviceCreateTexture(flushContext.Device, in textureDescriptor);
+        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
+        {
+            texture = flushContext.Api.DeviceCreateTexture((Device*)deviceReference.Handle, in textureDescriptor);
+        }
+
         if (texture is null)
         {
             textureView = null;
@@ -619,7 +635,11 @@ internal static unsafe class WebGPUSceneResources
         };
 
         Extent3D size = new(1, 1, 1);
-        flushContext.Api.QueueWriteTexture(flushContext.Queue, in destination, &pixel, 4, in layout, in size);
+        using (WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference())
+        {
+            flushContext.Api.QueueWriteTexture((Queue*)queueReference.Handle, in destination, &pixel, 4, in layout, in size);
+        }
+
         flushContext.TrackTexture(texture);
         flushContext.TrackTextureView(textureView);
         error = null;
@@ -649,7 +669,11 @@ internal static unsafe class WebGPUSceneResources
             SampleCount = 1
         };
 
-        texture = flushContext.Api.DeviceCreateTexture(flushContext.Device, in textureDescriptor);
+        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
+        {
+            texture = flushContext.Api.DeviceCreateTexture((Device*)deviceReference.Handle, in textureDescriptor);
+        }
+
         if (texture is null)
         {
             textureView = null;
@@ -712,8 +736,9 @@ internal static unsafe class WebGPUSceneResources
             };
 
             Extent3D extent = new((uint)width, (uint)height, 1);
+            using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
             flushContext.Api.QueueWriteTexture(
-                flushContext.Queue,
+                (Queue*)queueReference.Handle,
                 in destination,
                 pixelPtr,
                 (nuint)(pixels.Length * Unsafe.SizeOf<TPixel>()),
@@ -770,15 +795,20 @@ internal static unsafe class WebGPUSceneResources
             Size = byteLength
         };
 
-        buffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in descriptor);
+        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
+        {
+            buffer = flushContext.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in descriptor);
+        }
+
         if (buffer is null)
         {
             error = $"Failed to create a staged-scene scalar buffer for '{typeof(T).Name}'.";
             return false;
         }
 
+        using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
         flushContext.Api.QueueWriteBuffer(
-            flushContext.Queue,
+            (Queue*)queueReference.Handle,
             buffer,
             0,
             Unsafe.AsPointer(ref Unsafe.AsRef(in value)),
@@ -810,7 +840,11 @@ internal static unsafe class WebGPUSceneResources
             Size = byteLength
         };
 
-        buffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in descriptor);
+        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
+        {
+            buffer = flushContext.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in descriptor);
+        }
+
         if (buffer is null)
         {
             error = $"Failed to create a staged-scene buffer for '{typeof(T).Name}'.";
@@ -820,10 +854,11 @@ internal static unsafe class WebGPUSceneResources
         if (!values.IsEmpty)
         {
             nuint uploadByteLength = checked((nuint)values.Length * (nuint)Unsafe.SizeOf<T>());
+            using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
             fixed (T* dataPtr = values)
             {
                 flushContext.Api.QueueWriteBuffer(
-                    flushContext.Queue,
+                    (Queue*)queueReference.Handle,
                     buffer,
                     0,
                     dataPtr,
@@ -1003,7 +1038,7 @@ internal sealed unsafe class WebGPUSceneResourceArena
 {
     public WebGPUSceneResourceArena(
         WebGPU api,
-        Device* device,
+        WebGPUDeviceHandle device,
         WebGPUSceneBufferSizes capacitySizes,
         nuint infoBinDataByteCapacity,
         nuint sceneByteCapacity,
@@ -1051,7 +1086,7 @@ internal sealed unsafe class WebGPUSceneResourceArena
 
     public WebGPU Api { get; }
 
-    public Device* Device { get; }
+    public WebGPUDeviceHandle Device { get; }
 
     public WebGPUSceneBufferSizes CapacitySizes { get; }
 
@@ -1097,7 +1132,7 @@ internal sealed unsafe class WebGPUSceneResourceArena
     /// Returns true if every buffer fits the required sizes for this scene.
     /// </summary>
     public bool CanReuse(WebGPUFlushContext flushContext, WebGPUSceneBufferSizes bufferSizes, nuint infoBinDataByteLength, nuint sceneByteLength)
-        => this.Device == flushContext.Device &&
+        => ReferenceEquals(this.Device, flushContext.DeviceHandle) &&
            this.HeaderBuffer is not null &&
            this.SceneBuffer is not null &&
            infoBinDataByteLength <= this.InfoBinDataByteCapacity &&

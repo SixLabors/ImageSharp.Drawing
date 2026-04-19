@@ -310,7 +310,11 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             SampleCount = 1
         };
 
-        texture = flushContext.Api.DeviceCreateTexture(flushContext.Device, in textureDescriptor);
+        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
+        {
+            texture = flushContext.Api.DeviceCreateTexture((Device*)deviceReference.Handle, in textureDescriptor);
+        }
+
         if (texture is null)
         {
             error = "Failed to create WebGPU composition texture.";
@@ -402,7 +406,11 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 return false;
             }
 
-            flushContext.Api.QueueSubmit(flushContext.Queue, 1, ref commandBuffer);
+            using (WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference())
+            {
+                flushContext.Api.QueueSubmit((Queue*)queueReference.Handle, 1, ref commandBuffer);
+            }
+
             flushContext.Api.CommandBufferRelease(commandBuffer);
             commandBuffer = null;
             flushContext.Api.CommandEncoderRelease(commandEncoder);

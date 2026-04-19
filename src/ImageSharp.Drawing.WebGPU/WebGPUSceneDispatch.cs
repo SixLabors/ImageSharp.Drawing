@@ -777,7 +777,11 @@ internal static class WebGPUSceneDispatch
                 MappedAtCreation = false
             };
 
-            readbackBuffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in readbackDescriptor);
+            using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
+            {
+                readbackBuffer = flushContext.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in readbackDescriptor);
+            }
+
             if (readbackBuffer is null)
             {
                 error = "Failed to create the staged-scene scheduling readback buffer.";
@@ -786,7 +790,7 @@ internal static class WebGPUSceneDispatch
 
             arena = new WebGPUSceneSchedulingArena(
                 flushContext.Api,
-                flushContext.Device,
+                flushContext.DeviceHandle,
                 bufferSizes,
                 readbackByteLength,
                 binHeaderBuffer,
@@ -912,16 +916,19 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        WebGPUDrawingBackend.CopyTextureRegion(
-            flushContext,
-            outputTexture,
-            0,
-            0,
-            flushContext.TargetTexture,
-            flushContext.TargetBounds.X,
-            flushContext.TargetBounds.Y,
-            targetWidth,
-            targetHeight);
+        using (WebGPUHandle.HandleReference targetTextureReference = flushContext.TargetTextureHandle.AcquireReference())
+        {
+            WebGPUDrawingBackend.CopyTextureRegion(
+                flushContext,
+                outputTexture,
+                0,
+                0,
+                (Texture*)targetTextureReference.Handle,
+                flushContext.TargetBounds.X,
+                flushContext.TargetBounds.Y,
+                targetWidth,
+                targetHeight);
+        }
 
         if (!WebGPUDrawingBackend.TrySubmit(flushContext))
         {
@@ -984,16 +991,19 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        WebGPUDrawingBackend.CopyTextureRegion(
-            flushContext,
-            flushContext.TargetTexture,
-            flushContext.TargetBounds.X,
-            flushContext.TargetBounds.Y,
-            outputTexture,
-            0,
-            0,
-            targetWidth,
-            targetHeight);
+        using (WebGPUHandle.HandleReference targetTextureReference = flushContext.TargetTextureHandle.AcquireReference())
+        {
+            WebGPUDrawingBackend.CopyTextureRegion(
+                flushContext,
+                (Texture*)targetTextureReference.Handle,
+                flushContext.TargetBounds.X,
+                flushContext.TargetBounds.Y,
+                outputTexture,
+                0,
+                0,
+                targetWidth,
+                targetHeight);
+        }
 
         if (!WebGPUDrawingBackend.TrySubmit(flushContext))
         {
@@ -1103,16 +1113,19 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        WebGPUDrawingBackend.CopyTextureRegion(
-            flushContext,
-            outputTexture,
-            0,
-            0,
-            flushContext.TargetTexture,
-            flushContext.TargetBounds.X,
-            flushContext.TargetBounds.Y,
-            targetWidth,
-            targetHeight);
+        using (WebGPUHandle.HandleReference targetTextureReference = flushContext.TargetTextureHandle.AcquireReference())
+        {
+            WebGPUDrawingBackend.CopyTextureRegion(
+                flushContext,
+                outputTexture,
+                0,
+                0,
+                (Texture*)targetTextureReference.Handle,
+                flushContext.TargetBounds.X,
+                flushContext.TargetBounds.Y,
+                targetWidth,
+                targetHeight);
+        }
 
         return WebGPUDrawingBackend.TrySubmit(flushContext);
     }
@@ -1190,7 +1203,8 @@ internal static class WebGPUSceneDispatch
         out string? error)
     {
         nuint headerSize = (nuint)sizeof(GpuSceneConfig);
-        flushContext.Api.QueueWriteBuffer(flushContext.Queue, headerBuffer, 0, &header, headerSize);
+        using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
+        flushContext.Api.QueueWriteBuffer((Queue*)queueReference.Handle, headerBuffer, 0, &header, headerSize);
         error = null;
         return true;
     }
@@ -1205,7 +1219,8 @@ internal static class WebGPUSceneDispatch
         out string? error)
     {
         GpuSceneBumpAllocators reset = default;
-        flushContext.Api.QueueWriteBuffer(flushContext.Queue, bumpBuffer, 0, &reset, (nuint)sizeof(GpuSceneBumpAllocators));
+        using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
+        flushContext.Api.QueueWriteBuffer((Queue*)queueReference.Handle, bumpBuffer, 0, &reset, (nuint)sizeof(GpuSceneBumpAllocators));
         error = null;
         return true;
     }
@@ -1735,10 +1750,13 @@ internal static class WebGPUSceneDispatch
 
         using PfnBufferMapCallback callback = PfnBufferMapCallback.From(Callback);
         flushContext.Api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, (nuint)sizeof(GpuSceneBumpAllocators), callback, null);
-        if (!WaitForMapSignal(flushContext.WgpuExtension, flushContext.Device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
+        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
         {
-            error = $"Failed to map staged-scene scheduling status with status '{mapStatus}'.";
-            return false;
+            if (!WaitForMapSignal(flushContext.WgpuExtension, (Device*)deviceReference.Handle, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
+            {
+                error = $"Failed to map staged-scene scheduling status with status '{mapStatus}'.";
+                return false;
+            }
         }
 
         void* mapped = flushContext.Api.BufferGetConstMappedRange(readbackBuffer, 0, (nuint)sizeof(GpuSceneBumpAllocators));
@@ -1805,10 +1823,13 @@ internal static class WebGPUSceneDispatch
         nuint mappedByteLength = checked((nuint)chunkCount * (nuint)sizeof(GpuSceneBumpAllocators));
         using PfnBufferMapCallback callback = PfnBufferMapCallback.From(Callback);
         flushContext.Api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, mappedByteLength, callback, null);
-        if (!WaitForMapSignal(flushContext.WgpuExtension, flushContext.Device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
+        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
         {
-            error = $"Failed to map staged-scene chunk scheduling status with status '{mapStatus}'.";
-            return false;
+            if (!WaitForMapSignal(flushContext.WgpuExtension, (Device*)deviceReference.Handle, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
+            {
+                error = $"Failed to map staged-scene chunk scheduling status with status '{mapStatus}'.";
+                return false;
+            }
         }
 
         void* mapped = flushContext.Api.BufferGetConstMappedRange(readbackBuffer, 0, mappedByteLength);
@@ -2174,7 +2195,9 @@ internal static class WebGPUSceneDispatch
         entries[5] = new BindGroupEntry { Binding = 5, TextureView = outputTextureView };
         entries[6] = new BindGroupEntry { Binding = 6, TextureView = resources.GradientTextureView };
         entries[7] = new BindGroupEntry { Binding = 7, TextureView = resources.ImageAtlasTextureView };
-        entries[8] = new BindGroupEntry { Binding = 8, TextureView = flushContext.TargetView };
+
+        using WebGPUHandle.HandleReference targetViewReference = flushContext.TargetTextureViewHandle.AcquireReference();
+        entries[8] = new BindGroupEntry { Binding = 8, TextureView = (TextureView*)targetViewReference.Handle };
 
         if (!TryDispatchComputePass(flushContext, bindGroupLayout, pipeline, entries, 9, groupCountX, groupCountY, 1, out error))
         {
@@ -2212,7 +2235,12 @@ internal static class WebGPUSceneDispatch
             Entries = entries
         };
 
-        BindGroup* bindGroup = flushContext.Api.DeviceCreateBindGroup(flushContext.Device, in descriptor);
+        BindGroup* bindGroup;
+        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
+        {
+            bindGroup = flushContext.Api.DeviceCreateBindGroup((Device*)deviceReference.Handle, in descriptor);
+        }
+
         if (bindGroup is null)
         {
             error = "Failed to create a staged-scene compute bind group.";
@@ -2272,7 +2300,12 @@ internal static class WebGPUSceneDispatch
             Entries = entries
         };
 
-        BindGroup* bindGroup = flushContext.Api.DeviceCreateBindGroup(flushContext.Device, in descriptor);
+        BindGroup* bindGroup;
+        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
+        {
+            bindGroup = flushContext.Api.DeviceCreateBindGroup((Device*)deviceReference.Handle, in descriptor);
+        }
+
         if (bindGroup is null)
         {
             error = "Failed to create a staged-scene compute bind group.";
@@ -2353,7 +2386,12 @@ internal static class WebGPUSceneDispatch
                         Entries = entriesPtr
                     };
 
-                    BindGroup* bindGroup = flushContext.Api.DeviceCreateBindGroup(flushContext.Device, in descriptor);
+                    BindGroup* bindGroup;
+                    using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
+                    {
+                        bindGroup = flushContext.Api.DeviceCreateBindGroup((Device*)deviceReference.Handle, in descriptor);
+                    }
+
                     if (bindGroup is null)
                     {
                         error = $"Failed to create a staged-scene compute bind group for '{shaderName}'.";
@@ -2639,7 +2677,11 @@ internal static class WebGPUSceneDispatch
             Size = size
         };
 
-        buffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in descriptor);
+        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
+        {
+            buffer = flushContext.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in descriptor);
+        }
+
         if (buffer is null)
         {
             error = "Failed to create a staged-scene buffer.";
@@ -2672,7 +2714,11 @@ internal static class WebGPUSceneDispatch
             Size = size
         };
 
-        buffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in descriptor);
+        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
+        {
+            buffer = flushContext.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in descriptor);
+        }
+
         if (buffer is null)
         {
             error = "Failed to create a staged-scene scheduling arena buffer.";
@@ -2698,8 +2744,9 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
+        using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
         flushContext.Api.QueueWriteBuffer(
-            flushContext.Queue,
+            (Queue*)queueReference.Handle,
             buffer,
             0,
             Unsafe.AsPointer(ref Unsafe.AsRef(in value)),
@@ -2723,8 +2770,9 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
+        using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
         flushContext.Api.QueueWriteBuffer(
-            flushContext.Queue,
+            (Queue*)queueReference.Handle,
             buffer,
             0,
             Unsafe.AsPointer(ref Unsafe.AsRef(in value)),
@@ -3263,7 +3311,7 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
 {
     public WebGPUSceneSchedulingArena(
         WebGPU api,
-        Device* device,
+        WebGPUDeviceHandle device,
         WebGPUSceneBufferSizes capacitySizes,
         nuint readbackByteLength,
         WgpuBuffer* binHeaderBuffer,
@@ -3299,7 +3347,7 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
     /// <summary>
     /// Gets the device that created the arena buffers so reuse never crosses device boundaries.
     /// </summary>
-    public Device* Device { get; }
+    public WebGPUDeviceHandle Device { get; }
 
     public WebGPUSceneBufferSizes CapacitySizes { get; }
 
@@ -3327,7 +3375,7 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
     /// Returns true if every buffer fits the required sizes for this scene.
     /// </summary>
     public bool CanReuse(WebGPUFlushContext flushContext, WebGPUSceneBufferSizes bufferSizes, nuint readbackByteLength)
-        => this.Device == flushContext.Device &&
+        => ReferenceEquals(this.Device, flushContext.DeviceHandle) &&
            this.BinHeaderBuffer is not null &&
            this.IndirectCountBuffer is not null &&
            this.PathTileBuffer is not null &&
