@@ -36,34 +36,32 @@ public readonly struct CompositionCommand
 {
     private readonly IPath? sourcePath;
     private readonly Brush? brush;
-    private readonly Matrix4x4 transform;
+    private readonly DrawingOptions? drawingOptions;
+    private readonly GraphicsOptions? layerGraphicsOptions;
     private readonly IReadOnlyList<IPath>? clipPaths;
-    private readonly ShapeOptions? shapeOptions;
 
     private CompositionCommand(
         CompositionCommandKind kind,
         IPath? sourcePath,
         Brush? brush,
-        GraphicsOptions graphicsOptions,
+        DrawingOptions? drawingOptions,
+        GraphicsOptions? layerGraphicsOptions,
         in RasterizerOptions rasterizerOptions,
         Rectangle targetBounds,
         Rectangle layerBounds,
         Point destinationOffset,
-        Matrix4x4 transform,
-        IReadOnlyList<IPath>? clipPaths,
-        ShapeOptions? shapeOptions)
+        IReadOnlyList<IPath>? clipPaths)
     {
         this.Kind = kind;
         this.sourcePath = sourcePath;
         this.brush = brush;
-        this.GraphicsOptions = graphicsOptions;
+        this.drawingOptions = drawingOptions;
+        this.layerGraphicsOptions = layerGraphicsOptions;
         this.RasterizerOptions = rasterizerOptions;
         this.TargetBounds = targetBounds;
         this.LayerBounds = layerBounds;
         this.DestinationOffset = destinationOffset;
-        this.transform = transform;
         this.clipPaths = clipPaths;
-        this.shapeOptions = shapeOptions;
     }
 
     /// <summary>
@@ -91,9 +89,14 @@ public readonly struct CompositionCommand
     public Brush Brush => this.brush ?? throw new InvalidOperationException("Layer commands do not carry a brush.");
 
     /// <summary>
+    /// Gets the drawing options carried by the command.
+    /// </summary>
+    public DrawingOptions DrawingOptions => this.drawingOptions ?? throw new InvalidOperationException("Layer commands do not carry drawing options.");
+
+    /// <summary>
     /// Gets graphics options used for composition or layer compositing.
     /// </summary>
-    public GraphicsOptions GraphicsOptions { get; }
+    public GraphicsOptions GraphicsOptions => this.drawingOptions?.GraphicsOptions ?? this.layerGraphicsOptions!;
 
     /// <summary>
     /// Gets rasterizer options used to generate coverage.
@@ -113,7 +116,7 @@ public readonly struct CompositionCommand
     /// <summary>
     /// Gets the command transform.
     /// </summary>
-    public Matrix4x4 Transform => this.transform;
+    public Matrix4x4 Transform => this.drawingOptions?.Transform ?? Matrix4x4.Identity;
 
     /// <summary>
     /// Gets the clip paths carried by the command.
@@ -123,17 +126,15 @@ public readonly struct CompositionCommand
     /// <summary>
     /// Gets the shape options carried by the command.
     /// </summary>
-    public ShapeOptions ShapeOptions => this.shapeOptions ?? throw new InvalidOperationException("Layer commands do not carry shape options.");
+    public ShapeOptions ShapeOptions => this.drawingOptions?.ShapeOptions ?? throw new InvalidOperationException("Layer commands do not carry shape options.");
 
     /// <summary>
     /// Creates a fill-path composition command.
     /// </summary>
     /// <param name="path">Path in target-local coordinates.</param>
     /// <param name="brush">Brush used during composition.</param>
-    /// <param name="graphicsOptions">Graphics options used for composition.</param>
+    /// <param name="drawingOptions">Drawing options (graphics, shape, transform) used during composition.</param>
     /// <param name="rasterizerOptions">Rasterizer options used to generate coverage.</param>
-    /// <param name="shapeOptions">Shape options for clip operations.</param>
-    /// <param name="transform">Transform matrix supplied with the command.</param>
     /// <param name="targetBounds">The absolute bounds of the logical target for this command.</param>
     /// <param name="destinationOffset">Absolute destination offset where coverage is composited.</param>
     /// <param name="clipPaths">Optional clip paths supplied with the command.</param>
@@ -141,10 +142,8 @@ public readonly struct CompositionCommand
     public static CompositionCommand Create(
         IPath path,
         Brush brush,
-        GraphicsOptions graphicsOptions,
+        DrawingOptions drawingOptions,
         in RasterizerOptions rasterizerOptions,
-        ShapeOptions shapeOptions,
-        Matrix4x4 transform,
         Rectangle targetBounds,
         Point destinationOffset = default,
         IReadOnlyList<IPath>? clipPaths = null)
@@ -152,14 +151,13 @@ public readonly struct CompositionCommand
             CompositionCommandKind.FillLayer,
             path,
             brush,
-            graphicsOptions,
+            drawingOptions,
+            null,
             in rasterizerOptions,
             targetBounds,
             default,
             destinationOffset,
-            transform,
-            clipPaths,
-            shapeOptions);
+            clipPaths);
 
     /// <summary>
     /// Creates a begin-layer composition command.
@@ -172,13 +170,12 @@ public readonly struct CompositionCommand
             CompositionCommandKind.BeginLayer,
             null,
             null,
+            null,
             graphicsOptions,
             default,
             layerBounds,
             layerBounds,
             default,
-            Matrix4x4.Identity,
-            null,
             null);
 
     /// <summary>
@@ -192,12 +189,11 @@ public readonly struct CompositionCommand
             CompositionCommandKind.EndLayer,
             null,
             null,
+            null,
             graphicsOptions,
             default,
             layerBounds,
             layerBounds,
             default,
-            Matrix4x4.Identity,
-            null,
             null);
 }

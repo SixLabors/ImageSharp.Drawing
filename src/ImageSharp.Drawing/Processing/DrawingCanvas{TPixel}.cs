@@ -944,10 +944,8 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
                 CompositionCommand.Create(
                     path,
                     brush,
-                    graphicsOptions,
+                    options,
                     in rasterizerOptions,
-                    shapeOptions,
-                    options.Transform,
                     state.TargetBounds,
                     state.TargetBounds.Location,
                     clipPaths));
@@ -958,10 +956,8 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             new StrokePathCommand(
                 path,
                 brush,
-                graphicsOptions,
+                options,
                 in rasterizerOptions,
-                shapeOptions,
-                options.Transform,
                 state.TargetBounds,
                 state.TargetBounds.Location,
                 pen,
@@ -1002,12 +998,11 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
                 start,
                 end,
                 brush,
-                graphicsOptions,
+                options,
                 in rasterizerOptions,
                 state.TargetBounds,
                 state.TargetBounds.Location,
-                pen,
-                options.Transform));
+                pen));
     }
 
     /// <summary>
@@ -1042,12 +1037,11 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             new StrokePolylineCommand(
                 points,
                 brush,
-                graphicsOptions,
+                options,
                 in rasterizerOptions,
                 state.TargetBounds,
                 state.TargetBounds.Location,
-                pen,
-                options.Transform));
+                pen));
     }
 
     /// <summary>
@@ -1116,7 +1110,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         for (int i = 0; i < operations.Count; i++)
         {
             DrawingOperation operation = operations[i];
-            entries.Add((operation.RenderPass, i, this.CreateCompositionCommand(operation, drawingOptions, clipPaths)));
+            entries.Add((operation.RenderPass, i, this.CreateTextCompositionCommand(operation, drawingOptions, clipPaths)));
         }
 
         entries.Sort(static (a, b) =>
@@ -1284,7 +1278,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     /// <param name="drawingOptions">Drawing options applied to the operation.</param>
     /// <param name="clipPaths">Optional clip paths to apply during preparation.</param>
     /// <returns>A composition scene command ready for batching.</returns>
-    private CompositionSceneCommand CreateCompositionCommand(
+    private CompositionSceneCommand CreateTextCompositionCommand(
         DrawingOperation operation,
         DrawingOptions drawingOptions,
         IReadOnlyList<IPath>? clipPaths = null)
@@ -1326,16 +1320,21 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             samplingOrigin,
             graphicsOptions.AntialiasThreshold);
 
+        // Glyph paths arrive pre-laid-out, so the queued command must report identity transform
+        // and the GraphicsOptions clone produced above. Reuse the caller's instance only when both already match.
+        DrawingOptions effectiveOptions = ReferenceEquals(graphicsOptions, drawingOptions.GraphicsOptions)
+            && drawingOptions.Transform == Matrix4x4.Identity
+            ? drawingOptions
+            : new DrawingOptions(graphicsOptions, shapeOptions, Matrix4x4.Identity);
+
         if (pen is null)
         {
             return new PathCompositionSceneCommand(
                 CompositionCommand.Create(
                     operation.Path,
                     compositeBrush,
-                    graphicsOptions,
+                    effectiveOptions,
                     in rasterizerOptions,
-                    shapeOptions,
-                    Matrix4x4.Identity,
                     state.TargetBounds,
                     destinationOffset,
                     clipPaths));
@@ -1345,10 +1344,8 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             new StrokePathCommand(
                 operation.Path,
                 compositeBrush,
-                graphicsOptions,
+                effectiveOptions,
                 in rasterizerOptions,
-                shapeOptions,
-                Matrix4x4.Identity,
                 state.TargetBounds,
                 destinationOffset,
                 pen,

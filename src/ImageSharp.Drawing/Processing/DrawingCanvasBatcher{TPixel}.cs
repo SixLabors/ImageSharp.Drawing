@@ -189,24 +189,24 @@ internal sealed class DrawingCanvasBatcher<TPixel>
             if (composition.ClipPaths is { Count: > 0 })
             {
                 IPath path = composition.SourcePath;
+                DrawingOptions sourceOptions = composition.DrawingOptions;
 
-                if (composition.Transform != Matrix4x4.Identity)
+                if (sourceOptions.Transform != Matrix4x4.Identity)
                 {
-                    path = path.Transform(composition.Transform);
+                    path = path.Transform(sourceOptions.Transform);
                 }
 
-                path = path.Clip(composition.ShapeOptions, composition.ClipPaths);
+                path = path.Clip(sourceOptions.ShapeOptions, composition.ClipPaths);
 
                 RasterizerOptions rasterizerOptions = composition.RasterizerOptions;
+                DrawingOptions preparedOptions = WithIdentityTransform(sourceOptions);
 
                 // Update the command with the clipped path.
                 pathCommand.Command = CompositionCommand.Create(
                     path,
-                    composition.Brush.Transform(composition.Transform),
-                    composition.GraphicsOptions,
+                    composition.Brush.Transform(sourceOptions.Transform),
+                    preparedOptions,
                     in rasterizerOptions,
-                    composition.ShapeOptions,
-                    Matrix4x4.Identity,
                     composition.TargetBounds,
                     composition.DestinationOffset);
             }
@@ -218,23 +218,24 @@ internal sealed class DrawingCanvasBatcher<TPixel>
             if (composition.ClipPaths is { Count: > 0 })
             {
                 IPath path = composition.Pen.GeneratePath(composition.SourcePath);
+                DrawingOptions sourceOptions = composition.DrawingOptions;
 
-                if (composition.Transform != Matrix4x4.Identity)
+                if (sourceOptions.Transform != Matrix4x4.Identity)
                 {
-                    path = path.Transform(composition.Transform);
+                    path = path.Transform(sourceOptions.Transform);
                 }
 
-                path = path.Clip(composition.ShapeOptions, composition.ClipPaths);
+                path = path.Clip(sourceOptions.ShapeOptions, composition.ClipPaths);
 
                 RasterizerOptions rasterizerOptions = composition.RasterizerOptions;
+                DrawingOptions preparedOptions = WithIdentityTransform(sourceOptions);
+
                 command = new PathCompositionSceneCommand(
                     CompositionCommand.Create(
                         path,
-                        composition.Brush.Transform(composition.Transform),
-                        composition.GraphicsOptions,
+                        composition.Brush.Transform(sourceOptions.Transform),
+                        preparedOptions,
                         in rasterizerOptions,
-                        composition.ShapeOptions,
-                        Matrix4x4.Identity,
                         composition.TargetBounds,
                         composition.DestinationOffset));
             }
@@ -247,10 +248,8 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                     strokePathCommand.Command = new StrokePathCommand(
                         composition.SourcePath.GenerateDashes(pen.StrokeWidth, pen.StrokePattern.Span),
                         composition.Brush,
-                        composition.GraphicsOptions,
+                        composition.DrawingOptions,
                         composition.RasterizerOptions,
-                        composition.ShapeOptions,
-                        composition.Transform,
                         composition.TargetBounds,
                         composition.DestinationOffset,
                         composition.Pen,
@@ -259,4 +258,9 @@ internal sealed class DrawingCanvasBatcher<TPixel>
             }
         }
     }
+
+    private static DrawingOptions WithIdentityTransform(DrawingOptions source)
+        => source.Transform == Matrix4x4.Identity
+            ? source
+            : new DrawingOptions(source.GraphicsOptions, source.ShapeOptions, Matrix4x4.Identity);
 }

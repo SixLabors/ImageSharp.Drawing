@@ -11,19 +11,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 public readonly struct StrokePathCommand
 {
     private readonly IPath sourcePath;
-    private readonly Matrix4x4 transform;
+    private readonly DrawingOptions drawingOptions;
     private readonly IReadOnlyList<IPath>? clipPaths;
-    private readonly ShapeOptions shapeOptions;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StrokePathCommand"/> struct.
     /// </summary>
     /// <param name="sourcePath">The source stroke path.</param>
     /// <param name="brush">The brush used to shade the stroke.</param>
-    /// <param name="graphicsOptions">The graphics options used during composition.</param>
+    /// <param name="drawingOptions">The drawing options (graphics, shape, transform) used during composition.</param>
     /// <param name="rasterizerOptions">The rasterizer options used to generate coverage.</param>
-    /// <param name="shapeOptions">The shape options used for clipping.</param>
-    /// <param name="transform">The drawing transform applied after stroke expansion.</param>
     /// <param name="targetBounds">The absolute bounds of the logical target.</param>
     /// <param name="destinationOffset">The absolute destination offset of the command.</param>
     /// <param name="pen">The stroke metadata.</param>
@@ -31,21 +28,17 @@ public readonly struct StrokePathCommand
     public StrokePathCommand(
         IPath sourcePath,
         Brush brush,
-        GraphicsOptions graphicsOptions,
+        DrawingOptions drawingOptions,
         in RasterizerOptions rasterizerOptions,
-        ShapeOptions shapeOptions,
-        Matrix4x4 transform,
         Rectangle targetBounds,
         Point destinationOffset,
         Pen pen,
         IReadOnlyList<IPath>? clipPaths = null)
     {
         this.sourcePath = sourcePath;
-        this.shapeOptions = shapeOptions;
-        this.transform = transform;
+        this.drawingOptions = drawingOptions;
         this.clipPaths = clipPaths;
         this.Brush = brush;
-        this.GraphicsOptions = graphicsOptions;
         this.RasterizerOptions = rasterizerOptions;
         this.TargetBounds = targetBounds;
         this.DestinationOffset = destinationOffset;
@@ -58,9 +51,14 @@ public readonly struct StrokePathCommand
     public Brush Brush { get; }
 
     /// <summary>
+    /// Gets the drawing options carried by the command.
+    /// </summary>
+    public DrawingOptions DrawingOptions => this.drawingOptions;
+
+    /// <summary>
     /// Gets the graphics options used during composition.
     /// </summary>
-    public GraphicsOptions GraphicsOptions { get; }
+    public GraphicsOptions GraphicsOptions => this.drawingOptions.GraphicsOptions;
 
     /// <summary>
     /// Gets the rasterizer options used to generate coverage.
@@ -90,7 +88,7 @@ public readonly struct StrokePathCommand
     /// <summary>
     /// Gets the drawing transform.
     /// </summary>
-    public Matrix4x4 Transform => this.transform;
+    public Matrix4x4 Transform => this.drawingOptions.Transform;
 
     /// <summary>
     /// Gets the optional clip paths carried by the command.
@@ -100,5 +98,5 @@ public readonly struct StrokePathCommand
     /// <summary>
     /// Gets the shape options carried by the command.
     /// </summary>
-    public ShapeOptions ShapeOptions => this.shapeOptions;
+    public ShapeOptions ShapeOptions => this.drawingOptions.ShapeOptions;
 }

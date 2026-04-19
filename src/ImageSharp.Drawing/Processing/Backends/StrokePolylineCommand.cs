@@ -11,28 +11,26 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 public readonly struct StrokePolylineCommand
 {
     private readonly PointF[] sourcePoints;
-    private readonly Matrix4x4 transform;
+    private readonly DrawingOptions drawingOptions;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StrokePolylineCommand"/> struct.
     /// </summary>
     /// <param name="sourcePoints">The source polyline points.</param>
     /// <param name="brush">The brush used to shade the stroke.</param>
-    /// <param name="graphicsOptions">The graphics options used during composition.</param>
+    /// <param name="drawingOptions">The drawing options (graphics, shape, transform) used during composition.</param>
     /// <param name="rasterizerOptions">The rasterizer options used to generate coverage.</param>
     /// <param name="targetBounds">The absolute bounds of the logical target.</param>
     /// <param name="destinationOffset">The absolute destination offset of the command.</param>
     /// <param name="pen">The stroke metadata.</param>
-    /// <param name="transform">The transform applied during preparation.</param>
     public StrokePolylineCommand(
         PointF[] sourcePoints,
         Brush brush,
-        GraphicsOptions graphicsOptions,
+        DrawingOptions drawingOptions,
         in RasterizerOptions rasterizerOptions,
         Rectangle targetBounds,
         Point destinationOffset,
-        Pen pen,
-        Matrix4x4 transform)
+        Pen pen)
     {
         ArgumentNullException.ThrowIfNull(sourcePoints);
         if (sourcePoints.Length < 2)
@@ -41,9 +39,8 @@ public readonly struct StrokePolylineCommand
         }
 
         this.sourcePoints = sourcePoints;
-        this.transform = transform;
+        this.drawingOptions = drawingOptions;
         this.Brush = brush;
-        this.GraphicsOptions = graphicsOptions;
         this.RasterizerOptions = rasterizerOptions;
         this.TargetBounds = targetBounds;
         this.DestinationOffset = destinationOffset;
@@ -56,9 +53,14 @@ public readonly struct StrokePolylineCommand
     public Brush Brush { get; }
 
     /// <summary>
+    /// Gets the drawing options carried by the command.
+    /// </summary>
+    public DrawingOptions DrawingOptions => this.drawingOptions;
+
+    /// <summary>
     /// Gets the graphics options used during composition.
     /// </summary>
-    public GraphicsOptions GraphicsOptions { get; }
+    public GraphicsOptions GraphicsOptions => this.drawingOptions.GraphicsOptions;
 
     /// <summary>
     /// Gets the rasterizer options used to generate coverage.
@@ -88,7 +90,7 @@ public readonly struct StrokePolylineCommand
     /// <summary>
     /// Gets the command transform.
     /// </summary>
-    public Matrix4x4 Transform => this.transform;
+    public Matrix4x4 Transform => this.drawingOptions.Transform;
 
     /// <summary>
     /// Computes the conservative stroked bounds of one open polyline.
