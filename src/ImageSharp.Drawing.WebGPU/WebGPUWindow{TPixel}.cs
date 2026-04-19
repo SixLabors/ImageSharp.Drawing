@@ -13,10 +13,18 @@ using SilkWindowState = Silk.NET.Windowing.WindowState;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// A WebGPU-backed window that provides a <see cref="DrawingCanvas{TPixel}"/> for each frame.
-/// Use <see cref="Run(Action{DrawingCanvas{TPixel}})"/> when you want the window to drive rendering for you, or <see cref="TryAcquireFrame(TimeSpan, out WebGPUWindowFrame{TPixel}?)"/> when you need to drive the frame loop yourself.
+/// A self-contained WebGPU-backed window that owns the platform window, the WebGPU device and queue, the surface
+/// and swap chain, and the per-frame texture acquire/present cycle, exposing a <see cref="DrawingCanvas{TPixel}"/>
+/// for each frame. Use <see cref="Run(Action{DrawingCanvas{TPixel}})"/> to let the window drive rendering, or
+/// <see cref="TryAcquireFrame(TimeSpan, out WebGPUWindowFrame{TPixel}?)"/> to drive the frame loop yourself.
 /// </summary>
 /// <typeparam name="TPixel">The canvas pixel format.</typeparam>
+/// <remarks>
+/// Use this type when ImageSharp.Drawing owns the application's window. To render into a window owned by a host
+/// application or UI framework, wrap the host's device and queue with <see cref="WebGPUDeviceContext{TPixel}"/>
+/// and pass the host's per-frame swap-chain texture to
+/// <see cref="WebGPUDeviceContext{TPixel}.CreateCanvas(nint, nint, WebGPUTextureFormatId, int, int, DrawingOptions)"/> instead.
+/// </remarks>
 public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
     where TPixel : unmanaged, IPixel<TPixel>
 {

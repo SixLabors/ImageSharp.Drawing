@@ -6,8 +6,10 @@ using SixLabors.ImageSharp.PixelFormats;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// A WebGPU drawing context for a specific <typeparamref name="TPixel"/> that owns the drawing backend and device handles used to create frames, canvases, and render targets.
-/// Use this type when you already own the device and queue, or when you want direct control over how ImageSharp.Drawing wraps external WebGPU textures.
+/// Binds ImageSharp.Drawing's WebGPU backend to an externally-owned device and queue.
+/// Use <see cref="CreateCanvas(nint, nint, WebGPUTextureFormatId, int, int, DrawingOptions)"/> to render into a
+/// host-supplied texture (typically a swap-chain back buffer for UI-framework embedding), or
+/// <see cref="CreateRenderTarget(int, int)"/> to allocate an offscreen target on the same device.
 /// </summary>
 /// <typeparam name="TPixel">The canvas pixel format.</typeparam>
 public sealed class WebGPUDeviceContext<TPixel> : IDisposable
@@ -129,6 +131,10 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
 
     /// <summary>
     /// Gets the WebGPU drawing backend owned by this context.
+    /// Use this to inspect per-flush diagnostics
+    /// (<see cref="WebGPUDrawingBackend.DiagnosticLastFlushUsedGPU"/>,
+    /// <see cref="WebGPUDrawingBackend.DiagnosticLastSceneFailure"/>) when you need to confirm whether the staged
+    /// GPU path executed or fell back to the CPU backend.
     /// </summary>
     public WebGPUDrawingBackend Backend { get; }
 
@@ -158,14 +164,21 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Creates a native-only frame over an externally-owned WebGPU texture and view.
+    /// Creates a native-only frame over an externally-owned WebGPU texture and view — typically the per-frame
+    /// swap-chain back buffer obtained from <c>wgpuSurfaceGetCurrentTexture</c> on a host-owned surface.
     /// </summary>
     /// <param name="textureHandle">The external WebGPU texture handle.</param>
     /// <param name="textureViewHandle">The external WebGPU texture-view handle.</param>
-    /// <param name="format">The texture format identifier.</param>
+    /// <param name="format">The texture format identifier. Must match the format expected for <typeparamref name="TPixel"/>.</param>
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
     /// <returns>A native-only canvas frame.</returns>
+    /// <remarks>
+    /// The caller retains ownership of the texture and view; this context does not release them.
+    /// The texture must have been created with <c>RenderAttachment | TextureBinding</c> usage.
+    /// Both handles are typically valid only for the current frame: dispose any consumer of the returned frame
+    /// before the host calls <c>wgpuSurfacePresent</c>, then re-acquire on the next frame.
+    /// </remarks>
     public NativeCanvasFrame<TPixel> CreateFrame(
         nint textureHandle,
         nint textureViewHandle,
@@ -175,14 +188,20 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         => this.CreateFrame(CreateExternalTextureHandle(textureHandle), CreateExternalTextureViewHandle(textureViewHandle), format, width, height);
 
     /// <summary>
-    /// Creates a drawing canvas over an externally-owned WebGPU texture.
+    /// Creates a drawing canvas that renders directly into an externally-owned WebGPU texture — typically the per-frame
+    /// swap-chain back buffer obtained from <c>wgpuSurfaceGetCurrentTexture</c> on a host-owned surface.
     /// </summary>
     /// <param name="textureHandle">The external WebGPU texture handle.</param>
     /// <param name="textureViewHandle">The external WebGPU texture-view handle.</param>
-    /// <param name="format">The texture format identifier.</param>
+    /// <param name="format">The texture format identifier. Must match the format expected for <typeparamref name="TPixel"/>.</param>
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
     /// <returns>A drawing canvas targeting the external texture.</returns>
+    /// <remarks>
+    /// The caller retains ownership of the texture and view; this context does not release them.
+    /// The texture must have been created with <c>RenderAttachment | TextureBinding</c> usage.
+    /// Dispose the returned canvas before the host calls <c>wgpuSurfacePresent</c>, then create a new canvas on the next frame.
+    /// </remarks>
     public DrawingCanvas<TPixel> CreateCanvas(
         nint textureHandle,
         nint textureViewHandle,
@@ -192,15 +211,21 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         => this.CreateCanvas(CreateExternalTextureHandle(textureHandle), CreateExternalTextureViewHandle(textureViewHandle), format, width, height, new DrawingOptions());
 
     /// <summary>
-    /// Creates a drawing canvas over an externally-owned WebGPU texture.
+    /// Creates a drawing canvas that renders directly into an externally-owned WebGPU texture — typically the per-frame
+    /// swap-chain back buffer obtained from <c>wgpuSurfaceGetCurrentTexture</c> on a host-owned surface.
     /// </summary>
     /// <param name="textureHandle">The external WebGPU texture handle.</param>
     /// <param name="textureViewHandle">The external WebGPU texture-view handle.</param>
-    /// <param name="format">The texture format identifier.</param>
+    /// <param name="format">The texture format identifier. Must match the format expected for <typeparamref name="TPixel"/>.</param>
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
     /// <param name="options">The initial drawing options.</param>
     /// <returns>A drawing canvas targeting the external texture.</returns>
+    /// <remarks>
+    /// The caller retains ownership of the texture and view; this context does not release them.
+    /// The texture must have been created with <c>RenderAttachment | TextureBinding</c> usage.
+    /// Dispose the returned canvas before the host calls <c>wgpuSurfacePresent</c>, then create a new canvas on the next frame.
+    /// </remarks>
     public DrawingCanvas<TPixel> CreateCanvas(
         nint textureHandle,
         nint textureViewHandle,

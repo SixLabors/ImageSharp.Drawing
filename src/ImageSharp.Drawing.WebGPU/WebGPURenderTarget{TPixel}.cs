@@ -13,6 +13,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <see cref="Readback"/> or <see cref="ReadbackInto(Image{TPixel})"/>.
 /// </summary>
 /// <typeparam name="TPixel">The canvas pixel format.</typeparam>
+/// <remarks>
+/// The constructors on this type allocate a target on the shared process WebGPU device. To allocate offscreen
+/// targets against an externally-owned device (for example, a host UI framework's WebGPU device), call
+/// <see cref="WebGPUDeviceContext{TPixel}.CreateRenderTarget(int, int)"/> instead.
+/// </remarks>
 public sealed class WebGPURenderTarget<TPixel> : IDisposable
     where TPixel : unmanaged, IPixel<TPixel>
 {
@@ -94,12 +99,16 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     public WebGPUDeviceContext<TPixel> Graphics { get; }
 
     /// <summary>
-    /// Gets the wrapped native surface.
+    /// Gets the wrapped native surface backing this render target.
+    /// Exposed for advanced interop with <see cref="WebGPUDrawingBackend"/> APIs that consume a native surface;
+    /// most callers do not need to touch this directly.
     /// </summary>
     public NativeSurface Surface { get; }
 
     /// <summary>
     /// Gets the native-only frame over this render target.
+    /// Pass this to <see cref="WebGPUDrawingBackend.TryReadRegion{TPixel}(Configuration, ICanvasFrame{TPixel}, Rectangle, Buffer2DRegion{TPixel})"/>
+    /// when you need to read back into a caller-owned region instead of using <see cref="Readback"/>.
     /// </summary>
     public NativeCanvasFrame<TPixel> NativeFrame { get; }
 
