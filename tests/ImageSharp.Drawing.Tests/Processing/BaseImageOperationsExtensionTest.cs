@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -13,7 +12,6 @@ public abstract class BaseImageOperationsExtensionTest : IDisposable
     private readonly FakeImageOperationsProvider.FakeImageOperations<Rgba32> internalOperations;
     protected readonly Rectangle rect;
     protected readonly GraphicsOptions graphicsOptions;
-    protected readonly ShapeOptions shapeOptions;
     private readonly Image<Rgba32> source;
 
     public Rectangle SourceBounds() => this.source.Bounds;
@@ -28,11 +26,9 @@ public abstract class BaseImageOperationsExtensionTest : IDisposable
             ColorBlendingMode = PixelColorBlendingMode.Multiply
         };
 
-        this.shapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.NonZero };
         this.source = new Image<Rgba32>(91 + 324, 123 + 56);
         this.rect = new Rectangle(91, 123, 324, 56); // make this random?
         this.internalOperations = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(this.source.Configuration, this.source, false);
-        this.internalOperations.SetShapeOptions(this.shapeOptions);
         this.internalOperations.SetGraphicsOptions(this.graphicsOptions);
         this.operations = this.internalOperations;
     }

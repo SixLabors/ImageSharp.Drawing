@@ -18,7 +18,6 @@ public class ProcessWithCanvas : BaseImageOperationsExtensionTest
         PaintProcessor processor = this.Verify<PaintProcessor>();
 
         GraphicsOptions expectedOptions = this.graphicsOptions;
-        Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
         Assert.Equal(expectedOptions.BlendPercentage, processor.Options.GraphicsOptions.BlendPercentage);
         Assert.Equal(expectedOptions.AlphaCompositionMode, processor.Options.GraphicsOptions.AlphaCompositionMode);
         Assert.Equal(expectedOptions.ColorBlendingMode, processor.Options.GraphicsOptions.ColorBlendingMode);
