@@ -37,7 +37,7 @@ internal static unsafe class BinningComputeShader
         out BindGroupLayout* layout,
         out string? error)
     {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[8];
+        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[7];
         entries[0] = SceneShaderBindingLayoutHelper.CreateUniformEntry(0, (nuint)sizeof(GpuSceneConfig));
         entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, BufferBindingType.ReadOnlyStorage);
         entries[2] = SceneShaderBindingLayoutHelper.CreateStorageEntry(2, BufferBindingType.ReadOnlyStorage);
@@ -45,11 +45,10 @@ internal static unsafe class BinningComputeShader
         entries[4] = SceneShaderBindingLayoutHelper.CreateStorageEntry(4, BufferBindingType.Storage);
         entries[5] = SceneShaderBindingLayoutHelper.CreateStorageEntry(5, BufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));
         entries[6] = SceneShaderBindingLayoutHelper.CreateStorageEntry(6, BufferBindingType.Storage);
-        entries[7] = SceneShaderBindingLayoutHelper.CreateStorageEntry(7, BufferBindingType.Storage);
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 8,
+            EntryCount = 7,
             Entries = entries
         };
 

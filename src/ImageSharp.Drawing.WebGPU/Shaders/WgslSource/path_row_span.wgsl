@@ -1,17 +1,12 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// Stage to compute counts of number of segments in each tile
+// Derive sparse per-row tile spans from the flattened line stream.
 
 #import bump
 #import config
 #import segment
 #import tile
-
-struct AtomicTile {
-    backdrop: atomic<i32>,
-    segment_count_or_ix: atomic<u32>,
-}
 
 @group(0) @binding(0)
 var<uniform> config: Config;
@@ -26,13 +21,7 @@ var<storage> lines: array<LineSoup>;
 var<storage> paths: array<Path>;
 
 @group(0) @binding(4)
-var<storage> rows: array<PathRow>;
-
-@group(0) @binding(5)
-var<storage, read_write> tile: array<AtomicTile>;
-
-@group(0) @binding(6)
-var<storage, read_write> seg_counts: array<SegmentCount>;
+var<storage, read_write> rows: array<AtomicPathRow>;
 
 fn span(a: f32, b: f32) -> u32 {
     return u32(max(ceil(max(a, b)) - floor(min(a, b)), 1.0));
@@ -46,7 +35,6 @@ fn main(
     @builtin(global_invocation_id) global_id: vec3<u32>,
 ) {
     let n_lines = atomicLoad(&bump.lines);
-    var count = 0u;
     if global_id.x >= n_lines {
         return;
     }
@@ -58,8 +46,7 @@ fn main(
     let s0 = xy0 * TILE_SCALE;
     let s1 = xy1 * TILE_SCALE;
     let count_x = span(s0.x, s1.x) - 1u;
-    count = count_x + span(s0.y, s1.y);
-    let line_ix = global_id.x;
+    let count = count_x + span(s0.y, s1.y);
 
     let dx = abs(s1.x - s0.x);
     let dy = s1.y - s0.y;
@@ -88,7 +75,18 @@ fn main(
     let path = paths[line.path_ix];
     let bbox = vec4<i32>(path.bbox);
     let xmin = min(s0.x, s1.x);
-    if s0.y >= f32(bbox.w) || s1.y <= f32(bbox.y) || xmin >= f32(bbox.z) || bbox.z <= bbox.x {
+    if s0.y >= f32(bbox.w) || s1.y <= f32(bbox.y) || bbox.z <= bbox.x {
+        return;
+    }
+
+    if xmin > f32(bbox.z) {
+        let ymin_right = max(i32(ceil(s0.y)), bbox.y);
+        let ymax_right = min(i32(ceil(s1.y)), bbox.w);
+        for (var y = ymin_right; y < ymax_right; y += 1) {
+            let row_ix = path.rows + u32(y - bbox.y);
+            atomicOr(&rows[row_ix].tiles, PATH_ROW_FLAG_TOUCHES_RIGHT);
+        }
+
         return;
     }
 
@@ -110,7 +108,12 @@ fn main(
         imax = u32(imaxf);
     }
 
+    let delta = select(1, -1, is_down);
+    var ymin = 0;
+    var ymax = 0;
     if max(s0.x, s1.x) <= f32(bbox.x) {
+        ymin = i32(ceil(s0.y));
+        ymax = i32(ceil(s1.y));
         imax = imin;
     } else {
         let fudge = select(1.0, 0.0, is_positive_slope);
@@ -119,12 +122,17 @@ fn main(
             if (x0 + x_sign * floor(a * f + b) < f32(bbox.x)) == is_positive_slope {
                 f += 1.0;
             }
+            let ynext = i32(y0 + f - floor(a * f + b) + 1.0);
             if is_positive_slope {
                 if u32(f) > imin {
+                    ymin = i32(y0 + select(1.0, 0.0, y0 == s0.y));
+                    ymax = ynext;
                     imin = u32(f);
                 }
             } else {
                 if u32(f) < imax {
+                    ymin = ynext;
+                    ymax = i32(ceil(s1.y));
                     imax = u32(f);
                 }
             }
@@ -142,35 +150,37 @@ fn main(
         }
     }
 
-    let delta = select(1, -1, is_down);
     imax = max(imin, imax);
+
+    ymin = max(ymin, bbox.y);
+    ymax = min(ymax, bbox.w);
+    for (var y = ymin; y < ymax; y += 1) {
+        let row_ix = path.rows + u32(y - bbox.y);
+        atomicAdd(&rows[row_ix].backdrop, delta);
+    }
+
     var last_z = floor(a * (f32(imin) - 1.0) + b);
-    let seg_base = atomicAdd(&bump.seg_counts, imax - imin);
     for (var i = imin; i < imax; i += 1u) {
         let zf = a * f32(i) + b;
         let z = floor(zf);
         let y = i32(y0 + f32(i) - z);
         let x = i32(x0 + x_sign * z);
-        let row = rows[path.rows + u32(y - bbox.y)];
-        if u32(x) < row.x0 || u32(x) >= row.x1 {
+        let row_ix = path.rows + u32(y - bbox.y);
+        if x >= bbox.z {
+            atomicOr(&rows[row_ix].tiles, PATH_ROW_FLAG_TOUCHES_RIGHT);
             last_z = z;
             continue;
         }
 
-        let tile_ix = row.tiles + u32(x) - row.x0;
-        let top_edge = select(last_z == z, y0 == s0.y, i == 0u);
-        if top_edge && x + 1 < i32(row.x1) {
-            let x_bump = max(x + 1, i32(row.x0));
-            let bump_ix = row.tiles + u32(x_bump) - row.x0;
-            atomicAdd(&tile[bump_ix].backdrop, delta);
-        }
+        let min_x = u32(max(x, bbox.x));
+        atomicMin(&rows[row_ix].x0, min_x);
+        atomicMax(&rows[row_ix].x1, min_x + 1u);
 
-        let seg_within_slice = atomicAdd(&tile[tile_ix].segment_count_or_ix, 1u);
-        let counts = (seg_within_slice << 16u) | i;
-        let seg_count = SegmentCount(line_ix, counts);
-        let seg_ix = seg_base + i - imin;
-        if seg_ix < config.seg_counts_size {
-            seg_counts[seg_ix] = seg_count;
+        let top_edge = select(last_z == z, y0 == s0.y, i == 0u);
+        if top_edge && x + 1 < bbox.z {
+            let x_bump = u32(max(x + 1, bbox.x));
+            atomicMin(&rows[row_ix].x0, x_bump);
+            atomicMax(&rows[row_ix].x1, x_bump + 1u);
         }
 
         last_z = z;

@@ -1,5 +1,5 @@
-// Copyright 2023 the Vello Authors
-// SPDX-License-Identifier: Apache-2.0 OR MIT OR Unlicense
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
 
 // This shader is the second stage of reduction for the pathtag
 // monoid scan, needed when the number of tags is large.

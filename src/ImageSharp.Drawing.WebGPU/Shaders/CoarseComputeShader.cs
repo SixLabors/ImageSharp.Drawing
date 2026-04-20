@@ -36,6 +36,11 @@ internal static unsafe class CoarseComputeShader
     /// <summary>
     /// Creates the bind-group layout required by the coarse stage.
     /// </summary>
+    /// <param name="api">The WebGPU API facade.</param>
+    /// <param name="device">The device that owns the staged-scene pipelines.</param>
+    /// <param name="layout">Receives the created bind-group layout on success.</param>
+    /// <param name="error">Receives the creation failure reason when layout creation fails.</param>
+    /// <returns><see langword="true"/> when the bind-group layout was created successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
         Device* device,

@@ -7,7 +7,7 @@ using Silk.NET.WebGPU;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// GPU stage that allocates and zeroes per-path tile ranges, matching Vello's tile allocation role.
+/// GPU stage that allocates and zeroes sparse per-path tile ranges after the row spans are known.
 /// </summary>
 internal static unsafe class TileAllocComputeShader
 {
@@ -31,23 +31,27 @@ internal static unsafe class TileAllocComputeShader
     /// <summary>
     /// Creates the bind-group layout required by the tile-allocation stage.
     /// </summary>
+    /// <param name="api">The WebGPU API facade.</param>
+    /// <param name="device">The device that owns the staged-scene pipelines.</param>
+    /// <param name="layout">Receives the created bind-group layout on success.</param>
+    /// <param name="error">Receives the creation failure reason when layout creation fails.</param>
+    /// <returns><see langword="true"/> when the bind-group layout was created successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
         Device* device,
         out BindGroupLayout* layout,
         out string? error)
     {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[6];
+        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[5];
         entries[0] = SceneShaderBindingLayoutHelper.CreateUniformEntry(0, (nuint)sizeof(GpuSceneConfig));
-        entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, BufferBindingType.ReadOnlyStorage);
+        entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, BufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));
         entries[2] = SceneShaderBindingLayoutHelper.CreateStorageEntry(2, BufferBindingType.ReadOnlyStorage);
-        entries[3] = SceneShaderBindingLayoutHelper.CreateStorageEntry(3, BufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));
+        entries[3] = SceneShaderBindingLayoutHelper.CreateStorageEntry(3, BufferBindingType.Storage);
         entries[4] = SceneShaderBindingLayoutHelper.CreateStorageEntry(4, BufferBindingType.Storage);
-        entries[5] = SceneShaderBindingLayoutHelper.CreateStorageEntry(5, BufferBindingType.Storage);
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 6,
+            EntryCount = 5,
             Entries = entries
         };
 

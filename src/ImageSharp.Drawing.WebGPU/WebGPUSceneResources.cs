@@ -58,7 +58,7 @@ internal static unsafe class WebGPUSceneResources
         }
 
         // Compute byte lengths for the two variable-size data buffers.
-        nuint infoBinDataByteLength = checked(GetBindingByteLength<uint>(scene.InfoWordCount) + config.BufferSizes.BinData.ByteLength);
+        nuint infoBinDataByteLength = checked(GetBindingByteLength<uint>(scene.InfoWordCount) + config.BufferSizes.BinData.ByteLength + config.BufferSizes.BinHeaders.ByteLength);
         nuint sceneByteLength = GetBindingByteLength<uint>(scene.SceneWordCount);
 
         // Reuse arena buffers if all capacities fit this scene.
@@ -104,7 +104,12 @@ internal static unsafe class WebGPUSceneResources
         // Arena miss — create all buffers fresh and build a new arena.
         WebGPUSceneResourceArena.Dispose(arena);
 
-        if (!TryCreateAndUploadCombinedInfoBinDataBuffer(flushContext, scene.InfoWordCount, config.BufferSizes.BinData.ByteLength, out WgpuBuffer* infoBinDataBuffer, out error))
+        if (!TryCreateAndUploadCombinedInfoBinDataBuffer(
+                flushContext,
+                scene.InfoWordCount,
+                checked(config.BufferSizes.BinData.ByteLength + config.BufferSizes.BinHeaders.ByteLength),
+                out WgpuBuffer* infoBinDataBuffer,
+                out error))
         {
             return false;
         }
@@ -274,6 +279,7 @@ internal static unsafe class WebGPUSceneResources
             layout,
             config.BufferSizes.Lines.Length,
             config.BumpSizes.Binning,
+            config.BumpSizes.PathRows,
             config.BumpSizes.PathTiles,
             config.BumpSizes.SegCounts,
             config.BumpSizes.Segments,
@@ -1192,6 +1198,7 @@ internal struct GpuSceneBumpAllocators
     public uint Failed;
     public uint Binning;
     public uint Ptcl;
+    public uint PathRows;
     public uint Tile;
     public uint SegCounts;
     public uint Segments;
@@ -1417,6 +1424,7 @@ internal readonly struct GpuSceneConfig
         GpuSceneLayout layout,
         uint linesSize,
         uint binningSize,
+        uint pathRowsSize,
         uint tilesSize,
         uint segCountsSize,
         uint segmentsSize,
@@ -1434,6 +1442,7 @@ internal readonly struct GpuSceneConfig
         this.Layout = layout;
         this.LinesSize = linesSize;
         this.BinningSize = binningSize;
+        this.PathRowsSize = pathRowsSize;
         this.TilesSize = tilesSize;
         this.SegCountsSize = segCountsSize;
         this.SegmentsSize = segmentsSize;
@@ -1467,6 +1476,11 @@ internal readonly struct GpuSceneConfig
     public uint LinesSize { get; }
 
     public uint BinningSize { get; }
+
+    /// <summary>
+    /// Gets the sparse path-row buffer capacity.
+    /// </summary>
+    public uint PathRowsSize { get; }
 
     public uint TilesSize { get; }
 
@@ -1559,13 +1573,13 @@ internal readonly struct GpuScenePath
     private readonly uint padding1;
     private readonly uint padding2;
 
-    public GpuScenePath(uint bboxMinX, uint bboxMinY, uint bboxMaxX, uint bboxMaxY, uint tiles)
+    public GpuScenePath(uint bboxMinX, uint bboxMinY, uint bboxMaxX, uint bboxMaxY, uint rowOffset)
     {
         this.BboxMinX = bboxMinX;
         this.BboxMinY = bboxMinY;
         this.BboxMaxX = bboxMaxX;
         this.BboxMaxY = bboxMaxY;
-        this.Tiles = tiles;
+        this.RowOffset = rowOffset;
         this.padding0 = 0;
         this.padding1 = 0;
         this.padding2 = 0;
@@ -1579,7 +1593,52 @@ internal readonly struct GpuScenePath
 
     public uint BboxMaxY { get; }
 
-    public uint Tiles { get; }
+    /// <summary>
+    /// Gets the first sparse row record owned by this path.
+    /// </summary>
+    public uint RowOffset { get; }
+}
+
+/// <summary>
+/// Per-path sparse row record used to allocate tiles only for the x-span actually touched on one tile row.
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct GpuPathRow
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GpuPathRow"/> struct.
+    /// </summary>
+    /// <param name="minTileX">The inclusive minimum tile X touched on this row.</param>
+    /// <param name="maxTileX">The exclusive maximum tile X touched on this row.</param>
+    /// <param name="backdrop">The backdrop winding carried into the first stored tile on this row.</param>
+    /// <param name="tileOffset">The first tile record owned by this row.</param>
+    public GpuPathRow(uint minTileX, uint maxTileX, int backdrop, uint tileOffset)
+    {
+        this.MinTileX = minTileX;
+        this.MaxTileX = maxTileX;
+        this.Backdrop = backdrop;
+        this.TileOffset = tileOffset;
+    }
+
+    /// <summary>
+    /// Gets or sets the inclusive minimum tile X touched on this row.
+    /// </summary>
+    public uint MinTileX;
+
+    /// <summary>
+    /// Gets or sets the exclusive maximum tile X touched on this row.
+    /// </summary>
+    public uint MaxTileX;
+
+    /// <summary>
+    /// Gets or sets the backdrop winding carried into the first stored tile on this row.
+    /// </summary>
+    public int Backdrop;
+
+    /// <summary>
+    /// Gets or sets the first tile record owned by this row.
+    /// </summary>
+    public uint TileOffset;
 }
 
 /// <summary>

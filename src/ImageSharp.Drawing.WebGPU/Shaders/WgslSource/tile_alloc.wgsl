@@ -1,129 +1,91 @@
-// Copyright 2022 the Vello Authors
-// SPDX-License-Identifier: Apache-2.0 OR MIT OR Unlicense
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
 
-// Tile allocation (and zeroing of tiles)
+// Tile allocation (and zeroing of sparse per-row tiles)
 
 #import config
 #import bump
-#import drawtag
 #import tile
 
 @group(0) @binding(0)
 var<uniform> config: Config;
 
 @group(0) @binding(1)
-var<storage> scene: array<u32>;
-
-@group(0) @binding(2)
-var<storage> draw_bboxes: array<vec4<f32>>;
-
-@group(0) @binding(3)
 var<storage, read_write> bump: BumpAllocators;
 
+@group(0) @binding(2)
+var<storage> paths: array<Path>;
+
+@group(0) @binding(3)
+var<storage, read_write> rows: array<AtomicPathRow>;
+
 @group(0) @binding(4)
-var<storage, read_write> paths: array<Path>;
-
-@group(0) @binding(5)
 var<storage, read_write> tiles: array<Tile>;
-
-const WG_SIZE = 256u;
-
-var<workgroup> sh_tile_count: array<u32, WG_SIZE>;
-var<workgroup> sh_tile_offset: u32;
-var<workgroup> sh_tile_zero_count: u32;
-var<workgroup> sh_previous_failed: u32;
 
 @compute @workgroup_size(256)
 fn main(
     @builtin(global_invocation_id) global_id: vec3<u32>,
-    @builtin(local_invocation_id) local_id: vec3<u32>,
 ) {
-    // Exit early if prior stages failed, as we can't run this stage.
-    // We need to check only prior stages, as if this stage has failed in another workgroup, 
-    // we still want to know this workgroup's memory requirement.
-    if local_id.x == 0u {
-        let failed = (atomicLoad(&bump.failed) & (STAGE_BINNING | STAGE_FLATTEN)) != 0u;
-        sh_previous_failed = u32(failed);
-    }
-    let failed = workgroupUniformLoad(&sh_previous_failed);
-    if failed != 0u {
+    if atomicLoad(&bump.path_rows) > config.path_rows_size {
         return;
-    }    
-    // scale factors useful for converting coordinates to tiles
-    // TODO: make into constants
-    let SX = 1.0 / f32(TILE_WIDTH);
-    let SY = 1.0 / f32(TILE_HEIGHT);
+    }
 
     let drawobj_ix = global_id.x;
-    var drawtag = DRAWTAG_NOP;
-    if drawobj_ix < config.n_drawobj {
-        drawtag = scene[config.drawtag_base + drawobj_ix];
-    }
-    var x0 = 0;
-    var y0 = 0;
-    var x1 = 0;
-    var y1 = 0;
-    if drawtag != DRAWTAG_NOP && drawtag != DRAWTAG_END_CLIP {
-        let bbox = draw_bboxes[drawobj_ix];
-
-        // Don't round up the bottom-right corner of the bbox if the area is zero and leave the
-        // coordinates at 0. This will make `tile_count` zero as the shape is clipped out.
-        if bbox.x < bbox.z && bbox.y < bbox.w {
-            x0 = i32(floor(bbox.x * SX));
-            y0 = i32(floor(bbox.y * SY));
-            x1 = i32(ceil(bbox.z * SX));
-            y1 = i32(ceil(bbox.w * SY));
-        }
-    }
-    let chunk_y0 = i32(config.chunk_tile_y_start);
-    let chunk_y1 = chunk_y0 + i32(config.chunk_tile_height);
-    let ux0 = u32(clamp(x0, 0, i32(config.width_in_tiles)));
-    let uy0 = u32(clamp(y0, chunk_y0, chunk_y1));
-    let ux1 = u32(clamp(x1, 0, i32(config.width_in_tiles)));
-    let uy1 = u32(clamp(y1, chunk_y0, chunk_y1));
-    let tile_count = (ux1 - ux0) * (uy1 - uy0);
-    var total_tile_count = tile_count;
-    sh_tile_count[local_id.x] = tile_count;
-    for (var i = 0u; i < firstTrailingBit(WG_SIZE); i += 1u) {
-        workgroupBarrier();
-        if local_id.x >= (1u << i) {
-            total_tile_count += sh_tile_count[local_id.x - (1u << i)];
-        }
-        workgroupBarrier();
-        sh_tile_count[local_id.x] = total_tile_count;
-    }
-    if local_id.x == WG_SIZE - 1u {
-        let count = sh_tile_count[WG_SIZE - 1u];
-        var offset = atomicAdd(&bump.tile, count);
-        var zero_count = count;
-        if offset + count > config.tiles_size {
-            offset = 0u;
-            zero_count = 0u;
-            atomicOr(&bump.failed, STAGE_TILE_ALLOC);
-        }
-        paths[drawobj_ix].tiles = offset;
-        sh_tile_zero_count = zero_count;
-    }    
-    // Using storage barriers is a workaround for what appears to be a miscompilation
-    // when a normal workgroup-shared variable is used to broadcast the value.
-    storageBarrier();
-    let tile_offset = paths[drawobj_ix | (WG_SIZE - 1u)].tiles;
-    storageBarrier();
-    if drawobj_ix < config.n_drawobj {
-        let tile_subix = select(0u, sh_tile_count[local_id.x - 1u], local_id.x > 0u);
-        let bbox = vec4(ux0, uy0, ux1, uy1);
-        let path = Path(bbox, tile_offset + tile_subix);
-        paths[drawobj_ix] = path;
+    if drawobj_ix >= config.n_drawobj {
+        return;
     }
 
-    // zero allocated memory
-    // Note: if the number of draw objects is small, utilization will be poor.
-    // There are two things that can be done to improve that. One would be a
-    // separate (indirect) dispatch. Another would be to have each workgroup
-    // process fewer draw objects than the number of threads in the wg.
-    let total_count = workgroupUniformLoad(&sh_tile_zero_count);
-    for (var i = local_id.x; i < total_count; i += WG_SIZE) {
-        // Note: could format output buffer as u32 for even better load balancing.
-        tiles[tile_offset + i] = Tile(0, 0u);
+    let path = paths[drawobj_ix];
+    let row_count = path.bbox.w - path.bbox.y;
+
+    var total_tile_count = 0u;
+    for (var row = 0u; row < row_count; row += 1u) {
+        let row_ix = path.rows + row;
+        let stored_x0 = atomicLoad(&rows[row_ix].x0);
+        let stored_x1 = atomicLoad(&rows[row_ix].x1);
+        var x0 = stored_x0;
+        var x1 = stored_x1;
+        let backdrop = atomicLoad(&rows[row_ix].backdrop);
+        let row_flags = atomicLoad(&rows[row_ix].tiles);
+        if backdrop != 0 {
+            x0 = min(x0, path.bbox.x);
+        }
+
+        if (row_flags & PATH_ROW_FLAG_TOUCHES_RIGHT) != 0u {
+            x1 = max(x1, path.bbox.z);
+        }
+
+        if x0 != stored_x0 {
+            atomicStore(&rows[row_ix].x0, x0);
+        }
+
+        if x1 != stored_x1 {
+            atomicStore(&rows[row_ix].x1, x1);
+        }
+
+        if x0 < x1 {
+            total_tile_count += x1 - x0;
+        }
+    }
+
+    let tile_base = atomicAdd(&bump.tile, total_tile_count);
+    if tile_base + total_tile_count > config.tiles_size {
+        atomicOr(&bump.failed, STAGE_TILE_ALLOC);
+        return;
+    }
+
+    var next_tile = tile_base;
+    for (var row = 0u; row < row_count; row += 1u) {
+        let row_ix = path.rows + row;
+        let x0 = atomicLoad(&rows[row_ix].x0);
+        let x1 = atomicLoad(&rows[row_ix].x1);
+        atomicStore(&rows[row_ix].tiles, next_tile);
+        if x0 < x1 {
+            next_tile += x1 - x0;
+        }
+    }
+
+    for (var i = 0u; i < total_tile_count; i += 1u) {
+        tiles[tile_base + i] = Tile(0, 0u);
     }
 }

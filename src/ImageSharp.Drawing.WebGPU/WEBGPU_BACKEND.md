@@ -2,7 +2,7 @@
 
 `WebGPUDrawingBackend` is the GPU execution backend for ImageSharp.Drawing. It receives one flush worth of prepared drawing commands, decides whether that flush can stay on the staged GPU path, and if so creates and dispatches the staged scene pipeline against a native WebGPU target.
 
-The WebGPU backend and staged scene pipeline are based on ideas and implementation techniques from Vello:
+The WebGPU backend and staged scene pipeline are based on ideas and implementation techniques from Vello, but the current ImageSharp.Drawing implementation is heavily adapted and no longer mirrors Vello one-for-one:
 
 - https://github.com/linebender/vello
 
@@ -91,9 +91,12 @@ It owns:
 - the command encoder and optional compute pass encoder
 - the native resources created during the flush
 
-The important lifetime rule is simple:
+The important lifetime rule is:
 
-unless something is explicitly cached in `WebGPURuntime.DeviceSharedState`, it is flush-scoped.
+most GPU state is flush-scoped, but two cache layers intentionally outlive one flush:
+
+- `WebGPURuntime.DeviceSharedState` keeps device-scoped pipelines and support state
+- `WebGPUDrawingBackend` keeps reusable resource arenas and retained scratch capacities for later flushes on the same backend instance
 
 ### Staged Scene
 
@@ -135,6 +138,7 @@ Its responsibilities are:
 - run the staged path if scene creation succeeds
 - fall back cleanly if any stage fails
 - keep explicit layer boundaries in the shared flush model until the staged scene encoder lowers them
+- retain the last successful scratch capacities and reuse backend-local GPU arenas across flushes when possible
 
 The expensive staged work is delegated:
 
@@ -218,7 +222,7 @@ That means layer semantics are part of the main staged scene pipeline rather tha
 
 ## Runtime And Caching
 
-`WebGPURuntime` and `WebGPURuntime.DeviceSharedState` hold the resources that outlive a single flush.
+`WebGPURuntime` and `WebGPURuntime.DeviceSharedState` hold the device-scoped resources that outlive a single flush.
 
 They cache things such as:
 
@@ -229,9 +233,14 @@ They cache things such as:
 
 `WebGPURuntime` also backs the explicit support probes surfaced by `WebGPUEnvironment`. The probe and runtime layer is where the library-managed device/queue availability and crash-isolated compute-pipeline test are cached.
 
-Everything else in the staged scene path is intentionally flush-scoped.
+`WebGPUDrawingBackend` adds one more cache layer above that device-scoped runtime state. It retains:
 
-That split keeps flushes isolated while still allowing truly device-scoped state to be reused.
+- the last successful staged-scene scratch capacities
+- reusable scheduling and resource arenas whose buffers can be leased by later flushes on the same backend instance
+
+The arena contents are still per-flush; only the underlying allocations are reused.
+
+That split keeps flushes isolated while still allowing both device-scoped state and backend-local buffer allocations to be reused.
 
 ## Relationship To The Rasterizer Doc
 

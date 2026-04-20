@@ -1,5 +1,5 @@
-// Copyright 2022 the Vello Authors
-// SPDX-License-Identifier: Apache-2.0 OR MIT OR Unlicense
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
 
 // The coarse rasterization stage.
 
@@ -18,20 +18,14 @@ var<storage> scene: array<u32>;
 @group(0) @binding(2)
 var<storage> draw_monoids: array<DrawMonoid>;
 
-// TODO: dedup
-struct BinHeader {
-    element_count: u32,
-    chunk_offset: u32,
-}
-
 @group(0) @binding(3)
-var<storage> bin_headers: array<BinHeader>;
-
-@group(0) @binding(4)
 var<storage> info_bin_data: array<u32>;
 
-@group(0) @binding(5)
+@group(0) @binding(4)
 var<storage> paths: array<Path>;
+
+@group(0) @binding(5)
+var<storage> rows: array<PathRow>;
 
 @group(0) @binding(6)
 var<storage, read_write> tiles: array<Tile>;
@@ -53,11 +47,24 @@ var<workgroup> sh_bitmaps: array<array<atomic<u32>, N_TILE>, N_SLICE>;
 var<workgroup> sh_part_count: array<u32, WG_SIZE>;
 var<workgroup> sh_part_offsets: array<u32, WG_SIZE>;
 var<workgroup> sh_drawobj_ix: array<u32, WG_SIZE>;
-var<workgroup> sh_tile_stride: array<u32, WG_SIZE>;
-var<workgroup> sh_tile_width: array<u32, WG_SIZE>;
-var<workgroup> sh_tile_x0y0: array<u32, WG_SIZE>;
 var<workgroup> sh_tile_count: array<u32, WG_SIZE>;
-var<workgroup> sh_tile_base: array<u32, WG_SIZE>;
+
+struct SparseBinTileRef {
+    valid: u32,
+    x: u32,
+    y: u32,
+    tile_ix: u32,
+}
+
+struct SparseTileRef {
+    valid: u32,
+    tile_ix: u32,
+}
+
+struct BinHeader {
+    element_count: u32,
+    chunk_offset: u32,
+}
 
 // helper functions for writing ptcl
 
@@ -162,6 +169,63 @@ fn write_blurred_rounded_rect(color: CmdColor, info_offset: u32) {
     cmd_offset += 3u;
 }
 
+fn get_bin_tile_count(path: Path, bin_tile_x: u32, bin_tile_y: u32) -> u32 {
+    let y0 = max(path.bbox.y, bin_tile_y);
+    let y1 = min(path.bbox.w, bin_tile_y + N_TILE_Y);
+    var count = 0u;
+    for (var y = y0; y < y1; y += 1u) {
+        let row = rows[path.rows + y - path.bbox.y];
+        let x0 = max(row.x0, bin_tile_x);
+        let x1 = min(row.x1, bin_tile_x + N_TILE_X);
+        if x0 < x1 {
+            count += x1 - x0;
+        }
+    }
+
+    return count;
+}
+
+fn decode_bin_tile(path: Path, bin_tile_x: u32, bin_tile_y: u32, seq_ix: u32) -> SparseBinTileRef {
+    let y0 = max(path.bbox.y, bin_tile_y);
+    let y1 = min(path.bbox.w, bin_tile_y + N_TILE_Y);
+    var remaining = seq_ix;
+    for (var y = y0; y < y1; y += 1u) {
+        let row = rows[path.rows + y - path.bbox.y];
+        let x0 = max(row.x0, bin_tile_x);
+        let x1 = min(row.x1, bin_tile_x + N_TILE_X);
+        if x0 < x1 {
+            let width = x1 - x0;
+            if remaining < width {
+                let x = x0 + remaining;
+                let tile_ix = row.tiles + x - row.x0;
+                return SparseBinTileRef(1u, x - bin_tile_x, y - bin_tile_y, tile_ix);
+            }
+
+            remaining -= width;
+        }
+    }
+
+    return SparseBinTileRef(0u, 0u, 0u, 0u);
+}
+
+fn lookup_tile(path: Path, global_x: u32, global_y: u32) -> SparseTileRef {
+    if global_y < path.bbox.y || global_y >= path.bbox.w {
+        return SparseTileRef(0u, 0u);
+    }
+
+    let row = rows[path.rows + global_y - path.bbox.y];
+    if global_x < row.x0 || global_x >= row.x1 {
+        return SparseTileRef(0u, 0u);
+    }
+
+    return SparseTileRef(1u, row.tiles + global_x - row.x0);
+}
+
+fn load_bin_header(bin_ix: u32) -> BinHeader {
+    let base = config.bin_data_start + config.binning_size + (bin_ix * 2u);
+    return BinHeader(info_bin_data[base], info_bin_data[base + 1u]);
+}
+
 @compute @workgroup_size(256)
 fn main(
     @builtin(local_invocation_id) local_id: vec3<u32>,
@@ -229,7 +293,7 @@ fn main(
                 var count = 0u;
                 if partition_ix + local_id.x < n_partitions {
                     let in_ix = (partition_ix + local_id.x) * N_TILE + bin_ix;
-                    let bin_header = bin_headers[in_ix];
+                    let bin_header = load_bin_header(in_ix);
                     count = bin_header.element_count;
                     sh_part_offsets[local_id.x] = bin_header.chunk_offset;
                 }
@@ -279,21 +343,7 @@ fn main(
         if tag != DRAWTAG_NOP {
             let path_ix = draw_monoids[drawobj_ix].path_ix;
             let path = paths[path_ix];
-            let stride = path.bbox.z - path.bbox.x;
-            sh_tile_stride[local_id.x] = stride;
-            let dx = i32(path.bbox.x) - i32(bin_tile_x);
-            let dy = i32(path.bbox.y) - i32(bin_tile_y);
-            let x0 = clamp(dx, 0, i32(N_TILE_X));
-            let y0 = clamp(dy, 0, i32(N_TILE_Y));
-            let x1 = clamp(i32(path.bbox.z) - i32(bin_tile_x), 0, i32(N_TILE_X));
-            let y1 = clamp(i32(path.bbox.w) - i32(bin_tile_y), 0, i32(N_TILE_Y));
-            sh_tile_width[local_id.x] = u32(x1 - x0);
-            sh_tile_x0y0[local_id.x] = u32(x0) | u32(y0 << 16u);
-            tile_count = u32(x1 - x0) * u32(y1 - y0);
-            // base relative to bin
-            let base = path.tiles - u32(dy * i32(stride) + dx);
-            sh_tile_base[local_id.x] = base;
-            // TODO: there's a write_tile_alloc here in the source, not sure what it's supposed to do
+            tile_count = get_bin_tile_count(path, bin_tile_x, bin_tile_y);
         }
 
         // Prefix sum of tile counts
@@ -321,11 +371,16 @@ fn main(
             drawobj_ix = sh_drawobj_ix[el_ix];
             tag = scene[config.drawtag_base + drawobj_ix];
             let seq_ix = ix - select(0u, sh_tile_count[el_ix - 1u], el_ix > 0u);
-            let width = sh_tile_width[el_ix];
-            let x0y0 = sh_tile_x0y0[el_ix];
-            let x = (x0y0 & 0xffffu) + seq_ix % width;
-            let y = (x0y0 >> 16u) + seq_ix / width;
-            let tile_ix = sh_tile_base[el_ix] + sh_tile_stride[el_ix] * y + x;
+            let path_ix = draw_monoids[drawobj_ix].path_ix;
+            let path = paths[path_ix];
+            let tile_ref = decode_bin_tile(path, bin_tile_x, bin_tile_y, seq_ix);
+            if tile_ref.valid == 0u {
+                continue;
+            }
+
+            let x = tile_ref.x;
+            let y = tile_ref.y;
+            let tile_ix = tile_ref.tile_ix;
             let tile = tiles[tile_ix];
             let is_clip = (tag & 1u) != 0u;
             var is_blend = false;
@@ -383,7 +438,13 @@ fn main(
             let di = dm.info_offset;
             let draw_flags = info_bin_data[di];
             if clip_zero_depth == 0u {
-                let tile_ix = sh_tile_base[el_ix] + sh_tile_stride[el_ix] * tile_y + tile_x;
+                let path = paths[dm.path_ix];
+                let tile_ref = lookup_tile(path, bin_tile_x + tile_x, bin_tile_y + tile_y);
+                if tile_ref.valid == 0u {
+                    continue;
+                }
+
+                let tile_ix = tile_ref.tile_ix;
                 let tile = tiles[tile_ix];
                 switch drawtag {
                     case DRAWTAG_FILL_COLOR: {

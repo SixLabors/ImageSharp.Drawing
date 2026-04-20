@@ -23,9 +23,9 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     // Number of independently sized scratch buffers tracked by WebGPUSceneBumpSizes.
     // A first-use flush can expose at most one newly visible allocator overflow per
     // failed pass, so the retry budget is expressed in terms of this count. The
-    // tracked allocators are Lines, Binning, PathTiles, SegCounts, Segments,
-    // BlendSpill, and Ptcl.
-    private const int ScratchAllocatorCount = 7;
+    // tracked allocators are Lines, Binning, PathRows, PathTiles, SegCounts,
+    // Segments, BlendSpill, and Ptcl.
+    private const int ScratchAllocatorCount = 8;
 
     // A first flush can rerun the staged path while the GPU-reported scratch capacities
     // converge. Earlier scheduling overflows can prevent later stages from reporting

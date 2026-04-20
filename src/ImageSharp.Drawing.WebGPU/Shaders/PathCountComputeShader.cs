@@ -31,23 +31,29 @@ internal static unsafe class PathCountComputeShader
     /// <summary>
     /// Creates the bind-group layout required by the path-count stage.
     /// </summary>
+    /// <param name="api">The WebGPU API facade.</param>
+    /// <param name="device">The device that owns the staged-scene pipelines.</param>
+    /// <param name="layout">Receives the created bind-group layout on success.</param>
+    /// <param name="error">Receives the creation failure reason when layout creation fails.</param>
+    /// <returns><see langword="true"/> when the bind-group layout was created successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
         Device* device,
         out BindGroupLayout* layout,
         out string? error)
     {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[6];
+        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[7];
         entries[0] = CreateUniformEntry(0, (nuint)sizeof(GpuSceneConfig));
         entries[1] = CreateStorageEntry(1, BufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));
         entries[2] = CreateStorageEntry(2, BufferBindingType.ReadOnlyStorage, 0);
         entries[3] = CreateStorageEntry(3, BufferBindingType.ReadOnlyStorage, 0);
-        entries[4] = CreateStorageEntry(4, BufferBindingType.Storage, 0);
+        entries[4] = CreateStorageEntry(4, BufferBindingType.ReadOnlyStorage, 0);
         entries[5] = CreateStorageEntry(5, BufferBindingType.Storage, 0);
+        entries[6] = CreateStorageEntry(6, BufferBindingType.Storage, 0);
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 6,
+            EntryCount = 7,
             Entries = entries
         };
 

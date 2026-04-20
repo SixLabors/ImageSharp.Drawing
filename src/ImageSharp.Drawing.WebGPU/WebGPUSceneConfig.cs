@@ -125,6 +125,7 @@ internal readonly struct WebGPUSceneBumpSizes
     /// </summary>
     /// <param name="lines">The flattened line buffer capacity.</param>
     /// <param name="binning">The bin-data scratch capacity.</param>
+    /// <param name="pathRows">The sparse path-row buffer capacity.</param>
     /// <param name="pathTiles">The path-tile buffer capacity.</param>
     /// <param name="segCounts">The segment-count buffer capacity.</param>
     /// <param name="segments">The segment buffer capacity.</param>
@@ -133,6 +134,7 @@ internal readonly struct WebGPUSceneBumpSizes
     public WebGPUSceneBumpSizes(
         uint lines,
         uint binning,
+        uint pathRows,
         uint pathTiles,
         uint segCounts,
         uint segments,
@@ -141,6 +143,7 @@ internal readonly struct WebGPUSceneBumpSizes
     {
         this.Lines = lines;
         this.Binning = binning;
+        this.PathRows = pathRows;
         this.PathTiles = pathTiles;
         this.SegCounts = segCounts;
         this.Segments = segments;
@@ -157,6 +160,11 @@ internal readonly struct WebGPUSceneBumpSizes
     /// Gets the bin-data scratch capacity.
     /// </summary>
     public uint Binning { get; }
+
+    /// <summary>
+    /// Gets the sparse path-row buffer capacity.
+    /// </summary>
+    public uint PathRows { get; }
 
     /// <summary>
     /// Gets the path-tile buffer capacity.
@@ -198,6 +206,7 @@ internal readonly struct WebGPUSceneBumpSizes
             1U << 15,
             1U << 15,
             1U << 15,
+            1U << 15,
             1U << 20,
             1U << 17);
 }
@@ -207,6 +216,32 @@ internal readonly struct WebGPUSceneBumpSizes
 /// </summary>
 internal readonly struct WebGPUSceneWorkgroupCounts
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUSceneWorkgroupCounts"/> struct.
+    /// </summary>
+    /// <param name="useLargePathScan">Whether the large pathtag scan variant is required for this scene.</param>
+    /// <param name="pathReduceX">The workgroup count for the first pathtag reduction pass.</param>
+    /// <param name="pathReduce2X">The workgroup count for the second pathtag reduction pass.</param>
+    /// <param name="pathScan1X">The workgroup count for the large pathtag scan setup pass.</param>
+    /// <param name="pathScanX">The workgroup count for the final pathtag scan pass.</param>
+    /// <param name="bboxClearX">The workgroup count for the bbox clear pass.</param>
+    /// <param name="flattenX">The workgroup count for the flatten pass.</param>
+    /// <param name="drawReduceX">The workgroup count for the draw reduction pass.</param>
+    /// <param name="drawLeafX">The workgroup count for the draw leaf pass.</param>
+    /// <param name="clipReduceX">The workgroup count for the clip reduction pass.</param>
+    /// <param name="clipLeafX">The workgroup count for the clip leaf pass.</param>
+    /// <param name="binningX">The workgroup count for the binning pass.</param>
+    /// <param name="pathRowAllocX">The workgroup count for the sparse path-row allocation pass.</param>
+    /// <param name="tileAllocX">The workgroup count for the sparse path-tile allocation pass.</param>
+    /// <param name="pathCountSetupX">The workgroup count for the line-driven indirect setup pass.</param>
+    /// <param name="pathCountX">The workgroup count for the path-count pass.</param>
+    /// <param name="backdropX">The workgroup count for the backdrop pass.</param>
+    /// <param name="coarseX">The X workgroup count for the coarse pass.</param>
+    /// <param name="coarseY">The Y workgroup count for the coarse pass.</param>
+    /// <param name="pathTilingSetupX">The workgroup count for the path-tiling setup pass.</param>
+    /// <param name="pathTilingX">The workgroup count for the path-tiling pass.</param>
+    /// <param name="fineX">The X workgroup count for the fine pass.</param>
+    /// <param name="fineY">The Y workgroup count for the fine pass.</param>
     public WebGPUSceneWorkgroupCounts(
         bool useLargePathScan,
         uint pathReduceX,
@@ -220,6 +255,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
         uint clipReduceX,
         uint clipLeafX,
         uint binningX,
+        uint pathRowAllocX,
         uint tileAllocX,
         uint pathCountSetupX,
         uint pathCountX,
@@ -243,6 +279,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
         this.ClipReduceX = clipReduceX;
         this.ClipLeafX = clipLeafX;
         this.BinningX = binningX;
+        this.PathRowAllocX = pathRowAllocX;
         this.TileAllocX = tileAllocX;
         this.PathCountSetupX = pathCountSetupX;
         this.PathCountX = pathCountX;
@@ -314,6 +351,11 @@ internal readonly struct WebGPUSceneWorkgroupCounts
     /// Gets the workgroup count for the binning pass.
     /// </summary>
     public uint BinningX { get; }
+
+    /// <summary>
+    /// Gets the workgroup count for the sparse path-row allocation pass.
+    /// </summary>
+    public uint PathRowAllocX { get; }
 
     /// <summary>
     /// Gets the workgroup count for the tile allocation pass.
@@ -407,6 +449,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
             clipReduceWgs,
             clipWgs,
             BinningComputeShader.GetDispatchX(drawObjectCount),
+            PathRowAllocComputeShader.GetDispatchX(pathCount),
             TileAllocComputeShader.GetDispatchX(pathCount),
             PathCountSetupComputeShader.GetDispatchX(),
             PathCountComputeShader.GetDispatchX(lineCount),
@@ -459,6 +502,7 @@ internal readonly struct WebGPUSceneBufferSizes
         WebGPUSceneBufferSize<GpuSceneBinHeader> binHeaders,
         WebGPUSceneBufferSize<uint> binData,
         WebGPUSceneBufferSize<GpuSceneIndirectCount> indirectCount,
+        WebGPUSceneBufferSize<GpuPathRow> pathRows,
         WebGPUSceneBufferSize<GpuPathTile> pathTiles,
         WebGPUSceneBufferSize<GpuSegmentCount> segCounts,
         WebGPUSceneBufferSize<GpuPathSegment> segments,
@@ -484,6 +528,7 @@ internal readonly struct WebGPUSceneBufferSizes
         this.BinHeaders = binHeaders;
         this.BinData = binData;
         this.IndirectCount = indirectCount;
+        this.PathRows = pathRows;
         this.PathTiles = pathTiles;
         this.SegCounts = segCounts;
         this.Segments = segments;
@@ -587,6 +632,11 @@ internal readonly struct WebGPUSceneBufferSizes
     public WebGPUSceneBufferSize<GpuSceneIndirectCount> IndirectCount { get; }
 
     /// <summary>
+    /// Gets the size of the sparse path-row buffer.
+    /// </summary>
+    public WebGPUSceneBufferSize<GpuPathRow> PathRows { get; }
+
+    /// <summary>
     /// Gets the size of the path-tile buffer.
     /// </summary>
     public WebGPUSceneBufferSize<GpuPathTile> PathTiles { get; }
@@ -663,6 +713,7 @@ internal readonly struct WebGPUSceneBufferSizes
             WebGPUSceneBufferSize<GpuSceneBinHeader>.Create(binHeaderCount),
             WebGPUSceneBufferSize<uint>.Create(bumpSizes.Binning),
             WebGPUSceneBufferSize<GpuSceneIndirectCount>.Create(1),
+            WebGPUSceneBufferSize<GpuPathRow>.Create(bumpSizes.PathRows),
             WebGPUSceneBufferSize<GpuPathTile>.Create(bumpSizes.PathTiles),
             WebGPUSceneBufferSize<GpuSegmentCount>.Create(bumpSizes.SegCounts),
             WebGPUSceneBufferSize<GpuPathSegment>.Create(bumpSizes.Segments),

@@ -60,7 +60,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, "FillPath", defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.05F);
         AssertBackendPairReferenceOutputs(provider, "FillPath", defaultImage, nativeSurfaceImage);
 
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
@@ -430,6 +430,96 @@ public partial class WebGPUDrawingBackendTests
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_NativeSurfaceSubregionParity", defaultImage, nativeSurfaceImage);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
+    }
+
+    /// <summary>
+    /// Verifies that a later full-frame fill on the same native WebGPU surface fully replaces the previous frame contents.
+    /// </summary>
+    [WebGPUTheory]
+    [WithBlankImage(256, 192, PixelTypes.Rgba32)]
+    public void Fill_AfterPreviousFrameOnNativeSurface_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        Brush firstBackground = Brushes.Solid(Color.DarkSlateBlue);
+        Brush firstFill = Brushes.Solid(Color.OrangeRed);
+        Brush secondBackground = Brushes.Solid(Color.MidnightBlue);
+        Brush secondFill = Brushes.Solid(Color.LimeGreen);
+        RectangularPolygon firstRect = new(18, 26, 176, 92);
+        RectangularPolygon secondRect = new(96, 54, 42, 38);
+
+        void DrawFirstFrame(DrawingCanvas<TPixel> canvas)
+        {
+            canvas.Fill(firstBackground);
+            canvas.Fill(firstFill, firstRect);
+        }
+
+        void DrawSecondFrame(DrawingCanvas<TPixel> canvas)
+        {
+            canvas.Fill(secondBackground);
+            canvas.Fill(secondFill, secondRect);
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawFirstFrame);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawSecondFrame);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        Assert.True(
+            WebGPUTestNativeSurfaceAllocator.TryCreate<TPixel>(
+                defaultImage.Width,
+                defaultImage.Height,
+                out NativeSurface nativeSurface,
+                out WebGPUTextureHandle textureHandle,
+                out WebGPUTextureViewHandle textureViewHandle,
+                out string createError),
+            createError);
+
+        try
+        {
+            Configuration nativeSurfaceConfiguration = Configuration.Default.Clone();
+            nativeSurfaceConfiguration.SetDrawingBackend(nativeSurfaceBackend);
+            Rectangle targetBounds = defaultImage.Bounds;
+
+            using (DrawingCanvas<TPixel> firstCanvas =
+                   new(nativeSurfaceConfiguration, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
+            {
+                DrawFirstFrame(firstCanvas);
+                firstCanvas.Flush();
+            }
+
+            using (DrawingCanvas<TPixel> secondCanvas =
+                   new(nativeSurfaceConfiguration, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
+            {
+                DrawSecondFrame(secondCanvas);
+                secondCanvas.Flush();
+            }
+
+            Assert.True(
+                WebGPUTextureTransfer.TryReadTexture(
+                    textureHandle,
+                    defaultImage.Width,
+                    defaultImage.Height,
+                    out Image<TPixel> nativeSurfaceImage,
+                    out string readError),
+                readError);
+
+            using (nativeSurfaceImage)
+            {
+                DebugSaveBackendPair(provider, "Fill_RepeatedFrames", defaultImage, nativeSurfaceImage);
+                AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
+            }
+
+            AssertGpuPathWhenRequired(nativeSurfaceBackend);
+        }
+        finally
+        {
+            WebGPUTestNativeSurfaceAllocator.Release(textureHandle, textureViewHandle);
+        }
     }
 
     [WebGPUTheory]
@@ -1085,7 +1175,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, "FillPath_MultipleSeparate", defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_MultipleSeparate", defaultImage, nativeSurfaceImage);
 
         AssertGpuPathWhenRequired(nativeSurfaceBackend);

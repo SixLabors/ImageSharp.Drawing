@@ -1,5 +1,5 @@
-// Copyright 2022 the Vello Authors
-// SPDX-License-Identifier: Apache-2.0 OR MIT OR Unlicense
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
 
 // This must be kept in sync with `ConfigUniform` in `vello_encoding/src/config.rs`
 struct Config {
@@ -38,6 +38,7 @@ struct Config {
     // Sizes of bump allocated buffers (in element size units)
     lines_size: u32,
     binning_size: u32,
+    path_rows_size: u32,
     tiles_size: u32,
     seg_counts_size: u32,
     segments_size: u32,

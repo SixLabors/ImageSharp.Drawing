@@ -19,7 +19,7 @@ This document starts after two earlier boundaries have already been crossed:
 
 Support probing through `WebGPUEnvironment` also sits outside this document. The rasterizer describes execution of one staged scene, not environment detection or object construction.
 
-The staged GPU rasterizer is based on ideas and implementation techniques from Vello:
+The staged GPU rasterizer is based on ideas and implementation techniques from Vello, but the current ImageSharp.Drawing implementation is heavily adapted and no longer mirrors Vello one-for-one:
 
 - https://github.com/linebender/vello
 
@@ -175,7 +175,7 @@ This validation happens before the expensive dispatch work begins.
 
 ## Stage 4: Resource Creation
 
-`WebGPUSceneResources.TryCreate(...)` creates the flush-scoped buffers and textures needed by the staged pipeline.
+`WebGPUSceneResources.TryCreate(...)` creates the buffers and textures needed by the staged pipeline for the current flush.
 
 That includes:
 
@@ -199,7 +199,7 @@ flowchart TD
     F --> G
 ```
 
-The resource set is flush-scoped. It exists to support one staged scene execution and then leaves with the flush context.
+The resource contents are flush-scoped, but the underlying allocations can be leased from backend-cached arenas and returned there after submission. That reuse keeps later flushes from recreating the same large GPU buffers when the current backend instance can keep reusing them safely.
 
 ## Stage 5: Scheduling Passes
 
@@ -210,6 +210,9 @@ Their purpose is structural. They:
 - scan the packed path and draw streams
 - build path and clip metadata
 - bin work into tiles
+- allocate sparse per-path row metadata from clipped draw bounds
+- discover each sparse row's active x span and carried backdrop
+- allocate sparse path tiles only for the touched row spans
 - count and allocate segment storage
 - write the tile-relative segment work consumed by the fine pass
 
@@ -227,13 +230,15 @@ flowchart TD
     H --> I[ClipReduce]
     I --> J[ClipLeaf]
     J --> K[Binning]
-    K --> L[TileAlloc]
-    L --> M[Backdrop]
-    M --> N[PathCountSetup]
-    N --> O[PathCount]
-    O --> P[Coarse]
-    P --> Q[PathTilingSetup]
-    Q --> R[PathTiling]
+    K --> L[PathRowAlloc]
+    L --> M[PathCountSetup]
+    M --> N[PathRowSpan]
+    N --> O[TileAlloc]
+    O --> P[PathCount]
+    P --> Q[Backdrop]
+    Q --> R[Coarse]
+    R --> S[PathTilingSetup]
+    S --> T[PathTiling]
 ```
 
 ## Stage 6: Fine Raster Pass
@@ -264,11 +269,11 @@ That is also where explicit layers are composited. The fine shader handles `Begi
 
 After the fine pass completes, the rasterizer copies the output texture to the target texture and submits the command buffer.
 
-At that point the staged scene has completed and the flush-scoped resources can be released with the context.
+At that point the staged scene has completed and the per-flush resource contents can be discarded while any reusable arena allocations are returned to the backend cache.
 
 ## Chunked Oversized-Scene Execution
 
-Some scenes exceed the device's single-binding limits even though they are otherwise valid staged scenes. The main example is the `segments` binding growing beyond the device's `MaxStorageBufferBindingSize`.
+Some scenes exceed the device's single-binding limits even though they are otherwise valid staged scenes. Common examples are `segments`, `path rows`, or `path tiles` growing beyond the device's `MaxStorageBufferBindingSize`.
 
 The chunked path exists for that case.
 

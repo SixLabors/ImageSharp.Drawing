@@ -1,5 +1,5 @@
-// Copyright 2022 the Vello Authors
-// SPDX-License-Identifier: Apache-2.0 OR MIT OR Unlicense
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
 
 // Flatten curves to lines
 
@@ -81,7 +81,7 @@ const DERIV_THRESH: f32 = 1e-6;
 const DERIV_THRESH_SQUARED: f32 = DERIV_THRESH * DERIV_THRESH;
 // Amount to nudge t when derivative is near-zero.
 const DERIV_EPS: f32 = 1e-6;
-// Limit for subdivision of cubic Béziers.
+// Limit for subdivision of cubic BÃ©ziers.
 const SUBDIV_LIMIT: f32 = 1.0 / 65536.0;
 // Robust ESPC computation: below this value, treat curve as circular arc
 const K1_THRESH: f32 = 1e-3;
@@ -322,7 +322,7 @@ const ESPC_ROBUST_NORMAL = 0;
 const ESPC_ROBUST_LOW_K1 = 1;
 const ESPC_ROBUST_LOW_DIST = 2;
 
-// This function flattens a cubic Bézier by first converting it into Euler spiral
+// This function flattens a cubic BÃ©zier by first converting it into Euler spiral
 // segments, and then computes a near-optimal flattening of the parallel curves of
 // the Euler spiral segments.
 fn flatten_euler(

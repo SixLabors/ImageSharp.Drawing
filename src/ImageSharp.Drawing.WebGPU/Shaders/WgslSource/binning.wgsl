@@ -1,5 +1,5 @@
-// Copyright 2022 the Vello Authors
-// SPDX-License-Identifier: Apache-2.0 OR MIT OR Unlicense
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
 
 // The binning stage
 
@@ -27,16 +27,7 @@ var<storage, read_write> intersected_bbox: array<vec4<f32>>;
 var<storage, read_write> bump: BumpAllocators;
 
 @group(0) @binding(6)
-var<storage, read_write> bin_data: array<u32>;
-
-// TODO: put in common place
-struct BinHeader {
-    element_count: u32,
-    chunk_offset: u32,
-}
-
-@group(0) @binding(7)
-var<storage, read_write> bin_header: array<BinHeader>;
+var<storage, read_write> info_bin_data: array<u32>;
 
 // conversion factors from coordinates to bin
 const SX = 1.0 / f32(N_TILE_X * TILE_WIDTH);
@@ -52,6 +43,10 @@ var<workgroup> sh_count: array<array<u32, N_TILE>, N_SUBSLICE>;
 var<workgroup> sh_chunk_offset: array<u32, N_TILE>;
 var<workgroup> sh_chunk_valid: array<u32, N_TILE>;
 var<workgroup> sh_previous_failed: u32;
+
+fn bin_header_ix(bin_ix: u32) -> u32 {
+    return config.bin_data_start + config.binning_size + (bin_ix * 2u);
+}
 
 @compute @workgroup_size(256)
 fn main(
@@ -155,8 +150,9 @@ fn main(
     }    
     sh_chunk_offset[local_id.x] = chunk_offset;
     sh_chunk_valid[local_id.x] = chunk_valid;
-    bin_header[global_id.x].element_count = element_count;
-    bin_header[global_id.x].chunk_offset = chunk_offset;
+    let header_ix = bin_header_ix(global_id.x);
+    info_bin_data[header_ix] = element_count;
+    info_bin_data[header_ix + 1u] = chunk_offset;
     workgroupBarrier();
 
     // loop over bbox of bins touched by this draw object
@@ -174,7 +170,7 @@ fn main(
                 idx += (count_packed >> (16u * (count_ix & 1u))) & 0xffffu;
             }
             let offset = config.bin_data_start + sh_chunk_offset[bin_ix];
-            bin_data[offset + idx] = element_ix;
+            info_bin_data[offset + idx] = element_ix;
         }
         x += 1;
         if x == x1 {

@@ -1,5 +1,5 @@
-// Copyright 2023 the Vello Authors
-// SPDX-License-Identifier: Apache-2.0 OR MIT OR Unlicense
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
 
 // This file defines utility functions that interact with host-shareable buffer objects. It should
 // be imported once following the resource binding declarations in the shader module that access

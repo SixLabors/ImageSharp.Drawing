@@ -36,6 +36,8 @@ internal static class WebGPUSceneDispatch
     private const string ClipReducePipelineKey = "scene/clip-reduce";
     private const string ClipLeafPipelineKey = "scene/clip-leaf";
     private const string BinningPipelineKey = "scene/binning";
+    private const string PathRowAllocPipelineKey = "scene/path-row-alloc";
+    private const string PathRowSpanPipelineKey = "scene/path-row-span";
     private const string TileAllocPipelineKey = "scene/tile-alloc";
     private const string BackdropPipelineKey = "scene/backdrop";
     private const string PathCountSetupPipelineKey = "scene/path-count-setup";
@@ -45,6 +47,7 @@ internal static class WebGPUSceneDispatch
     private const string PathTilingPipelineKey = "scene/path-tiling";
     private const string FineAreaPipelineKey = "scene/fine-area";
     private const string FineAliasedThresholdPipelineKey = "scene/fine-aliased-threshold";
+    private const string ChunkResetPipelineKey = "scene/chunk-reset";
 
     /// <summary>
     /// Identifies the staged-scene storage binding that exceeded the device limit for one flush attempt.
@@ -57,19 +60,34 @@ internal static class WebGPUSceneDispatch
         None = 0,
 
         /// <summary>
+        /// The sparse path-row buffer exceeded the maximum bindable storage-buffer size.
+        /// </summary>
+        PathRows = 1,
+
+        /// <summary>
         /// The path-tiling tile buffer exceeded the maximum bindable storage-buffer size.
         /// </summary>
-        PathTiles = 1,
+        PathTiles = 2,
 
         /// <summary>
         /// The path-tiling segment-count buffer exceeded the maximum bindable storage-buffer size.
         /// </summary>
-        SegCounts = 2,
+        SegCounts = 3,
 
         /// <summary>
         /// The path-tiling segment buffer exceeded the maximum bindable storage-buffer size.
         /// </summary>
-        Segments = 3
+        Segments = 4,
+
+        /// <summary>
+        /// The coarse-stage blend-spill buffer exceeded the maximum bindable storage-buffer size.
+        /// </summary>
+        BlendSpill = 5,
+
+        /// <summary>
+        /// The coarse/fine PTCL buffer exceeded the maximum bindable storage-buffer size.
+        /// </summary>
+        Ptcl = 6
     }
 
     /// <summary>
@@ -175,9 +193,10 @@ internal static class WebGPUSceneDispatch
             }
 
             encodedScene = createdScene;
-            WebGPUSceneConfig config = WebGPUSceneConfig.Create(encodedScene, bumpSizes);
+            WebGPUSceneBumpSizes seededBumpSizes = SeedSceneBumpSizes(bumpSizes, encodedScene);
+            WebGPUSceneConfig config = WebGPUSceneConfig.Create(encodedScene, seededBumpSizes);
             uint baseColor = 0U;
-            bool segmentChunkingRequired = false;
+            bool chunkingRequired = false;
             if (!TryValidateBindingSizes(encodedScene, config, flushContext.DeviceState.MaxStorageBufferBindingSize, out bindingLimitFailure, out error))
             {
                 if (!IsChunkableBindingFailure(bindingLimitFailure.Buffer))
@@ -189,12 +208,12 @@ internal static class WebGPUSceneDispatch
                     return false;
                 }
 
-                segmentChunkingRequired = true;
+                chunkingRequired = true;
             }
 
             if (encodedScene.FillCount == 0)
             {
-                stagedScene = new WebGPUStagedScene(flushContext, encodedScene, config, default, segmentChunkingRequired ? bindingLimitFailure : BindingLimitFailure.None);
+                stagedScene = new WebGPUStagedScene(flushContext, encodedScene, config, default, chunkingRequired ? bindingLimitFailure : BindingLimitFailure.None);
                 error = null;
                 return true;
             }
@@ -207,7 +226,7 @@ internal static class WebGPUSceneDispatch
                 return false;
             }
 
-            stagedScene = new WebGPUStagedScene(flushContext, encodedScene, config, resources, segmentChunkingRequired ? bindingLimitFailure : BindingLimitFailure.None);
+            stagedScene = new WebGPUStagedScene(flushContext, encodedScene, config, resources, chunkingRequired ? bindingLimitFailure : BindingLimitFailure.None);
             error = null;
             return true;
         }
@@ -243,7 +262,7 @@ internal static class WebGPUSceneDispatch
     {
         bindingLimitFailure = BindingLimitFailure.None;
         WebGPUSceneBufferSizes bufferSizes = config.BufferSizes;
-        nuint infoBinDataByteLength = checked(GetBindingByteLength<uint>(encodedScene.InfoWordCount) + config.BufferSizes.BinData.ByteLength);
+        nuint infoBinDataByteLength = checked(GetBindingByteLength<uint>(encodedScene.InfoWordCount) + config.BufferSizes.BinData.ByteLength + config.BufferSizes.BinHeaders.ByteLength);
         if (!TryValidateBufferSize(GetBindingByteLength<GpuSceneConfig>(1), "scene config", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
             !TryValidateBufferSize(GetBindingByteLength<uint>(encodedScene.SceneWordCount), "scene data", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
             !TryValidateBufferSize(bufferSizes.PathReduced.ByteLength, "path reduced", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
@@ -263,11 +282,12 @@ internal static class WebGPUSceneDispatch
             !TryValidateBufferSize(bufferSizes.Lines.ByteLength, "scene lines", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
             !TryValidateBufferSize(bufferSizes.BinHeaders.ByteLength, "bin headers", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
             !TryValidateBufferSize(bufferSizes.IndirectCount.ByteLength, "indirect count", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
+            !TryValidateBufferSize(bufferSizes.PathRows.ByteLength, "path rows", BindingLimitBuffer.PathRows, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
             !TryValidateBufferSize(bufferSizes.PathTiles.ByteLength, "path tiles", BindingLimitBuffer.PathTiles, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
             !TryValidateBufferSize(bufferSizes.SegCounts.ByteLength, "segment counts", BindingLimitBuffer.SegCounts, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
             !TryValidateBufferSize(bufferSizes.Segments.ByteLength, "segments", BindingLimitBuffer.Segments, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.BlendSpill.ByteLength, "blend spill", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
-            !TryValidateBufferSize(bufferSizes.Ptcl.ByteLength, "ptcl", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error))
+            !TryValidateBufferSize(bufferSizes.BlendSpill.ByteLength, "blend spill", BindingLimitBuffer.BlendSpill, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
+            !TryValidateBufferSize(bufferSizes.Ptcl.ByteLength, "ptcl", BindingLimitBuffer.Ptcl, maxStorageBufferBindingSize, out bindingLimitFailure, out error))
         {
             return false;
         }
@@ -294,7 +314,8 @@ internal static class WebGPUSceneDispatch
     {
         WebGPUSceneBufferSizes bufferSizes = config.BufferSizes;
         uint lineCount = checked((uint)encodedScene.LineCount);
-        uint tileMembershipCount = checked((uint)encodedScene.TotalTileMembershipCount);
+        uint pathRowEstimate = checked((uint)encodedScene.TotalPathRowCount);
+        uint pathTileFloor = checked((uint)Math.Max(encodedScene.TotalPathRowCount, encodedScene.PathCount));
         uint initialPtclWords = checked((uint)encodedScene.TileCountX * (uint)encodedScene.TileCountY * PtclInitialAlloc);
 
         if (lineCount > bufferSizes.Lines.Length)
@@ -309,9 +330,15 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        if (tileMembershipCount > bufferSizes.PathTiles.Length)
+        if (pathRowEstimate > bufferSizes.PathRows.Length)
         {
-            error = $"The staged-scene path-tile buffer reserves {bufferSizes.PathTiles.Length} entries, but this scene touches {tileMembershipCount} tiles.";
+            error = $"The staged-scene path-row buffer reserves {bufferSizes.PathRows.Length} entries, but this scene needs at least {pathRowEstimate}.";
+            return false;
+        }
+
+        if (pathTileFloor > bufferSizes.PathTiles.Length)
+        {
+            error = $"The staged-scene path-tile buffer reserves {bufferSizes.PathTiles.Length} entries, but this scene needs at least {pathTileFloor} sparse tiles.";
             return false;
         }
 
@@ -336,6 +363,26 @@ internal static class WebGPUSceneDispatch
     {
         scheduling = default;
 
+        if (!TryDispatchSharedSchedulingStages(ref stagedScene, arena, out error))
+        {
+            return false;
+        }
+
+        return TryDispatchChunkLocalSchedulingStages(ref stagedScene, arena, resetChunkLocalBumpAllocators: false, out scheduling, out error);
+    }
+
+    /// <summary>
+    /// Records the chunk-invariant scheduling stages that depend only on the full encoded scene and can be reused across all oversized-scene tile windows in the same flush.
+    /// </summary>
+    /// <param name="stagedScene">The flush-scoped staged scene whose full-scene scheduling state is being prepared for later chunk reuse.</param>
+    /// <param name="arena">The reusable scheduling arena that owns the transient buffers written by the shared passes.</param>
+    /// <param name="error">Receives the recording or dispatch failure reason when the shared scheduling stages cannot be staged successfully.</param>
+    /// <returns><see langword="true"/> when the shared scheduling stages were recorded successfully; otherwise, <see langword="false"/>.</returns>
+    private static unsafe bool TryDispatchSharedSchedulingStages(
+        ref WebGPUStagedScene stagedScene,
+        WebGPUSceneSchedulingArena arena,
+        out string? error)
+    {
         WebGPUFlushContext flushContext = stagedScene.FlushContext;
         WebGPUEncodedScene encodedScene = stagedScene.EncodedScene;
         WebGPUSceneConfig config = stagedScene.Config;
@@ -349,20 +396,14 @@ internal static class WebGPUSceneDispatch
         nuint pathBboxBufferSize = bufferSizes.PathBboxes.ByteLength;
         nuint drawReducedBufferSize = bufferSizes.DrawReduced.ByteLength;
         nuint drawMonoidBufferSize = bufferSizes.DrawMonoids.ByteLength;
-        nuint infoBinDataBufferSize = checked(GetBindingByteLength<uint>(encodedScene.InfoWordCount) + bufferSizes.BinData.ByteLength);
+        nuint infoBinDataBufferSize = checked(GetBindingByteLength<uint>(encodedScene.InfoWordCount) + bufferSizes.BinData.ByteLength + bufferSizes.BinHeaders.ByteLength);
         nuint clipInputBufferSize = bufferSizes.ClipInputs.ByteLength;
         nuint clipElementBufferSize = bufferSizes.ClipElements.ByteLength;
         nuint clipBicBufferSize = bufferSizes.ClipBics.ByteLength;
         nuint clipBboxBufferSize = bufferSizes.ClipBboxes.ByteLength;
         nuint drawBboxBufferSize = bufferSizes.DrawBboxes.ByteLength;
-        nuint pathBufferSize = bufferSizes.Paths.ByteLength;
         nuint lineBufferSize = bufferSizes.Lines.ByteLength;
         nuint binHeaderBufferSize = bufferSizes.BinHeaders.ByteLength;
-        nuint indirectCountBufferSize = bufferSizes.IndirectCount.ByteLength;
-        nuint pathTileBufferSize = bufferSizes.PathTiles.ByteLength;
-        nuint segCountBufferSize = bufferSizes.SegCounts.ByteLength;
-        nuint segmentBufferSize = bufferSizes.Segments.ByteLength;
-        nuint ptclBufferSize = bufferSizes.Ptcl.ByteLength;
         if (encodedScene.FillCount == 0)
         {
             error = null;
@@ -376,23 +417,18 @@ internal static class WebGPUSceneDispatch
         }
 
         WgpuBuffer* binHeaderBuffer = arena.BinHeaderBuffer;
-        WgpuBuffer* indirectCountBuffer = arena.IndirectCountBuffer;
-        WgpuBuffer* pathTileBuffer = arena.PathTileBuffer;
-        WgpuBuffer* segCountBuffer = arena.SegCountBuffer;
-        WgpuBuffer* segmentBuffer = arena.SegmentBuffer;
-        WgpuBuffer* blendBuffer = arena.BlendBuffer;
-        WgpuBuffer* ptclBuffer = arena.PtclBuffer;
         WgpuBuffer* bumpBuffer = arena.BumpBuffer;
 
         WebGPUSceneResourceRegistry resourceRegistry = WebGPUSceneResourceRegistry.Create(stagedScene.Resources);
         resourceRegistry.RegisterSchedulingBuffers(
             binHeaderBuffer,
-            indirectCountBuffer,
-            pathTileBuffer,
-            segCountBuffer,
-            segmentBuffer,
-            blendBuffer,
-            ptclBuffer,
+            arena.IndirectCountBuffer,
+            arena.PathRowBuffer,
+            arena.PathTileBuffer,
+            arena.SegCountBuffer,
+            arena.SegmentBuffer,
+            arena.BlendBuffer,
+            arena.PtclBuffer,
             bumpBuffer);
 
         WebGPUSceneComputeRecording recording = new(resourceRegistry);
@@ -571,8 +607,6 @@ internal static class WebGPUSceneDispatch
                 clipBboxBufferSize,
                 drawBboxBufferSize,
                 infoBinDataBufferSize,
-                binHeaderBuffer,
-                binHeaderBufferSize,
                 bumpBuffer,
                 workgroupCounts.BinningX,
                 out error))
@@ -580,17 +614,97 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        if (!TryDispatchTileAlloc(
+        return TryExecuteComputeRecording(flushContext, recording, out error);
+    }
+
+    /// <summary>
+    /// Records the chunk-local scheduling stages that must be rerun for each oversized-scene tile window after the shared full-scene preparation has populated reusable buffers.
+    /// </summary>
+    /// <param name="stagedScene">The chunk-scoped staged scene describing the current tile-row window.</param>
+    /// <param name="arena">The reusable scheduling arena that owns the transient chunk-local scheduling buffers.</param>
+    /// <param name="resetChunkLocalBumpAllocators">Whether the chunk-local allocator counters should be cleared while preserving the shared full-scene scheduling state already stored in the arena.</param>
+    /// <param name="scheduling">Receives the transient scheduling resources bound by the later fine and readback stages.</param>
+    /// <param name="error">Receives the recording or dispatch failure reason when the chunk-local scheduling stages cannot be staged successfully.</param>
+    /// <returns><see langword="true"/> when the chunk-local scheduling stages were recorded successfully; otherwise, <see langword="false"/>.</returns>
+    private static unsafe bool TryDispatchChunkLocalSchedulingStages(
+        ref WebGPUStagedScene stagedScene,
+        WebGPUSceneSchedulingArena arena,
+        bool resetChunkLocalBumpAllocators,
+        out WebGPUSceneSchedulingResources scheduling,
+        out string? error)
+    {
+        scheduling = default;
+
+        WebGPUFlushContext flushContext = stagedScene.FlushContext;
+        WebGPUEncodedScene encodedScene = stagedScene.EncodedScene;
+        WebGPUSceneConfig config = stagedScene.Config;
+        WebGPUSceneBufferSizes bufferSizes = config.BufferSizes;
+        WebGPUSceneWorkgroupCounts workgroupCounts = config.WorkgroupCounts;
+        nuint sceneBufferSize = GetBindingByteLength<uint>(encodedScene.SceneWordCount);
+        nuint drawMonoidBufferSize = bufferSizes.DrawMonoids.ByteLength;
+        nuint infoBinDataBufferSize = checked(GetBindingByteLength<uint>(encodedScene.InfoWordCount) + bufferSizes.BinData.ByteLength + bufferSizes.BinHeaders.ByteLength);
+        nuint drawBboxBufferSize = bufferSizes.DrawBboxes.ByteLength;
+        nuint pathBufferSize = bufferSizes.Paths.ByteLength;
+        nuint lineBufferSize = bufferSizes.Lines.ByteLength;
+        nuint binHeaderBufferSize = bufferSizes.BinHeaders.ByteLength;
+        nuint pathRowBufferSize = bufferSizes.PathRows.ByteLength;
+        nuint pathTileBufferSize = bufferSizes.PathTiles.ByteLength;
+        nuint segCountBufferSize = bufferSizes.SegCounts.ByteLength;
+        nuint segmentBufferSize = bufferSizes.Segments.ByteLength;
+        nuint ptclBufferSize = bufferSizes.Ptcl.ByteLength;
+        if (encodedScene.FillCount == 0)
+        {
+            error = null;
+            return true;
+        }
+
+        if (!flushContext.EnsureCommandEncoder())
+        {
+            error = "Failed to create a command encoder for the staged WebGPU scene.";
+            return false;
+        }
+
+        WgpuBuffer* binHeaderBuffer = arena.BinHeaderBuffer;
+        WgpuBuffer* indirectCountBuffer = arena.IndirectCountBuffer;
+        WgpuBuffer* pathRowBuffer = arena.PathRowBuffer;
+        WgpuBuffer* pathTileBuffer = arena.PathTileBuffer;
+        WgpuBuffer* segCountBuffer = arena.SegCountBuffer;
+        WgpuBuffer* segmentBuffer = arena.SegmentBuffer;
+        WgpuBuffer* blendBuffer = arena.BlendBuffer;
+        WgpuBuffer* ptclBuffer = arena.PtclBuffer;
+        WgpuBuffer* bumpBuffer = arena.BumpBuffer;
+
+        WebGPUSceneResourceRegistry resourceRegistry = WebGPUSceneResourceRegistry.Create(stagedScene.Resources);
+        resourceRegistry.RegisterSchedulingBuffers(
+            binHeaderBuffer,
+            indirectCountBuffer,
+            pathRowBuffer,
+            pathTileBuffer,
+            segCountBuffer,
+            segmentBuffer,
+            blendBuffer,
+            ptclBuffer,
+            bumpBuffer);
+
+        WebGPUSceneComputeRecording recording = new(resourceRegistry);
+
+        if (resetChunkLocalBumpAllocators &&
+            !TryDispatchChunkReset(recording, bumpBuffer, ChunkResetComputeShader.GetDispatchX(), out error))
+        {
+            return false;
+        }
+
+        if (!TryDispatchPathRowAlloc(
                 recording,
                 flushContext,
                 stagedScene.Resources,
                 sceneBufferSize,
                 drawBboxBufferSize,
                 pathBufferSize,
-                pathTileBuffer,
-                pathTileBufferSize,
+                pathRowBuffer,
+                pathRowBufferSize,
                 bumpBuffer,
-                workgroupCounts.TileAllocX,
+                workgroupCounts.PathRowAllocX,
                 out error))
         {
             return false;
@@ -607,12 +721,45 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
+        if (!TryDispatchPathRowSpan(
+                recording,
+                flushContext,
+                stagedScene.Resources,
+                bumpBuffer,
+                pathBufferSize,
+                pathRowBuffer,
+                pathRowBufferSize,
+                lineBufferSize,
+                indirectCountBuffer,
+                out error))
+        {
+            return false;
+        }
+
+        if (!TryDispatchTileAlloc(
+                recording,
+                flushContext,
+                stagedScene.Resources,
+                bumpBuffer,
+                pathBufferSize,
+                pathRowBuffer,
+                pathRowBufferSize,
+                pathTileBuffer,
+                pathTileBufferSize,
+                workgroupCounts.TileAllocX,
+                out error))
+        {
+            return false;
+        }
+
         if (!TryDispatchPathCount(
                 recording,
                 flushContext,
                 stagedScene.Resources,
                 bumpBuffer,
                 pathBufferSize,
+                pathRowBuffer,
+                pathRowBufferSize,
                 pathTileBuffer,
                 pathTileBufferSize,
                 segCountBuffer,
@@ -630,6 +777,8 @@ internal static class WebGPUSceneDispatch
                 stagedScene.Resources,
                 bumpBuffer,
                 pathBufferSize,
+                pathRowBuffer,
+                pathRowBufferSize,
                 pathTileBuffer,
                 pathTileBufferSize,
                 workgroupCounts.BackdropX,
@@ -645,9 +794,9 @@ internal static class WebGPUSceneDispatch
                 sceneBufferSize,
                 drawMonoidBufferSize,
                 infoBinDataBufferSize,
-                binHeaderBuffer,
-                binHeaderBufferSize,
                 pathBufferSize,
+                pathRowBuffer,
+                pathRowBufferSize,
                 pathTileBuffer,
                 pathTileBufferSize,
                 ptclBuffer,
@@ -683,6 +832,8 @@ internal static class WebGPUSceneDispatch
                 segCountBufferSize,
                 lineBufferSize,
                 pathBufferSize,
+                pathRowBuffer,
+                pathRowBufferSize,
                 pathTileBuffer,
                 pathTileBufferSize,
                 segmentBuffer,
@@ -701,6 +852,7 @@ internal static class WebGPUSceneDispatch
         scheduling = new WebGPUSceneSchedulingResources(
             binHeaderBuffer,
             indirectCountBuffer,
+            pathRowBuffer,
             pathTileBuffer,
             segCountBuffer,
             segmentBuffer,
@@ -743,6 +895,7 @@ internal static class WebGPUSceneDispatch
         arena = null;
         WgpuBuffer* binHeaderBuffer = null;
         WgpuBuffer* indirectCountBuffer = null;
+        WgpuBuffer* pathRowBuffer = null;
         WgpuBuffer* pathTileBuffer = null;
         WgpuBuffer* segCountBuffer = null;
         WgpuBuffer* segmentBuffer = null;
@@ -755,6 +908,7 @@ internal static class WebGPUSceneDispatch
         {
             if (!TryCreateArenaStorageBuffer(flushContext, bufferSizes.BinHeaders.ByteLength, out binHeaderBuffer, out error) ||
                 !TryCreateArenaIndirectStorageBuffer(flushContext, bufferSizes.IndirectCount.ByteLength, out indirectCountBuffer, out error) ||
+                !TryCreateArenaStorageBuffer(flushContext, bufferSizes.PathRows.ByteLength, out pathRowBuffer, out error) ||
                 !TryCreateArenaStorageBuffer(flushContext, bufferSizes.PathTiles.ByteLength, out pathTileBuffer, out error) ||
                 !TryCreateArenaStorageBuffer(flushContext, bufferSizes.SegCounts.ByteLength, out segCountBuffer, out error) ||
                 !TryCreateArenaStorageBuffer(flushContext, bufferSizes.Segments.ByteLength, out segmentBuffer, out error) ||
@@ -795,6 +949,7 @@ internal static class WebGPUSceneDispatch
                 readbackByteLength,
                 binHeaderBuffer,
                 indirectCountBuffer,
+                pathRowBuffer,
                 pathTileBuffer,
                 segCountBuffer,
                 segmentBuffer,
@@ -816,6 +971,7 @@ internal static class WebGPUSceneDispatch
                 ReleaseArenaBuffer(flushContext.Api, blendBuffer);
                 ReleaseArenaBuffer(flushContext.Api, segmentBuffer);
                 ReleaseArenaBuffer(flushContext.Api, segCountBuffer);
+                ReleaseArenaBuffer(flushContext.Api, pathRowBuffer);
                 ReleaseArenaBuffer(flushContext.Api, pathTileBuffer);
                 ReleaseArenaBuffer(flushContext.Api, indirectCountBuffer);
                 ReleaseArenaBuffer(flushContext.Api, binHeaderBuffer);
@@ -940,7 +1096,8 @@ internal static class WebGPUSceneDispatch
         grownBumpSizes = new WebGPUSceneBumpSizes(
             Math.Max(bumpAllocators.Lines, stagedScene.Config.BumpSizes.Lines),
             Math.Max(bumpAllocators.Binning, stagedScene.Config.BumpSizes.Binning),
-            Math.Max(bumpAllocators.Tile, stagedScene.Config.BumpSizes.PathTiles),
+            Math.Max(bumpAllocators.PathRows, 1U),
+            Math.Max(bumpAllocators.Tile, 1U),
             Math.Max(bumpAllocators.SegCounts, stagedScene.Config.BumpSizes.SegCounts),
             Math.Max(bumpAllocators.Segments, stagedScene.Config.BumpSizes.Segments),
             Math.Max(bumpAllocators.BlendSpill, stagedScene.Config.BumpSizes.BlendSpill),
@@ -1011,7 +1168,7 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        uint nextChunkTileHeight = GetInitialSegmentChunkTileHeight(encodedScene, stagedScene.BindingLimitFailure);
+        uint nextChunkTileHeight = GetInitialChunkTileHeight(encodedScene, stagedScene.BindingLimitFailure);
         uint tileYStart = 0U;
         uint totalTileHeight = checked((uint)encodedScene.TileCountY);
 
@@ -1025,6 +1182,7 @@ internal static class WebGPUSceneDispatch
         Span<uint> chunkAttemptTileHeights = chunkTileHeightOwner.Memory.Span;
 
         int chunkReadbackCount = 0;
+        bool sharedSchedulingPrepared = false;
 
         // Outer loop: advance through tile rows. Each iteration renders one chunk.
         while (tileYStart < totalTileHeight)
@@ -1066,15 +1224,43 @@ internal static class WebGPUSceneDispatch
                     return false;
                 }
 
+                bool useSharedSchedulingState = sharedSchedulingPrepared || chunkWindow.TileHeight < totalTileHeight;
+                if (!sharedSchedulingPrepared && useSharedSchedulingState)
+                {
+                    if (!TryDispatchSharedSchedulingStages(ref stagedScene, schedulingArena, out error))
+                    {
+                        return false;
+                    }
+
+                    if (!WebGPUDrawingBackend.TrySubmit(flushContext))
+                    {
+                        error = "Failed to submit the staged-scene shared chunk scheduling passes.";
+                        return false;
+                    }
+
+                    sharedSchedulingPrepared = true;
+                }
+
                 // Render this chunk: scheduling + fine into the shared output texture.
-                // Readback is deferred — each chunk copies its bump status into a different
+                // Readback is deferred - each chunk copies its bump status into a different
                 // offset in the readback buffer. All chunks are checked in one batch below.
-                if (TryRenderChunkAttempt(
+                bool recordedChunk = useSharedSchedulingState
+                    ? TryRecordChunkAttempt(
                         ref chunkScene,
                         schedulingArena,
                         outputTextureView,
                         (nuint)chunkReadbackCount * (nuint)sizeof(GpuSceneBumpAllocators),
-                        out error))
+                        chunkReadbackCount > 0,
+                        out error)
+                    : TryRenderChunkAttempt(
+                        ref chunkScene,
+                        schedulingArena,
+                        outputTextureView,
+                        (nuint)chunkReadbackCount * (nuint)sizeof(GpuSceneBumpAllocators),
+                        useSharedSchedulingState,
+                        resetChunkLocalBumpAllocators: false,
+                        out error);
+                if (recordedChunk)
                 {
                     chunkAttemptBumpSizes[chunkReadbackCount++] = chunkConfig.BumpSizes;
                     chunkAttemptTileHeights[chunkReadbackCount - 1] = chunkWindow.TileHeight;
@@ -1083,6 +1269,12 @@ internal static class WebGPUSceneDispatch
                     break;
                 }
             }
+        }
+
+        if (sharedSchedulingPrepared && !WebGPUDrawingBackend.TrySubmit(flushContext))
+        {
+            error = "Failed to submit the staged-scene chunk passes.";
+            return false;
         }
 
         // All chunks submitted. Map the readback buffer once and check every chunk's
@@ -1137,6 +1329,8 @@ internal static class WebGPUSceneDispatch
     /// <param name="schedulingArena">The flush-local reusable scheduling scratch and readback arena.</param>
     /// <param name="outputTextureView">The shared output texture view receiving fine-pass results for every chunk.</param>
     /// <param name="readbackOffset">The byte offset inside the shared readback buffer where this chunk should copy its bump allocators.</param>
+    /// <param name="reuseSharedSchedulingState">Whether this chunk should reuse the flush-scoped shared scheduling results instead of rerunning the full scheduling pipeline.</param>
+    /// <param name="resetChunkLocalBumpAllocators">Whether the chunk-local bump counters should be cleared while preserving the shared full-scene scheduling state.</param>
     /// <param name="error">Receives the chunk failure reason when scheduling or fine dispatch cannot complete.</param>
     /// <returns><see langword="true"/> when this chunk rendered successfully; otherwise, <see langword="false"/>.</returns>
     private static unsafe bool TryRenderChunkAttempt(
@@ -1144,15 +1338,12 @@ internal static class WebGPUSceneDispatch
         WebGPUSceneSchedulingArena schedulingArena,
         TextureView* outputTextureView,
         nuint readbackOffset,
+        bool reuseSharedSchedulingState,
+        bool resetChunkLocalBumpAllocators,
         out string? error)
     {
         error = null;
-
-        // Zero the bump buffer so this chunk doesn't inherit the previous chunk's overflow state.
-        if (!TryResetSceneBumpAllocators(stagedScene.FlushContext, schedulingArena.BumpBuffer, out error))
-        {
-            return false;
-        }
+        WebGPUSceneSchedulingResources scheduling;
 
         // Upload the chunk-specific config header (tile window, buffer sizes).
         if (!TryWriteSceneHeader(stagedScene.FlushContext, stagedScene.Resources.HeaderBuffer, WebGPUSceneResources.CreateHeader(stagedScene.EncodedScene, stagedScene.Config, 0U), out error))
@@ -1160,7 +1351,16 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        if (!TryDispatchSchedulingStages(ref stagedScene, schedulingArena, out WebGPUSceneSchedulingResources scheduling, out error))
+        if (reuseSharedSchedulingState)
+        {
+            if (!TryDispatchChunkLocalSchedulingStages(ref stagedScene, schedulingArena, resetChunkLocalBumpAllocators, out WebGPUSceneSchedulingResources sharedScheduling, out error))
+            {
+                return false;
+            }
+
+            scheduling = sharedScheduling;
+        }
+        else if (!TryDispatchSchedulingStages(ref stagedScene, schedulingArena, out scheduling, out error))
         {
             return false;
         }
@@ -1189,6 +1389,57 @@ internal static class WebGPUSceneDispatch
     }
 
     /// <summary>
+    /// Records one chunk attempt into the current command encoder by copying a dedicated chunk header, replaying the chunk-local scheduling stages, and appending the scheduling-status readback copy without submitting yet.
+    /// </summary>
+    /// <param name="stagedScene">The chunk-scoped staged scene describing the tile-row window being recorded.</param>
+    /// <param name="schedulingArena">The flush-local reusable scheduling scratch and readback arena.</param>
+    /// <param name="outputTextureView">The shared output texture view receiving fine-pass results for this chunk.</param>
+    /// <param name="readbackOffset">The byte offset inside the shared readback buffer where this chunk should copy its bump allocators.</param>
+    /// <param name="resetChunkLocalBumpAllocators">Whether the chunk-local allocator counters should be cleared while preserving the shared full-scene scheduling state.</param>
+    /// <param name="error">Receives the chunk failure reason when scheduling, fine dispatch, or readback staging cannot complete.</param>
+    /// <returns><see langword="true"/> when this chunk was recorded successfully into the active command encoder; otherwise, <see langword="false"/>.</returns>
+    private static unsafe bool TryRecordChunkAttempt(
+        ref WebGPUStagedScene stagedScene,
+        WebGPUSceneSchedulingArena schedulingArena,
+        TextureView* outputTextureView,
+        nuint readbackOffset,
+        bool resetChunkLocalBumpAllocators,
+        out string? error)
+    {
+        error = null;
+
+        GpuSceneConfig header = WebGPUSceneResources.CreateHeader(stagedScene.EncodedScene, stagedScene.Config, 0U);
+        if (!stagedScene.FlushContext.EnsureCommandEncoder())
+        {
+            error = "Failed to create a command encoder for the staged-scene chunk pass.";
+            return false;
+        }
+
+        if (!TryCreateAndUploadCopySourceBuffer(stagedScene.FlushContext, in header, out WgpuBuffer* headerSourceBuffer, out error) ||
+            !TryEnqueueSceneHeaderCopy(stagedScene.FlushContext, headerSourceBuffer, stagedScene.Resources.HeaderBuffer, out error) ||
+            !TryDispatchChunkLocalSchedulingStages(ref stagedScene, schedulingArena, resetChunkLocalBumpAllocators, out WebGPUSceneSchedulingResources scheduling, out error))
+        {
+            return false;
+        }
+
+        if (!TryDispatchFineArea(
+                stagedScene.FlushContext,
+                stagedScene.Resources,
+                stagedScene.EncodedScene,
+                stagedScene.Config.BufferSizes,
+                scheduling,
+                outputTextureView,
+                (uint)stagedScene.EncodedScene.TileCountX,
+                stagedScene.Config.ChunkWindow.TileHeight,
+                out error))
+        {
+            return false;
+        }
+
+        return TryEnqueueSchedulingStatusReadback(stagedScene.FlushContext, scheduling.BumpBuffer, schedulingArena.ReadbackBuffer, readbackOffset, out error);
+    }
+
+    /// <summary>
     /// Uploads one staged-scene config header into the shared header buffer before a chunked render attempt.
     /// </summary>
     /// <param name="flushContext">The flush context that owns the queue used to upload the updated header.</param>
@@ -1205,6 +1456,38 @@ internal static class WebGPUSceneDispatch
         nuint headerSize = (nuint)sizeof(GpuSceneConfig);
         using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
         flushContext.Api.QueueWriteBuffer((Queue*)queueReference.Handle, headerBuffer, 0, &header, headerSize);
+        error = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Records one copy from a per-chunk header upload buffer into the shared staged-scene header buffer so subsequent chunk-local passes see the correct tile window.
+    /// </summary>
+    /// <param name="flushContext">The flush context that owns the active command encoder receiving the copy command.</param>
+    /// <param name="sourceBuffer">The flush-scoped buffer containing the already uploaded chunk header data.</param>
+    /// <param name="destinationBuffer">The shared staged-scene header buffer consumed by subsequent chunk-local passes.</param>
+    /// <param name="error">Receives the recording failure reason when the copy cannot be appended to the active command encoder.</param>
+    /// <returns><see langword="true"/> when the header copy was recorded successfully; otherwise, <see langword="false"/>.</returns>
+    private static unsafe bool TryEnqueueSceneHeaderCopy(
+        WebGPUFlushContext flushContext,
+        WgpuBuffer* sourceBuffer,
+        WgpuBuffer* destinationBuffer,
+        out string? error)
+    {
+        flushContext.EndComputePassIfOpen();
+        if (flushContext.CommandEncoder is null)
+        {
+            error = "Failed to record the staged-scene chunk header copy because no command encoder is active.";
+            return false;
+        }
+
+        flushContext.Api.CommandEncoderCopyBufferToBuffer(
+            flushContext.CommandEncoder,
+            sourceBuffer,
+            0,
+            destinationBuffer,
+            0,
+            (nuint)sizeof(GpuSceneConfig));
         error = null;
         return true;
     }
@@ -1229,9 +1512,9 @@ internal static class WebGPUSceneDispatch
     /// Chooses the first chunk height from the exact full-scene chunkable binding overflow.
     /// </summary>
     /// <param name="scene">The encoded scene whose full-scene chunkable binding exceeded the device limit.</param>
-    /// <param name="bindingLimitFailure">The exact segment or segment-count binding overflow reported during full-scene planning.</param>
+    /// <param name="bindingLimitFailure">The exact chunk-local binding overflow reported during full-scene planning.</param>
     /// <returns>The initial tile-row chunk height to try for the oversized scene.</returns>
-    private static uint GetInitialSegmentChunkTileHeight(WebGPUEncodedScene scene, BindingLimitFailure bindingLimitFailure)
+    private static uint GetInitialChunkTileHeight(WebGPUEncodedScene scene, BindingLimitFailure bindingLimitFailure)
     {
         uint fullTileHeight = checked((uint)scene.TileCountY);
         if (!IsChunkableBindingFailure(bindingLimitFailure.Buffer) || bindingLimitFailure.RequiredBytes == 0)
@@ -1249,7 +1532,7 @@ internal static class WebGPUSceneDispatch
     /// </summary>
     /// <param name="currentTileHeight">The chunk height that just overflowed the device binding limit.</param>
     /// <param name="remainingTileHeight">The number of tile rows still left to render in the oversized scene.</param>
-    /// <param name="bindingLimitFailure">The exact segment or segment-count binding-limit failure reported for the overflowing chunk.</param>
+    /// <param name="bindingLimitFailure">The exact chunk-local binding-limit failure reported for the overflowing chunk.</param>
     /// <returns>A smaller tile-row chunk height to retry for the same scene region.</returns>
     private static uint ShrinkChunkTileHeight(uint currentTileHeight, uint remainingTileHeight, BindingLimitFailure bindingLimitFailure)
     {
@@ -1288,12 +1571,14 @@ internal static class WebGPUSceneDispatch
     private static WebGPUSceneBumpSizes ScaleChunkBumpSizes(WebGPUSceneBumpSizes sourceBumpSizes, WebGPUEncodedScene scene, uint chunkTileHeight)
     {
         uint fullTileHeight = checked((uint)scene.TileCountY);
-        uint pathTileFloor = AddSizingSlack(ScaleCount((uint)Math.Max(scene.TotalTileMembershipCount, scene.PathCount), chunkTileHeight, fullTileHeight));
+        uint pathRowFloor = ScaleCount((uint)Math.Max(scene.TotalPathRowCount, scene.PathCount), chunkTileHeight, fullTileHeight);
+        uint pathTileFloor = pathRowFloor;
         uint segmentFloor = AddSizingSlack(ScaleCount((uint)scene.LineCount, chunkTileHeight, fullTileHeight));
 
         return new WebGPUSceneBumpSizes(
             sourceBumpSizes.Lines,
             sourceBumpSizes.Binning,
+            Math.Max(ScaleCount(sourceBumpSizes.PathRows, chunkTileHeight, fullTileHeight), pathRowFloor),
             Math.Max(ScaleCount(sourceBumpSizes.PathTiles, chunkTileHeight, fullTileHeight), pathTileFloor),
             Math.Max(ScaleCount(sourceBumpSizes.SegCounts, chunkTileHeight, fullTileHeight), segmentFloor),
             Math.Max(ScaleCount(sourceBumpSizes.Segments, chunkTileHeight, fullTileHeight), segmentFloor),
@@ -1301,9 +1586,32 @@ internal static class WebGPUSceneDispatch
             ScaleCount(sourceBumpSizes.Ptcl, chunkTileHeight, fullTileHeight));
     }
 
+    /// <summary>
+    /// Raises the caller-provided scratch capacities to the scene-specific lower bounds already known on the CPU so the first GPU attempt does not waste a full-scene pass on allocations that cannot possibly fit.
+    /// </summary>
+    /// <param name="currentSizes">The persisted scratch capacities carried into this flush.</param>
+    /// <param name="scene">The encoded scene whose line count and path-tile estimate provide guaranteed minimum capacities.</param>
+    /// <returns>The retained capacities raised to the scene's known CPU-side lower bounds.</returns>
+    private static WebGPUSceneBumpSizes SeedSceneBumpSizes(WebGPUSceneBumpSizes currentSizes, WebGPUEncodedScene scene)
+    {
+        uint lineFloor = AddSizingSlack(checked((uint)Math.Max(scene.LineCount, 1)));
+        uint pathRowFloor = checked((uint)Math.Max(scene.TotalPathRowCount, scene.PathCount));
+        uint pathTileFloor = pathRowFloor;
+
+        return new WebGPUSceneBumpSizes(
+            Math.Max(currentSizes.Lines, lineFloor),
+            currentSizes.Binning,
+            Math.Max(currentSizes.PathRows, pathRowFloor),
+            Math.Max(currentSizes.PathTiles, pathTileFloor),
+            Math.Max(currentSizes.SegCounts, lineFloor),
+            Math.Max(currentSizes.Segments, lineFloor),
+            currentSizes.BlendSpill,
+            currentSizes.Ptcl);
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsChunkableBindingFailure(BindingLimitBuffer buffer)
-        => buffer is BindingLimitBuffer.PathTiles or BindingLimitBuffer.SegCounts or BindingLimitBuffer.Segments;
+        => buffer is BindingLimitBuffer.PathRows or BindingLimitBuffer.PathTiles or BindingLimitBuffer.SegCounts or BindingLimitBuffer.Segments or BindingLimitBuffer.BlendSpill or BindingLimitBuffer.Ptcl;
 
     /// <summary>
     /// Scales one count by the chunk's tile-height ratio while keeping the result non-zero.
@@ -1378,6 +1686,7 @@ internal static class WebGPUSceneDispatch
         => bumpAllocators.Failed != 0 ||
            bumpAllocators.Binning > currentSizes.Binning ||
            bumpAllocators.Ptcl > currentSizes.Ptcl ||
+           bumpAllocators.PathRows > currentSizes.PathRows ||
            bumpAllocators.Tile > currentSizes.PathTiles ||
            bumpAllocators.SegCounts > currentSizes.SegCounts ||
            bumpAllocators.Segments > currentSizes.Segments ||
@@ -1395,6 +1704,7 @@ internal static class WebGPUSceneDispatch
         WebGPUSceneBumpSizes grownSizes = new(
             GrowBumpSize(currentSizes.Lines, bumpAllocators.Lines),
             GrowBumpSize(currentSizes.Binning, bumpAllocators.Binning),
+            GrowBumpSize(currentSizes.PathRows, bumpAllocators.PathRows),
             GrowBumpSize(currentSizes.PathTiles, bumpAllocators.Tile),
             GrowBumpSize(currentSizes.SegCounts, bumpAllocators.SegCounts),
             GrowBumpSize(currentSizes.Segments, bumpAllocators.Segments),
@@ -1409,6 +1719,7 @@ internal static class WebGPUSceneDispatch
         return new WebGPUSceneBumpSizes(
             ForceGrowBumpSize(currentSizes.Lines),
             ForceGrowBumpSize(currentSizes.Binning),
+            ForceGrowBumpSize(currentSizes.PathRows),
             ForceGrowBumpSize(currentSizes.PathTiles),
             ForceGrowBumpSize(currentSizes.SegCounts),
             ForceGrowBumpSize(currentSizes.Segments),
@@ -1421,6 +1732,7 @@ internal static class WebGPUSceneDispatch
         => new(
             Math.Max(left.Lines, right.Lines),
             Math.Max(left.Binning, right.Binning),
+            Math.Max(left.PathRows, right.PathRows),
             Math.Max(left.PathTiles, right.PathTiles),
             Math.Max(left.SegCounts, right.SegCounts),
             Math.Max(left.Segments, right.Segments),
@@ -1431,6 +1743,7 @@ internal static class WebGPUSceneDispatch
     private static bool AreBumpSizesEqual(WebGPUSceneBumpSizes left, WebGPUSceneBumpSizes right)
         => left.Lines == right.Lines &&
            left.Binning == right.Binning &&
+           left.PathRows == right.PathRows &&
            left.PathTiles == right.PathTiles &&
            left.SegCounts == right.SegCounts &&
            left.Segments == right.Segments &&
@@ -1678,13 +1991,11 @@ internal static class WebGPUSceneDispatch
         nuint clipBboxBufferSize,
         nuint drawBboxBufferSize,
         nuint infoBinDataBufferSize,
-        WgpuBuffer* binHeaderBuffer,
-        nuint binHeaderBufferSize,
         WgpuBuffer* bumpBuffer,
         uint dispatchX,
         out string? error)
     {
-        BindGroupEntry* entries = stackalloc BindGroupEntry[8];
+        BindGroupEntry* entries = stackalloc BindGroupEntry[7];
         entries[0] = CreateBufferBinding(0, resources.HeaderBuffer, (nuint)sizeof(GpuSceneConfig));
         entries[1] = CreateBufferBinding(1, resources.DrawMonoidBuffer, drawMonoidBufferSize);
         entries[2] = CreateBufferBinding(2, resources.PathBboxBuffer, pathBboxBufferSize);
@@ -1692,9 +2003,8 @@ internal static class WebGPUSceneDispatch
         entries[4] = CreateBufferBinding(4, resources.DrawBboxBuffer, drawBboxBufferSize);
         entries[5] = CreateBufferBinding(5, bumpBuffer, (nuint)sizeof(GpuSceneBumpAllocators));
         entries[6] = CreateBufferBinding(6, resources.InfoBinDataBuffer, infoBinDataBufferSize);
-        entries[7] = CreateBufferBinding(7, binHeaderBuffer, binHeaderBufferSize);
 
-        if (!recording.TryRecord(WebGPUSceneShaderId.Binning, entries, 8, dispatchX, 1, 1, out error))
+        if (!recording.TryRecord(WebGPUSceneShaderId.Binning, entries, 7, dispatchX, 1, 1, out error))
         {
             return false;
         }
@@ -1859,7 +2169,8 @@ internal static class WebGPUSceneDispatch
                 WebGPUSceneBumpSizes chunkActuals = new(
                     Math.Max(bumpAllocators.Lines, currentSizes.Lines),
                     Math.Max(bumpAllocators.Binning, currentSizes.Binning),
-                    Math.Max(bumpAllocators.Tile, currentSizes.PathTiles),
+                    Math.Max(bumpAllocators.PathRows, 1U),
+                    Math.Max(bumpAllocators.Tile, 1U),
                     Math.Max(bumpAllocators.SegCounts, currentSizes.SegCounts),
                     Math.Max(bumpAllocators.Segments, currentSizes.Segments),
                     Math.Max(bumpAllocators.BlendSpill, currentSizes.BlendSpill),
@@ -1892,6 +2203,7 @@ internal static class WebGPUSceneDispatch
         => new(
             chunkSizes.Lines,
             chunkSizes.Binning,
+            ScaleChunkRequirementToSceneBudget(chunkSizes.PathRows, fullTileHeight, chunkTileHeight),
             ScaleChunkRequirementToSceneBudget(chunkSizes.PathTiles, fullTileHeight, chunkTileHeight),
             ScaleChunkRequirementToSceneBudget(chunkSizes.SegCounts, fullTileHeight, chunkTileHeight),
             ScaleChunkRequirementToSceneBudget(chunkSizes.Segments, fullTileHeight, chunkTileHeight),
@@ -1906,15 +2218,30 @@ internal static class WebGPUSceneDispatch
         return checked((uint)Math.Max(1UL, (numerator + denominator - 1UL) / denominator));
     }
 
-    private static unsafe bool TryDispatchTileAlloc(
+    /// <summary>
+    /// Records the sparse path-row allocation stage that reserves one row descriptor per active tile row in each path.
+    /// </summary>
+    /// <param name="recording">The compute recording that receives the staged dispatch.</param>
+    /// <param name="flushContext">The flush context that owns the current device.</param>
+    /// <param name="resources">The staged-scene resource set that provides the scene, draw-bbox, and path buffers.</param>
+    /// <param name="sceneBufferSize">The byte length of the packed scene buffer binding.</param>
+    /// <param name="drawBboxBufferSize">The byte length of the draw-bbox buffer binding.</param>
+    /// <param name="pathBufferSize">The byte length of the per-path buffer binding.</param>
+    /// <param name="pathRowBuffer">The sparse path-row buffer to populate.</param>
+    /// <param name="pathRowBufferSize">The byte length of the sparse path-row buffer binding.</param>
+    /// <param name="bumpBuffer">The scheduling bump-allocator buffer.</param>
+    /// <param name="dispatchX">The X workgroup count for the stage.</param>
+    /// <param name="error">Receives the recording failure reason when the dispatch cannot be staged.</param>
+    /// <returns><see langword="true"/> when the dispatch was recorded successfully; otherwise, <see langword="false"/>.</returns>
+    private static unsafe bool TryDispatchPathRowAlloc(
         WebGPUSceneComputeRecording recording,
         WebGPUFlushContext flushContext,
         WebGPUSceneResourceSet resources,
         nuint sceneBufferSize,
         nuint drawBboxBufferSize,
         nuint pathBufferSize,
-        WgpuBuffer* pathTileBuffer,
-        nuint pathTileBufferSize,
+        WgpuBuffer* pathRowBuffer,
+        nuint pathRowBufferSize,
         WgpuBuffer* bumpBuffer,
         uint dispatchX,
         out string? error)
@@ -1925,9 +2252,80 @@ internal static class WebGPUSceneDispatch
         entries[2] = CreateBufferBinding(2, resources.DrawBboxBuffer, drawBboxBufferSize);
         entries[3] = CreateBufferBinding(3, bumpBuffer, (nuint)sizeof(GpuSceneBumpAllocators));
         entries[4] = CreateBufferBinding(4, resources.PathBuffer, pathBufferSize);
-        entries[5] = CreateBufferBinding(5, pathTileBuffer, pathTileBufferSize);
+        entries[5] = CreateBufferBinding(5, pathRowBuffer, pathRowBufferSize);
 
-        if (!recording.TryRecord(WebGPUSceneShaderId.TileAlloc, entries, 6, dispatchX, 1, 1, out error))
+        if (!recording.TryRecord(WebGPUSceneShaderId.PathRowAlloc, entries, 6, dispatchX, 1, 1, out error))
+        {
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Records the line-driven pass that discovers each sparse row's active x span.
+    /// </summary>
+    /// <param name="recording">The compute recording that receives the staged dispatch.</param>
+    /// <param name="flushContext">The flush context that owns the current device.</param>
+    /// <param name="resources">The staged-scene resource set that provides the line and path buffers.</param>
+    /// <param name="bumpBuffer">The scheduling bump-allocator buffer.</param>
+    /// <param name="pathBufferSize">The byte length of the per-path buffer binding.</param>
+    /// <param name="pathRowBuffer">The sparse path-row buffer to update.</param>
+    /// <param name="pathRowBufferSize">The byte length of the sparse path-row buffer binding.</param>
+    /// <param name="lineBufferSize">The byte length of the flattened line buffer binding.</param>
+    /// <param name="indirectCountBuffer">The indirect-dispatch argument buffer seeded from the line count.</param>
+    /// <param name="error">Receives the recording failure reason when the dispatch cannot be staged.</param>
+    /// <returns><see langword="true"/> when the dispatch was recorded successfully; otherwise, <see langword="false"/>.</returns>
+    private static unsafe bool TryDispatchPathRowSpan(
+        WebGPUSceneComputeRecording recording,
+        WebGPUFlushContext flushContext,
+        WebGPUSceneResourceSet resources,
+        WgpuBuffer* bumpBuffer,
+        nuint pathBufferSize,
+        WgpuBuffer* pathRowBuffer,
+        nuint pathRowBufferSize,
+        nuint lineBufferSize,
+        WgpuBuffer* indirectCountBuffer,
+        out string? error)
+    {
+        BindGroupEntry* entries = stackalloc BindGroupEntry[5];
+        entries[0] = CreateBufferBinding(0, resources.HeaderBuffer, (nuint)sizeof(GpuSceneConfig));
+        entries[1] = CreateBufferBinding(1, bumpBuffer, (nuint)sizeof(GpuSceneBumpAllocators));
+        entries[2] = CreateBufferBinding(2, resources.LineBuffer, lineBufferSize);
+        entries[3] = CreateBufferBinding(3, resources.PathBuffer, pathBufferSize);
+        entries[4] = CreateBufferBinding(4, pathRowBuffer, pathRowBufferSize);
+
+        if (!recording.TryRecordIndirect(WebGPUSceneShaderId.PathRowSpan, entries, 5, indirectCountBuffer, 0, out error))
+        {
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
+    private static unsafe bool TryDispatchTileAlloc(
+        WebGPUSceneComputeRecording recording,
+        WebGPUFlushContext flushContext,
+        WebGPUSceneResourceSet resources,
+        WgpuBuffer* bumpBuffer,
+        nuint pathBufferSize,
+        WgpuBuffer* pathRowBuffer,
+        nuint pathRowBufferSize,
+        WgpuBuffer* pathTileBuffer,
+        nuint pathTileBufferSize,
+        uint dispatchX,
+        out string? error)
+    {
+        BindGroupEntry* entries = stackalloc BindGroupEntry[5];
+        entries[0] = CreateBufferBinding(0, resources.HeaderBuffer, (nuint)sizeof(GpuSceneConfig));
+        entries[1] = CreateBufferBinding(1, bumpBuffer, (nuint)sizeof(GpuSceneBumpAllocators));
+        entries[2] = CreateBufferBinding(2, resources.PathBuffer, pathBufferSize);
+        entries[3] = CreateBufferBinding(3, pathRowBuffer, pathRowBufferSize);
+        entries[4] = CreateBufferBinding(4, pathTileBuffer, pathTileBufferSize);
+
+        if (!recording.TryRecord(WebGPUSceneShaderId.TileAlloc, entries, 5, dispatchX, 1, 1, out error))
         {
             return false;
         }
@@ -1942,18 +2340,21 @@ internal static class WebGPUSceneDispatch
         WebGPUSceneResourceSet resources,
         WgpuBuffer* bumpBuffer,
         nuint pathBufferSize,
+        WgpuBuffer* pathRowBuffer,
+        nuint pathRowBufferSize,
         WgpuBuffer* pathTileBuffer,
         nuint pathTileBufferSize,
         uint dispatchX,
         out string? error)
     {
-        BindGroupEntry* entries = stackalloc BindGroupEntry[4];
+        BindGroupEntry* entries = stackalloc BindGroupEntry[5];
         entries[0] = CreateBufferBinding(0, resources.HeaderBuffer, (nuint)sizeof(GpuSceneConfig));
         entries[1] = CreateBufferBinding(1, bumpBuffer, (nuint)sizeof(GpuSceneBumpAllocators));
         entries[2] = CreateBufferBinding(2, resources.PathBuffer, pathBufferSize);
-        entries[3] = CreateBufferBinding(3, pathTileBuffer, pathTileBufferSize);
+        entries[3] = CreateBufferBinding(3, pathRowBuffer, pathRowBufferSize);
+        entries[4] = CreateBufferBinding(4, pathTileBuffer, pathTileBufferSize);
 
-        if (!recording.TryRecord(WebGPUSceneShaderId.Backdrop, entries, 4, dispatchX, 1, 1, out error))
+        if (!recording.TryRecord(WebGPUSceneShaderId.Backdrop, entries, 5, dispatchX, 1, 1, out error))
         {
             return false;
         }
@@ -2014,12 +2415,40 @@ internal static class WebGPUSceneDispatch
         return true;
     }
 
+    /// <summary>
+    /// Records the one-workgroup reset pass that keeps the shared full-scene bump counters while clearing the chunk-local allocators between oversized-scene tile windows.
+    /// </summary>
+    /// <param name="recording">The flush-scoped compute recording that receives the reset dispatch.</param>
+    /// <param name="bumpBuffer">The scheduling bump-allocator buffer whose shared counters must be preserved while chunk-local counters are cleared.</param>
+    /// <param name="dispatchX">The X workgroup count for the reset pass.</param>
+    /// <param name="error">Receives the recording failure reason when the reset dispatch cannot be staged.</param>
+    /// <returns><see langword="true"/> when the reset dispatch was recorded successfully; otherwise, <see langword="false"/>.</returns>
+    private static unsafe bool TryDispatchChunkReset(
+        WebGPUSceneComputeRecording recording,
+        WgpuBuffer* bumpBuffer,
+        uint dispatchX,
+        out string? error)
+    {
+        BindGroupEntry* entries = stackalloc BindGroupEntry[1];
+        entries[0] = CreateBufferBinding(0, bumpBuffer, (nuint)sizeof(GpuSceneBumpAllocators));
+
+        if (!recording.TryRecord(WebGPUSceneShaderId.ChunkReset, entries, 1, dispatchX, 1, 1, out error))
+        {
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
     private static unsafe bool TryDispatchPathCount(
         WebGPUSceneComputeRecording recording,
         WebGPUFlushContext flushContext,
         WebGPUSceneResourceSet resources,
         WgpuBuffer* bumpBuffer,
         nuint pathBufferSize,
+        WgpuBuffer* pathRowBuffer,
+        nuint pathRowBufferSize,
         WgpuBuffer* pathTileBuffer,
         nuint pathTileBufferSize,
         WgpuBuffer* segCountBuffer,
@@ -2028,15 +2457,16 @@ internal static class WebGPUSceneDispatch
         WgpuBuffer* indirectCountBuffer,
         out string? error)
     {
-        BindGroupEntry* entries = stackalloc BindGroupEntry[6];
+        BindGroupEntry* entries = stackalloc BindGroupEntry[7];
         entries[0] = CreateBufferBinding(0, resources.HeaderBuffer, (nuint)sizeof(GpuSceneConfig));
         entries[1] = CreateBufferBinding(1, bumpBuffer, (nuint)sizeof(GpuSceneBumpAllocators));
         entries[2] = CreateBufferBinding(2, resources.LineBuffer, lineBufferSize);
         entries[3] = CreateBufferBinding(3, resources.PathBuffer, pathBufferSize);
-        entries[4] = CreateBufferBinding(4, pathTileBuffer, pathTileBufferSize);
-        entries[5] = CreateBufferBinding(5, segCountBuffer, segCountBufferSize);
+        entries[4] = CreateBufferBinding(4, pathRowBuffer, pathRowBufferSize);
+        entries[5] = CreateBufferBinding(5, pathTileBuffer, pathTileBufferSize);
+        entries[6] = CreateBufferBinding(6, segCountBuffer, segCountBufferSize);
 
-        if (!recording.TryRecordIndirect(WebGPUSceneShaderId.PathCount, entries, 6, indirectCountBuffer, 0, out error))
+        if (!recording.TryRecordIndirect(WebGPUSceneShaderId.PathCount, entries, 7, indirectCountBuffer, 0, out error))
         {
             return false;
         }
@@ -2052,9 +2482,9 @@ internal static class WebGPUSceneDispatch
         nuint sceneBufferSize,
         nuint drawMonoidBufferSize,
         nuint infoBinDataBufferSize,
-        WgpuBuffer* binHeaderBuffer,
-        nuint binHeaderBufferSize,
         nuint pathBufferSize,
+        WgpuBuffer* pathRowBuffer,
+        nuint pathRowBufferSize,
         WgpuBuffer* pathTileBuffer,
         nuint pathTileBufferSize,
         WgpuBuffer* ptclBuffer,
@@ -2068,9 +2498,9 @@ internal static class WebGPUSceneDispatch
         entries[0] = CreateBufferBinding(0, resources.HeaderBuffer, (nuint)sizeof(GpuSceneConfig));
         entries[1] = CreateBufferBinding(1, resources.SceneBuffer, sceneBufferSize);
         entries[2] = CreateBufferBinding(2, resources.DrawMonoidBuffer, drawMonoidBufferSize);
-        entries[3] = CreateBufferBinding(3, binHeaderBuffer, binHeaderBufferSize);
-        entries[4] = CreateBufferBinding(4, resources.InfoBinDataBuffer, infoBinDataBufferSize);
-        entries[5] = CreateBufferBinding(5, resources.PathBuffer, pathBufferSize);
+        entries[3] = CreateBufferBinding(3, resources.InfoBinDataBuffer, infoBinDataBufferSize);
+        entries[4] = CreateBufferBinding(4, resources.PathBuffer, pathBufferSize);
+        entries[5] = CreateBufferBinding(5, pathRowBuffer, pathRowBufferSize);
         entries[6] = CreateBufferBinding(6, pathTileBuffer, pathTileBufferSize);
         entries[7] = CreateBufferBinding(7, bumpBuffer, (nuint)sizeof(GpuSceneBumpAllocators));
         entries[8] = CreateBufferBinding(8, ptclBuffer, ptclBufferSize);
@@ -2119,6 +2549,8 @@ internal static class WebGPUSceneDispatch
         nuint segCountBufferSize,
         nuint lineBufferSize,
         nuint pathBufferSize,
+        WgpuBuffer* pathRowBuffer,
+        nuint pathRowBufferSize,
         WgpuBuffer* pathTileBuffer,
         nuint pathTileBufferSize,
         WgpuBuffer* segmentBuffer,
@@ -2126,15 +2558,16 @@ internal static class WebGPUSceneDispatch
         WgpuBuffer* indirectCountBuffer,
         out string? error)
     {
-        BindGroupEntry* entries = stackalloc BindGroupEntry[6];
+        BindGroupEntry* entries = stackalloc BindGroupEntry[7];
         entries[0] = CreateBufferBinding(0, bumpBuffer, (nuint)sizeof(GpuSceneBumpAllocators));
         entries[1] = CreateBufferBinding(1, segCountBuffer, segCountBufferSize);
         entries[2] = CreateBufferBinding(2, resources.LineBuffer, lineBufferSize);
         entries[3] = CreateBufferBinding(3, resources.PathBuffer, pathBufferSize);
-        entries[4] = CreateBufferBinding(4, pathTileBuffer, pathTileBufferSize);
-        entries[5] = CreateBufferBinding(5, segmentBuffer, segmentBufferSize);
+        entries[4] = CreateBufferBinding(4, pathRowBuffer, pathRowBufferSize);
+        entries[5] = CreateBufferBinding(5, pathTileBuffer, pathTileBufferSize);
+        entries[6] = CreateBufferBinding(6, segmentBuffer, segmentBufferSize);
 
-        if (!recording.TryRecordIndirect(WebGPUSceneShaderId.PathTiling, entries, 6, indirectCountBuffer, 0, out error))
+        if (!recording.TryRecordIndirect(WebGPUSceneShaderId.PathTiling, entries, 7, indirectCountBuffer, 0, out error))
         {
             return false;
         }
@@ -2199,7 +2632,7 @@ internal static class WebGPUSceneDispatch
         entries[0] = CreateBufferBinding(0, resources.HeaderBuffer, (nuint)sizeof(GpuSceneConfig));
         entries[1] = CreateBufferBinding(1, scheduling.SegmentBuffer, bufferSizes.Segments.ByteLength);
         entries[2] = CreateBufferBinding(2, scheduling.PtclBuffer, bufferSizes.Ptcl.ByteLength);
-        entries[3] = CreateBufferBinding(3, resources.InfoBinDataBuffer, checked(GetBindingByteLength<uint>(encodedScene.InfoWordCount) + bufferSizes.BinData.ByteLength));
+        entries[3] = CreateBufferBinding(3, resources.InfoBinDataBuffer, checked(GetBindingByteLength<uint>(encodedScene.InfoWordCount) + bufferSizes.BinData.ByteLength + bufferSizes.BinHeaders.ByteLength));
         entries[4] = CreateBufferBinding(4, scheduling.BlendBuffer, bufferSizes.BlendSpill.ByteLength);
         entries[5] = new BindGroupEntry { Binding = 5, TextureView = outputTextureView };
         entries[6] = new BindGroupEntry { Binding = 6, TextureView = resources.GradientTextureView };
@@ -2460,6 +2893,8 @@ internal static class WebGPUSceneDispatch
             WebGPUSceneShaderId.ClipReduce => "clip_reduce",
             WebGPUSceneShaderId.ClipLeaf => "clip_leaf",
             WebGPUSceneShaderId.Binning => "binning",
+            WebGPUSceneShaderId.PathRowAlloc => "path_row_alloc",
+            WebGPUSceneShaderId.PathRowSpan => "path_row_span",
             WebGPUSceneShaderId.TileAlloc => "tile_alloc",
             WebGPUSceneShaderId.Backdrop => "backdrop",
             WebGPUSceneShaderId.PathCountSetup => "path_count_setup",
@@ -2467,6 +2902,7 @@ internal static class WebGPUSceneDispatch
             WebGPUSceneShaderId.Coarse => "coarse",
             WebGPUSceneShaderId.PathTilingSetup => "path_tiling_setup",
             WebGPUSceneShaderId.PathTiling => "path_tiling",
+            WebGPUSceneShaderId.ChunkReset => "chunk_reset",
             _ => "unknown",
         };
 
@@ -2498,6 +2934,8 @@ internal static class WebGPUSceneDispatch
                 WebGPUSceneShaderId.ClipReduce => ClipReduceComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 WebGPUSceneShaderId.ClipLeaf => ClipLeafComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 WebGPUSceneShaderId.Binning => BinningComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
+                WebGPUSceneShaderId.PathRowAlloc => PathRowAllocComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
+                WebGPUSceneShaderId.PathRowSpan => PathRowSpanComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 WebGPUSceneShaderId.TileAlloc => TileAllocComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 WebGPUSceneShaderId.Backdrop => BackdropComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 WebGPUSceneShaderId.PathCountSetup => PathCountSetupComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
@@ -2505,6 +2943,7 @@ internal static class WebGPUSceneDispatch
                 WebGPUSceneShaderId.Coarse => CoarseComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 WebGPUSceneShaderId.PathTilingSetup => PathTilingSetupComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 WebGPUSceneShaderId.PathTiling => PathTilingComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
+                WebGPUSceneShaderId.ChunkReset => ChunkResetComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 _ => throw new UnreachableException()
             };
 
@@ -2523,6 +2962,8 @@ internal static class WebGPUSceneDispatch
             WebGPUSceneShaderId.ClipReduce => ClipReduceComputeShader.ShaderCode,
             WebGPUSceneShaderId.ClipLeaf => ClipLeafComputeShader.ShaderCode,
             WebGPUSceneShaderId.Binning => BinningComputeShader.ShaderCode,
+            WebGPUSceneShaderId.PathRowAlloc => PathRowAllocComputeShader.ShaderCode,
+            WebGPUSceneShaderId.PathRowSpan => PathRowSpanComputeShader.ShaderCode,
             WebGPUSceneShaderId.TileAlloc => TileAllocComputeShader.ShaderCode,
             WebGPUSceneShaderId.Backdrop => BackdropComputeShader.ShaderCode,
             WebGPUSceneShaderId.PathCountSetup => PathCountSetupComputeShader.ShaderCode,
@@ -2530,6 +2971,7 @@ internal static class WebGPUSceneDispatch
             WebGPUSceneShaderId.Coarse => CoarseComputeShader.ShaderCode,
             WebGPUSceneShaderId.PathTilingSetup => PathTilingSetupComputeShader.ShaderCode,
             WebGPUSceneShaderId.PathTiling => PathTilingComputeShader.ShaderCode,
+            WebGPUSceneShaderId.ChunkReset => ChunkResetComputeShader.ShaderCode,
             _ => throw new UnreachableException()
         };
 
@@ -2547,6 +2989,8 @@ internal static class WebGPUSceneDispatch
             WebGPUSceneShaderId.ClipReduce => ClipReduceComputeShader.EntryPoint,
             WebGPUSceneShaderId.ClipLeaf => ClipLeafComputeShader.EntryPoint,
             WebGPUSceneShaderId.Binning => BinningComputeShader.EntryPoint,
+            WebGPUSceneShaderId.PathRowAlloc => PathRowAllocComputeShader.EntryPoint,
+            WebGPUSceneShaderId.PathRowSpan => PathRowSpanComputeShader.EntryPoint,
             WebGPUSceneShaderId.TileAlloc => TileAllocComputeShader.EntryPoint,
             WebGPUSceneShaderId.Backdrop => BackdropComputeShader.EntryPoint,
             WebGPUSceneShaderId.PathCountSetup => PathCountSetupComputeShader.EntryPoint,
@@ -2554,6 +2998,7 @@ internal static class WebGPUSceneDispatch
             WebGPUSceneShaderId.Coarse => CoarseComputeShader.EntryPoint,
             WebGPUSceneShaderId.PathTilingSetup => PathTilingSetupComputeShader.EntryPoint,
             WebGPUSceneShaderId.PathTiling => PathTilingComputeShader.EntryPoint,
+            WebGPUSceneShaderId.ChunkReset => ChunkResetComputeShader.EntryPoint,
             _ => throw new UnreachableException()
         };
 
@@ -2572,6 +3017,8 @@ internal static class WebGPUSceneDispatch
             WebGPUSceneShaderId.ClipReduce => ClipReducePipelineKey,
             WebGPUSceneShaderId.ClipLeaf => ClipLeafPipelineKey,
             WebGPUSceneShaderId.Binning => BinningPipelineKey,
+            WebGPUSceneShaderId.PathRowAlloc => PathRowAllocPipelineKey,
+            WebGPUSceneShaderId.PathRowSpan => PathRowSpanPipelineKey,
             WebGPUSceneShaderId.TileAlloc => TileAllocPipelineKey,
             WebGPUSceneShaderId.Backdrop => BackdropPipelineKey,
             WebGPUSceneShaderId.PathCountSetup => PathCountSetupPipelineKey,
@@ -2579,6 +3026,7 @@ internal static class WebGPUSceneDispatch
             WebGPUSceneShaderId.Coarse => CoarsePipelineKey,
             WebGPUSceneShaderId.PathTilingSetup => PathTilingSetupPipelineKey,
             WebGPUSceneShaderId.PathTiling => PathTilingPipelineKey,
+            WebGPUSceneShaderId.ChunkReset => ChunkResetPipelineKey,
             _ => throw new UnreachableException()
         };
 
@@ -2765,6 +3213,38 @@ internal static class WebGPUSceneDispatch
     }
 
     /// <summary>
+    /// Creates one flush-scoped copy-source buffer and uploads a single unmanaged value into it.
+    /// </summary>
+    /// <param name="flushContext">The flush context that owns the device and queue used to create and populate the copy-source buffer.</param>
+    /// <param name="value">The unmanaged value to upload into the new copy-source buffer.</param>
+    /// <param name="buffer">Receives the created copy-source buffer on success.</param>
+    /// <param name="error">Receives the creation or upload failure reason when the buffer cannot be prepared.</param>
+    /// <returns><see langword="true"/> when the copy-source buffer was created and populated successfully; otherwise, <see langword="false"/>.</returns>
+    /// <typeparam name="T">The unmanaged payload type uploaded into the new copy-source buffer.</typeparam>
+    private static unsafe bool TryCreateAndUploadCopySourceBuffer<T>(
+        WebGPUFlushContext flushContext,
+        in T value,
+        out WgpuBuffer* buffer,
+        out string? error)
+        where T : unmanaged
+    {
+        if (!TryCreateBuffer(flushContext, (nuint)sizeof(T), BufferUsage.CopySrc | BufferUsage.CopyDst, out buffer, out error))
+        {
+            return false;
+        }
+
+        using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
+        flushContext.Api.QueueWriteBuffer(
+            (Queue*)queueReference.Handle,
+            buffer,
+            0,
+            Unsafe.AsPointer(ref Unsafe.AsRef(in value)),
+            (nuint)sizeof(T));
+        error = null;
+        return true;
+    }
+
+    /// <summary>
     /// Creates one reusable scheduling storage buffer and uploads a single unmanaged value into it.
     /// </summary>
     private static unsafe bool TryCreateAndUploadArenaStorageBuffer<T>(
@@ -2841,6 +3321,10 @@ internal static class WebGPUSceneDispatch
     /// <summary>
     /// Pumps the WebGPU device while waiting for one asynchronous map callback to signal completion.
     /// </summary>
+    /// <param name="extension">The optional native WGPU extension used to advance callback delivery.</param>
+    /// <param name="device">The device that owns the mapped readback buffer.</param>
+    /// <param name="signal">The event that the map callback sets when the copy is ready to read.</param>
+    /// <returns><see langword="true"/> when the callback completed before the timeout; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static unsafe bool WaitForMapSignal(Wgpu? extension, Device* device, ManualResetEventSlim signal)
     {
@@ -2850,9 +3334,22 @@ internal static class WebGPUSceneDispatch
         }
 
         Stopwatch stopwatch = Stopwatch.StartNew();
-        while (!signal.IsSet && stopwatch.ElapsedMilliseconds < 5000)
+        while (!signal.IsSet)
         {
-            _ = extension.DevicePoll(device, true, (WrappedSubmissionIndex*)null);
+            int remainingMilliseconds = 5000 - (int)stopwatch.ElapsedMilliseconds;
+            if (remainingMilliseconds <= 0)
+            {
+                break;
+            }
+
+            // The map callback still needs DevicePoll to make progress, but a tight blocking poll loop
+            // can monopolize the CPU while the driver is trying to retire the submitted work. Poll once,
+            // then yield briefly so the callback and driver threads can run without the flush thread hot-spinning.
+            _ = extension.DevicePoll(device, false, (WrappedSubmissionIndex*)null);
+            if (!signal.IsSet)
+            {
+                _ = signal.Wait(Math.Min(remainingMilliseconds, 1));
+            }
         }
 
         return signal.IsSet;
@@ -3010,13 +3507,16 @@ internal enum WebGPUSceneShaderId
     ClipReduce = 10,
     ClipLeaf = 11,
     Binning = 12,
-    TileAlloc = 13,
-    Backdrop = 14,
-    PathCountSetup = 15,
-    PathCount = 16,
-    Coarse = 17,
-    PathTilingSetup = 18,
-    PathTiling = 19
+    PathRowAlloc = 13,
+    PathRowSpan = 14,
+    TileAlloc = 15,
+    Backdrop = 16,
+    PathCountSetup = 17,
+    PathCount = 18,
+    Coarse = 19,
+    PathTilingSetup = 20,
+    PathTiling = 21,
+    ChunkReset = 22
 }
 
 /// <summary>
@@ -3113,6 +3613,7 @@ internal sealed unsafe class WebGPUSceneResourceRegistry
     public void RegisterSchedulingBuffers(
         WgpuBuffer* binHeaderBuffer,
         WgpuBuffer* indirectCountBuffer,
+        WgpuBuffer* pathRowBuffer,
         WgpuBuffer* pathTileBuffer,
         WgpuBuffer* segCountBuffer,
         WgpuBuffer* segmentBuffer,
@@ -3122,6 +3623,7 @@ internal sealed unsafe class WebGPUSceneResourceRegistry
     {
         this.RegisterBuffer(binHeaderBuffer);
         this.RegisterBuffer(indirectCountBuffer);
+        this.RegisterBuffer(pathRowBuffer);
         this.RegisterBuffer(pathTileBuffer);
         this.RegisterBuffer(segCountBuffer);
         this.RegisterBuffer(segmentBuffer);
@@ -3255,6 +3757,7 @@ internal readonly unsafe struct WebGPUSceneSchedulingResources
     public WebGPUSceneSchedulingResources(
         WgpuBuffer* binHeaderBuffer,
         WgpuBuffer* indirectCountBuffer,
+        WgpuBuffer* pathRowBuffer,
         WgpuBuffer* pathTileBuffer,
         WgpuBuffer* segCountBuffer,
         WgpuBuffer* segmentBuffer,
@@ -3264,6 +3767,7 @@ internal readonly unsafe struct WebGPUSceneSchedulingResources
     {
         this.BinHeaderBuffer = binHeaderBuffer;
         this.IndirectCountBuffer = indirectCountBuffer;
+        this.PathRowBuffer = pathRowBuffer;
         this.PathTileBuffer = pathTileBuffer;
         this.SegCountBuffer = segCountBuffer;
         this.SegmentBuffer = segmentBuffer;
@@ -3281,6 +3785,11 @@ internal readonly unsafe struct WebGPUSceneSchedulingResources
     /// Gets the indirect dispatch-count buffer produced by the scheduling passes.
     /// </summary>
     public WgpuBuffer* IndirectCountBuffer { get; }
+
+    /// <summary>
+    /// Gets the sparse path-row buffer produced by the scheduling passes.
+    /// </summary>
+    public WgpuBuffer* PathRowBuffer { get; }
 
     /// <summary>
     /// Gets the path-tile buffer produced by the scheduling passes.
@@ -3325,6 +3834,7 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
         nuint readbackByteLength,
         WgpuBuffer* binHeaderBuffer,
         WgpuBuffer* indirectCountBuffer,
+        WgpuBuffer* pathRowBuffer,
         WgpuBuffer* pathTileBuffer,
         WgpuBuffer* segCountBuffer,
         WgpuBuffer* segmentBuffer,
@@ -3339,6 +3849,7 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
         this.ReadbackByteLength = readbackByteLength;
         this.BinHeaderBuffer = binHeaderBuffer;
         this.IndirectCountBuffer = indirectCountBuffer;
+        this.PathRowBuffer = pathRowBuffer;
         this.PathTileBuffer = pathTileBuffer;
         this.SegCountBuffer = segCountBuffer;
         this.SegmentBuffer = segmentBuffer;
@@ -3366,6 +3877,8 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
 
     public WgpuBuffer* IndirectCountBuffer { get; }
 
+    public WgpuBuffer* PathRowBuffer { get; }
+
     public WgpuBuffer* PathTileBuffer { get; }
 
     public WgpuBuffer* SegCountBuffer { get; }
@@ -3387,6 +3900,7 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
         => ReferenceEquals(this.Device, flushContext.DeviceHandle) &&
            this.BinHeaderBuffer is not null &&
            this.IndirectCountBuffer is not null &&
+           this.PathRowBuffer is not null &&
            this.PathTileBuffer is not null &&
            this.SegCountBuffer is not null &&
            this.SegmentBuffer is not null &&
@@ -3396,6 +3910,7 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
            this.ReadbackBuffer is not null &&
            bufferSizes.BinHeaders.ByteLength <= this.CapacitySizes.BinHeaders.ByteLength &&
            bufferSizes.IndirectCount.ByteLength <= this.CapacitySizes.IndirectCount.ByteLength &&
+           bufferSizes.PathRows.ByteLength <= this.CapacitySizes.PathRows.ByteLength &&
            bufferSizes.PathTiles.ByteLength <= this.CapacitySizes.PathTiles.ByteLength &&
            bufferSizes.SegCounts.ByteLength <= this.CapacitySizes.SegCounts.ByteLength &&
            bufferSizes.Segments.ByteLength <= this.CapacitySizes.Segments.ByteLength &&
@@ -3420,6 +3935,7 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
         ReleaseArenaBuffer(api, arena.BlendBuffer);
         ReleaseArenaBuffer(api, arena.SegmentBuffer);
         ReleaseArenaBuffer(api, arena.SegCountBuffer);
+        ReleaseArenaBuffer(api, arena.PathRowBuffer);
         ReleaseArenaBuffer(api, arena.PathTileBuffer);
         ReleaseArenaBuffer(api, arena.IndirectCountBuffer);
         ReleaseArenaBuffer(api, arena.BinHeaderBuffer);

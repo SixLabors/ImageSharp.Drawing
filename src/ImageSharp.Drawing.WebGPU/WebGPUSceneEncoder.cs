@@ -97,6 +97,7 @@ internal static class WebGPUSceneEncoder
     {
         private bool hasLastStyle;
         private bool gradientPixelsDetached;
+        private long estimatedPathRowCount;
         private uint lastStyle0;
         private uint lastStyle1;
         private uint lastStyle2;
@@ -137,6 +138,7 @@ internal static class WebGPUSceneEncoder
             this.rootTargetBounds = rootTargetBounds;
             this.lastTransform = GpuSceneTransform.Identity;
             this.openLayerBounds = null;
+            this.estimatedPathRowCount = 0;
             this.VisibleFillCount = 0;
             this.FineRasterizationMode = RasterizationMode.Antialiased;
             this.FineCoverageThreshold = 0F;
@@ -219,6 +221,11 @@ internal static class WebGPUSceneEncoder
         /// Gets the number of emitted gradient-ramp rows.
         /// </summary>
         public int GradientRowCount { get; private set; }
+
+        /// <summary>
+        /// Gets the CPU-side estimate of the number of active tile rows referenced by the staged path metadata.
+        /// </summary>
+        public int EstimatedPathRowCount => (int)Math.Min(this.estimatedPathRowCount, int.MaxValue);
 
         /// <summary>
         /// Gets the flush-wide fine rasterization mode selected while encoding visible fills.
@@ -515,6 +522,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle0 = style0;
             this.lastStyle1 = style1;
             this.lastStyle2 = style2;
+            this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -579,6 +587,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle0 = style0;
             this.lastStyle1 = style1;
             this.lastStyle2 = style2;
+            this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -649,6 +658,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle0 = style0;
             this.lastStyle1 = style1;
             this.lastStyle2 = style2;
+            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -728,6 +738,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle0 = style0;
             this.lastStyle1 = style1;
             this.lastStyle2 = style2;
+            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -787,6 +798,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle0 = style0;
             this.lastStyle1 = style1;
             this.lastStyle2 = style2;
+            this.AccumulateDrawRowEstimateLocal(layerBounds);
             this.PathCount++;
             this.LineCount += clipLineCount;
             this.InfoWordCount += (int)GpuSceneDrawTag.Map(GpuSceneDrawTag.BeginClip).InfoOffset;
@@ -795,6 +807,40 @@ internal static class WebGPUSceneEncoder
             this.ClipCount++;
             this.openLayerBounds ??= new List<Rectangle>(4);
             this.openLayerBounds.Add(layerBounds);
+        }
+
+        /// <summary>
+        /// Adds one draw object's target-space interest rectangle to the sparse path-row estimate after converting it to root-target-local coordinates.
+        /// </summary>
+        /// <param name="absoluteInterest">The draw object's absolute raster interest bounds.</param>
+        private void AccumulateDrawRowEstimate(Rectangle absoluteInterest)
+            => this.AccumulateDrawRowEstimateLocal(ToTargetLocal(absoluteInterest, this.rootTargetBounds));
+
+        /// <summary>
+        /// Adds one draw object's clipped root-target-local tile-row span to the sparse path-row estimate.
+        /// </summary>
+        /// <param name="localBounds">The draw object's root-target-local raster interest bounds.</param>
+        private void AccumulateDrawRowEstimateLocal(Rectangle localBounds)
+        {
+            Rectangle clippedBounds = Rectangle.Intersect(localBounds, new Rectangle(0, 0, this.rootTargetBounds.Width, this.rootTargetBounds.Height));
+
+            if (this.openLayerBounds is { Count: > 0 })
+            {
+                for (int i = 0; i < this.openLayerBounds.Count && clippedBounds.Width > 0 && clippedBounds.Height > 0; i++)
+                {
+                    clippedBounds = Rectangle.Intersect(clippedBounds, this.openLayerBounds[i]);
+                }
+            }
+
+            if (clippedBounds.Width <= 0 || clippedBounds.Height <= 0)
+            {
+                return;
+            }
+
+            int tileY0 = clippedBounds.Top / TileHeight;
+            int tileY1 = DivideRoundUp(clippedBounds.Bottom, TileHeight);
+            long rowCount = Math.Max(tileY1 - tileY0, 0);
+            this.estimatedPathRowCount = Math.Min(this.estimatedPathRowCount + rowCount, int.MaxValue);
         }
 
         /// <summary>
@@ -892,7 +938,7 @@ internal static class WebGPUSceneEncoder
                     styleWordCount,
                     encoding.ClipCount,
                     encoding.FillCount,
-                    Math.Max(encoding.LineCount, encoding.PathCount),
+                    Math.Max(encoding.EstimatedPathRowCount, encoding.PathCount),
                     DivideRoundUp(targetBounds.Width, TileWidth),
                     DivideRoundUp(targetBounds.Height, TileHeight),
                     encoding.FineRasterizationMode,
@@ -2231,7 +2277,7 @@ internal sealed class WebGPUEncodedScene : IDisposable
         int styleWordCount,
         int clipCount,
         int uniqueDefinitionCount,
-        int totalTileMembershipCount,
+        int totalPathRowCount,
         int tileCountX,
         int tileCountY,
         RasterizationMode fineRasterizationMode,
@@ -2257,7 +2303,7 @@ internal sealed class WebGPUEncodedScene : IDisposable
         this.StyleWordCount = styleWordCount;
         this.ClipCount = clipCount;
         this.UniqueDefinitionCount = uniqueDefinitionCount;
-        this.TotalTileMembershipCount = totalTileMembershipCount;
+        this.TotalPathRowCount = totalPathRowCount;
         this.TileCountX = tileCountX;
         this.TileCountY = tileCountY;
         this.FineRasterizationMode = fineRasterizationMode;
@@ -2362,9 +2408,9 @@ internal sealed class WebGPUEncodedScene : IDisposable
     public int UniqueDefinitionCount { get; }
 
     /// <summary>
-    /// Gets the conservative tile-membership estimate used for chunk sizing.
+    /// Gets the CPU-side estimate of the number of active tile rows used by sparse path metadata.
     /// </summary>
-    public int TotalTileMembershipCount { get; }
+    public int TotalPathRowCount { get; }
 
     /// <summary>
     /// Gets the total line-slice count.

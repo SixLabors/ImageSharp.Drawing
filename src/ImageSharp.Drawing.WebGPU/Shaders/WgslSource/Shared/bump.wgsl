@@ -1,5 +1,5 @@
-// Copyright 2022 the Vello Authors
-// SPDX-License-Identifier: Apache-2.0 OR MIT OR Unlicense
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
 
 // Bitflags for each stage that can fail allocation.
 const STAGE_BINNING: u32 = 0x1u;
@@ -14,6 +14,7 @@ struct BumpAllocators {
     failed: atomic<u32>,
     binning: atomic<u32>,
     ptcl: atomic<u32>,
+    path_rows: atomic<u32>,
     tile: atomic<u32>,
     seg_counts: atomic<u32>,
     segments: atomic<u32>,

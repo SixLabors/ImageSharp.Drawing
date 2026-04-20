@@ -275,6 +275,10 @@ internal static unsafe class WebGPUTextureTransfer
     /// <summary>
     /// Pumps the WebGPU device while waiting for one asynchronous map callback to signal completion.
     /// </summary>
+    /// <param name="extension">The optional native WGPU extension used to advance callback delivery.</param>
+    /// <param name="device">The device that owns the mapped transfer buffer.</param>
+    /// <param name="signal">The event that the map callback sets when the transfer buffer is ready.</param>
+    /// <returns><see langword="true"/> when the callback completed before the timeout; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool WaitForSignal(Wgpu? extension, Device* device, ManualResetEventSlim signal)
     {
@@ -284,9 +288,22 @@ internal static unsafe class WebGPUTextureTransfer
         }
 
         Stopwatch stopwatch = Stopwatch.StartNew();
-        while (!signal.IsSet && stopwatch.ElapsedMilliseconds < CallbackTimeoutMilliseconds)
+        while (!signal.IsSet)
         {
-            _ = extension.DevicePoll(device, true, (WrappedSubmissionIndex*)null);
+            int remainingMilliseconds = CallbackTimeoutMilliseconds - (int)stopwatch.ElapsedMilliseconds;
+            if (remainingMilliseconds <= 0)
+            {
+                break;
+            }
+
+            // The map callback still needs DevicePoll to make progress, but a tight blocking poll loop
+            // can monopolize the CPU while the driver is trying to retire the submitted work. Poll once,
+            // then yield briefly so the callback and driver threads can run without the transfer thread hot-spinning.
+            _ = extension.DevicePoll(device, false, (WrappedSubmissionIndex*)null);
+            if (!signal.IsSet)
+            {
+                _ = signal.Wait(Math.Min(remainingMilliseconds, 1));
+            }
         }
 
         return signal.IsSet;
