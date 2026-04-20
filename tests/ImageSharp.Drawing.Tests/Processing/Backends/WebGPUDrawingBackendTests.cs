@@ -870,8 +870,7 @@ public partial class WebGPUDrawingBackendTests
         TestImageProvider<TPixel> provider,
         string testName,
         Image<TPixel> defaultImage,
-        Image<TPixel> nativeSurfaceImage,
-        float tolerantPercentage = 0.0003F)
+        Image<TPixel> nativeSurfaceImage)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         defaultImage.DebugSave(
@@ -1508,7 +1507,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         // MacOS on CI has some outliers with this test, so using a slightly higher tolerance here to avoid noise.
-        DebugSaveBackendPair(provider, "FillPath_LinearGradient", defaultImage, nativeSurfaceImage, tolerantPercentage: 0.0007F);
+        DebugSaveBackendPair(provider, "FillPath_LinearGradient", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.03F);
         AssertBackendPairReferenceOutputs(
             provider,
@@ -1759,8 +1758,7 @@ public partial class WebGPUDrawingBackendTests
             provider,
             "FillPath_SweepGradient_PartialArc",
             defaultImage,
-            nativeSurfaceImage,
-            tolerantPercentage: 0.0280F);
+            nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0280F);
         AssertBackendPairReferenceOutputs(
             provider,

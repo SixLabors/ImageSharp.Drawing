@@ -16,6 +16,8 @@ internal sealed class CpuBenchmarkBackend : IBenchmarkBackend
 {
     private readonly Configuration configuration;
     private Image<Bgra32>? image;
+    private int cachedWidth;
+    private int cachedHeight;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CpuBenchmarkBackend"/> class.
@@ -63,12 +65,15 @@ internal sealed class CpuBenchmarkBackend : IBenchmarkBackend
     /// <returns>The cached image.</returns>
     private Image<Bgra32> EnsureImage(int width, int height)
     {
-        if (this.image is not null)
+        if (this.image is not null && this.cachedWidth == width && this.cachedHeight == height)
         {
             return this.image;
         }
 
+        this.image?.Dispose();
         this.image = new Image<Bgra32>(width, height);
+        this.cachedWidth = width;
+        this.cachedHeight = height;
         return this.image;
     }
 }

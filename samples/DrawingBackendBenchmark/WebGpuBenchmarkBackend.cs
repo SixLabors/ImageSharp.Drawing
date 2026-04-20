@@ -16,6 +16,8 @@ namespace DrawingBackendBenchmark;
 internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend
 {
     private WebGPURenderTarget<Bgra32>? renderTarget;
+    private int cachedWidth;
+    private int cachedHeight;
 
     private WebGpuBenchmarkBackend()
     {
@@ -88,12 +90,15 @@ internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend
 
     private WebGPURenderTarget<Bgra32> EnsureRenderTarget(int width, int height)
     {
-        if (this.renderTarget is not null)
+        if (this.renderTarget is not null && this.cachedWidth == width && this.cachedHeight == height)
         {
             return this.renderTarget;
         }
 
+        this.renderTarget?.Dispose();
         this.renderTarget = new WebGPURenderTarget<Bgra32>(width, height);
+        this.cachedWidth = width;
+        this.cachedHeight = height;
         return this.renderTarget;
     }
 }
