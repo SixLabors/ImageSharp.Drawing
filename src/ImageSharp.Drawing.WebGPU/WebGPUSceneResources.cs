@@ -1510,7 +1510,7 @@ internal static class GpuSceneDrawTag
     public const uint FillRecolor = 0x4CU;
     public const uint FillLinGradient = 0x114U;
     public const uint FillRadGradient = 0x29CU;
-    public const uint FillEllipticGradient = 0x1D8U;
+    public const uint FillEllipticGradient = 0x1DCU;
     public const uint FillSweepGradient = 0x254U;
     public const uint FillImage = 0x294U;
     public const uint BeginClip = 0x49U;

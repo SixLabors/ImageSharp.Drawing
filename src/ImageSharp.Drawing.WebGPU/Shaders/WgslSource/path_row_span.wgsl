@@ -142,10 +142,32 @@ fn main(
             if (x0 + x_sign * floor(a * f + b) < f32(bbox.z)) == is_positive_slope {
                 f += 1.0;
             }
-            if is_positive_slope {
-                imax = min(imax, u32(f));
-            } else {
-                imin = max(imin, u32(f));
+            // Rows whose iterations were truncated because the line was past
+            // bbox.z still need to be flagged as TOUCHES_RIGHT so tile_alloc
+            // will expand row.x1 to cover the sparse fill interior. Without
+            // this, a row whose only line activity is off the right side of
+            // the bbox leaves row.x1 at its initial (0) or too-narrow value,
+            // and backdrop propagation stops short — producing a horizontal
+            // gap in the fill at exactly that tile row. This mirrors the
+            // row.backdrop accumulation performed in the xmin < bbox.x
+            // branch above.
+            let ynext_r = i32(y0 + f - floor(a * f + b) + 1.0);
+            var yflag_min: i32 = 0;
+            var yflag_max: i32 = 0;
+            if is_positive_slope && u32(f) < imax {
+                yflag_min = ynext_r;
+                yflag_max = i32(ceil(s1.y));
+                imax = u32(f);
+            } else if !is_positive_slope && u32(f) > imin {
+                yflag_min = i32(y0 + select(1.0, 0.0, y0 == s0.y));
+                yflag_max = ynext_r;
+                imin = u32(f);
+            }
+            yflag_min = max(yflag_min, i32(bbox.y));
+            yflag_max = min(yflag_max, i32(bbox.w));
+            for (var y = yflag_min; y < yflag_max; y += 1) {
+                let row_ix = path.rows + u32(y - i32(bbox.y));
+                atomicOr(&rows[row_ix].tiles, PATH_ROW_FLAG_TOUCHES_RIGHT);
             }
         }
     }

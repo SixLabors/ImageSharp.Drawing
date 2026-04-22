@@ -22,8 +22,6 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing;
 /// </summary>
 public class FillParis
 {
-    private const string NeighborhoodPathData = "m652.129 419.702.22 6.474 3.354 3.13 4.571-.215 3.086-3.335-.245-6.464-3.33-3.057-4.585.127z";
-
     // The SVG is ~1096x1060 with a Y-flip group transform.
     private const float Scale = 1f;
     private const int Width = 1096;
@@ -194,12 +192,6 @@ public class FillParis
             bench.sdBitmap,
             bench.image,
             bench.webGpuTarget.TextureHandle);
-        SvgBenchmarkHelper.WriteNeighborhoodSvg(
-            "paris",
-            bench.parsedElements,
-            NeighborhoodPathData,
-            Width,
-            Height);
 
         bench.Cleanup();
     }

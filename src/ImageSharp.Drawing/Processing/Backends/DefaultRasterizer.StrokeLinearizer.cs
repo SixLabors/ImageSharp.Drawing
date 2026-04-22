@@ -3,6 +3,7 @@
 
 using System.Buffers;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -19,13 +20,12 @@ internal static partial class DefaultRasterizer
         private const float StrokeMicroSegmentEpsilon = 1F / 64F;
 
         private readonly StrokeStyle stroke;
-        private readonly Matrix4x4 transform;
-        private readonly bool hasTransform;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="StrokeLinearizer{TL}"/> class.
         /// </summary>
         /// <param name="geometry">The stroked centerline geometry.</param>
+        /// <param name="residual">The residual transform applied to each source point during emission.</param>
         /// <param name="stroke">The stroke style.</param>
         /// <param name="translateX">The destination-space X translation applied at composition time.</param>
         /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
@@ -37,10 +37,10 @@ internal static partial class DefaultRasterizer
         /// <param name="rowBandCount">The retained row-band count.</param>
         /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
         /// <param name="samplingOffsetY">The vertical sampling offset.</param>
-        /// <param name="transform">The post-stroke drawing transform.</param>
         /// <param name="allocator">The allocator used for retained start-cover storage.</param>
         protected StrokeLinearizer(
             LinearGeometry geometry,
+            Matrix4x4 residual,
             StrokeStyle stroke,
             int translateX,
             int translateY,
@@ -52,14 +52,9 @@ internal static partial class DefaultRasterizer
             int rowBandCount,
             float samplingOffsetX,
             float samplingOffsetY,
-            Matrix4x4 transform,
             MemoryAllocator allocator)
-            : base(geometry, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, allocator)
-        {
-            this.stroke = stroke;
-            this.transform = transform;
-            this.hasTransform = !transform.IsIdentity;
-        }
+            : base(geometry, residual, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, allocator)
+            => this.stroke = stroke;
 
         private enum ContourInterest
         {
@@ -108,12 +103,7 @@ internal static partial class DefaultRasterizer
         /// <returns>The contour's relationship to the interest bounds.</returns>
         private ContourInterest GetContourInterest(ReadOnlySpan<PointF> contourPoints)
         {
-            RectangleF translatedBounds = InflateStrokeBounds(GetPointBounds(contourPoints), this.stroke);
-            if (this.hasTransform)
-            {
-                translatedBounds = RectangleF.Transform(translatedBounds, this.transform);
-            }
-
+            RectangleF translatedBounds = InflateStrokeBounds(this.GetPointBounds(contourPoints), this.stroke);
             translatedBounds.Offset(this.TranslateX + this.SamplingOffsetX - this.MinX, this.TranslateY + this.SamplingOffsetY - this.MinY);
 
             if (translatedBounds.Right <= 0F ||
@@ -148,15 +138,22 @@ internal static partial class DefaultRasterizer
                 return false;
             }
 
-            if (isDeclaredClosed || contourPoints[0] == contourPoints[^1])
+            PointF first = this.TransformPoint(contourPoints[0]);
+            PointF last = this.TransformPoint(contourPoints[^1]);
+
+            if (isDeclaredClosed || first == last)
             {
                 return true;
             }
 
-            Vector2 delta = contourPoints[0] - contourPoints[^1];
+            Vector2 delta = first - last;
             float closeThreshold = MathF.Max(this.stroke.Width, 1E-3F);
             return delta.LengthSquared() <= closeThreshold * closeThreshold;
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private PointF TransformPoint(PointF point)
+            => this.HasResidual ? PointF.Transform(point, this.Residual) : point;
 
         /// <summary>
         /// Processes one centerline contour.
@@ -226,7 +223,9 @@ internal static partial class DefaultRasterizer
                 return 0;
             }
 
-            PointF firstPoint = contourPoints[0];
+            Matrix4x4 residual = this.Residual;
+            bool hasResidual = this.HasResidual;
+            PointF firstPoint = hasResidual ? PointF.Transform(contourPoints[0], residual) : contourPoints[0];
             PointF previousPoint = firstPoint;
             pointLike = firstPoint;
             distinctPointCount = 1;
@@ -234,13 +233,13 @@ internal static partial class DefaultRasterizer
 
             for (int i = 1; i < contourPoints.Length; i++)
             {
-                PointF point = contourPoints[i];
+                PointF point = hasResidual ? PointF.Transform(contourPoints[i], residual) : contourPoints[i];
                 if (point == previousPoint)
                 {
                     continue;
                 }
 
-                if (this.TryCreateStrokeContourSegment(previousPoint, point, out StrokeContourSegment segment))
+                if (TryCreateStrokeContourSegment(previousPoint, point, out StrokeContourSegment segment))
                 {
                     distinctPointCount++;
                     segments[segmentCount++] = segment;
@@ -260,7 +259,7 @@ internal static partial class DefaultRasterizer
             if (isClosed &&
                 segmentCount > 1 &&
                 previousPoint != firstPoint &&
-                this.TryCreateStrokeContourSegment(previousPoint, firstPoint, out StrokeContourSegment closingSegment))
+                TryCreateStrokeContourSegment(previousPoint, firstPoint, out StrokeContourSegment closingSegment))
             {
                 segments[segmentCount++] = closingSegment;
             }
@@ -275,17 +274,9 @@ internal static partial class DefaultRasterizer
         /// <param name="end">The segment end point.</param>
         /// <param name="segment">Receives the segment descriptor.</param>
         /// <returns><see langword="true"/> when a non-degenerate segment exists.</returns>
-        private bool TryCreateStrokeContourSegment(PointF start, PointF end, out StrokeContourSegment segment)
+        private static bool TryCreateStrokeContourSegment(PointF start, PointF end, out StrokeContourSegment segment)
         {
-            PointF transformedStart = start;
-            PointF transformedEnd = end;
-            if (this.hasTransform)
-            {
-                transformedStart = PointF.Transform(start, this.transform);
-                transformedEnd = PointF.Transform(end, this.transform);
-            }
-
-            if (Vector2.DistanceSquared(transformedStart, transformedEnd) <= StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon)
+            if (Vector2.DistanceSquared(start, end) <= StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon)
             {
                 segment = default;
                 return false;
@@ -306,16 +297,19 @@ internal static partial class DefaultRasterizer
         /// </summary>
         /// <param name="contourPoints">The contiguous contour points.</param>
         /// <returns>The contour point bounds.</returns>
-        private static RectangleF GetPointBounds(ReadOnlySpan<PointF> contourPoints)
+        private RectangleF GetPointBounds(ReadOnlySpan<PointF> contourPoints)
         {
-            float minX = contourPoints[0].X;
-            float minY = contourPoints[0].Y;
+            Matrix4x4 residual = this.Residual;
+            bool hasResidual = this.HasResidual;
+            PointF first = hasResidual ? PointF.Transform(contourPoints[0], residual) : contourPoints[0];
+            float minX = first.X;
+            float minY = first.Y;
             float maxX = minX;
             float maxY = minY;
 
             for (int i = 1; i < contourPoints.Length; i++)
             {
-                PointF point = contourPoints[i];
+                PointF point = hasResidual ? PointF.Transform(contourPoints[i], residual) : contourPoints[i];
                 minX = MathF.Min(minX, point.X);
                 minY = MathF.Min(minY, point.Y);
                 maxX = MathF.Max(maxX, point.X);
@@ -966,12 +960,6 @@ internal static partial class DefaultRasterizer
         /// <param name="contained">Indicates whether the edge is fully contained within the interest.</param>
         private void EmitLine(PointF start, PointF end, bool contained)
         {
-            if (this.hasTransform)
-            {
-                start = PointF.Transform(start, this.transform);
-                end = PointF.Transform(end, this.transform);
-            }
-
             if (contained)
             {
                 this.AddContainedLineF24Dot8(
@@ -1035,6 +1023,7 @@ internal static partial class DefaultRasterizer
         /// Initializes a new instance of the <see cref="StrokeLinearizerX32Y16"/> class.
         /// </summary>
         /// <param name="geometry">The stroked centerline geometry.</param>
+        /// <param name="residual">The residual transform applied to each source point during emission.</param>
         /// <param name="stroke">The stroke style.</param>
         /// <param name="translateX">The destination-space X translation applied at composition time.</param>
         /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
@@ -1046,10 +1035,10 @@ internal static partial class DefaultRasterizer
         /// <param name="rowBandCount">The retained row-band count.</param>
         /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
         /// <param name="samplingOffsetY">The vertical sampling offset.</param>
-        /// <param name="transform">The post-stroke drawing transform.</param>
         /// <param name="allocator">The allocator used for retained start-cover storage.</param>
         public StrokeLinearizerX32Y16(
             LinearGeometry geometry,
+            Matrix4x4 residual,
             StrokeStyle stroke,
             int translateX,
             int translateY,
@@ -1061,9 +1050,8 @@ internal static partial class DefaultRasterizer
             int rowBandCount,
             float samplingOffsetX,
             float samplingOffsetY,
-            Matrix4x4 transform,
             MemoryAllocator allocator)
-            : base(geometry, stroke, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, transform, allocator)
+            : base(geometry, residual, stroke, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, allocator)
             => this.FinalLines = new LineArrayX32Y16Block?[rowBandCount];
 
         /// <summary>
@@ -1122,6 +1110,7 @@ internal static partial class DefaultRasterizer
         /// Initializes a new instance of the <see cref="StrokeLinearizerX16Y16"/> class.
         /// </summary>
         /// <param name="geometry">The stroked centerline geometry.</param>
+        /// <param name="residual">The residual transform applied to each source point during emission.</param>
         /// <param name="stroke">The stroke style.</param>
         /// <param name="translateX">The destination-space X translation applied at composition time.</param>
         /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
@@ -1133,10 +1122,10 @@ internal static partial class DefaultRasterizer
         /// <param name="rowBandCount">The retained row-band count.</param>
         /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
         /// <param name="samplingOffsetY">The vertical sampling offset.</param>
-        /// <param name="transform">The post-stroke drawing transform.</param>
         /// <param name="allocator">The allocator used for retained start-cover storage.</param>
         public StrokeLinearizerX16Y16(
             LinearGeometry geometry,
+            Matrix4x4 residual,
             StrokeStyle stroke,
             int translateX,
             int translateY,
@@ -1148,9 +1137,8 @@ internal static partial class DefaultRasterizer
             int rowBandCount,
             float samplingOffsetX,
             float samplingOffsetY,
-            Matrix4x4 transform,
             MemoryAllocator allocator)
-            : base(geometry, stroke, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, transform, allocator)
+            : base(geometry, residual, stroke, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, allocator)
             => this.FinalLines = new LineArrayX16Y16Block?[rowBandCount];
 
         /// <summary>

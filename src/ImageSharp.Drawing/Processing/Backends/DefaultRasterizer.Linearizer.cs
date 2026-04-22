@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Buffers;
+using System.Numerics;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -19,6 +20,7 @@ internal static partial class DefaultRasterizer
 
         protected Linearizer(
             LinearGeometry geometry,
+            Matrix4x4 residual,
             int translateX,
             int translateY,
             int minX,
@@ -32,6 +34,8 @@ internal static partial class DefaultRasterizer
             MemoryAllocator allocator)
         {
             this.Geometry = geometry;
+            this.Residual = residual;
+            this.HasResidual = !residual.IsIdentity;
             this.TranslateX = translateX;
             this.TranslateY = translateY;
             this.MinX = minX;
@@ -54,6 +58,16 @@ internal static partial class DefaultRasterizer
         /// Gets the source geometry being lowered.
         /// </summary>
         protected LinearGeometry Geometry { get; }
+
+        /// <summary>
+        /// Gets the residual transform applied to each source point during emission.
+        /// </summary>
+        protected Matrix4x4 Residual { get; }
+
+        /// <summary>
+        /// Gets a value indicating whether <see cref="Residual"/> is non-identity.
+        /// </summary>
+        protected bool HasResidual { get; }
 
         /// <summary>
         /// Gets the translated X offset applied to the geometry.
@@ -146,7 +160,9 @@ internal static partial class DefaultRasterizer
         /// <returns><see langword="true"/> when any retained coverage was produced; otherwise <see langword="false"/>.</returns>
         protected virtual bool ProcessCore()
         {
-            RectangleF translatedBounds = this.Geometry.Info.Bounds;
+            RectangleF translatedBounds = this.HasResidual
+                ? RectangleF.Transform(this.Geometry.Info.Bounds, this.Residual)
+                : this.Geometry.Info.Bounds;
             translatedBounds.Offset(this.TranslateX + this.SamplingOffsetX - this.MinX, this.TranslateY + this.SamplingOffsetY - this.MinY);
 
             bool contains =
@@ -182,11 +198,19 @@ internal static partial class DefaultRasterizer
         protected void ProcessContained()
         {
             SegmentEnumerator enumerator = this.Geometry.GetSegments();
+            Matrix4x4 residual = this.Residual;
+            bool hasResidual = this.HasResidual;
             while (enumerator.MoveNext())
             {
                 LinearSegment segment = enumerator.Current;
                 PointF p0 = segment.Start;
                 PointF p1 = segment.End;
+                if (hasResidual)
+                {
+                    p0 = PointF.Transform(p0, residual);
+                    p1 = PointF.Transform(p1, residual);
+                }
+
                 this.AddContainedLineF24Dot8(
                     FloatToFixed24Dot8(((p0.X + this.TranslateX) - this.MinX) + this.SamplingOffsetX),
                     FloatToFixed24Dot8(((p0.Y + this.TranslateY) - this.MinY) + this.SamplingOffsetY),
@@ -201,11 +225,19 @@ internal static partial class DefaultRasterizer
         protected void ProcessUncontained()
         {
             SegmentEnumerator enumerator = this.Geometry.GetSegments();
+            Matrix4x4 residual = this.Residual;
+            bool hasResidual = this.HasResidual;
             while (enumerator.MoveNext())
             {
                 LinearSegment segment = enumerator.Current;
                 PointF p0 = segment.Start;
                 PointF p1 = segment.End;
+                if (hasResidual)
+                {
+                    p0 = PointF.Transform(p0, residual);
+                    p1 = PointF.Transform(p1, residual);
+                }
+
                 this.AddUncontainedLine(
                     ((p0.X + this.TranslateX) - this.MinX) + this.SamplingOffsetX,
                     ((p0.Y + this.TranslateY) - this.MinY) + this.SamplingOffsetY,
@@ -751,6 +783,7 @@ internal static partial class DefaultRasterizer
         /// </summary>
         public LinearizerX32Y16(
             LinearGeometry geometry,
+            Matrix4x4 residual,
             int translateX,
             int translateY,
             int minX,
@@ -762,7 +795,7 @@ internal static partial class DefaultRasterizer
             float samplingOffsetX,
             float samplingOffsetY,
             MemoryAllocator allocator)
-            : base(geometry, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, allocator)
+            : base(geometry, residual, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, allocator)
             => this.FinalLines = new LineArrayX32Y16Block?[rowBandCount];
 
         /// <summary>
@@ -822,6 +855,7 @@ internal static partial class DefaultRasterizer
         /// </summary>
         public LinearizerX16Y16(
             LinearGeometry geometry,
+            Matrix4x4 residual,
             int translateX,
             int translateY,
             int minX,
@@ -833,7 +867,7 @@ internal static partial class DefaultRasterizer
             float samplingOffsetX,
             float samplingOffsetY,
             MemoryAllocator allocator)
-            : base(geometry, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, allocator)
+            : base(geometry, residual, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, allocator)
             => this.FinalLines = new LineArrayX16Y16Block?[rowBandCount];
 
         /// <summary>

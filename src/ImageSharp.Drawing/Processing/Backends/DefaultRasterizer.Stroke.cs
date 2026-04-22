@@ -18,20 +18,22 @@ internal static partial class DefaultRasterizer
     /// Creates retained row-local raster payload for one stroked centerline geometry.
     /// </summary>
     /// <param name="geometry">The source stroke centerline geometry.</param>
+    /// <param name="residual">The residual transform applied to each source point during emission.</param>
     /// <param name="pen">The stroke metadata.</param>
     /// <param name="translateX">The destination-space X translation applied at composition time.</param>
     /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
     /// <param name="options">The rasterizer options used to generate coverage.</param>
-    /// <param name="transform">The projective transform applied after stroke expansion.</param>
+    /// <param name="widthScale">The isotropic scale factor applied to the stroke width so expansion runs in device-space pixels.</param>
     /// <param name="allocator">The allocator used for retained raster storage.</param>
     /// <returns>The retained rasterizable geometry for the stroke, or <see langword="null"/> when the stroke produces no coverage.</returns>
     internal static StrokeRasterizableGeometry? CreatePathStrokeRasterizableGeometry(
         LinearGeometry geometry,
+        Matrix4x4 residual,
         Pen pen,
         int translateX,
         int translateY,
         in RasterizerOptions options,
-        Matrix4x4 transform,
+        float widthScale,
         MemoryAllocator allocator)
     {
         if (pen.StrokeWidth <= 0F)
@@ -41,11 +43,11 @@ internal static partial class DefaultRasterizer
 
         return CreateRetainedStrokeRasterizableGeometry(
             geometry,
-            new StrokeStyle(pen),
+            residual,
+            new StrokeStyle(pen, widthScale),
             translateX,
             translateY,
             in options,
-            transform,
             allocator);
     }
 
@@ -58,7 +60,7 @@ internal static partial class DefaultRasterizer
     /// <param name="translateX">The destination-space X translation applied at composition time.</param>
     /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
     /// <param name="options">The rasterizer options used to generate coverage.</param>
-    /// <param name="transform">The projective transform applied after stroke expansion.</param>
+    /// <param name="widthScale">The isotropic scale factor applied to the stroke width so expansion runs in device-space pixels.</param>
     /// <param name="allocator">The allocator used for retained raster storage.</param>
     /// <returns>The retained rasterizable geometry for the stroke, or <see langword="null"/> when the stroke produces no coverage.</returns>
     internal static StrokeRasterizableGeometry? CreateLineSegmentStrokeRasterizableGeometry(
@@ -68,7 +70,7 @@ internal static partial class DefaultRasterizer
         int translateX,
         int translateY,
         in RasterizerOptions options,
-        Matrix4x4 transform,
+        float widthScale,
         MemoryAllocator allocator)
     {
         if (pen.StrokeWidth <= 0F)
@@ -79,17 +81,15 @@ internal static partial class DefaultRasterizer
         float samplingOffsetX = 0.5F;
         float samplingOffsetY = 0.5F;
 
+        StrokeStyle strokeStyle = new(pen, widthScale);
+
         RectangleF bounds = RectangleF.FromLTRB(
             MathF.Min(start.X, end.X),
             MathF.Min(start.Y, end.Y),
             MathF.Max(start.X, end.X),
             MathF.Max(start.Y, end.Y));
 
-        RectangleF translatedBounds = InflateStrokeBounds(bounds, new StrokeStyle(pen));
-        if (!transform.IsIdentity)
-        {
-            translatedBounds = RectangleF.Transform(translatedBounds, transform);
-        }
+        RectangleF translatedBounds = InflateStrokeBounds(bounds, strokeStyle);
 
         translatedBounds.Offset(translateX + samplingOffsetX, translateY + samplingOffsetY);
 
@@ -147,74 +147,33 @@ internal static partial class DefaultRasterizer
             new LineSegmentStrokeRasterData(
                 start,
                 end,
-                new StrokeStyle(pen),
+                strokeStyle,
                 translateX,
                 translateY,
                 firstRowBandIndex,
                 rowBandCount,
                 samplingOffsetX,
-                samplingOffsetY,
-                transform));
-    }
-
-    /// <summary>
-    /// Creates retained row-local raster payload for one stroked explicit open polyline.
-    /// </summary>
-    /// <param name="points">The retained polyline points.</param>
-    /// <param name="pen">The stroke metadata.</param>
-    /// <param name="translateX">The destination-space X translation applied at composition time.</param>
-    /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
-    /// <param name="options">The rasterizer options used to generate coverage.</param>
-    /// <param name="transform">The projective transform applied after stroke expansion.</param>
-    /// <param name="allocator">The allocator used for retained raster storage.</param>
-    /// <returns>The retained rasterizable geometry for the stroke, or <see langword="null"/> when the stroke produces no coverage.</returns>
-    internal static StrokeRasterizableGeometry? CreatePolylineStrokeRasterizableGeometry(
-        PointF[] points,
-        Pen pen,
-        int translateX,
-        int translateY,
-        in RasterizerOptions options,
-        Matrix4x4 transform,
-        MemoryAllocator allocator)
-    {
-        if (points.Length == 0 || pen.StrokeWidth <= 0F)
-        {
-            return null;
-        }
-
-        if (points.Length == 2)
-        {
-            return CreateLineSegmentStrokeRasterizableGeometry(points[0], points[1], pen, translateX, translateY, in options, transform, allocator);
-        }
-
-        return CreateRetainedStrokeRasterizableGeometry(
-            LinearGeometry.CreateOpenPolyline(points),
-            new StrokeStyle(pen),
-            translateX,
-            translateY,
-            in options,
-            transform,
-            allocator);
+                samplingOffsetY));
     }
 
     /// <summary>
     /// Expands one stroked centerline geometry once into retained per-band line storage.
     /// </summary>
     /// <param name="geometry">The retained stroke centerline geometry.</param>
+    /// <param name="residual">The residual transform applied to each source point during emission.</param>
     /// <param name="stroke">The stroke style.</param>
     /// <param name="translateX">The destination-space X translation applied at composition time.</param>
     /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
     /// <param name="options">The rasterizer options used for the retained bands.</param>
-    /// <param name="transform">The drawing transform applied after stroke expansion.</param>
     /// <param name="allocator">The allocator used for retained raster storage.</param>
     /// <returns>The retained stroke rasterizable geometry, or <see langword="null"/> when the stroke produces no coverage.</returns>
     private static StrokeRasterizableGeometry? CreateRetainedStrokeRasterizableGeometry(
         LinearGeometry geometry,
+        Matrix4x4 residual,
         in StrokeStyle stroke,
         int translateX,
         int translateY,
         in RasterizerOptions options,
-        Matrix4x4 transform,
         MemoryAllocator allocator)
     {
         if (geometry.Info.PointCount == 0)
@@ -225,12 +184,8 @@ internal static partial class DefaultRasterizer
         float samplingOffsetX = 0.5F;
         float samplingOffsetY = 0.5F;
 
-        RectangleF translatedBounds = InflateStrokeBounds(geometry.Info.Bounds, stroke);
-        if (!transform.IsIdentity)
-        {
-            translatedBounds = RectangleF.Transform(translatedBounds, transform);
-        }
-
+        RectangleF sourceBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
+        RectangleF translatedBounds = InflateStrokeBounds(sourceBounds, stroke);
         translatedBounds.Offset(translateX + samplingOffsetX, translateY + samplingOffsetY);
 
         Rectangle geometryBounds = Rectangle.FromLTRB(
@@ -262,6 +217,7 @@ internal static partial class DefaultRasterizer
         {
             StrokeLinearizerX16Y16 linearizer = new(
                 geometry,
+                residual,
                 stroke,
                 translateX,
                 translateY,
@@ -273,7 +229,6 @@ internal static partial class DefaultRasterizer
                 rowBandCount,
                 samplingOffsetX,
                 samplingOffsetY,
-                transform,
                 allocator);
 
             if (!linearizer.TryProcess(out LinearizedRasterData<LineArrayX16Y16Block> result))
@@ -294,6 +249,7 @@ internal static partial class DefaultRasterizer
 
         StrokeLinearizerX32Y16 wideLinearizer = new(
             geometry,
+            residual,
             stroke,
             translateX,
             translateY,
@@ -305,7 +261,6 @@ internal static partial class DefaultRasterizer
             rowBandCount,
             samplingOffsetX,
             samplingOffsetY,
-            transform,
             allocator);
 
         if (!wideLinearizer.TryProcess(out LinearizedRasterData<LineArrayX32Y16Block> wideResult))
@@ -493,7 +448,6 @@ internal static partial class DefaultRasterizer
         /// <param name="rowBandCount">The number of retained row bands touched by the stroke.</param>
         /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
         /// <param name="samplingOffsetY">The vertical sampling offset.</param>
-        /// <param name="transform">The drawing transform applied after stroke expansion.</param>
         protected StrokeRasterData(
             StrokeStyle stroke,
             int translateX,
@@ -501,8 +455,7 @@ internal static partial class DefaultRasterizer
             int firstBandIndex,
             int rowBandCount,
             float samplingOffsetX,
-            float samplingOffsetY,
-            Matrix4x4 transform)
+            float samplingOffsetY)
         {
             this.Stroke = stroke;
             this.TranslateX = translateX;
@@ -511,7 +464,6 @@ internal static partial class DefaultRasterizer
             this.RowBandCount = rowBandCount;
             this.SamplingOffsetX = samplingOffsetX;
             this.SamplingOffsetY = samplingOffsetY;
-            this.Transform = transform;
         }
 
         public StrokeStyle Stroke { get; }
@@ -545,11 +497,6 @@ internal static partial class DefaultRasterizer
         /// Gets the vertical sampling offset applied during rasterization.
         /// </summary>
         public float SamplingOffsetY { get; }
-
-        /// <summary>
-        /// Gets the drawing transform applied after stroke expansion.
-        /// </summary>
-        public Matrix4x4 Transform { get; }
 
         public virtual bool RequiresBandCoverage => false;
 
@@ -588,7 +535,6 @@ internal static partial class DefaultRasterizer
         /// <param name="rowBandCount">The number of retained row bands touched by the stroke.</param>
         /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
         /// <param name="samplingOffsetY">The vertical sampling offset.</param>
-        /// <param name="transform">The drawing transform applied after stroke expansion.</param>
         public LineSegmentStrokeRasterData(
             PointF start,
             PointF end,
@@ -598,9 +544,8 @@ internal static partial class DefaultRasterizer
             int firstBandIndex,
             int rowBandCount,
             float samplingOffsetX,
-            float samplingOffsetY,
-            Matrix4x4 transform)
-            : base(stroke, translateX, translateY, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, transform)
+            float samplingOffsetY)
+            : base(stroke, translateX, translateY, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY)
         {
             this.Start = start;
             this.End = end;
@@ -637,7 +582,6 @@ internal static partial class DefaultRasterizer
                 this.TranslateY,
                 this.SamplingOffsetX,
                 this.SamplingOffsetY,
-                this.Transform,
                 in bandInfo,
                 scanline,
                 ref rowHandler);
@@ -653,7 +597,7 @@ internal static partial class DefaultRasterizer
         /// </summary>
         /// <param name="outline">The retained fill-style raster payload replayed for the stroke.</param>
         public RetainedStrokeRasterData(RasterizableGeometry outline)
-            : base(default, 0, 0, outline.FirstRowBandIndex, outline.RowBandCount, 0F, 0F, Matrix4x4.Identity)
+            : base(default, 0, 0, outline.FirstRowBandIndex, outline.RowBandCount, 0F, 0F)
             => this.Outline = outline;
 
         /// <summary>
@@ -816,8 +760,6 @@ internal static partial class DefaultRasterizer
         private readonly Vector2 end;
         private readonly Vector2 translation;
         private readonly StrokeStyle stroke;
-        private readonly Matrix4x4 transform;
-        private readonly bool hasTransform;
         private readonly int width;
         private readonly int height;
         private readonly int destinationLeft;
@@ -835,7 +777,6 @@ internal static partial class DefaultRasterizer
         /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
         /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
         /// <param name="samplingOffsetY">The vertical sampling offset.</param>
-        /// <param name="transform">The drawing transform applied after stroke expansion.</param>
         /// <param name="bandInfo">The retained band metadata.</param>
         private DirectLineSegmentBandRasterizer(
             PointF start,
@@ -845,7 +786,6 @@ internal static partial class DefaultRasterizer
             int translateY,
             float samplingOffsetX,
             float samplingOffsetY,
-            Matrix4x4 transform,
             in RasterizableBandInfo bandInfo)
         {
             this.translation = new(
@@ -855,8 +795,6 @@ internal static partial class DefaultRasterizer
             this.start = start;
             this.end = end;
             this.stroke = stroke;
-            this.transform = transform;
-            this.hasTransform = !transform.IsIdentity;
             this.width = bandInfo.Width;
             this.height = bandInfo.BandHeight;
             this.destinationLeft = bandInfo.DestinationLeft;
@@ -876,7 +814,6 @@ internal static partial class DefaultRasterizer
         /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
         /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
         /// <param name="samplingOffsetY">The vertical sampling offset.</param>
-        /// <param name="transform">The drawing transform applied after stroke expansion.</param>
         /// <param name="bandInfo">The retained band metadata.</param>
         /// <param name="scanline">The reusable scanline scratch buffer.</param>
         /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
@@ -888,7 +825,6 @@ internal static partial class DefaultRasterizer
             int translateY,
             float samplingOffsetX,
             float samplingOffsetY,
-            Matrix4x4 transform,
             in RasterizableBandInfo bandInfo,
             Span<float> scanline,
             ref TRowHandler rowHandler)
@@ -901,7 +837,6 @@ internal static partial class DefaultRasterizer
                 translateY,
                 samplingOffsetX,
                 samplingOffsetY,
-                transform,
                 in bandInfo).Rasterize(scanline, ref rowHandler);
 
         /// <summary>
@@ -915,12 +850,6 @@ internal static partial class DefaultRasterizer
         {
             if (this.stroke.Width <= 0F || this.width <= 0 || this.height <= 0)
             {
-                return;
-            }
-
-            if (this.hasTransform)
-            {
-                this.RasterizeTransformed(scanline, ref rowHandler);
                 return;
             }
 
@@ -943,62 +872,6 @@ internal static partial class DefaultRasterizer
             for (int row = 0; row < this.height; row++)
             {
                 this.EmitLineCoverageRow(row, p0, p1, p2, p3, scanline, ref rowHandler);
-            }
-        }
-
-        /// <summary>
-        /// Rasterizes the stored segment after applying the drawing transform to the stroked segment geometry.
-        /// </summary>
-        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
-        /// <param name="scanline">The reusable scanline scratch buffer.</param>
-        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
-        private void RasterizeTransformed<TRowHandler>(Span<float> scanline, ref TRowHandler rowHandler)
-            where TRowHandler : struct, IRasterizerCoverageRowHandler
-        {
-            if (!TryGetDirection(this.start, this.end, out Vector2 tangent, out _))
-            {
-                this.RasterizeTransformedPointLike(scanline, ref rowHandler);
-                return;
-            }
-
-            float halfWidth = this.stroke.HalfWidth;
-            Vector2 normal = GetStrokeOffsetNormal(tangent) * halfWidth;
-            Vector2 extension = this.stroke.LineCap == LineCap.Square ? tangent * halfWidth : Vector2.Zero;
-            Vector2 p0 = this.start + normal - extension;
-            Vector2 p1 = this.end + normal + extension;
-            Vector2 p2 = this.end - normal + extension;
-            Vector2 p3 = this.start - normal - extension;
-
-            if (this.stroke.LineCap != LineCap.Round)
-            {
-                Vector2[] polygon =
-                [
-                    this.TransformAndTranslate(p0),
-                    this.TransformAndTranslate(p1),
-                    this.TransformAndTranslate(p2),
-                    this.TransformAndTranslate(p3)
-                ];
-
-                for (int row = 0; row < this.height; row++)
-                {
-                    this.EmitPolygonCoverageRow(row, polygon, scanline, ref rowHandler);
-                }
-
-                return;
-            }
-
-            int capSubdivisionCount = GetArcSubdivisionCount(halfWidth, Math.PI, this.stroke.ArcDetailScale);
-            Vector2[] contourPoints = new Vector2[4 + (capSubdivisionCount * 2)];
-            int contourPointCount = 0;
-            contourPoints[contourPointCount++] = this.TransformAndTranslate(p0);
-            contourPoints[contourPointCount++] = this.TransformAndTranslate(p1);
-            this.AppendTransformedArcPoints(contourPoints, ref contourPointCount, this.end, normal, -normal, includeEndpoint: true);
-            contourPoints[contourPointCount++] = this.TransformAndTranslate(p3);
-            this.AppendTransformedArcPoints(contourPoints, ref contourPointCount, this.start, -normal, normal, includeEndpoint: false);
-
-            for (int row = 0; row < this.height; row++)
-            {
-                this.EmitPolygonCoverageRow(row, contourPoints.AsSpan(0, contourPointCount), scanline, ref rowHandler);
             }
         }
 
@@ -1290,175 +1163,6 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
-        /// Rasterizes a transformed point-like stroke footprint as a transformed convex polygon.
-        /// </summary>
-        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
-        /// <param name="scanline">The reusable scanline scratch buffer.</param>
-        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
-        private void RasterizeTransformedPointLike<TRowHandler>(Span<float> scanline, ref TRowHandler rowHandler)
-            where TRowHandler : struct, IRasterizerCoverageRowHandler
-        {
-            Vector2 center = this.start;
-            float halfWidth = this.stroke.HalfWidth;
-
-            if (this.stroke.LineCap != LineCap.Round)
-            {
-                Vector2[] polygon =
-                [
-                    this.TransformAndTranslate(center + new Vector2(-halfWidth, -halfWidth)),
-                    this.TransformAndTranslate(center + new Vector2(halfWidth, -halfWidth)),
-                    this.TransformAndTranslate(center + new Vector2(halfWidth, halfWidth)),
-                    this.TransformAndTranslate(center + new Vector2(-halfWidth, halfWidth))
-                ];
-
-                for (int row = 0; row < this.height; row++)
-                {
-                    this.EmitPolygonCoverageRow(row, polygon, scanline, ref rowHandler);
-                }
-
-                return;
-            }
-
-            Vector2 startOffset = new(halfWidth, 0F);
-            int arcSubdivisionCount = GetArcSubdivisionCount(halfWidth, Math.PI, this.stroke.ArcDetailScale);
-            Vector2[] contourPoints = new Vector2[2 + (arcSubdivisionCount * 2)];
-            int contourPointCount = 0;
-            contourPoints[contourPointCount++] = this.TransformAndTranslate(center + startOffset);
-            this.AppendTransformedArcPoints(contourPoints, ref contourPointCount, center, startOffset, -startOffset, includeEndpoint: true);
-            this.AppendTransformedArcPoints(contourPoints, ref contourPointCount, center, -startOffset, startOffset, includeEndpoint: false);
-
-            for (int row = 0; row < this.height; row++)
-            {
-                this.EmitPolygonCoverageRow(row, contourPoints.AsSpan(0, contourPointCount), scanline, ref rowHandler);
-            }
-        }
-
-        /// <summary>
-        /// Computes and emits one raster row for a transformed convex stroke contour.
-        /// </summary>
-        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
-        /// <param name="row">The band-local row index.</param>
-        /// <param name="polygonPoints">The transformed contour points.</param>
-        /// <param name="scanline">The reusable scanline scratch buffer.</param>
-        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
-        private void EmitPolygonCoverageRow<TRowHandler>(
-            int row,
-            ReadOnlySpan<Vector2> polygonPoints,
-            Span<float> scanline,
-            ref TRowHandler rowHandler)
-            where TRowHandler : struct, IRasterizerCoverageRowHandler
-        {
-            float globalLeft = float.PositiveInfinity;
-            float globalRight = float.NegativeInfinity;
-            int sampleCount = 0;
-
-            for (int sampleIndex = 0; sampleIndex < DirectStrokeVerticalSampleCount; sampleIndex++)
-            {
-                float sampleY = row + ((sampleIndex + 0.5F) / DirectStrokeVerticalSampleCount);
-                if (!TryGetPolygonIntervalAtY(polygonPoints, sampleY, out float left, out float right))
-                {
-                    continue;
-                }
-
-                globalLeft = MathF.Min(globalLeft, left);
-                globalRight = MathF.Max(globalRight, right);
-                sampleCount++;
-            }
-
-            if (sampleCount == 0)
-            {
-                return;
-            }
-
-            int startColumn = Math.Max(0, (int)MathF.Floor(globalLeft));
-            int endColumn = Math.Min(this.width, (int)MathF.Ceiling(globalRight));
-            if (endColumn <= startColumn)
-            {
-                return;
-            }
-
-            Span<float> rowCoverage = scanline[startColumn..endColumn];
-            rowCoverage.Clear();
-
-            float sampleWeight = 1F / DirectStrokeVerticalSampleCount;
-            for (int sampleIndex = 0; sampleIndex < DirectStrokeVerticalSampleCount; sampleIndex++)
-            {
-                float sampleY = row + ((sampleIndex + 0.5F) / DirectStrokeVerticalSampleCount);
-                if (TryGetPolygonIntervalAtY(polygonPoints, sampleY, out float left, out float right))
-                {
-                    AccumulateIntervalCoverage(rowCoverage, startColumn, left, right, sampleWeight);
-                }
-            }
-
-            this.FinalizeCoverageRow(row, startColumn, rowCoverage, ref rowHandler);
-        }
-
-        /// <summary>
-        /// Applies the stored drawing transform and destination translation to one stroke boundary point.
-        /// </summary>
-        /// <param name="point">The stroke-local boundary point.</param>
-        /// <returns>The transformed band-local point.</returns>
-        private Vector2 TransformAndTranslate(Vector2 point)
-            => (Vector2)PointF.Transform((PointF)point, this.transform) + this.translation;
-
-        /// <summary>
-        /// Appends transformed arc points to the supplied contour point buffer.
-        /// </summary>
-        /// <param name="contourPoints">The destination contour point buffer.</param>
-        /// <param name="contourPointCount">The running contour point count.</param>
-        /// <param name="center">The arc center.</param>
-        /// <param name="fromOffset">The start offset from the center.</param>
-        /// <param name="toOffset">The end offset from the center.</param>
-        /// <param name="includeEndpoint">Indicates whether to append the arc endpoint.</param>
-        private void AppendTransformedArcPoints(
-            Span<Vector2> contourPoints,
-            ref int contourPointCount,
-            Vector2 center,
-            Vector2 fromOffset,
-            Vector2 toOffset,
-            bool includeEndpoint)
-        {
-            if (fromOffset == Vector2.Zero || toOffset == Vector2.Zero)
-            {
-                if (includeEndpoint)
-                {
-                    contourPoints[contourPointCount++] = this.TransformAndTranslate(center + toOffset);
-                }
-
-                return;
-            }
-
-            float radius = fromOffset.Length();
-            if (radius <= StrokeDirectionEpsilon)
-            {
-                if (includeEndpoint)
-                {
-                    contourPoints[contourPointCount++] = this.TransformAndTranslate(center + toOffset);
-                }
-
-                return;
-            }
-
-            double startAngle = Math.Atan2(fromOffset.Y, fromOffset.X);
-            double endAngle = Math.Atan2(toOffset.Y, toOffset.X);
-            double sweep = NormalizePositiveAngle(endAngle - startAngle);
-            int subdivisionCount = GetArcSubdivisionCount(radius, sweep, this.stroke.ArcDetailScale);
-            double step = sweep / (subdivisionCount + 1);
-
-            for (int i = 1; i <= subdivisionCount; i++)
-            {
-                float angle = (float)(startAngle + (step * i));
-                contourPoints[contourPointCount++] = this.TransformAndTranslate(
-                    center + new Vector2(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius));
-            }
-
-            if (includeEndpoint)
-            {
-                contourPoints[contourPointCount++] = this.TransformAndTranslate(center + toOffset);
-            }
-        }
-
-        /// <summary>
         /// Applies the selected rasterization mode and emits the non-zero runs for one row.
         /// </summary>
         /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
@@ -1670,35 +1374,6 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
-        /// Intersects a horizontal sample line with a convex polygon.
-        /// </summary>
-        /// <param name="polygonPoints">The convex polygon points in contour order.</param>
-        /// <param name="sampleY">The sample row in band-local coordinates.</param>
-        /// <param name="intervalLeft">Receives the left intersection bound.</param>
-        /// <param name="intervalRight">Receives the right intersection bound.</param>
-        /// <returns><see langword="true"/> when the sample intersects the polygon.</returns>
-        private static bool TryGetPolygonIntervalAtY(
-            ReadOnlySpan<Vector2> polygonPoints,
-            float sampleY,
-            out float intervalLeft,
-            out float intervalRight)
-        {
-            intervalLeft = float.PositiveInfinity;
-            intervalRight = float.NegativeInfinity;
-            bool hasIntersection = false;
-
-            Vector2 previousPoint = polygonPoints[^1];
-            for (int i = 0; i < polygonPoints.Length; i++)
-            {
-                Vector2 point = polygonPoints[i];
-                AppendEdgeInterval(previousPoint, point, sampleY, ref hasIntersection, ref intervalLeft, ref intervalRight);
-                previousPoint = point;
-            }
-
-            return hasIntersection && intervalRight > intervalLeft;
-        }
-
-        /// <summary>
         /// Expands the current sample interval bounds with one polygon edge intersection.
         /// </summary>
         /// <param name="start">The edge start point.</param>
@@ -1858,9 +1533,10 @@ internal static partial class DefaultRasterizer
         /// Initializes a new instance of the <see cref="StrokeStyle"/> struct.
         /// </summary>
         /// <param name="pen">The source pen.</param>
-        public StrokeStyle(Pen pen)
+        /// <param name="widthScale">The isotropic scale factor applied to the stroke width so the expansion happens in device-space pixels.</param>
+        public StrokeStyle(Pen pen, float widthScale)
         {
-            this.Width = pen.StrokeWidth;
+            this.Width = pen.StrokeWidth * widthScale;
             this.LineCap = pen.StrokeOptions.LineCap;
             this.LineJoin = pen.StrokeOptions.LineJoin;
             this.InnerJoin = pen.StrokeOptions.InnerJoin;
@@ -1870,12 +1546,12 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
-        /// Gets the stroke width in stroke-local units before any drawing transform is applied.
+        /// Gets the stroke width in device-space pixels.
         /// </summary>
         public float Width { get; }
 
         /// <summary>
-        /// Gets half the stroke width in stroke-local units before any drawing transform is applied.
+        /// Gets half the stroke width in device-space pixels.
         /// </summary>
         public float HalfWidth => this.Width * 0.5F;
 

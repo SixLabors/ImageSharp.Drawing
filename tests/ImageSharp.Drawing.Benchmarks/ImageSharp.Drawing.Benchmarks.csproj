@@ -64,6 +64,9 @@
     <Compile Include="..\ImageSharp.Drawing.Tests\TestUtilities\SvgBenchmarkHelper.cs">
       <Link>SvgBenchmarkHelper.cs</Link>
     </Compile>
+    <Compile Include="..\ImageSharp.Drawing.Tests\TestUtilities\SvgBenchmarkHelper.Backends.cs">
+      <Link>SvgBenchmarkHelper.Backends.cs</Link>
+    </Compile>
   </ItemGroup>
 
 </Project>

@@ -16,11 +16,17 @@ This document explains the backend as a newcomer would need to understand it:
 
 ## Where The Public WebGPU Types Fit
 
-The public WebGPU surface area around this backend is small and target-first:
+The public WebGPU surface area around this backend is small and target-first. Most applications only reach for the recommended types; the advanced types exist as escape hatches for unusual interop scenarios.
+
+**Recommended types** — the entry points most applications should use:
 
 - `WebGPUEnvironment` exposes explicit support probes for the library-managed WebGPU environment
 - `WebGPUWindow<TPixel>` owns a native window and either runs a render loop or returns `WebGPUWindowFrame<TPixel>` instances through `TryAcquireFrame(...)`
+- `WebGPUHostedWindow<TPixel>` attaches to a caller-owned native window via `WebGPUWindowHost` — the host application owns the window and its lifecycle and tells the hosted window when the client area resizes
 - `WebGPURenderTarget<TPixel>` owns an offscreen native target for GPU rendering, hybrid CPU plus GPU canvases, and readback
+
+**Advanced types** — interop escape hatches for applications that already own a WebGPU device, queue, or native surface:
+
 - `WebGPUDeviceContext<TPixel>` wraps a shared or caller-owned device and queue and creates native-only or hybrid frames and canvases over external textures
 - `WebGPUNativeSurfaceFactory` is the low-level escape hatch for caller-owned native targets
 
@@ -150,7 +156,7 @@ The expensive staged work is delegated:
 The public object graph around those responsibilities is also separate:
 
 - `WebGPUEnvironment` handles explicit support probes
-- `WebGPUWindow<TPixel>`, `WebGPURenderTarget<TPixel>`, and `WebGPUDeviceContext<TPixel>` construct native targets, frames, and canvases
+- `WebGPUWindow<TPixel>`, `WebGPUHostedWindow<TPixel>`, and `WebGPURenderTarget<TPixel>` are the recommended target constructors; `WebGPUDeviceContext<TPixel>` and `WebGPUNativeSurfaceFactory` are advanced interop escape hatches for caller-owned devices or surfaces
 - `DrawingCanvas<TPixel>` hands a prepared `CompositionScene` to the backend
 
 ## The Flush Boundary
@@ -261,7 +267,7 @@ The staged scene pipeline itself is described in [`WEBGPU_RASTERIZER.md`](d:/Git
 If you want to understand the backend first, read the code in this order:
 
 1. `WebGPUEnvironment.cs`
-2. `WebGPUWindow{TPixel}.cs`, `WebGPUWindowFrame{TPixel}.cs`, `WebGPURenderTarget{TPixel}.cs`, and `WebGPUDeviceContext{TPixel}.cs`
+2. `WebGPUWindow{TPixel}.cs`, `WebGPUWindowFrame{TPixel}.cs`, `WebGPUHostedWindow{TPixel}.cs`, `WebGPUWindowHost.cs`, `WebGPURenderTarget{TPixel}.cs`, and `WebGPUDeviceContext{TPixel}.cs`
 3. `WebGPUDrawingBackend.cs`
 4. `WebGPUFlushContext.cs`
 5. `WebGPURuntime.cs`
@@ -279,7 +285,7 @@ The easiest way to keep this backend straight is to remember that it is not the 
 If that model is clear, the major types fall into place:
 
 - `WebGPUEnvironment` exposes explicit support probes
-- `WebGPUWindow<TPixel>`, `WebGPURenderTarget<TPixel>`, and `WebGPUDeviceContext<TPixel>` create canvases over native targets
+- `WebGPUWindow<TPixel>`, `WebGPUHostedWindow<TPixel>`, and `WebGPURenderTarget<TPixel>` are the recommended target types; `WebGPUDeviceContext<TPixel>` and `WebGPUNativeSurfaceFactory` are advanced interop escape hatches
 - `WebGPUDrawingBackend` orchestrates and decides policy
 - `WebGPUFlushContext` owns one flush's execution state
 - `WebGPURuntime` owns longer-lived device state

@@ -48,7 +48,7 @@ public sealed class EmptyPath : IPath
     public IEnumerable<ISimplePath> Flatten() => [];
 
     /// <inheritdoc />
-    public LinearGeometry ToLinearGeometry(Matrix4x4 transform) => EmptyGeometry;
+    public LinearGeometry ToLinearGeometry(Vector2 scale) => EmptyGeometry;
 
     /// <inheritdoc />
     public IPath Transform(Matrix4x4 matrix) => this;

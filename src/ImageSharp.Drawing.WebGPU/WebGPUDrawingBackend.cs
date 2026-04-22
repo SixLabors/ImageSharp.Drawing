@@ -96,6 +96,47 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     internal uint TestingLastClipReduceX { get; private set; }
 
     /// <summary>
+    /// Gets the number of staged-dispatch attempts (including the successful one, if any) for the most recent flush.
+    /// </summary>
+    internal int TestingLastAttemptCount { get; private set; }
+
+    /// <summary>
+    /// Gets the per-attempt bump-allocator readbacks for the most recent flush.
+    /// </summary>
+    internal List<GpuSceneBumpAllocators> TestingLastAttemptBumpAllocators { get; } = [];
+
+    /// <summary>
+    /// Gets the per-attempt bump-size budgets for the most recent flush.
+    /// </summary>
+    internal List<WebGPUSceneBumpSizes> TestingLastAttemptBumpSizes { get; } = [];
+
+    /// <summary>
+    /// Gets the per-attempt <c>requiresGrowth</c> decisions for the most recent flush.
+    /// </summary>
+    internal List<bool> TestingLastAttemptRequiresGrowth { get; } = [];
+
+    /// <summary>
+    /// Gets a value indicating whether the most recent flush exhausted its dynamic-growth retry budget
+    /// and fell through to the CPU fallback.
+    /// </summary>
+    internal bool TestingLastExhaustedRetryBudget { get; private set; }
+
+    /// <summary>
+    /// Gets the final-attempt coarse pass workgroup counts for the most recent flush (X, Y).
+    /// </summary>
+    internal (uint X, uint Y) TestingLastCoarseDispatch { get; private set; }
+
+    /// <summary>
+    /// Gets the final-attempt fine pass workgroup counts for the most recent flush (X, Y).
+    /// </summary>
+    internal (uint X, uint Y) TestingLastFineDispatch { get; private set; }
+
+    /// <summary>
+    /// Gets the final-attempt chunk window for the most recent flush (TileYStart, TileHeight, TileBufferHeight).
+    /// </summary>
+    internal (uint Start, uint Height, uint BufferHeight) TestingLastChunkWindow { get; private set; }
+
+    /// <summary>
     /// Gets a value indicating whether the last flush completed on the staged path.
     /// </summary>
     /// <remarks>
@@ -154,6 +195,11 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         this.TestingLastEncodedSceneClipCount = 0;
         this.TestingLastUsedLargePathScan = false;
         this.TestingLastClipReduceX = 0;
+        this.TestingLastAttemptCount = 0;
+        this.TestingLastAttemptBumpAllocators.Clear();
+        this.TestingLastAttemptBumpSizes.Clear();
+        this.TestingLastAttemptRequiresGrowth.Clear();
+        this.TestingLastExhaustedRetryBudget = false;
         WebGPUSceneBumpSizes currentBumpSizes = this.bumpSizes;
 
         // Rent the cached scheduling arena. Null on first flush or if another thread has it.
@@ -186,13 +232,22 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                     this.TestingLastEncodedSceneClipCount = stagedScene.EncodedScene.ClipCount;
                     this.TestingLastUsedLargePathScan = stagedScene.Config.WorkgroupCounts.UseLargePathScan;
                     this.TestingLastClipReduceX = stagedScene.Config.WorkgroupCounts.ClipReduceX;
+                    this.TestingLastCoarseDispatch = (stagedScene.Config.WorkgroupCounts.CoarseX, stagedScene.Config.WorkgroupCounts.CoarseY);
+                    this.TestingLastFineDispatch = (stagedScene.Config.WorkgroupCounts.FineX, stagedScene.Config.WorkgroupCounts.FineY);
+                    this.TestingLastChunkWindow = (stagedScene.Config.ChunkWindow.TileYStart, stagedScene.Config.ChunkWindow.TileHeight, stagedScene.Config.ChunkWindow.TileBufferHeight);
 
                     if (stagedScene.EncodedScene.FillCount == 0)
                     {
                         return;
                     }
 
-                    if (WebGPUSceneDispatch.TryRenderStagedScene(ref stagedScene, ref schedulingArena, out bool requiresGrowth, out WebGPUSceneBumpSizes grownBumpSizes, out error))
+                    bool renderSucceeded = WebGPUSceneDispatch.TryRenderStagedScene(ref stagedScene, ref schedulingArena, out bool requiresGrowth, out WebGPUSceneBumpSizes grownBumpSizes, out GpuSceneBumpAllocators lastBumpAllocators, out error);
+                    this.TestingLastAttemptCount = attempt + 1;
+                    this.TestingLastAttemptBumpSizes.Add(currentBumpSizes);
+                    this.TestingLastAttemptBumpAllocators.Add(lastBumpAllocators);
+                    this.TestingLastAttemptRequiresGrowth.Add(requiresGrowth);
+
+                    if (renderSucceeded)
                     {
                         // Persist GPU-reported actual usage for next flush.
                         this.bumpSizes = grownBumpSizes;
@@ -219,6 +274,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             }
 
             this.TestingLastGPUInitializationFailure = "The staged WebGPU scene exceeded the current dynamic growth retry budget.";
+            this.TestingLastExhaustedRetryBudget = true;
             this.FlushCompositionsFallback(configuration, target, compositionScene, compositionBounds: null);
         }
         finally

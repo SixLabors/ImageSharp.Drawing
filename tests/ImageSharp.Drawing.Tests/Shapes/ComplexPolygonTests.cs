@@ -11,64 +11,58 @@ public class ComplexPolygonTests
         => new(new PointF[] { new(x, y), new(x + size, y), new(x + size, y + size), new(x, y + size) });
 
     [Fact]
-    public void ToLinearGeometry_WithTransform_AppliesTransformToPoints()
+    public void ToLinearGeometry_WithScale_BakesPoints()
     {
         Polygon outer = CreateSquare(0, 0, 10);
         Polygon hole = CreateSquare(2, 2, 6);
         ComplexPolygon complex = new(outer, hole);
 
-        Matrix4x4 transform = Matrix4x4.CreateScale(2F);
+        Vector2 scale = new(2F);
 
-        LinearGeometry identity = complex.ToLinearGeometry(Matrix4x4.Identity);
-        LinearGeometry transformed = complex.ToLinearGeometry(transform);
+        LinearGeometry identity = complex.ToLinearGeometry(Vector2.One);
+        LinearGeometry scaled = complex.ToLinearGeometry(scale);
 
-        // Same structure.
-        Assert.Equal(identity.Info.ContourCount, transformed.Info.ContourCount);
-        Assert.Equal(identity.Info.PointCount, transformed.Info.PointCount);
+        Assert.Equal(identity.Info.ContourCount, scaled.Info.ContourCount);
+        Assert.Equal(identity.Info.PointCount, scaled.Info.PointCount);
 
-        // Points are scaled.
         for (int i = 0; i < identity.Points.Count; i++)
         {
-            PointF expected = PointF.Transform(identity.Points[i], transform);
-            Assert.Equal(expected.X, transformed.Points[i].X, 0.001F);
-            Assert.Equal(expected.Y, transformed.Points[i].Y, 0.001F);
+            Assert.Equal(identity.Points[i].X * scale.X, scaled.Points[i].X, 0.001F);
+            Assert.Equal(identity.Points[i].Y * scale.Y, scaled.Points[i].Y, 0.001F);
         }
 
-        // Bounds are scaled.
-        Assert.Equal(identity.Info.Bounds.Left * 2, transformed.Info.Bounds.Left, 0.001F);
-        Assert.Equal(identity.Info.Bounds.Top * 2, transformed.Info.Bounds.Top, 0.001F);
-        Assert.Equal(identity.Info.Bounds.Right * 2, transformed.Info.Bounds.Right, 0.001F);
-        Assert.Equal(identity.Info.Bounds.Bottom * 2, transformed.Info.Bounds.Bottom, 0.001F);
+        Assert.Equal(identity.Info.Bounds.Left * 2, scaled.Info.Bounds.Left, 0.001F);
+        Assert.Equal(identity.Info.Bounds.Top * 2, scaled.Info.Bounds.Top, 0.001F);
+        Assert.Equal(identity.Info.Bounds.Right * 2, scaled.Info.Bounds.Right, 0.001F);
+        Assert.Equal(identity.Info.Bounds.Bottom * 2, scaled.Info.Bounds.Bottom, 0.001F);
     }
 
     [Fact]
-    public void ToLinearGeometry_WithIdentityTransform_ReturnsCachedGeometry()
+    public void ToLinearGeometry_WithIdentityScale_ReturnsCachedGeometry()
     {
         ComplexPolygon complex = new(CreateSquare(0, 0, 10));
 
-        LinearGeometry first = complex.ToLinearGeometry(Matrix4x4.Identity);
-        LinearGeometry second = complex.ToLinearGeometry(Matrix4x4.Identity);
+        LinearGeometry first = complex.ToLinearGeometry(Vector2.One);
+        LinearGeometry second = complex.ToLinearGeometry(Vector2.One);
 
         Assert.Same(first, second);
     }
 
     [Fact]
-    public void ToLinearGeometry_WithTransform_PreservesContourMetadata()
+    public void ToLinearGeometry_WithScale_PreservesContourMetadata()
     {
         Polygon outer = CreateSquare(0, 0, 10);
         Polygon hole = CreateSquare(2, 2, 6);
         ComplexPolygon complex = new(outer, hole);
 
-        Matrix4x4 transform = Matrix4x4.CreateTranslation(50, 100, 0);
+        LinearGeometry geometry = complex.ToLinearGeometry(new Vector2(3F, 2F));
 
-        LinearGeometry transformed = complex.ToLinearGeometry(transform);
+        Assert.Equal(2, geometry.Info.ContourCount);
+        Assert.Equal(2, geometry.Contours.Count);
 
-        Assert.Equal(2, transformed.Info.ContourCount);
-        Assert.Equal(2, transformed.Contours.Count);
-
-        for (int i = 0; i < transformed.Contours.Count; i++)
+        for (int i = 0; i < geometry.Contours.Count; i++)
         {
-            Assert.True(transformed.Contours[i].IsClosed);
+            Assert.True(geometry.Contours[i].IsClosed);
         }
     }
 

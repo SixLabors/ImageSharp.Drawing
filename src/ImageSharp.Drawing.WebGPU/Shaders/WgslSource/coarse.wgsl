@@ -161,14 +161,6 @@ fn write_end_clip(end_clip: CmdEndClip) {
     cmd_offset += 3u;
 }
 
-fn write_blurred_rounded_rect(color: CmdColor, info_offset: u32) {
-    alloc_cmd(3u);
-    ptcl[cmd_offset] = CMD_BLUR_RECT;
-    ptcl[cmd_offset + 1u] = info_offset;
-    ptcl[cmd_offset + 2u] = color.rgba_color;
-    cmd_offset += 3u;
-}
-
 fn get_bin_tile_count(path: Path, bin_tile_x: u32, bin_tile_y: u32) -> u32 {
     let y0 = max(path.bbox.y, bin_tile_y);
     let y1 = min(path.bbox.w, bin_tile_y + N_TILE_Y);
@@ -251,9 +243,14 @@ fn main(
         return;
     }
     let width_in_bins = (config.width_in_tiles + N_TILE_X - 1u) / N_TILE_X;
+    let height_in_bins = (config.height_in_tiles + N_TILE_Y - 1u) / N_TILE_Y;
     let chunk_bin_y = config.chunk_tile_y_start / N_TILE_Y;
     let bin_ix = width_in_bins * (chunk_bin_y + wg_id.y) + wg_id.x;
     let n_partitions = (config.n_drawobj + N_TILE - 1u) / N_TILE;
+    // Bin-header stride per draw-partition: the full bin grid aligned up to
+    // N_TILE so every binning workgroup contributes a dense slot block.
+    let n_bins_total = width_in_bins * height_in_bins;
+    let bin_header_stride = (n_bins_total + N_TILE - 1u) / N_TILE * N_TILE;
 
     // Coordinates of the top left of this bin, in tiles.
     let bin_tile_x = N_TILE_X * wg_id.x;
@@ -292,7 +289,7 @@ fn main(
                 part_start_ix = ready_ix;
                 var count = 0u;
                 if partition_ix + local_id.x < n_partitions {
-                    let in_ix = (partition_ix + local_id.x) * N_TILE + bin_ix;
+                    let in_ix = (partition_ix + local_id.x) * bin_header_stride + bin_ix;
                     let bin_header = load_bin_header(in_ix);
                     count = bin_header.element_count;
                     sh_part_offsets[local_id.x] = bin_header.chunk_offset;
@@ -455,12 +452,6 @@ fn main(
                     case DRAWTAG_FILL_RECOLOR: {
                         write_path(tile, tile_ix, draw_flags);
                         write_recolor(scene[dd], scene[dd + 1u], scene[dd + 2u], draw_flags);
-                    }
-                    case DRAWTAG_BLURRED_ROUNDED_RECT: {
-                        write_path(tile, tile_ix, draw_flags);
-                        let rgba_color = scene[dd];
-                        let info_offset = di + 1u;
-                        write_blurred_rounded_rect(CmdColor(rgba_color, draw_flags), info_offset);
                     }
                     case DRAWTAG_FILL_LIN_GRADIENT: {
                         write_path(tile, tile_ix, draw_flags);

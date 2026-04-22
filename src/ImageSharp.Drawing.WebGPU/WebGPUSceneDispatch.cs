@@ -609,6 +609,7 @@ internal static class WebGPUSceneDispatch
                 infoBinDataBufferSize,
                 bumpBuffer,
                 workgroupCounts.BinningX,
+                workgroupCounts.BinningY,
                 out error))
         {
             return false;
@@ -987,10 +988,12 @@ internal static class WebGPUSceneDispatch
         ref WebGPUSceneSchedulingArena? schedulingArena,
         out bool requiresGrowth,
         out WebGPUSceneBumpSizes grownBumpSizes,
+        out GpuSceneBumpAllocators lastBumpAllocators,
         out string? error)
     {
         requiresGrowth = false;
         grownBumpSizes = stagedScene.Config.BumpSizes;
+        lastBumpAllocators = default;
         error = null;
 
         WebGPUEncodedScene encodedScene = stagedScene.EncodedScene;
@@ -1003,7 +1006,7 @@ internal static class WebGPUSceneDispatch
         // The chunked path ensures its own arena per chunk with chunk-local sizes.
         if (IsChunkableBindingFailure(stagedScene.BindingLimitFailure.Buffer))
         {
-            return TryRenderSegmentChunkedStagedScene(ref stagedScene, ref schedulingArena, out requiresGrowth, out grownBumpSizes, out error);
+            return TryRenderSegmentChunkedStagedScene(ref stagedScene, ref schedulingArena, out requiresGrowth, out grownBumpSizes, out lastBumpAllocators, out error);
         }
 
         // Normal path: ensure arena with full-scene sizes.
@@ -1053,6 +1056,8 @@ internal static class WebGPUSceneDispatch
         {
             return false;
         }
+
+        lastBumpAllocators = bumpAllocators;
 
         // Overflow: the fine output is discarded, but the scheduling readback still reports
         // the scratch usage visible to this pass. Later-stage demand can stay hidden until
@@ -1118,6 +1123,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="schedulingArena">The flush-local reusable scheduling scratch and readback arena.</param>
     /// <param name="requiresGrowth">Receives whether the chunked path needs the caller to retry with larger global scratch capacities.</param>
     /// <param name="grownBumpSizes">Receives the enlarged scratch capacities when <paramref name="requiresGrowth"/> is <see langword="true"/>.</param>
+    /// <param name="lastBumpAllocators">Receives the last chunk's bump-allocator readback for diagnostics (default when no chunk ran).</param>
     /// <param name="error">Receives the chunked-render failure reason when the oversized scene cannot be completed.</param>
     /// <returns><see langword="true"/> when every chunk rendered successfully; otherwise, <see langword="false"/>.</returns>
     private static unsafe bool TryRenderSegmentChunkedStagedScene(
@@ -1125,10 +1131,12 @@ internal static class WebGPUSceneDispatch
         ref WebGPUSceneSchedulingArena? schedulingArena,
         out bool requiresGrowth,
         out WebGPUSceneBumpSizes grownBumpSizes,
+        out GpuSceneBumpAllocators lastBumpAllocators,
         out string? error)
     {
         requiresGrowth = false;
         grownBumpSizes = stagedScene.Config.BumpSizes;
+        lastBumpAllocators = default;
         error = null;
 
         WebGPUEncodedScene encodedScene = stagedScene.EncodedScene;
@@ -1993,6 +2001,7 @@ internal static class WebGPUSceneDispatch
         nuint infoBinDataBufferSize,
         WgpuBuffer* bumpBuffer,
         uint dispatchX,
+        uint dispatchY,
         out string? error)
     {
         BindGroupEntry* entries = stackalloc BindGroupEntry[7];
@@ -2004,7 +2013,7 @@ internal static class WebGPUSceneDispatch
         entries[5] = CreateBufferBinding(5, bumpBuffer, (nuint)sizeof(GpuSceneBumpAllocators));
         entries[6] = CreateBufferBinding(6, resources.InfoBinDataBuffer, infoBinDataBufferSize);
 
-        if (!recording.TryRecord(WebGPUSceneShaderId.Binning, entries, 7, dispatchX, 1, 1, out error))
+        if (!recording.TryRecord(WebGPUSceneShaderId.Binning, entries, 7, dispatchX, dispatchY, 1, out error))
         {
             return false;
         }
@@ -3334,22 +3343,9 @@ internal static class WebGPUSceneDispatch
         }
 
         Stopwatch stopwatch = Stopwatch.StartNew();
-        while (!signal.IsSet)
+        while (!signal.IsSet && stopwatch.ElapsedMilliseconds < 5000)
         {
-            int remainingMilliseconds = 5000 - (int)stopwatch.ElapsedMilliseconds;
-            if (remainingMilliseconds <= 0)
-            {
-                break;
-            }
-
-            // The map callback still needs DevicePoll to make progress, but a tight blocking poll loop
-            // can monopolize the CPU while the driver is trying to retire the submitted work. Poll once,
-            // then yield briefly so the callback and driver threads can run without the flush thread hot-spinning.
-            _ = extension.DevicePoll(device, false, (WrappedSubmissionIndex*)null);
-            if (!signal.IsSet)
-            {
-                _ = signal.Wait(Math.Min(remainingMilliseconds, 1));
-            }
+            _ = extension.DevicePoll(device, true, (WrappedSubmissionIndex*)null);
         }
 
         return signal.IsSet;

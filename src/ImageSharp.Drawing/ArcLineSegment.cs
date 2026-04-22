@@ -3,6 +3,7 @@
 
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace SixLabors.ImageSharp.Drawing;
 
@@ -100,17 +101,24 @@ public class ArcLineSegment : ILineSegment
     public RectangleF Bounds { get; }
 
     /// <inheritdoc />
-    public int LinearVertexCount => this.linePoints.Length;
-
-    /// <inheritdoc/>
-    public ReadOnlyMemory<PointF> Flatten() => this.linePoints;
+    public int LinearVertexCount(Vector2 scale) => this.linePoints.Length;
 
     /// <inheritdoc />
-    public void CopyTo(Span<PointF> destination, bool skipFirstPoint)
+    public void CopyTo(Span<PointF> destination, bool skipFirstPoint, Vector2 scale)
     {
         int startIndex = skipFirstPoint ? 1 : 0;
+        ReadOnlySpan<PointF> source = this.linePoints.AsSpan(startIndex);
 
-        this.linePoints.AsSpan(startIndex).CopyTo(destination);
+        if (scale == Vector2.One)
+        {
+            source.CopyTo(destination);
+            return;
+        }
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            destination[i] = new PointF(source[i].X * scale.X, source[i].Y * scale.Y);
+        }
     }
 
     /// <summary>
@@ -234,11 +242,12 @@ public class ArcLineSegment : ILineSegment
             Vector2 q1 = p1 + (alpha * EllipticArcDerivative(radius, xAngle, s));
             Vector2 q2 = p2 - (alpha * EllipticArcDerivative(radius, xAngle, s + signStep));
 
-            ReadOnlySpan<PointF> bezierPoints = new CubicBezierLineSegment(from, q1, q2, p2).Flatten().Span;
-            for (int i = 0; i < bezierPoints.Length; i++)
-            {
-                points.Add(bezierPoints[i]);
-            }
+            CubicBezierLineSegment bezier = new(from, q1, q2, p2);
+            int bezierCount = bezier.LinearVertexCount(Vector2.One);
+            int startIndex = points.Count;
+            CollectionsMarshal.SetCount(points, startIndex + bezierCount);
+            Span<PointF> destination = CollectionsMarshal.AsSpan(points).Slice(startIndex, bezierCount);
+            bezier.CopyTo(destination, skipFirstPoint: false, Vector2.One);
 
             from = p2;
 

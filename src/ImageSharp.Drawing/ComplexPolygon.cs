@@ -3,7 +3,6 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
-using System.Threading;
 
 namespace SixLabors.ImageSharp.Drawing;
 
@@ -19,7 +18,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     private float length;
     private RectangleF? bounds;
     private IPath? closedPath;
-    private LinearGeometry? linearGeometry;
+    private LinearGeometryCache geometryCache;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ComplexPolygon"/> class.
@@ -101,31 +100,12 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     }
 
     /// <inheritdoc/>
-    public LinearGeometry ToLinearGeometry(Matrix4x4 transform)
-        => transform.IsIdentity ? this.GetLinearGeometryCore() : this.CreateTransformedLinearGeometryCore(transform);
+    public LinearGeometry ToLinearGeometry(Vector2 scale)
+        => this.geometryCache.TryGet(scale, out LinearGeometry? hit)
+            ? hit
+            : this.geometryCache.Store(scale, this.BuildLinearGeometry(scale));
 
-    /// <summary>
-    /// Returns the retained identity geometry, publishing it once for concurrent readers.
-    /// </summary>
-    /// <returns>The retained identity geometry.</returns>
-    private LinearGeometry GetLinearGeometryCore()
-    {
-        LinearGeometry? cached = Volatile.Read(ref this.linearGeometry);
-        if (cached is not null)
-        {
-            return cached;
-        }
-
-        LinearGeometry geometry = this.CreateLinearGeometryCore();
-        LinearGeometry? published = Interlocked.CompareExchange(ref this.linearGeometry, geometry, null);
-        return published ?? geometry;
-    }
-
-    /// <summary>
-    /// Materializes the retained identity geometry for the composed contours.
-    /// </summary>
-    /// <returns>The retained identity geometry.</returns>
-    private LinearGeometry CreateLinearGeometryCore()
+    private LinearGeometry BuildLinearGeometry(Vector2 scale)
     {
         int pointCount = 0;
         int contourCount = 0;
@@ -141,7 +121,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
 
         foreach (IPath path in this.paths)
         {
-            LinearGeometry geometry = path.ToLinearGeometry(Matrix4x4.Identity);
+            LinearGeometry geometry = path.ToLinearGeometry(scale);
 
             if (geometry.Info.PointCount == 0)
             {
@@ -170,102 +150,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
 
         foreach (IPath path in this.paths)
         {
-            LinearGeometry geometry = path.ToLinearGeometry(Matrix4x4.Identity);
-            if (geometry.Info.PointCount == 0)
-            {
-                continue;
-            }
-
-            for (int i = 0; i < geometry.Points.Count; i++)
-            {
-                points[pointStart + i] = geometry.Points[i];
-            }
-
-            for (int i = 0; i < geometry.Contours.Count; i++)
-            {
-                LinearContour contour = geometry.Contours[i];
-                contours[contourStart + i] = new LinearContour
-                {
-                    PointStart = pointStart + contour.PointStart,
-                    PointCount = contour.PointCount,
-                    SegmentStart = segmentStart + contour.SegmentStart,
-                    SegmentCount = contour.SegmentCount,
-                    IsClosed = contour.IsClosed
-                };
-            }
-
-            pointStart += geometry.Info.PointCount;
-            contourStart += geometry.Info.ContourCount;
-            segmentStart += geometry.Info.SegmentCount;
-        }
-
-        RectangleF bounds = hasBounds ? RectangleF.FromLTRB(minX, minY, maxX, maxY) : RectangleF.Empty;
-
-        return new LinearGeometry(
-            new LinearGeometryInfo
-            {
-                Bounds = bounds,
-                ContourCount = contours.Length,
-                PointCount = points.Length,
-                SegmentCount = segmentCount,
-                NonHorizontalSegmentCountPixelBoundary = nonHorizontalSegmentCountPixelBoundary,
-                NonHorizontalSegmentCountPixelCenter = nonHorizontalSegmentCountPixelCenter
-            },
-            contours,
-            points);
-    }
-
-    /// <summary>
-    /// Materializes transformed linear geometry without caching the transformed result.
-    /// </summary>
-    /// <param name="transform">The transform to apply to each emitted point.</param>
-    /// <returns>The transformed retained geometry.</returns>
-    private LinearGeometry CreateTransformedLinearGeometryCore(Matrix4x4 transform)
-    {
-        int pointCount = 0;
-        int contourCount = 0;
-        int segmentCount = 0;
-        int nonHorizontalSegmentCountPixelBoundary = 0;
-        int nonHorizontalSegmentCountPixelCenter = 0;
-
-        bool hasBounds = false;
-        float minX = float.MaxValue;
-        float minY = float.MaxValue;
-        float maxX = float.MinValue;
-        float maxY = float.MinValue;
-
-        foreach (IPath path in this.paths)
-        {
-            LinearGeometry geometry = path.ToLinearGeometry(transform);
-
-            if (geometry.Info.PointCount == 0)
-            {
-                continue;
-            }
-
-            RectangleF childBounds = geometry.Info.Bounds;
-            minX = MathF.Min(minX, childBounds.Left);
-            minY = MathF.Min(minY, childBounds.Top);
-            maxX = MathF.Max(maxX, childBounds.Right);
-            maxY = MathF.Max(maxY, childBounds.Bottom);
-            hasBounds = true;
-
-            pointCount += geometry.Info.PointCount;
-            contourCount += geometry.Info.ContourCount;
-            segmentCount += geometry.Info.SegmentCount;
-            nonHorizontalSegmentCountPixelBoundary += geometry.Info.NonHorizontalSegmentCountPixelBoundary;
-            nonHorizontalSegmentCountPixelCenter += geometry.Info.NonHorizontalSegmentCountPixelCenter;
-        }
-
-        PointF[] points = new PointF[pointCount];
-        LinearContour[] contours = new LinearContour[contourCount];
-        int pointStart = 0;
-        int contourStart = 0;
-        int segmentStart = 0;
-
-        foreach (IPath path in this.paths)
-        {
-            LinearGeometry geometry = path.ToLinearGeometry(transform);
+            LinearGeometry geometry = path.ToLinearGeometry(scale);
             if (geometry.Info.PointCount == 0)
             {
                 continue;

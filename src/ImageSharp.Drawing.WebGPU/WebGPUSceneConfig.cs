@@ -195,20 +195,22 @@ internal readonly struct WebGPUSceneBumpSizes
     /// Creates the initial capacities for the staged scene's bump-allocated scratch buffers.
     /// </summary>
     /// <remarks>
-    /// These are startup sizes for the staged pipeline's transient GPU scratch memory, not fixed
-    /// correctness limits. The dynamic-memory path will grow them when an earlier run reports that
-    /// a scene needed more space.
+    /// Startup sizes for the staged pipeline's transient GPU scratch memory, not fixed correctness
+    /// limits. The dynamic-memory path will grow them when an earlier run reports that a scene
+    /// needed more space. The values mirror Vello's hand-picked defaults (<c>vello_encoding/src/config.rs</c>)
+    /// which are sized to accommodate its reference scenes — including paris-30k — without a
+    /// grow-and-retry cycle on the first flush.
     /// </remarks>
     public static WebGPUSceneBumpSizes Initial()
         => new(
-            1U << 15,
-            1U << 12,
-            1U << 15,
-            1U << 15,
-            1U << 15,
-            1U << 15,
-            1U << 20,
-            1U << 17);
+            1U << 21, // Lines
+            1U << 18, // Binning
+            1U << 20, // PathRows
+            1U << 21, // PathTiles
+            1U << 21, // SegCounts
+            1U << 21, // Segments
+            1U << 20, // BlendSpill
+            1U << 23); // Ptcl
 }
 
 /// <summary>
@@ -230,7 +232,8 @@ internal readonly struct WebGPUSceneWorkgroupCounts
     /// <param name="drawLeafX">The workgroup count for the draw leaf pass.</param>
     /// <param name="clipReduceX">The workgroup count for the clip reduction pass.</param>
     /// <param name="clipLeafX">The workgroup count for the clip leaf pass.</param>
-    /// <param name="binningX">The workgroup count for the binning pass.</param>
+    /// <param name="binningX">The workgroup count for the binning pass along the draw-partition axis.</param>
+    /// <param name="binningY">The workgroup count for the binning pass along the bin-chunk axis.</param>
     /// <param name="pathRowAllocX">The workgroup count for the sparse path-row allocation pass.</param>
     /// <param name="tileAllocX">The workgroup count for the sparse path-tile allocation pass.</param>
     /// <param name="pathCountSetupX">The workgroup count for the line-driven indirect setup pass.</param>
@@ -255,6 +258,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
         uint clipReduceX,
         uint clipLeafX,
         uint binningX,
+        uint binningY,
         uint pathRowAllocX,
         uint tileAllocX,
         uint pathCountSetupX,
@@ -279,6 +283,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
         this.ClipReduceX = clipReduceX;
         this.ClipLeafX = clipLeafX;
         this.BinningX = binningX;
+        this.BinningY = binningY;
         this.PathRowAllocX = pathRowAllocX;
         this.TileAllocX = tileAllocX;
         this.PathCountSetupX = pathCountSetupX;
@@ -348,9 +353,14 @@ internal readonly struct WebGPUSceneWorkgroupCounts
     public uint ClipLeafX { get; }
 
     /// <summary>
-    /// Gets the workgroup count for the binning pass.
+    /// Gets the workgroup count for the binning pass along the draw-partition axis.
     /// </summary>
     public uint BinningX { get; }
+
+    /// <summary>
+    /// Gets the workgroup count for the binning pass along the bin-chunk axis.
+    /// </summary>
+    public uint BinningY { get; }
 
     /// <summary>
     /// Gets the workgroup count for the sparse path-row allocation pass.
@@ -436,6 +446,14 @@ internal readonly struct WebGPUSceneWorkgroupCounts
         uint widthInBins = DivideRoundUp(checked((uint)scene.TileCountX), 16U);
         uint heightInBins = DivideRoundUp(chunkWindow.TileBufferHeight, 16U);
 
+        // Binning dispatches over the full-image bin grid, not the chunk, since
+        // its output (bin_header + bin_data) is read by every chunk's coarse
+        // workgroups. Each binning workgroup covers 256 bins, so the Y
+        // dimension tiles the full bin grid whenever it exceeds 256 bins.
+        uint fullHeightInBins = DivideRoundUp(checked((uint)scene.TileCountY), 16U);
+        uint totalBins = checked(widthInBins * fullHeightInBins);
+        uint binChunks = DivideRoundUp(totalBins, 256U);
+
         return new WebGPUSceneWorkgroupCounts(
             useLargePathScan,
             pathTagWgs,
@@ -449,6 +467,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
             clipReduceWgs,
             clipWgs,
             BinningComputeShader.GetDispatchX(drawObjectCount),
+            binChunks,
             PathRowAllocComputeShader.GetDispatchX(pathCount),
             TileAllocComputeShader.GetDispatchX(pathCount),
             PathCountSetupComputeShader.GetDispatchX(),
@@ -688,7 +707,11 @@ internal readonly struct WebGPUSceneBufferSizes
         uint clipBboxCount = clipInputCount;
         uint drawBboxCount = drawObjectCount;
         uint drawObjectPartitions = BinningComputeShader.GetDispatchX(drawObjectCount);
-        uint binHeaderCount = checked(drawObjectPartitions * 256U);
+
+        // Each binning workgroup writes 256 bin-header slots (one per lane), and
+        // the Y dispatch tiles the full bin grid in 256-bin chunks. The header
+        // buffer therefore reserves 256 slots per (draw-partition, bin-chunk).
+        uint binHeaderCount = checked(drawObjectPartitions * workgroupCounts.BinningY * 256U);
         uint pathCount = AlignUp(checked((uint)scene.PathCount), 256U);
         uint ptclBootstrapCount = checked((uint)scene.TileCountX * chunkWindow.TileBufferHeight * WebGPUSceneDispatch.PtclInitialAlloc);
         uint ptclCount = checked(bumpSizes.Ptcl + ptclBootstrapCount);

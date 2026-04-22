@@ -67,22 +67,24 @@ public sealed class LinearLineSegment : ILineSegment
     public RectangleF Bounds { get; }
 
     /// <inheritdoc />
-    public int LinearVertexCount => this.points.Length;
-
-    /// <summary>
-    /// Converts the <see cref="ILineSegment" /> into a simple linear path..
-    /// </summary>
-    /// <returns>
-    /// Returns the current <see cref="ILineSegment" /> as simple linear path.
-    /// </returns>
-    public ReadOnlyMemory<PointF> Flatten() => this.points;
+    public int LinearVertexCount(Vector2 scale) => this.points.Length;
 
     /// <inheritdoc />
-    public void CopyTo(Span<PointF> destination, bool skipFirstPoint)
+    public void CopyTo(Span<PointF> destination, bool skipFirstPoint, Vector2 scale)
     {
         int startIndex = skipFirstPoint ? 1 : 0;
+        ReadOnlySpan<PointF> source = this.points.AsSpan(startIndex);
 
-        this.points.AsSpan(startIndex).CopyTo(destination);
+        if (scale == Vector2.One)
+        {
+            source.CopyTo(destination);
+            return;
+        }
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            destination[i] = new PointF(source[i].X * scale.X, source[i].Y * scale.Y);
+        }
     }
 
     /// <summary>

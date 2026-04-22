@@ -29,7 +29,7 @@ public class InternalPathTests
     {
         LinearLineSegment seg1 = new(new PointF(0, 0), new PointF(0, 2));
 
-        InternalPath path = new(seg1, true);
+        InternalPath path = new([seg1], true);
 
         Assert.Equal(4, path.Length);
     }
@@ -39,7 +39,7 @@ public class InternalPathTests
     {
         LinearLineSegment seg1 = new(new PointF(0, 0), new PointF(0, 2));
 
-        InternalPath path = new(seg1, false);
+        InternalPath path = new([seg1], false);
 
         Assert.Equal(2, path.Length);
     }

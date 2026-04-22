@@ -259,6 +259,7 @@ The linearizer is the retained-geometry builder. It is generic over line-array s
 Its responsibilities are:
 
 - traverse prepared contours
+- apply the residual transform per-point as contours are read
 - clip work to retained bounds
 - convert coordinates into fixed-point
 - decide whether a segment is contained or must be split
@@ -266,6 +267,12 @@ Its responsibilities are:
 - accumulate start covers for left-of-band influence
 
 For a newcomer, the most important thing to understand is that the linearizer is not the hot coverage emitter. It is the preparation step that turns arbitrary contour geometry into a stable retained scanning payload.
+
+### Residual transform application
+
+The prepared `LinearGeometry` passed to `CreateRasterizableGeometry(...)` carries scale-baked points — the effective X/Y scale of the drawing matrix has already been absorbed into the flattened contour, so curve subdivision happens at device-scale precision. The remaining rotation, shear, translation, and perspective is handed to the rasterizer as a separate `Matrix4x4 residual`, which the linearizer applies per-point where the contour is read: at segment emission time in `ProcessContained` / `ProcessUncontained` for fills, and at bounds / closure / contour-segment construction sites in the stroke linearizer.
+
+This split keeps the scale-baked geometry cacheable across frames (text and panning workloads reuse the same bake at a fixed zoom) while letting per-frame rotation or translation ride through the rasterizer without re-subdividing curves.
 
 ### Contained lines
 

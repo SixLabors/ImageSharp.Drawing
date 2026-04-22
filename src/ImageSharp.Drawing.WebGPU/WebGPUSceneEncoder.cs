@@ -225,7 +225,7 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Gets the CPU-side estimate of the number of active tile rows referenced by the staged path metadata.
         /// </summary>
-        public int EstimatedPathRowCount => (int)Math.Min(this.estimatedPathRowCount, int.MaxValue);
+        public readonly int EstimatedPathRowCount => (int)Math.Min(this.estimatedPathRowCount, int.MaxValue);
 
         /// <summary>
         /// Gets the flush-wide fine rasterization mode selected while encoding visible fills.
@@ -326,7 +326,8 @@ internal static class WebGPUSceneEncoder
                         return false;
                     }
 
-                    this.AppendTransformIfChanged(command.Transform);
+                    Matrix4x4 fillResidual = ComputeResidual(ExtractScale(command.Transform), command.Transform);
+                    this.AppendTransformIfChanged(GetSceneTransform(fillResidual, resolved.RasterizerOptions.SamplingOrigin));
 
                     this.AppendPlainFill(resolved);
                     error = null;
@@ -363,7 +364,8 @@ internal static class WebGPUSceneEncoder
                 return false;
             }
 
-            this.AppendTransformIfChanged(command.Transform);
+            Matrix4x4 strokeResidual = ComputeResidual(ExtractScale(command.Transform), command.Transform);
+            this.AppendTransformIfChanged(GetSceneTransform(strokeResidual, resolved.RasterizerOptions.SamplingOrigin));
             this.AppendPlainStroke(resolved, command.Pen);
             error = null;
             return true;
@@ -385,7 +387,12 @@ internal static class WebGPUSceneEncoder
                 return false;
             }
 
-            this.AppendTransformIfChanged(command.Transform);
+            Vector2 segmentScale = ExtractScale(command.Transform);
+            Matrix4x4 segmentResidual = ComputeResidual(segmentScale, command.Transform);
+            this.AppendTransformIfChanged(GetSceneTransform(segmentResidual, resolved.RasterizerOptions.SamplingOrigin));
+            PointF start = new(resolved.Start.X * segmentScale.X, resolved.Start.Y * segmentScale.Y);
+            PointF end = new(resolved.End.X * segmentScale.X, resolved.End.Y * segmentScale.Y);
+            float widthScale = GetTransformWidthScale(command.Transform);
             this.AppendExplicitStroke(
                 resolved.Brush,
                 resolved.GraphicsOptions,
@@ -393,8 +400,10 @@ internal static class WebGPUSceneEncoder
                 resolved.DestinationOffset,
                 resolved.BrushBounds,
                 resolved.Pen,
-                resolved.Start,
-                resolved.End);
+                widthScale,
+                segmentScale,
+                start,
+                end);
             error = null;
             return true;
         }
@@ -415,9 +424,12 @@ internal static class WebGPUSceneEncoder
                 return false;
             }
 
-            this.AppendTransformIfChanged(command.Transform);
-            LinearGeometry geometry = LinearGeometry.CreateOpenPolyline(resolved.Points);
-            this.AppendExplicitStroke(resolved.Brush, resolved.GraphicsOptions, resolved.RasterizerOptions, resolved.DestinationOffset, resolved.BrushBounds, resolved.Pen, geometry);
+            Vector2 polylineScale = ExtractScale(command.Transform);
+            Matrix4x4 polylineResidual = ComputeResidual(polylineScale, command.Transform);
+            this.AppendTransformIfChanged(GetSceneTransform(polylineResidual, resolved.RasterizerOptions.SamplingOrigin));
+            LinearGeometry geometry = LinearGeometry.CreateOpenPolyline(resolved.Points, polylineScale);
+            float widthScale = GetTransformWidthScale(command.Transform);
+            this.AppendExplicitStroke(resolved.Brush, resolved.GraphicsOptions, resolved.RasterizerOptions, resolved.DestinationOffset, resolved.BrushBounds, resolved.Pen, widthScale, polylineScale, geometry);
             error = null;
             return true;
         }
@@ -467,6 +479,16 @@ internal static class WebGPUSceneEncoder
             this.lastTransform = transform;
         }
 
+        // Path geometry is baked at device-space scale via ToLinearGeometry(scale); the scene-side
+        // transform carries the rotation/shear/translation/perspective residual composed with the
+        // sampling-origin half-pixel shift, so the flatten shader lands each point in device space
+        // at the correct sampling origin in one transform_apply per vertex.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Matrix4x4 GetSceneTransform(Matrix4x4 residual, RasterizerSamplingOrigin samplingOrigin)
+            => samplingOrigin == RasterizerSamplingOrigin.PixelCenter
+                ? residual * Matrix4x4.CreateTranslation(0.5f, 0.5f, 0f)
+                : residual;
+
         /// <summary>
         /// Encodes one visible fill command into the path, draw, style, and auxiliary payload streams.
         /// </summary>
@@ -479,7 +501,8 @@ internal static class WebGPUSceneEncoder
             int pathDataCheckpoint = this.PathData.Count;
             int styleCheckpoint = this.Styles.Count;
             bool appendStyle = !this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1 || style2 != this.lastStyle2;
-            LinearGeometry geometry = command.Path.ToLinearGeometry(Matrix4x4.Identity);
+            Vector2 scale = ExtractScale(command.Transform);
+            LinearGeometry geometry = command.Path.ToLinearGeometry(scale);
 
             // Reserve the exact words/tags this item can append before encoding so the
             // subsequent Add calls stay on the already-allocated contiguous spans.
@@ -530,7 +553,7 @@ internal static class WebGPUSceneEncoder
             this.DrawTags.Add(drawTag);
             int gradientRowCount = this.GradientRowCount;
 
-            AppendDrawData(command.Brush, command.BrushBounds, command.GraphicsOptions, drawTag, ref this.DrawData, ref this.GradientPixels, this.Images, ref gradientRowCount);
+            AppendDrawData(command.Brush, command.BrushBounds, command.GraphicsOptions, drawTag, scale, ref this.DrawData, ref this.GradientPixels, this.Images, ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
         }
 
@@ -539,10 +562,12 @@ internal static class WebGPUSceneEncoder
         /// </summary>
         private void AppendPlainStroke(in ResolvedPathCommand command, Pen pen)
         {
-            LinearGeometry geometry = command.Path.ToLinearGeometry(Matrix4x4.Identity);
+            Vector2 scale = ExtractScale(command.Transform);
+            LinearGeometry geometry = command.Path.ToLinearGeometry(scale);
+            float widthScale = GetTransformWidthScale(command.Transform);
             uint drawTag = GetDrawTag(command.Brush);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
-            (uint style0, uint style1, uint style2) = GetStrokeStyle(command.GraphicsOptions, pen);
+            (uint style0, uint style1, uint style2) = GetStrokeStyle(command.GraphicsOptions, pen, widthScale);
             int pathTagCheckpoint = this.PathTags.Count;
             int styleCheckpoint = this.Styles.Count;
             bool appendStyle = !this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1 || style2 != this.lastStyle2;
@@ -568,9 +593,9 @@ internal static class WebGPUSceneEncoder
 
             int encodedPathCount = EncodeStrokePath(
                 geometry,
-                command.RasterizerOptions,
                 command.DestinationOffset,
                 pen,
+                widthScale,
                 this.rootTargetBounds,
                 ref this.PathTags,
                 ref this.PathData,
@@ -595,7 +620,7 @@ internal static class WebGPUSceneEncoder
             this.DrawTags.Add(drawTag);
             int gradientRowCount = this.GradientRowCount;
 
-            AppendDrawData(command.Brush, command.BrushBounds, command.GraphicsOptions, drawTag, ref this.DrawData, ref this.GradientPixels, this.Images, ref gradientRowCount);
+            AppendDrawData(command.Brush, command.BrushBounds, command.GraphicsOptions, drawTag, scale, ref this.DrawData, ref this.GradientPixels, this.Images, ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
         }
 
@@ -609,11 +634,13 @@ internal static class WebGPUSceneEncoder
             Point destinationOffset,
             Rectangle brushBounds,
             Pen pen,
+            float widthScale,
+            Vector2 scale,
             LinearGeometry geometry)
         {
             uint drawTag = GetDrawTag(brush);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
-            (uint style0, uint style1, uint style2) = GetStrokeStyle(graphicsOptions, pen);
+            (uint style0, uint style1, uint style2) = GetStrokeStyle(graphicsOptions, pen, widthScale);
             int pathTagCheckpoint = this.PathTags.Count;
             int styleCheckpoint = this.Styles.Count;
             bool appendStyle = !this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1 || style2 != this.lastStyle2;
@@ -639,9 +666,9 @@ internal static class WebGPUSceneEncoder
 
             int encodedPathCount = EncodeStrokePath(
                 geometry,
-                rasterizerOptions,
                 destinationOffset,
                 pen,
+                widthScale,
                 this.rootTargetBounds,
                 ref this.PathTags,
                 ref this.PathData,
@@ -671,6 +698,7 @@ internal static class WebGPUSceneEncoder
                 brushBounds,
                 graphicsOptions,
                 drawTag,
+                scale,
                 ref this.DrawData,
                 ref this.GradientPixels,
                 this.Images,
@@ -688,12 +716,14 @@ internal static class WebGPUSceneEncoder
             Point destinationOffset,
             Rectangle brushBounds,
             Pen pen,
+            float widthScale,
+            Vector2 scale,
             PointF start,
             PointF end)
         {
             uint drawTag = GetDrawTag(brush);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
-            (uint style0, uint style1, uint style2) = GetStrokeStyle(graphicsOptions, pen);
+            (uint style0, uint style1, uint style2) = GetStrokeStyle(graphicsOptions, pen, widthScale);
             int pathTagCheckpoint = this.PathTags.Count;
             int styleCheckpoint = this.Styles.Count;
             bool appendStyle = !this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1 || style2 != this.lastStyle2;
@@ -719,9 +749,9 @@ internal static class WebGPUSceneEncoder
             int encodedPathCount = EncodeOpenSegmentStrokePath(
                 start,
                 end,
-                rasterizerOptions,
                 destinationOffset,
                 pen,
+                widthScale,
                 this.rootTargetBounds,
                 ref this.PathTags,
                 ref this.PathData,
@@ -751,6 +781,7 @@ internal static class WebGPUSceneEncoder
                 brushBounds,
                 graphicsOptions,
                 drawTag,
+                scale,
                 ref this.DrawData,
                 ref this.GradientPixels,
                 this.Images,
@@ -997,7 +1028,8 @@ internal static class WebGPUSceneEncoder
             command.GraphicsOptions,
             command.RasterizerOptions,
             command.DestinationOffset,
-            command.Brush is ImageBrush ? command.RasterizerOptions.Interest : default);
+            command.Brush is ImageBrush ? command.RasterizerOptions.Interest : default,
+            command.Transform);
         return true;
     }
 
@@ -1009,7 +1041,8 @@ internal static class WebGPUSceneEncoder
             command.GraphicsOptions,
             command.RasterizerOptions,
             command.DestinationOffset,
-            command.Brush is ImageBrush ? command.RasterizerOptions.Interest : default);
+            command.Brush is ImageBrush ? command.RasterizerOptions.Interest : default,
+            command.Transform);
         return true;
     }
 
@@ -1048,7 +1081,8 @@ internal static class WebGPUSceneEncoder
             GraphicsOptions graphicsOptions,
             RasterizerOptions rasterizerOptions,
             Point destinationOffset,
-            Rectangle brushBounds)
+            Rectangle brushBounds,
+            Matrix4x4 transform)
         {
             this.Path = path;
             this.Brush = brush;
@@ -1056,6 +1090,7 @@ internal static class WebGPUSceneEncoder
             this.RasterizerOptions = rasterizerOptions;
             this.DestinationOffset = destinationOffset;
             this.BrushBounds = brushBounds;
+            this.Transform = transform;
         }
 
         public IPath Path { get; }
@@ -1069,6 +1104,8 @@ internal static class WebGPUSceneEncoder
         public Point DestinationOffset { get; }
 
         public Rectangle BrushBounds { get; }
+
+        public Matrix4x4 Transform { get; }
     }
 
     private readonly struct ResolvedLineSegmentCommand
@@ -1174,9 +1211,8 @@ internal static class WebGPUSceneEncoder
         ref OwnedStream<uint> pathData,
         out int lineCount)
     {
-        float samplingOffset = command.RasterizerOptions.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
-        float pointTranslateX = (command.DestinationOffset.X - rootTargetBounds.X) + samplingOffset;
-        float pointTranslateY = (command.DestinationOffset.Y - rootTargetBounds.Y) + samplingOffset;
+        float pointTranslateX = command.DestinationOffset.X - rootTargetBounds.X;
+        float pointTranslateY = command.DestinationOffset.Y - rootTargetBounds.Y;
         lineCount = command.RasterizerOptions.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter
             ? geometry.Info.NonHorizontalSegmentCountPixelCenter
             : geometry.Info.NonHorizontalSegmentCountPixelBoundary;
@@ -1237,18 +1273,17 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     private static int EncodeStrokePath(
         LinearGeometry geometry,
-        in RasterizerOptions rasterizerOptions,
         Point destinationOffset,
         Pen pen,
+        float widthScale,
         in Rectangle rootTargetBounds,
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
         out int lineCount)
     {
-        float samplingOffset = rasterizerOptions.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
-        float pointTranslateX = (destinationOffset.X - rootTargetBounds.X) + samplingOffset;
-        float pointTranslateY = (destinationOffset.Y - rootTargetBounds.Y) + samplingOffset;
-        lineCount = EstimateStrokeLineCount(geometry, pen);
+        float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
+        float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
+        lineCount = EstimateStrokeLineCount(geometry, pen, widthScale);
 
         for (int i = 0; i < geometry.Contours.Count; i++)
         {
@@ -1308,17 +1343,16 @@ internal static class WebGPUSceneEncoder
     private static int EncodeOpenSegmentStrokePath(
         PointF start,
         PointF end,
-        in RasterizerOptions rasterizerOptions,
         Point destinationOffset,
         Pen pen,
+        float widthScale,
         in Rectangle rootTargetBounds,
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
         out int lineCount)
     {
-        float samplingOffset = rasterizerOptions.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
-        float pointTranslateX = (destinationOffset.X - rootTargetBounds.X) + samplingOffset;
-        float pointTranslateY = (destinationOffset.Y - rootTargetBounds.Y) + samplingOffset;
+        float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
+        float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
         PointF firstTangentEndPoint = GetStrokeMarkerTangentPoint(start, end);
 
         Span<uint> contourData = pathData.GetAppendSpan(8);
@@ -1336,7 +1370,7 @@ internal static class WebGPUSceneEncoder
         pathData.Advance(contourData.Length);
         pathTags.Advance(contourTags.Length);
         pathTags.Add(PathTagPath);
-        lineCount = EstimateStrokeLineCountForOpenSegment(pen);
+        lineCount = EstimateStrokeLineCountForOpenSegment(pen, widthScale);
         return 1;
     }
 
@@ -1521,10 +1555,10 @@ internal static class WebGPUSceneEncoder
     /// Estimates the flattened line workload for one stroke.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int EstimateStrokeLineCount(LinearGeometry geometry, Pen pen)
+    private static int EstimateStrokeLineCount(LinearGeometry geometry, Pen pen, float widthScale)
     {
-        int joinCost = GetStrokeJoinLineCost(pen);
-        int capCost = GetStrokeCapLineCost(pen);
+        int joinCost = GetStrokeJoinLineCost(pen, widthScale);
+        int capCost = GetStrokeCapLineCost(pen, widthScale);
         int total = 0;
 
         for (int i = 0; i < geometry.Contours.Count; i++)
@@ -1550,34 +1584,40 @@ internal static class WebGPUSceneEncoder
     /// Estimates the flattened line workload for one explicit open two-point stroke segment.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int EstimateStrokeLineCountForOpenSegment(Pen pen)
-        => Math.Max(2 + (GetStrokeCapLineCost(pen) * 2), 1);
+    private static int EstimateStrokeLineCountForOpenSegment(Pen pen, float widthScale)
+        => Math.Max(2 + (GetStrokeCapLineCost(pen, widthScale) * 2), 1);
 
     /// <summary>
     /// Returns the conservative flattened line cost of one stroke join.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int GetStrokeJoinLineCost(Pen pen)
-        => pen.StrokeOptions.LineJoin switch
+    private static int GetStrokeJoinLineCost(Pen pen, float widthScale)
+    {
+        float halfWidth = pen.StrokeWidth * widthScale * 0.5F;
+        return pen.StrokeOptions.LineJoin switch
         {
             LineJoin.Miter => 4,
-            LineJoin.MiterRound => GetStrokeArcLineCost(pen.StrokeWidth * 0.5F, MathF.PI, pen.StrokeOptions.ArcDetailScale) + 1,
+            LineJoin.MiterRound => GetStrokeArcLineCost(halfWidth, MathF.PI, pen.StrokeOptions.ArcDetailScale) + 1,
             LineJoin.MiterRevert => 2,
-            LineJoin.Round => GetStrokeArcLineCost(pen.StrokeWidth * 0.5F, MathF.PI, pen.StrokeOptions.ArcDetailScale) + 1,
+            LineJoin.Round => GetStrokeArcLineCost(halfWidth, MathF.PI, pen.StrokeOptions.ArcDetailScale) + 1,
             _ => 2
         };
+    }
 
     /// <summary>
     /// Returns the conservative flattened line cost of one stroke cap.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int GetStrokeCapLineCost(Pen pen)
-        => pen.StrokeOptions.LineCap switch
+    private static int GetStrokeCapLineCost(Pen pen, float widthScale)
+    {
+        float halfWidth = pen.StrokeWidth * widthScale * 0.5F;
+        return pen.StrokeOptions.LineCap switch
         {
             LineCap.Square => 3,
-            LineCap.Round => GetStrokeArcLineCost(pen.StrokeWidth * 0.5F, MathF.PI, pen.StrokeOptions.ArcDetailScale),
+            LineCap.Round => GetStrokeArcLineCost(halfWidth, MathF.PI, pen.StrokeOptions.ArcDetailScale),
             _ => 1
         };
+    }
 
     /// <summary>
     /// Returns the conservative flattened line cost of one round arc in the stroke shaders.
@@ -1672,7 +1712,7 @@ internal static class WebGPUSceneEncoder
             GpuSceneDrawTag.FillRecolor => 3,
             GpuSceneDrawTag.FillLinGradient => 5,
             GpuSceneDrawTag.FillRadGradient => 7,
-            GpuSceneDrawTag.FillEllipticGradient => 5,
+            GpuSceneDrawTag.FillEllipticGradient => 7,
             GpuSceneDrawTag.FillSweepGradient => 5,
             GpuSceneDrawTag.FillImage => 5,
             _ => throw new UnreachableException($"Unsupported draw tag '{drawTag}' reached draw-data sizing.")
@@ -1715,12 +1755,41 @@ internal static class WebGPUSceneEncoder
     /// Packs the three style words that describe stroke behavior for one draw record.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static (uint Style0, uint Style1, uint Style2) GetStrokeStyle(GraphicsOptions options, Pen pen)
+    private static (uint Style0, uint Style1, uint Style2) GetStrokeStyle(GraphicsOptions options, Pen pen, float widthScale)
     {
         uint style0 = StyleFlagsStyle | EncodeStrokeJoinFlags(pen.StrokeOptions.LineJoin) | EncodeStrokeCapFlags(pen.StrokeOptions.LineCap);
         style0 |= BitConverter.HalfToUInt16Bits((Half)(float)pen.StrokeOptions.MiterLimit);
-        return (style0, BitcastSingle(pen.StrokeWidth), PackStyleDrawFlags(options));
+        return (style0, BitcastSingle(pen.StrokeWidth * widthScale), PackStyleDrawFlags(options));
     }
+
+    /// <summary>
+    /// Returns the isotropic scale factor embedded in a drawing transform so stroke widths match device-space pixels.
+    /// </summary>
+    /// <remarks>
+    /// Uses the square root of the absolute 2D determinant — the SVG-style fallback for non-uniform
+    /// scale. Reduces to the uniform scale for pure scale/rotate/translate matrices.
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static float GetTransformWidthScale(Matrix4x4 transform)
+    {
+        if (transform.IsIdentity)
+        {
+            return 1F;
+        }
+
+        float det = (transform.M11 * transform.M22) - (transform.M12 * transform.M21);
+        return MathF.Sqrt(MathF.Abs(det));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector2 ExtractScale(Matrix4x4 matrix)
+        => new(
+            MathF.Sqrt((matrix.M11 * matrix.M11) + (matrix.M12 * matrix.M12)),
+            MathF.Sqrt((matrix.M21 * matrix.M21) + (matrix.M22 * matrix.M22)));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Matrix4x4 ComputeResidual(Vector2 scale, Matrix4x4 matrix)
+        => Matrix4x4.CreateScale(1F / scale.X, 1F / scale.Y, 1F) * matrix;
 
     /// <summary>
     /// Packs the stroke join flags consumed by the staged flatten shader.
@@ -1847,6 +1916,7 @@ internal static class WebGPUSceneEncoder
         Rectangle brushBounds,
         GraphicsOptions graphicsOptions,
         uint drawTag,
+        Vector2 scale,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,
         List<GpuImageDescriptor> images,
@@ -1866,16 +1936,16 @@ internal static class WebGPUSceneEncoder
                 AppendRecolorData((RecolorBrush)brush, ref drawData);
                 break;
             case GpuSceneDrawTag.FillLinGradient:
-                AppendLinearGradientData((LinearGradientBrush)brush, ref drawData, ref gradientPixels, ref gradientRowCount);
+                AppendLinearGradientData((LinearGradientBrush)brush, scale, ref drawData, ref gradientPixels, ref gradientRowCount);
                 break;
             case GpuSceneDrawTag.FillRadGradient:
-                AppendRadialGradientData((RadialGradientBrush)brush, ref drawData, ref gradientPixels, ref gradientRowCount);
+                AppendRadialGradientData((RadialGradientBrush)brush, scale, ref drawData, ref gradientPixels, ref gradientRowCount);
                 break;
             case GpuSceneDrawTag.FillEllipticGradient:
-                AppendEllipticGradientData((EllipticGradientBrush)brush, ref drawData, ref gradientPixels, ref gradientRowCount);
+                AppendEllipticGradientData((EllipticGradientBrush)brush, scale, ref drawData, ref gradientPixels, ref gradientRowCount);
                 break;
             case GpuSceneDrawTag.FillSweepGradient:
-                AppendSweepGradientData((SweepGradientBrush)brush, ref drawData, ref gradientPixels, ref gradientRowCount);
+                AppendSweepGradientData((SweepGradientBrush)brush, scale, ref drawData, ref gradientPixels, ref gradientRowCount);
                 break;
             case GpuSceneDrawTag.FillImage:
                 AppendImageData(brush, brushBounds, ref drawData, images);
@@ -1986,6 +2056,7 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     private static void AppendLinearGradientData(
         LinearGradientBrush brush,
+        Vector2 scale,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,
         ref int gradientRowCount)
@@ -1994,11 +2065,14 @@ internal static class WebGPUSceneEncoder
         AppendGradientRamp(brush.ColorStops, ref gradientPixels);
         gradientRowCount++;
 
+        PointF start = new(brush.StartPoint.X * scale.X, brush.StartPoint.Y * scale.Y);
+        PointF end = new(brush.EndPoint.X * scale.X, brush.EndPoint.Y * scale.Y);
+
         drawData.Add(indexMode);
-        drawData.Add(BitcastSingle(brush.StartPoint.X));
-        drawData.Add(BitcastSingle(brush.StartPoint.Y));
-        drawData.Add(BitcastSingle(brush.EndPoint.X));
-        drawData.Add(BitcastSingle(brush.EndPoint.Y));
+        drawData.Add(BitcastSingle(start.X));
+        drawData.Add(BitcastSingle(start.Y));
+        drawData.Add(BitcastSingle(end.X));
+        drawData.Add(BitcastSingle(end.Y));
     }
 
     /// <summary>
@@ -2006,6 +2080,7 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     private static void AppendRadialGradientData(
         RadialGradientBrush brush,
+        Vector2 scale,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,
         ref int gradientRowCount)
@@ -2019,8 +2094,6 @@ internal static class WebGPUSceneEncoder
         PointF center1;
         float radius1;
 
-        // The shader consumes both one-circle and two-circle radial gradients through the
-        // same payload shape, so the one-circle case is normalized to a degenerate inner circle.
         if (brush.IsTwoCircle)
         {
             center0 = brush.Center0;
@@ -2036,6 +2109,12 @@ internal static class WebGPUSceneEncoder
             radius1 = brush.Radius0;
         }
 
+        float radiusScale = 0.5F * (scale.X + scale.Y);
+        center0 = new(center0.X * scale.X, center0.Y * scale.Y);
+        center1 = new(center1.X * scale.X, center1.Y * scale.Y);
+        radius0 *= radiusScale;
+        radius1 *= radiusScale;
+
         drawData.Add(indexMode);
         drawData.Add(BitcastSingle(center0.X));
         drawData.Add(BitcastSingle(center0.Y));
@@ -2050,6 +2129,7 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     private static void AppendEllipticGradientData(
         EllipticGradientBrush brush,
+        Vector2 scale,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,
         ref int gradientRowCount)
@@ -2058,12 +2138,28 @@ internal static class WebGPUSceneEncoder
         AppendGradientRamp(brush.ColorStops, ref gradientPixels);
         gradientRowCount++;
 
+        // The perpendicular axis of the ellipse must be constructed in local space where it is
+        // geometrically orthogonal to the main axis; componentwise scale-bake does not commute with
+        // rotation, so reconstructing it from the scale-baked main axis in the shader goes wrong
+        // under non-uniform scale. Bake all three points instead and let the shader derive the
+        // device-space axis ratio from the transformed distances.
+        PointF localCenter = brush.Center;
+        PointF localAxisEnd = brush.ReferenceAxisEnd;
+        Vector2 localAxis = new(localAxisEnd.X - localCenter.X, localAxisEnd.Y - localCenter.Y);
+        Vector2 localPerpendicular = new Vector2(-localAxis.Y, localAxis.X) * brush.AxisRatio;
+        PointF localSecondEnd = new(localCenter.X + localPerpendicular.X, localCenter.Y + localPerpendicular.Y);
+
+        PointF center = new(localCenter.X * scale.X, localCenter.Y * scale.Y);
+        PointF axisEnd = new(localAxisEnd.X * scale.X, localAxisEnd.Y * scale.Y);
+        PointF secondEnd = new(localSecondEnd.X * scale.X, localSecondEnd.Y * scale.Y);
+
         drawData.Add(indexMode);
-        drawData.Add(BitcastSingle(brush.Center.X));
-        drawData.Add(BitcastSingle(brush.Center.Y));
-        drawData.Add(BitcastSingle(brush.ReferenceAxisEnd.X));
-        drawData.Add(BitcastSingle(brush.ReferenceAxisEnd.Y));
-        drawData.Add(BitcastSingle(brush.AxisRatio));
+        drawData.Add(BitcastSingle(center.X));
+        drawData.Add(BitcastSingle(center.Y));
+        drawData.Add(BitcastSingle(axisEnd.X));
+        drawData.Add(BitcastSingle(axisEnd.Y));
+        drawData.Add(BitcastSingle(secondEnd.X));
+        drawData.Add(BitcastSingle(secondEnd.Y));
     }
 
     /// <summary>
@@ -2071,6 +2167,7 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     private static void AppendSweepGradientData(
         SweepGradientBrush brush,
+        Vector2 scale,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,
         ref int gradientRowCount)
@@ -2079,19 +2176,18 @@ internal static class WebGPUSceneEncoder
         AppendGradientRamp(brush.ColorStops, ref gradientPixels);
         gradientRowCount++;
 
-        // Zero-width sweeps are normalized to a full turn so the shader sees a stable range.
-        float sweepDegrees = brush.EndAngleDegrees - brush.StartAngleDegrees;
-        if (MathF.Abs(sweepDegrees) < 1e-6F)
+        float t0 = brush.StartAngleDegrees / 360F;
+        float t1 = brush.EndAngleDegrees / 360F;
+        if (MathF.Abs(t1 - t0) < 1e-6F)
         {
-            sweepDegrees = 360F;
+            t1 = t0 + 1F;
         }
 
-        float t0 = brush.StartAngleDegrees / 360F;
-        float t1 = t0 + (sweepDegrees / 360F);
+        PointF center = new(brush.Center.X * scale.X, brush.Center.Y * scale.Y);
 
         drawData.Add(indexMode);
-        drawData.Add(BitcastSingle(brush.Center.X));
-        drawData.Add(BitcastSingle(brush.Center.Y));
+        drawData.Add(BitcastSingle(center.X));
+        drawData.Add(BitcastSingle(center.Y));
         drawData.Add(BitcastSingle(t0));
         drawData.Add(BitcastSingle(t1));
     }

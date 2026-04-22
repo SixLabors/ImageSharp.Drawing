@@ -29,22 +29,21 @@ public interface ILineSegment
     public RectangleF Bounds { get; }
 
     /// <summary>
-    /// Gets the number of linear vertices emitted by this segment.
+    /// Returns the number of linear vertices emitted by this segment when flattened under the supplied
+    /// device-space <paramref name="scale"/>.
     /// </summary>
-    public int LinearVertexCount { get; }
+    /// <param name="scale">The X/Y scale at which curves are flattened. Pass <see cref="Vector2.One"/> for local-space counts.</param>
+    /// <returns>The number of linear vertices this segment emits.</returns>
+    public int LinearVertexCount(Vector2 scale);
 
     /// <summary>
-    /// Converts the <see cref="ILineSegment" /> into a simple linear path..
-    /// </summary>
-    /// <returns>Returns the current <see cref="ILineSegment" /> as simple linear path.</returns>
-    public ReadOnlyMemory<PointF> Flatten();
-
-    /// <summary>
-    /// Copies the linearized point data to the destination span.
+    /// Writes the segment's linearized points to <paramref name="destination"/>, baked at the supplied
+    /// device-space <paramref name="scale"/>.
     /// </summary>
     /// <param name="destination">The destination point span.</param>
     /// <param name="skipFirstPoint">Whether to skip the first emitted point.</param>
-    public void CopyTo(Span<PointF> destination, bool skipFirstPoint);
+    /// <param name="scale">The X/Y scale at which curves are flattened. Pass <see cref="Vector2.One"/> for local-space output.</param>
+    public void CopyTo(Span<PointF> destination, bool skipFirstPoint, Vector2 scale);
 
     /// <summary>
     /// Transforms the current LineSegment using specified matrix.

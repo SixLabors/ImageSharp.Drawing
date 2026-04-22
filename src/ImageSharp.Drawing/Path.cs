@@ -4,7 +4,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
-using System.Threading;
 
 namespace SixLabors.ImageSharp.Drawing;
 
@@ -18,7 +17,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     private InternalPath? innerPath;
     private IReadOnlyList<InternalPath>? internalPathRings;
     private IPath? closedPath;
-    private LinearGeometry? linearGeometry;
+    private LinearGeometryCache geometryCache;
     private RectangleF? bounds;
 
     /// <summary>
@@ -132,31 +131,12 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     }
 
     /// <inheritdoc/>
-    public virtual LinearGeometry ToLinearGeometry(Matrix4x4 transform)
-        => transform.IsIdentity ? this.GetLinearGeometryCore() : this.CreateTransformedLinearGeometryCore(transform);
+    public virtual LinearGeometry ToLinearGeometry(Vector2 scale)
+        => this.geometryCache.TryGet(scale, out LinearGeometry? hit)
+            ? hit
+            : this.geometryCache.Store(scale, this.BuildLinearGeometry(scale));
 
-    /// <summary>
-    /// Returns the retained identity geometry, publishing it once for concurrent readers.
-    /// </summary>
-    /// <returns>The retained identity geometry.</returns>
-    private LinearGeometry GetLinearGeometryCore()
-    {
-        LinearGeometry? cached = Volatile.Read(ref this.linearGeometry);
-        if (cached is not null)
-        {
-            return cached;
-        }
-
-        LinearGeometry geometry = this.CreateLinearGeometryCore();
-        LinearGeometry? published = Interlocked.CompareExchange(ref this.linearGeometry, geometry, null);
-        return published ?? geometry;
-    }
-
-    /// <summary>
-    /// Materializes the retained identity geometry for this path.
-    /// </summary>
-    /// <returns>The retained identity geometry.</returns>
-    private LinearGeometry CreateLinearGeometryCore()
+    private LinearGeometry BuildLinearGeometry(Vector2 scale)
     {
         if (this.lineSegments.Length == 0)
         {
@@ -181,7 +161,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
         {
             ILineSegment segment = this.lineSegments[i];
             bool skipFirstPoint = lastEndPoint?.Equals(segment.StartPoint) == true;
-            pointCount += segment.LinearVertexCount - (skipFirstPoint ? 1 : 0);
+            pointCount += segment.LinearVertexCount(scale) - (skipFirstPoint ? 1 : 0);
             lastEndPoint = segment.EndPoint;
         }
 
@@ -202,100 +182,14 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
         {
             ILineSegment segment = this.lineSegments[i];
             bool skipFirstPoint = lastEndPoint?.Equals(segment.StartPoint) == true;
-            int contributionCount = segment.LinearVertexCount - (skipFirstPoint ? 1 : 0);
+            int contributionCount = segment.LinearVertexCount(scale) - (skipFirstPoint ? 1 : 0);
             Span<PointF> destination = points.AsSpan(pointIndex, contributionCount);
 
-            segment.CopyTo(destination, skipFirstPoint);
+            segment.CopyTo(destination, skipFirstPoint, scale);
             lastEndPoint = segment.EndPoint;
 
             for (int p = 0; p < destination.Length; p++)
             {
-                PointF point = destination[p];
-                minX = MathF.Min(minX, point.X);
-                minY = MathF.Min(minY, point.Y);
-                maxX = MathF.Max(maxX, point.X);
-                maxY = MathF.Max(maxY, point.Y);
-                hasBounds = true;
-            }
-
-            pointIndex += contributionCount;
-        }
-
-        int segmentCount = pointCount == 0 ? 0 : this.IsClosed ? pointCount : pointCount - 1;
-        CountNonHorizontalSegments(points, pointCount, this.IsClosed, ref nonHorizontalSegmentCountPixelBoundary, ref nonHorizontalSegmentCountPixelCenter);
-
-        if (pointCount > 0)
-        {
-            contours[0] = new LinearContour
-            {
-                PointStart = 0,
-                PointCount = pointCount,
-                SegmentStart = 0,
-                SegmentCount = segmentCount,
-                IsClosed = this.IsClosed
-            };
-        }
-
-        RectangleF bounds = hasBounds ? RectangleF.FromLTRB(minX, minY, maxX, maxY) : RectangleF.Empty;
-
-        return new LinearGeometry(
-            new LinearGeometryInfo
-            {
-                Bounds = bounds,
-                ContourCount = contours.Length,
-                PointCount = points.Length,
-                SegmentCount = segmentCount,
-                NonHorizontalSegmentCountPixelBoundary = nonHorizontalSegmentCountPixelBoundary,
-                NonHorizontalSegmentCountPixelCenter = nonHorizontalSegmentCountPixelCenter
-            },
-            contours,
-            points);
-    }
-
-    /// <summary>
-    /// Materializes transformed linear geometry without caching the transformed result.
-    /// </summary>
-    /// <param name="transform">The transform to apply to each emitted point.</param>
-    /// <returns>The transformed retained geometry.</returns>
-    private LinearGeometry CreateTransformedLinearGeometryCore(Matrix4x4 transform)
-    {
-        PointF? lastEndPoint = null;
-        int pointCount = 0;
-
-        for (int i = 0; i < this.lineSegments.Length; i++)
-        {
-            ILineSegment segment = this.lineSegments[i];
-            bool skipFirstPoint = lastEndPoint?.Equals(segment.StartPoint) == true;
-            pointCount += segment.LinearVertexCount - (skipFirstPoint ? 1 : 0);
-            lastEndPoint = segment.EndPoint;
-        }
-
-        PointF[] points = new PointF[pointCount];
-        LinearContour[] contours = pointCount == 0 ? [] : new LinearContour[1];
-
-        bool hasBounds = false;
-        float minX = float.MaxValue;
-        float minY = float.MaxValue;
-        float maxX = float.MinValue;
-        float maxY = float.MinValue;
-        int nonHorizontalSegmentCountPixelBoundary = 0;
-        int nonHorizontalSegmentCountPixelCenter = 0;
-        int pointIndex = 0;
-        lastEndPoint = null;
-
-        for (int i = 0; i < this.lineSegments.Length; i++)
-        {
-            ILineSegment segment = this.lineSegments[i];
-            bool skipFirstPoint = lastEndPoint?.Equals(segment.StartPoint) == true;
-            int contributionCount = segment.LinearVertexCount - (skipFirstPoint ? 1 : 0);
-            Span<PointF> destination = points.AsSpan(pointIndex, contributionCount);
-
-            segment.CopyTo(destination, skipFirstPoint);
-            lastEndPoint = segment.EndPoint;
-
-            for (int p = 0; p < destination.Length; p++)
-            {
-                destination[p] = PointF.Transform(destination[p], transform);
                 PointF point = destination[p];
                 minX = MathF.Min(minX, point.X);
                 minY = MathF.Min(minY, point.Y);

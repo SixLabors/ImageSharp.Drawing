@@ -1,6 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Helpers;
+
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
@@ -37,8 +40,8 @@ public sealed class LinearGeometry
     /// <param name="points">The point storage.</param>
     public LinearGeometry(LinearGeometryInfo info, IReadOnlyList<LinearContour> contours, IReadOnlyList<PointF> points)
     {
-        ArgumentNullException.ThrowIfNull(contours);
-        ArgumentNullException.ThrowIfNull(points);
+        Guard.NotNull(contours, nameof(contours));
+        Guard.NotNull(points, nameof(points));
 
         this.Info = info;
         this.contours = contours as LinearContour[] ?? [.. contours];
@@ -75,26 +78,38 @@ public sealed class LinearGeometry
         => this.points.AsSpan(contour.PointStart, contour.PointCount);
 
     /// <summary>
-    /// Creates retained geometry for one open polyline.
+    /// Creates retained geometry for one open polyline, baked under the supplied device-space <paramref name="scale"/>.
     /// </summary>
     /// <param name="points">The polyline points.</param>
+    /// <param name="scale">The X/Y scale at which the polyline is baked.</param>
     /// <returns>The retained open polyline geometry.</returns>
-    public static LinearGeometry CreateOpenPolyline(PointF[] points)
+    public static LinearGeometry CreateOpenPolyline(PointF[] points, Vector2 scale)
     {
-        ArgumentNullException.ThrowIfNull(points);
-        if (points.Length < 2)
+        Guard.NotNull(points, nameof(points));
+        Guard.MustBeGreaterThanOrEqualTo(points.Length, 2, nameof(points));
+
+        PointF[] retained;
+        if (scale == Vector2.One)
         {
-            throw new ArgumentOutOfRangeException(nameof(points), "Open polylines require at least two points.");
+            retained = points;
+        }
+        else
+        {
+            retained = new PointF[points.Length];
+            for (int i = 0; i < points.Length; i++)
+            {
+                retained[i] = new PointF(points[i].X * scale.X, points[i].Y * scale.Y);
+            }
         }
 
-        RectangleF bounds = GetPointBounds(points);
-        int segmentCount = points.Length - 1;
+        RectangleF bounds = GetPointBounds(retained);
+        int segmentCount = retained.Length - 1;
         int nonHorizontalBoundary = 0;
         int nonHorizontalCenter = 0;
         for (int i = 0; i < segmentCount; i++)
         {
-            PointF start = points[i];
-            PointF end = points[i + 1];
+            PointF start = retained[i];
+            PointF end = retained[i + 1];
             if ((int)MathF.Floor(start.Y) != (int)MathF.Floor(end.Y))
             {
                 nonHorizontalBoundary++;
@@ -111,7 +126,7 @@ public sealed class LinearGeometry
             {
                 Bounds = bounds,
                 ContourCount = 1,
-                PointCount = points.Length,
+                PointCount = retained.Length,
                 SegmentCount = segmentCount,
                 NonHorizontalSegmentCountPixelBoundary = nonHorizontalBoundary,
                 NonHorizontalSegmentCountPixelCenter = nonHorizontalCenter
@@ -119,14 +134,22 @@ public sealed class LinearGeometry
             [new LinearContour
             {
                 PointStart = 0,
-                PointCount = points.Length,
+                PointCount = retained.Length,
                 SegmentStart = 0,
                 SegmentCount = segmentCount,
                 IsClosed = false
             }
             ],
-            points);
+            retained);
     }
+
+    /// <summary>
+    /// Creates retained geometry for one open polyline.
+    /// </summary>
+    /// <param name="points">The polyline points.</param>
+    /// <returns>The retained open polyline geometry.</returns>
+    public static LinearGeometry CreateOpenPolyline(PointF[] points)
+        => CreateOpenPolyline(points, Vector2.One);
 
     /// <summary>
     /// Gets an enumerator for the derived linear segments represented by <see cref="Points"/> and <see cref="Contours"/>.

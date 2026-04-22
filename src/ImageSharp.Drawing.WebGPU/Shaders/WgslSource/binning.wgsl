@@ -37,6 +37,10 @@ const WG_SIZE = 256u;
 const N_SLICE = WG_SIZE / 32u;
 const N_SUBSLICE = 4u;
 
+// sh_bitmaps holds one bit per (element, bin-in-chunk) pair, so its inner
+// dimension is fixed at N_TILE (= 256) — the number of bins processed by a
+// single workgroup. The dispatch tiles bin space in Y so the full bin grid
+// can exceed 256 without overflowing this shared array.
 var<workgroup> sh_bitmaps: array<array<atomic<u32>, N_TILE>, N_SLICE>;
 // store count values packed two u16's to a u32
 var<workgroup> sh_count: array<array<u32, N_TILE>, N_SUBSLICE>;
@@ -44,8 +48,16 @@ var<workgroup> sh_chunk_offset: array<u32, N_TILE>;
 var<workgroup> sh_chunk_valid: array<u32, N_TILE>;
 var<workgroup> sh_previous_failed: u32;
 
-fn bin_header_ix(bin_ix: u32) -> u32 {
-    return config.bin_data_start + config.binning_size + (bin_ix * 2u);
+// Total number of bin-header slots reserved per draw-partition. Each
+// workgroup covers at most N_TILE bins, so the stride is the full bin grid
+// aligned up to N_TILE.
+fn bin_header_stride(width_in_bins: u32, height_in_bins: u32) -> u32 {
+    let n_bins = width_in_bins * height_in_bins;
+    return (n_bins + N_TILE - 1u) / N_TILE * N_TILE;
+}
+
+fn bin_header_ix(partition_ix: u32, bin_ix: u32, stride: u32) -> u32 {
+    return config.bin_data_start + config.binning_size + (partition_ix * stride + bin_ix) * 2u;
 }
 
 @compute @workgroup_size(256)
@@ -70,8 +82,20 @@ fn main(
         return;
     }
 
+    let width_in_bins = (config.width_in_tiles + N_TILE_X - 1u) / N_TILE_X;
+    let height_in_bins = (config.height_in_tiles + N_TILE_Y - 1u) / N_TILE_Y;
+    let total_bins = width_in_bins * height_in_bins;
+    let header_stride = bin_header_stride(width_in_bins, height_in_bins);
+
+    // This workgroup covers draw-partition wg_id.x and the N_TILE-wide bin
+    // chunk starting at bin_chunk_start (inclusive) through bin_chunk_end
+    // (exclusive) in the flat global bin grid.
+    let partition_ix = wg_id.x;
+    let bin_chunk_start = wg_id.y * N_TILE;
+    let bin_chunk_end = min(bin_chunk_start + N_TILE, total_bins);
+
     // Read inputs and determine coverage of bins
-    let element_ix = global_id.x;
+    let element_ix = partition_ix * WG_SIZE + local_id.x;
     var x0 = 0;
     var y0 = 0;
     var x1 = 0;
@@ -94,7 +118,11 @@ fn main(
         let pb = vec4<f32>(vec4(path_bbox.x0, path_bbox.y0, path_bbox.x1, path_bbox.y1));
         let bbox = bbox_intersect(clip_bbox, pb);
 
-        intersected_bbox[element_ix] = bbox;
+        // Only the first bin-chunk workgroup writes the intersected bbox, since
+        // the value is identical across chunks and later stages read it once.
+        if wg_id.y == 0u {
+            intersected_bbox[element_ix] = bbox;
+        }
 
         // `bbox_intersect` can result in a zero or negative area intersection if the path bbox lies
         // outside the clip bbox. If that is the case, Don't round up the bottom-right corner of the
@@ -107,12 +135,12 @@ fn main(
             y1 = i32(ceil(bbox.w * SY));
         }
     }
-    let width_in_bins = i32((config.width_in_tiles + N_TILE_X - 1u) / N_TILE_X);
-    let height_in_bins = i32((config.height_in_tiles + N_TILE_Y - 1u) / N_TILE_Y);
-    x0 = clamp(x0, 0, width_in_bins);
-    y0 = clamp(y0, 0, height_in_bins);
-    x1 = clamp(x1, 0, width_in_bins);
-    y1 = clamp(y1, 0, height_in_bins);
+    let width_in_bins_i = i32(width_in_bins);
+    let height_in_bins_i = i32(height_in_bins);
+    x0 = clamp(x0, 0, width_in_bins_i);
+    y0 = clamp(y0, 0, height_in_bins_i);
+    x1 = clamp(x1, 0, width_in_bins_i);
+    y1 = clamp(y1, 0, height_in_bins_i);
     if x0 == x1 {
         y1 = y0;
     }
@@ -121,7 +149,10 @@ fn main(
     let my_slice = local_id.x / 32u;
     let my_mask = 1u << (local_id.x & 31u);
     while y < y1 {
-        atomicOr(&sh_bitmaps[my_slice][y * width_in_bins + x], my_mask);
+        let bin_ix = u32(y) * width_in_bins + u32(x);
+        if bin_ix >= bin_chunk_start && bin_ix < bin_chunk_end {
+            atomicOr(&sh_bitmaps[my_slice][bin_ix - bin_chunk_start], my_mask);
+        }
         x += 1;
         if x == x1 {
             x = x0;
@@ -147,30 +178,40 @@ fn main(
         chunk_offset = 0u;
         chunk_valid = 0u;
         atomicOr(&bump.failed, STAGE_BINNING);
-    }    
+    }
     sh_chunk_offset[local_id.x] = chunk_offset;
     sh_chunk_valid[local_id.x] = chunk_valid;
-    let header_ix = bin_header_ix(global_id.x);
-    info_bin_data[header_ix] = element_count;
-    info_bin_data[header_ix + 1u] = chunk_offset;
+
+    // Write the bin header for this thread's bin. Threads whose bin lies past
+    // the real grid still write a zero-count header into the padded stride so
+    // coarse sees a consistent layout.
+    let this_bin_ix = bin_chunk_start + local_id.x;
+    if this_bin_ix < header_stride {
+        let header_ix = bin_header_ix(partition_ix, this_bin_ix, header_stride);
+        info_bin_data[header_ix] = element_count;
+        info_bin_data[header_ix + 1u] = chunk_offset;
+    }
     workgroupBarrier();
 
     // loop over bbox of bins touched by this draw object
     x = x0;
     y = y0;
     while y < y1 {
-        let bin_ix = y * width_in_bins + x;
-        let out_mask = atomicLoad(&sh_bitmaps[my_slice][bin_ix]);
-        // I think this predicate will always be true...
-        if (out_mask & my_mask) != 0u && sh_chunk_valid[bin_ix] != 0u {
-            var idx = countOneBits(out_mask & (my_mask - 1u));
-            if my_slice > 0u {
-                let count_ix = my_slice - 1u;
-                let count_packed = sh_count[count_ix / 2u][bin_ix];
-                idx += (count_packed >> (16u * (count_ix & 1u))) & 0xffffu;
+        let bin_ix = u32(y) * width_in_bins + u32(x);
+        if bin_ix >= bin_chunk_start && bin_ix < bin_chunk_end {
+            let local_bin_ix = bin_ix - bin_chunk_start;
+            let out_mask = atomicLoad(&sh_bitmaps[my_slice][local_bin_ix]);
+            // I think this predicate will always be true...
+            if (out_mask & my_mask) != 0u && sh_chunk_valid[local_bin_ix] != 0u {
+                var idx = countOneBits(out_mask & (my_mask - 1u));
+                if my_slice > 0u {
+                    let count_ix = my_slice - 1u;
+                    let count_packed = sh_count[count_ix / 2u][local_bin_ix];
+                    idx += (count_packed >> (16u * (count_ix & 1u))) & 0xffffu;
+                }
+                let offset = config.bin_data_start + sh_chunk_offset[local_bin_ix];
+                info_bin_data[offset + idx] = element_ix;
             }
-            let offset = config.bin_data_start + sh_chunk_offset[bin_ix];
-            info_bin_data[offset + idx] = element_ix;
         }
         x += 1;
         if x == x1 {

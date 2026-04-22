@@ -152,19 +152,29 @@ fn main(
         let y = i32(y0 + f32(i) - z);
         let x = i32(x0 + x_sign * z);
         let row = rows[path.rows + u32(y - bbox.y)];
+        let top_edge = select(last_z == z, y0 == s0.y, i == 0u);
+
+        // Top-edge backdrop propagation must fire even when the crossing
+        // column itself lies outside the sparse row's allocated column span —
+        // for example, a line entering from the left of bbox (x < bbox.x).
+        // path_row_span already clamped x_bump to bbox.x and expanded row.x0
+        // accordingly, so clamp the bump target to row.x0 here to route the
+        // winding into the row's leftmost allocated tile. Skipping this (as
+        // the old in-range-only path did) left fills whose left edges crossed
+        // the bbox boundary with zero-backdrop interior tiles — rendering
+        // horizontal row-aligned gaps.
+        if top_edge && row.x0 < row.x1 && x + 1 < i32(row.x1) {
+            let x_bump = max(x + 1, i32(row.x0));
+            let bump_ix = row.tiles + u32(x_bump) - row.x0;
+            atomicAdd(&tile[bump_ix].backdrop, delta);
+        }
+
         if u32(x) < row.x0 || u32(x) >= row.x1 {
             last_z = z;
             continue;
         }
 
         let tile_ix = row.tiles + u32(x) - row.x0;
-        let top_edge = select(last_z == z, y0 == s0.y, i == 0u);
-        if top_edge && x + 1 < i32(row.x1) {
-            let x_bump = max(x + 1, i32(row.x0));
-            let bump_ix = row.tiles + u32(x_bump) - row.x0;
-            atomicAdd(&tile[bump_ix].backdrop, delta);
-        }
-
         let seg_within_slice = atomicAdd(&tile[tile_ix].segment_count_or_ix, 1u);
         let counts = (seg_within_slice << 16u) | i;
         let seg_count = SegmentCount(line_ix, counts);

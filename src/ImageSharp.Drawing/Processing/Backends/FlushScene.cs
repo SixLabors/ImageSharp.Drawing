@@ -735,12 +735,15 @@ internal sealed partial class FlushScene : IDisposable
         IPath path = command.SourcePath;
         Matrix4x4 transform = command.Transform;
         bool hasTransform = !transform.IsIdentity;
-        LinearGeometry geometry = path.ToLinearGeometry(transform);
+        Vector2 scale = ExtractScale(transform);
+        Matrix4x4 residual = ComputeResidual(scale, transform);
+        LinearGeometry geometry = path.ToLinearGeometry(scale);
         Brush sourceBrush = hasTransform ? command.Brush.Transform(transform) : command.Brush;
+        RectangleF geometryBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
 
         if (!TryResolveRasterization(
                 sourceBrush,
-                geometry.Info.Bounds,
+                geometryBounds,
                 command.RasterizerOptions,
                 command.DestinationOffset,
                 command.TargetBounds,
@@ -754,6 +757,7 @@ internal sealed partial class FlushScene : IDisposable
 
         DefaultRasterizer.RasterizableGeometry? rasterizable = DefaultRasterizer.CreateRasterizableGeometry(
             geometry,
+            residual,
             command.DestinationOffset.X,
             command.DestinationOffset.Y,
             rasterizerOptions,
@@ -777,13 +781,17 @@ internal sealed partial class FlushScene : IDisposable
         IPath path = command.SourcePath;
         Matrix4x4 transform = command.Transform;
         bool hasTransform = !transform.IsIdentity;
-        LinearGeometry geometry = path.ToLinearGeometry(Matrix4x4.Identity);
-        RectangleF strokeBounds = GetStrokeBounds(geometry.Info.Bounds, command.Pen);
+        Vector2 scale = ExtractScale(transform);
+        Matrix4x4 residual = ComputeResidual(scale, transform);
+        LinearGeometry geometry = path.ToLinearGeometry(scale);
+        float widthScale = GetTransformWidthScale(transform);
+        RectangleF geometryBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
+        RectangleF strokeBounds = GetStrokeBounds(geometryBounds, command.Pen, widthScale);
         Brush sourceBrush = hasTransform ? command.Brush.Transform(transform) : command.Brush;
 
         if (!TryResolveRasterization(
                 sourceBrush,
-                hasTransform ? RectangleF.Transform(strokeBounds, transform) : strokeBounds,
+                strokeBounds,
                 command.RasterizerOptions,
                 command.DestinationOffset,
                 command.TargetBounds,
@@ -795,15 +803,14 @@ internal sealed partial class FlushScene : IDisposable
             return false;
         }
 
-        // Retained-scene preparation preserves the stroke centerline and forwards the drawing
-        // transform into the CPU stroke rasterizer so expansion still happens before transform.
         DefaultRasterizer.StrokeRasterizableGeometry? rasterizable = DefaultRasterizer.CreatePathStrokeRasterizableGeometry(
             geometry,
+            residual,
             command.Pen,
             command.DestinationOffset.X,
             command.DestinationOffset.Y,
             rasterizerOptions,
-            transform,
+            widthScale,
             allocator);
         if (rasterizable is null)
         {
@@ -820,15 +827,22 @@ internal sealed partial class FlushScene : IDisposable
         MemoryAllocator allocator,
         out PreparedStrokeItem prepared)
     {
-        PointF start = command.SourceStart;
-        PointF end = command.SourceEnd;
-        bool hasTransform = !command.Transform.IsIdentity;
-        RectangleF bounds = StrokeLineSegmentCommand.GetConservativeBounds(start, end, command.Pen);
-        Brush sourceBrush = hasTransform ? command.Brush.Transform(command.Transform) : command.Brush;
+        Matrix4x4 transform = command.Transform;
+        bool hasTransform = !transform.IsIdentity;
+        PointF start = hasTransform ? PointF.Transform(command.SourceStart, transform) : command.SourceStart;
+        PointF end = hasTransform ? PointF.Transform(command.SourceEnd, transform) : command.SourceEnd;
+        float widthScale = GetTransformWidthScale(transform);
+        RectangleF segmentBounds = RectangleF.FromLTRB(
+            MathF.Min(start.X, end.X),
+            MathF.Min(start.Y, end.Y),
+            MathF.Max(start.X, end.X),
+            MathF.Max(start.Y, end.Y));
+        RectangleF bounds = GetStrokeBounds(segmentBounds, command.Pen, widthScale);
+        Brush sourceBrush = hasTransform ? command.Brush.Transform(transform) : command.Brush;
 
         if (!TryResolveRasterization(
                 sourceBrush,
-                hasTransform ? RectangleF.Transform(bounds, command.Transform) : bounds,
+                bounds,
                 command.RasterizerOptions,
                 command.DestinationOffset,
                 command.TargetBounds,
@@ -840,8 +854,6 @@ internal sealed partial class FlushScene : IDisposable
             return false;
         }
 
-        // Explicit two-point segments may stay on the direct retained fast path, but this
-        // preparation step is still responsible for selecting that path by shape kind.
         DefaultRasterizer.StrokeRasterizableGeometry? rasterizable = DefaultRasterizer.CreateLineSegmentStrokeRasterizableGeometry(
             start,
             end,
@@ -849,7 +861,7 @@ internal sealed partial class FlushScene : IDisposable
             command.DestinationOffset.X,
             command.DestinationOffset.Y,
             rasterizerOptions,
-            command.Transform,
+            widthScale,
             allocator);
 
         if (rasterizable is null)
@@ -867,14 +879,19 @@ internal sealed partial class FlushScene : IDisposable
         MemoryAllocator allocator,
         out PreparedStrokeItem prepared)
     {
-        PointF[] points = command.SourcePoints;
-        bool hasTransform = !command.Transform.IsIdentity;
-        RectangleF bounds = StrokePolylineCommand.GetConservativeBounds(points, command.Pen);
-        Brush sourceBrush = hasTransform ? command.Brush.Transform(command.Transform) : command.Brush;
+        Matrix4x4 transform = command.Transform;
+        bool hasTransform = !transform.IsIdentity;
+        Vector2 scale = ExtractScale(transform);
+        Matrix4x4 residual = ComputeResidual(scale, transform);
+        LinearGeometry geometry = LinearGeometry.CreateOpenPolyline(command.SourcePoints, scale);
+        float widthScale = GetTransformWidthScale(transform);
+        RectangleF geometryBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
+        RectangleF strokeBounds = GetStrokeBounds(geometryBounds, command.Pen, widthScale);
+        Brush sourceBrush = hasTransform ? command.Brush.Transform(transform) : command.Brush;
 
         if (!TryResolveRasterization(
                 sourceBrush,
-                hasTransform ? RectangleF.Transform(bounds, command.Transform) : bounds,
+                strokeBounds,
                 command.RasterizerOptions,
                 command.DestinationOffset,
                 command.TargetBounds,
@@ -886,14 +903,16 @@ internal sealed partial class FlushScene : IDisposable
             return false;
         }
 
-        DefaultRasterizer.StrokeRasterizableGeometry? rasterizable = DefaultRasterizer.CreatePolylineStrokeRasterizableGeometry(
-            points,
+        DefaultRasterizer.StrokeRasterizableGeometry? rasterizable = DefaultRasterizer.CreatePathStrokeRasterizableGeometry(
+            geometry,
+            residual,
             command.Pen,
             command.DestinationOffset.X,
             command.DestinationOffset.Y,
             rasterizerOptions,
-            command.Transform,
+            widthScale,
             allocator);
+
         if (rasterizable is null)
         {
             prepared = default;
@@ -952,9 +971,9 @@ internal sealed partial class FlushScene : IDisposable
         return true;
     }
 
-    private static RectangleF GetStrokeBounds(RectangleF bounds, Pen pen)
+    private static RectangleF GetStrokeBounds(RectangleF bounds, Pen pen, float widthScale)
     {
-        float halfWidth = pen.StrokeWidth * 0.5F;
+        float halfWidth = pen.StrokeWidth * widthScale * 0.5F;
         float joinInflate = pen.StrokeOptions.LineJoin switch
         {
             LineJoin.Miter or LineJoin.MiterRevert or LineJoin.MiterRound => (float)(halfWidth * Math.Max(pen.StrokeOptions.MiterLimit, 1D)),
@@ -970,6 +989,32 @@ internal sealed partial class FlushScene : IDisposable
         bounds.Inflate(new SizeF(inflate, inflate));
         return bounds;
     }
+
+    /// <summary>
+    /// Returns the isotropic scale factor embedded in a drawing transform so stroke widths match device-space pixels.
+    /// </summary>
+    /// <remarks>
+    /// Uses the square root of the absolute 2D determinant — the SVG-style fallback for non-uniform
+    /// scale. Reduces to the uniform scale for pure scale/rotate/translate matrices.
+    /// </remarks>
+    private static float GetTransformWidthScale(Matrix4x4 transform)
+    {
+        if (transform.IsIdentity)
+        {
+            return 1F;
+        }
+
+        float det = (transform.M11 * transform.M22) - (transform.M12 * transform.M21);
+        return MathF.Sqrt(MathF.Abs(det));
+    }
+
+    private static Vector2 ExtractScale(Matrix4x4 matrix)
+        => new(
+            MathF.Sqrt((matrix.M11 * matrix.M11) + (matrix.M12 * matrix.M12)),
+            MathF.Sqrt((matrix.M21 * matrix.M21) + (matrix.M22 * matrix.M22)));
+
+    private static Matrix4x4 ComputeResidual(Vector2 scale, Matrix4x4 matrix)
+        => Matrix4x4.CreateScale(1F / scale.X, 1F / scale.Y, 1F) * matrix;
 
     private readonly struct PreparedFillItem
     {

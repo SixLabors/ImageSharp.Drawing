@@ -207,9 +207,9 @@ The scene builder begins from the incoming command stream and keeps only the wor
 
 ### 2. Create retained raster geometry
 
-For each visible item, the builder asks `DefaultRasterizer` to create retained rasterizable geometry. This is where prepared shape data becomes the retained line and coverage-seed data that later row execution can consume cheaply.
+For each visible item, the builder decomposes the command's drawing matrix into an X/Y scale and the rotation-shear-translation-perspective residual, asks the path for its scale-baked `LinearGeometry` via `ToLinearGeometry(Vector2 scale)`, and hands both the geometry and the residual to `DefaultRasterizer` to create the retained rasterizable payload. Curve subdivision therefore happens once per (path, scale) pair — cached on the `IPath` — and any per-frame rotation or translation rides into the rasterizer as the residual without forcing the path to re-flatten.
 
-This step matters because it moves expensive geometry preparation out of the hot row loop.
+This step matters because it moves expensive geometry preparation out of the hot row loop and out of every frame of workloads like text or panning that drift only in their residual.
 
 ### 3. Build row membership
 

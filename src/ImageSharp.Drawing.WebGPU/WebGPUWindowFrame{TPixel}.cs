@@ -18,6 +18,7 @@ public sealed unsafe class WebGPUWindowFrame<TPixel> : IDisposable
     private WebGPUHandle.HandleReference surfaceReference;
     private readonly WebGPUTextureHandle textureHandle;
     private readonly WebGPUTextureViewHandle textureViewHandle;
+    private readonly Action? onDisposed;
     private bool isDisposed;
     private bool presented;
 
@@ -31,7 +32,8 @@ public sealed unsafe class WebGPUWindowFrame<TPixel> : IDisposable
         Size clientSize,
         Size framebufferSize,
         TimeSpan deltaTime,
-        long frameIndex)
+        long frameIndex,
+        Action? onDisposed = null)
     {
         this.api = api;
         this.surfaceReference = surfaceHandle.AcquireReference();
@@ -43,6 +45,7 @@ public sealed unsafe class WebGPUWindowFrame<TPixel> : IDisposable
         this.FramebufferSize = framebufferSize;
         this.DeltaTime = deltaTime;
         this.FrameIndex = frameIndex;
+        this.onDisposed = onDisposed;
     }
 
     /// <summary>
@@ -120,6 +123,7 @@ public sealed unsafe class WebGPUWindowFrame<TPixel> : IDisposable
             this.textureHandle.Dispose();
             this.surfaceReference.Dispose();
             this.isDisposed = true;
+            this.onDisposed?.Invoke();
         }
     }
 }

@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using System.Threading;
 
 namespace SixLabors.ImageSharp.Drawing;
 
@@ -17,7 +16,7 @@ public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
     private readonly PointF[] points;
     private readonly float halfLength;
     private readonly float length;
-    private LinearGeometry? linearGeometry;
+    private LinearGeometryCache geometryCache;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RectangularPolygon" /> class.
@@ -221,77 +220,17 @@ public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
     }
 
     /// <inheritdoc/>
-    public LinearGeometry ToLinearGeometry(Matrix4x4 transform)
-        => transform.IsIdentity ? this.GetLinearGeometryCore() : this.CreateTransformedLinearGeometryCore(transform);
+    public LinearGeometry ToLinearGeometry(Vector2 scale)
+        => this.geometryCache.TryGet(scale, out LinearGeometry? hit)
+            ? hit
+            : this.geometryCache.Store(scale, this.BuildLinearGeometry(scale));
 
-    /// <summary>
-    /// Returns the retained identity geometry, publishing it once for concurrent readers.
-    /// </summary>
-    /// <returns>The retained identity geometry.</returns>
-    private LinearGeometry GetLinearGeometryCore()
+    private LinearGeometry BuildLinearGeometry(Vector2 scale)
     {
-        LinearGeometry? cached = Volatile.Read(ref this.linearGeometry);
-        if (cached is not null)
-        {
-            return cached;
-        }
-
-        LinearGeometry geometry = this.CreateLinearGeometryCore();
-        LinearGeometry? published = Interlocked.CompareExchange(ref this.linearGeometry, geometry, null);
-        return published ?? geometry;
-    }
-
-    /// <summary>
-    /// Materializes the retained identity geometry for the rectangle.
-    /// </summary>
-    /// <returns>The retained identity geometry.</returns>
-    private LinearGeometry CreateLinearGeometryCore()
-    {
-        PointF[] points =
-        [
-            this.points[0],
-            this.points[1],
-            this.points[2],
-            this.points[3]
-        ];
-
-        LinearContour[] contours =
-        [
-            new LinearContour
-            {
-                PointStart = 0,
-                PointCount = 4,
-                SegmentStart = 0,
-                SegmentCount = 4,
-                IsClosed = true
-            }
-        ];
-
-        return new LinearGeometry(
-            new LinearGeometryInfo
-            {
-                Bounds = this.Bounds,
-                ContourCount = 1,
-                PointCount = 4,
-                SegmentCount = 4,
-                NonHorizontalSegmentCountPixelBoundary = 2,
-                NonHorizontalSegmentCountPixelCenter = 2
-            },
-            contours,
-            points);
-    }
-
-    /// <summary>
-    /// Materializes transformed linear geometry without caching the transformed result.
-    /// </summary>
-    /// <param name="transform">The transform to apply to the rectangle corners.</param>
-    /// <returns>The transformed retained geometry.</returns>
-    private LinearGeometry CreateTransformedLinearGeometryCore(Matrix4x4 transform)
-    {
-        PointF p0 = PointF.Transform(this.points[0], transform);
-        PointF p1 = PointF.Transform(this.points[1], transform);
-        PointF p2 = PointF.Transform(this.points[2], transform);
-        PointF p3 = PointF.Transform(this.points[3], transform);
+        PointF p0 = new(this.points[0].X * scale.X, this.points[0].Y * scale.Y);
+        PointF p1 = new(this.points[1].X * scale.X, this.points[1].Y * scale.Y);
+        PointF p2 = new(this.points[2].X * scale.X, this.points[2].Y * scale.Y);
+        PointF p3 = new(this.points[3].X * scale.X, this.points[3].Y * scale.Y);
 
         PointF[] points = [p0, p1, p2, p3];
 
@@ -300,8 +239,8 @@ public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
         float maxX = MathF.Max(MathF.Max(p0.X, p1.X), MathF.Max(p2.X, p3.X));
         float maxY = MathF.Max(MathF.Max(p0.Y, p1.Y), MathF.Max(p2.Y, p3.Y));
 
-        // After a projective transform, all 4 edges may be non-horizontal.
-        // Count conservatively by checking each edge.
+        // Any rotation or shear in the transform can turn the axis-aligned edges into slanted ones,
+        // so count each edge individually rather than assuming the axis-aligned case.
         int nonHorizontalSegmentCountPixelBoundary = 0;
         int nonHorizontalSegmentCountPixelCenter = 0;
         for (int i = 0; i < 4; i++)

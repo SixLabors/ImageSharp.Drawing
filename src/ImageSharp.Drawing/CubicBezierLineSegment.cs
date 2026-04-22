@@ -16,9 +16,8 @@ public sealed class CubicBezierLineSegment : ILineSegment
     private const float MinimumSqrDistance = 1.75f;
     private const float DivisionThreshold = -.9995f;
 
-    private RectangleF? bounds;
-    private PointF[]? linePoints;
     private readonly PointF[] controlPoints;
+    private FlattenedCache? flattenedCache;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CubicBezierLineSegment"/> class.
@@ -68,21 +67,38 @@ public sealed class CubicBezierLineSegment : ILineSegment
     public PointF EndPoint => this.controlPoints[^1];
 
     /// <inheritdoc />
-    public RectangleF Bounds => this.bounds ??= CalculateBounds(this.GetLinePoints());
+    public RectangleF Bounds => CalculateBounds(this.GetFlattenedPoints(Vector2.One));
 
     /// <inheritdoc />
-    public int LinearVertexCount => this.GetLinePoints().Length;
-
-    /// <inheritdoc/>
-    public ReadOnlyMemory<PointF> Flatten() => this.GetLinePoints();
+    public int LinearVertexCount(Vector2 scale) => this.GetFlattenedPoints(scale).Length;
 
     /// <inheritdoc />
-    public void CopyTo(Span<PointF> destination, bool skipFirstPoint)
+    public void CopyTo(Span<PointF> destination, bool skipFirstPoint, Vector2 scale)
     {
-        PointF[] linePoints = this.GetLinePoints();
+        PointF[] flattened = this.GetFlattenedPoints(scale);
         int startIndex = skipFirstPoint ? 1 : 0;
+        flattened.AsSpan(startIndex).CopyTo(destination);
+    }
 
-        linePoints.AsSpan(startIndex).CopyTo(destination);
+    /// <summary>
+    /// Returns the flattened point run for this curve under <paramref name="scale"/>, computing it on first
+    /// request and reusing the cached result for subsequent calls at the same scale.
+    /// </summary>
+    /// <remarks>
+    /// Publication uses <see cref="Volatile.Write{T}(ref T, T)"/> so a concurrent reader either observes
+    /// <see langword="null"/> or a fully-constructed entry.
+    /// </remarks>
+    private PointF[] GetFlattenedPoints(Vector2 scale)
+    {
+        FlattenedCache? hit = Volatile.Read(ref this.flattenedCache);
+        if (hit is not null && hit.Scale == scale)
+        {
+            return hit.Points;
+        }
+
+        PointF[] baked = FlattenCurve(this.controlPoints, scale);
+        Volatile.Write(ref this.flattenedCache, new FlattenedCache(scale, baked));
+        return baked;
     }
 
     /// <summary>
@@ -117,39 +133,46 @@ public sealed class CubicBezierLineSegment : ILineSegment
     /// <inheritdoc/>
     ILineSegment ILineSegment.Transform(Matrix4x4 matrix) => this.Transform(matrix);
 
-    private PointF[] GetLinePoints()
-        => this.linePoints ??= GetDrawingPoints(this.controlPoints);
-
-    private static PointF[] GetDrawingPoints(PointF[] controlPoints)
+    /// <summary>
+    /// Flattens every cubic in <paramref name="controlPoints"/> under the supplied device-space
+    /// <paramref name="scale"/> into a single contiguous point run. Subdivision density is evaluated
+    /// against the scaled control points so the polyline adapts to rendering scale.
+    /// </summary>
+    private static PointF[] FlattenCurve(PointF[] controlPoints, Vector2 scale)
     {
-        // Each cubic contributes its end point plus a small number of midpoint inserts in the common case,
-        // so 4 points per curve is a cheap baseline that avoids most growth without a sizing prepass.
         int curveCount = (controlPoints.Length - 1) / 3;
-        List<PointF> drawingPoints = new(curveCount * 4);
+        List<PointF> output = new(curveCount * 4);
 
         for (int curveIndex = 0; curveIndex < curveCount; curveIndex++)
         {
+            int nodeIndex = curveIndex * 3;
+            Vector2 p0 = new(controlPoints[nodeIndex].X * scale.X, controlPoints[nodeIndex].Y * scale.Y);
+            Vector2 p1 = new(controlPoints[nodeIndex + 1].X * scale.X, controlPoints[nodeIndex + 1].Y * scale.Y);
+            Vector2 p2 = new(controlPoints[nodeIndex + 2].X * scale.X, controlPoints[nodeIndex + 2].Y * scale.Y);
+            Vector2 p3 = new(controlPoints[nodeIndex + 3].X * scale.X, controlPoints[nodeIndex + 3].Y * scale.Y);
+
             if (curveIndex == 0)
             {
-                drawingPoints.Add(CalculateBezierPoint(curveIndex, 0, controlPoints));
+                output.Add(p0);
             }
 
-            SubdivideAndAppend(curveIndex, 0, 1, controlPoints, drawingPoints, 0);
-            drawingPoints.Add(CalculateBezierPoint(curveIndex, 1, controlPoints));
+            SubdivideAndAppend(0F, 1F, p0, p1, p2, p3, output, 0);
+            output.Add(p3);
         }
 
-        return [.. drawingPoints];
+        return [.. output];
     }
 
     /// <summary>
-    /// Recursively subdivides a cubic bezier curve segment and appends points in left-to-right order.
-    /// Points are appended (not inserted), avoiding O(n) shifts per point.
+    /// Recursively subdivides the scaled cubic segment, appending midpoints in left-to-right order.
     /// </summary>
     private static void SubdivideAndAppend(
-        int curveIndex,
         float t0,
         float t1,
-        PointF[] controlPoints,
+        Vector2 p0,
+        Vector2 p1,
+        Vector2 p2,
+        Vector2 p3,
         List<PointF> output,
         int depth)
     {
@@ -158,8 +181,8 @@ public sealed class CubicBezierLineSegment : ILineSegment
             return;
         }
 
-        Vector2 left = CalculateBezierPoint(curveIndex, t0, controlPoints);
-        Vector2 right = CalculateBezierPoint(curveIndex, t1, controlPoints);
+        Vector2 left = CalculateBezierPoint(t0, p0, p1, p2, p3);
+        Vector2 right = CalculateBezierPoint(t1, p0, p1, p2, p3);
 
         if ((left - right).LengthSquared() < MinimumSqrDistance)
         {
@@ -167,30 +190,17 @@ public sealed class CubicBezierLineSegment : ILineSegment
         }
 
         float midT = (t0 + t1) / 2;
-        Vector2 mid = CalculateBezierPoint(curveIndex, midT, controlPoints);
+        Vector2 mid = CalculateBezierPoint(midT, p0, p1, p2, p3);
 
         Vector2 leftDirection = Vector2.Normalize(left - mid);
         Vector2 rightDirection = Vector2.Normalize(right - mid);
 
         if (Vector2.Dot(leftDirection, rightDirection) > DivisionThreshold || Math.Abs(midT - 0.5f) < 0.0001f)
         {
-            // Recurse left half, emit midpoint, recurse right half — all in order.
-            SubdivideAndAppend(curveIndex, t0, midT, controlPoints, output, depth + 1);
+            SubdivideAndAppend(t0, midT, p0, p1, p2, p3, output, depth + 1);
             output.Add(mid);
-            SubdivideAndAppend(curveIndex, midT, t1, controlPoints, output, depth + 1);
+            SubdivideAndAppend(midT, t1, p0, p1, p2, p3, output, depth + 1);
         }
-    }
-
-    private static PointF CalculateBezierPoint(int curveIndex, float t, PointF[] controlPoints)
-    {
-        int nodeIndex = curveIndex * 3;
-
-        Vector2 p0 = controlPoints[nodeIndex];
-        Vector2 p1 = controlPoints[nodeIndex + 1];
-        Vector2 p2 = controlPoints[nodeIndex + 2];
-        Vector2 p3 = controlPoints[nodeIndex + 3];
-
-        return CalculateBezierPoint(t, p0, p1, p2, p3);
     }
 
     /// <summary>
@@ -241,5 +251,12 @@ public sealed class CubicBezierLineSegment : ILineSegment
         }
 
         return RectangleF.FromLTRB(minX, minY, maxX, maxY);
+    }
+
+    private sealed class FlattenedCache(Vector2 scale, PointF[] points)
+    {
+        public Vector2 Scale { get; } = scale;
+
+        public PointF[] Points { get; } = points;
     }
 }

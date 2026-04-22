@@ -145,6 +145,7 @@ internal static partial class DefaultRasterizer
     /// </summary>
     internal static RasterizableGeometry? CreateRasterizableGeometry(
         LinearGeometry geometry,
+        Matrix4x4 residual,
         int translateX,
         int translateY,
         in RasterizerOptions options,
@@ -153,7 +154,7 @@ internal static partial class DefaultRasterizer
         float samplingOffsetX = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
         float samplingOffsetY = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
 
-        RectangleF translatedBounds = geometry.Info.Bounds;
+        RectangleF translatedBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
         translatedBounds.Offset(translateX + samplingOffsetX, translateY + samplingOffsetY);
 
         // The retained clipper ignores segments at the maximum X edge,
@@ -187,6 +188,7 @@ internal static partial class DefaultRasterizer
         {
             LinearizerX16Y16 linearizer = new(
                 geometry,
+                residual,
                 translateX,
                 translateY,
                 clippedBounds.Left,
@@ -241,6 +243,7 @@ internal static partial class DefaultRasterizer
         {
             LinearizerX32Y16 linearizer = new(
                 geometry,
+                residual,
                 translateX,
                 translateY,
                 clippedBounds.Left,

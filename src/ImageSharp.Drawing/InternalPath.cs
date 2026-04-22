@@ -47,16 +47,6 @@ internal class InternalPath
     /// <summary>
     /// Initializes a new instance of the <see cref="InternalPath" /> class.
     /// </summary>
-    /// <param name="segment">The segment.</param>
-    /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
-    internal InternalPath(ILineSegment segment, bool isClosedPath)
-        : this(segment?.Flatten() ?? Array.Empty<PointF>(), isClosedPath)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="InternalPath" /> class.
-    /// </summary>
     /// <param name="points">The points.</param>
     /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
     internal InternalPath(ReadOnlyMemory<PointF> points, bool isClosedPath)
@@ -224,11 +214,11 @@ internal class InternalPath
     /// </returns>
     private static PointData[] Simplify(IReadOnlyList<ILineSegment> segments, bool isClosed, bool removeCloseAndCollinear)
     {
-        // Pre-compute capacity from cached flattened lengths to avoid List resizing.
+        // Pre-compute capacity from identity-transform vertex counts to avoid List resizing.
         int totalPoints = 0;
         for (int s = 0; s < segments.Count; s++)
         {
-            totalPoints += segments[s].Flatten().Length;
+            totalPoints += segments[s].LinearVertexCount(Vector2.One);
         }
 
         List<PointF> simplified = new(totalPoints);
@@ -244,16 +234,18 @@ internal class InternalPath
         foreach (ILineSegment seg in segments)
         {
             int start = simplified.Count;
-            ReadOnlyMemory<PointF> points = seg.Flatten();
-            simplified.AddRange(points.Span);
+            int segmentCount = seg.LinearVertexCount(Vector2.One);
+            CollectionsMarshal.SetCount(simplified, start + segmentCount);
+            Span<PointF> destination = CollectionsMarshal.AsSpan(simplified).Slice(start, segmentCount);
+            seg.CopyTo(destination, skipFirstPoint: false, Vector2.One);
 
             if (seg is LinearLineSegment)
             {
                 // Interior points of a multi-point linear segment (e.g. DrawLine with 3+ points).
-                if (points.Length > 2)
+                if (segmentCount > 2)
                 {
                     linearReversalIndices ??= [];
-                    for (int i = start + 1; i < start + points.Length - 1; i++)
+                    for (int i = start + 1; i < start + segmentCount - 1; i++)
                     {
                         _ = linearReversalIndices.Add(i);
                     }

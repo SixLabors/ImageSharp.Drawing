@@ -288,22 +288,9 @@ internal static unsafe class WebGPUTextureTransfer
         }
 
         Stopwatch stopwatch = Stopwatch.StartNew();
-        while (!signal.IsSet)
+        while (!signal.IsSet && stopwatch.ElapsedMilliseconds < CallbackTimeoutMilliseconds)
         {
-            int remainingMilliseconds = CallbackTimeoutMilliseconds - (int)stopwatch.ElapsedMilliseconds;
-            if (remainingMilliseconds <= 0)
-            {
-                break;
-            }
-
-            // The map callback still needs DevicePoll to make progress, but a tight blocking poll loop
-            // can monopolize the CPU while the driver is trying to retire the submitted work. Poll once,
-            // then yield briefly so the callback and driver threads can run without the transfer thread hot-spinning.
-            _ = extension.DevicePoll(device, false, (WrappedSubmissionIndex*)null);
-            if (!signal.IsSet)
-            {
-                _ = signal.Wait(Math.Min(remainingMilliseconds, 1));
-            }
+            _ = extension.DevicePoll(device, true, (WrappedSubmissionIndex*)null);
         }
 
         return signal.IsSet;
