@@ -29,11 +29,10 @@ public partial class DrawingCanvasTests
         canvas.Clear(Brushes.Solid(Color.White));
 
         PointF origin = textOptions.Origin;
+        TextMetrics metrics = canvas.MeasureText(textOptions, text);
 
         // Line metrics: colored bands with ascender/baseline/descender guides.
-        int lineCount = canvas.CountTextLines(textOptions, text);
-        LineMetrics[] lineMetrics = canvas.GetTextLineMetrics(textOptions, text);
-        Assert.Equal(lineCount, lineMetrics.Length);
+        Assert.Equal(metrics.LineCount, metrics.Lines.Count);
 
         float lineOriginY = origin.Y;
         Color[] bandColors =
@@ -43,87 +42,75 @@ public partial class DrawingCanvasTests
             Color.LightGreen.WithAlpha(0.4F),
         ];
 
-        for (int i = 0; i < lineMetrics.Length; i++)
+        for (int i = 0; i < metrics.Lines.Count; i++)
         {
-            LineMetrics metrics = lineMetrics[i];
-            float startX = origin.X + metrics.Start;
-            float endX = startX + metrics.Extent;
+            LineMetrics line = metrics.Lines[i];
+            float startX = origin.X + line.Start;
+            float endX = startX + line.Extent;
 
             canvas.Fill(
                 Brushes.Solid(bandColors[i % bandColors.Length]),
-                new RectangularPolygon(startX, lineOriginY, endX - startX, metrics.LineHeight));
+                new RectangularPolygon(startX, lineOriginY, endX - startX, line.LineHeight));
 
             canvas.DrawLine(
                 Pens.Solid(Color.Teal.WithAlpha(0.9F), 1.5F),
-                new PointF(startX, lineOriginY + metrics.Ascender),
-                new PointF(endX, lineOriginY + metrics.Ascender));
+                new PointF(startX, lineOriginY + line.Ascender),
+                new PointF(endX, lineOriginY + line.Ascender));
 
             canvas.DrawLine(
                 Pens.Solid(Color.Crimson.WithAlpha(0.9F), 1.5F),
-                new PointF(startX, lineOriginY + metrics.Baseline),
-                new PointF(endX, lineOriginY + metrics.Baseline));
+                new PointF(startX, lineOriginY + line.Baseline),
+                new PointF(endX, lineOriginY + line.Baseline));
 
             canvas.DrawLine(
                 Pens.Solid(Color.DarkOrange.WithAlpha(0.9F), 1.5F),
-                new PointF(startX, lineOriginY + metrics.Descender),
-                new PointF(endX, lineOriginY + metrics.Descender));
+                new PointF(startX, lineOriginY + line.Descender),
+                new PointF(endX, lineOriginY + line.Descender));
 
-            lineOriginY += metrics.LineHeight;
+            lineOriginY += line.LineHeight;
         }
 
         // Character renderable bounds: outlined rectangles positioned at each glyph.
-        if (canvas.TryMeasureCharacterRenderableBounds(textOptions, text, out ReadOnlySpan<GlyphBounds> charRenderableBounds))
+        for (int i = 0; i < metrics.CharacterRenderableBounds.Count; i++)
         {
-            Color[] renderableColors =
-            [
-                Color.Black,
-                Color.Black
-            ];
-
-            for (int i = 0; i < charRenderableBounds.Length; i++)
-            {
-                FontRectangle rb = charRenderableBounds[i].Bounds;
-                canvas.Draw(
-                    Pens.Solid(renderableColors[i % renderableColors.Length], 1),
-                    new RectangularPolygon(rb.X, rb.Y, rb.Width, rb.Height));
-            }
+            FontRectangle rb = metrics.CharacterRenderableBounds[i].Bounds;
+            canvas.Draw(
+                Pens.Solid(Color.Black, 1),
+                new RectangularPolygon(rb.X, rb.Y, rb.Width, rb.Height));
         }
 
         // Character bounds: alternating filled rectangles behind the glyphs.
-        if (canvas.TryMeasureCharacterBounds(textOptions, text, out ReadOnlySpan<GlyphBounds> charBounds))
-        {
-            Color[] charColors =
-            [
-                Color.Gold.WithAlpha(0.5F),
-                Color.MediumPurple.WithAlpha(0.5F),
-            ];
+        Color[] charColors =
+        [
+            Color.Gold.WithAlpha(0.5F),
+            Color.MediumPurple.WithAlpha(0.5F),
+        ];
 
-            for (int i = 0; i < charBounds.Length; i++)
-            {
-                FontRectangle b = charBounds[i].Bounds;
-                canvas.Fill(
-                    Brushes.Solid(charColors[i % charColors.Length]),
-                    new RectangularPolygon(b.X, b.Y, b.Width, b.Height));
-            }
+        for (int i = 0; i < metrics.CharacterBounds.Count; i++)
+        {
+            FontRectangle b = metrics.CharacterBounds[i].Bounds;
+            canvas.Fill(
+                Brushes.Solid(charColors[i % charColors.Length]),
+                new RectangularPolygon(b.X, b.Y, b.Width, b.Height));
         }
 
         // Render the text.
         canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null);
 
         // Advance rectangle (green outline).
-        RectangleF advance = canvas.MeasureTextAdvance(textOptions, text);
+        FontRectangle advance = metrics.Advance;
         canvas.Draw(
             Pens.Solid(Color.SeaGreen, 2),
             new RectangularPolygon(origin.X + advance.X, origin.Y + advance.Y, advance.Width, advance.Height));
 
         // Bounds rectangle (dodger blue outline).
-        RectangleF bounds = canvas.MeasureTextBounds(textOptions, text);
+        FontRectangle bounds = metrics.Bounds;
         canvas.Draw(
             Pens.Solid(Color.DodgerBlue, 2),
             new RectangularPolygon(bounds.X, bounds.Y, bounds.Width, bounds.Height));
 
         // Renderable bounds rectangle (black outline).
-        RectangleF renderableBounds = canvas.MeasureTextRenderableBounds(textOptions, text);
+        FontRectangle renderableBounds = metrics.RenderableBounds;
         canvas.Draw(
             Pens.Solid(Color.Black, 2),
             new RectangularPolygon(renderableBounds.X, renderableBounds.Y, renderableBounds.Width, renderableBounds.Height));
@@ -199,7 +186,7 @@ public partial class DrawingCanvasTests
     }
 
     [Fact]
-    public void MeasureTextSize_ReturnsNonEmptyRectangle()
+    public void MeasureText_ReturnsNonEmptySize()
     {
         TestImageProvider<Rgba32> provider = TestImageProvider<Rgba32>.Blank(1, 1);
         using Image<Rgba32> target = new(64, 64);
@@ -208,14 +195,14 @@ public partial class DrawingCanvasTests
         Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 24);
         RichTextOptions textOptions = new(font) { Origin = new PointF(0, 0) };
 
-        RectangleF size = canvas.MeasureTextSize(textOptions, "Hello");
+        TextMetrics metrics = canvas.MeasureText(textOptions, "Hello");
 
-        Assert.True(size.Width > 0, "Width should be positive.");
-        Assert.True(size.Height > 0, "Height should be positive.");
+        Assert.True(metrics.Size.Width > 0, "Width should be positive.");
+        Assert.True(metrics.Size.Height > 0, "Height should be positive.");
     }
 
     [Fact]
-    public void MeasureTextSize_EmptyText_ReturnsEmpty()
+    public void MeasureText_EmptyText_ReturnsEmpty()
     {
         TestImageProvider<Rgba32> provider = TestImageProvider<Rgba32>.Blank(1, 1);
         using Image<Rgba32> target = new(64, 64);
@@ -224,13 +211,16 @@ public partial class DrawingCanvasTests
         Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 24);
         RichTextOptions textOptions = new(font) { Origin = new PointF(0, 0) };
 
-        RectangleF size = canvas.MeasureTextSize(textOptions, ReadOnlySpan<char>.Empty);
+        TextMetrics metrics = canvas.MeasureText(textOptions, ReadOnlySpan<char>.Empty);
 
-        Assert.Equal(RectangleF.Empty, size);
+        Assert.Equal(FontRectangle.Empty, metrics.Size);
+        Assert.Equal(0, metrics.LineCount);
+        Assert.Empty(metrics.CharacterAdvances);
+        Assert.Empty(metrics.Lines);
     }
 
     [Fact]
-    public void MeasureTextSize_LongerText_IsWider()
+    public void MeasureText_LongerText_IsWider()
     {
         TestImageProvider<Rgba32> provider = TestImageProvider<Rgba32>.Blank(1, 1);
         using Image<Rgba32> target = new(64, 64);
@@ -239,14 +229,14 @@ public partial class DrawingCanvasTests
         Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 24);
         RichTextOptions textOptions = new(font) { Origin = new PointF(0, 0) };
 
-        RectangleF shortSize = canvas.MeasureTextSize(textOptions, "Hi");
-        RectangleF longSize = canvas.MeasureTextSize(textOptions, "Hello World");
+        TextMetrics shortMetrics = canvas.MeasureText(textOptions, "Hi");
+        TextMetrics longMetrics = canvas.MeasureText(textOptions, "Hello World");
 
-        Assert.True(longSize.Width > shortSize.Width, "Longer text should produce a wider measurement.");
+        Assert.True(longMetrics.Size.Width > shortMetrics.Size.Width, "Longer text should produce a wider measurement.");
     }
 
     [Fact]
-    public void TryMeasureCharacterAdvances_ReturnsAdvancesForEachCharacter()
+    public void MeasureText_CharacterAdvances_MatchCharacterCount()
     {
         TestImageProvider<Rgba32> provider = TestImageProvider<Rgba32>.Blank(1, 1);
         using Image<Rgba32> target = new(64, 64);
@@ -256,30 +246,12 @@ public partial class DrawingCanvasTests
         RichTextOptions textOptions = new(font) { Origin = new PointF(0, 0) };
 
         const string text = "ABC";
-        bool result = canvas.TryMeasureCharacterAdvances(textOptions, text, out ReadOnlySpan<GlyphBounds> advances);
+        TextMetrics metrics = canvas.MeasureText(textOptions, text);
 
-        Assert.True(result);
-        Assert.Equal(text.Length, advances.Length);
-
-        for (int i = 0; i < advances.Length; i++)
+        Assert.Equal(text.Length, metrics.CharacterAdvances.Count);
+        for (int i = 0; i < metrics.CharacterAdvances.Count; i++)
         {
-            Assert.True(advances[i].Bounds.Width > 0, $"Advance width for character {i} should be positive.");
+            Assert.True(metrics.CharacterAdvances[i].Bounds.Width > 0, $"Advance width for character {i} should be positive.");
         }
-    }
-
-    [Fact]
-    public void TryMeasureCharacterAdvances_EmptyText_ReturnsFalse()
-    {
-        TestImageProvider<Rgba32> provider = TestImageProvider<Rgba32>.Blank(1, 1);
-        using Image<Rgba32> target = new(64, 64);
-        using DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, target, new DrawingOptions());
-
-        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 24);
-        RichTextOptions textOptions = new(font) { Origin = new PointF(0, 0) };
-
-        bool result = canvas.TryMeasureCharacterAdvances(textOptions, ReadOnlySpan<char>.Empty, out ReadOnlySpan<GlyphBounds> advances);
-
-        Assert.False(result);
-        Assert.True(advances.IsEmpty);
     }
 }

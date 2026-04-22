@@ -81,9 +81,9 @@ public partial class DrawingCanvasTests
         canvas.Fill(Brushes.Solid(Color.LightSteelBlue.WithAlpha(0.25F)), new Rectangle(0, 0, 712, 276));
         canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null);
 
-        LineMetrics[] lineMetrics = canvas.GetTextLineMetrics(textOptions, text);
+        IReadOnlyList<LineMetrics> lineMetrics = canvas.MeasureText(textOptions, text).Lines;
         float lineOriginY = textOptions.Origin.Y;
-        for (int i = 0; i < lineMetrics.Length; i++)
+        for (int i = 0; i < lineMetrics.Count; i++)
         {
             LineMetrics metrics = lineMetrics[i];
             float startX = metrics.Start;
