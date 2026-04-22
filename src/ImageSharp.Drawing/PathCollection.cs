@@ -30,9 +30,10 @@ public class PathCollection : IPathCollection
     /// <param name="paths">The collection of paths</param>
     public PathCollection(params IPath[] paths)
     {
-        this.paths = paths ?? throw new ArgumentNullException(nameof(paths));
+        Guard.NotNull(paths, nameof(paths));
+        this.paths = paths;
 
-        if (this.paths.Length == 0)
+        if (paths.Length == 0)
         {
             this.bounds = new RectangleF(0, 0, 0, 0);
         }

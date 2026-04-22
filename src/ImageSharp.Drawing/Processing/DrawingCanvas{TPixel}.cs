@@ -487,7 +487,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         Pen? pen)
     {
         this.EnsureNotDisposed();
-        Guard.NotNull(textOptions, nameof(textOptions));
 
         if (text.IsEmpty)
         {
@@ -584,7 +583,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     public RectangleF MeasureTextAdvance(RichTextOptions textOptions, ReadOnlySpan<char> text)
     {
         this.EnsureNotDisposed();
-        Guard.NotNull(textOptions, nameof(textOptions));
 
         if (text.IsEmpty)
         {
@@ -599,7 +597,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     public RectangleF MeasureTextBounds(RichTextOptions textOptions, ReadOnlySpan<char> text)
     {
         this.EnsureNotDisposed();
-        Guard.NotNull(textOptions, nameof(textOptions));
 
         if (text.IsEmpty)
         {
@@ -614,7 +611,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     public RectangleF MeasureTextRenderableBounds(RichTextOptions textOptions, ReadOnlySpan<char> text)
     {
         this.EnsureNotDisposed();
-        Guard.NotNull(textOptions, nameof(textOptions));
 
         if (text.IsEmpty)
         {
@@ -629,7 +625,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     public RectangleF MeasureTextSize(RichTextOptions textOptions, ReadOnlySpan<char> text)
     {
         this.EnsureNotDisposed();
-        Guard.NotNull(textOptions, nameof(textOptions));
 
         if (text.IsEmpty)
         {
@@ -644,7 +639,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     public bool TryMeasureCharacterAdvances(RichTextOptions textOptions, ReadOnlySpan<char> text, out ReadOnlySpan<GlyphBounds> advances)
     {
         this.EnsureNotDisposed();
-        Guard.NotNull(textOptions, nameof(textOptions));
 
         if (text.IsEmpty)
         {
@@ -659,7 +653,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     public bool TryMeasureCharacterBounds(RichTextOptions textOptions, ReadOnlySpan<char> text, out ReadOnlySpan<GlyphBounds> bounds)
     {
         this.EnsureNotDisposed();
-        Guard.NotNull(textOptions, nameof(textOptions));
 
         if (text.IsEmpty)
         {
@@ -674,7 +667,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     public bool TryMeasureCharacterRenderableBounds(RichTextOptions textOptions, ReadOnlySpan<char> text, out ReadOnlySpan<GlyphBounds> bounds)
     {
         this.EnsureNotDisposed();
-        Guard.NotNull(textOptions, nameof(textOptions));
 
         if (text.IsEmpty)
         {
@@ -689,7 +681,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     public bool TryMeasureCharacterSizes(RichTextOptions textOptions, ReadOnlySpan<char> text, out ReadOnlySpan<GlyphBounds> sizes)
     {
         this.EnsureNotDisposed();
-        Guard.NotNull(textOptions, nameof(textOptions));
 
         if (text.IsEmpty)
         {
@@ -704,7 +695,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     public int CountTextLines(RichTextOptions textOptions, ReadOnlySpan<char> text)
     {
         this.EnsureNotDisposed();
-        Guard.NotNull(textOptions, nameof(textOptions));
 
         if (text.IsEmpty)
         {
@@ -718,7 +708,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     public LineMetrics[] GetTextLineMetrics(RichTextOptions textOptions, ReadOnlySpan<char> text)
     {
         this.EnsureNotDisposed();
-        Guard.NotNull(textOptions, nameof(textOptions));
 
         if (text.IsEmpty)
         {
@@ -754,7 +743,11 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         Rectangle sourceRect,
         RectangleF destinationRect,
         IResampler? sampler = null)
-        => this.DrawImageCore(image, sourceRect, destinationRect, sampler, ownsSourceImage: false);
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(image, nameof(image));
+        this.DrawImageCore(image, sourceRect, destinationRect, sampler, ownsSourceImage: false);
+    }
 
     private void DrawImageCore(
         Image<TPixel> image,
@@ -763,8 +756,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         IResampler? sampler,
         bool ownsSourceImage)
     {
-        this.EnsureNotDisposed();
-        Guard.NotNull(image, nameof(image));
         bool disposeSourceImage = ownsSourceImage;
 
         DrawingCanvasState state = this.ResolveState();
@@ -1075,10 +1066,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     /// <param name="path">Path to fill.</param>
     private void EnqueueFillPath(Brush brush, IPath path)
     {
-        this.EnsureNotDisposed();
-        Guard.NotNull(path, nameof(path));
-        Guard.NotNull(brush, nameof(brush));
-
         DrawingCanvasState state = this.ResolveState();
         IPath closed = path.AsClosedPath();
 
@@ -1101,8 +1088,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         DrawingOptions drawingOptions,
         IReadOnlyList<IPath> clipPaths)
     {
-        this.EnsureNotDisposed();
-
         // Build composition commands and enforce render-pass ordering while preserving
         // original emission order inside each pass. This preserves overlapping color-font
         // layer compositing semantics (for example emoji mouth/teeth layers).

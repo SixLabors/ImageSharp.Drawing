@@ -25,15 +25,10 @@ public sealed class CubicBezierLineSegment : ILineSegment
     /// <param name="points">The points.</param>
     public CubicBezierLineSegment(PointF[] points)
     {
-        this.controlPoints = points ?? throw new ArgumentNullException(nameof(points));
-
-        Guard.MustBeGreaterThanOrEqualTo(this.controlPoints.Length, 4, nameof(points));
-
-        int correctPointCount = (this.controlPoints.Length - 1) % 3;
-        if (correctPointCount != 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(points), "points must be a multiple of 3 plus 1 long.");
-        }
+        Guard.NotNull(points, nameof(points));
+        Guard.MustBeGreaterThanOrEqualTo(points.Length, 4, nameof(points));
+        Guard.IsTrue((points.Length - 1) % 3 == 0, nameof(points), "points must be a multiple of 3 plus 1 long.");
+        this.controlPoints = points;
     }
 
     /// <summary>

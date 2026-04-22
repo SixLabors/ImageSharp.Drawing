@@ -66,7 +66,8 @@ public static class WebGPUNativeSurfaceFactory
         Guard.NotNull(targetTextureHandle, nameof(targetTextureHandle));
         Guard.NotNull(targetTextureViewHandle, nameof(targetTextureViewHandle));
 
-        ValidateCommon(deviceHandle, queueHandle, targetTextureHandle, targetTextureViewHandle, width, height);
+        Guard.MustBeGreaterThan(width, 0, nameof(width));
+        Guard.MustBeGreaterThan(height, 0, nameof(height));
         ValidatePixelCompatibility<TPixel>(targetFormat);
 
         NativeSurface nativeSurface = new(TPixel.GetPixelTypeInfo());
@@ -79,41 +80,6 @@ public static class WebGPUNativeSurfaceFactory
             width,
             height));
         return nativeSurface;
-    }
-
-    /// <summary>
-    /// Validates the shared handle and size requirements for every native-surface factory entry point.
-    /// </summary>
-    private static void ValidateCommon(
-        WebGPUDeviceHandle deviceHandle,
-        WebGPUQueueHandle queueHandle,
-        WebGPUTextureHandle targetTextureHandle,
-        WebGPUTextureViewHandle targetTextureViewHandle,
-        int width,
-        int height)
-    {
-        if (deviceHandle.IsInvalid)
-        {
-            throw new ArgumentOutOfRangeException(nameof(deviceHandle), "Device handle must be non-zero.");
-        }
-
-        if (queueHandle.IsInvalid)
-        {
-            throw new ArgumentOutOfRangeException(nameof(queueHandle), "Queue handle must be non-zero.");
-        }
-
-        if (targetTextureHandle.IsInvalid)
-        {
-            throw new ArgumentOutOfRangeException(nameof(targetTextureHandle), "Texture handle must be non-zero.");
-        }
-
-        if (targetTextureViewHandle.IsInvalid)
-        {
-            throw new ArgumentOutOfRangeException(nameof(targetTextureViewHandle), "Texture view handle must be non-zero.");
-        }
-
-        Guard.MustBeGreaterThan(width, 0, nameof(width));
-        Guard.MustBeGreaterThan(height, 0, nameof(height));
     }
 
     /// <summary>

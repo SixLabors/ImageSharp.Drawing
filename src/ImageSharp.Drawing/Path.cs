@@ -53,7 +53,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     /// <param name="segments">The segments.</param>
     public Path(params ILineSegment[] segments)
     {
-        ArgumentNullException.ThrowIfNull(segments);
+        Guard.NotNull(segments, nameof(segments));
         this.lineSegments = segments;
     }
 

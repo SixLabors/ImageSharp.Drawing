@@ -108,16 +108,6 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         Guard.NotNull(queueHandle, nameof(queueHandle));
         EnsurePixelTypeSupported();
 
-        if (deviceHandle.IsInvalid)
-        {
-            throw new ArgumentOutOfRangeException(nameof(deviceHandle), "Device handle must be non-zero.");
-        }
-
-        if (queueHandle.IsInvalid)
-        {
-            throw new ArgumentOutOfRangeException(nameof(queueHandle), "Queue handle must be non-zero.");
-        }
-
         this.DeviceHandle = deviceHandle;
         this.QueueHandle = queueHandle;
         this.Backend = new WebGPUDrawingBackend();
@@ -321,16 +311,6 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         this.ThrowIfDisposed();
         Guard.NotNull(textureHandle, nameof(textureHandle));
         Guard.NotNull(textureViewHandle, nameof(textureViewHandle));
-
-        if (textureHandle.IsInvalid)
-        {
-            throw new ArgumentOutOfRangeException(nameof(textureHandle), "Texture handle must be non-zero.");
-        }
-
-        if (textureViewHandle.IsInvalid)
-        {
-            throw new ArgumentOutOfRangeException(nameof(textureViewHandle), "Texture view handle must be non-zero.");
-        }
 
         return WebGPUNativeSurfaceFactory.Create<TPixel>(
             this.DeviceHandle,

@@ -44,10 +44,10 @@ public sealed class LinearLineSegment : ILineSegment
     /// <param name="points">The points.</param>
     public LinearLineSegment(PointF[] points)
     {
-        this.points = points ?? throw new ArgumentNullException(nameof(points));
-
-        Guard.MustBeGreaterThanOrEqualTo(this.points.Length, 2, nameof(points));
-        this.Bounds = CalculateBounds(this.points);
+        Guard.NotNull(points, nameof(points));
+        Guard.MustBeGreaterThanOrEqualTo(points.Length, 2, nameof(points));
+        this.points = points;
+        this.Bounds = CalculateBounds(points);
     }
 
     /// <summary>
