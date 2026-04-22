@@ -513,7 +513,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     public void DrawGlyphs(
         Brush brush,
         Pen pen,
-        IReadOnlyList<GlyphPathCollection> glyphs)
+        IEnumerable<GlyphPathCollection> glyphs)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(brush, nameof(brush));
@@ -524,9 +524,8 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         DrawingOptions baseOptions = state.Options;
         IReadOnlyList<IPath> clipPaths = state.ClipPaths;
 
-        for (int glyphIndex = 0; glyphIndex < glyphs.Count; glyphIndex++)
+        foreach (GlyphPathCollection glyph in glyphs)
         {
-            GlyphPathCollection glyph = glyphs[glyphIndex];
             if (glyph.LayerCount == 0)
             {
                 continue;

@@ -211,7 +211,7 @@ public interface IDrawingCanvas : IDisposable
     public void DrawGlyphs(
         Brush brush,
         Pen pen,
-        IReadOnlyList<GlyphPathCollection> glyphs);
+        IEnumerable<GlyphPathCollection> glyphs);
 
     /// <summary>
     /// Measures the logical advance of the text in pixel units.
