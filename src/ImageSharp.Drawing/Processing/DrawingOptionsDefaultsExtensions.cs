@@ -23,7 +23,7 @@ public static class DrawingOptionsDefaultsExtensions
     /// </summary>
     /// <param name="drawingOptions">The drawing options to clone</param>
     /// <returns>A clone of shapeOptions with ColorBlendingMode, AlphaCompositionMode, and BlendPercentage set</returns>
-    public static DrawingOptions CloneForClearOperation(this DrawingOptions drawingOptions)
+    internal static DrawingOptions CloneForClearOperation(this DrawingOptions drawingOptions)
     {
         GraphicsOptions options = drawingOptions.GraphicsOptions.DeepClone();
         options.ColorBlendingMode = PixelColorBlendingMode.Normal;
