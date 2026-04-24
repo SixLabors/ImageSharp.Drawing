@@ -58,9 +58,12 @@ public class WebGPUDeviceContextTests
                 drawing.Backend.DiagnosticLastSceneFailure ?? "The last flush did not use the staged path.");
 
             using Image<Rgba32> readback = new(32, 24);
-            Buffer2DRegion<Rgba32> destination = new(readback.Frames.RootFrame.PixelBuffer, readback.Bounds);
             Assert.True(
-                drawing.Backend.TryReadRegion(drawing.Configuration, target.NativeFrame, new Rectangle(0, 0, 32, 24), destination));
+                drawing.Backend.TryReadRegion(
+                    drawing.Configuration,
+                    target.NativeFrame,
+                    new Rectangle(0, 0, 32, 24),
+                    new Buffer2DRegion<Rgba32>(readback.Frames.RootFrame.PixelBuffer)));
             Assert.NotEqual(default, readback[16, 12]);
         }
     }
@@ -76,9 +79,12 @@ public class WebGPUDeviceContextTests
             canvas.Flush();
 
             using Image<Rgba32> readback = new(18, 14);
-            Buffer2DRegion<Rgba32> destination = new(readback.Frames.RootFrame.PixelBuffer, readback.Bounds);
             Assert.True(
-                drawing.Backend.TryReadRegion(drawing.Configuration, target.NativeFrame, new Rectangle(0, 0, 18, 14), destination));
+                drawing.Backend.TryReadRegion(
+                    drawing.Configuration,
+                    target.NativeFrame,
+                    new Rectangle(0, 0, 18, 14),
+                    new Buffer2DRegion<Rgba32>(readback.Frames.RootFrame.PixelBuffer)));
             Assert.NotEqual(default, readback[9, 7]);
         }
     }
@@ -92,10 +98,16 @@ public class WebGPUDeviceContextTests
         WebGPUTextureHandle textureHandle = target.TextureHandle;
         drawing.Dispose();
 
-        Assert.True(
-            WebGPUTextureTransfer.TryReadTexture(textureHandle, 12, 10, out Image<Rgba32> image, out string readError),
-            readError);
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> image = new(12, 10);
 
-        image?.Dispose();
+        Assert.True(
+            backend.TryReadRegion(
+                Configuration.Default,
+                target.NativeFrame,
+                target.Bounds,
+                new Buffer2DRegion<Rgba32>(image.Frames.RootFrame.PixelBuffer),
+                out string readError),
+            readError);
     }
 }

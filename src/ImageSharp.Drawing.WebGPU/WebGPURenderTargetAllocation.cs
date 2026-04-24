@@ -7,7 +7,7 @@ using SixLabors.ImageSharp.PixelFormats;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Shared WebGPU render-target allocation helpers used by the public target API and internal tests.
+/// Shared WebGPU render-target allocation helpers used by the public target API.
 /// </summary>
 internal static unsafe class WebGPURenderTargetAllocation
 {

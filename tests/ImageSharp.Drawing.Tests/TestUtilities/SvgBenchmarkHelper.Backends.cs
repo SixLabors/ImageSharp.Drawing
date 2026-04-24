@@ -111,7 +111,7 @@ internal static partial class SvgBenchmarkHelper
         SKSurface skSurface,
         Bitmap sdBitmap,
         Image<Rgba32> isImage,
-        WebGPUTextureHandle webGpuTextureHandle)
+        WebGPURenderTarget<Rgba32> webGpuTarget)
     {
         string outDir = System.IO.Path.Combine(AppContext.BaseDirectory, $"{name}-verify");
         Directory.CreateDirectory(outDir);
@@ -135,21 +135,9 @@ internal static partial class SvgBenchmarkHelper
         Console.WriteLine($"Saved {name}-imagesharp.png");
 
         // ImageSharp (WebGPU)
-        if (WebGPUTextureTransfer.TryReadTexture(
-                webGpuTextureHandle,
-                width,
-                height,
-                out Image<Rgba32> gpuImage,
-                out string readError))
-        {
-            gpuImage.SaveAsPng(System.IO.Path.Combine(outDir, $"{name}-webgpu.png"));
-            gpuImage.Dispose();
-            Console.WriteLine($"Saved {name}-webgpu.png");
-        }
-        else
-        {
-            Console.WriteLine($"WebGPU readback failed: {readError}");
-        }
+        using Image<Rgba32> gpuImage = webGpuTarget.Readback();
+        gpuImage.SaveAsPng(System.IO.Path.Combine(outDir, $"{name}-webgpu.png"));
+        Console.WriteLine($"Saved {name}-webgpu.png");
 
         Console.WriteLine($"Output saved to: {outDir}");
     }

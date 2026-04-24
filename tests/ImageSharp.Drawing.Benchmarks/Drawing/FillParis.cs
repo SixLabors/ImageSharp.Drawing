@@ -191,7 +191,7 @@ public class FillParis
             bench.skSurface,
             bench.sdBitmap,
             bench.image,
-            bench.webGpuTarget.TextureHandle);
+            bench.webGpuTarget);
 
         bench.Cleanup();
     }

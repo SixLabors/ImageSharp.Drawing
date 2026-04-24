@@ -211,12 +211,11 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
                 nameof(destination));
         }
 
-        Buffer2DRegion<TPixel> region = new(destination.Frames.RootFrame.PixelBuffer, destination.Bounds);
         if (!this.Graphics.Backend.TryReadRegion(
                 this.Graphics.Configuration,
                 this.NativeFrame,
                 new Rectangle(0, 0, this.Width, this.Height),
-                region,
+                new Buffer2DRegion<TPixel>(destination.Frames.RootFrame.PixelBuffer),
                 out string? error))
         {
             if (error is null)

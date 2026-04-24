@@ -78,7 +78,8 @@ internal static class WebGPUTestNativeSurfaceAllocator
             return;
         }
 
-        WebGPUTextureTransfer.Release(textureHandle, textureViewHandle);
+        textureViewHandle.Dispose();
+        textureHandle.Dispose();
     }
 
     private sealed class OwnedTexturePair : IDisposable

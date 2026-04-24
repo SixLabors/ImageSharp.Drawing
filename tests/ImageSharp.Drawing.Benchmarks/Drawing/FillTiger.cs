@@ -218,7 +218,7 @@ public class FillTiger
             bench.skSurface,
             bench.sdBitmap,
             bench.image,
-            bench.webGpuTarget.TextureHandle);
+            bench.webGpuTarget);
 
         bench.Cleanup();
     }
@@ -278,15 +278,8 @@ public class FillTiger
         System.IO.Directory.CreateDirectory(dir);
         image.Save(System.IO.Path.Combine(dir, tag + "-imagesharp.png"));
 
-        if (WebGPUTextureTransfer.TryReadTexture(webGpuTarget.TextureHandle, width, height, out Image<Rgba32> gpuImage, out string readError))
-        {
-            gpuImage.SaveAsPng(System.IO.Path.Combine(dir, tag + "-webgpu.png"));
-            gpuImage.Dispose();
-        }
-        else
-        {
-            Console.WriteLine($"WebGPU readback failed: {readError}");
-        }
+        using Image<Rgba32> gpuImage = webGpuTarget.Readback();
+        gpuImage.SaveAsPng(System.IO.Path.Combine(dir, tag + "-webgpu.png"));
 
         Console.WriteLine($"Output saved to: {dir}");
 
@@ -370,7 +363,7 @@ public class FillTiger
         PrintWebGpuDiagnostics(printer);
 
         string tag = $"tiger-xform-{width}x{height}-z{zoom:0.##}-p{panX:0.##}_{panY:0.##}";
-        SvgBenchmarkHelper.VerifyOutput(tag, width, height, sk, sdBitmap, image, webGpuTarget.TextureHandle);
+        SvgBenchmarkHelper.VerifyOutput(tag, width, height, sk, sdBitmap, image, webGpuTarget);
 
         foreach ((SKPath path, SKPaint fill, SKPaint stroke) in skElements)
         {
