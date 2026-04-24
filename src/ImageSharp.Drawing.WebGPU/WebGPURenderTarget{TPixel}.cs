@@ -70,11 +70,6 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
                 throw new InvalidOperationException(allocationError);
             }
 
-            if (textureHandle is null || textureViewHandle is null)
-            {
-                throw new InvalidOperationException("WebGPU render-target allocation succeeded without returning both owned texture handles.");
-            }
-
             this.TextureHandle = textureHandle;
             this.TextureViewHandle = textureViewHandle;
             this.Surface = surface;
@@ -99,16 +94,14 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     public WebGPUDeviceContext<TPixel> Graphics { get; }
 
     /// <summary>
-    /// Gets the wrapped native surface backing this render target.
-    /// Exposed for advanced interop with <see cref="WebGPUDrawingBackend"/> APIs that consume a native surface;
-    /// most callers do not need to touch this directly.
+    /// Gets the native surface backing this render target.
+    /// Most callers should use <see cref="CreateCanvas()"/> or <see cref="Readback"/> instead.
     /// </summary>
     public NativeSurface Surface { get; }
 
     /// <summary>
-    /// Gets the native-only frame over this render target.
-    /// Pass this to <see cref="WebGPUDrawingBackend.TryReadRegion{TPixel}(Configuration, ICanvasFrame{TPixel}, Rectangle, Buffer2DRegion{TPixel})"/>
-    /// when you need to read back into a caller-owned region instead of using <see cref="Readback"/>.
+    /// Gets the frame over this render target.
+    /// Most callers should use <see cref="CreateCanvas()"/> instead.
     /// </summary>
     public NativeCanvasFrame<TPixel> NativeFrame { get; }
 
@@ -143,9 +136,9 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     internal WebGPUTextureViewHandle TextureViewHandle { get; }
 
     /// <summary>
-    /// Creates a native-only frame over this render target.
+    /// Creates a frame over this render target.
     /// </summary>
-    /// <returns>The native-only frame.</returns>
+    /// <returns>The frame over this render target.</returns>
     public NativeCanvasFrame<TPixel> CreateFrame()
     {
         this.ThrowIfDisposed();
@@ -154,14 +147,14 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Creates a drawing canvas over this native-only render target.
+    /// Creates a drawing canvas over this render target.
     /// </summary>
     /// <returns>A drawing canvas targeting this render target.</returns>
     public DrawingCanvas<TPixel> CreateCanvas()
         => this.CreateCanvas(new DrawingOptions());
 
     /// <summary>
-    /// Creates a drawing canvas over this native-only render target.
+    /// Creates a drawing canvas over this render target.
     /// </summary>
     /// <param name="options">The initial drawing options.</param>
     /// <returns>A drawing canvas targeting this render target.</returns>
@@ -218,11 +211,6 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
                 new Buffer2DRegion<TPixel>(destination.Frames.RootFrame.PixelBuffer),
                 out string? error))
         {
-            if (error is null)
-            {
-                throw new InvalidOperationException("The WebGPU render target readback failed without reporting a reason.");
-            }
-
             throw new InvalidOperationException(error);
         }
     }

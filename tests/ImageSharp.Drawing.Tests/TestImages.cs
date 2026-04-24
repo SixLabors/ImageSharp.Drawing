@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-
 // ReSharper disable InconsistentNaming
 // ReSharper disable MemberHidesStaticFromOuterClass
 namespace SixLabors.ImageSharp.Drawing.Tests;
@@ -221,7 +220,7 @@ public static class TestImages
             }
         }
 
-        public static readonly string[] All = Baseline.All.Concat(Progressive.All).ToArray();
+        public static readonly string[] All = [.. Baseline.All, .. Progressive.All];
 
         public static class BenchmarkSuite
         {

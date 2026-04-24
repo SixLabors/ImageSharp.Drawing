@@ -12,11 +12,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// WebGPU-backed implementation of <see cref="IDrawingBackend"/>.
 /// </summary>
 /// <remarks>
-/// Scene composition uses a staged WebGPU raster path when the target surface and pixel format are supported,
-/// and falls back to <see cref="DefaultDrawingBackend"/> otherwise.
-/// Public diagnostic properties on this type describe only the most recent flush executed by this backend
-/// instance. They are lightweight inspection state for debugging, tests, and benchmarks, and they are
-/// overwritten by the next flush.
+/// Uses WebGPU when the target surface and pixel format are supported, and uses the CPU drawing backend otherwise.
+/// Diagnostic properties describe only the most recent flush executed by this backend instance and are overwritten
+/// by the next flush.
 /// </remarks>
 public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisposable
 {
@@ -27,7 +25,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     // Segments, BlendSpill, and Ptcl.
     private const int ScratchAllocatorCount = 8;
 
-    // A first flush can rerun the staged path while the GPU-reported scratch capacities
+    // A first flush can rerun the WebGPU path while the GPU-reported scratch capacities
     // converge. Earlier scheduling overflows can prevent later stages from reporting
     // their own demand, so one failed pass can be needed per tracked allocator. A
     // Failed-only report can also require one conservative force-growth pass when no
@@ -45,6 +43,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     // start and returned at flush end so parallel flushes on different threads don't contend.
     private WebGPUSceneSchedulingArena? cachedSchedulingArena;
     private WebGPUSceneResourceArena? cachedResourceArena;
+    private WebGPUSceneDispatch.BindingLimitBuffer lastChunkingBindingFailure;
     private bool isDisposed;
 
     private static readonly Dictionary<Type, CompositePixelRegistration> CompositePixelHandlers = CreateCompositePixelHandlers();
@@ -56,123 +55,38 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         => this.fallbackBackend = DefaultDrawingBackend.Instance;
 
     /// <summary>
-    /// Gets a value indicating whether the last flush completed on the staged path.
-    /// </summary>
-    internal bool TestingLastFlushUsedGPU { get; private set; }
-
-    /// <summary>
-    /// Gets the testing-only diagnostic containing the last GPU initialization failure reason, if any.
-    /// </summary>
-    internal string? TestingLastGPUInitializationFailure { get; private set; }
-
-    /// <summary>
-    /// Gets a value indicating whether the last staged flush used chunked oversized-scene dispatch.
-    /// </summary>
-    internal bool TestingLastFlushUsedChunking { get; private set; }
-
-    /// <summary>
-    /// Gets the chunkable binding-limit failure that selected the chunked path for the last staged flush.
-    /// </summary>
-    internal WebGPUSceneDispatch.BindingLimitBuffer TestingLastChunkingBindingFailure { get; private set; }
-
-    /// <summary>
-    /// Gets the encoded scene path-tag payload size for the most recent staged flush.
-    /// </summary>
-    internal int TestingLastEncodedScenePathTagByteCount { get; private set; }
-
-    /// <summary>
-    /// Gets the encoded scene clip record count for the most recent staged flush.
-    /// </summary>
-    internal int TestingLastEncodedSceneClipCount { get; private set; }
-
-    /// <summary>
-    /// Gets a value indicating whether the most recent staged flush used the large pathtag scan path.
-    /// </summary>
-    internal bool TestingLastUsedLargePathScan { get; private set; }
-
-    /// <summary>
-    /// Gets the clip-reduce dispatch count for the most recent staged flush.
-    /// </summary>
-    internal uint TestingLastClipReduceX { get; private set; }
-
-    /// <summary>
-    /// Gets the number of staged-dispatch attempts (including the successful one, if any) for the most recent flush.
-    /// </summary>
-    internal int TestingLastAttemptCount { get; private set; }
-
-    /// <summary>
-    /// Gets the per-attempt bump-allocator readbacks for the most recent flush.
-    /// </summary>
-    internal List<GpuSceneBumpAllocators> TestingLastAttemptBumpAllocators { get; } = [];
-
-    /// <summary>
-    /// Gets the per-attempt bump-size budgets for the most recent flush.
-    /// </summary>
-    internal List<WebGPUSceneBumpSizes> TestingLastAttemptBumpSizes { get; } = [];
-
-    /// <summary>
-    /// Gets the per-attempt <c>requiresGrowth</c> decisions for the most recent flush.
-    /// </summary>
-    internal List<bool> TestingLastAttemptRequiresGrowth { get; } = [];
-
-    /// <summary>
-    /// Gets a value indicating whether the most recent flush exhausted its dynamic-growth retry budget
-    /// and fell through to the CPU fallback.
-    /// </summary>
-    internal bool TestingLastExhaustedRetryBudget { get; private set; }
-
-    /// <summary>
-    /// Gets the final-attempt coarse pass workgroup counts for the most recent flush (X, Y).
-    /// </summary>
-    internal (uint X, uint Y) TestingLastCoarseDispatch { get; private set; }
-
-    /// <summary>
-    /// Gets the final-attempt fine pass workgroup counts for the most recent flush (X, Y).
-    /// </summary>
-    internal (uint X, uint Y) TestingLastFineDispatch { get; private set; }
-
-    /// <summary>
-    /// Gets the final-attempt chunk window for the most recent flush (TileYStart, TileHeight, TileBufferHeight).
-    /// </summary>
-    internal (uint Start, uint Height, uint BufferHeight) TestingLastChunkWindow { get; private set; }
-
-    /// <summary>
-    /// Gets a value indicating whether the last flush completed on the staged path.
+    /// Gets a value indicating whether the last flush completed using WebGPU.
     /// </summary>
     /// <remarks>
-    /// This value describes only the most recent call to <see cref="FlushCompositions{TPixel}(Configuration, ICanvasFrame{TPixel}, CompositionScene)"/>
-    /// on this backend instance. It is overwritten by the next flush.
+    /// This value describes only the most recent flush on this backend instance. It is overwritten by the next flush.
     /// </remarks>
-    public bool DiagnosticLastFlushUsedGPU => this.TestingLastFlushUsedGPU;
+    public bool DiagnosticLastFlushUsedGPU { get; private set; }
 
     /// <summary>
-    /// Gets the last staged-scene creation or dispatch failure that forced CPU fallback.
+    /// Gets the last WebGPU rendering failure that forced CPU rendering.
     /// </summary>
     /// <remarks>
-    /// This value describes only the most recent call to <see cref="FlushCompositions{TPixel}(Configuration, ICanvasFrame{TPixel}, CompositionScene)"/>
-    /// on this backend instance. It is reset at the start of each flush and overwritten by the next failure.
+    /// This value describes only the most recent flush on this backend instance. It is reset at the start of each flush.
     /// A <see langword="null"/> value means no failure reason was recorded for the most recent flush.
     /// </remarks>
-    public string? DiagnosticLastSceneFailure => this.TestingLastGPUInitializationFailure;
+    public string? DiagnosticLastSceneFailure { get; private set; }
 
     /// <summary>
-    /// Gets a value indicating whether the last staged flush used the chunked oversized-scene path.
+    /// Gets a value indicating whether the last WebGPU flush used chunked rendering.
     /// </summary>
     /// <remarks>
-    /// This value describes only the most recent call to <see cref="FlushCompositions{TPixel}(Configuration, ICanvasFrame{TPixel}, CompositionScene)"/>
-    /// on this backend instance. It is overwritten by the next flush.
+    /// This value describes only the most recent flush on this backend instance. It is overwritten by the next flush.
     /// </remarks>
-    public bool DiagnosticLastFlushUsedChunking => this.TestingLastFlushUsedChunking;
+    public bool DiagnosticLastFlushUsedChunking { get; private set; }
 
     /// <summary>
-    /// Gets the chunkable binding-limit failure that selected the chunked oversized-scene path for the last staged flush.
+    /// Gets the binding category that selected chunked rendering for the last WebGPU flush.
     /// </summary>
     /// <remarks>
-    /// This value describes only the most recent call to <see cref="FlushCompositions{TPixel}(Configuration, ICanvasFrame{TPixel}, CompositionScene)"/>
-    /// on this backend instance. When the most recent flush did not use the chunked path, this property returns
-    /// the default <c>None</c> value from <see cref="WebGPUSceneDispatch.BindingLimitBuffer"/>.
+    /// This value describes only the most recent flush on this backend instance. When the most recent flush did not use
+    /// chunked rendering, this property returns <c>None</c>.
     /// </remarks>
-    public string DiagnosticLastChunkingBindingFailure => this.TestingLastChunkingBindingFailure.ToString();
+    public string DiagnosticLastChunkingBindingFailure => this.lastChunkingBindingFailure.ToString();
 
     /// <inheritdoc />
     public void FlushCompositions<TPixel>(
@@ -187,19 +101,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             return;
         }
 
-        this.TestingLastFlushUsedGPU = false;
-        this.TestingLastGPUInitializationFailure = null;
-        this.TestingLastFlushUsedChunking = false;
-        this.TestingLastChunkingBindingFailure = WebGPUSceneDispatch.BindingLimitBuffer.None;
-        this.TestingLastEncodedScenePathTagByteCount = 0;
-        this.TestingLastEncodedSceneClipCount = 0;
-        this.TestingLastUsedLargePathScan = false;
-        this.TestingLastClipReduceX = 0;
-        this.TestingLastAttemptCount = 0;
-        this.TestingLastAttemptBumpAllocators.Clear();
-        this.TestingLastAttemptBumpSizes.Clear();
-        this.TestingLastAttemptRequiresGrowth.Clear();
-        this.TestingLastExhaustedRetryBudget = false;
+        this.DiagnosticLastFlushUsedGPU = false;
+        this.DiagnosticLastSceneFailure = null;
+        this.DiagnosticLastFlushUsedChunking = false;
+        this.lastChunkingBindingFailure = WebGPUSceneDispatch.BindingLimitBuffer.None;
         WebGPUSceneBumpSizes currentBumpSizes = this.bumpSizes;
 
         // Rent the cached scheduling arena. Null on first flush or if another thread has it.
@@ -214,9 +119,18 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             // persisted in this.bumpSizes, so later flushes usually run without retries.
             for (int attempt = 0; attempt < MaxDynamicGrowthAttempts; attempt++)
             {
-                if (!WebGPUSceneDispatch.TryCreateStagedScene(configuration, target, compositionScene, currentBumpSizes, ref resourceArena, out bool exceedsBindingLimit, out WebGPUSceneDispatch.BindingLimitFailure bindingLimitFailure, out WebGPUStagedScene stagedScene, out string? error))
+                if (!WebGPUSceneDispatch.TryCreateStagedScene(
+                        configuration,
+                        target,
+                        compositionScene,
+                        currentBumpSizes,
+                        ref resourceArena,
+                        out bool exceedsBindingLimit,
+                        out _,
+                        out WebGPUStagedScene stagedScene,
+                        out string? error))
                 {
-                    this.TestingLastGPUInitializationFailure = exceedsBindingLimit
+                    this.DiagnosticLastSceneFailure = exceedsBindingLimit
                         ? error ?? "The staged WebGPU scene exceeded the current binding limits."
                         : error ?? "Failed to create the staged WebGPU scene.";
                     this.FlushCompositionsFallback(configuration, target, compositionScene, compositionBounds: null);
@@ -225,27 +139,21 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
                 try
                 {
-                    this.TestingLastFlushUsedGPU = true;
-                    this.TestingLastFlushUsedChunking = stagedScene.BindingLimitFailure.Buffer != WebGPUSceneDispatch.BindingLimitBuffer.None;
-                    this.TestingLastChunkingBindingFailure = stagedScene.BindingLimitFailure.Buffer;
-                    this.TestingLastEncodedScenePathTagByteCount = stagedScene.EncodedScene.PathTagByteCount;
-                    this.TestingLastEncodedSceneClipCount = stagedScene.EncodedScene.ClipCount;
-                    this.TestingLastUsedLargePathScan = stagedScene.Config.WorkgroupCounts.UseLargePathScan;
-                    this.TestingLastClipReduceX = stagedScene.Config.WorkgroupCounts.ClipReduceX;
-                    this.TestingLastCoarseDispatch = (stagedScene.Config.WorkgroupCounts.CoarseX, stagedScene.Config.WorkgroupCounts.CoarseY);
-                    this.TestingLastFineDispatch = (stagedScene.Config.WorkgroupCounts.FineX, stagedScene.Config.WorkgroupCounts.FineY);
-                    this.TestingLastChunkWindow = (stagedScene.Config.ChunkWindow.TileYStart, stagedScene.Config.ChunkWindow.TileHeight, stagedScene.Config.ChunkWindow.TileBufferHeight);
+                    this.DiagnosticLastFlushUsedGPU = true;
+                    this.DiagnosticLastFlushUsedChunking = stagedScene.BindingLimitFailure.Buffer != WebGPUSceneDispatch.BindingLimitBuffer.None;
+                    this.lastChunkingBindingFailure = stagedScene.BindingLimitFailure.Buffer;
 
                     if (stagedScene.EncodedScene.FillCount == 0)
                     {
                         return;
                     }
 
-                    bool renderSucceeded = WebGPUSceneDispatch.TryRenderStagedScene(ref stagedScene, ref schedulingArena, out bool requiresGrowth, out WebGPUSceneBumpSizes grownBumpSizes, out GpuSceneBumpAllocators lastBumpAllocators, out error);
-                    this.TestingLastAttemptCount = attempt + 1;
-                    this.TestingLastAttemptBumpSizes.Add(currentBumpSizes);
-                    this.TestingLastAttemptBumpAllocators.Add(lastBumpAllocators);
-                    this.TestingLastAttemptRequiresGrowth.Add(requiresGrowth);
+                    bool renderSucceeded = WebGPUSceneDispatch.TryRenderStagedScene(
+                        ref stagedScene,
+                        ref schedulingArena,
+                        out bool requiresGrowth,
+                        out WebGPUSceneBumpSizes grownBumpSizes,
+                        out error);
 
                     if (renderSucceeded)
                     {
@@ -254,15 +162,15 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                         return;
                     }
 
-                    this.TestingLastFlushUsedGPU = false;
+                    this.DiagnosticLastFlushUsedGPU = false;
                     if (requiresGrowth)
                     {
-                        // Bump overflow — retry with GPU-reported sizes.
+                        // Bump overflow; retry with GPU-reported sizes.
                         currentBumpSizes = grownBumpSizes;
                         continue;
                     }
 
-                    this.TestingLastGPUInitializationFailure = error ?? "The staged WebGPU scene dispatch failed.";
+                    this.DiagnosticLastSceneFailure = error ?? "The staged WebGPU scene dispatch failed.";
                 }
                 finally
                 {
@@ -273,8 +181,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 return;
             }
 
-            this.TestingLastGPUInitializationFailure = "The staged WebGPU scene exceeded the current dynamic growth retry budget.";
-            this.TestingLastExhaustedRetryBudget = true;
+            this.DiagnosticLastSceneFailure = "The staged WebGPU scene exceeded the current dynamic growth retry budget.";
             this.FlushCompositionsFallback(configuration, target, compositionScene, compositionBounds: null);
         }
         finally
@@ -287,8 +194,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     }
 
     /// <summary>
-    /// Executes the scene on the CPU fallback backend, then uploads the result
-    /// to the native GPU surface.
+    /// Executes the scene on the default backend, uploading the result when the target is a native WebGPU surface.
     /// </summary>
     private void FlushCompositionsFallback<TPixel>(
         Configuration configuration,
@@ -300,6 +206,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         if (!target.TryGetNativeSurface(out NativeSurface? nativeSurface) ||
             !nativeSurface.TryGetCapability(out WebGPUSurfaceCapability? capability))
         {
+            this.fallbackBackend.FlushCompositions(configuration, target, compositionScene);
             return;
         }
 
@@ -316,7 +223,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 new Rectangle(0, 0, targetBounds.Width, targetBounds.Height),
                 stagingRegion))
         {
-            return;
+            throw new NotSupportedException("WebGPU fallback requires readback from the native target.");
         }
 
         this.fallbackBackend.FlushCompositions(configuration, stagingFrame, compositionScene);
@@ -492,14 +399,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             return;
         }
 
-        this.TestingLastFlushUsedGPU = false;
-        this.TestingLastGPUInitializationFailure = null;
-        this.TestingLastFlushUsedChunking = false;
-        this.TestingLastChunkingBindingFailure = WebGPUSceneDispatch.BindingLimitBuffer.None;
-        this.TestingLastEncodedScenePathTagByteCount = 0;
-        this.TestingLastEncodedSceneClipCount = 0;
-        this.TestingLastUsedLargePathScan = false;
-        this.TestingLastClipReduceX = 0;
+        this.DiagnosticLastFlushUsedGPU = false;
+        this.DiagnosticLastSceneFailure = null;
+        this.DiagnosticLastFlushUsedChunking = false;
+        this.lastChunkingBindingFailure = WebGPUSceneDispatch.BindingLimitBuffer.None;
         WebGPUSceneSchedulingArena.Dispose(this.cachedSchedulingArena);
         WebGPUSceneResourceArena.Dispose(this.cachedResourceArena);
         this.isDisposed = true;

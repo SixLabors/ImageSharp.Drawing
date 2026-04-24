@@ -101,7 +101,7 @@ internal static unsafe class WebGPUSceneResources
             return true;
         }
 
-        // Arena miss — create all buffers fresh and build a new arena.
+        // Arena miss; create all buffers fresh and build a new arena.
         WebGPUSceneResourceArena.Dispose(arena);
 
         if (!TryCreateAndUploadCombinedInfoBinDataBuffer(
@@ -196,7 +196,7 @@ internal static unsafe class WebGPUSceneResources
         }
 
         // Build the new arena from the freshly created buffers.
-        // These buffers are NOT tracked by the flush context — the arena owns them.
+        // These buffers are NOT tracked by the flush context; the arena owns them.
         arena = new WebGPUSceneResourceArena(
             flushContext.Api,
             flushContext.DeviceHandle,
@@ -888,9 +888,6 @@ internal static unsafe class WebGPUSceneResources
 
 /// <summary>
 /// Flush-scoped GPU resources produced from one encoded scene.
-/// </summary>
-/// <summary>
-/// Flush-scoped GPU resources created for one encoded staged scene.
 /// </summary>
 internal readonly unsafe struct WebGPUSceneResourceSet
 {

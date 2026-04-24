@@ -30,8 +30,7 @@ public static class WebGPUNativeSurfaceFactory
     /// <returns>A configured <see cref="NativeSurface"/> instance.</returns>
     /// <remarks>
     /// These handles must originate from the same process WebGPU runtime used by ImageSharp.Drawing.WebGPU.
-    /// The target texture must have been created with the <c>TEXTURE_BINDING</c> usage flag.
-    /// The backend reads the target texture for Porter-Duff backdrop sampling.
+    /// The target texture must support render attachment and texture binding usage.
     /// </remarks>
     public static NativeSurface Create<TPixel>(
         nint deviceHandle,

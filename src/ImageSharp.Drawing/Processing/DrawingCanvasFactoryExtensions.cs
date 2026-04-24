@@ -47,7 +47,7 @@ public static class DrawingCanvasFactoryExtensions
 
         return new DrawingCanvas<TPixel>(
             configuration,
-            new Buffer2DRegion<TPixel>(frame.PixelBuffer, frame.Bounds),
+            new Buffer2DRegion<TPixel>(frame.PixelBuffer),
             options,
             clipPaths);
     }

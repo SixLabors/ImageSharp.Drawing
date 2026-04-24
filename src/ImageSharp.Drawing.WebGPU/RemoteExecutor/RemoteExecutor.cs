@@ -10,7 +10,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// Minimal remote executor that invokes a named method in a child process.
 /// The child process entry point (<see cref="Program.Main"/>) dispatches to
-/// the requested method by name — no reflection is used.
+/// the requested method by name; no reflection is used.
 /// Adapted from Microsoft.DotNet.RemoteExecutor (MIT license).
 /// </summary>
 internal static class RemoteExecutor
@@ -49,7 +49,7 @@ internal static class RemoteExecutor
             // Walk up from the runtime directory to find the dotnet host executable.
             // The runtime directory is typically:
             //   <dotnet_root>/shared/Microsoft.NETCore.App/<version>/
-            // so dotnet.exe is 3–4 levels up depending on trailing separator.
+            // so dotnet.exe is 3-4 levels up depending on trailing separator.
             string? directory = RuntimeEnvironment.GetRuntimeDirectory();
             for (int i = 0; i < 4 && directory is not null; i++)
             {

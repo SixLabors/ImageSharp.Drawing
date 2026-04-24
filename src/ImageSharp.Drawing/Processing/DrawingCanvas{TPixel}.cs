@@ -352,11 +352,9 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
             return;
         }
 
-        // Defensive guard: built-in backends should provide either direct readback (CPU/backed surface)
-        // or shadow fallback. If this fails, it indicates a backend implementation bug or an unsupported custom backend.
         if (!this.TryCreateProcessSourceImage(sourceRect, out Image<TPixel>? sourceImage))
         {
-            throw new NotSupportedException("Canvas process operations require either CPU pixels, backend readback support, or shadow fallback.");
+            throw new NotSupportedException("Canvas process operations require access to the current target pixels.");
         }
 
         sourceImage.Mutate(operation);
@@ -920,8 +918,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
             return typedBrush;
         }
 
-        // This brush references an image with a pixel format that doesn't match the canvas target.
-        // Clone the image as TPixel
+        // Normalize the source image once so deferred composition does not repeat per-pixel conversions.
         Image<TPixel> convertedImage = imageBrush.UntypedImage.CloneAs<TPixel>();
         this.pendingImageResources.Add(convertedImage);
         return new ImageBrush<TPixel>(convertedImage, imageBrush.SourceRegion, imageBrush.Offset);
@@ -1013,7 +1010,6 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
 
     /// <summary>
     /// Attempts to create a source image for process-in-path operations.
-    /// The backend copies pixels directly into the image's pixel buffer — single copy.
     /// </summary>
     /// <param name="sourceRect">Source rectangle in local canvas coordinates.</param>
     /// <param name="sourceImage">The readback image when available.</param>
@@ -1365,9 +1361,6 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         return transformed;
     }
 
-    /// <summary>
-    /// Computes the axis-aligned bounding rectangle of a transformed rectangle.
-    /// </summary>
     /// <summary>
     /// Disposes image resources retained for deferred draw execution.
     /// </summary>

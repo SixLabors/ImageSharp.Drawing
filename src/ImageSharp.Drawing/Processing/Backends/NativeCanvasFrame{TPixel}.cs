@@ -7,7 +7,7 @@ using SixLabors.ImageSharp.Memory;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Canvas frame adapter over a <see cref="NativeSurface"/>.
+/// Canvas frame backed by a <see cref="NativeSurface"/>.
 /// </summary>
 /// <typeparam name="TPixel">The pixel format.</typeparam>
 public sealed class NativeCanvasFrame<TPixel> : ICanvasFrame<TPixel>

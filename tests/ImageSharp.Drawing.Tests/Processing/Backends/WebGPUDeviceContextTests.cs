@@ -55,15 +55,9 @@ public class WebGPUDeviceContextTests
 
             Assert.True(
                 drawing.Backend.DiagnosticLastFlushUsedGPU,
-                drawing.Backend.DiagnosticLastSceneFailure ?? "The last flush did not use the staged path.");
+                drawing.Backend.DiagnosticLastSceneFailure ?? "The last flush did not use WebGPU.");
 
-            using Image<Rgba32> readback = new(32, 24);
-            Assert.True(
-                drawing.Backend.TryReadRegion(
-                    drawing.Configuration,
-                    target.NativeFrame,
-                    new Rectangle(0, 0, 32, 24),
-                    new Buffer2DRegion<Rgba32>(readback.Frames.RootFrame.PixelBuffer)));
+            using Image<Rgba32> readback = target.Readback();
             Assert.NotEqual(default, readback[16, 12]);
         }
     }
@@ -78,13 +72,7 @@ public class WebGPUDeviceContextTests
             canvas.Fill(Brushes.Solid(Color.Green), new RectangularPolygon(0, 0, 18, 14));
             canvas.Flush();
 
-            using Image<Rgba32> readback = new(18, 14);
-            Assert.True(
-                drawing.Backend.TryReadRegion(
-                    drawing.Configuration,
-                    target.NativeFrame,
-                    new Rectangle(0, 0, 18, 14),
-                    new Buffer2DRegion<Rgba32>(readback.Frames.RootFrame.PixelBuffer)));
+            using Image<Rgba32> readback = target.Readback();
             Assert.NotEqual(default, readback[9, 7]);
         }
     }
@@ -95,7 +83,6 @@ public class WebGPUDeviceContextTests
         using WebGPUDeviceContext<Rgba32> drawing = new();
         using WebGPURenderTarget<Rgba32> target = drawing.CreateRenderTarget(12, 10);
 
-        WebGPUTextureHandle textureHandle = target.TextureHandle;
         drawing.Dispose();
 
         using WebGPUDrawingBackend backend = new();

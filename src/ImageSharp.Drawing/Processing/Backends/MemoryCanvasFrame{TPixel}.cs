@@ -7,7 +7,7 @@ using SixLabors.ImageSharp.Memory;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Canvas frame adapter over a <see cref="Buffer2DRegion{T}"/>.
+/// Canvas frame backed by a <see cref="Buffer2DRegion{T}"/>.
 /// </summary>
 /// <typeparam name="TPixel">The pixel format.</typeparam>
 public sealed class MemoryCanvasFrame<TPixel> : ICanvasFrame<TPixel>

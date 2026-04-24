@@ -26,9 +26,9 @@ public class PathTests
     public void SimplePath()
     {
         Path path = new(new LinearLineSegment(new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10)));
-        System.Collections.Generic.IReadOnlyList<PointF> points = path.Flatten().Single().Points.ToArray();
+        PointF[] points = path.Flatten().Single().Points.ToArray();
 
-        Assert.Equal(4, points.Count);
+        Assert.Equal(4, points.Length);
         Assert.Equal(new PointF(0, 0), points[0]);
         Assert.Equal(new PointF(10, 0), points[1]);
         Assert.Equal(new PointF(10, 10), points[2]);

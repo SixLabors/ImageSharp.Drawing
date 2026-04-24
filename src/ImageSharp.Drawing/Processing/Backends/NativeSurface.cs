@@ -7,7 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Opaque native destination with backend capability attachments.
+/// Represents a backend-specific native drawing target.
 /// </summary>
 public sealed class NativeSurface
 {
@@ -26,7 +26,7 @@ public sealed class NativeSurface
     public PixelTypeInfo PixelType { get; }
 
     /// <summary>
-    /// Sets or replaces a capability object.
+    /// Associates a backend capability with this surface.
     /// </summary>
     /// <typeparam name="TCapability">Capability type.</typeparam>
     /// <param name="capability">Capability instance.</param>
@@ -38,7 +38,7 @@ public sealed class NativeSurface
     }
 
     /// <summary>
-    /// Attempts to get a capability object by type.
+    /// Attempts to get a backend capability by type.
     /// </summary>
     /// <typeparam name="TCapability">Capability type.</typeparam>
     /// <param name="capability">Capability instance when available.</param>

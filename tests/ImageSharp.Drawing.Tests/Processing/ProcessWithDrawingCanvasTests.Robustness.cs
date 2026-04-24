@@ -4,7 +4,6 @@
 #pragma warning disable xUnit1004 // Test methods should not be skipped
 using System.Numerics;
 using System.Runtime.InteropServices;
-using System.Linq;
 using GeoJSON.Net.Feature;
 using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;

@@ -125,7 +125,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         if (path is not null)
         {
             // Path-based text: each glyph gets a unique per-position transform,
-            // so cache hits are near-impossible — disable caching entirely.
+            // so cache hits are vanishingly rare; disable caching entirely.
             this.rasterizationRequired = true;
             this.noCache = true;
             if (path is IPathInternals internals)
@@ -154,9 +154,9 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     {
         // Resolves the active brush/pen from the text run, computes the cache key,
         // and takes one of three paths:
-        //   1. Non-layered cache hit without decorations → emit cached ops, return false (fast path).
-        //   2. Layered or decorated cache hit → reuse cached path, return true for EndGlyph/SetDecoration.
-        //   3. Cache miss → rasterize from scratch.
+        //   1. Non-layered cache hit without decorations: emit cached ops, return false (fast path).
+        //   2. Layered or decorated cache hit: reuse cached path, return true for EndGlyph/SetDecoration.
+        //   3. Cache miss: rasterize from scratch.
         this.cacheReadIndex = 0;
         this.currentDecorationIsVertical = parameters.LayoutMode is GlyphLayoutMode.Vertical or GlyphLayoutMode.VerticalRotated;
         this.currentTextRun = parameters.TextRun;
@@ -379,7 +379,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         // Emits a DrawingOperation for a text decoration. Resolves the decoration pen
         // from the current RichTextRun, re-scales the base-class path when the pen's
         // stroke width differs from the font-metric thickness, and anchors the scaling
-        // per decoration type (overline→bottom edge, underline→top edge, strikeout→center).
+        // per decoration type (overline to bottom edge, underline to top edge, strikeout to center).
         // Decorations are not cached.
         if (thickness == 0)
         {
@@ -476,7 +476,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// <inheritdoc/>
     protected override void EndGlyph()
     {
-        // If hasLayer is set, layers were already handled by EndLayer — skip.
+        // If hasLayer is set, layers were already handled by EndLayer; skip.
         // Otherwise, on a cache miss the built path is translated to local coordinates,
         // stored for future hits, and emitted as fill and/or outline DrawingOperations.
         // On a cache hit the stored path is reused with sub-pixel delta compensation.
@@ -769,7 +769,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
 
         // Now offset to our target point since we're aligning the top-left location of our glyph against the path.
         Vector2 translation = (Vector2)pathPoint.Point - bounds.Location - half + new Vector2(0, bounds.Top);
-        return Matrix4x4.CreateTranslation(translation.X, translation.Y, 0) * new Matrix4x4(Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, (Vector2)pathPoint.Point));
+        return Matrix4x4.CreateTranslation(translation.X, translation.Y, 0)
+            * new Matrix4x4(Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, (Vector2)pathPoint.Point));
     }
 
     /// <summary>
@@ -878,7 +879,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         /// <summary>
         /// Gets the pen reference used for outlined text. Compared by reference equality
         /// so that different pen instances (even with the same stroke width) produce
-        /// separate cache entries — this is correct because pen identity affects stroke
+        /// separate cache entries; this is correct because pen identity affects stroke
         /// pattern and dash style.
         /// </summary>
         public Pen? PenReference { get; init; }

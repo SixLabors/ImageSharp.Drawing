@@ -9,6 +9,7 @@ using SixLabors.ImageSharp.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 
+#pragma warning disable xUnit1004 // Test methods should not be skipped
 public class FillParisTests
 {
     private const float Scale = 1f;
@@ -18,9 +19,9 @@ public class FillParisTests
     private static readonly string SvgFilePath =
         TestFile.GetInputFileFullPath(TestImages.Svg.Paris30k);
 
-    private static readonly List<SvgBenchmarkHelper.SvgElement> elements = SvgBenchmarkHelper.ParseSvg(SvgFilePath);
-    private static readonly List<(IPath Path, SolidBrush Fill, SolidPen Stroke)> isElements =
-        SvgBenchmarkHelper.BuildImageSharpElements(elements, Scale);
+    private static readonly List<SvgBenchmarkHelper.SvgElement> Elements = SvgBenchmarkHelper.ParseSvg(SvgFilePath);
+    private static readonly List<(IPath Path, SolidBrush Fill, SolidPen Stroke)> IsElements =
+        SvgBenchmarkHelper.BuildImageSharpElements(Elements, Scale);
 
     [Fact(Skip = "Benchmarking only")]
     public void FillParis_ImageSharp_CPU()
@@ -28,7 +29,7 @@ public class FillParisTests
         using Image<Rgba32> image = new(Width, Height);
         image.Mutate(c => c.Paint(canvas =>
         {
-            foreach ((IPath path, SolidBrush fill, SolidPen stroke) in isElements)
+            foreach ((IPath path, SolidBrush fill, SolidPen stroke) in IsElements)
             {
                 if (fill is not null)
                 {
@@ -49,7 +50,7 @@ public class FillParisTests
         using WebGPURenderTarget<Rgba32> target = new(Width, Height);
         using DrawingCanvas<Rgba32> canvas = target.CreateCanvas();
 
-        foreach ((IPath path, SolidBrush fill, SolidPen stroke) in isElements)
+        foreach ((IPath path, SolidBrush fill, SolidPen stroke) in IsElements)
         {
             if (fill is not null)
             {

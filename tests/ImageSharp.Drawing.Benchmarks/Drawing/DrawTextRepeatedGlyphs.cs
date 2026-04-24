@@ -5,7 +5,6 @@ using BenchmarkDotNet.Attributes;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
-using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing;
@@ -28,7 +27,6 @@ public class DrawTextRepeatedGlyphs
 
     private readonly Brush brush = Brushes.Solid(Color.HotPink);
 
-    private Configuration defaultConfiguration;
     private Image<Rgba32> defaultImage;
     private WebGPURenderTarget<Rgba32> webGpuTarget;
     private RichTextOptions textOptions;
@@ -54,7 +52,6 @@ public class DrawTextRepeatedGlyphs
             WrappingLength = Width - 16
         };
 
-        this.defaultConfiguration = Configuration.Default;
         this.defaultImage = new Image<Rgba32>(Width, Height);
         this.webGpuTarget = new WebGPURenderTarget<Rgba32>(Width, Height);
 
@@ -71,9 +68,7 @@ public class DrawTextRepeatedGlyphs
     [Benchmark(Baseline = true, Description = "DrawingCanvas Default Backend")]
     public void DrawingCanvasDefaultBackend()
     {
-        MemoryCanvasFrame<Rgba32> frame = new(GetFrameRegion(this.defaultImage));
-
-        using DrawingCanvas<Rgba32> canvas = new(this.defaultConfiguration, frame, this.drawingOptions);
+        using DrawingCanvas<Rgba32> canvas = this.defaultImage.CreateCanvas(this.drawingOptions);
         canvas.DrawText(this.textOptions, this.text, this.brush, null);
         canvas.Flush();
     }
@@ -85,7 +80,4 @@ public class DrawTextRepeatedGlyphs
         canvas.DrawText(this.textOptions, this.text, this.brush, null);
         canvas.Flush();
     }
-
-    private static Buffer2DRegion<Rgba32> GetFrameRegion(Image<Rgba32> image)
-        => new(image.Frames.RootFrame.PixelBuffer, new Rectangle(0, 0, image.Width, image.Height));
 }

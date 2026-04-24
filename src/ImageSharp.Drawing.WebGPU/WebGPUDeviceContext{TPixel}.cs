@@ -38,7 +38,10 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
 
         try
         {
-            if (!WebGPURuntime.TryGetOrCreateDevice(out WebGPUDeviceHandle? deviceHandle, out WebGPUQueueHandle? queueHandle, out WebGPUEnvironmentError errorCode)
+            if (!WebGPURuntime.TryGetOrCreateDevice(
+                    out WebGPUDeviceHandle? deviceHandle,
+                    out WebGPUQueueHandle? queueHandle,
+                    out WebGPUEnvironmentError errorCode)
                 || deviceHandle is null
                 || queueHandle is null)
             {
@@ -121,10 +124,9 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
 
     /// <summary>
     /// Gets the WebGPU drawing backend owned by this context.
-    /// Use this to inspect per-flush diagnostics
-    /// (<see cref="WebGPUDrawingBackend.DiagnosticLastFlushUsedGPU"/>,
-    /// <see cref="WebGPUDrawingBackend.DiagnosticLastSceneFailure"/>) when you need to confirm whether the staged
-    /// GPU path executed or fell back to the CPU backend.
+    /// Use this to inspect per-flush diagnostics such as
+    /// <see cref="WebGPUDrawingBackend.DiagnosticLastFlushUsedGPU"/> and
+    /// <see cref="WebGPUDrawingBackend.DiagnosticLastSceneFailure"/>.
     /// </summary>
     public WebGPUDrawingBackend Backend { get; }
 
@@ -154,7 +156,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Creates a native-only frame over an externally-owned WebGPU texture and view — typically the per-frame
+    /// Creates a frame over an externally-owned WebGPU texture and view, typically the per-frame
     /// swap-chain back buffer obtained from <c>wgpuSurfaceGetCurrentTexture</c> on a host-owned surface.
     /// </summary>
     /// <param name="textureHandle">The external WebGPU texture handle.</param>
@@ -162,7 +164,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     /// <param name="format">The texture format identifier. Must match the format expected for <typeparamref name="TPixel"/>.</param>
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
-    /// <returns>A native-only canvas frame.</returns>
+    /// <returns>A canvas frame backed by the external WebGPU texture.</returns>
     /// <remarks>
     /// The caller retains ownership of the texture and view; this context does not release them.
     /// The texture must have been created with <c>RenderAttachment | TextureBinding</c> usage.
@@ -178,7 +180,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         => this.CreateFrame(CreateExternalTextureHandle(textureHandle), CreateExternalTextureViewHandle(textureViewHandle), format, width, height);
 
     /// <summary>
-    /// Creates a drawing canvas that renders directly into an externally-owned WebGPU texture — typically the per-frame
+    /// Creates a drawing canvas that renders directly into an externally-owned WebGPU texture, typically the per-frame
     /// swap-chain back buffer obtained from <c>wgpuSurfaceGetCurrentTexture</c> on a host-owned surface.
     /// </summary>
     /// <param name="textureHandle">The external WebGPU texture handle.</param>
@@ -198,10 +200,16 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         WebGPUTextureFormatId format,
         int width,
         int height)
-        => this.CreateCanvas(CreateExternalTextureHandle(textureHandle), CreateExternalTextureViewHandle(textureViewHandle), format, width, height, new DrawingOptions());
+        => this.CreateCanvas(
+            CreateExternalTextureHandle(textureHandle),
+            CreateExternalTextureViewHandle(textureViewHandle),
+            format,
+            width,
+            height,
+            new DrawingOptions());
 
     /// <summary>
-    /// Creates a drawing canvas that renders directly into an externally-owned WebGPU texture — typically the per-frame
+    /// Creates a drawing canvas that renders directly into an externally-owned WebGPU texture, typically the per-frame
     /// swap-chain back buffer obtained from <c>wgpuSurfaceGetCurrentTexture</c> on a host-owned surface.
     /// </summary>
     /// <param name="textureHandle">The external WebGPU texture handle.</param>
@@ -246,14 +254,14 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
 
     /// <summary>
-    /// Creates a native-only frame over wrapped texture handles that are already in this assembly's ownership model.
+    /// Creates a frame over wrapped texture handles that are already in this assembly's ownership model.
     /// </summary>
     /// <param name="textureHandle">The wrapped texture handle.</param>
     /// <param name="textureViewHandle">The wrapped texture-view handle.</param>
     /// <param name="format">The texture format identifier.</param>
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
-    /// <returns>A native-only frame over the supplied handles.</returns>
+    /// <returns>A frame backed by the supplied handles.</returns>
     internal NativeCanvasFrame<TPixel> CreateFrame(
         WebGPUTextureHandle textureHandle,
         WebGPUTextureViewHandle textureViewHandle,

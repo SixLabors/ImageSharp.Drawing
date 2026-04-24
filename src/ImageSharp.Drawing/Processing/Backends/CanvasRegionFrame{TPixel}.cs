@@ -16,21 +16,29 @@ internal sealed class CanvasRegionFrame<TPixel> : ICanvasFrame<TPixel>
     private readonly ICanvasFrame<TPixel> parent;
     private readonly Rectangle region;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CanvasRegionFrame{TPixel}"/> class.
+    /// </summary>
+    /// <param name="parent">The parent frame that owns the target pixels.</param>
+    /// <param name="region">The child region in parent-local coordinates.</param>
     public CanvasRegionFrame(ICanvasFrame<TPixel> parent, Rectangle region)
     {
         Guard.NotNull(parent, nameof(parent));
         Guard.MustBeGreaterThanOrEqualTo(region.Width, 0, nameof(region));
         Guard.MustBeGreaterThanOrEqualTo(region.Height, 0, nameof(region));
+
         this.parent = parent;
         this.region = region;
     }
 
+    /// <inheritdoc />
     public Rectangle Bounds => new(
         this.parent.Bounds.X + this.region.X,
         this.parent.Bounds.Y + this.region.Y,
         this.region.Width,
         this.region.Height);
 
+    /// <inheritdoc />
     public bool TryGetCpuRegion(out Buffer2DRegion<TPixel> region)
     {
         if (!this.parent.TryGetCpuRegion(out Buffer2DRegion<TPixel> parentRegion))
@@ -43,6 +51,7 @@ internal sealed class CanvasRegionFrame<TPixel> : ICanvasFrame<TPixel>
         return true;
     }
 
+    /// <inheritdoc />
     public bool TryGetNativeSurface([NotNullWhen(true)] out NativeSurface? surface)
         => this.parent.TryGetNativeSurface(out surface);
 }

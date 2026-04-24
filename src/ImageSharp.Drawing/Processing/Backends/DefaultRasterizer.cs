@@ -521,11 +521,6 @@ internal static partial class DefaultRasterizer
                 int row = this.touchedRows[i];
                 int rowCover = this.startCover[row];
                 bool rowHasBits = this.rowHasBits[row] != 0;
-                if (rowCover == 0 && !rowHasBits)
-                {
-                    // Safety guard — should not fire in practice.
-                    continue;
-                }
 
                 if (!rowHasBits)
                 {
@@ -1613,9 +1608,6 @@ internal static partial class DefaultRasterizer
         }
     }
 
-    /// <summary>
-    /// Immutable line record stored in band-local raster coordinates.
-    /// </summary>
     /// <summary>
     /// Reusable per-worker scratch buffers used by raster band execution.
     /// </summary>

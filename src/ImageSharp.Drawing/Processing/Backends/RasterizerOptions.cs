@@ -47,7 +47,7 @@ public readonly struct RasterizerOptions
     /// <param name="intersectionRule">Polygon intersection rule.</param>
     /// <param name="rasterizationMode">Rasterization coverage mode.</param>
     /// <param name="samplingOrigin">Sampling origin alignment.</param>
-    /// <param name="antialiasThreshold">Coverage threshold for aliased mode (0–1).</param>
+    /// <param name="antialiasThreshold">Coverage threshold for aliased mode (0 to 1).</param>
     public RasterizerOptions(
         Rectangle interest,
         IntersectionRule intersectionRule,

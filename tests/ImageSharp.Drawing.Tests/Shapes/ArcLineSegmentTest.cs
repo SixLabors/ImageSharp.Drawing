@@ -41,7 +41,7 @@ public class ArcLineSegmentTest
         }
     }
 
-    private static PointF[] Flatten(ILineSegment segment)
+    private static PointF[] Flatten(ArcLineSegment segment)
     {
         PointF[] points = new PointF[segment.LinearVertexCount(Vector2.One)];
         segment.CopyTo(points, skipFirstPoint: false, Vector2.One);

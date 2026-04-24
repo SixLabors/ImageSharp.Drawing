@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes;
 
 public class RectangleTests
 {
-    public static TheoryData<TestPoint, TestSize, TestPoint, bool> PointInPolygonTheoryData =
+    public static TheoryData<TestPoint, TestSize, TestPoint, bool> PointInPolygonTheoryData { get; } =
         new()
         {
             {
@@ -25,7 +25,7 @@ public class RectangleTests
             }, // corner is inside
         };
 
-    public static TheoryData<TestPoint, TestSize, TestPoint, float> DistanceTheoryData =
+    public static TheoryData<TestPoint, TestSize, TestPoint, float> DistanceTheoryData { get; } =
         new()
         {
             {
@@ -105,7 +105,7 @@ public class RectangleTests
     [Fact]
     public void Bounds_Shape()
     {
-        IPath shape = new RectangularPolygon(10, 11, 12, 13);
+        RectangularPolygon shape = new(10, 11, 12, 13);
         Assert.Equal(10, shape.Bounds.Left);
         Assert.Equal(22, shape.Bounds.Right);
         Assert.Equal(11, shape.Bounds.Top);
@@ -115,8 +115,8 @@ public class RectangleTests
     [Fact]
     public void LinearSegments()
     {
-        IPath shape = new RectangularPolygon(10, 11, 12, 13);
-        IReadOnlyList<PointF> segments = shape.Flatten().ToArray()[0].Points.ToArray();
+        RectangularPolygon shape = new(10, 11, 12, 13);
+        PointF[] segments = shape.Flatten().ToArray()[0].Points.ToArray();
         Assert.Equal(new PointF(10, 11), segments[0]);
         Assert.Equal(new PointF(22, 11), segments[1]);
         Assert.Equal(new PointF(22, 24), segments[2]);
@@ -126,7 +126,7 @@ public class RectangleTests
     [Fact]
     public void Bounds_Path()
     {
-        IPath shape = new RectangularPolygon(10, 11, 12, 13);
+        RectangularPolygon shape = new(10, 11, 12, 13);
         Assert.Equal(10, shape.Bounds.Left);
         Assert.Equal(22, shape.Bounds.Right);
         Assert.Equal(11, shape.Bounds.Top);
@@ -136,7 +136,7 @@ public class RectangleTests
     [Fact]
     public void ShapePaths()
     {
-        IPath shape = new RectangularPolygon(10, 11, 12, 13);
+        RectangularPolygon shape = new(10, 11, 12, 13);
 
         Assert.Equal(shape, shape.AsClosedPath());
     }
@@ -144,7 +144,7 @@ public class RectangleTests
     [Fact]
     public void TransformIdentityReturnsShapeObject()
     {
-        IPath shape = new RectangularPolygon(0, 0, 200, 60);
+        RectangularPolygon shape = new(0, 0, 200, 60);
         IPath transformedShape = shape.Transform(Matrix4x4.Identity);
 
         Assert.Same(shape, transformedShape);
@@ -153,7 +153,7 @@ public class RectangleTests
     [Fact]
     public void Transform()
     {
-        IPath shape = new RectangularPolygon(0, 0, 200, 60);
+        RectangularPolygon shape = new(0, 0, 200, 60);
 
         IPath newShape = shape.Transform(new Matrix4x4(new Matrix3x2(0, 1, 1, 0, 20, 2)));
 

@@ -4,12 +4,12 @@
 using System.Diagnostics;
 using CommandLine;
 using CommandLine.Text;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Tests;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+
+namespace SixLabors.ImageSharp.Drawing.ManualBenchmarks;
 
 public sealed class DrawingThroughputBenchmark
 {
@@ -202,10 +202,7 @@ public sealed class DrawingThroughputBenchmark
         {
             CommandLineOptions? result = null;
             using Parser parser = new(settings => settings.CaseInsensitiveEnumValues = true);
-            ParserResult<CommandLineOptions> parserResult = parser.ParseArguments<CommandLineOptions>(args).WithParsed(o =>
-            {
-                result = o;
-            });
+            ParserResult<CommandLineOptions> parserResult = parser.ParseArguments<CommandLineOptions>(args).WithParsed(o => result = o);
 
             if (result == null)
             {

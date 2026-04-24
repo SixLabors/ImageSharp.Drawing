@@ -7,10 +7,9 @@ using SixLabors.ImageSharp.Memory;
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Gradient Brush with elliptic shape.
-/// The ellipse is defined by a center point,
-/// a point on the longest extension of the ellipse and
-/// the ratio between longest and shortest extension.
+/// Provides an implementation of a brush for painting elliptical gradients.
+/// The ellipse is defined by a center point, a point on the longest axis, and the ratio
+/// between the longest and shortest axes.
 /// </summary>
 public sealed class EllipticGradientBrush : GradientBrush
 {
@@ -19,11 +18,11 @@ public sealed class EllipticGradientBrush : GradientBrush
     /// <param name="referenceAxisEnd">The end point of the reference axis of the ellipse.</param>
     /// <param name="axisRatio">
     ///   The ratio of the axis widths.
-    ///   The second axis' is perpendicular to the reference axis and
-    ///   it's length is the reference axis' length multiplied by this factor.
+    ///   The second axis is perpendicular to the reference axis and its length is the reference axis length
+    ///   multiplied by this factor.
     /// </param>
     /// <param name="repetitionMode">Defines how the colors of the gradients are repeated.</param>
-    /// <param name="colorStops">the color stops as defined in base class.</param>
+    /// <param name="colorStops">The color stops.</param>
     public EllipticGradientBrush(
         PointF center,
         PointF referenceAxisEnd,

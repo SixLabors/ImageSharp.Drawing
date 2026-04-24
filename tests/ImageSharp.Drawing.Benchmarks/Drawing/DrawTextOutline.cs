@@ -99,22 +99,18 @@ public class DrawTextOutline
         {
             IPathCollection glyphs = TextBuilder.GeneratePaths(text, textOptions);
             int saveCount = canvas.Save(options);
-            try
-            {
-                if (brush != null)
-                {
-                    canvas.Fill(brush, glyphs);
-                }
 
-                if (pen != null)
-                {
-                    canvas.Draw(pen, glyphs);
-                }
-            }
-            finally
+            if (brush != null)
             {
-                canvas.RestoreTo(saveCount);
+                canvas.Fill(brush, glyphs);
             }
+
+            if (pen != null)
+            {
+                canvas.Draw(pen, glyphs);
+            }
+
+            canvas.RestoreTo(saveCount);
         }
     }
 

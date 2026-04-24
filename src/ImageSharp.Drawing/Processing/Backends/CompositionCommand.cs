@@ -27,7 +27,7 @@ public enum CompositionCommandKind : byte
 }
 
 /// <summary>
-/// One normalized fill-path or layer-based composition command queued by <see cref="DrawingCanvasBatcher{TPixel}"/>.
+/// One normalized fill-path or layer-based composition command queued for backend execution.
 /// </summary>
 /// <remarks>
 /// This type carries fill-path commands plus inline layer boundaries.

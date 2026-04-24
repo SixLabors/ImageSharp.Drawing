@@ -164,7 +164,7 @@ public interface IDrawingCanvas : IDisposable
     /// Applies an image-processing operation to a path region.
     /// </summary>
     /// <remarks>
-    /// The operation is constrained to the path bounds and then composited back using an image brush.
+    /// The operation affects only pixels covered by the supplied path.
     /// </remarks>
     /// <param name="path">The path region to process.</param>
     /// <param name="operation">The image-processing operation to apply to the region.</param>
@@ -198,13 +198,8 @@ public interface IDrawingCanvas : IDisposable
         Pen? pen);
 
     /// <summary>
-    /// Draws layered glyph geometry using a monochrome projection.
+    /// Draws layered glyph geometry.
     /// </summary>
-    /// <remarks>
-    /// For painted glyph layers, the implementation uses a coverage/compactness heuristic
-    /// to keep one dominant background-like layer as outline-only to preserve interior definition.
-    /// All non-painted layers are filled.
-    /// </remarks>
     /// <param name="brush">Brush used to fill glyph layers.</param>
     /// <param name="pen">Pen used to outline dominant painted layers.</param>
     /// <param name="glyphs">Layered glyph geometry to draw.</param>

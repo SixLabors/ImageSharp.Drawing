@@ -198,7 +198,7 @@ internal readonly struct WebGPUSceneBumpSizes
     /// Startup sizes for the staged pipeline's transient GPU scratch memory, not fixed correctness
     /// limits. The dynamic-memory path will grow them when an earlier run reports that a scene
     /// needed more space. The values mirror Vello's hand-picked defaults (<c>vello_encoding/src/config.rs</c>)
-    /// which are sized to accommodate its reference scenes — including paris-30k — without a
+    /// which are sized to accommodate its reference scenes, including paris-30k, without a
     /// grow-and-retry cycle on the first flush.
     /// </remarks>
     public static WebGPUSceneBumpSizes Initial()

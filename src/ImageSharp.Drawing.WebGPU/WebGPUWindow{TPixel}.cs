@@ -23,7 +23,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// and pass the host's per-frame swap-chain texture to
 /// <see cref="WebGPUDeviceContext{TPixel}.CreateCanvas(nint, nint, WebGPUTextureFormatId, int, int, DrawingOptions)"/> instead.
 /// </remarks>
-public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
+public sealed class WebGPUWindow<TPixel> : IDisposable
     where TPixel : unmanaged, IPixel<TPixel>
 {
     private const int CallbackTimeoutMilliseconds = 10_000;
@@ -294,9 +294,13 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
     /// Tries to acquire the next drawable window frame.
     /// </summary>
     /// <param name="frame">Receives the acquired frame on success.</param>
-    /// <returns><see langword="true"/> when a frame is available; otherwise <see langword="false"/> when the frame should be retried later.</returns>
+    /// <returns>
+    /// <see langword="true"/> when a frame is available; otherwise <see langword="false"/> when the frame should be retried later.
+    /// </returns>
     /// <remarks>
-    /// Use this overload when you are driving the render loop yourself and want frame acquisition failures to be handled as normal retry behavior instead of exceptions. Dispose the returned frame when you are done with it to present it and release its per-frame resources.
+    /// Use this overload when you are driving the render loop yourself and want frame acquisition failures
+    /// to be handled as normal retry behavior instead of exceptions. Dispose the returned frame when you
+    /// are done with it to present it and release its per-frame resources.
     /// </remarks>
     public bool TryAcquireFrame([NotNullWhen(true)] out WebGPUWindowFrame<TPixel>? frame)
         => this.TryAcquireFrameCore(TimeSpan.Zero, out frame, new DrawingOptions());
@@ -306,9 +310,13 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
     /// </summary>
     /// <param name="deltaTime">The elapsed time since the previous frame.</param>
     /// <param name="frame">Receives the acquired frame on success.</param>
-    /// <returns><see langword="true"/> when a frame is available; otherwise <see langword="false"/> when the frame should be retried later.</returns>
+    /// <returns>
+    /// <see langword="true"/> when a frame is available; otherwise <see langword="false"/> when the frame should be retried later.
+    /// </returns>
     /// <remarks>
-    /// Use this overload when you are driving the render loop yourself and want to provide timing information for the acquired frame. Dispose the returned frame when you are done with it to present it and release its per-frame resources.
+    /// Use this overload when you are driving the render loop yourself and want to provide timing information
+    /// for the acquired frame. Dispose the returned frame when you are done with it to present it and release
+    /// its per-frame resources.
     /// </remarks>
     public bool TryAcquireFrame(TimeSpan deltaTime, [NotNullWhen(true)] out WebGPUWindowFrame<TPixel>? frame)
         => this.TryAcquireFrameCore(deltaTime, out frame, new DrawingOptions());
@@ -318,9 +326,14 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
     /// </summary>
     /// <param name="frame">Receives the acquired frame on success.</param>
     /// <param name="options">The drawing options for the acquired frame.</param>
-    /// <returns><see langword="true"/> when a frame is available; otherwise <see langword="false"/> when the frame should be retried later.</returns>
+    /// <returns>
+    /// <see langword="true"/> when a frame is available; otherwise <see langword="false"/> when the frame should be retried later.
+    /// </returns>
     /// <remarks>
-    /// This method is intended for manual frame loops. A <see langword="false"/> result means no drawable frame is available right now, for example because the surface was lost, outdated, timed out, or has a zero-sized framebuffer. Dispose the returned frame when you are done with it to present it and release its per-frame resources.
+    /// This method is intended for manual frame loops. A <see langword="false"/> result means no drawable
+    /// frame is available right now, for example because the surface was lost, outdated, timed out, or has
+    /// a zero-sized framebuffer. Dispose the returned frame when you are done with it to present it and release
+    /// its per-frame resources.
     /// </remarks>
     public bool TryAcquireFrame([NotNullWhen(true)] out WebGPUWindowFrame<TPixel>? frame, DrawingOptions options)
         => this.TryAcquireFrameCore(TimeSpan.Zero, out frame, options);
@@ -331,9 +344,14 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
     /// <param name="deltaTime">The elapsed time since the previous frame.</param>
     /// <param name="frame">Receives the acquired frame on success.</param>
     /// <param name="options">The drawing options for the acquired frame.</param>
-    /// <returns><see langword="true"/> when a frame is available; otherwise <see langword="false"/> when the frame should be retried later.</returns>
+    /// <returns>
+    /// <see langword="true"/> when a frame is available; otherwise <see langword="false"/> when the frame should be retried later.
+    /// </returns>
     /// <remarks>
-    /// This method is intended for manual frame loops. A <see langword="false"/> result means no drawable frame is available right now, for example because the surface was lost, outdated, timed out, or has a zero-sized framebuffer. Dispose the returned frame when you are done with it to present it and release its per-frame resources.
+    /// This method is intended for manual frame loops. A <see langword="false"/> result means no drawable
+    /// frame is available right now, for example because the surface was lost, outdated, timed out, or has
+    /// a zero-sized framebuffer. Dispose the returned frame when you are done with it to present it and release
+    /// its per-frame resources.
     /// </remarks>
     public bool TryAcquireFrame(TimeSpan deltaTime, [NotNullWhen(true)] out WebGPUWindowFrame<TPixel>? frame, DrawingOptions options)
         => this.TryAcquireFrameCore(deltaTime, out frame, options);

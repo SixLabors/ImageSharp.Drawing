@@ -261,7 +261,7 @@ internal static class WebGPUSceneEncoder
         public int GradientRowCount { get; private set; }
 
         /// <summary>
-        /// Gets the CPU-side estimate of the number of active tile rows referenced by the staged path metadata.
+        /// Gets the CPU-side estimate of the number of active tile rows referenced by sparse path metadata.
         /// </summary>
         public readonly int EstimatedPathRowCount => (int)Math.Min(this.estimatedPathRowCount, int.MaxValue);
 
@@ -1858,7 +1858,7 @@ internal static class WebGPUSceneEncoder
     /// Returns the isotropic scale factor embedded in a drawing transform so stroke widths match device-space pixels.
     /// </summary>
     /// <remarks>
-    /// Uses the square root of the absolute 2D determinant — the SVG-style fallback for non-uniform
+    /// Uses the square root of the absolute 2D determinant, the SVG-style fallback for non-uniform
     /// scale. Reduces to the uniform scale for pure scale/rotate/translate matrices.
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2600,9 +2600,6 @@ internal sealed class WebGPUEncodedScene : IDisposable
     /// </summary>
     public int TotalPathRowCount { get; }
 
-    /// <summary>
-    /// Gets the total line-slice count.
-    /// </summary>
     /// <summary>
     /// Gets the tile count on the X axis.
     /// </summary>

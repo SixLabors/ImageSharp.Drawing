@@ -994,7 +994,7 @@ internal sealed partial class FlushScene : IDisposable
     /// Returns the isotropic scale factor embedded in a drawing transform so stroke widths match device-space pixels.
     /// </summary>
     /// <remarks>
-    /// Uses the square root of the absolute 2D determinant — the SVG-style fallback for non-uniform
+    /// Uses the square root of the absolute 2D determinant, the SVG-style fallback for non-uniform
     /// scale. Reduces to the uniform scale for pure scale/rotate/translate matrices.
     /// </remarks>
     private static float GetTransformWidthScale(Matrix4x4 transform)

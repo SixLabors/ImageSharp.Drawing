@@ -355,7 +355,7 @@ internal static class WebGPUSceneDispatch
     /// <summary>
     /// Dispatches the early Vello-style scheduling stages for one staged scene.
     /// </summary>
-    public static unsafe bool TryDispatchSchedulingStages(
+    public static bool TryDispatchSchedulingStages(
         ref WebGPUStagedScene stagedScene,
         WebGPUSceneSchedulingArena arena,
         out WebGPUSceneSchedulingResources scheduling,
@@ -988,12 +988,10 @@ internal static class WebGPUSceneDispatch
         ref WebGPUSceneSchedulingArena? schedulingArena,
         out bool requiresGrowth,
         out WebGPUSceneBumpSizes grownBumpSizes,
-        out GpuSceneBumpAllocators lastBumpAllocators,
         out string? error)
     {
         requiresGrowth = false;
         grownBumpSizes = stagedScene.Config.BumpSizes;
-        lastBumpAllocators = default;
         error = null;
 
         WebGPUEncodedScene encodedScene = stagedScene.EncodedScene;
@@ -1006,7 +1004,7 @@ internal static class WebGPUSceneDispatch
         // The chunked path ensures its own arena per chunk with chunk-local sizes.
         if (IsChunkableBindingFailure(stagedScene.BindingLimitFailure.Buffer))
         {
-            return TryRenderSegmentChunkedStagedScene(ref stagedScene, ref schedulingArena, out requiresGrowth, out grownBumpSizes, out lastBumpAllocators, out error);
+            return TryRenderSegmentChunkedStagedScene(ref stagedScene, ref schedulingArena, out requiresGrowth, out grownBumpSizes, out error);
         }
 
         // Normal path: ensure arena with full-scene sizes.
@@ -1056,8 +1054,6 @@ internal static class WebGPUSceneDispatch
         {
             return false;
         }
-
-        lastBumpAllocators = bumpAllocators;
 
         // Overflow: the fine output is discarded, but the scheduling readback still reports
         // the scratch usage visible to this pass. Later-stage demand can stay hidden until
@@ -1123,7 +1119,6 @@ internal static class WebGPUSceneDispatch
     /// <param name="schedulingArena">The flush-local reusable scheduling scratch and readback arena.</param>
     /// <param name="requiresGrowth">Receives whether the chunked path needs the caller to retry with larger global scratch capacities.</param>
     /// <param name="grownBumpSizes">Receives the enlarged scratch capacities when <paramref name="requiresGrowth"/> is <see langword="true"/>.</param>
-    /// <param name="lastBumpAllocators">Receives the last chunk's bump-allocator readback for diagnostics (default when no chunk ran).</param>
     /// <param name="error">Receives the chunked-render failure reason when the oversized scene cannot be completed.</param>
     /// <returns><see langword="true"/> when every chunk rendered successfully; otherwise, <see langword="false"/>.</returns>
     private static unsafe bool TryRenderSegmentChunkedStagedScene(
@@ -1131,12 +1126,10 @@ internal static class WebGPUSceneDispatch
         ref WebGPUSceneSchedulingArena? schedulingArena,
         out bool requiresGrowth,
         out WebGPUSceneBumpSizes grownBumpSizes,
-        out GpuSceneBumpAllocators lastBumpAllocators,
         out string? error)
     {
         requiresGrowth = false;
         grownBumpSizes = stagedScene.Config.BumpSizes;
-        lastBumpAllocators = default;
         error = null;
 
         WebGPUEncodedScene encodedScene = stagedScene.EncodedScene;
@@ -1648,7 +1641,7 @@ internal static class WebGPUSceneDispatch
     /// <para>
     /// This method therefore rounds non-final chunks up to the next multiple of 16 (the smallest legal chunk size
     /// that preserves bin alignment) and only permits a sub-bin tail when <paramref name="maximumTileHeight"/>
-    /// itself is a sub-bin remainder — i.e., this is the final chunk and there are no further rows to render.
+    /// itself is a sub-bin remainder; this is the final chunk and there are no further rows to render.
     /// </para>
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

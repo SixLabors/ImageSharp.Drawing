@@ -92,7 +92,7 @@ public sealed class LinearGradientBrush : GradientBrush
 
     /// <summary>
     /// Resolves a three-point gradient axis into a two-point axis by projecting
-    /// the gradient vector (p0→p1) onto the perpendicular of the rotation vector (p0→rotationPoint).
+    /// the gradient vector (p0 to p1) onto the perpendicular of the rotation vector (p0 to rotationPoint).
     /// This follows the COLRv1 font specification for rotated linear gradients.
     /// </summary>
     /// <param name="p0">The gradient start point.</param>

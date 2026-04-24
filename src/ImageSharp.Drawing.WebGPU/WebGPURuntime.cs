@@ -147,7 +147,7 @@ internal static unsafe partial class WebGPURuntime
                 return false;
             }
 
-            // Provision: instance → adapter → device → queue.
+            // Provision: instance -> adapter -> device -> queue.
             // The instance and adapter are transient; only the device and queue are cached.
             Instance* instance = api.CreateInstance((InstanceDescriptor*)null);
             if (instance is null)

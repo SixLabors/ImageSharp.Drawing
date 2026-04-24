@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Tests;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Shapes;
 
@@ -151,7 +150,7 @@ public class PathBuilderTests
         builder.AddLine(10, 90, 50, 50);
 
         ComplexPolygon shape = Assert.IsType<ComplexPolygon>(builder.Build());
-        IPath[] p = shape.Paths.ToArray();
+        IPath[] p = [.. shape.Paths];
         Assert.Equal(2, p.Length);
         Assert.IsType<Path>(p[0]);
         Assert.IsType<Path>(p[1]);
@@ -169,7 +168,7 @@ public class PathBuilderTests
         builder.AddLine(10, 90, 50, 50);
         builder.CloseFigure();
         ComplexPolygon shape = Assert.IsType<ComplexPolygon>(builder.Build());
-        IPath[] p = shape.Paths.ToArray();
+        IPath[] p = [.. shape.Paths];
 
         Assert.Equal(2, p.Length);
         Assert.IsType<Path>(p[0]);
@@ -188,7 +187,7 @@ public class PathBuilderTests
         builder.AddLine(10, 90, 50, 50);
         ComplexPolygon shape = Assert.IsType<ComplexPolygon>(builder.Build());
 
-        IPath[] p = shape.Paths.ToArray();
+        IPath[] p = [.. shape.Paths];
         Assert.Equal(2, p.Length);
         Assert.IsType<Polygon>(p[0]);
         Assert.IsType<Path>(p[1]);
@@ -206,7 +205,7 @@ public class PathBuilderTests
         builder.AddLine(10, 90, 50, 50);
         ComplexPolygon shape = Assert.IsType<ComplexPolygon>(builder.Build());
 
-        IPath[] p = shape.Paths.ToArray();
+        IPath[] p = [.. shape.Paths];
         Assert.Equal(2, p.Length);
         Assert.IsType<Path>(p[0]);
         Assert.IsType<Path>(p[1]);
@@ -214,7 +213,7 @@ public class PathBuilderTests
         builder.CloseAllFigures();
         shape = Assert.IsType<ComplexPolygon>(builder.Build());
 
-        p = shape.Paths.ToArray();
+        p = [.. shape.Paths];
         Assert.Equal(2, p.Length);
         Assert.IsType<Polygon>(p[0]);
         Assert.IsType<Polygon>(p[1]);
@@ -279,7 +278,7 @@ public class PathBuilderTests
         builder.ResetOrigin();
         builder.AddLines(point1, point2, point3);
 
-        IPath[] shape = Assert.IsType<ComplexPolygon>(builder.Build()).Paths.ToArray();
+        IPath[] shape = [.. Assert.IsType<ComplexPolygon>(builder.Build()).Paths];
         Assert.Equal(10, shape[0].Bounds.Left);
         Assert.Equal(110, shape[1].Bounds.Left);
         Assert.Equal(10, shape[0].Bounds.Left);
@@ -299,12 +298,12 @@ public class PathBuilderTests
         builder.SetOrigin(origin); // new origin is scaled by default transform
         builder.StartFigure();
         builder.AddLines(point1, point2, point3);
-        IPath[] shape = Assert.IsType<ComplexPolygon>(builder.Build()).Paths.ToArray();
+        IPath[] shape = [.. Assert.IsType<ComplexPolygon>(builder.Build()).Paths];
         Assert.Equal(100, shape[0].Bounds.Left);
         Assert.Equal(-400, shape[1].Bounds.Left);
     }
 
-    private static void AssertEquivalentPaths(IPath actual, IPath expected)
+    private static void AssertEquivalentPaths(Polygon actual, IPath expected)
     {
         PointF[] actualPoints = actual.Flatten().Single().Points.ToArray();
         PointF[] expectedPoints = expected.Flatten().Single().Points.ToArray();

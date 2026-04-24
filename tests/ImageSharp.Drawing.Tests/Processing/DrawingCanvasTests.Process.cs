@@ -71,8 +71,7 @@ public partial class DrawingCanvasTests
         IPath blurPath = CreateBlurEllipsePath();
         IPath pixelatePath = CreatePixelateTrianglePath();
 
-        Buffer2DRegion<TPixel> targetRegion = new(target.Frames.RootFrame.PixelBuffer, target.Bounds);
-        MemoryCanvasFrame<TPixel> proxyFrame = new(targetRegion);
+        MemoryCanvasFrame<TPixel> proxyFrame = new(new Buffer2DRegion<TPixel>(target.Frames.RootFrame.PixelBuffer));
         MirroringCpuReadbackTestBackend<TPixel> mirroringBackend = new(proxyFrame, target);
 
         NativeSurface nativeSurface = new(TPixel.GetPixelTypeInfo());
@@ -101,8 +100,7 @@ public partial class DrawingCanvasTests
     {
         Configuration configuration = Configuration.Default.Clone();
         using Image<Rgba32> target = new(configuration, 48, 36);
-        Buffer2DRegion<Rgba32> targetRegion = new(target.Frames.RootFrame.PixelBuffer, target.Bounds);
-        using DrawingCanvas<Rgba32> canvas = new(configuration, targetRegion, new DrawingOptions());
+        using DrawingCanvas<Rgba32> canvas = target.CreateCanvas(new DrawingOptions());
 
         bool callbackInvoked = false;
         bool sameConfiguration = false;
@@ -162,7 +160,7 @@ public partial class DrawingCanvasTests
 
     /// <summary>
     /// Test backend that mirrors composition output into a CPU frame and optionally serves readback
-    /// from a backing image so Process-path tests can exercise both readback and shadow-fallback flows.
+    /// from a backing image for process-path tests.
     /// </summary>
     private sealed class MirroringCpuReadbackTestBackend<TPixel> : IDrawingBackend
         where TPixel : unmanaged, IPixel<TPixel>

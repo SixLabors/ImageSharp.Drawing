@@ -10,7 +10,7 @@ using SilkPresentMode = Silk.NET.WebGPU.PresentMode;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Owning container for the per-window WebGPU stack — instance, surface, adapter, device, queue, drawing context,
+/// Owning container for the per-window WebGPU stack: instance, surface, adapter, device, queue, drawing context,
 /// and the negotiated swapchain texture format.
 /// </summary>
 /// <remarks>
@@ -22,7 +22,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <para>
 /// Shared by the two public window types: <see cref="WebGPUWindow{TPixel}"/> (where this type binds to a library-owned
 /// Silk <c>IWindow</c>) and <see cref="WebGPUHostedWindow{TPixel}"/> (where this type binds to an externally-owned
-/// native window via <see cref="SilkNativeWindowAdapter"/>). Neither caller owns the Silk types directly — they pass
+/// native window via <see cref="SilkNativeWindowAdapter"/>). Neither caller owns the Silk types directly; they pass
 /// an <see cref="INativeWindowSource"/> and this class drives surface creation, per-frame texture acquisition, and
 /// swapchain reconfiguration.
 /// </para>
@@ -134,7 +134,10 @@ internal sealed unsafe class WebGPUWindowResources<TPixel> : IDisposable
     /// with a positive size.</param>
     /// <returns>The fully initialized resource container. The caller owns it and must call <see cref="Dispose"/>.</returns>
     /// <exception cref="NotSupportedException">Thrown when <typeparamref name="TPixel"/> does not map to a supported WebGPU texture format.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when any of the underlying WebGPU bootstrap steps — instance, surface, adapter, device, or queue — fails. All partially-acquired handles are released before the exception propagates.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when any of the underlying WebGPU bootstrap steps fail. All partially-acquired handles are released
+    /// before the exception propagates.
+    /// </exception>
     public static WebGPUWindowResources<TPixel> Create(
         Configuration configuration,
         INativeWindowSource nativeSource,
@@ -396,7 +399,7 @@ internal sealed unsafe class WebGPUWindowResources<TPixel> : IDisposable
 
     /// <summary>
     /// Releases every owned handle in reverse acquisition order (graphics context, queue, device, adapter, surface, instance).
-    /// Idempotent — subsequent calls are no-ops.
+    /// Idempotent; subsequent calls are no-ops.
     /// </summary>
     public void Dispose()
     {

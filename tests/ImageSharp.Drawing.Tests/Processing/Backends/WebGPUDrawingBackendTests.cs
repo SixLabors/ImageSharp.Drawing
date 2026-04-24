@@ -7,7 +7,6 @@ using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.Attributes;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
-using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -51,7 +50,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -86,7 +85,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -131,7 +130,7 @@ public partial class WebGPUDrawingBackendTests
             defaultImage.Height,
             nativeSurfaceBackend,
             drawingOptions,
-            (Action<DrawingCanvas<TPixel>>)DrawAction);
+            DrawAction);
 
         DebugSaveBackendPair(provider, "FillPath_ImageBrush", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
@@ -186,7 +185,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -233,7 +232,7 @@ public partial class WebGPUDrawingBackendTests
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -286,7 +285,7 @@ public partial class WebGPUDrawingBackendTests
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -335,7 +334,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -378,7 +377,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -418,7 +417,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -469,52 +468,28 @@ public partial class WebGPUDrawingBackendTests
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawSecondFrame);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
-        Assert.True(
-            WebGPUTestNativeSurfaceAllocator.TryCreate<TPixel>(
-                defaultImage.Width,
-                defaultImage.Height,
-                out NativeSurface nativeSurface,
-                out WebGPUTextureHandle textureHandle,
-                out WebGPUTextureViewHandle textureViewHandle,
-                out string createError),
-            createError);
+        using WebGPURenderTarget<TPixel> renderTarget = new(defaultImage.Width, defaultImage.Height);
+        Configuration nativeSurfaceConfiguration = Configuration.Default.Clone();
+        nativeSurfaceConfiguration.SetDrawingBackend(nativeSurfaceBackend);
 
-        try
+        using (DrawingCanvas<TPixel> firstCanvas =
+               new(nativeSurfaceConfiguration, nativeSurfaceBackend, renderTarget.NativeFrame, drawingOptions))
         {
-            Configuration nativeSurfaceConfiguration = Configuration.Default.Clone();
-            nativeSurfaceConfiguration.SetDrawingBackend(nativeSurfaceBackend);
-            Rectangle targetBounds = defaultImage.Bounds;
-
-            using (DrawingCanvas<TPixel> firstCanvas =
-                   new(nativeSurfaceConfiguration, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
-            {
-                DrawFirstFrame(firstCanvas);
-                firstCanvas.Flush();
-            }
-
-            using (DrawingCanvas<TPixel> secondCanvas =
-                   new(nativeSurfaceConfiguration, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
-            {
-                DrawSecondFrame(secondCanvas);
-                secondCanvas.Flush();
-            }
-
-            using (Image<TPixel> nativeSurfaceImage = ReadNativeSurface<TPixel>(
-                       nativeSurfaceBackend,
-                       nativeSurfaceConfiguration,
-                       nativeSurface,
-                       targetBounds))
-            {
-                DebugSaveBackendPair(provider, "Fill_RepeatedFrames", defaultImage, nativeSurfaceImage);
-                AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
-            }
-
-            AssertGpuPathWhenRequired(nativeSurfaceBackend);
+            DrawFirstFrame(firstCanvas);
+            firstCanvas.Flush();
         }
-        finally
+
+        using (DrawingCanvas<TPixel> secondCanvas =
+               new(nativeSurfaceConfiguration, nativeSurfaceBackend, renderTarget.NativeFrame, drawingOptions))
         {
-            WebGPUTestNativeSurfaceAllocator.Release(textureHandle, textureViewHandle);
+            DrawSecondFrame(secondCanvas);
+            secondCanvas.Flush();
         }
+
+        using Image<TPixel> nativeSurfaceImage = renderTarget.Readback();
+        DebugSaveBackendPair(provider, "Fill_RepeatedFrames", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
+        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -541,7 +516,7 @@ public partial class WebGPUDrawingBackendTests
             defaultImage.Height,
             nativeSurfaceBackend,
             drawingOptions,
-            (Action<DrawingCanvas<TPixel>>)DrawAction);
+            DrawAction);
 
         DebugSaveBackendPair(provider, "Process", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0516F);
@@ -575,7 +550,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -623,72 +598,48 @@ public partial class WebGPUDrawingBackendTests
         Brush drawBrush = Brushes.Solid(Color.HotPink);
         Brush clearBrush = Brushes.Solid(Color.White);
         using Image<TPixel> defaultImage = provider.GetImage();
-        using (DrawingCanvas<TPixel> defaultClearCanvas = new(Configuration.Default, GetFrameRegion(defaultImage), clearOptions))
+        using (DrawingCanvas<TPixel> defaultClearCanvas = defaultImage.CreateCanvas(Configuration.Default, clearOptions))
         {
             defaultClearCanvas.Fill(clearBrush);
             defaultClearCanvas.Flush();
         }
 
-        using (DrawingCanvas<TPixel> defaultDrawCanvas = new(Configuration.Default, GetFrameRegion(defaultImage), drawingOptions))
+        using (DrawingCanvas<TPixel> defaultDrawCanvas = defaultImage.CreateCanvas(Configuration.Default, drawingOptions))
         {
             defaultDrawCanvas.DrawText(textOptions, text, drawBrush, null);
             defaultDrawCanvas.Flush();
         }
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
-        Assert.True(
-            WebGPUTestNativeSurfaceAllocator.TryCreate<TPixel>(
-                defaultImage.Width,
-                defaultImage.Height,
-                out NativeSurface nativeSurface,
-                out WebGPUTextureHandle textureHandle,
-                out WebGPUTextureViewHandle textureViewHandle,
-                out string createError),
-            createError);
+        using WebGPURenderTarget<TPixel> renderTarget = new(defaultImage.Width, defaultImage.Height);
+        Configuration nativeSurfaceConfiguration = Configuration.Default.Clone();
+        nativeSurfaceConfiguration.SetDrawingBackend(nativeSurfaceBackend);
 
-        try
+        using (DrawingCanvas<TPixel> nativeSurfaceClearCanvas =
+               new(nativeSurfaceConfiguration, nativeSurfaceBackend, renderTarget.NativeFrame, clearOptions))
         {
-            Configuration nativeSurfaceConfiguration = Configuration.Default.Clone();
-            nativeSurfaceConfiguration.SetDrawingBackend(nativeSurfaceBackend);
-            Rectangle targetBounds = defaultImage.Bounds;
-
-            using (DrawingCanvas<TPixel> nativeSurfaceClearCanvas =
-                   new(nativeSurfaceConfiguration, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), clearOptions))
-            {
-                nativeSurfaceClearCanvas.Fill(clearBrush);
-                nativeSurfaceClearCanvas.Flush();
-            }
-
-            using (DrawingCanvas<TPixel> nativeSurfaceDrawCanvas =
-                   new(nativeSurfaceConfiguration, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
-            {
-                nativeSurfaceDrawCanvas.DrawText(textOptions, text, drawBrush, null);
-                nativeSurfaceDrawCanvas.Flush();
-            }
-
-            using (Image<TPixel> nativeSurfaceImage = ReadNativeSurface<TPixel>(
-                       nativeSurfaceBackend,
-                       nativeSurfaceConfiguration,
-                       nativeSurface,
-                       targetBounds))
-            {
-                DebugSaveBackendPair(provider, "RepeatedGlyphs_AfterClear", defaultImage, nativeSurfaceImage);
-                AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 2F);
-                AssertBackendPairReferenceOutputs(provider, "RepeatedGlyphs_AfterClear", defaultImage, nativeSurfaceImage);
-            }
-
-            AssertGpuPathWhenRequired(nativeSurfaceBackend);
+            nativeSurfaceClearCanvas.Fill(clearBrush);
+            nativeSurfaceClearCanvas.Flush();
         }
-        finally
+
+        using (DrawingCanvas<TPixel> nativeSurfaceDrawCanvas =
+               new(nativeSurfaceConfiguration, nativeSurfaceBackend, renderTarget.NativeFrame, drawingOptions))
         {
-            WebGPUTestNativeSurfaceAllocator.Release(textureHandle, textureViewHandle);
+            nativeSurfaceDrawCanvas.DrawText(textOptions, text, drawBrush, null);
+            nativeSurfaceDrawCanvas.Flush();
         }
+
+        using Image<TPixel> nativeSurfaceImage = renderTarget.Readback();
+        DebugSaveBackendPair(provider, "RepeatedGlyphs_AfterClear", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 2F);
+        AssertBackendPairReferenceOutputs(provider, "RepeatedGlyphs_AfterClear", defaultImage, nativeSurfaceImage);
+        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     private static void RenderWithDefaultBackend<TPixel>(Image<TPixel> image, DrawingOptions options, Action<DrawingCanvas<TPixel>> drawAction)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        using DrawingCanvas<TPixel> canvas = new(Configuration.Default, GetFrameRegion(image), options);
+        using DrawingCanvas<TPixel> canvas = image.CreateCanvas(Configuration.Default, options);
         drawAction(canvas);
         canvas.Flush();
     }
@@ -805,65 +756,25 @@ public partial class WebGPUDrawingBackendTests
         Action<WebGPUDrawingBackend> assertBackend = null)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        Assert.True(
-            WebGPUTestNativeSurfaceAllocator.TryCreate<TPixel>(
-                width,
-                height,
-                out NativeSurface nativeSurface,
-                out WebGPUTextureHandle textureHandle,
-                out WebGPUTextureViewHandle textureViewHandle,
-                out string createError),
-            createError);
+        using WebGPURenderTarget<TPixel> renderTarget = new(width, height);
+        Configuration configuration = Configuration.Default.Clone();
+        configuration.SetDrawingBackend(backend);
+        Rectangle targetBounds = new(0, 0, width, height);
 
-        try
+        if (initialImage is not null)
         {
-            Configuration configuration = Configuration.Default.Clone();
-            configuration.SetDrawingBackend(backend);
-            Rectangle targetBounds = new(0, 0, width, height);
-
-            if (initialImage is not null)
-            {
-                using DrawingCanvas<TPixel> initialCanvas =
-                    new(configuration, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), new DrawingOptions());
-                initialCanvas.DrawImage(initialImage, initialImage.Bounds, targetBounds);
-                initialCanvas.Flush();
-            }
-
-            using DrawingCanvas<TPixel> canvas =
-                new(configuration, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), options);
-
-            drawAction(canvas);
-            canvas.Flush();
-            assertBackend?.Invoke(backend);
-
-            return ReadNativeSurface<TPixel>(backend, configuration, nativeSurface, targetBounds);
+            using DrawingCanvas<TPixel> initialCanvas =
+                new(configuration, backend, renderTarget.NativeFrame, new DrawingOptions());
+            initialCanvas.DrawImage(initialImage, initialImage.Bounds, targetBounds);
+            initialCanvas.Flush();
         }
-        finally
-        {
-            WebGPUTestNativeSurfaceAllocator.Release(textureHandle, textureViewHandle);
-        }
-    }
 
-    private static Image<TPixel> ReadNativeSurface<TPixel>(
-        WebGPUDrawingBackend backend,
-        Configuration configuration,
-        NativeSurface nativeSurface,
-        Rectangle targetBounds)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        Image<TPixel> image = new(targetBounds.Width, targetBounds.Height);
-        NativeCanvasFrame<TPixel> frame = new(targetBounds, nativeSurface);
-        Rectangle sourceRectangle = new(0, 0, targetBounds.Width, targetBounds.Height);
-        Assert.True(
-            backend.TryReadRegion(
-                configuration,
-                frame,
-                sourceRectangle,
-                new Buffer2DRegion<TPixel>(image.Frames.RootFrame.PixelBuffer),
-                out string readError),
-            readError);
+        using DrawingCanvas<TPixel> canvas = new(configuration, backend, renderTarget.NativeFrame, options);
+        drawAction(canvas);
+        canvas.Flush();
+        assertBackend?.Invoke(backend);
 
-        return image;
+        return renderTarget.Readback();
     }
 
     private static void DebugSaveBackendPair<TPixel>(
@@ -945,8 +856,8 @@ public partial class WebGPUDrawingBackendTests
         }
 
         Assert.True(
-            backend.TestingLastFlushUsedGPU,
-            backend.TestingLastGPUInitializationFailure ?? "The last flush did not use the staged path.");
+            backend.DiagnosticLastFlushUsedGPU,
+            backend.DiagnosticLastSceneFailure ?? "The last flush did not use WebGPU.");
     }
 
     [WebGPUTheory]
@@ -972,7 +883,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1031,7 +942,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1101,7 +1012,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1165,7 +1076,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1205,7 +1116,7 @@ public partial class WebGPUDrawingBackendTests
         ]);
         pathBuilder.CloseFigure();
 
-        // Inner contour with same winding — EvenOdd should create a hole.
+        // Inner contour with same winding; EvenOdd should create a hole.
         pathBuilder.StartFigure();
         pathBuilder.AddLines(
         [
@@ -1225,7 +1136,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1262,7 +1173,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1289,25 +1200,16 @@ public partial class WebGPUDrawingBackendTests
         Brush brush = Brushes.Solid(Color.Black);
         IPath denseGrid = CreateLargeSceneDenseRectangleGridPath();
         void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, denseGrid);
-        static void AssertBackend(WebGPUDrawingBackend backend)
-        {
-            Assert.True(
+        static void AssertBackend(WebGPUDrawingBackend backend) => Assert.True(
                 backend.DiagnosticLastFlushUsedGPU,
-                backend.DiagnosticLastSceneFailure ?? "The last flush did not use the staged path.");
-            Assert.True(
-                backend.TestingLastEncodedScenePathTagByteCount > (256 * 1024),
-                $"Expected a large-scene path-tag payload but encoded only {backend.TestingLastEncodedScenePathTagByteCount} bytes.");
-            Assert.True(
-                backend.TestingLastUsedLargePathScan,
-                $"Expected the large pathtag scan path for {backend.TestingLastEncodedScenePathTagByteCount} path-tag bytes.");
-        }
+                backend.DiagnosticLastSceneFailure ?? "The last flush did not use WebGPU.");
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1349,20 +1251,14 @@ public partial class WebGPUDrawingBackendTests
         {
             Assert.True(
                 backend.DiagnosticLastFlushUsedGPU,
-                backend.DiagnosticLastSceneFailure ?? "The last flush did not use the staged path.");
-            Assert.True(
-                backend.TestingLastEncodedSceneClipCount > 256,
-                $"Expected more than 256 clip records but encoded {backend.TestingLastEncodedSceneClipCount}.");
-            Assert.True(
-                backend.TestingLastClipReduceX > 0,
-                $"Expected clip-reduce dispatch for {backend.TestingLastEncodedSceneClipCount} clip records.");
+                backend.DiagnosticLastSceneFailure ?? "The last flush did not use WebGPU.");
         }
 
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1392,69 +1288,46 @@ public partial class WebGPUDrawingBackendTests
         RectangularPolygon rect1 = new(20, 20, 120, 80);
         RectangularPolygon rect2 = new(160, 100, 120, 80);
 
-        // Default backend: two separate flushes
+        // Default backend: two separate flushes.
         using Image<TPixel> defaultImage = provider.GetImage();
-        using (DrawingCanvas<TPixel> canvas1 = new(Configuration.Default, GetFrameRegion(defaultImage), drawingOptions))
+        using (DrawingCanvas<TPixel> canvas1 = defaultImage.CreateCanvas(Configuration.Default, drawingOptions))
         {
             canvas1.Fill(redBrush, rect1);
             canvas1.Flush();
         }
 
-        using (DrawingCanvas<TPixel> canvas2 = new(Configuration.Default, GetFrameRegion(defaultImage), drawingOptions))
+        using (DrawingCanvas<TPixel> canvas2 = defaultImage.CreateCanvas(Configuration.Default, drawingOptions))
         {
             canvas2.Fill(blueBrush, rect2);
             canvas2.Flush();
         }
 
-        // Native surface: two separate flushes reusing same backend
+        // Native surface: two separate flushes reusing same backend.
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
-        Assert.True(
-            WebGPUTestNativeSurfaceAllocator.TryCreate<TPixel>(
-                defaultImage.Width,
-                defaultImage.Height,
-                out NativeSurface nativeSurface,
-                out WebGPUTextureHandle textureHandle,
-                out WebGPUTextureViewHandle textureViewHandle,
-                out string createError),
-            createError);
+        using WebGPURenderTarget<TPixel> renderTarget = new(defaultImage.Width, defaultImage.Height);
+        Configuration nativeConfig = Configuration.Default.Clone();
+        nativeConfig.SetDrawingBackend(nativeSurfaceBackend);
 
-        try
+        using (DrawingCanvas<TPixel> canvas1 =
+               new(nativeConfig, nativeSurfaceBackend, renderTarget.NativeFrame, drawingOptions))
         {
-            Configuration nativeConfig = Configuration.Default.Clone();
-            nativeConfig.SetDrawingBackend(nativeSurfaceBackend);
-            Rectangle targetBounds = defaultImage.Bounds;
-
-            using (DrawingCanvas<TPixel> canvas1 =
-                   new(nativeConfig, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
-            {
-                canvas1.Clear(Brushes.Solid(Color.White));
-                canvas1.Fill(redBrush, rect1);
-                canvas1.Flush();
-            }
-
-            using (DrawingCanvas<TPixel> canvas2 =
-                   new(nativeConfig, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
-            {
-                canvas2.Fill(blueBrush, rect2);
-                canvas2.Flush();
-            }
-
-            using (Image<TPixel> nativeSurfaceImage = ReadNativeSurface<TPixel>(
-                       nativeSurfaceBackend,
-                       nativeConfig,
-                       nativeSurface,
-                       targetBounds))
-            {
-                DebugSaveBackendPair(provider, "MultipleFlushes", defaultImage, nativeSurfaceImage);
-                AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-                AssertBackendPairReferenceOutputs(provider, "MultipleFlushes", defaultImage, nativeSurfaceImage);
-                AssertGpuPathWhenRequired(nativeSurfaceBackend);
-            }
+            canvas1.Clear(Brushes.Solid(Color.White));
+            canvas1.Fill(redBrush, rect1);
+            canvas1.Flush();
         }
-        finally
+
+        using (DrawingCanvas<TPixel> canvas2 =
+               new(nativeConfig, nativeSurfaceBackend, renderTarget.NativeFrame, drawingOptions))
         {
-            WebGPUTestNativeSurfaceAllocator.Release(textureHandle, textureViewHandle);
+            canvas2.Fill(blueBrush, rect2);
+            canvas2.Flush();
         }
+
+        using Image<TPixel> nativeSurfaceImage = renderTarget.Readback();
+        DebugSaveBackendPair(provider, "MultipleFlushes", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairReferenceOutputs(provider, "MultipleFlushes", defaultImage, nativeSurfaceImage);
+        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -1483,7 +1356,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1528,7 +1401,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1567,7 +1440,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1608,7 +1481,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1648,7 +1521,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1690,7 +1563,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1730,7 +1603,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1800,7 +1673,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1811,10 +1684,10 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_PathGradient_Fallback", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
 
-        Assert.False(nativeSurfaceBackend.TestingLastFlushUsedGPU);
+        Assert.False(nativeSurfaceBackend.DiagnosticLastFlushUsedGPU);
         Assert.Equal(
             "The staged WebGPU scene pipeline does not support brush type 'PathGradientBrush'.",
-            nativeSurfaceBackend.TestingLastGPUInitializationFailure);
+            nativeSurfaceBackend.DiagnosticLastSceneFailure);
     }
 
     [WebGPUTheory]
@@ -1837,7 +1710,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1871,7 +1744,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1905,7 +1778,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1945,7 +1818,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -1986,7 +1859,7 @@ public partial class WebGPUDrawingBackendTests
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -2178,7 +2051,7 @@ the evil Galactic Empire.";
 
         void DrawAction(DrawingCanvas<TPixel> canvas)
         {
-            // Bottom hull (draw first — behind stern).
+            // Bottom hull (draw first, behind stern).
             canvas.Save(hullOptions);
             canvas.Fill(highlightBrush, new Polygon(bottomHull));
             canvas.Restore();
@@ -2214,7 +2087,7 @@ the evil Galactic Empire.";
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -2253,7 +2126,7 @@ the evil Galactic Empire.";
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -2288,7 +2161,7 @@ the evil Galactic Empire.";
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -2329,7 +2202,7 @@ the evil Galactic Empire.";
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -2370,7 +2243,7 @@ the evil Galactic Empire.";
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -2405,7 +2278,7 @@ the evil Galactic Empire.";
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -2444,7 +2317,7 @@ the evil Galactic Empire.";
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
-        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
@@ -2457,8 +2330,5 @@ the evil Galactic Empire.";
         AssertBackendPairReferenceOutputs(provider, "SaveLayer_MixedSaveAndSaveLayer", defaultImage, nativeSurfaceImage);
     }
 
-    private static Buffer2DRegion<TPixel> GetFrameRegion<TPixel>(Image<TPixel> image)
-        where TPixel : unmanaged, IPixel<TPixel>
-        => new(image.Frames.RootFrame.PixelBuffer);
 }
 

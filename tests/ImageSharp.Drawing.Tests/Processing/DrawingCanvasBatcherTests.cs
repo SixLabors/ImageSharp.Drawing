@@ -18,12 +18,11 @@ public class DrawingCanvasBatcherTests
         Configuration configuration = new();
         CapturingBackend backend = new();
         configuration.SetDrawingBackend(backend);
-        using Image<Rgba32> image = new(40, 40);
-        Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+        using Image<Rgba32> image = new(configuration, 40, 40);
 
         IPath path = new RectangularPolygon(4, 6, 18, 12);
         DrawingOptions options = new();
-        using DrawingCanvas<Rgba32> canvas = new(configuration, region, options);
+        using DrawingCanvas<Rgba32> canvas = image.CreateCanvas(options);
         Brush brushA = Brushes.Solid(Color.Red);
         Brush brushB = Brushes.Solid(Color.Blue);
 
@@ -44,12 +43,11 @@ public class DrawingCanvasBatcherTests
         Configuration configuration = new();
         CapturingBackend backend = new();
         configuration.SetDrawingBackend(backend);
-        using Image<Rgba32> image = new(40, 40);
-        Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+        using Image<Rgba32> image = new(configuration, 40, 40);
 
         IPath path = new RectangularPolygon(4, 6, 18, 12);
         DrawingOptions options = new();
-        using DrawingCanvas<Rgba32> canvas = new(configuration, region, options);
+        using DrawingCanvas<Rgba32> canvas = image.CreateCanvas(options);
 
         canvas.Fill(Brushes.Solid(Color.Red), path);
         canvas.Fill(Brushes.Solid(Color.Blue), path);
@@ -69,12 +67,11 @@ public class DrawingCanvasBatcherTests
         Configuration configuration = new();
         CapturingBackend backend = new();
         configuration.SetDrawingBackend(backend);
-        using Image<Rgba32> image = new(100, 100);
-        Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+        using Image<Rgba32> image = new(configuration, 100, 100);
 
         IPath path = new RectangularPolygon(10, 10, 40, 40);
         DrawingOptions options = new();
-        using DrawingCanvas<Rgba32> canvas = new(configuration, region, options);
+        using DrawingCanvas<Rgba32> canvas = image.CreateCanvas(options);
 
         for (int i = 0; i < 10; i++)
         {
@@ -93,8 +90,7 @@ public class DrawingCanvasBatcherTests
         Configuration configuration = new();
         CapturingBackend backend = new();
         configuration.SetDrawingBackend(backend);
-        using Image<Rgba32> image = new(420, 220);
-        Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+        using Image<Rgba32> image = new(configuration, 420, 220);
 
         Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 48);
         RichTextOptions textOptions = new(font)
@@ -111,7 +107,7 @@ public class DrawingCanvasBatcherTests
         string text = new('A', 200);
         Brush brush = Brushes.Solid(Color.Black);
 
-        using DrawingCanvas<Rgba32> canvas = new(configuration, region, drawingOptions);
+        using DrawingCanvas<Rgba32> canvas = image.CreateCanvas(drawingOptions);
         canvas.DrawText(textOptions, text, brush, pen: null);
         canvas.Flush();
 
@@ -148,10 +144,9 @@ public class DrawingCanvasBatcherTests
         Configuration configuration = new();
         CapturingBackend backend = new();
         configuration.SetDrawingBackend(backend);
-        using Image<Rgba32> image = new(80, 80);
-        Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+        using Image<Rgba32> image = new(configuration, 80, 80);
 
-        using DrawingCanvas<Rgba32> canvas = new(configuration, region, new DrawingOptions());
+        using DrawingCanvas<Rgba32> canvas = image.CreateCanvas(new DrawingOptions());
         canvas.DrawLine(Pens.Dash(Color.Red, 5F), new PointF(8, 12), new PointF(70, 64));
         canvas.Flush();
 
@@ -168,8 +163,7 @@ public class DrawingCanvasBatcherTests
         Configuration configuration = new();
         CapturingBackend backend = new();
         configuration.SetDrawingBackend(backend);
-        using Image<Rgba32> image = new(80, 80);
-        Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+        using Image<Rgba32> image = new(configuration, 80, 80);
 
         PenOptions options = new(Color.Red, 5F)
         {
@@ -179,7 +173,7 @@ public class DrawingCanvasBatcherTests
             }
         };
 
-        using DrawingCanvas<Rgba32> canvas = new(configuration, region, new DrawingOptions());
+        using DrawingCanvas<Rgba32> canvas = image.CreateCanvas(new DrawingOptions());
         canvas.Draw(new SolidPen(options), new Path([new PointF(8, 40), new PointF(40, 8), new PointF(72, 40)]));
         canvas.Flush();
 

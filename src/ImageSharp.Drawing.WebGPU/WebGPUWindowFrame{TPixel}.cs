@@ -8,7 +8,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
 /// A single frame returned by <see cref="WebGPUWindow{TPixel}.TryAcquireFrame(TimeSpan, out WebGPUWindowFrame{TPixel}?)"/>.
-/// Use the <see cref="Canvas"/> to draw the frame contents, then either call <see cref="Present"/> or dispose the frame to show it on screen.
+/// Use the <see cref="Canvas"/> to draw the frame contents, then either call <see cref="Present"/> or dispose
+/// the frame to show it on screen.
 /// </summary>
 /// <typeparam name="TPixel">The canvas pixel format.</typeparam>
 public sealed unsafe class WebGPUWindowFrame<TPixel> : IDisposable
@@ -82,7 +83,8 @@ public sealed unsafe class WebGPUWindowFrame<TPixel> : IDisposable
     /// Flushes pending canvas work and presents the frame on screen.
     /// </summary>
     /// <remarks>
-    /// This method finalizes the current frame. If you do not call it explicitly, <see cref="Dispose"/> will flush and present the frame automatically.
+    /// This method finalizes the current frame. If you do not call it explicitly, <see cref="Dispose"/>
+    /// will flush and present the frame automatically.
     /// </remarks>
     public void Present()
     {

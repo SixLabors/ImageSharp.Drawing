@@ -7,11 +7,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// Native WebGPU surface capability attached to <see cref="NativeSurface"/>.
 /// </summary>
 /// <remarks>
-/// The backing WebGPU device handle must remain valid for the lifetime of any
-/// <see cref="IDrawingBackend"/> that processes frames using this capability.
-/// The backend caches per-device GPU resources (pipelines, buffers) that reference
-/// the device internally. Ensure the device is not released while any backend
-/// instance may still reference it.
+/// The backing WebGPU device, queue, texture, and texture view must remain valid while canvases target this surface.
 /// </remarks>
 public sealed class WebGPUSurfaceCapability
 {

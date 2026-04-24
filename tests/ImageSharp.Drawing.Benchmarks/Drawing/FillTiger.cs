@@ -223,7 +223,6 @@ public class FillTiger
         bench.Cleanup();
     }
 
-
     /// <summary>
     /// Like <see cref="VerifyTransform"/> but pre-bakes the pan/zoom matrix into each
     /// <see cref="IPath"/> before drawing, so the WebGPU scene sees identity transform + transformed
@@ -250,8 +249,15 @@ public class FillTiger
         {
             foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in baked)
             {
-                if (fill is not null) { canvas.Fill(fill, path); }
-                if (stroke is not null) { canvas.Draw(stroke, path); }
+                if (fill is not null)
+                {
+                    canvas.Fill(fill, path);
+                }
+
+                if (stroke is not null)
+                {
+                    canvas.Draw(stroke, path);
+                }
             }
         }));
 
@@ -260,22 +266,33 @@ public class FillTiger
         {
             foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in baked)
             {
-                if (fill is not null) { canvas.Fill(fill, path); }
-                if (stroke is not null) { canvas.Draw(stroke, path); }
+                if (fill is not null)
+                {
+                    canvas.Fill(fill, path);
+                }
+
+                if (stroke is not null)
+                {
+                    canvas.Draw(stroke, path);
+                }
             }
 
             canvas.Flush();
         }
 
-        FillTiger printer = new() { Dimensions = width };
-        printer.webGpuTarget = webGpuTarget;
+        FillTiger printer = new()
+        {
+            Dimensions = width,
+            webGpuTarget = webGpuTarget
+        };
+
         Console.WriteLine();
         Console.WriteLine($"=== Transform-baked verify {width}x{height} zoom={zoom} pan=({panX},{panY}) ===");
         PrintWebGpuDiagnostics(printer);
 
         string tag = $"tiger-baked-{width}x{height}-z{zoom:0.##}-p{panX:0.##}_{panY:0.##}";
         string dir = System.IO.Path.Combine(AppContext.BaseDirectory, tag + "-verify");
-        System.IO.Directory.CreateDirectory(dir);
+        Directory.CreateDirectory(dir);
         image.Save(System.IO.Path.Combine(dir, tag + "-imagesharp.png"));
 
         using Image<Rgba32> gpuImage = webGpuTarget.Readback();
@@ -302,21 +319,39 @@ public class FillTiger
             Matrix4x4.CreateTranslation(-panX, -panY, 0f) *
             Matrix4x4.CreateScale(zoom, zoom, 1f) *
             Matrix4x4.CreateTranslation(width * 0.5f, height * 0.5f, 0f);
+
         SKMatrix skTransform = new(
-            transform4.M11, transform4.M21, transform4.M41,
-            transform4.M12, transform4.M22, transform4.M42,
-            0f, 0f, 1f);
-        System.Drawing.Drawing2D.Matrix sdTransform = new(
-            transform4.M11, transform4.M12,
-            transform4.M21, transform4.M22,
-            transform4.M41, transform4.M42);
+            transform4.M11,
+            transform4.M21,
+            transform4.M41,
+            transform4.M12,
+            transform4.M22,
+            transform4.M42,
+            0f,
+            0f,
+            1f);
+
+        Matrix sdTransform = new(
+            transform4.M11,
+            transform4.M12,
+            transform4.M21,
+            transform4.M22,
+            transform4.M41,
+            transform4.M42);
 
         SKSurface sk = SKSurface.Create(new SKImageInfo(width, height));
         sk.Canvas.SetMatrix(skTransform);
         foreach ((SKPath path, SKPaint fillPaint, SKPaint strokePaint) in skElements)
         {
-            if (fillPaint is not null) { sk.Canvas.DrawPath(path, fillPaint); }
-            if (strokePaint is not null) { sk.Canvas.DrawPath(path, strokePaint); }
+            if (fillPaint is not null)
+            {
+                sk.Canvas.DrawPath(path, fillPaint);
+            }
+
+            if (strokePaint is not null)
+            {
+                sk.Canvas.DrawPath(path, strokePaint);
+            }
         }
 
         Bitmap sdBitmap = new(width, height);
@@ -325,8 +360,15 @@ public class FillTiger
         sdGraphics.Transform = sdTransform;
         foreach ((GraphicsPath path, SDSolidBrush fill, SDPen stroke) in sdElements)
         {
-            if (fill is not null) { sdGraphics.FillPath(fill, path); }
-            if (stroke is not null) { sdGraphics.DrawPath(stroke, path); }
+            if (fill is not null)
+            {
+                sdGraphics.FillPath(fill, path);
+            }
+
+            if (stroke is not null)
+            {
+                sdGraphics.DrawPath(stroke, path);
+            }
         }
 
         Image<Rgba32> image = new(width, height);
@@ -335,8 +377,15 @@ public class FillTiger
             canvas.Save(new DrawingOptions { Transform = transform4 });
             foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in isElements)
             {
-                if (fill is not null) { canvas.Fill(fill, path); }
-                if (stroke is not null) { canvas.Draw(stroke, path); }
+                if (fill is not null)
+                {
+                    canvas.Fill(fill, path);
+                }
+
+                if (stroke is not null)
+                {
+                    canvas.Draw(stroke, path);
+                }
             }
 
             canvas.Restore();
@@ -348,16 +397,26 @@ public class FillTiger
             canvas.Save(new DrawingOptions { Transform = transform4 });
             foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in isElements)
             {
-                if (fill is not null) { canvas.Fill(fill, path); }
-                if (stroke is not null) { canvas.Draw(stroke, path); }
+                if (fill is not null)
+                {
+                    canvas.Fill(fill, path);
+                }
+
+                if (stroke is not null)
+                {
+                    canvas.Draw(stroke, path);
+                }
             }
 
             canvas.Restore();
             canvas.Flush();
         }
 
-        FillTiger printer = new() { Dimensions = width };
-        printer.webGpuTarget = webGpuTarget;
+        FillTiger printer = new()
+        {
+            Dimensions = width,
+            webGpuTarget = webGpuTarget
+        };
         Console.WriteLine();
         Console.WriteLine($"=== Transform verify {width}x{height} zoom={zoom} pan=({panX},{panY}) ===");
         PrintWebGpuDiagnostics(printer);
@@ -392,42 +451,10 @@ public class FillTiger
 
         Console.WriteLine();
         Console.WriteLine($"=== WebGPU flush diagnostics (dim={bench.Dimensions}) ===");
-        Console.WriteLine($"  UsedGPU            : {backend.TestingLastFlushUsedGPU}");
-        Console.WriteLine($"  UsedChunking       : {backend.TestingLastFlushUsedChunking} (binding failure: {backend.TestingLastChunkingBindingFailure})");
-        Console.WriteLine($"  AttemptCount       : {backend.TestingLastAttemptCount}");
-        Console.WriteLine($"  ExhaustedRetries   : {backend.TestingLastExhaustedRetryBudget}");
-        Console.WriteLine($"  SceneFailure       : {backend.TestingLastGPUInitializationFailure ?? "<none>"}");
-        Console.WriteLine($"  EncodedPathTagBytes: {backend.TestingLastEncodedScenePathTagByteCount}");
-        Console.WriteLine($"  CoarseDispatch     : {backend.TestingLastCoarseDispatch.X} x {backend.TestingLastCoarseDispatch.Y}");
-        Console.WriteLine($"  FineDispatch       : {backend.TestingLastFineDispatch.X} x {backend.TestingLastFineDispatch.Y}");
-        Console.WriteLine($"  ChunkWindow        : start={backend.TestingLastChunkWindow.Start} height={backend.TestingLastChunkWindow.Height} bufferHeight={backend.TestingLastChunkWindow.BufferHeight}");
-        Console.WriteLine();
-
-        for (int i = 0; i < backend.TestingLastAttemptCount; i++)
-        {
-            WebGPUSceneBumpSizes sizes = backend.TestingLastAttemptBumpSizes[i];
-            GpuSceneBumpAllocators alloc = backend.TestingLastAttemptBumpAllocators[i];
-            bool requiresGrowth = backend.TestingLastAttemptRequiresGrowth[i];
-
-            Console.WriteLine($"  Attempt #{i} requiresGrowth={requiresGrowth} failed=0x{alloc.Failed:x}");
-            Console.WriteLine($"    buffer     {"budget",12} {"actual",12}  overflow?");
-            Print("Lines     ", alloc.Lines,      sizes.Lines);
-            Print("Binning   ", alloc.Binning,    sizes.Binning);
-            Print("PathRows  ", alloc.PathRows,   sizes.PathRows);
-            Print("Tile      ", alloc.Tile,       sizes.PathTiles);
-            Print("SegCounts ", alloc.SegCounts,  sizes.SegCounts);
-            Print("Segments  ", alloc.Segments,   sizes.Segments);
-            Print("BlendSpill", alloc.BlendSpill, sizes.BlendSpill);
-            Print("Ptcl      ", alloc.Ptcl,       sizes.Ptcl);
-        }
-
+        Console.WriteLine($"  UsedGPU      : {backend.DiagnosticLastFlushUsedGPU}");
+        Console.WriteLine($"  UsedChunking : {backend.DiagnosticLastFlushUsedChunking} (binding failure: {backend.DiagnosticLastChunkingBindingFailure})");
+        Console.WriteLine($"  SceneFailure : {backend.DiagnosticLastSceneFailure ?? "<none>"}");
         Console.WriteLine("=== end WebGPU diagnostics ===");
         Console.WriteLine();
-
-        static void Print(string name, uint actual, uint budget)
-        {
-            string marker = actual > budget ? "  OVERFLOW" : string.Empty;
-            Console.WriteLine($"    {name}  {budget,12:N0} {actual,12:N0}{marker}");
-        }
     }
 }

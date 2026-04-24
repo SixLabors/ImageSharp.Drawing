@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Diagnostics.CodeAnalysis;
 using Silk.NET.WebGPU;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -33,8 +34,8 @@ internal static unsafe class WebGPURenderTargetAllocation
         int width,
         int height,
         out NativeSurface surface,
-        out WebGPUTextureHandle? textureHandle,
-        out WebGPUTextureViewHandle? textureViewHandle,
+        [NotNullWhen(true)] out WebGPUTextureHandle? textureHandle,
+        [NotNullWhen(true)] out WebGPUTextureViewHandle? textureViewHandle,
         out WebGPUTextureFormatId formatId,
         out string error)
         where TPixel : unmanaged, IPixel<TPixel>
