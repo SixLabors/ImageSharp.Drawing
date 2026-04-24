@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// <summary>
 /// Convenience extension methods for creating <see cref="DrawingCanvas{TPixel}"/> instances from ImageSharp image types.
 /// </summary>
-public static class DrawingCanvasExtensions
+public static class DrawingCanvasFactoryExtensions
 {
     /// <summary>
     /// Creates a drawing canvas over an existing frame.
