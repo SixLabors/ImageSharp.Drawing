@@ -390,14 +390,14 @@ internal static partial class DefaultRasterizer
                 StrokeContourSegment previousSegment = segments[i - 1];
                 StrokeContourSegment nextSegment = segments[i];
 
+                // Forward traversal: (v0, v1, v2) = (prev.Start, shared_vertex, next.End).
                 this.AppendSideJoinContour(
                     ref strokeContour,
+                    previousSegment.Start,
                     previousSegment.End,
-                    previousSegment.Tangent,
-                    nextSegment.Tangent,
+                    nextSegment.End,
                     previousSegment.Length,
                     nextSegment.Length,
-                    1F,
                     contained);
             }
 
@@ -417,14 +417,15 @@ internal static partial class DefaultRasterizer
                 StrokeContourSegment previousSegment = segments[i];
                 StrokeContourSegment nextSegment = segments[i - 1];
 
+                // Reverse traversal: vertex order reversed so PolygonStroker's Outline2
+                // state machine lines up with the port below.
                 this.AppendSideJoinContour(
                     ref strokeContour,
+                    previousSegment.End,
                     previousSegment.Start,
-                    -previousSegment.Tangent,
-                    -nextSegment.Tangent,
+                    nextSegment.Start,
                     previousSegment.Length,
                     nextSegment.Length,
-                    1F,
                     contained);
             }
 
@@ -453,12 +454,11 @@ internal static partial class DefaultRasterizer
 
                 this.AppendSideJoinContour(
                     ref leftContour,
+                    previousSegment.Start,
                     nextSegment.Start,
-                    previousSegment.Tangent,
-                    nextSegment.Tangent,
+                    nextSegment.End,
                     previousSegment.Length,
                     nextSegment.Length,
-                    1F,
                     contained);
             }
 
@@ -472,12 +472,11 @@ internal static partial class DefaultRasterizer
 
                 this.AppendSideJoinContour(
                     ref reversedContour,
+                    previousSegment.End,
                     previousSegment.Start,
-                    -previousSegment.Tangent,
-                    -nextSegment.Tangent,
+                    nextSegment.Start,
                     previousSegment.Length,
                     nextSegment.Length,
-                    1F,
                     contained);
             }
 
@@ -604,95 +603,94 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Appends one side join point sequence directly to the active stroke contour.
         /// </summary>
+        /// <remarks>
+        /// Direct port of <c>PolygonStroker.CalcJoin</c> so the rasterizer emits the same
+        /// join geometry as the reference CPU stroker. Each side of the outline calls this
+        /// once per source vertex; the reverse side reverses the vertex order exactly
+        /// like PolygonStroker's Outline2 state.
+        /// </remarks>
         /// <param name="contour">The active contour state.</param>
-        /// <param name="point">The join point.</param>
-        /// <param name="previousTangent">The normalized tangent of the previous segment.</param>
-        /// <param name="nextTangent">The normalized tangent of the next segment.</param>
-        /// <param name="previousLength">The length of the previous segment.</param>
-        /// <param name="nextLength">The length of the next segment.</param>
-        /// <param name="sideSign">The side selector for the contour being emitted.</param>
+        /// <param name="v0">Previous source vertex in the emission's traversal order.</param>
+        /// <param name="v1">Current source vertex (the corner).</param>
+        /// <param name="v2">Next source vertex in the emission's traversal order.</param>
+        /// <param name="len1">Length of segment v0-v1.</param>
+        /// <param name="len2">Length of segment v1-v2.</param>
         /// <param name="contained">Indicates whether the join is fully contained within the interest.</param>
         private void AppendSideJoinContour(
             ref ContourState contour,
-            Vector2 point,
-            Vector2 previousTangent,
-            Vector2 nextTangent,
-            float previousLength,
-            float nextLength,
-            float sideSign,
+            Vector2 v0,
+            Vector2 v1,
+            Vector2 v2,
+            float len1,
+            float len2,
             bool contained)
         {
-            Vector2 previousOffset = GetStrokeOffsetNormal(previousTangent) * (this.stroke.HalfWidth * sideSign);
-            Vector2 nextOffset = GetStrokeOffsetNormal(nextTangent) * (this.stroke.HalfWidth * sideSign);
-            float dot = Vector2.Dot(previousTangent, nextTangent);
-            float cross = Cross(nextTangent, previousTangent);
+            float eps = StrokeDirectionEpsilon;
+            float halfWidth = this.stroke.HalfWidth;
+            float widthAbs = halfWidth;
+            float strokeWidth = halfWidth;
 
-            if (MathF.Abs(cross) <= StrokeParallelEpsilon && dot > 0F)
+            if (len1 < eps || len2 < eps)
             {
-                this.AppendContourPoint(ref contour, point + nextOffset, contained);
+                // Degenerate neighborhood: fall back to best available segment direction.
+                float l1 = len1 >= eps ? len1 : len2;
+                float l2 = len2 >= eps ? len2 : len1;
+                float invL1 = strokeWidth / l1;
+                float invL2 = strokeWidth / l2;
+
+                Vector2 seg1 = v1 - v0;
+                Vector2 seg2 = v2 - v1;
+
+                float offX1 = seg1.Y * invL1;
+                float offY1 = seg1.X * invL1;
+                float offX2 = seg2.Y * invL2;
+                float offY2 = seg2.X * invL2;
+
+                this.AppendContourPoint(ref contour, new Vector2(v1.X + offX1, v1.Y - offY1), contained);
+                this.AppendContourPoint(ref contour, new Vector2(v1.X + offX2, v1.Y - offY2), contained);
                 return;
             }
 
-            // Mirror PolygonStroker.CalcJoin(): the next x previous turn sign decides whether the
-            // active outline sees this corner as inner or outer. That keeps forward and reverse
-            // side emission aligned with the CPU outline stroker's bevel/miter decisions.
-            bool isInnerJoin = cross > 0F;
+            Vector2 segForward = v1 - v0;
+            Vector2 segNext = v2 - v1;
+            float invLen1 = strokeWidth / len1;
+            float invLen2 = strokeWidth / len2;
+            float dx1 = segForward.Y * invLen1;
+            float dy1 = segForward.X * invLen1;
+            float dx2 = segNext.Y * invLen2;
+            float dy2 = segNext.X * invLen2;
 
-            if (isInnerJoin)
+            float cp = Cross(segNext, segForward);
+
+            if (MathF.Abs(cp) > float.Epsilon && cp > 0F)
             {
-                this.AppendInnerJoinContour(
-                    ref contour,
-                    point,
-                    previousTangent,
-                    nextTangent,
-                    previousOffset,
-                    nextOffset,
-                    previousLength,
-                    nextLength,
-                    contained);
+                float limit = MathF.Min(len1, len2) / widthAbs;
+                if (limit < 1.01F)
+                {
+                    limit = 1.01F;
+                }
+
+                this.CalcMiter(ref contour, v0, v1, v2, dx1, dy1, dx2, dy2, LineJoin.MiterRevert, limit, 0F, contained);
                 return;
             }
 
-            this.AppendOuterJoinContour(
-                ref contour,
-                point,
-                previousTangent,
-                nextTangent,
-                previousOffset,
-                nextOffset,
-                contained);
-        }
+            // Outer corner.
+            Vector2 averageOffset = new Vector2(dx1 + dx2, dy1 + dy2) * 0.5F;
+            float bevelDistance = averageOffset.Length();
 
-        /// <summary>
-        /// Appends one outer join directly to the active stroke contour.
-        /// </summary>
-        /// <param name="contour">The active contour state.</param>
-        /// <param name="point">The join point.</param>
-        /// <param name="previousTangent">The normalized tangent of the previous segment.</param>
-        /// <param name="nextTangent">The normalized tangent of the next segment.</param>
-        /// <param name="previousOffset">The offset vector on the previous segment.</param>
-        /// <param name="nextOffset">The offset vector on the next segment.</param>
-        /// <param name="contained">Indicates whether the join is fully contained within the interest.</param>
-        private void AppendOuterJoinContour(
-            ref ContourState contour,
-            Vector2 point,
-            Vector2 previousTangent,
-            Vector2 nextTangent,
-            Vector2 previousOffset,
-            Vector2 nextOffset,
-            bool contained)
-        {
-            float bevelDistance = ((previousOffset + nextOffset) * 0.5F).Length();
+            float widthEps = widthAbs / 1024F;
             if ((this.stroke.LineJoin is LineJoin.Round or LineJoin.Bevel) &&
-                (this.stroke.ArcDetailScale * (this.stroke.HalfWidth - bevelDistance)) < (this.stroke.HalfWidth / 1024F))
+                ((float)this.stroke.ArcDetailScale * (widthAbs - bevelDistance)) < widthEps)
             {
-                if (TryIntersectOffsetLines(point, previousOffset, previousTangent, nextOffset, nextTangent, out Vector2 intersection))
+                Vector2 outerOffset1 = new(dx1, -dy1);
+                Vector2 outerOffset2 = new(dx2, -dy2);
+                if (TryCalcIntersection(v0 + outerOffset1, v1 + outerOffset1, v1 + outerOffset2, v2 + outerOffset2, out Vector2 intersection))
                 {
                     this.AppendContourPoint(ref contour, intersection, contained);
                 }
                 else
                 {
-                    this.AppendContourPoint(ref contour, point + previousOffset, contained);
+                    this.AppendContourPoint(ref contour, new Vector2(v1.X + dx1, v1.Y - dy1), contained);
                 }
 
                 return;
@@ -700,215 +698,190 @@ internal static partial class DefaultRasterizer
 
             switch (this.stroke.LineJoin)
             {
-                case LineJoin.Round:
-                    this.AppendContourPoint(ref contour, point + previousOffset, contained);
-                    this.AppendDirectedArcContour(
-                        ref contour,
-                        point,
-                        previousOffset,
-                        nextOffset,
-                        contained);
-                    return;
-
                 case LineJoin.Miter:
                 case LineJoin.MiterRevert:
                 case LineJoin.MiterRound:
-                    this.AppendMiterJoinContour(
-                        ref contour,
-                        point,
-                        previousTangent,
-                        nextTangent,
-                        previousOffset,
-                        nextOffset,
-                        this.stroke.LineJoin,
-                        this.stroke.MiterLimit,
-                        contained);
-                    return;
+                    this.CalcMiter(ref contour, v0, v1, v2, dx1, dy1, dx2, dy2, this.stroke.LineJoin, (float)this.stroke.MiterLimit, bevelDistance, contained);
+                    break;
+
+                case LineJoin.Round:
+                    this.CalcArc(ref contour, v1.X, v1.Y, dx1, -dy1, dx2, -dy2, contained);
+                    break;
 
                 default:
-                    this.AppendContourPoint(ref contour, point + previousOffset, contained);
-                    this.AppendContourPoint(ref contour, point + nextOffset, contained);
-                    return;
+                    this.AppendContourPoint(ref contour, new Vector2(v1.X + dx1, v1.Y - dy1), contained);
+                    this.AppendContourPoint(ref contour, new Vector2(v1.X + dx2, v1.Y - dy2), contained);
+                    break;
             }
         }
 
         /// <summary>
-        /// Appends one inner join directly to the active stroke contour.
+        /// Direct port of <c>PolygonStroker.CalcMiter</c>. Emits the miter apex (or the
+        /// configured overflow fallback) at the join vertex.
         /// </summary>
-        /// <param name="contour">The active contour state.</param>
-        /// <param name="point">The join point.</param>
-        /// <param name="previousTangent">The normalized tangent of the previous segment.</param>
-        /// <param name="nextTangent">The normalized tangent of the next segment.</param>
-        /// <param name="previousOffset">The offset vector on the previous segment.</param>
-        /// <param name="nextOffset">The offset vector on the next segment.</param>
-        /// <param name="previousLength">The length of the previous segment.</param>
-        /// <param name="nextLength">The length of the next segment.</param>
-        /// <param name="contained">Indicates whether the join is fully contained within the interest.</param>
-        private void AppendInnerJoinContour(
+        private void CalcMiter(
             ref ContourState contour,
-            Vector2 point,
-            Vector2 previousTangent,
-            Vector2 nextTangent,
-            Vector2 previousOffset,
-            Vector2 nextOffset,
-            float previousLength,
-            float nextLength,
-            bool contained)
-        {
-            double limit = Math.Min(previousLength, nextLength) / Math.Max(this.stroke.HalfWidth, StrokeDirectionEpsilon);
-            if (limit < this.stroke.InnerMiterLimit)
-            {
-                limit = this.stroke.InnerMiterLimit;
-            }
-
-            switch (this.stroke.InnerJoin)
-            {
-                case InnerJoin.Miter:
-                    this.AppendMiterJoinContour(
-                        ref contour,
-                        point,
-                        previousTangent,
-                        nextTangent,
-                        previousOffset,
-                        nextOffset,
-                        LineJoin.MiterRevert,
-                        limit,
-                        contained);
-                    return;
-
-                case InnerJoin.Jag:
-                case InnerJoin.Round:
-                    Vector2 offsetDelta = previousOffset - nextOffset;
-                    float offsetDeltaSquared = offsetDelta.LengthSquared();
-                    if (offsetDeltaSquared < previousLength * previousLength && offsetDeltaSquared < nextLength * nextLength)
-                    {
-                        this.AppendMiterJoinContour(
-                            ref contour,
-                            point,
-                            previousTangent,
-                            nextTangent,
-                            previousOffset,
-                            nextOffset,
-                            LineJoin.MiterRevert,
-                            limit,
-                            contained);
-                        return;
-                    }
-
-                    this.AppendContourPoint(ref contour, point + previousOffset, contained);
-                    this.AppendContourPoint(ref contour, point, contained);
-                    if (this.stroke.InnerJoin == InnerJoin.Round)
-                    {
-                        this.AppendContourPoint(ref contour, point + nextOffset, contained);
-                        this.AppendDirectedArcContour(
-                            ref contour,
-                            point,
-                            nextOffset,
-                            previousOffset,
-                            contained);
-                    }
-
-                    this.AppendContourPoint(ref contour, point, contained);
-                    this.AppendContourPoint(ref contour, point + nextOffset, contained);
-                    return;
-
-                default:
-                    this.AppendContourPoint(ref contour, point + previousOffset, contained);
-                    this.AppendContourPoint(ref contour, point + nextOffset, contained);
-                    return;
-            }
-        }
-
-        /// <summary>
-        /// Appends one miter-family join directly to the active stroke contour.
-        /// </summary>
-        /// <param name="contour">The active contour state.</param>
-        /// <param name="point">The join point.</param>
-        /// <param name="previousTangent">The normalized tangent of the previous segment.</param>
-        /// <param name="nextTangent">The normalized tangent of the next segment.</param>
-        /// <param name="previousOffset">The offset vector on the previous segment.</param>
-        /// <param name="nextOffset">The offset vector on the next segment.</param>
-        /// <param name="lineJoin">The miter-family join behavior to apply.</param>
-        /// <param name="miterLimit">The effective miter limit.</param>
-        /// <param name="contained">Indicates whether the join is fully contained within the interest.</param>
-        private void AppendMiterJoinContour(
-            ref ContourState contour,
-            Vector2 point,
-            Vector2 previousTangent,
-            Vector2 nextTangent,
-            Vector2 previousOffset,
-            Vector2 nextOffset,
+            Vector2 v0,
+            Vector2 v1,
+            Vector2 v2,
+            float dx1,
+            float dy1,
+            float dx2,
+            float dy2,
             LineJoin lineJoin,
-            double miterLimit,
+            float miterLimit,
+            float bevelDistance,
             bool contained)
         {
-            Vector2 previousPoint = point + previousOffset;
-            Vector2 nextPoint = point + nextOffset;
-            float bevelDistance = ((previousOffset + nextOffset) * 0.5F).Length();
-            float limit = (float)(Math.Max(miterLimit, 1D) * Math.Max(previousOffset.Length(), nextOffset.Length()));
+            Vector2 p0 = v0;
+            Vector2 p1 = v1;
+            Vector2 p2 = v2;
+            Vector2 offset1 = new(dx1, -dy1);
+            Vector2 offset2 = new(dx2, -dy2);
 
-            if (TryIntersectOffsetLines(point, previousOffset, previousTangent, nextOffset, nextTangent, out Vector2 intersection))
+            float xi = v1.X;
+            float yi = v1.Y;
+            float intersectionDistance = 1F;
+            float limit = this.stroke.HalfWidth * miterLimit;
+            bool miterLimitExceeded = true;
+            bool intersectionFailed = true;
+
+            if (TryCalcIntersection(p0 + offset1, p1 + offset1, p1 + offset2, p2 + offset2, out Vector2 intersection))
             {
-                float intersectionDistance = Vector2.Distance(point, intersection);
+                xi = intersection.X;
+                yi = intersection.Y;
+                intersectionDistance = Vector2.Distance(p1, intersection);
                 if (intersectionDistance <= limit)
                 {
                     this.AppendContourPoint(ref contour, intersection, contained);
-                    return;
+                    miterLimitExceeded = false;
                 }
 
-                switch (lineJoin)
+                intersectionFailed = false;
+            }
+            else
+            {
+                // Parallel/near-parallel fallback: probe a candidate offset point.
+                Vector2 probe = new(v1.X + dx1, v1.Y - dy1);
+                if ((CrossProduct(v0, v1, probe) < 0F) == (CrossProduct(v1, v2, probe) < 0F))
                 {
-                    case LineJoin.MiterRevert:
-                        this.AppendContourPoint(ref contour, previousPoint, contained);
-                        this.AppendContourPoint(ref contour, nextPoint, contained);
-                        return;
-
-                    case LineJoin.MiterRound:
-                        this.AppendDirectedArcContour(
-                            ref contour,
-                            point,
-                            previousOffset,
-                            nextOffset,
-                            contained);
-                        return;
-
-                    default:
-                        if (intersectionDistance <= bevelDistance + StrokeDirectionEpsilon)
-                        {
-                            this.AppendContourPoint(ref contour, previousPoint, contained);
-                            this.AppendContourPoint(ref contour, nextPoint, contained);
-                            return;
-                        }
-
-                        float ratio = (limit - bevelDistance) / (intersectionDistance - bevelDistance);
-                        this.AppendContourPoint(ref contour, previousPoint + ((intersection - previousPoint) * ratio), contained);
-                        this.AppendContourPoint(ref contour, nextPoint + ((intersection - nextPoint) * ratio), contained);
-                        return;
+                    this.AppendContourPoint(ref contour, probe, contained);
+                    miterLimitExceeded = false;
                 }
+            }
+
+            if (!miterLimitExceeded)
+            {
+                return;
             }
 
             switch (lineJoin)
             {
                 case LineJoin.MiterRevert:
-                    this.AppendContourPoint(ref contour, previousPoint, contained);
-                    this.AppendContourPoint(ref contour, nextPoint, contained);
-                    return;
+                    this.AppendContourPoint(ref contour, new Vector2(v1.X + dx1, v1.Y - dy1), contained);
+                    this.AppendContourPoint(ref contour, new Vector2(v1.X + dx2, v1.Y - dy2), contained);
+                    break;
 
                 case LineJoin.MiterRound:
-                    this.AppendDirectedArcContour(
-                        ref contour,
-                        point,
-                        previousOffset,
-                        nextOffset,
-                        contained);
-                    return;
+                    this.CalcArc(ref contour, v1.X, v1.Y, dx1, -dy1, dx2, -dy2, contained);
+                    break;
 
                 default:
-                    float fallbackLimit = (float)Math.Max(miterLimit, 1D) * (previousOffset.Length() <= 0F ? nextOffset.Length() : previousOffset.Length());
-                    this.AppendContourPoint(ref contour, previousPoint + (previousTangent * fallbackLimit), contained);
-                    this.AppendContourPoint(ref contour, nextPoint - (nextTangent * fallbackLimit), contained);
-                    return;
+                    if (intersectionFailed)
+                    {
+                        // No reliable apex: project a clipped bevel using local tangent/perpendicular vectors.
+                        this.AppendContourPoint(
+                            ref contour,
+                            new Vector2(v1.X + dx1 + (dy1 * miterLimit), v1.Y - dy1 + (dx1 * miterLimit)),
+                            contained);
+                        this.AppendContourPoint(
+                            ref contour,
+                            new Vector2(v1.X + dx2 - (dy2 * miterLimit), v1.Y - dy2 - (dx2 * miterLimit)),
+                            contained);
+                    }
+                    else
+                    {
+                        float x1 = v1.X + dx1;
+                        float y1 = v1.Y - dy1;
+                        float x2 = v1.X + dx2;
+                        float y2 = v1.Y - dy2;
+                        float ratio = (limit - bevelDistance) / (intersectionDistance - bevelDistance);
+                        this.AppendContourPoint(ref contour, new Vector2(x1 + ((xi - x1) * ratio), y1 + ((yi - y1) * ratio)), contained);
+                        this.AppendContourPoint(ref contour, new Vector2(x2 + ((xi - x2) * ratio), y2 + ((yi - y2) * ratio)), contained);
+                    }
+
+                    break;
             }
+        }
+
+        /// <summary>
+        /// Direct port of <c>PolygonStroker.CalcArc</c>. Emits intermediate arc vertices
+        /// around a join center between two offset vectors.
+        /// </summary>
+        private void CalcArc(
+            ref ContourState contour,
+            float x,
+            float y,
+            float dx1,
+            float dy1,
+            float dx2,
+            float dy2,
+            bool contained)
+        {
+            float strokeWidth = this.stroke.HalfWidth;
+            double a1 = Math.Atan2(dy1, dx1);
+            double a2 = Math.Atan2(dy2, dx2);
+
+            double widthAbs = strokeWidth;
+            double da = Math.Acos(widthAbs / (widthAbs + (0.125D / this.stroke.ArcDetailScale))) * 2D;
+            this.AppendContourPoint(ref contour, new Vector2(x + dx1, y + dy1), contained);
+
+            if (a1 > a2)
+            {
+                a2 += Math.PI * 2D;
+            }
+
+            int n = (int)((a2 - a1) / da);
+            da = (a2 - a1) / (n + 1);
+            a1 += da;
+            for (int i = 0; i < n; i++)
+            {
+                this.AppendContourPoint(
+                    ref contour,
+                    new Vector2((float)(x + (Math.Cos(a1) * strokeWidth)), (float)(y + (Math.Sin(a1) * strokeWidth))),
+                    contained);
+                a1 += da;
+            }
+
+            this.AppendContourPoint(ref contour, new Vector2(x + dx2, y + dy2), contained);
+        }
+
+        /// <summary>
+        /// Signed area of triangle (a, b, point), matching <c>PolygonStroker.CrossProduct</c>.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float CrossProduct(Vector2 a, Vector2 b, Vector2 point)
+            => ((point.X - b.X) * (b.Y - a.Y)) - ((point.Y - b.Y) * (b.X - a.X));
+
+        /// <summary>
+        /// Intersects two infinite lines defined by point pairs (a, b) and (c, d),
+        /// matching <c>PolygonStroker.TryCalcIntersection</c>.
+        /// </summary>
+        private static bool TryCalcIntersection(Vector2 a, Vector2 b, Vector2 c, Vector2 d, out Vector2 intersection)
+        {
+            const float eps = 1e-7F;
+            Vector2 ab = b - a;
+            Vector2 cd = d - c;
+            float denominator = Cross(ab, cd);
+            if (MathF.Abs(denominator) < eps)
+            {
+                intersection = default;
+                return false;
+            }
+
+            float t = Cross(c - a, cd) / denominator;
+            intersection = a + (ab * t);
+            return true;
         }
 
         /// <summary>

@@ -21,25 +21,59 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 internal static class WebGPUSceneEncoder
 {
     private const int GradientWidth = 512;
+    private const int StyleWordCount = 5;
     private const int TileWidth = 16;
     private const int TileHeight = 16;
-    private const byte PathTagLineToF32 = 0x09;
-    private const byte PathTagQuadToF32 = 0x0A;
-    private const byte PathTagTransform = 0x20;
-    private const byte PathTagPath = 0x10;
-    private const byte PathTagStyle = 0x40;
-    private const byte PathTagSubpathEnd = 0x04;
-    private const uint StyleFlagsStyle = 0x80000000U;
-    private const uint StyleFlagsFill = 0x40000000U;
-    private const uint StyleFlagsJoinMiter = 0x10000000U;
-    private const uint StyleFlagsJoinRound = 0x20000000U;
-    private const uint StyleFlagsStartCapSquare = 0x04000000U;
-    private const uint StyleFlagsStartCapRound = 0x08000000U;
-    private const uint StyleFlagsEndCapSquare = 0x01000000U;
-    private const uint StyleFlagsEndCapRound = 0x02000000U;
-    private const uint StyleFlagsJoinMiterRevert = 0x00400000U;
-    private const uint StyleFlagsJoinMiterRound = 0x00800000U;
     private static readonly GraphicsOptions DefaultClipGraphicsOptions = new();
+
+    /// <summary>
+    /// Tags packed into the byte path-tag stream consumed by the WebGPU shaders.
+    /// </summary>
+    /// <remarks>
+    /// The low two bits store the segment type; the remaining bits are flags/count markers.
+    /// Values must match the PATH_TAG_* constants in pathtag.wgsl.
+    /// </remarks>
+    [Flags]
+    private enum PathTag : byte
+    {
+        None = 0,
+        LineTo = 1 << 0,
+        QuadTo = 1 << 1,
+        CubicTo = LineTo | QuadTo,
+        SubpathEnd = 1 << 2,
+        F32 = 1 << 3,
+        LineToF32 = F32 | LineTo,
+        QuadToF32 = F32 | QuadTo,
+        Path = 1 << 4,
+        Transform = 1 << 5,
+        Style = 1 << 6
+    }
+
+    /// <summary>
+    /// Flags packed into the first style word consumed by the WebGPU shaders.
+    /// </summary>
+    /// <remarks>
+    /// Cap styles are stored as two two-bit fields: end caps in bits 24-25 and start caps
+    /// in bits 26-27. The flatten shader shifts the start-cap field down before decoding it.
+    /// </remarks>
+    [Flags]
+    private enum StyleFlags : uint
+    {
+        None = 0U,
+        JoinMiterRevert = 1U << 22,
+        JoinMiterRound = 1U << 23,
+        EndCapSquare = 1U << 24,
+        EndCapRound = 1U << 25,
+        StartCapSquare = EndCapSquare << 2,
+        StartCapRound = EndCapRound << 2,
+        JoinMiter = 1U << 28,
+        JoinRound = 1U << 29,
+        Fill = 1U << 30,
+        Stroke = 1U << 31
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static byte PackPathTag(PathTag tag) => (byte)tag;
 
     /// <summary>
     /// Encodes composition commands into flush-scoped scene buffers.
@@ -101,6 +135,8 @@ internal static class WebGPUSceneEncoder
         private uint lastStyle0;
         private uint lastStyle1;
         private uint lastStyle2;
+        private uint lastStyle3;
+        private uint lastStyle4;
         private GpuSceneTransform lastTransform;
         private readonly Rectangle rootTargetBounds;
         private List<Rectangle>? openLayerBounds;
@@ -121,7 +157,7 @@ internal static class WebGPUSceneEncoder
             this.DrawTags = new OwnedStream<uint>(allocator, Math.Max(commandCount, 16));
             this.DrawData = new OwnedStream<uint>(allocator, Math.Max(commandCount, 16));
             this.Transforms = new OwnedStream<uint>(allocator, 8);
-            this.Styles = new OwnedStream<uint>(allocator, Math.Max(commandCount * 2, 16));
+            this.Styles = new OwnedStream<uint>(allocator, Math.Max(commandCount * StyleWordCount, 16));
             this.GradientPixels = new OwnedStream<uint>(allocator, Math.Max(commandCount * GradientWidth, GradientWidth));
             this.Images = [];
             this.FillCount = 0;
@@ -135,6 +171,8 @@ internal static class WebGPUSceneEncoder
             this.lastStyle0 = 0;
             this.lastStyle1 = 0;
             this.lastStyle2 = 0;
+            this.lastStyle3 = 0;
+            this.lastStyle4 = 0;
             this.rootTargetBounds = rootTargetBounds;
             this.lastTransform = GpuSceneTransform.Identity;
             this.openLayerBounds = null;
@@ -143,7 +181,7 @@ internal static class WebGPUSceneEncoder
             this.FineRasterizationMode = RasterizationMode.Antialiased;
             this.FineCoverageThreshold = 0F;
 
-            this.PathTags.Add(PathTagTransform);
+            this.PathTags.Add(PackPathTag(PathTag.Transform));
             AppendIdentityTransform(ref this.Transforms);
         }
 
@@ -474,7 +512,7 @@ internal static class WebGPUSceneEncoder
                 return;
             }
 
-            this.PathTags.Add(PathTagTransform);
+            this.PathTags.Add(PackPathTag(PathTag.Transform));
             AppendTransform(transform, ref this.Transforms);
             this.lastTransform = transform;
         }
@@ -496,11 +534,16 @@ internal static class WebGPUSceneEncoder
         {
             uint drawTag = GetDrawTag(command.Brush);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
-            (uint style0, uint style1, uint style2) = GetFillStyle(command.GraphicsOptions, command.RasterizerOptions.IntersectionRule);
+            (uint style0, uint style1, uint style2, uint style3, uint style4) = GetFillStyle(command.GraphicsOptions, command.RasterizerOptions.IntersectionRule);
             int pathTagCheckpoint = this.PathTags.Count;
             int pathDataCheckpoint = this.PathData.Count;
             int styleCheckpoint = this.Styles.Count;
-            bool appendStyle = !this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1 || style2 != this.lastStyle2;
+            bool appendStyle = !this.hasLastStyle ||
+                style0 != this.lastStyle0 ||
+                style1 != this.lastStyle1 ||
+                style2 != this.lastStyle2 ||
+                style3 != this.lastStyle3 ||
+                style4 != this.lastStyle4;
             Vector2 scale = ExtractScale(command.Transform);
             LinearGeometry geometry = command.Path.ToLinearGeometry(scale);
 
@@ -519,10 +562,12 @@ internal static class WebGPUSceneEncoder
 
             if (appendStyle)
             {
-                this.PathTags.Add(PathTagStyle);
+                this.PathTags.Add(PackPathTag(PathTag.Style));
                 this.Styles.Add(style0);
                 this.Styles.Add(style1);
                 this.Styles.Add(style2);
+                this.Styles.Add(style3);
+                this.Styles.Add(style4);
             }
 
             int encodedPathCount = EncodePath(
@@ -545,6 +590,8 @@ internal static class WebGPUSceneEncoder
             this.lastStyle0 = style0;
             this.lastStyle1 = style1;
             this.lastStyle2 = style2;
+            this.lastStyle3 = style3;
+            this.lastStyle4 = style4;
             this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest);
             this.FillCount++;
             this.PathCount += encodedPathCount;
@@ -567,10 +614,15 @@ internal static class WebGPUSceneEncoder
             float widthScale = GetTransformWidthScale(command.Transform);
             uint drawTag = GetDrawTag(command.Brush);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
-            (uint style0, uint style1, uint style2) = GetStrokeStyle(command.GraphicsOptions, pen, widthScale);
+            (uint style0, uint style1, uint style2, uint style3, uint style4) = GetStrokeStyle(command.GraphicsOptions, pen, widthScale);
             int pathTagCheckpoint = this.PathTags.Count;
             int styleCheckpoint = this.Styles.Count;
-            bool appendStyle = !this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1 || style2 != this.lastStyle2;
+            bool appendStyle = !this.hasLastStyle ||
+                style0 != this.lastStyle0 ||
+                style1 != this.lastStyle1 ||
+                style2 != this.lastStyle2 ||
+                style3 != this.lastStyle3 ||
+                style4 != this.lastStyle4;
 
             ReservePlainStrokeCapacity(
                 geometry,
@@ -585,10 +637,12 @@ internal static class WebGPUSceneEncoder
 
             if (appendStyle)
             {
-                this.PathTags.Add(PathTagStyle);
+                this.PathTags.Add(PackPathTag(PathTag.Style));
                 this.Styles.Add(style0);
                 this.Styles.Add(style1);
                 this.Styles.Add(style2);
+                this.Styles.Add(style3);
+                this.Styles.Add(style4);
             }
 
             int encodedPathCount = EncodeStrokePath(
@@ -612,6 +666,8 @@ internal static class WebGPUSceneEncoder
             this.lastStyle0 = style0;
             this.lastStyle1 = style1;
             this.lastStyle2 = style2;
+            this.lastStyle3 = style3;
+            this.lastStyle4 = style4;
             this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest);
             this.FillCount++;
             this.PathCount += encodedPathCount;
@@ -640,10 +696,15 @@ internal static class WebGPUSceneEncoder
         {
             uint drawTag = GetDrawTag(brush);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
-            (uint style0, uint style1, uint style2) = GetStrokeStyle(graphicsOptions, pen, widthScale);
+            (uint style0, uint style1, uint style2, uint style3, uint style4) = GetStrokeStyle(graphicsOptions, pen, widthScale);
             int pathTagCheckpoint = this.PathTags.Count;
             int styleCheckpoint = this.Styles.Count;
-            bool appendStyle = !this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1 || style2 != this.lastStyle2;
+            bool appendStyle = !this.hasLastStyle ||
+                style0 != this.lastStyle0 ||
+                style1 != this.lastStyle1 ||
+                style2 != this.lastStyle2 ||
+                style3 != this.lastStyle3 ||
+                style4 != this.lastStyle4;
 
             ReservePlainStrokeCapacity(
                 geometry,
@@ -658,10 +719,12 @@ internal static class WebGPUSceneEncoder
 
             if (appendStyle)
             {
-                this.PathTags.Add(PathTagStyle);
+                this.PathTags.Add(PackPathTag(PathTag.Style));
                 this.Styles.Add(style0);
                 this.Styles.Add(style1);
                 this.Styles.Add(style2);
+                this.Styles.Add(style3);
+                this.Styles.Add(style4);
             }
 
             int encodedPathCount = EncodeStrokePath(
@@ -685,6 +748,8 @@ internal static class WebGPUSceneEncoder
             this.lastStyle0 = style0;
             this.lastStyle1 = style1;
             this.lastStyle2 = style2;
+            this.lastStyle3 = style3;
+            this.lastStyle4 = style4;
             this.AccumulateDrawRowEstimate(rasterizerOptions.Interest);
             this.FillCount++;
             this.PathCount += encodedPathCount;
@@ -723,10 +788,15 @@ internal static class WebGPUSceneEncoder
         {
             uint drawTag = GetDrawTag(brush);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
-            (uint style0, uint style1, uint style2) = GetStrokeStyle(graphicsOptions, pen, widthScale);
+            (uint style0, uint style1, uint style2, uint style3, uint style4) = GetStrokeStyle(graphicsOptions, pen, widthScale);
             int pathTagCheckpoint = this.PathTags.Count;
             int styleCheckpoint = this.Styles.Count;
-            bool appendStyle = !this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1 || style2 != this.lastStyle2;
+            bool appendStyle = !this.hasLastStyle ||
+                style0 != this.lastStyle0 ||
+                style1 != this.lastStyle1 ||
+                style2 != this.lastStyle2 ||
+                style3 != this.lastStyle3 ||
+                style4 != this.lastStyle4;
 
             ReservePlainStrokeCapacityForOpenSegment(
                 drawTag,
@@ -740,10 +810,12 @@ internal static class WebGPUSceneEncoder
 
             if (appendStyle)
             {
-                this.PathTags.Add(PathTagStyle);
+                this.PathTags.Add(PackPathTag(PathTag.Style));
                 this.Styles.Add(style0);
                 this.Styles.Add(style1);
                 this.Styles.Add(style2);
+                this.Styles.Add(style3);
+                this.Styles.Add(style4);
             }
 
             int encodedPathCount = EncodeOpenSegmentStrokePath(
@@ -768,6 +840,8 @@ internal static class WebGPUSceneEncoder
             this.lastStyle0 = style0;
             this.lastStyle1 = style1;
             this.lastStyle2 = style2;
+            this.lastStyle3 = style3;
+            this.lastStyle4 = style4;
             this.AccumulateDrawRowEstimate(rasterizerOptions.Interest);
             this.FillCount++;
             this.PathCount += encodedPathCount;
@@ -795,10 +869,15 @@ internal static class WebGPUSceneEncoder
         private void AppendBeginLayer(in CompositionCommand command)
         {
             Rectangle layerBounds = ToTargetLocal(command.LayerBounds, this.rootTargetBounds);
-            (uint style0, uint style1, uint style2) = GetFillStyle(DefaultClipGraphicsOptions, IntersectionRule.NonZero);
+            (uint style0, uint style1, uint style2, uint style3, uint style4) = GetFillStyle(DefaultClipGraphicsOptions, IntersectionRule.NonZero);
             int pathTagCheckpoint = this.PathTags.Count;
             int styleCheckpoint = this.Styles.Count;
-            bool appendStyle = !this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1 || style2 != this.lastStyle2;
+            bool appendStyle = !this.hasLastStyle ||
+                style0 != this.lastStyle0 ||
+                style1 != this.lastStyle1 ||
+                style2 != this.lastStyle2 ||
+                style3 != this.lastStyle3 ||
+                style4 != this.lastStyle4;
 
             // Begin-layer clip emission is fixed-size: one optional style record,
             // one rectangular clip path, and one BeginClip draw record.
@@ -812,10 +891,12 @@ internal static class WebGPUSceneEncoder
 
             if (appendStyle)
             {
-                this.PathTags.Add(PathTagStyle);
+                this.PathTags.Add(PackPathTag(PathTag.Style));
                 this.Styles.Add(style0);
                 this.Styles.Add(style1);
                 this.Styles.Add(style2);
+                this.Styles.Add(style3);
+                this.Styles.Add(style4);
             }
 
             if (EncodeRectanglePath(layerBounds, ref this.PathTags, ref this.PathData, out int clipLineCount) == 0)
@@ -829,6 +910,8 @@ internal static class WebGPUSceneEncoder
             this.lastStyle0 = style0;
             this.lastStyle1 = style1;
             this.lastStyle2 = style2;
+            this.lastStyle3 = style3;
+            this.lastStyle4 = style4;
             this.AccumulateDrawRowEstimateLocal(layerBounds);
             this.PathCount++;
             this.LineCount += clipLineCount;
@@ -890,7 +973,7 @@ internal static class WebGPUSceneEncoder
             // terminator for the zero-data end marker.
             ReserveEndLayerCapacity(ref this.PathTags, ref this.DrawTags);
             this.DrawTags.Add(GpuSceneDrawTag.EndClip);
-            this.PathTags.Add(PathTagPath);
+            this.PathTags.Add(PackPathTag(PathTag.Path));
             this.PathCount++;
             this.ClipCount++;
         }
@@ -1245,12 +1328,12 @@ internal static class WebGPUSceneEncoder
                 float translatedEndY = endPoint.Y + pointTranslateY;
                 contourData[dataIndex++] = BitcastSingle(translatedEndX);
                 contourData[dataIndex++] = BitcastSingle(translatedEndY);
-                contourTags[j] = PathTagLineToF32;
+                contourTags[j] = PackPathTag(PathTag.LineToF32);
             }
 
             if (contour.SegmentCount > 0)
             {
-                contourTags[^1] |= PathTagSubpathEnd;
+                contourTags[^1] |= PackPathTag(PathTag.SubpathEnd);
             }
 
             // The reserved slices are staged locally until the contour is complete so the stream
@@ -1264,7 +1347,7 @@ internal static class WebGPUSceneEncoder
             return 0;
         }
 
-        pathTags.Add(PathTagPath);
+        pathTags.Add(PackPathTag(PathTag.Path));
         return 1;
     }
 
@@ -1306,7 +1389,7 @@ internal static class WebGPUSceneEncoder
                 PointF endPoint = geometry.Points[endPointIndex];
                 contourData[dataIndex++] = BitcastSingle(endPoint.X + pointTranslateX);
                 contourData[dataIndex++] = BitcastSingle(endPoint.Y + pointTranslateY);
-                contourTags[tagIndex++] = PathTagLineToF32;
+                contourTags[tagIndex++] = PackPathTag(PathTag.LineToF32);
             }
 
             if (!contour.IsClosed)
@@ -1315,13 +1398,13 @@ internal static class WebGPUSceneEncoder
                 contourData[dataIndex++] = BitcastSingle(firstPoint.Y + pointTranslateY);
                 contourData[dataIndex++] = BitcastSingle(firstTangentEndPoint.X + pointTranslateX);
                 contourData[dataIndex++] = BitcastSingle(firstTangentEndPoint.Y + pointTranslateY);
-                contourTags[tagIndex] = PathTagQuadToF32 | PathTagSubpathEnd;
+                contourTags[tagIndex] = PackPathTag(PathTag.QuadToF32 | PathTag.SubpathEnd);
             }
             else
             {
                 contourData[dataIndex++] = BitcastSingle(firstTangentEndPoint.X + pointTranslateX);
                 contourData[dataIndex++] = BitcastSingle(firstTangentEndPoint.Y + pointTranslateY);
-                contourTags[tagIndex] = PathTagLineToF32 | PathTagSubpathEnd;
+                contourTags[tagIndex] = PackPathTag(PathTag.LineToF32 | PathTag.SubpathEnd);
             }
 
             pathData.Advance(contourData.Length);
@@ -1333,7 +1416,7 @@ internal static class WebGPUSceneEncoder
             return 0;
         }
 
-        pathTags.Add(PathTagPath);
+        pathTags.Add(PackPathTag(PathTag.Path));
         return 1;
     }
 
@@ -1361,15 +1444,15 @@ internal static class WebGPUSceneEncoder
         contourData[1] = BitcastSingle(start.Y + pointTranslateY);
         contourData[2] = BitcastSingle(end.X + pointTranslateX);
         contourData[3] = BitcastSingle(end.Y + pointTranslateY);
-        contourTags[0] = PathTagLineToF32;
+        contourTags[0] = PackPathTag(PathTag.LineToF32);
         contourData[4] = BitcastSingle(start.X + pointTranslateX);
         contourData[5] = BitcastSingle(start.Y + pointTranslateY);
         contourData[6] = BitcastSingle(firstTangentEndPoint.X + pointTranslateX);
         contourData[7] = BitcastSingle(firstTangentEndPoint.Y + pointTranslateY);
-        contourTags[1] = PathTagQuadToF32 | PathTagSubpathEnd;
+        contourTags[1] = PackPathTag(PathTag.QuadToF32 | PathTag.SubpathEnd);
         pathData.Advance(contourData.Length);
         pathTags.Advance(contourTags.Length);
-        pathTags.Add(PathTagPath);
+        pathTags.Add(PackPathTag(PathTag.Path));
         lineCount = EstimateStrokeLineCountForOpenSegment(pen, widthScale);
         return 1;
     }
@@ -1401,21 +1484,21 @@ internal static class WebGPUSceneEncoder
 
         data[2] = BitcastSingle(right);
         data[3] = BitcastSingle(top);
-        tags[0] = PathTagLineToF32;
+        tags[0] = PackPathTag(PathTag.LineToF32);
 
         data[4] = BitcastSingle(right);
         data[5] = BitcastSingle(bottom);
-        tags[1] = PathTagLineToF32;
+        tags[1] = PackPathTag(PathTag.LineToF32);
 
         data[6] = BitcastSingle(left);
         data[7] = BitcastSingle(bottom);
-        tags[2] = PathTagLineToF32;
+        tags[2] = PackPathTag(PathTag.LineToF32);
 
         data[8] = BitcastSingle(left);
         data[9] = BitcastSingle(top);
-        tags[3] = PathTagLineToF32 | PathTagSubpathEnd;
+        tags[3] = PackPathTag(PathTag.LineToF32 | PathTag.SubpathEnd);
 
-        tags[4] = PathTagPath;
+        tags[4] = PackPathTag(PathTag.Path);
 
         pathData.Advance(data.Length);
         pathTags.Advance(tags.Length);
@@ -1448,7 +1531,7 @@ internal static class WebGPUSceneEncoder
 
         if (appendStyle)
         {
-            styles.EnsureAdditionalCapacity(3);
+            styles.EnsureAdditionalCapacity(StyleWordCount);
         }
 
         if (DrawTagUsesGradientRamp(drawTag))
@@ -1513,7 +1596,7 @@ internal static class WebGPUSceneEncoder
 
         if (appendStyle)
         {
-            styles.EnsureAdditionalCapacity(3);
+            styles.EnsureAdditionalCapacity(StyleWordCount);
         }
 
         if (DrawTagUsesGradientRamp(drawTag))
@@ -1542,7 +1625,7 @@ internal static class WebGPUSceneEncoder
 
         if (appendStyle)
         {
-            styles.EnsureAdditionalCapacity(3);
+            styles.EnsureAdditionalCapacity(StyleWordCount);
         }
 
         if (DrawTagUsesGradientRamp(drawTag))
@@ -1594,14 +1677,15 @@ internal static class WebGPUSceneEncoder
     private static int GetStrokeJoinLineCost(Pen pen, float widthScale)
     {
         float halfWidth = pen.StrokeWidth * widthScale * 0.5F;
-        return pen.StrokeOptions.LineJoin switch
+        int outerCost = pen.StrokeOptions.LineJoin switch
         {
-            LineJoin.Miter => 4,
-            LineJoin.MiterRound => GetStrokeArcLineCost(halfWidth, MathF.PI, pen.StrokeOptions.ArcDetailScale) + 1,
+            LineJoin.Miter => 3,
+            LineJoin.MiterRound => GetStrokeArcLineCost(halfWidth, MathF.PI, pen.StrokeOptions.ArcDetailScale),
             LineJoin.MiterRevert => 2,
-            LineJoin.Round => GetStrokeArcLineCost(halfWidth, MathF.PI, pen.StrokeOptions.ArcDetailScale) + 1,
+            LineJoin.Round => GetStrokeArcLineCost(halfWidth, MathF.PI, pen.StrokeOptions.ArcDetailScale),
             _ => 2
         };
+        return outerCost + 2;
     }
 
     /// <summary>
@@ -1626,8 +1710,10 @@ internal static class WebGPUSceneEncoder
     private static int GetStrokeArcLineCost(float radius, float angle, double arcDetailScale)
     {
         float safeRadius = Math.Max(radius, 0.25F);
-        float theta = Math.Max(0.0001F, 2F * MathF.Acos(1F - (0.25F / safeRadius)));
-        return Math.Max(1, (int)MathF.Ceiling((angle / theta) * (float)Math.Max(arcDetailScale, 0.01D)));
+        float safeScale = (float)Math.Max(arcDetailScale, 0.01D);
+        float ratio = Math.Clamp(safeRadius / (safeRadius + (0.125F / safeScale)), -1F, 1F);
+        float theta = Math.Max(0.0001F, 2F * MathF.Acos(ratio));
+        return Math.Max(1, (int)MathF.Ceiling(angle / theta));
     }
 
     /// <summary>
@@ -1681,8 +1767,7 @@ internal static class WebGPUSceneEncoder
 
         if (appendStyle)
         {
-            // A style record is always three packed words.
-            styles.EnsureAdditionalCapacity(3);
+            styles.EnsureAdditionalCapacity(StyleWordCount);
         }
     }
 
@@ -1752,14 +1837,21 @@ internal static class WebGPUSceneEncoder
         => AppendTransform(GpuSceneTransform.Identity, ref transforms);
 
     /// <summary>
-    /// Packs the three style words that describe stroke behavior for one draw record.
+    /// Packs the style words that describe stroke behavior for one draw record.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static (uint Style0, uint Style1, uint Style2) GetStrokeStyle(GraphicsOptions options, Pen pen, float widthScale)
+    private static (uint Style0, uint Style1, uint Style2, uint Style3, uint Style4) GetStrokeStyle(GraphicsOptions options, Pen pen, float widthScale)
     {
-        uint style0 = StyleFlagsStyle | EncodeStrokeJoinFlags(pen.StrokeOptions.LineJoin) | EncodeStrokeCapFlags(pen.StrokeOptions.LineCap);
-        style0 |= BitConverter.HalfToUInt16Bits((Half)(float)pen.StrokeOptions.MiterLimit);
-        return (style0, BitcastSingle(pen.StrokeWidth * widthScale), PackStyleDrawFlags(options));
+        StyleFlags styleFlags = StyleFlags.Stroke
+            | EncodeStrokeJoinFlags(pen.StrokeOptions.LineJoin)
+            | EncodeStrokeCapFlags(pen.StrokeOptions.LineCap);
+
+        return (
+            (uint)styleFlags,
+            BitcastSingle(pen.StrokeWidth * widthScale),
+            PackStyleDrawFlags(options),
+            BitcastSingle((float)pen.StrokeOptions.MiterLimit),
+            BitcastSingle((float)pen.StrokeOptions.ArcDetailScale));
     }
 
     /// <summary>
@@ -1795,36 +1887,36 @@ internal static class WebGPUSceneEncoder
     /// Packs the stroke join flags consumed by the staged flatten shader.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint EncodeStrokeJoinFlags(LineJoin lineJoin)
+    private static StyleFlags EncodeStrokeJoinFlags(LineJoin lineJoin)
         => lineJoin switch
         {
-            LineJoin.Miter => StyleFlagsJoinMiter,
-            LineJoin.MiterRevert => StyleFlagsJoinMiter | StyleFlagsJoinMiterRevert,
-            LineJoin.MiterRound => StyleFlagsJoinMiter | StyleFlagsJoinMiterRound,
-            LineJoin.Round => StyleFlagsJoinRound,
-            _ => 0U
+            LineJoin.Miter => StyleFlags.JoinMiter,
+            LineJoin.MiterRevert => StyleFlags.JoinMiter | StyleFlags.JoinMiterRevert,
+            LineJoin.MiterRound => StyleFlags.JoinMiter | StyleFlags.JoinMiterRound,
+            LineJoin.Round => StyleFlags.JoinRound,
+            _ => StyleFlags.None
         };
 
     /// <summary>
     /// Packs the start and end cap flags consumed by the staged flatten shader.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint EncodeStrokeCapFlags(LineCap lineCap)
+    private static StyleFlags EncodeStrokeCapFlags(LineCap lineCap)
         => lineCap switch
         {
-            LineCap.Square => StyleFlagsStartCapSquare | StyleFlagsEndCapSquare,
-            LineCap.Round => StyleFlagsStartCapRound | StyleFlagsEndCapRound,
-            _ => 0U
+            LineCap.Square => StyleFlags.StartCapSquare | StyleFlags.EndCapSquare,
+            LineCap.Round => StyleFlags.StartCapRound | StyleFlags.EndCapRound,
+            _ => StyleFlags.None
         };
 
     /// <summary>
-    /// Packs the three style words that describe fill behavior for one draw record.
+    /// Packs the style words that describe fill behavior for one draw record.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static (uint Style0, uint Style1, uint Style2) GetFillStyle(GraphicsOptions options, IntersectionRule intersectionRule)
+    private static (uint Style0, uint Style1, uint Style2, uint Style3, uint Style4) GetFillStyle(GraphicsOptions options, IntersectionRule intersectionRule)
     {
-        uint style0 = intersectionRule == IntersectionRule.EvenOdd ? StyleFlagsFill : 0U;
-        return (style0, 0U, PackStyleDrawFlags(options));
+        StyleFlags styleFlags = intersectionRule == IntersectionRule.EvenOdd ? StyleFlags.Fill : StyleFlags.None;
+        return ((uint)styleFlags, 0U, PackStyleDrawFlags(options), 0U, 0U);
     }
 
     /// <summary>

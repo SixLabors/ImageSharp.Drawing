@@ -492,15 +492,18 @@ fn flatten_euler(
 // `begin`, `end`, center`, and `angle` should be chosen carefully to ensure a smooth arc with the
 // correct winding.
 fn flatten_arc(
-    path_ix: u32, begin: vec2f, end: vec2f, center: vec2f, angle: f32, transform: Transform
+    path_ix: u32, begin: vec2f, end: vec2f, center: vec2f,
+    angle: f32, arc_detail_scale: f32, transform: Transform
 ) {
     var p0 = transform_apply(transform, begin);
     var r = begin - center;
 
     let MIN_THETA = 0.0001;
-    let tol = 0.25;
-    let radius = max(tol, length(p0 - transform_apply(transform, center)));
-    let theta = max(MIN_THETA, 2. * acos(1. - tol / radius));
+    let radius = max(0.25, length(p0 - transform_apply(transform, center)));
+    // Matches PolygonStroker.CalcArc's default `da = 2 * acos(r / (r + 0.125/scale))`.
+    let safe_scale = max(arc_detail_scale, 0.01);
+    let ratio = clamp(radius / (radius + (0.125 / safe_scale)), -1., 1.);
+    let theta = max(MIN_THETA, 2. * acos(ratio));
 
     // Always output at least one line so that we always draw the chord.
     let n_lines = max(1u, u32(ceil(angle / theta)));
@@ -521,12 +524,12 @@ fn flatten_arc(
 }
 
 fn draw_cap(
-    path_ix: u32, cap_style: u32, point: vec2f,
+    path_ix: u32, cap_style: u32, arc_detail_scale: f32, point: vec2f,
     cap0: vec2f, cap1: vec2f, offset_tangent: vec2f,
     transform: Transform,
 ) {
     if cap_style == STYLE_FLAGS_CAP_ROUND {
-        flatten_arc(path_ix, cap0, cap1, point, 3.1415927, transform);
+        flatten_arc(path_ix, cap0, cap1, point, 3.1415927, arc_detail_scale, transform);
         return;
     }
 
@@ -546,9 +549,52 @@ fn draw_cap(
     write_line_with_transform(line_ix, path_ix, start, end, transform);
 }
 
-fn draw_join(
-    path_ix: u32, style_flags: u32, p0: vec2f,
+fn output_inner_edge_with_transform(
+    path_ix: u32, p0: vec2f,
     tan_prev: vec2f, tan_next: vec2f,
+    len_prev: f32, len_next: f32, half_width: f32,
+    inner_prev: vec2f, inner_next: vec2f,
+    inner_before: vec2f, inner_after: vec2f,
+    cr: f32,
+    transform: Transform,
+) {
+    var miter_limit = min(len_prev, len_next) / half_width;
+    if miter_limit < 1.01 {
+        miter_limit = 1.01;
+    }
+    let limit = half_width * miter_limit;
+
+    if abs(cr) > TANGENT_THRESH * TANGENT_THRESH {
+        let v = inner_after - inner_before;
+        let h = (tan_prev.x * v.y - tan_prev.y * v.x) / cr;
+        let miter_pt = inner_after - tan_next * h;
+        if distance(p0, miter_pt) <= limit {
+            let line_ix = atomicAdd(&bump.lines, 2u);
+            write_line_with_transform(line_ix, path_ix, inner_prev, miter_pt, transform);
+            write_line_with_transform(line_ix + 1u, path_ix, miter_pt, inner_next, transform);
+            return;
+        }
+    } else {
+        let probe = inner_before;
+        let probe_offset = probe - p0;
+        let prev_side = ((probe_offset.x * tan_prev.y) - (probe_offset.y * tan_prev.x)) < 0.;
+        let next_side = ((probe_offset.x * tan_next.y) - (probe_offset.y * tan_next.x)) < 0.;
+        if prev_side == next_side {
+            let line_ix = atomicAdd(&bump.lines, 2u);
+            write_line_with_transform(line_ix, path_ix, inner_prev, probe, transform);
+            write_line_with_transform(line_ix + 1u, path_ix, probe, inner_next, transform);
+            return;
+        }
+    }
+
+    output_line_with_transform(path_ix, inner_prev, inner_next, transform);
+}
+
+fn draw_join(
+    path_ix: u32, style_flags: u32, miter_limit: f32, arc_detail_scale: f32,
+    p0: vec2f,
+    tan_prev: vec2f, tan_next: vec2f,
+    len_prev: f32, len_next: f32, half_width: f32,
     n_prev: vec2f, n_next: vec2f,
     transform: Transform,
 ) {
@@ -559,113 +605,130 @@ fn draw_join(
 
     let cr = tan_prev.x * tan_next.y - tan_prev.y * tan_next.x;
     let d = dot(tan_prev, tan_next);
+    let is_backside = cr > 0.;
 
-    switch style_flags & STYLE_FLAGS_JOIN_MASK {
-        case STYLE_FLAGS_JOIN_BEVEL: {
-            output_two_lines_with_transform(path_ix, front0, front1, back0, back1, transform);
+    // Contour-flow endpoints. `*_prev` connects to the incoming offset curve at this vertex
+    // and `*_next` starts the outgoing offset curve, so emitting the join straight from
+    // `*_prev` to `*_next` preserves the signed-winding direction of the stroke outline.
+    let outer_prev = select(front0, back1, is_backside);
+    let outer_next = select(front1, back0, is_backside);
+    let inner_prev = select(back0, front0, is_backside);
+    let inner_next = select(back1, front1, is_backside);
+    let inner_before = select(back1, front0, is_backside);
+    let inner_after = select(back0, front1, is_backside);
+
+    // The outer-side endpoints emitted in the contour's natural flow direction: front0 ->
+    // front1 on forward turns and back0 -> back1 on backside turns.
+    let outer_start = select(front0, back0, is_backside);
+    let outer_end = select(front1, back1, is_backside);
+
+    let join_style = style_flags & STYLE_FLAGS_JOIN_MASK;
+    let bevel_distance = length(((outer_prev - p0) + (outer_next - p0)) * 0.5);
+    var outer_done = false;
+
+    if ((join_style == STYLE_FLAGS_JOIN_BEVEL || join_style == STYLE_FLAGS_JOIN_ROUND)
+        && (arc_detail_scale * (half_width - bevel_distance) < half_width / 1024.))
+    {
+        if abs(cr) > TANGENT_THRESH * TANGENT_THRESH {
+            let v = outer_next - outer_prev;
+            let h = (tan_prev.x * v.y - tan_prev.y * v.x) / cr;
+            let miter_pt = outer_next - tan_next * h;
+            let line_ix = atomicAdd(&bump.lines, 2u);
+            write_line_with_transform(line_ix, path_ix, outer_start, miter_pt, transform);
+            write_line_with_transform(line_ix + 1u, path_ix, miter_pt, outer_end, transform);
+        } else {
+            output_line_with_transform(path_ix, outer_start, outer_end, transform);
         }
-        case STYLE_FLAGS_JOIN_MITER: {
-            let hypot = length(vec2f(cr, d));
-            let miter_limit = unpack2x16float(style_flags & STYLE_MITER_LIMIT_MASK)[0];
-            let is_backside = cr > 0.;
-            let outer_prev = select(front0, back1, is_backside);
-            let outer_next = select(front1, back0, is_backside);
-            let inner_prev = select(back0, front0, is_backside);
-            let inner_next = select(back1, front1, is_backside);
+        outer_done = true;
+    }
 
-            var line_ix: u32;
-            // Given the two tangents `tan_prev` and `tan_next` arranged tail-to-tail, the
-            // miter length ratio is `1 / |cos(theta/2)|`, where `theta` is the angle
-            // between the tangents.
-            //
-            // `hypot` is `|tan_prev| * |tan_next|` (since cr^2 + d^2 = |a|^2 |b|^2) and
-            // `hypot + d` is `2 * |tan_prev| * |tan_next| * cos^2(theta/2)`. After
-            // rearranging, the following tests whether `1/|cos(theta/2)| < miter_limit`.
-            //
-            // Also avoid the miter computation when `cr` is very small; the intersection
-            // math divides by `cr` and becomes numerically unstable for near-collinear
-            // tangents.
-            if 2. * hypot < (hypot + d) * miter_limit * miter_limit
-                && abs(cr) > TANGENT_THRESH * TANGENT_THRESH
-            {
-                let fp_last = select(front0, back1, is_backside);
-                let fp_this = select(front1, back0, is_backside);
-                let p = select(front0, back0, is_backside);
+    if !outer_done {
+        switch join_style {
+            case STYLE_FLAGS_JOIN_BEVEL: {
+                output_line_with_transform(path_ix, outer_start, outer_end, transform);
+            }
+            case STYLE_FLAGS_JOIN_MITER: {
+                let hypot = length(vec2f(cr, d));
 
-                let v = fp_this - fp_last;
-                let h = (tan_prev.x * v.y - tan_prev.y * v.x) / cr;
-                let miter_pt = fp_this - tan_next * h;
+                var line_ix: u32;
+                // Given the two tangents `tan_prev` and `tan_next` arranged tail-to-tail, the
+                // miter length ratio is `1 / |cos(theta/2)|`, where `theta` is the angle
+                // between the tangents.
+                //
+                // `hypot` is `|tan_prev| * |tan_next|` (since cr^2 + d^2 = |a|^2 |b|^2) and
+                // `hypot + d` is `2 * |tan_prev| * |tan_next| * cos^2(theta/2)`. After
+                // rearranging, the following tests whether `1/|cos(theta/2)| < miter_limit`.
+                //
+                // Also avoid the miter computation when `cr` is very small; the intersection
+                // math divides by `cr` and becomes numerically unstable for near-collinear
+                // tangents.
+                if 2. * hypot < (hypot + d) * miter_limit * miter_limit
+                    && abs(cr) > TANGENT_THRESH * TANGENT_THRESH
+                {
+                    let p = select(front0, back0, is_backside);
 
-                line_ix = atomicAdd(&bump.lines, 3u);
-                write_line_with_transform(line_ix, path_ix, p, miter_pt, transform);
-
-                // Preserve the contour winding on backside turns by stitching the outer
-                // edge as back0 -> miter -> back1 rather than reversing the join wedge.
-                if is_backside {
-                    back0 = miter_pt;
-                } else {
-                    front0 = miter_pt;
-                }
-
-                write_line_with_transform(line_ix + 1u, path_ix, front0, front1, transform);
-                write_line_with_transform(line_ix + 2u, path_ix, back0, back1, transform);
-            } else {
-                let use_round_overflow = (style_flags & STYLE_FLAGS_JOIN_MITER_ROUND) != 0u;
-                let use_revert_overflow = (style_flags & STYLE_FLAGS_JOIN_MITER_REVERT) != 0u;
-                if use_round_overflow {
-                    let arc_start = select(outer_prev, outer_next, is_backside);
-                    let arc_end = select(outer_next, outer_prev, is_backside);
-                    flatten_arc(path_ix, arc_start, arc_end, p0, abs(atan2(cr, d)), transform);
-                    output_line_with_transform(path_ix, inner_prev, inner_next, transform);
-                } else if use_revert_overflow || abs(cr) <= TANGENT_THRESH * TANGENT_THRESH {
-                    output_two_lines_with_transform(path_ix, front0, front1, back0, back1, transform);
-                } else {
                     let v = outer_next - outer_prev;
                     let h = (tan_prev.x * v.y - tan_prev.y * v.x) / cr;
                     let miter_pt = outer_next - tan_next * h;
-                    let limit = length(n_prev) * miter_limit;
-                    let bevel_distance = length(((outer_prev - p0) + (outer_next - p0)) * 0.5);
-                    let intersection_distance = distance(p0, miter_pt);
-                    if intersection_distance <= bevel_distance + TANGENT_THRESH {
-                        output_two_lines_with_transform(path_ix, front0, front1, back0, back1, transform);
+
+                    line_ix = atomicAdd(&bump.lines, 2u);
+                    write_line_with_transform(line_ix, path_ix, p, miter_pt, transform);
+
+                    // Preserve the contour winding on backside turns by stitching the outer
+                    // edge as back0 -> miter -> back1 rather than reversing the join wedge.
+                    if is_backside {
+                        back0 = miter_pt;
+                        write_line_with_transform(line_ix + 1u, path_ix, back0, back1, transform);
                     } else {
-                        let ratio = (limit - bevel_distance) / (intersection_distance - bevel_distance);
-                        let clipped_prev = outer_prev + ((miter_pt - outer_prev) * ratio);
-                        let clipped_next = outer_next + ((miter_pt - outer_next) * ratio);
-                        let outer_start = select(outer_prev, outer_next, is_backside);
-                        let clipped_start = select(clipped_prev, clipped_next, is_backside);
-                        let clipped_end = select(clipped_next, clipped_prev, is_backside);
-                        let outer_end = select(outer_next, outer_prev, is_backside);
-                        line_ix = atomicAdd(&bump.lines, 4u);
-                        write_line_with_transform(line_ix, path_ix, outer_start, clipped_start, transform);
-                        write_line_with_transform(line_ix + 1u, path_ix, clipped_start, clipped_end, transform);
-                        write_line_with_transform(line_ix + 2u, path_ix, clipped_end, outer_end, transform);
-                        write_line_with_transform(line_ix + 3u, path_ix, inner_prev, inner_next, transform);
+                        front0 = miter_pt;
+                        write_line_with_transform(line_ix + 1u, path_ix, front0, front1, transform);
+                    }
+                } else {
+                    let use_round_overflow = (style_flags & STYLE_FLAGS_JOIN_MITER_ROUND) != 0u;
+                    let use_revert_overflow = (style_flags & STYLE_FLAGS_JOIN_MITER_REVERT) != 0u;
+                    if use_round_overflow {
+                        let arc_start = select(outer_prev, outer_next, is_backside);
+                        let arc_end = select(outer_next, outer_prev, is_backside);
+                        flatten_arc(path_ix, arc_start, arc_end, p0, abs(atan2(cr, d)), arc_detail_scale, transform);
+                    } else if use_revert_overflow || abs(cr) <= TANGENT_THRESH * TANGENT_THRESH {
+                        output_line_with_transform(path_ix, outer_start, outer_end, transform);
+                    } else {
+                        let v = outer_next - outer_prev;
+                        let h = (tan_prev.x * v.y - tan_prev.y * v.x) / cr;
+                        let miter_pt = outer_next - tan_next * h;
+                        let limit = half_width * miter_limit;
+                        let intersection_distance = distance(p0, miter_pt);
+                        if intersection_distance <= bevel_distance + TANGENT_THRESH {
+                            output_line_with_transform(path_ix, outer_start, outer_end, transform);
+                        } else {
+                            let ratio = (limit - bevel_distance) / (intersection_distance - bevel_distance);
+                            let clipped_prev = outer_prev + ((miter_pt - outer_prev) * ratio);
+                            let clipped_next = outer_next + ((miter_pt - outer_next) * ratio);
+                            let clip_outer_start = select(outer_prev, outer_next, is_backside);
+                            let clipped_start = select(clipped_prev, clipped_next, is_backside);
+                            let clipped_end = select(clipped_next, clipped_prev, is_backside);
+                            let clip_outer_end = select(outer_next, outer_prev, is_backside);
+                            line_ix = atomicAdd(&bump.lines, 3u);
+                            write_line_with_transform(line_ix, path_ix, clip_outer_start, clipped_start, transform);
+                            write_line_with_transform(line_ix + 1u, path_ix, clipped_start, clipped_end, transform);
+                            write_line_with_transform(line_ix + 2u, path_ix, clipped_end, clip_outer_end, transform);
+                        }
                     }
                 }
             }
-        }
-        case STYLE_FLAGS_JOIN_ROUND: {
-            var arc0: vec2f;
-            var arc1: vec2f;
-            var other0: vec2f;
-            var other1: vec2f;
-            if cr > 0. {
-                arc0 = back0;
-                arc1 = back1;
-                other0 = front0;
-                other1 = front1;
-            } else {
-                arc0 = front0;
-                arc1 = front1;
-                other0 = back0;
-                other1 = back1;
+            case STYLE_FLAGS_JOIN_ROUND: {
+                let arc_start = select(outer_prev, outer_next, is_backside);
+                let arc_end = select(outer_next, outer_prev, is_backside);
+                flatten_arc(path_ix, arc_start, arc_end, p0, abs(atan2(cr, d)), arc_detail_scale, transform);
             }
-            flatten_arc(path_ix, arc0, arc1, p0, abs(atan2(cr, d)), transform);
-            output_line_with_transform(path_ix, other0, other1, transform);
+            default: {}
         }
-        default: {}
     }
+
+    output_inner_edge_with_transform(
+        path_ix, p0, tan_prev, tan_next, len_prev, len_next, half_width,
+        inner_prev, inner_next, inner_before, inner_after,
+        cr, transform);
 }
 
 fn read_f32_point(ix: u32) -> vec2f {
@@ -845,7 +908,7 @@ fn output_two_lines_with_transform(
 struct NeighboringSegment {
     do_join: bool,
 
-    // Device-space start tangent vector
+    length: f32,
     tangent: vec2f,
 }
 
@@ -860,7 +923,7 @@ fn read_neighboring_segment(ix: u32) -> NeighboringSegment {
     if !is_stroke_cap_marker {
         tangent = cubic_start_tangent(pts.p0, pts.p1, pts.p2, pts.p3);
     }
-    return NeighboringSegment(do_join, tangent);
+    return NeighboringSegment(do_join, length(pts.p3 - pts.p0), tangent);
 }
 
 // `pathdata_base` is decoded once and reused by helpers above.
@@ -903,6 +966,8 @@ fn main(
         if is_stroke {
             let linewidth = bitcast<f32>(scene[config.style_base + style_ix + 1u]);
             let offset = 0.5 * linewidth;
+            let miter_limit = bitcast<f32>(scene[config.style_base + style_ix + 3u]);
+            let arc_detail_scale = bitcast<f32>(scene[config.style_base + style_ix + 4u]);
 
             let is_open = (tag.tag_byte & PATH_TAG_SEG_TYPE) != PATH_TAG_LINETO;
             let is_stroke_cap_marker = (tag.tag_byte & PATH_TAG_SUBPATH_END) != 0u;
@@ -912,7 +977,7 @@ fn main(
                     let tangent = pts.p3 - pts.p0;
                     let offset_tangent = offset * normalize(tangent);
                     let n = offset_tangent.yx * vec2f(-1., 1.);
-                    draw_cap(path_ix, (style_flags & STYLE_FLAGS_START_CAP_MASK) >> 2u,
+                    draw_cap(path_ix, (style_flags & STYLE_FLAGS_START_CAP_MASK) >> 2u, arc_detail_scale,
                              pts.p0, pts.p0 - n, pts.p0 + n, -offset_tangent, transform);
                 } else {
                     // Don't draw anything if the path is closed.
@@ -932,6 +997,8 @@ fn main(
                 if dot(tan_next, tan_next) < TANGENT_THRESH * TANGENT_THRESH {
                     tan_next = vec2(TANGENT_THRESH, 0.);
                 }
+                let len_prev = length(pts.p3 - pts.p0);
+                let len_next = neighbor.length;
                 let n_start = offset * normalize(vec2(-tan_start.y, tan_start.x));
                 let offset_tangent = offset * normalize(tan_prev);
                 let n_prev = offset_tangent.yx * vec2f(-1., 1.);
@@ -942,11 +1009,11 @@ fn main(
                 flatten_euler(pts, path_ix, transform, -offset, pts.p0 - n_start, pts.p3 - n_prev);
 
                 if neighbor.do_join {
-                    draw_join(path_ix, style_flags, pts.p3, tan_prev, tan_next,
-                              n_prev, n_next, transform);
+                    draw_join(path_ix, style_flags, miter_limit, arc_detail_scale,
+                              pts.p3, tan_prev, tan_next, len_prev, len_next, offset, n_prev, n_next, transform);
                 } else {
                     // Draw end cap.
-                    draw_cap(path_ix, (style_flags & STYLE_FLAGS_END_CAP_MASK),
+                    draw_cap(path_ix, (style_flags & STYLE_FLAGS_END_CAP_MASK), arc_detail_scale,
                              pts.p3, pts.p3 + n_prev, pts.p3 - n_prev, offset_tangent, transform);
                 }
             }

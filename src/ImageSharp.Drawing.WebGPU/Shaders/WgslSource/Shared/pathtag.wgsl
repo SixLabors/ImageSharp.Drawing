@@ -21,11 +21,10 @@ const PATH_TAG_STYLE = 0x40u;
 const PATH_TAG_SUBPATH_END = 4u;
 
 // Size of the `Style` data structure in words
-const STYLE_SIZE_IN_WORDS: u32 = 3u;
+const STYLE_SIZE_IN_WORDS: u32 = 5u;
 
 const STYLE_FLAGS_STYLE: u32 = 0x80000000u;
 const STYLE_FLAGS_FILL: u32 = 0x40000000u;
-const STYLE_MITER_LIMIT_MASK: u32 = 0xFFFFu;
 
 const STYLE_FLAGS_START_CAP_MASK: u32 = 0x0C000000u;
 const STYLE_FLAGS_END_CAP_MASK: u32 = 0x03000000u;

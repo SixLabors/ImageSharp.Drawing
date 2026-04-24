@@ -1039,8 +1039,6 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
-
         using Image<TPixel> referenceImage = provider.GetImage();
         RenderWithDefaultBackend(referenceImage, drawingOptions, DrawReference);
 
@@ -1052,6 +1050,8 @@ public partial class WebGPUDrawingBackendTests
             $"DrawPath_Stroke_LineJoin_{lineJoin}",
             defaultComparisonImage,
             nativeSurfaceComparisonImage);
+
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
         AssertBackendPairReferenceOutputs(
             provider,
             $"DrawPath_Stroke_LineJoin_{lineJoin}",
@@ -1109,8 +1109,6 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0103F);
-
         using Image<TPixel> referenceImage = provider.GetImage();
         RenderWithDefaultBackend(referenceImage, drawingOptions, DrawReference);
 
@@ -1122,6 +1120,8 @@ public partial class WebGPUDrawingBackendTests
             $"DrawPath_Stroke_LineCap_{lineCap}",
             defaultComparisonImage,
             nativeSurfaceComparisonImage);
+
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0103F);
         AssertBackendPairReferenceOutputs(
             provider,
             $"DrawPath_Stroke_LineCap_{lineCap}",

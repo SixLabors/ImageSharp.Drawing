@@ -1539,9 +1539,7 @@ internal static partial class DefaultRasterizer
             this.Width = pen.StrokeWidth * widthScale;
             this.LineCap = pen.StrokeOptions.LineCap;
             this.LineJoin = pen.StrokeOptions.LineJoin;
-            this.InnerJoin = pen.StrokeOptions.InnerJoin;
             this.MiterLimit = pen.StrokeOptions.MiterLimit;
-            this.InnerMiterLimit = pen.StrokeOptions.InnerMiterLimit;
             this.ArcDetailScale = pen.StrokeOptions.ArcDetailScale;
         }
 
@@ -1566,19 +1564,9 @@ internal static partial class DefaultRasterizer
         public LineJoin LineJoin { get; }
 
         /// <summary>
-        /// Gets the inner join style applied to contour corners.
-        /// </summary>
-        public InnerJoin InnerJoin { get; }
-
-        /// <summary>
         /// Gets the outer miter limit expressed in stroke-width units.
         /// </summary>
         public double MiterLimit { get; }
-
-        /// <summary>
-        /// Gets the inner miter limit expressed in stroke-width units.
-        /// </summary>
-        public double InnerMiterLimit { get; }
 
         /// <summary>
         /// Gets the round join/cap tessellation detail scale.

@@ -84,7 +84,6 @@ internal static class StrokedShapeGenerator
         {
             ArcDetailScale = options.ArcDetailScale,
             MiterLimit = options.MiterLimit,
-            InnerMiterLimit = options.InnerMiterLimit,
             LineJoin = options.LineJoin switch
             {
                 LineJoin.MiterRound => PolygonClipper.LineJoin.MiterRound,
@@ -92,14 +91,6 @@ internal static class StrokedShapeGenerator
                 LineJoin.Round => PolygonClipper.LineJoin.Round,
                 LineJoin.MiterRevert => PolygonClipper.LineJoin.MiterRevert,
                 _ => PolygonClipper.LineJoin.Miter,
-            },
-
-            InnerJoin = options.InnerJoin switch
-            {
-                InnerJoin.Round => PolygonClipper.InnerJoin.Round,
-                InnerJoin.Miter => PolygonClipper.InnerJoin.Miter,
-                InnerJoin.Jag => PolygonClipper.InnerJoin.Jag,
-                _ => PolygonClipper.InnerJoin.Bevel,
             },
 
             LineCap = options.LineCap switch
