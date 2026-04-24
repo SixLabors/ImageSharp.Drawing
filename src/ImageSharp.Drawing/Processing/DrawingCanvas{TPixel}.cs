@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// A drawing canvas over a frame target.
 /// </summary>
 /// <typeparam name="TPixel">The pixel format.</typeparam>
-public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
+public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     where TPixel : unmanaged, IPixel<TPixel>
 {
     /// <summary>
