@@ -140,6 +140,16 @@ fn write_grad(ty: u32, index: u32, info_offset: u32) {
     cmd_offset += 3u;
 }
 
+fn write_path_grad(data_offset: u32, edge_count: u32, flags: u32, draw_flags: u32) {
+    alloc_cmd(5u);
+    ptcl[cmd_offset] = CMD_PATH_GRAD;
+    ptcl[cmd_offset + 1u] = data_offset;
+    ptcl[cmd_offset + 2u] = edge_count;
+    ptcl[cmd_offset + 3u] = flags;
+    ptcl[cmd_offset + 4u] = draw_flags;
+    cmd_offset += 5u;
+}
+
 fn write_image(info_offset: u32) {
     alloc_cmd(2u);
     ptcl[cmd_offset] = CMD_IMAGE;
@@ -476,7 +486,11 @@ fn main(
                         let index = scene[dd];
                         let info_offset = di + 1u;
                         write_grad(CMD_SWEEP_GRAD, index, info_offset);
-                    }                    
+                    }
+                    case DRAWTAG_FILL_PATH_GRADIENT: {
+                        write_path(tile, tile_ix, draw_flags);
+                        write_path_grad(config.path_gradient_data_base + scene[dd], scene[dd + 1u], scene[dd + 2u], draw_flags);
+                    }
                     case DRAWTAG_FILL_IMAGE: {
                         write_path(tile, tile_ix, draw_flags);
                         write_image(di + 1u);

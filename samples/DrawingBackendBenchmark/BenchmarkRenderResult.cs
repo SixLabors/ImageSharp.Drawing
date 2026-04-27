@@ -14,11 +14,10 @@ internal sealed class BenchmarkRenderResult : IDisposable
     /// <summary>
     /// Initializes a new instance of the <see cref="BenchmarkRenderResult"/> class.
     /// </summary>
-    public BenchmarkRenderResult(double renderMilliseconds, Image<Bgra32>? preview, bool usedGpu = false, string? backendFailure = null)
+    public BenchmarkRenderResult(double renderMilliseconds, Image<Bgra32>? preview, string? backendFailure = null)
     {
         this.RenderMilliseconds = renderMilliseconds;
         this.Preview = preview;
-        this.UsedGpu = usedGpu;
         this.BackendFailure = backendFailure;
     }
 
@@ -33,12 +32,7 @@ internal sealed class BenchmarkRenderResult : IDisposable
     public Image<Bgra32>? Preview { get; }
 
     /// <summary>
-    /// Gets a value indicating whether the WebGPU backend completed on the staged GPU path.
-    /// </summary>
-    public bool UsedGpu { get; }
-
-    /// <summary>
-    /// Gets the backend failure or fallback reason, when one was reported.
+    /// Gets the backend failure reason, when one was reported.
     /// </summary>
     public string? BackendFailure { get; }
 

@@ -58,7 +58,7 @@ internal static unsafe class WebGPUSceneResources
         }
 
         // Compute byte lengths for the two variable-size data buffers.
-        nuint infoBinDataByteLength = checked(GetBindingByteLength<uint>(scene.InfoWordCount) + config.BufferSizes.BinData.ByteLength + config.BufferSizes.BinHeaders.ByteLength);
+        nuint infoBinDataByteLength = checked(GetBindingByteLength<uint>(scene.InfoBufferWordCount) + config.BufferSizes.BinData.ByteLength + config.BufferSizes.BinHeaders.ByteLength);
         nuint sceneByteLength = GetBindingByteLength<uint>(scene.SceneWordCount);
 
         // Reuse arena buffers if all capacities fit this scene.
@@ -75,6 +75,7 @@ internal static unsafe class WebGPUSceneResources
 
             GpuSceneConfig header = CreateHeader(scene, config, baseColor);
             flushContext.Api.QueueWriteBuffer(reuseQueue, arena.HeaderBuffer, 0, &header, (nuint)sizeof(GpuSceneConfig));
+            UploadPathGradientData(flushContext, arena.InfoBinDataBuffer, scene.InfoWordCount, scene.PathGradientData.Span);
 
             resources = new WebGPUSceneResourceSet(
                 arena.HeaderBuffer,
@@ -107,6 +108,7 @@ internal static unsafe class WebGPUSceneResources
         if (!TryCreateAndUploadCombinedInfoBinDataBuffer(
                 flushContext,
                 scene.InfoWordCount,
+                scene.PathGradientData.Span,
                 checked(config.BufferSizes.BinData.ByteLength + config.BufferSizes.BinHeaders.ByteLength),
                 out WgpuBuffer* infoBinDataBuffer,
                 out error))
@@ -260,6 +262,7 @@ internal static unsafe class WebGPUSceneResources
             scene.Layout.PathCount,
             scene.Layout.ClipCount,
             scene.Layout.BinDataStart,
+            scene.Layout.PathGradientDataBase,
             checked((uint)scene.TileCountX * config.ChunkWindow.TileBufferHeight * 64U),
             scene.Layout.PathTagBase,
             scene.Layout.PathDataBase,
@@ -540,11 +543,12 @@ internal static unsafe class WebGPUSceneResources
     private static bool TryCreateAndUploadCombinedInfoBinDataBuffer(
         WebGPUFlushContext flushContext,
         int infoWordCount,
+        ReadOnlySpan<uint> pathGradientData,
         nuint dynamicBinByteLength,
         out WgpuBuffer* buffer,
         out string? error)
     {
-        nuint infoByteLength = checked((nuint)infoWordCount * (nuint)Unsafe.SizeOf<uint>());
+        nuint infoByteLength = checked((nuint)(infoWordCount + pathGradientData.Length) * (nuint)Unsafe.SizeOf<uint>());
         nuint totalByteLength = checked(infoByteLength + dynamicBinByteLength);
         if (totalByteLength == 0)
         {
@@ -568,8 +572,30 @@ internal static unsafe class WebGPUSceneResources
             return false;
         }
 
+        UploadPathGradientData(flushContext, buffer, infoWordCount, pathGradientData);
         error = null;
         return true;
+    }
+
+    private static void UploadPathGradientData(
+        WebGPUFlushContext flushContext,
+        WgpuBuffer* buffer,
+        int infoWordCount,
+        ReadOnlySpan<uint> pathGradientData)
+    {
+        if (pathGradientData.IsEmpty)
+        {
+            return;
+        }
+
+        nuint offset = checked((nuint)infoWordCount * (nuint)Unsafe.SizeOf<uint>());
+        nuint byteLength = checked((nuint)pathGradientData.Length * (nuint)Unsafe.SizeOf<uint>());
+
+        using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
+        fixed (uint* dataPtr = pathGradientData)
+        {
+            flushContext.Api.QueueWriteBuffer((Queue*)queueReference.Handle, buffer, offset, dataPtr, byteLength);
+        }
     }
 
     /// <summary>
@@ -1360,6 +1386,7 @@ internal readonly struct GpuSceneLayout
         uint pathCount,
         uint clipCount,
         uint binDataStart,
+        uint pathGradientDataBase,
         uint ptclDynamicStart,
         uint pathTagBase,
         uint pathDataBase,
@@ -1372,6 +1399,7 @@ internal readonly struct GpuSceneLayout
         this.PathCount = pathCount;
         this.ClipCount = clipCount;
         this.BinDataStart = binDataStart;
+        this.PathGradientDataBase = pathGradientDataBase;
         this.PtclDynamicStart = ptclDynamicStart;
         this.PathTagBase = pathTagBase;
         this.PathDataBase = pathDataBase;
@@ -1388,6 +1416,8 @@ internal readonly struct GpuSceneLayout
     public uint ClipCount { get; }
 
     public uint BinDataStart { get; }
+
+    public uint PathGradientDataBase { get; }
 
     public uint PtclDynamicStart { get; }
 
@@ -1509,6 +1539,7 @@ internal static class GpuSceneDrawTag
     public const uint FillRadGradient = 0x29CU;
     public const uint FillEllipticGradient = 0x1DCU;
     public const uint FillSweepGradient = 0x254U;
+    public const uint FillPathGradient = 0x50U;
     public const uint FillImage = 0x294U;
     public const uint BeginClip = 0x49U;
     public const uint EndClip = 0x21U;

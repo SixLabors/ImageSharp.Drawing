@@ -61,8 +61,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.05F);
         AssertBackendPairReferenceOutputs(provider, "FillPath", defaultImage, nativeSurfaceImage);
-
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -96,8 +94,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_AliasedThreshold", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_AliasedThreshold", defaultImage, nativeSurfaceImage);
-
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -135,8 +131,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_ImageBrush", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_ImageBrush", defaultImage, nativeSurfaceImage);
-
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -195,8 +189,6 @@ public partial class WebGPUDrawingBackendTests
 
         DebugSaveBackendPair(provider, "FillPath_NonZeroNestedContours", defaultImage, nativeSurfaceImage);
 
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
-
         // Non-zero winding semantics must still match on an interior point.
         Assert.Equal(defaultImage[128, 128], nativeSurfaceImage[128, 128]);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
@@ -251,8 +243,6 @@ public partial class WebGPUDrawingBackendTests
             $"FillPath_GraphicsOptions_SolidBrush_{colorMode}_{alphaMode}",
             defaultImage,
             nativeSurfaceImage);
-
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -304,8 +294,6 @@ public partial class WebGPUDrawingBackendTests
             $"FillPath_GraphicsOptions_ImageBrush_{colorMode}_{alphaMode}",
             defaultImage,
             nativeSurfaceImage);
-
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -349,8 +337,6 @@ public partial class WebGPUDrawingBackendTests
             new Rectangle(8, 12, defaultImage.Width - 16, Math.Min(220, defaultImage.Height - 12)));
         AssertBackendPairSimilarityInRegion(defaultImage, nativeSurfaceImage, textRegion, 0.0157F);
         AssertBackendPairReferenceOutputs(provider, "DrawText", defaultImage, nativeSurfaceImage);
-
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -388,7 +374,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_NativeSurfaceParity", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_NativeSurfaceParity", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -428,7 +413,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_NativeSurfaceSubregionParity", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_NativeSurfaceSubregionParity", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     /// <summary>
@@ -489,7 +473,6 @@ public partial class WebGPUDrawingBackendTests
         using Image<TPixel> nativeSurfaceImage = renderTarget.Readback();
         DebugSaveBackendPair(provider, "Fill_RepeatedFrames", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -521,7 +504,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "Process", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0516F);
         AssertBackendPairReferenceOutputs(provider, "Process", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -561,8 +543,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "RepeatedGlyphs", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 2F);
         AssertBackendPairReferenceOutputs(provider, "RepeatedGlyphs", defaultImage, nativeSurfaceImage);
-
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -633,7 +613,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "RepeatedGlyphs_AfterClear", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 2F);
         AssertBackendPairReferenceOutputs(provider, "RepeatedGlyphs_AfterClear", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     private static void RenderWithDefaultBackend<TPixel>(Image<TPixel> image, DrawingOptions options, Action<DrawingCanvas<TPixel>> drawAction)
@@ -752,8 +731,7 @@ public partial class WebGPUDrawingBackendTests
         WebGPUDrawingBackend backend,
         DrawingOptions options,
         Action<DrawingCanvas<TPixel>> drawAction,
-        Image<TPixel> initialImage = null,
-        Action<WebGPUDrawingBackend> assertBackend = null)
+        Image<TPixel> initialImage = null)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using WebGPURenderTarget<TPixel> renderTarget = new(width, height);
@@ -772,7 +750,6 @@ public partial class WebGPUDrawingBackendTests
         using DrawingCanvas<TPixel> canvas = new(configuration, options, backend, renderTarget.NativeFrame);
         drawAction(canvas);
         canvas.Flush();
-        assertBackend?.Invoke(backend);
 
         return renderTarget.Readback();
     }
@@ -843,23 +820,6 @@ public partial class WebGPUDrawingBackendTests
         AssertBackendPairSimilarity(defaultRegion, nativeRegion, defaultTolerancePercent);
     }
 
-    private static void AssertGpuPathWhenRequired(WebGPUDrawingBackend backend)
-    {
-        bool requireGpuPath = string.Equals(
-            Environment.GetEnvironmentVariable("IMAGESHARP_REQUIRE_WEBGPU"),
-            "1",
-            StringComparison.Ordinal);
-
-        if (!requireGpuPath)
-        {
-            return;
-        }
-
-        Assert.True(
-            backend.DiagnosticLastFlushUsedGPU,
-            backend.DiagnosticLastSceneFailure ?? "The last flush did not use WebGPU.");
-    }
-
     [WebGPUTheory]
     [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32)]
     public void DrawPath_Stroke_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
@@ -894,7 +854,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "DrawPath_Stroke", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
         AssertBackendPairReferenceOutputs(provider, "DrawPath_Stroke", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     public static TheoryData<LineJoin> LineJoinValues { get; } = new()
@@ -968,7 +927,6 @@ public partial class WebGPUDrawingBackendTests
             $"DrawPath_Stroke_LineJoin_{lineJoin}",
             defaultComparisonImage,
             nativeSurfaceComparisonImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
 
         static Image<TPixel> CreateJoinComparisonImage(Image<TPixel> reference, Image<TPixel> rendered)
         {
@@ -1038,7 +996,6 @@ public partial class WebGPUDrawingBackendTests
             $"DrawPath_Stroke_LineCap_{lineCap}",
             defaultComparisonImage,
             nativeSurfaceComparisonImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
 
         static Image<TPixel> CreateLineCapComparisonImage(Image<TPixel> reference, Image<TPixel> rendered)
         {
@@ -1087,8 +1044,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_MultipleSeparate", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_MultipleSeparate", defaultImage, nativeSurfaceImage);
-
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -1145,7 +1100,6 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, "FillPath_EvenOdd", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
 
         // EvenOdd with same winding inner contour should create a hole at center.
         Assert.Equal(defaultImage[128, 128], nativeSurfaceImage[128, 128]);
@@ -1184,7 +1138,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_LargeTileCount", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_LargeTileCount", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -1200,9 +1153,6 @@ public partial class WebGPUDrawingBackendTests
         Brush brush = Brushes.Solid(Color.Black);
         IPath denseGrid = CreateLargeSceneDenseRectangleGridPath();
         void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, denseGrid);
-        static void AssertBackend(WebGPUDrawingBackend backend) => Assert.True(
-                backend.DiagnosticLastFlushUsedGPU,
-                backend.DiagnosticLastSceneFailure ?? "The last flush did not use WebGPU.");
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1215,13 +1165,11 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceBackend,
             drawingOptions,
             DrawAction,
-            nativeSurfaceInitialImage,
-            AssertBackend);
+            nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, "FillPath_LargeScene", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_LargeScene", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -1247,13 +1195,6 @@ public partial class WebGPUDrawingBackendTests
             }
         }
 
-        static void AssertBackend(WebGPUDrawingBackend backend)
-        {
-            Assert.True(
-                backend.DiagnosticLastFlushUsedGPU,
-                backend.DiagnosticLastSceneFailure ?? "The last flush did not use WebGPU.");
-        }
-
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
@@ -1264,13 +1205,11 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceBackend,
             drawingOptions,
             DrawAction,
-            nativeSurfaceInitialImage,
-            AssertBackend);
+            nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, "SaveLayer_ClipReduce", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
         AssertBackendPairReferenceOutputs(provider, "SaveLayer_ClipReduce", defaultImage, nativeSurfaceImage, 0.0006F);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -1327,7 +1266,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "MultipleFlushes", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
         AssertBackendPairReferenceOutputs(provider, "MultipleFlushes", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -1373,7 +1311,6 @@ public partial class WebGPUDrawingBackendTests
             defaultImage,
             nativeSurfaceImage,
             tolerantPercentage: 0.0007F);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -1412,7 +1349,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_LinearGradient_Repeat", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.02F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_LinearGradient_Repeat", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -1451,7 +1387,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_RadialGradient_Single", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.02F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_RadialGradient_Single", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -1492,7 +1427,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_RadialGradient_TwoCircle", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0171F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_RadialGradient_TwoCircle", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -1532,7 +1466,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_EllipticGradient", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.035F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_EllipticGradient", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -1574,7 +1507,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_SweepGradient", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0304F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_SweepGradient", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -1624,13 +1556,11 @@ public partial class WebGPUDrawingBackendTests
             defaultImage,
             nativeSurfaceImage,
             tolerantPercentage: 0.0280F);
-
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
     [WithBasicTestPatternImages(384, 256, PixelTypes.Rgba32)]
-    public void FillPath_WithPathGradientBrush_FallsBackCleanly<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillPath_WithPathGradientBrush_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         DrawingOptions drawingOptions = new()
@@ -1681,13 +1611,8 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_PathGradient_Fallback", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, "FillPath_PathGradient", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
-
-        Assert.False(nativeSurfaceBackend.DiagnosticLastFlushUsedGPU);
-        Assert.Equal(
-            "The staged WebGPU scene pipeline does not support brush type 'PathGradientBrush'.",
-            nativeSurfaceBackend.DiagnosticLastSceneFailure);
     }
 
     [WebGPUTheory]
@@ -1721,7 +1646,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_PatternBrush_Horizontal", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.045F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_PatternBrush_Horizontal", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -1755,7 +1679,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_PatternBrush_Diagonal", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_PatternBrush_Diagonal", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -1789,7 +1712,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_RecolorBrush", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_RecolorBrush", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -1829,7 +1751,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_LinearGradient_ThreePoint", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0065F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_LinearGradient_ThreePoint", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -1870,7 +1791,6 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_EllipticGradient_Reflect", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0398F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_EllipticGradient_Reflect", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]
@@ -2101,7 +2021,6 @@ the evil Galactic Empire.";
         // platforms, so using a higher tolerance here to avoid noise.
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0474F);
         AssertBackendPairReferenceOutputs(provider, "StarWarsCrawl", defaultImage, nativeSurfaceImage);
-        AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
     [WebGPUTheory]

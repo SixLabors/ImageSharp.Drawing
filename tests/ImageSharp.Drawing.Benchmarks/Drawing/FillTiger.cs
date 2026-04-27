@@ -451,9 +451,7 @@ public class FillTiger
 
         Console.WriteLine();
         Console.WriteLine($"=== WebGPU flush diagnostics (dim={bench.Dimensions}) ===");
-        Console.WriteLine($"  UsedGPU      : {backend.DiagnosticLastFlushUsedGPU}");
         Console.WriteLine($"  UsedChunking : {backend.DiagnosticLastFlushUsedChunking} (binding failure: {backend.DiagnosticLastChunkingBindingFailure})");
-        Console.WriteLine($"  SceneFailure : {backend.DiagnosticLastSceneFailure ?? "<none>"}");
         Console.WriteLine("=== end WebGPU diagnostics ===");
         Console.WriteLine();
     }

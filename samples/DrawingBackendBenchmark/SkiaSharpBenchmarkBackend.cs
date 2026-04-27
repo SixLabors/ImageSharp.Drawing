@@ -83,7 +83,7 @@ internal sealed class SkiaSharpBenchmarkBackend : IBenchmarkBackend
             });
         }
 
-        return new BenchmarkRenderResult(stopwatch.Elapsed.TotalMilliseconds, preview, usedGpu: this.context != null);
+        return new BenchmarkRenderResult(stopwatch.Elapsed.TotalMilliseconds, preview);
     }
 
     public override string ToString() => this.context != null ? "SkiaSharp (GPU)" : "SkiaSharp (CPU)";

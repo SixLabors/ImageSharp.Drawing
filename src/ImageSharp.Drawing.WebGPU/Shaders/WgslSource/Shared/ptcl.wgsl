@@ -24,6 +24,7 @@ const CMD_IMAGE = 9u;
 const CMD_BEGIN_CLIP = 10u;
 const CMD_END_CLIP = 11u;
 const CMD_JUMP = 12u;
+const CMD_PATH_GRAD = 16u;
 
 // The individual PTCL structs are written here, but read/write is by
 // hand in the relevant shaders
@@ -88,6 +89,13 @@ struct CmdSweepGrad {
     xlat: vec2<f32>,
     t0: f32,
     t1: f32,
+}
+
+struct CmdPathGrad {
+    data_offset: u32,
+    edge_count: u32,
+    flags: u32,
+    draw_flags: u32,
 }
 
 struct CmdImage {

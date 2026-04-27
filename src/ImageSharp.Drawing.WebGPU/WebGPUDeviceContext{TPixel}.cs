@@ -124,9 +124,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
 
     /// <summary>
     /// Gets the WebGPU drawing backend owned by this context.
-    /// Use this to inspect per-flush diagnostics such as
-    /// <see cref="WebGPUDrawingBackend.DiagnosticLastFlushUsedGPU"/> and
-    /// <see cref="WebGPUDrawingBackend.DiagnosticLastSceneFailure"/>.
+    /// Use this to inspect per-flush diagnostics for chunked rendering.
     /// </summary>
     public WebGPUDrawingBackend Backend { get; }
 

@@ -2,9 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 // Fine rasterizer.
-//
-// To enable multisampled rendering, turn on both the msaa ifdef and one of msaa8
-// or msaa16.
 
 struct Tile {
     backdrop: i32,
@@ -52,666 +49,6 @@ var image_atlas: texture_2d<f32>;
 
 @group(0) @binding(8)
 var backdrop_texture: texture_2d<f32>;
-
-// MSAA-only bindings and utilities
-#ifdef msaa
-
-const MASK_LUT_INDEX: u32 = 8;
-
-#ifdef msaa8
-const MASK_WIDTH = 32u;
-const MASK_HEIGHT = 32u;
-const SH_SAMPLES_SIZE = 512u;
-const SAMPLE_WORDS_PER_PIXEL = 2u;
-// This might be better in uniform, but that has 16 byte alignment
-@group(0) @binding(MASK_LUT_INDEX)
-var<storage> mask_lut: array<u32, 256u>;
-#endif
-
-#ifdef msaa16
-const MASK_WIDTH = 64u;
-const MASK_HEIGHT = 64u;
-const SH_SAMPLES_SIZE = 1024u;
-const SAMPLE_WORDS_PER_PIXEL = 4u;
-@group(0) @binding(MASK_LUT_INDEX)
-var<storage> mask_lut: array<u32, 2048u>;
-#endif
-
-const WG_SIZE = 64u;
-var<workgroup> sh_count: array<u32, WG_SIZE>;
-
-// This array contains the winding number of the top left corner of each
-// 16 pixel wide row of pixels, relative to the top left corner of the row
-// immediately above.
-//
-// The values are stored packed, as 4 8-bit subwords in a 32 bit word.
-// The values are biased signed integers, with 0x80 representing a winding
-// number of 0, so that the range of -128 to 127 (inclusive) can be stored
-// without carry.
-//
-// For the even-odd case, the same storage is repurposed, so that a single
-// word contains 16 one-bit winding parity values packed to the word.
-var<workgroup> sh_winding_y: array<atomic<u32>, 4u>;
-// This array contains the winding number of the top left corner of each
-// 16 pixel wide row of pixels, relative to the top left corner of the tile.
-// It is expanded from sh_winding_y by inclusive prefix sum.
-var<workgroup> sh_winding_y_prefix: array<atomic<u32>, 4u>;
-// This array contains winding numbers of the top left corner of each
-// pixel, relative to the top left corner of the enclosing 16 pixel
-// wide row.
-//
-// During winding number accumulation, it stores a delta (winding number
-// relative to the pixel immediately to the left), then expanded using
-// prefix sum and reusing the same storage.
-//
-// The encoding and packing is the same as `sh_winding_y`. For the even-odd
-// case, only the first 16 values are used, and each word stores packed
-// parity values for one row of pixels.
-var<workgroup> sh_winding: array<atomic<u32>, 64u>;
-// This array contains winding numbers of multiple sample points within
-// a pixel, relative to the winding number of the top left corner of the
-// pixel. The encoding and packing is the same as `sh_winding_y`.
-var<workgroup> sh_samples: array<atomic<u32>, SH_SAMPLES_SIZE>;
-
-// number of integer cells spanned by interval defined by a, b
-fn span(a: f32, b: f32) -> u32 {
-    return u32(max(ceil(max(a, b)) - floor(min(a, b)), 1.0));
-}
-
-const SEG_SIZE = 5u;
-
-// See cpu_shaders/util.rs for explanation of these.
-const ONE_MINUS_ULP: f32 = 0.99999994;
-const ROBUST_EPSILON: f32 = 2e-7;
-
-// Multisampled path rendering algorithm.
-//
-// FIXME: This could return an array when https://github.com/gfx-rs/naga/issues/1930 is fixed.
-//
-// Generally, this algorithm works in an accumulation phase followed by a
-// resolving phase, with arrays in workgroup shared memory accumulating
-// winding number deltas as the results of edge crossings detected in the
-// path segments. Accumulation is in two stages: first a counting stage
-// which computes the number of pixels touched by each line segment (with
-// each thread processing one line segment), then a stage in which the
-// deltas are bumped. Separating these two is a partition-wide prefix sum
-// and a binary search to assign the work to threads in a load-balanced
-// manner.
-//
-// The resolving phase is also two stages: prefix sums in both x and y
-// directions, then counting nonzero winding numbers for all samples within
-// all pixels in the tile.
-//
-// A great deal of SIMD within a register (SWAR) logic is used, as there
-// are a great many winding numbers to be computed. The interested reader
-// is invited to study the even-odd case first, as there only one bit is
-// needed to represent a winding number parity, thus there is a lot less
-// bit shifting, and less shuffling altogether.
-fn fill_path_ms(fill: CmdFill, local_id: vec2<u32>, result: ptr<function, array<f32, PIXELS_PER_THREAD>>) {
-    let even_odd = (fill.size_and_rule & 1u) != 0u;
-    // This isn't a divergent branch because the fill parameters are workgroup uniform,
-    // provably so because the ptcl buffer is bound read-only.
-    if even_odd {
-        fill_path_ms_evenodd(fill, local_id, result);
-        return;
-    }
-    let n_segs = fill.size_and_rule >> 1u;
-    let th_ix = local_id.y * (TILE_WIDTH / PIXELS_PER_THREAD) + local_id.x;
-    // Initialize winding number arrays to a winding number of 0, which is 0x80 in an
-    // 8 bit biased signed integer encoding.
-    if th_ix < 64u {
-        if th_ix < 4u {
-            atomicStore(&sh_winding_y[th_ix], 0x80808080u);
-        }
-        atomicStore(&sh_winding[th_ix], 0x80808080u);
-    }
-    let sample_count = PIXELS_PER_THREAD * SAMPLE_WORDS_PER_PIXEL;
-    for (var i = 0u; i < sample_count; i++) {
-        atomicStore(&sh_samples[th_ix * sample_count + i], 0x80808080u);
-    }
-    workgroupBarrier();
-    let n_batch = (n_segs + (WG_SIZE - 1u)) / WG_SIZE;
-    for (var batch = 0u; batch < n_batch; batch++) {
-        let seg_ix = batch * WG_SIZE + th_ix;
-        let seg_off = fill.seg_data + seg_ix;
-        var count = 0u;
-        let slice_size = min(n_segs - batch * WG_SIZE, WG_SIZE);
-        // TODO: might save a register rewriting this in terms of limit
-        if th_ix < slice_size {
-            let segment = segments[seg_off];
-            let xy0 = segment.point0;
-            let xy1 = segment.point1;
-            var y_edge_f = f32(TILE_HEIGHT);
-            var delta = select(-1, 1, xy1.x <= xy0.x);
-            if xy0.x == 0.0 {
-                y_edge_f = xy0.y;
-            } else if xy1.x == 0.0 {
-                y_edge_f = xy1.y;
-            }
-            // discard horizontal lines aligned to pixel grid
-            if !(xy0.y == xy1.y && xy0.y == floor(xy0.y)) {
-                count = span(xy0.x, xy1.x) + span(xy0.y, xy1.y) - 1u;
-            }
-            let y_edge = u32(ceil(y_edge_f));
-            if y_edge < TILE_HEIGHT {
-                atomicAdd(&sh_winding_y[y_edge >> 2u], u32(delta) << ((y_edge & 3u) << 3u));
-            }
-        }
-        // workgroup prefix sum of counts
-        sh_count[th_ix] = count;
-        let lg_n = firstLeadingBit(slice_size * 2u - 1u);
-        for (var i = 0u; i < lg_n; i++) {
-            workgroupBarrier();
-            if th_ix >= 1u << i {
-                count += sh_count[th_ix - (1u << i)];
-            }
-            workgroupBarrier();
-            sh_count[th_ix] = count;
-        }
-        let total = workgroupUniformLoad(&sh_count[slice_size - 1u]);
-        for (var i = th_ix; i < total; i += WG_SIZE) {
-            // binary search to find pixel
-            var lo = 0u;
-            var hi = slice_size;
-            let goal = i;
-            while hi > lo + 1u {
-                let mid = (lo + hi) >> 1u;
-                if goal >= sh_count[mid - 1u] {
-                    lo = mid;
-                } else {
-                    hi = mid;
-                }
-            }
-            let el_ix = lo;
-            let last_pixel = i + 1u == sh_count[el_ix];
-            let sub_ix = i - select(0u, sh_count[el_ix - 1u], el_ix > 0u);
-            let seg_off = fill.seg_data + batch * WG_SIZE + el_ix;
-            let segment = segments[seg_off];
-            // Coordinates are relative to tile origin
-            let xy0_in = segment.point0;
-            let xy1_in = segment.point1;
-            let is_down = xy1_in.y >= xy0_in.y;
-            let xy0 = select(xy1_in, xy0_in, is_down);
-            let xy1 = select(xy0_in, xy1_in, is_down);
-
-            // Set up data for line rasterization
-            // Note: this is duplicated work if total count exceeds a workgroup.
-            // One alternative is to compute it in a separate dispatch.
-            let dx = abs(xy1.x - xy0.x);
-            let dy = xy1.y - xy0.y;
-            let idxdy = 1.0 / (dx + dy);
-            var a = dx * idxdy;
-            // is_positive_slope is true for \ and | slopes, false for /. For
-            // horizontal lines, it follows the original data.
-            let is_positive_slope = xy1.x >= xy0.x;
-            let x_sign = select(-1.0, 1.0, is_positive_slope);
-            let xt0 = floor(xy0.x * x_sign);
-            let c = xy0.x * x_sign - xt0;
-            let y0i = floor(xy0.y);
-            let ytop = y0i + 1.0;
-            let b = min((dy * c + dx * (ytop - xy0.y)) * idxdy, ONE_MINUS_ULP);
-            let count_x = span(xy0.x, xy1.x) - 1u;
-            let count = count_x + span(xy0.y, xy1.y);
-            let robust_err = floor(a * (f32(count) - 1.0) + b) - f32(count_x);
-            if robust_err != 0.0 {
-                a -= ROBUST_EPSILON * sign(robust_err);
-            }
-            let x0i = i32(xt0 * x_sign + 0.5 * (x_sign - 1.0));
-            // Use line equation to plot pixel coordinates
-
-            let zf = a * f32(sub_ix) + b;
-            let z = floor(zf);
-            let x = x0i + i32(x_sign * z);
-            let y = i32(y0i) + i32(sub_ix) - i32(z);
-            // is_delta captures whether the line crosses the top edge of this
-            // pixel. If so, then a delta is added to `sh_winding`, followed by
-            // a prefix sum, so that a winding number delta is applied to all
-            // pixels to the right of this one.
-            var is_delta: bool;
-            // is_bump captures whether x0 crosses the left edge of this pixel.
-            var is_bump = false;
-            let zp = floor(a * f32(sub_ix - 1u) + b);
-            if sub_ix == 0u {
-                // The first (top-most) pixel in the line. It is considered to be
-                // a line crossing when it touches the top of the pixel.
-                //
-                // Note: horizontal lines aligned to the pixel grid have already
-                // been discarded.
-                is_delta = y0i == xy0.y;
-                // The pixel is counted as a left edge crossing only at the left
-                // edge of the tile (and when it is not the top left corner,
-                // using logic analogous to tiling).
-                is_bump = xy0.x == 0.0 && y0i != xy0.y;
-            } else {
-                // Pixels other than the first are a crossing at the top or on
-                // the side, based on the conservative line rasterization. When
-                // positive slope, the crossing is on the left.
-                is_delta = z == zp;
-                is_bump = is_positive_slope && !is_delta;
-            }
-            let pix_ix = u32(y) * TILE_WIDTH + u32(x);
-            if u32(x) < TILE_WIDTH - 1u && u32(y) < TILE_HEIGHT {
-                let delta_pix = pix_ix + 1u;
-                if is_delta {
-                    let delta = select(u32(-1i), 1u, is_down) << ((delta_pix & 3u) << 3u);
-                    atomicAdd(&sh_winding[delta_pix >> 2u], delta);
-                }
-            }
-            // Apply sample mask
-            let mask_block = u32(is_positive_slope) * (MASK_WIDTH * MASK_HEIGHT / 2u);
-            let half_height = f32(MASK_HEIGHT / 2u);
-            let mask_row = floor(min(a * half_height, half_height - 1.0)) * f32(MASK_WIDTH);
-            let mask_col = floor((zf - z) * f32(MASK_WIDTH));
-            let mask_ix = mask_block + u32(mask_row + mask_col);
-#ifdef msaa8
-            var mask = mask_lut[mask_ix / 4u] >> ((mask_ix % 4u) * 8u);
-            mask &= 0xffu;
-            // Intersect with y half-plane masks
-            if sub_ix == 0u && !is_bump {
-                let mask_shift = u32(round(8.0 * (xy0.y - f32(y))));
-                mask &= 0xffu << mask_shift;
-            }
-            if last_pixel && xy1.x != 0.0 {
-                let mask_shift = u32(round(8.0 * (xy1.y - f32(y))));
-                mask &= ~(0xffu << mask_shift);
-            }
-            // Expand an 8 bit mask value to 8 1-bit values, packed 4 to a subword,
-            // so that two words are used to represent the result. An efficient
-            // technique is carry-less multiplication by 0b10_0000_0100_0000_1000_0001
-            // followed by and-masking to extract bit in position 4 * k.
-            //
-            // See https://en.wikipedia.org/wiki/Carry-less_product
-            let mask_a = mask ^ (mask << 7u);
-            let mask_b = mask_a ^ (mask_a << 14u);
-            let mask0_exp = mask_b & 0x1010101u;
-            var mask0_signed = select(mask0_exp, u32(-i32(mask0_exp)), is_down);
-            let mask1_exp = (mask_b >> 4u) & 0x1010101u;
-            var mask1_signed = select(mask1_exp, u32(-i32(mask1_exp)), is_down);
-            if is_bump {
-                let bump_delta = select(u32(-0x1010101i), 0x1010101u, is_down);
-                mask0_signed += bump_delta;
-                mask1_signed += bump_delta;
-            }
-            atomicAdd(&sh_samples[pix_ix * 2u], mask0_signed);
-            atomicAdd(&sh_samples[pix_ix * 2u + 1u], mask1_signed);
-#endif
-#ifdef msaa16
-            var mask = mask_lut[mask_ix / 2u] >> ((mask_ix % 2u) * 16u);
-            mask &= 0xffffu;
-            // Intersect with y half-plane masks
-            if sub_ix == 0u && !is_bump {
-                let mask_shift = u32(round(16.0 * (xy0.y - f32(y))));
-                mask &= 0xffffu << mask_shift;
-            }
-            if last_pixel && xy1.x != 0.0 {
-                let mask_shift = u32(round(16.0 * (xy1.y - f32(y))));
-                mask &= ~(0xffffu << mask_shift);
-            }
-            // Similar logic as above, only a 16 bit mask is divided into
-            // two 8 bit halves first, then each is expanded as above.
-            // Mask is 0bABCD_EFGH_IJKL_MNOP. Expand to 4 32 bit words
-            // mask0_exp will be 0b0000_000M_0000_000N_0000_000O_0000_000P
-            // mask3_exp will be 0b0000_000A_0000_000B_0000_000C_0000_000D
-            let mask0 = mask & 0xffu;
-            // mask0_a = 0b0IJK_LMNO_*JKL_MNOP
-            let mask0_a = mask0 ^ (mask0 << 7u);
-            // mask0_b = 0b000I_JKLM_NO*J_KLMN_O*K_LMNO_*JKL_MNOP
-            //                ^    ^    ^    ^   ^    ^    ^    ^
-            let mask0_b = mask0_a ^ (mask0_a << 14u);
-            let mask0_exp = mask0_b & 0x1010101u;
-            var mask0_signed = select(mask0_exp, u32(-i32(mask0_exp)), is_down);
-            let mask1_exp = (mask0_b >> 4u) & 0x1010101u;
-            var mask1_signed = select(mask1_exp, u32(-i32(mask1_exp)), is_down);
-            let mask1 = (mask >> 8u) & 0xffu;
-            let mask1_a = mask1 ^ (mask1 << 7u);
-            // mask1_a = 0b0ABC_DEFG_*BCD_EFGH
-            let mask1_b = mask1_a ^ (mask1_a << 14u);
-            // mask1_b = 0b000A_BCDE_FG*B_CDEF_G*C_DEFG_*BCD_EFGH
-            let mask2_exp = mask1_b & 0x1010101u;
-            var mask2_signed = select(mask2_exp, u32(-i32(mask2_exp)), is_down);
-            let mask3_exp = (mask1_b >> 4u) & 0x1010101u;
-            var mask3_signed = select(mask3_exp, u32(-i32(mask3_exp)), is_down);
-            if is_bump {
-                let bump_delta = select(u32(-0x1010101i), 0x1010101u, is_down);
-                mask0_signed += bump_delta;
-                mask1_signed += bump_delta;
-                mask2_signed += bump_delta;
-                mask3_signed += bump_delta;
-            }
-            atomicAdd(&sh_samples[pix_ix * 4u], mask0_signed);
-            atomicAdd(&sh_samples[pix_ix * 4u + 1u], mask1_signed);
-            atomicAdd(&sh_samples[pix_ix * 4u + 2u], mask2_signed);
-            atomicAdd(&sh_samples[pix_ix * 4u + 3u], mask3_signed);
-#endif
-        }
-        workgroupBarrier();
-    }
-    var area: array<f32, PIXELS_PER_THREAD>;
-    let major = (th_ix * PIXELS_PER_THREAD) >> 2u;
-    var packed_w = atomicLoad(&sh_winding[major]);
-    // Compute prefix sums of both `sh_winding` and `sh_winding_y`. Both
-    // use the same technique. First, a per-word prefix sum is computed
-    // of the 4 subwords within each word. The last subword is the sum
-    // (reduction) of that group of 4 values, and is stored to shared
-    // memory for broadcast to other threads. Then each thread computes
-    // the prefix by adding the preceding reduced values.
-    //
-    // Addition of 2 biased signed values is accomplished by adding the
-    // values, then subtracting the bias.
-    packed_w += (packed_w - 0x808080u) << 8u;
-    packed_w += (packed_w - 0x8080u) << 16u;
-    var packed_y = atomicLoad(&sh_winding_y[local_id.y >> 2u]);
-    packed_y += (packed_y - 0x808080u) << 8u;
-    packed_y += (packed_y - 0x8080u) << 16u;
-    var wind_y = (packed_y >> ((local_id.y & 3u) << 3u)) - 0x80u;
-    if (local_id.y & 3u) == 3u && local_id.x == 0u {
-        let prefix_y = wind_y;
-        atomicStore(&sh_winding_y_prefix[local_id.y >> 2u], prefix_y);
-    }
-    let prefix_x = ((packed_w >> 24u) - 0x80u) * 0x1010101u;
-    // reuse sh_winding to store prefix as well
-    atomicStore(&sh_winding[major], prefix_x);
-    workgroupBarrier();
-    for (var i = (major & ~3u); i < major; i++) {
-        packed_w += atomicLoad(&sh_winding[i]);
-    }
-    // packed_w now contains the winding numbers for a slice of 4 pixels,
-    // each relative to the top left of the row.
-    for (var i = 0u; i < (local_id.y >> 2u); i++) {
-        wind_y += atomicLoad(&sh_winding_y_prefix[i]);
-    }
-    // wind_y now contains the winding number of the top left of the row of
-    // pixels relative to the top left of the tile. Note that this is actually
-    // a signed quantity stored without bias.
-
-    // The winding number of a sample point is the sum of four levels of
-    // hierarchy:
-    // * The winding number of the top left of the tile (backdrop)
-    // * The winding number of the pixel row relative to tile (wind_y)
-    // * The winding number of the pixel relative to row (packed_w)
-    // * The winding number of the sample relative to pixel (sh_samples)
-    //
-    // Conceptually, we want to compute each of these total winding numbers
-    // for each sample within a pixel, then count the number that are non-zero.
-    // However, we apply a shortcut, partly to make the computation more
-    // efficient, and partly to avoid overflow of intermediate results.
-    //
-    // Here's the technique that's used. The `expected_zero` value contains
-    // the *negation* of the sum of the first three levels of the hierarchy.
-    // Thus, `sample - expected` is zero when the sum of all levels in the
-    // hierarchy is zero, and this is true when `sample = expected`. We
-    // compute this using SWAR techniques as follows: we compute the xor of
-    // all bits of `expected` (repeated to all subwords) against the packed
-    // samples, then the or-reduction of the bits within each subword. This
-    // value is 1 when the values are unequal, thus the sum is nonzero, and
-    // 0 when the sum is zero. These bits are then masked and counted.
-
-    for (var i = 0u; i < PIXELS_PER_THREAD; i++) {
-        let pix_ix = th_ix * PIXELS_PER_THREAD + i;
-        let minor = i; // assumes PIXELS_PER_THREAD == 4
-        let expected_zero = (((packed_w >> (minor * 8u)) + wind_y) & 0xffu) - u32(fill.backdrop);
-        // When the expected_zero value exceeds the range of what can be stored
-        // in a (biased) signed integer, then there is no sample value that can
-        // be equal to the expected value, thus all resulting bits are 1.
-        if expected_zero >= 256u {
-            area[i] = 1.0;
-        } else {
-#ifdef msaa8
-            let samples0 = atomicLoad(&sh_samples[pix_ix * 2u]);
-            let samples1 = atomicLoad(&sh_samples[pix_ix * 2u + 1u]);
-            let xored0 = (expected_zero * 0x1010101u) ^ samples0;
-            let xored0_2 = xored0 | (xored0 * 2u);
-            let xored1 = (expected_zero * 0x1010101u) ^ samples1;
-            let xored1_2 = xored1 | (xored1 >> 1u);
-            // xored2 contains 2-reductions from each word, interleaved
-            let xored2 = (xored0_2 & 0xAAAAAAAAu) | (xored1_2 & 0x55555555u);
-            // bits 4 * k + 2 and 4 * k + 3 contain 4-reductions
-            let xored4 = xored2 | (xored2 * 4u);
-            // bits 8 * k + 6 and 8 * k + 7 contain 8-reductions
-            let xored8 = xored4 | (xored4 * 16u);
-            area[i] = f32(countOneBits(xored8 & 0xC0C0C0C0u)) * 0.125;
-#endif
-#ifdef msaa16
-            let samples0 = atomicLoad(&sh_samples[pix_ix * 4u]);
-            let samples1 = atomicLoad(&sh_samples[pix_ix * 4u + 1u]);
-            let samples2 = atomicLoad(&sh_samples[pix_ix * 4u + 2u]);
-            let samples3 = atomicLoad(&sh_samples[pix_ix * 4u + 3u]);
-            let xored0 = (expected_zero * 0x1010101u) ^ samples0;
-            let xored0_2 = xored0 | (xored0 * 2u);
-            let xored1 = (expected_zero * 0x1010101u) ^ samples1;
-            let xored1_2 = xored1 | (xored1 >> 1u);
-            // xored01 contains 2-reductions from words 0 and 1, interleaved
-            let xored01 = (xored0_2 & 0xAAAAAAAAu) | (xored1_2 & 0x55555555u);
-            // bits 4 * k + 2 and 4 * k + 3 contain 4-reductions
-            let xored01_4 = xored01 | (xored01 * 4u);
-            let xored2 = (expected_zero * 0x1010101u) ^ samples2;
-            let xored2_2 = xored2 | (xored2 * 2u);
-            let xored3 = (expected_zero * 0x1010101u) ^ samples3;
-            let xored3_2 = xored3 | (xored3 >> 1u);
-            // xored23 contains 2-reductions from words 2 and 3, interleaved
-            let xored23 = (xored2_2 & 0xAAAAAAAAu) | (xored3_2 & 0x55555555u);
-            // bits 4 * k and 4 * k + 1 contain 4-reductions
-            let xored23_4 = xored23 | (xored23 >> 2u);
-            // each bit is a 4-reduction, with values from all 4 words
-            let xored4 = (xored01_4 & 0xCCCCCCCCu) | (xored23_4 & 0x33333333u);
-            // bits 8 * k + {4, 5, 6, 7} contain 8-reductions
-            let xored8 = xored4 | (xored4 * 16u);
-            area[i] = f32(countOneBits(xored8 & 0xF0F0F0F0u)) * 0.0625;
-#endif
-        }
-    }
-    *result = area;
-}
-
-// Path rendering specialized to the even-odd rule.
-//
-// This proceeds very much the same as `fill_path_ms`, but is simpler because
-// all winding numbers can be represented in one bit. Formally, addition is
-// modulo 2, or, equivalently, winding numbers are elements of GF(2). One
-// simplification is that we don't need to track the direction of crossings,
-// as both have the same effect on winding number.
-//
-// TODO: factor some logic out to reduce code duplication.
-fn fill_path_ms_evenodd(fill: CmdFill, local_id: vec2<u32>, result: ptr<function, array<f32, PIXELS_PER_THREAD>>) {
-    let n_segs = fill.size_and_rule >> 1u;
-    let th_ix = local_id.y * (TILE_WIDTH / PIXELS_PER_THREAD) + local_id.x;
-    if th_ix < TILE_HEIGHT {
-        if th_ix == 0u {
-            atomicStore(&sh_winding_y[th_ix], 0u);
-        }
-        atomicStore(&sh_winding[th_ix], 0u);
-    }
-    let sample_count = PIXELS_PER_THREAD;
-    for (var i = 0u; i < sample_count; i++) {
-        atomicStore(&sh_samples[th_ix * sample_count + i], 0u);
-    }
-    workgroupBarrier();
-    let n_batch = (n_segs + (WG_SIZE - 1u)) / WG_SIZE;
-    for (var batch = 0u; batch < n_batch; batch++) {
-        let seg_ix = batch * WG_SIZE + th_ix;
-        let seg_off = fill.seg_data + seg_ix;
-        var count = 0u;
-        let slice_size = min(n_segs - batch * WG_SIZE, WG_SIZE);
-        // TODO: might save a register rewriting this in terms of limit
-        if th_ix < slice_size {
-            let segment = segments[seg_off];
-            // Coordinates are relative to tile origin
-            let xy0 = segment.point0;
-            let xy1 = segment.point1;
-            var y_edge_f = f32(TILE_HEIGHT);
-            if xy0.x == 0.0 {
-                y_edge_f = xy0.y;
-            } else if xy1.x == 0.0 {
-                y_edge_f = xy1.y;
-            }
-            // discard horizontal lines aligned to pixel grid
-            if !(xy0.y == xy1.y && xy0.y == floor(xy0.y)) {
-                count = span(xy0.x, xy1.x) + span(xy0.y, xy1.y) - 1u;
-            }
-            let y_edge = u32(ceil(y_edge_f));
-            if y_edge < TILE_HEIGHT {
-                atomicXor(&sh_winding_y[0], 1u << y_edge);
-            }
-        }
-        // workgroup prefix sum of counts
-        sh_count[th_ix] = count;
-        let lg_n = firstLeadingBit(slice_size * 2u - 1u);
-        for (var i = 0u; i < lg_n; i++) {
-            workgroupBarrier();
-            if th_ix >= 1u << i {
-                count += sh_count[th_ix - (1u << i)];
-            }
-            workgroupBarrier();
-            sh_count[th_ix] = count;
-        }
-        let total = workgroupUniformLoad(&sh_count[slice_size - 1u]);
-        for (var i = th_ix; i < total; i += WG_SIZE) {
-            // binary search to find pixel
-            var lo = 0u;
-            var hi = slice_size;
-            let goal = i;
-            while hi > lo + 1u {
-                let mid = (lo + hi) >> 1u;
-                if goal >= sh_count[mid - 1u] {
-                    lo = mid;
-                } else {
-                    hi = mid;
-                }
-            }
-            let el_ix = lo;
-            let last_pixel = i + 1u == sh_count[el_ix];
-            let sub_ix = i - select(0u, sh_count[el_ix - 1u], el_ix > 0u);
-            let seg_off = fill.seg_data + batch * WG_SIZE + el_ix;
-            let segment = segments[seg_off];
-            let xy0_in = segment.point0;
-            let xy1_in = segment.point1;
-            let is_down = xy1_in.y >= xy0_in.y;
-            let xy0 = select(xy1_in, xy0_in, is_down);
-            let xy1 = select(xy0_in, xy1_in, is_down);
-
-            // Set up data for line rasterization
-            // Note: this is duplicated work if total count exceeds a workgroup.
-            // One alternative is to compute it in a separate dispatch.
-            let dx = abs(xy1.x - xy0.x);
-            let dy = xy1.y - xy0.y;
-            let idxdy = 1.0 / (dx + dy);
-            var a = dx * idxdy;
-            let is_positive_slope = xy1.x >= xy0.x;
-            let x_sign = select(-1.0, 1.0, is_positive_slope);
-            let xt0 = floor(xy0.x * x_sign);
-            let c = xy0.x * x_sign - xt0;
-            let y0i = floor(xy0.y);
-            let ytop = y0i + 1.0;
-            let b = min((dy * c + dx * (ytop - xy0.y)) * idxdy, ONE_MINUS_ULP);
-            let count_x = span(xy0.x, xy1.x) - 1u;
-            let count = count_x + span(xy0.y, xy1.y);
-            let robust_err = floor(a * (f32(count) - 1.0) + b) - f32(count_x);
-            if robust_err != 0.0 {
-                a -= ROBUST_EPSILON * sign(robust_err);
-            }
-            let x0i = i32(xt0 * x_sign + 0.5 * (x_sign - 1.0));
-            // Use line equation to plot pixel coordinates
-
-            let zf = a * f32(sub_ix) + b;
-            let z = floor(zf);
-            let x = x0i + i32(x_sign * z);
-            let y = i32(y0i) + i32(sub_ix) - i32(z);
-            var is_delta: bool;
-            // See comments in nonzero case.
-            var is_bump = false;
-            let zp = floor(a * f32(sub_ix - 1u) + b);
-            if sub_ix == 0u {
-                is_delta = y0i == xy0.y;
-                is_bump = xy0.x == 0.0;
-            } else {
-                is_delta = z == zp;
-                is_bump = is_positive_slope && !is_delta;
-            }
-            if u32(x) < TILE_WIDTH - 1u && u32(y) < TILE_HEIGHT {
-                if is_delta {
-                    atomicXor(&sh_winding[y], 2u << u32(x));
-                }
-            }
-            // Apply sample mask
-            let mask_block = u32(is_positive_slope) * (MASK_WIDTH * MASK_HEIGHT / 2u);
-            let half_height = f32(MASK_HEIGHT / 2u);
-            let mask_row = floor(min(a * half_height, half_height - 1.0)) * f32(MASK_WIDTH);
-            let mask_col = floor((zf - z) * f32(MASK_WIDTH));
-            let mask_ix = mask_block + u32(mask_row + mask_col);
-            let pix_ix = u32(y) * TILE_WIDTH + u32(x);
-#ifdef msaa8
-            var mask = mask_lut[mask_ix / 4u] >> ((mask_ix % 4u) * 8u);
-            mask &= 0xffu;
-            // Intersect with y half-plane masks
-            if sub_ix == 0u && !is_bump {
-                let mask_shift = u32(round(8.0 * (xy0.y - f32(y))));
-                mask &= 0xffu << mask_shift;
-            }
-            if last_pixel && xy1.x != 0.0 {
-                let mask_shift = u32(round(8.0 * (xy1.y - f32(y))));
-                mask &= ~(0xffu << mask_shift);
-            }
-            if is_bump {
-                mask ^= 0xffu;
-            }
-            atomicXor(&sh_samples[pix_ix], mask);
-#endif
-#ifdef msaa16
-            var mask = mask_lut[mask_ix / 2u] >> ((mask_ix % 2u) * 16u);
-            mask &= 0xffffu;
-            // Intersect with y half-plane masks
-            if sub_ix == 0u && !is_bump {
-                let mask_shift = u32(round(16.0 * (xy0.y - f32(y))));
-                mask &= 0xffffu << mask_shift;
-            }
-            if last_pixel && xy1.x != 0.0 {
-                let mask_shift = u32(round(16.0 * (xy1.y - f32(y))));
-                mask &= ~(0xffffu << mask_shift);
-            }
-            if is_bump {
-                mask ^= 0xffffu;
-            }
-            atomicXor(&sh_samples[pix_ix], mask);
-#endif
-        }
-        workgroupBarrier();
-    }
-    var area: array<f32, PIXELS_PER_THREAD>;
-    var scan_x = atomicLoad(&sh_winding[local_id.y]);
-    // prefix sum over GF(2) is equivalent to carry-less multiplication
-    // by 0xFFFF
-    scan_x ^= scan_x << 1u;
-    scan_x ^= scan_x << 2u;
-    scan_x ^= scan_x << 4u;
-    scan_x ^= scan_x << 8u;
-    // scan_x contains the winding number parity for all pixels in the row
-    var scan_y = atomicLoad(&sh_winding_y[0]);
-    scan_y ^= scan_y << 1u;
-    scan_y ^= scan_y << 2u;
-    scan_y ^= scan_y << 4u;
-    scan_y ^= scan_y << 8u;
-    // winding number parity for the row of pixels is in the LSB of row_parity
-    let row_parity = (scan_y >> local_id.y) ^ u32(fill.backdrop);
-
-    for (var i = 0u; i < PIXELS_PER_THREAD; i++) {
-        let pix_ix = th_ix * PIXELS_PER_THREAD + i;
-        let samples = atomicLoad(&sh_samples[pix_ix]);
-        let pix_parity = row_parity ^ (scan_x >> (pix_ix % TILE_WIDTH));
-        // The LSB of pix_parity contains the sum of the first three levels
-        // of the hierarchy, thus the absolute winding number of the top left
-        // of the pixel.
-        let pix_mask = u32(-i32(pix_parity & 1u));
-        // pix_mask is pix_party broadcast to all bits in the word.
-#ifdef msaa8
-        area[i] = f32(countOneBits((samples ^ pix_mask) & 0xffu)) * 0.125;
-#endif
-#ifdef msaa16
-        area[i] = f32(countOneBits((samples ^ pix_mask) & 0xffffu)) * 0.0625;
-#endif
-    }
-    *result = area;
-}
-#endif // msaa
 
 fn read_fill(cmd_ix: u32) -> CmdFill {
     let size_and_rule = ptcl[cmd_ix + 1u];
@@ -792,6 +129,14 @@ fn read_sweep_grad(cmd_ix: u32) -> CmdSweepGrad {
     let t0 = bitcast<f32>(info[info_offset + 6u]);
     let t1 = bitcast<f32>(info[info_offset + 7u]);
     return CmdSweepGrad(index, extend_mode, matrx, xlat, t0, t1);
+}
+
+fn read_path_grad(cmd_ix: u32) -> CmdPathGrad {
+    let data_offset = ptcl[cmd_ix + 1u];
+    let edge_count = ptcl[cmd_ix + 2u];
+    let flags = ptcl[cmd_ix + 3u];
+    let draw_flags = ptcl[cmd_ix + 4u];
+    return CmdPathGrad(data_offset, edge_count, flags, draw_flags);
 }
 
 fn read_image(cmd_ix: u32) -> CmdImage {
@@ -1038,14 +383,144 @@ fn image_extend_mode_i32(t: f32, mode: u32, max: i32) -> i32 {
     }
 }
 
+const PATH_GRAD_HAS_EXPLICIT_CENTER_COLOR = 1u;
+const PATH_GRAD_HEADER_WORD_COUNT = 4u;
+const PATH_GRAD_EDGE_WORD_COUNT = 6u;
+
+fn path_grad_edge_offset(path_grad: CmdPathGrad, edge_ix: u32) -> u32 {
+    return path_grad.data_offset + PATH_GRAD_HEADER_WORD_COUNT + edge_ix * PATH_GRAD_EDGE_WORD_COUNT;
+}
+
+fn path_grad_load_point(offset: u32) -> vec2<f32> {
+    return vec2<f32>(bitcast<f32>(info[offset]), bitcast<f32>(info[offset + 1u]));
+}
+
+fn path_grad_load_color(offset: u32) -> vec4<f32> {
+    return unpack4x8unorm(info[offset]);
+}
+
+fn cross2(a: vec2<f32>, b: vec2<f32>) -> f32 {
+    return a.x * b.y - a.y * b.x;
+}
+
+fn path_grad_line_intersection(p: vec2<f32>, r: vec2<f32>, q: vec2<f32>, s: vec2<f32>) -> vec4<f32> {
+    let denominator = cross2(r, s);
+    if abs(denominator) <= 1.0e-6 {
+        return vec4<f32>(0.0);
+    }
+
+    let qp = q - p;
+    let t = cross2(qp, s) / denominator;
+    let u = cross2(qp, r) / denominator;
+    if t < 0.0 || t > 1.0 || u < 0.0 || u > 1.0 {
+        return vec4<f32>(0.0);
+    }
+
+    let point = p + t * r;
+    return vec4<f32>(1.0, point.x, point.y, u);
+}
+
+fn path_grad_point_on_triangle(v1: vec2<f32>, v2: vec2<f32>, v3: vec2<f32>, point: vec2<f32>) -> vec3<f32> {
+    let e1 = v2 - v1;
+    let e2 = v3 - v2;
+    let e3 = v1 - v3;
+    let pv1 = point - v1;
+    let pv2 = point - v2;
+    let pv3 = point - v3;
+    let d1 = cross2(e1, pv1);
+    let d2 = cross2(e2, pv2);
+    let d3 = cross2(e3, pv3);
+    let has_negative = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
+    let has_positive = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
+    if has_negative && has_positive {
+        return vec3<f32>(0.0);
+    }
+
+    let d00 = dot(e1, e1);
+    let d01 = -dot(e1, e3);
+    let d11 = dot(e3, e3);
+    let d20 = dot(pv1, e1);
+    let d21 = -dot(pv1, e3);
+    let denominator = (d00 * d11) - (d01 * d01);
+    if abs(denominator) <= 1.0e-6 {
+        return vec3<f32>(0.0);
+    }
+
+    let u = ((d11 * d20) - (d01 * d21)) / denominator;
+    let v = ((d00 * d21) - (d01 * d20)) / denominator;
+    return vec3<f32>(1.0, u, v);
+}
+
+fn evaluate_path_gradient(path_grad: CmdPathGrad, point: vec2<f32>) -> vec4<f32> {
+    let center = path_grad_load_point(path_grad.data_offset);
+    let center_color = path_grad_load_color(path_grad.data_offset + 3u);
+
+    if all(point == center) {
+        return premul_alpha(center_color);
+    }
+
+    if path_grad.edge_count == 3u && (path_grad.flags & PATH_GRAD_HAS_EXPLICIT_CENTER_COLOR) == 0u {
+        let edge0 = path_grad_edge_offset(path_grad, 0u);
+        let edge1 = path_grad_edge_offset(path_grad, 1u);
+        let edge2 = path_grad_edge_offset(path_grad, 2u);
+        let v1 = path_grad_load_point(edge0);
+        let v2 = path_grad_load_point(edge1);
+        let v3 = path_grad_load_point(edge2);
+        let triangle = path_grad_point_on_triangle(v1, v2, v3, point);
+        if triangle.x == 0.0 {
+            return vec4<f32>(0.0);
+        }
+
+        let c0 = path_grad_load_color(edge0 + 4u);
+        let c1 = path_grad_load_color(edge0 + 5u);
+        let c2 = path_grad_load_color(edge2 + 4u);
+        return premul_alpha(((1.0 - triangle.y - triangle.z) * c0) + (triangle.y * c1) + (triangle.z * c2));
+    }
+
+    let delta = point - center;
+    let delta_length_squared = dot(delta, delta);
+    if delta_length_squared == 0.0 {
+        return premul_alpha(center_color);
+    }
+
+    let max_distance = bitcast<f32>(info[path_grad.data_offset + 2u]);
+    let direction = delta * inverseSqrt(delta_length_squared);
+    let ray = direction * max_distance;
+    var closest_distance = 3.4028234663852886e38;
+    var closest_point = vec2<f32>(0.0);
+    var closest_color = vec4<f32>(0.0);
+    var found = false;
+
+    for (var edge_ix = 0u; edge_ix < path_grad.edge_count; edge_ix += 1u) {
+        let edge = path_grad_edge_offset(path_grad, edge_ix);
+        let start = path_grad_load_point(edge);
+        let end = path_grad_load_point(edge + 2u);
+        let segment = end - start;
+        let intersection = path_grad_line_intersection(point, ray, start, segment);
+        if intersection.x != 0.0 {
+            let intersection_point = intersection.yz;
+            let distance_squared = dot(intersection_point - point, intersection_point - point);
+            if distance_squared < closest_distance {
+                closest_distance = distance_squared;
+                closest_point = intersection_point;
+                closest_color = mix(path_grad_load_color(edge + 4u), path_grad_load_color(edge + 5u), intersection.w);
+                found = true;
+            }
+        }
+    }
+
+    if !found {
+        return vec4<f32>(0.0);
+    }
+
+    let center_distance = distance(closest_point, center);
+    let ratio = select(0.0, distance(closest_point, point) / center_distance, center_distance > 0.0);
+    return premul_alpha(mix(closest_color, center_color, ratio));
+}
+
 const PIXELS_PER_THREAD = 4u;
 
-#ifndef msaa
-
 // Analytic area anti-aliasing.
-//
-// This is currently dead code if msaa is enabled, but it would be fairly straightforward
-// to wire this so it's a dynamic choice (even per-path).
 //
 // FIXME: This should return an array when https://github.com/gfx-rs/naga/issues/1930 is fixed.
 fn fill_path(fill: CmdFill, xy: vec2<f32>, result: ptr<function, array<f32, PIXELS_PER_THREAD>>) {
@@ -1104,8 +579,6 @@ fn fill_path(fill: CmdFill, xy: vec2<f32>, result: ptr<function, array<f32, PIXE
     *result = area;
 }
 
-#endif
-
 // The X size should be 16 / PIXELS_PER_THREAD
 @compute @workgroup_size(4, 16)
 fn main(
@@ -1143,11 +616,7 @@ fn main(
         switch tag {
             case CMD_FILL: {
                 let fill = read_fill(cmd_ix);
-#ifdef msaa
-                fill_path_ms(fill, local_id.xy, &area);
-#else
                 fill_path(fill, local_xy, &area);
-#endif
                 cmd_ix += 4u;
             }
             case CMD_SOLID: {
@@ -1357,6 +826,18 @@ fn main(
                     }
                 }
                 cmd_ix += 3u;
+            }
+            case CMD_PATH_GRAD: {
+                let path_grad = read_path_grad(cmd_ix);
+                for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+                    if area[i] != 0.0 {
+                        let my_xy = vec2(xy.x + f32(i) + 0.5, xy.y + 0.5);
+                        let fg_rgba = evaluate_path_gradient(path_grad, my_xy);
+                        let fg_i = fg_rgba * area[i];
+                        rgba[i] = compose_draw(rgba[i], fg_i, path_grad.draw_flags);
+                    }
+                }
+                cmd_ix += 5u;
             }
             case CMD_IMAGE: {
                 let image = read_image(cmd_ix);

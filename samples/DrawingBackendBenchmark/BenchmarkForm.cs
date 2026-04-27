@@ -266,12 +266,7 @@ internal sealed class BenchmarkForm : Form
             return $"Failed: {result.BackendFailure}";
         }
 
-        if (result.UsedGpu)
-        {
-            return "GPU";
-        }
-
-        return backendName == "WebGPU" ? "CPU fallback" : "CPU";
+        return backendName;
     }
 
     /// <summary>

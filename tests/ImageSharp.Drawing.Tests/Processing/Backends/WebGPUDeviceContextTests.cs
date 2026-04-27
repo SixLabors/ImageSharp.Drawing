@@ -53,10 +53,6 @@ public class WebGPUDeviceContextTests
             canvas.Fill(Brushes.Solid(Color.Red), new RectangularPolygon(0, 0, 32, 24));
             canvas.Flush();
 
-            Assert.True(
-                drawing.Backend.DiagnosticLastFlushUsedGPU,
-                drawing.Backend.DiagnosticLastSceneFailure ?? "The last flush did not use WebGPU.");
-
             using Image<Rgba32> readback = target.Readback();
             Assert.NotEqual(default, readback[16, 12]);
         }

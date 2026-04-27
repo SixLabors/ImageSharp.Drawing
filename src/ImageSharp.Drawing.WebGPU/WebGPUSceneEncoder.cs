@@ -21,6 +21,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 internal static class WebGPUSceneEncoder
 {
     private const int GradientWidth = 512;
+    private const int PathGradientHeaderWordCount = 4;
+    private const int PathGradientEdgeWordCount = 6;
     private const int StyleWordCount = 5;
     private const int TileWidth = 16;
     private const int TileHeight = 16;
@@ -131,6 +133,7 @@ internal static class WebGPUSceneEncoder
     {
         private bool hasLastStyle;
         private bool gradientPixelsDetached;
+        private bool pathGradientDataDetached;
         private long estimatedPathRowCount;
         private uint lastStyle0;
         private uint lastStyle1;
@@ -159,6 +162,7 @@ internal static class WebGPUSceneEncoder
             this.Transforms = new OwnedStream<uint>(allocator, 8);
             this.Styles = new OwnedStream<uint>(allocator, Math.Max(commandCount * StyleWordCount, 16));
             this.GradientPixels = new OwnedStream<uint>(allocator, Math.Max(commandCount * GradientWidth, GradientWidth));
+            this.PathGradientData = new OwnedStream<uint>(allocator, Math.Max(commandCount * PathGradientHeaderWordCount, 16));
             this.Images = [];
             this.FillCount = 0;
             this.PathCount = 0;
@@ -168,6 +172,7 @@ internal static class WebGPUSceneEncoder
             this.GradientRowCount = 0;
             this.hasLastStyle = false;
             this.gradientPixelsDetached = false;
+            this.pathGradientDataDetached = false;
             this.lastStyle0 = 0;
             this.lastStyle1 = 0;
             this.lastStyle2 = 0;
@@ -219,6 +224,11 @@ internal static class WebGPUSceneEncoder
         /// Gets or sets the packed gradient-ramp pixel stream.
         /// </summary>
         public OwnedStream<uint> GradientPixels;
+
+        /// <summary>
+        /// Gets or sets the encoded path-gradient payload stream.
+        /// </summary>
+        public OwnedStream<uint> PathGradientData;
 
         /// <summary>
         /// Gets or sets the deferred image payload descriptors that are patched after atlas creation.
@@ -290,6 +300,11 @@ internal static class WebGPUSceneEncoder
                 this.GradientPixels.Dispose();
             }
 
+            if (!this.pathGradientDataDetached)
+            {
+                this.PathGradientData.Dispose();
+            }
+
             this.Styles.Dispose();
             this.Transforms.Dispose();
             this.DrawData.Dispose();
@@ -302,6 +317,11 @@ internal static class WebGPUSceneEncoder
         /// Marks the gradient pixel stream as detached so disposal does not free it twice.
         /// </summary>
         public void MarkGradientPixelsDetached() => this.gradientPixelsDetached = true;
+
+        /// <summary>
+        /// Marks the path-gradient payload stream as detached so disposal does not free it twice.
+        /// </summary>
+        public void MarkPathGradientDataDetached() => this.pathGradientDataDetached = true;
 
         /// <summary>
         /// Appends all supported scene operations into the mutable scene streams.
@@ -439,6 +459,7 @@ internal static class WebGPUSceneEncoder
                 resolved.BrushBounds,
                 resolved.Pen,
                 widthScale,
+                command.Transform,
                 segmentScale,
                 start,
                 end);
@@ -467,7 +488,17 @@ internal static class WebGPUSceneEncoder
             this.AppendTransformIfChanged(GetSceneTransform(polylineResidual, resolved.RasterizerOptions.SamplingOrigin));
             LinearGeometry geometry = LinearGeometry.CreateOpenPolyline(resolved.Points, polylineScale);
             float widthScale = GetTransformWidthScale(command.Transform);
-            this.AppendExplicitStroke(resolved.Brush, resolved.GraphicsOptions, resolved.RasterizerOptions, resolved.DestinationOffset, resolved.BrushBounds, resolved.Pen, widthScale, polylineScale, geometry);
+            this.AppendExplicitStroke(
+                resolved.Brush,
+                resolved.GraphicsOptions,
+                resolved.RasterizerOptions,
+                resolved.DestinationOffset,
+                resolved.BrushBounds,
+                resolved.Pen,
+                widthScale,
+                command.Transform,
+                polylineScale,
+                geometry);
             error = null;
             return true;
         }
@@ -553,12 +584,14 @@ internal static class WebGPUSceneEncoder
                 geometry.Info,
                 drawTag,
                 appendStyle,
+                GetPathGradientDataWordCount(command.Brush),
                 ref this.PathTags,
                 ref this.PathData,
                 ref this.DrawTags,
                 ref this.DrawData,
                 ref this.Styles,
-                ref this.GradientPixels);
+                ref this.GradientPixels,
+                ref this.PathGradientData);
 
             if (appendStyle)
             {
@@ -600,7 +633,20 @@ internal static class WebGPUSceneEncoder
             this.DrawTags.Add(drawTag);
             int gradientRowCount = this.GradientRowCount;
 
-            AppendDrawData(command.Brush, command.BrushBounds, command.GraphicsOptions, drawTag, scale, ref this.DrawData, ref this.GradientPixels, this.Images, ref gradientRowCount);
+            AppendDrawData(
+                command.Brush,
+                command.BrushBounds,
+                command.GraphicsOptions,
+                drawTag,
+                scale,
+                command.Transform,
+                command.DestinationOffset,
+                this.rootTargetBounds,
+                ref this.DrawData,
+                ref this.GradientPixels,
+                ref this.PathGradientData,
+                this.Images,
+                ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
         }
 
@@ -628,12 +674,14 @@ internal static class WebGPUSceneEncoder
                 geometry,
                 drawTag,
                 appendStyle,
+                GetPathGradientDataWordCount(command.Brush),
                 ref this.PathTags,
                 ref this.PathData,
                 ref this.DrawTags,
                 ref this.DrawData,
                 ref this.Styles,
-                ref this.GradientPixels);
+                ref this.GradientPixels,
+                ref this.PathGradientData);
 
             if (appendStyle)
             {
@@ -676,7 +724,20 @@ internal static class WebGPUSceneEncoder
             this.DrawTags.Add(drawTag);
             int gradientRowCount = this.GradientRowCount;
 
-            AppendDrawData(command.Brush, command.BrushBounds, command.GraphicsOptions, drawTag, scale, ref this.DrawData, ref this.GradientPixels, this.Images, ref gradientRowCount);
+            AppendDrawData(
+                command.Brush,
+                command.BrushBounds,
+                command.GraphicsOptions,
+                drawTag,
+                scale,
+                command.Transform,
+                command.DestinationOffset,
+                this.rootTargetBounds,
+                ref this.DrawData,
+                ref this.GradientPixels,
+                ref this.PathGradientData,
+                this.Images,
+                ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
         }
 
@@ -691,6 +752,7 @@ internal static class WebGPUSceneEncoder
             Rectangle brushBounds,
             Pen pen,
             float widthScale,
+            Matrix4x4 transform,
             Vector2 scale,
             LinearGeometry geometry)
         {
@@ -710,12 +772,14 @@ internal static class WebGPUSceneEncoder
                 geometry,
                 drawTag,
                 appendStyle,
+                GetPathGradientDataWordCount(brush),
                 ref this.PathTags,
                 ref this.PathData,
                 ref this.DrawTags,
                 ref this.DrawData,
                 ref this.Styles,
-                ref this.GradientPixels);
+                ref this.GradientPixels,
+                ref this.PathGradientData);
 
             if (appendStyle)
             {
@@ -764,8 +828,12 @@ internal static class WebGPUSceneEncoder
                 graphicsOptions,
                 drawTag,
                 scale,
+                transform,
+                destinationOffset,
+                this.rootTargetBounds,
                 ref this.DrawData,
                 ref this.GradientPixels,
+                ref this.PathGradientData,
                 this.Images,
                 ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
@@ -782,6 +850,7 @@ internal static class WebGPUSceneEncoder
             Rectangle brushBounds,
             Pen pen,
             float widthScale,
+            Matrix4x4 transform,
             Vector2 scale,
             PointF start,
             PointF end)
@@ -801,12 +870,14 @@ internal static class WebGPUSceneEncoder
             ReservePlainStrokeCapacityForOpenSegment(
                 drawTag,
                 appendStyle,
+                GetPathGradientDataWordCount(brush),
                 ref this.PathTags,
                 ref this.PathData,
                 ref this.DrawTags,
                 ref this.DrawData,
                 ref this.Styles,
-                ref this.GradientPixels);
+                ref this.GradientPixels,
+                ref this.PathGradientData);
 
             if (appendStyle)
             {
@@ -856,8 +927,12 @@ internal static class WebGPUSceneEncoder
                 graphicsOptions,
                 drawTag,
                 scale,
+                transform,
+                destinationOffset,
+                this.rootTargetBounds,
                 ref this.DrawData,
                 ref this.GradientPixels,
+                ref this.PathGradientData,
                 this.Images,
                 ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
@@ -999,6 +1074,7 @@ internal static class WebGPUSceneEncoder
             int drawDataWordCount = encoding.DrawData.Count;
             int transformWordCount = encoding.Transforms.Count;
             int styleWordCount = encoding.Styles.Count;
+            int pathGradientDataWordCount = encoding.PathGradientData.Count;
             int drawTagBase = pathTagWordCount + pathDataWordCount;
             int drawDataBase = drawTagBase + drawTagCount;
             int transformBase = drawDataBase + drawDataWordCount;
@@ -1008,6 +1084,7 @@ internal static class WebGPUSceneEncoder
                 (uint)drawTagCount,
                 (uint)encoding.PathCount,
                 (uint)encoding.ClipCount,
+                (uint)(encoding.InfoWordCount + pathGradientDataWordCount),
                 (uint)encoding.InfoWordCount,
                 0U,
                 0U,
@@ -1037,6 +1114,8 @@ internal static class WebGPUSceneEncoder
                     sceneDataOwner,
                     sceneWordCount,
                     DetachGradientPixels(ref encoding),
+                    DetachPathGradientData(ref encoding),
+                    pathGradientDataWordCount,
                     encoding.Images,
                     encoding.GradientRowCount,
                     layout,
@@ -1078,6 +1157,17 @@ internal static class WebGPUSceneEncoder
             encoding.MarkGradientPixelsDetached();
             return encoding.GradientPixels.DetachOwner();
         }
+
+        private static IMemoryOwner<uint>? DetachPathGradientData(ref SupportedSubsetSceneEncoding encoding)
+        {
+            if (encoding.PathGradientData.Count == 0)
+            {
+                return null;
+            }
+
+            encoding.MarkPathGradientDataDetached();
+            return encoding.PathGradientData.DetachOwner();
+        }
     }
 
     /// <summary>
@@ -1091,6 +1181,7 @@ internal static class WebGPUSceneEncoder
             or RadialGradientBrush
             or EllipticGradientBrush
             or SweepGradientBrush
+            or PathGradientBrush
             or PatternBrush
             or ImageBrush;
 
@@ -1278,6 +1369,7 @@ internal static class WebGPUSceneEncoder
             RadialGradientBrush => GpuSceneDrawTag.FillRadGradient,
             EllipticGradientBrush => GpuSceneDrawTag.FillEllipticGradient,
             SweepGradientBrush => GpuSceneDrawTag.FillSweepGradient,
+            PathGradientBrush => GpuSceneDrawTag.FillPathGradient,
             PatternBrush => GpuSceneDrawTag.FillImage,
             ImageBrush => GpuSceneDrawTag.FillImage,
             _ => throw new UnreachableException($"Unsupported brush type '{brush.GetType().Name}' should have been rejected before scene encoding.")
@@ -1514,12 +1606,14 @@ internal static class WebGPUSceneEncoder
         int segmentCount,
         uint drawTag,
         bool appendStyle,
+        int pathGradientDataWordCount,
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
         ref OwnedStream<uint> drawTags,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> styles,
-        ref OwnedStream<uint> gradientPixels)
+        ref OwnedStream<uint> gradientPixels,
+        ref OwnedStream<uint> pathGradientData)
     {
         int pathTagAdd = segmentCount + 1 + (appendStyle ? 1 : 0);
         int pathDataAdd = (contourCount * 2) + (segmentCount * 2);
@@ -1538,6 +1632,11 @@ internal static class WebGPUSceneEncoder
         {
             gradientPixels.EnsureAdditionalCapacity(GradientWidth);
         }
+
+        if (pathGradientDataWordCount > 0)
+        {
+            pathGradientData.EnsureAdditionalCapacity(pathGradientDataWordCount);
+        }
     }
 
     /// <summary>
@@ -1547,23 +1646,27 @@ internal static class WebGPUSceneEncoder
         LinearGeometryInfo geometryInfo,
         uint drawTag,
         bool appendStyle,
+        int pathGradientDataWordCount,
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
         ref OwnedStream<uint> drawTags,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> styles,
-        ref OwnedStream<uint> gradientPixels)
+        ref OwnedStream<uint> gradientPixels,
+        ref OwnedStream<uint> pathGradientData)
         => ReservePlainFillCapacity(
             geometryInfo.ContourCount,
             geometryInfo.SegmentCount,
             drawTag,
             appendStyle,
+            pathGradientDataWordCount,
             ref pathTags,
             ref pathData,
             ref drawTags,
             ref drawData,
             ref styles,
-            ref gradientPixels);
+            ref gradientPixels,
+            ref pathGradientData);
 
     /// <summary>
     /// Reserves the exact stream growth needed for one stroke item.
@@ -1572,12 +1675,14 @@ internal static class WebGPUSceneEncoder
         LinearGeometry geometry,
         uint drawTag,
         bool appendStyle,
+        int pathGradientDataWordCount,
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
         ref OwnedStream<uint> drawTags,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> styles,
-        ref OwnedStream<uint> gradientPixels)
+        ref OwnedStream<uint> gradientPixels,
+        ref OwnedStream<uint> pathGradientData)
     {
         int markerTagCount = geometry.Info.ContourCount;
         int markerWordCount = 0;
@@ -1603,6 +1708,11 @@ internal static class WebGPUSceneEncoder
         {
             gradientPixels.EnsureAdditionalCapacity(GradientWidth);
         }
+
+        if (pathGradientDataWordCount > 0)
+        {
+            pathGradientData.EnsureAdditionalCapacity(pathGradientDataWordCount);
+        }
     }
 
     /// <summary>
@@ -1611,12 +1721,14 @@ internal static class WebGPUSceneEncoder
     private static void ReservePlainStrokeCapacityForOpenSegment(
         uint drawTag,
         bool appendStyle,
+        int pathGradientDataWordCount,
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
         ref OwnedStream<uint> drawTags,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> styles,
-        ref OwnedStream<uint> gradientPixels)
+        ref OwnedStream<uint> gradientPixels,
+        ref OwnedStream<uint> pathGradientData)
     {
         pathTags.EnsureAdditionalCapacity(3 + (appendStyle ? 1 : 0));
         pathData.EnsureAdditionalCapacity(8);
@@ -1631,6 +1743,11 @@ internal static class WebGPUSceneEncoder
         if (DrawTagUsesGradientRamp(drawTag))
         {
             gradientPixels.EnsureAdditionalCapacity(GradientWidth);
+        }
+
+        if (pathGradientDataWordCount > 0)
+        {
+            pathGradientData.EnsureAdditionalCapacity(pathGradientDataWordCount);
         }
     }
 
@@ -1799,9 +1916,18 @@ internal static class WebGPUSceneEncoder
             GpuSceneDrawTag.FillRadGradient => 7,
             GpuSceneDrawTag.FillEllipticGradient => 7,
             GpuSceneDrawTag.FillSweepGradient => 5,
+            GpuSceneDrawTag.FillPathGradient => 4,
             GpuSceneDrawTag.FillImage => 5,
             _ => throw new UnreachableException($"Unsupported draw tag '{drawTag}' reached draw-data sizing.")
         };
+
+    /// <summary>
+    /// Gets the exact path-gradient payload word count emitted for one brush.
+    /// </summary>
+    private static int GetPathGradientDataWordCount(Brush brush)
+        => brush is PathGradientBrush pathGradientBrush
+            ? PathGradientHeaderWordCount + (pathGradientBrush.Points.Length * PathGradientEdgeWordCount)
+            : 0;
 
     /// <summary>
     /// Returns a value indicating whether the draw tag emits one gradient ramp row.
@@ -2009,8 +2135,12 @@ internal static class WebGPUSceneEncoder
         GraphicsOptions graphicsOptions,
         uint drawTag,
         Vector2 scale,
+        Matrix4x4 transform,
+        Point destinationOffset,
+        Rectangle rootTargetBounds,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,
+        ref OwnedStream<uint> pathGradientData,
         List<GpuImageDescriptor> images,
         ref int gradientRowCount)
     {
@@ -2038,6 +2168,9 @@ internal static class WebGPUSceneEncoder
                 break;
             case GpuSceneDrawTag.FillSweepGradient:
                 AppendSweepGradientData((SweepGradientBrush)brush, scale, ref drawData, ref gradientPixels, ref gradientRowCount);
+                break;
+            case GpuSceneDrawTag.FillPathGradient:
+                AppendPathGradientData((PathGradientBrush)brush, transform, rootTargetBounds, ref drawData, ref pathGradientData);
                 break;
             case GpuSceneDrawTag.FillImage:
                 AppendImageData(brush, brushBounds, ref drawData, images);
@@ -2285,6 +2418,79 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
+    /// Appends the path-gradient payload in target-local coordinates.
+    /// </summary>
+    private static void AppendPathGradientData(
+        PathGradientBrush brush,
+        Matrix4x4 transform,
+        Rectangle rootTargetBounds,
+        ref OwnedStream<uint> drawData,
+        ref OwnedStream<uint> pathGradientData)
+    {
+        ReadOnlySpan<PointF> points = brush.Points;
+        ReadOnlySpan<Color> colors = brush.Colors;
+        int edgeCount = points.Length;
+        PointF center = default;
+
+        for (int i = 0; i < edgeCount; i++)
+        {
+            PointF point = TransformPathGradientPoint(points[i], transform, rootTargetBounds);
+            center = new PointF(center.X + point.X, center.Y + point.Y);
+        }
+
+        center = new PointF(center.X / edgeCount, center.Y / edgeCount);
+
+        float maxDistance = 0F;
+        for (int i = 0; i < edgeCount; i++)
+        {
+            PointF point = TransformPathGradientPoint(points[i], transform, rootTargetBounds);
+            maxDistance = MathF.Max(maxDistance, Vector2.Distance(point, center));
+        }
+
+        int dataOffset = pathGradientData.Count;
+        Span<uint> payload = pathGradientData.GetAppendSpan(PathGradientHeaderWordCount + (edgeCount * PathGradientEdgeWordCount));
+        payload[0] = BitcastSingle(center.X);
+        payload[1] = BitcastSingle(center.Y);
+        payload[2] = BitcastSingle(maxDistance);
+        payload[3] = PackUnpremultipliedColor(brush.CenterColor);
+
+        for (int i = 0; i < edgeCount; i++)
+        {
+            int payloadOffset = PathGradientHeaderWordCount + (i * PathGradientEdgeWordCount);
+            PointF start = TransformPathGradientPoint(points[i], transform, rootTargetBounds);
+            PointF end = TransformPathGradientPoint(points[(i + 1) % edgeCount], transform, rootTargetBounds);
+
+            payload[payloadOffset] = BitcastSingle(start.X);
+            payload[payloadOffset + 1] = BitcastSingle(start.Y);
+            payload[payloadOffset + 2] = BitcastSingle(end.X);
+            payload[payloadOffset + 3] = BitcastSingle(end.Y);
+            payload[payloadOffset + 4] = PackUnpremultipliedColor(colors[i % colors.Length]);
+            payload[payloadOffset + 5] = PackUnpremultipliedColor(colors[(i + 1) % colors.Length]);
+        }
+
+        pathGradientData.Advance(payload.Length);
+        drawData.Add((uint)dataOffset);
+        drawData.Add((uint)edgeCount);
+        drawData.Add(brush.HasExplicitCenterColor ? 1U : 0U);
+        drawData.Add(0U);
+    }
+
+    /// <summary>
+    /// Transforms one path-gradient point into the target-local coordinates consumed by the fine pass.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static PointF TransformPathGradientPoint(
+        PointF point,
+        Matrix4x4 transform,
+        Rectangle rootTargetBounds)
+    {
+        PointF transformed = transform.IsIdentity ? point : PointF.Transform(point, transform);
+        return new PointF(
+            transformed.X - rootTargetBounds.X,
+            transformed.Y - rootTargetBounds.Y);
+    }
+
+    /// <summary>
     /// Appends one packed gradient ramp row sampled across the fixed gradient width.
     /// </summary>
     private static void AppendGradientRamp(ReadOnlySpan<ColorStop> colorStops, ref OwnedStream<uint> gradientPixels)
@@ -2338,6 +2544,13 @@ internal static class WebGPUSceneEncoder
         Premultiply(ref vector);
         return Rgba32.FromScaledVector4(vector).Rgba;
     }
+
+    /// <summary>
+    /// Packs one straight-alpha color into RGBA8 payload format.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint PackUnpremultipliedColor(in Color color)
+        => color.ToPixel<Rgba32>().Rgba;
 
     /// <summary>
     /// Premultiplies the RGB channels of a normalized RGBA vector by its alpha channel.
@@ -2415,6 +2628,8 @@ internal sealed class WebGPUEncodedScene : IDisposable
         null,
         0,
         null,
+        null,
+        0,
         [],
         0,
         default,
@@ -2438,6 +2653,7 @@ internal sealed class WebGPUEncodedScene : IDisposable
 
     private readonly IMemoryOwner<uint>? sceneDataOwner;
     private readonly IMemoryOwner<uint>? gradientPixelsOwner;
+    private readonly IMemoryOwner<uint>? pathGradientDataOwner;
     private readonly List<GpuImageDescriptor> images;
     private bool disposed;
 
@@ -2450,6 +2666,8 @@ internal sealed class WebGPUEncodedScene : IDisposable
         IMemoryOwner<uint>? sceneDataOwner,
         int sceneWordCount,
         IMemoryOwner<uint>? gradientPixelsOwner,
+        IMemoryOwner<uint>? pathGradientDataOwner,
+        int pathGradientDataWordCount,
         List<GpuImageDescriptor> images,
         int gradientRowCount,
         GpuSceneLayout layout,
@@ -2475,6 +2693,8 @@ internal sealed class WebGPUEncodedScene : IDisposable
         this.InfoWordCount = infoWordCount;
         this.sceneDataOwner = sceneDataOwner;
         this.gradientPixelsOwner = gradientPixelsOwner;
+        this.pathGradientDataOwner = pathGradientDataOwner;
+        this.PathGradientDataWordCount = pathGradientDataWordCount;
         this.images = images;
         this.SceneWordCount = sceneWordCount;
         this.GradientRowCount = gradientRowCount;
@@ -2514,6 +2734,22 @@ internal sealed class WebGPUEncodedScene : IDisposable
     /// </summary>
     public ReadOnlyMemory<uint> GradientPixels
         => this.gradientPixelsOwner is null ? ReadOnlyMemory<uint>.Empty : this.gradientPixelsOwner.Memory[..(this.GradientRowCount * 512)];
+
+    /// <summary>
+    /// Gets the encoded path-gradient payload stream.
+    /// </summary>
+    public ReadOnlyMemory<uint> PathGradientData
+        => this.pathGradientDataOwner is null ? ReadOnlyMemory<uint>.Empty : this.pathGradientDataOwner.Memory[..this.PathGradientDataWordCount];
+
+    /// <summary>
+    /// Gets the encoded path-gradient payload word count.
+    /// </summary>
+    public int PathGradientDataWordCount { get; }
+
+    /// <summary>
+    /// Gets the combined info/path-gradient prefix word count before dynamic bin data.
+    /// </summary>
+    public int InfoBufferWordCount => this.InfoWordCount + this.PathGradientDataWordCount;
 
     /// <summary>
     /// Gets the deferred image descriptors that must be patched after atlas creation.
@@ -2646,7 +2882,7 @@ internal sealed class WebGPUEncodedScene : IDisposable
     }
 
     /// <summary>
-    /// Releases the owned scene and gradient buffers.
+    /// Releases the owned scene, gradient, and path-gradient buffers.
     /// </summary>
     public void Dispose()
     {
@@ -2658,6 +2894,7 @@ internal sealed class WebGPUEncodedScene : IDisposable
         this.disposed = true;
         this.sceneDataOwner?.Dispose();
         this.gradientPixelsOwner?.Dispose();
+        this.pathGradientDataOwner?.Dispose();
     }
 }
 

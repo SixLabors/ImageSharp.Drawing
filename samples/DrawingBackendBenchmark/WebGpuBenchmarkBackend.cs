@@ -72,8 +72,7 @@ internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend
         return new BenchmarkRenderResult(
             stopwatch.Elapsed.TotalMilliseconds,
             preview,
-            renderTarget.Graphics.Backend.DiagnosticLastFlushUsedGPU,
-            readbackError ?? renderTarget.Graphics.Backend.DiagnosticLastSceneFailure);
+            readbackError);
     }
 
     /// <summary>

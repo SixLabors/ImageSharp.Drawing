@@ -19,7 +19,6 @@ internal static class FineAliasedThresholdComputeShader
     private const string PremulAlphaMarker = "fn premul_alpha(rgba: vec4<f32>) -> vec4<f32> {";
     private const string WorkgroupSizeMarker = "// The X size should be 16 / PIXELS_PER_THREAD";
     private const string AnalyticFillCallMarker = "                fill_path(fill, local_xy, &area);";
-    private const string MsaaFillCallMarker = "                fill_path_ms(fill, local_id.xy, &area);";
     private const string ThresholdHelper =
         """
         fn apply_aliased_threshold(result: ptr<function, array<f32, PIXELS_PER_THREAD>>) {
@@ -66,7 +65,6 @@ internal static class FineAliasedThresholdComputeShader
             source = source.Replace(PremulAlphaMarker, $"{traits.EncodeOutputFunction}\n\n{PremulAlphaMarker}", StringComparison.Ordinal);
             source = source.Replace(WorkgroupSizeMarker, $"{ThresholdHelper}{WorkgroupSizeMarker}", StringComparison.Ordinal);
             source = source.Replace(AnalyticFillCallMarker, $"{AnalyticFillCallMarker}\n                apply_aliased_threshold(&area);", StringComparison.Ordinal);
-            source = source.Replace(MsaaFillCallMarker, $"{MsaaFillCallMarker}\n                apply_aliased_threshold(&area);", StringComparison.Ordinal);
 
             int byteCount = Encoding.UTF8.GetByteCount(source);
             code = new byte[byteCount + 1];

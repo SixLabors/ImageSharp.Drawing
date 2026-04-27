@@ -287,7 +287,7 @@ internal static class WebGPUSceneDispatch
     {
         bindingLimitFailure = BindingLimitFailure.None;
         WebGPUSceneBufferSizes bufferSizes = config.BufferSizes;
-        nuint infoBinDataByteLength = checked(GetBindingByteLength<uint>(encodedScene.InfoWordCount) + config.BufferSizes.BinData.ByteLength + config.BufferSizes.BinHeaders.ByteLength);
+        nuint infoBinDataByteLength = checked(GetBindingByteLength<uint>(encodedScene.InfoBufferWordCount) + config.BufferSizes.BinData.ByteLength + config.BufferSizes.BinHeaders.ByteLength);
         if (!TryValidateBufferSize(GetBindingByteLength<GpuSceneConfig>(1), "scene config", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
             !TryValidateBufferSize(GetBindingByteLength<uint>(encodedScene.SceneWordCount), "scene data", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
             !TryValidateBufferSize(bufferSizes.PathReduced.ByteLength, "path reduced", BindingLimitBuffer.None, maxStorageBufferBindingSize, out bindingLimitFailure, out error) ||
@@ -421,7 +421,7 @@ internal static class WebGPUSceneDispatch
         nuint pathBboxBufferSize = bufferSizes.PathBboxes.ByteLength;
         nuint drawReducedBufferSize = bufferSizes.DrawReduced.ByteLength;
         nuint drawMonoidBufferSize = bufferSizes.DrawMonoids.ByteLength;
-        nuint infoBinDataBufferSize = checked(GetBindingByteLength<uint>(encodedScene.InfoWordCount) + bufferSizes.BinData.ByteLength + bufferSizes.BinHeaders.ByteLength);
+        nuint infoBinDataBufferSize = checked(GetBindingByteLength<uint>(encodedScene.InfoBufferWordCount) + bufferSizes.BinData.ByteLength + bufferSizes.BinHeaders.ByteLength);
         nuint clipInputBufferSize = bufferSizes.ClipInputs.ByteLength;
         nuint clipElementBufferSize = bufferSizes.ClipElements.ByteLength;
         nuint clipBicBufferSize = bufferSizes.ClipBics.ByteLength;
@@ -668,7 +668,7 @@ internal static class WebGPUSceneDispatch
         WebGPUSceneWorkgroupCounts workgroupCounts = config.WorkgroupCounts;
         nuint sceneBufferSize = GetBindingByteLength<uint>(encodedScene.SceneWordCount);
         nuint drawMonoidBufferSize = bufferSizes.DrawMonoids.ByteLength;
-        nuint infoBinDataBufferSize = checked(GetBindingByteLength<uint>(encodedScene.InfoWordCount) + bufferSizes.BinData.ByteLength + bufferSizes.BinHeaders.ByteLength);
+        nuint infoBinDataBufferSize = checked(GetBindingByteLength<uint>(encodedScene.InfoBufferWordCount) + bufferSizes.BinData.ByteLength + bufferSizes.BinHeaders.ByteLength);
         nuint drawBboxBufferSize = bufferSizes.DrawBboxes.ByteLength;
         nuint pathBufferSize = bufferSizes.Paths.ByteLength;
         nuint lineBufferSize = bufferSizes.Lines.ByteLength;
@@ -2659,7 +2659,7 @@ internal static class WebGPUSceneDispatch
         entries[0] = CreateBufferBinding(0, resources.HeaderBuffer, (nuint)sizeof(GpuSceneConfig));
         entries[1] = CreateBufferBinding(1, scheduling.SegmentBuffer, bufferSizes.Segments.ByteLength);
         entries[2] = CreateBufferBinding(2, scheduling.PtclBuffer, bufferSizes.Ptcl.ByteLength);
-        entries[3] = CreateBufferBinding(3, resources.InfoBinDataBuffer, checked(GetBindingByteLength<uint>(encodedScene.InfoWordCount) + bufferSizes.BinData.ByteLength + bufferSizes.BinHeaders.ByteLength));
+        entries[3] = CreateBufferBinding(3, resources.InfoBinDataBuffer, checked(GetBindingByteLength<uint>(encodedScene.InfoBufferWordCount) + bufferSizes.BinData.ByteLength + bufferSizes.BinHeaders.ByteLength));
         entries[4] = CreateBufferBinding(4, scheduling.BlendBuffer, bufferSizes.BlendSpill.ByteLength);
         entries[5] = new BindGroupEntry { Binding = 5, TextureView = outputTextureView };
         entries[6] = new BindGroupEntry { Binding = 6, TextureView = resources.GradientTextureView };

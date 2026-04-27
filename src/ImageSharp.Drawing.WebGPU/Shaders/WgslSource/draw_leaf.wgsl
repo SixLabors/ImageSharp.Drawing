@@ -114,7 +114,7 @@ fn main(
         let di = m.info_offset;
         if tag_word == DRAWTAG_FILL_COLOR || tag_word == DRAWTAG_FILL_RECOLOR || tag_word == DRAWTAG_FILL_LIN_GRADIENT ||
             tag_word == DRAWTAG_FILL_RAD_GRADIENT || tag_word == DRAWTAG_FILL_ELLIPTIC_GRADIENT || tag_word == DRAWTAG_FILL_SWEEP_GRADIENT ||
-            tag_word == DRAWTAG_FILL_IMAGE || tag_word == DRAWTAG_BEGIN_CLIP
+            tag_word == DRAWTAG_FILL_PATH_GRADIENT || tag_word == DRAWTAG_FILL_IMAGE || tag_word == DRAWTAG_BEGIN_CLIP
         {
             let bbox = path_bbox[m.path_ix];
             let draw_flags = bbox.draw_flags;
@@ -267,6 +267,9 @@ fn main(
                     info[di + 6u] = bitcast<u32>(inv.translate.y);
                     info[di + 7u] = scene[dd + 3u];
                     info[di + 8u] = scene[dd + 4u];
+                }
+                case DRAWTAG_FILL_PATH_GRADIENT: {
+                    info[di] = draw_flags;
                 }
                 case DRAWTAG_FILL_IMAGE: {
                     info[di] = draw_flags;

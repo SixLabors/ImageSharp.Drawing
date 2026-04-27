@@ -3,7 +3,6 @@
 
 using System.Runtime.CompilerServices;
 using Silk.NET.WebGPU;
-using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -12,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// WebGPU-backed implementation of <see cref="IDrawingBackend"/>.
 /// </summary>
 /// <remarks>
-/// Uses WebGPU when the target surface and pixel format are supported, and uses the CPU drawing backend otherwise.
+/// Uses WebGPU when the target surface and pixel format are supported.
 /// Diagnostic properties describe only the most recent flush executed by this backend instance and are overwritten
 /// by the next flush.
 /// </remarks>
@@ -33,8 +32,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     // successful render after the last growth.
     private const int MaxDynamicGrowthAttempts = ScratchAllocatorCount + 2;
 
-    private readonly DefaultDrawingBackend fallbackBackend;
-
     // The staged pipeline keeps the most recently successful scratch capacities so later flushes
     // can start closer to the scene sizes the current device has already proven it needs.
     private WebGPUSceneBumpSizes bumpSizes = WebGPUSceneBumpSizes.Initial();
@@ -52,24 +49,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// Initializes a new instance of the <see cref="WebGPUDrawingBackend"/> class.
     /// </summary>
     public WebGPUDrawingBackend()
-        => this.fallbackBackend = DefaultDrawingBackend.Instance;
-
-    /// <summary>
-    /// Gets a value indicating whether the last flush completed using WebGPU.
-    /// </summary>
-    /// <remarks>
-    /// This value describes only the most recent flush on this backend instance. It is overwritten by the next flush.
-    /// </remarks>
-    public bool DiagnosticLastFlushUsedGPU { get; private set; }
-
-    /// <summary>
-    /// Gets the last WebGPU rendering failure that forced CPU rendering.
-    /// </summary>
-    /// <remarks>
-    /// This value describes only the most recent flush on this backend instance. It is reset at the start of each flush.
-    /// A <see langword="null"/> value means no failure reason was recorded for the most recent flush.
-    /// </remarks>
-    public string? DiagnosticLastSceneFailure { get; private set; }
+    {
+    }
 
     /// <summary>
     /// Gets a value indicating whether the last WebGPU flush used chunked rendering.
@@ -101,8 +82,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             return;
         }
 
-        this.DiagnosticLastFlushUsedGPU = false;
-        this.DiagnosticLastSceneFailure = null;
         this.DiagnosticLastFlushUsedChunking = false;
         this.lastChunkingBindingFailure = WebGPUSceneDispatch.BindingLimitBuffer.None;
         WebGPUSceneBumpSizes currentBumpSizes = this.bumpSizes;
@@ -130,16 +109,14 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                         out WebGPUStagedScene stagedScene,
                         out string? error))
                 {
-                    this.DiagnosticLastSceneFailure = exceedsBindingLimit
-                        ? error ?? "The staged WebGPU scene exceeded the current binding limits."
-                        : error ?? "Failed to create the staged WebGPU scene.";
-                    this.FlushCompositionsFallback(configuration, target, compositionScene, compositionBounds: null);
-                    return;
+                    throw new InvalidOperationException(
+                        exceedsBindingLimit
+                            ? error ?? "The staged WebGPU scene exceeded the current binding limits."
+                            : error ?? "Failed to create the staged WebGPU scene.");
                 }
 
                 try
                 {
-                    this.DiagnosticLastFlushUsedGPU = true;
                     this.DiagnosticLastFlushUsedChunking = stagedScene.BindingLimitFailure.Buffer != WebGPUSceneDispatch.BindingLimitBuffer.None;
                     this.lastChunkingBindingFailure = stagedScene.BindingLimitFailure.Buffer;
 
@@ -162,7 +139,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                         return;
                     }
 
-                    this.DiagnosticLastFlushUsedGPU = false;
                     if (requiresGrowth)
                     {
                         // Bump overflow; retry with GPU-reported sizes.
@@ -170,19 +146,15 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                         continue;
                     }
 
-                    this.DiagnosticLastSceneFailure = error ?? "The staged WebGPU scene dispatch failed.";
+                    throw new InvalidOperationException(error ?? "The staged WebGPU scene dispatch failed.");
                 }
                 finally
                 {
                     stagedScene.Dispose();
                 }
-
-                this.FlushCompositionsFallback(configuration, target, compositionScene, compositionBounds: null);
-                return;
             }
 
-            this.DiagnosticLastSceneFailure = "The staged WebGPU scene exceeded the current dynamic growth retry budget.";
-            this.FlushCompositionsFallback(configuration, target, compositionScene, compositionBounds: null);
+            throw new InvalidOperationException("The staged WebGPU scene exceeded the current dynamic growth retry budget.");
         }
         finally
         {
@@ -191,60 +163,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             WebGPUSceneSchedulingArena.Dispose(Interlocked.Exchange(ref this.cachedSchedulingArena, schedulingArena));
             WebGPUSceneResourceArena.Dispose(Interlocked.Exchange(ref this.cachedResourceArena, resourceArena));
         }
-    }
-
-    /// <summary>
-    /// Executes the scene on the default backend, uploading the result when the target is a native WebGPU surface.
-    /// </summary>
-    private void FlushCompositionsFallback<TPixel>(
-        Configuration configuration,
-        ICanvasFrame<TPixel> target,
-        CompositionScene compositionScene,
-        Rectangle? compositionBounds)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        if (!target.TryGetNativeSurface(out NativeSurface? nativeSurface) ||
-            !nativeSurface.TryGetCapability(out WebGPUSurfaceCapability? capability))
-        {
-            this.fallbackBackend.FlushCompositions(configuration, target, compositionScene);
-            return;
-        }
-
-        Rectangle targetBounds = target.Bounds;
-        using Buffer2D<TPixel> stagingBuffer =
-            configuration.MemoryAllocator.Allocate2D<TPixel>(targetBounds.Right, targetBounds.Bottom, AllocationOptions.Clean);
-
-        Buffer2DRegion<TPixel> stagingRegion = new(stagingBuffer, targetBounds);
-        ICanvasFrame<TPixel> stagingFrame = new MemoryCanvasFrame<TPixel>(stagingRegion);
-
-        this.ReadRegion(
-            configuration,
-            target,
-            new Rectangle(0, 0, targetBounds.Width, targetBounds.Height),
-            stagingRegion);
-
-        this.fallbackBackend.FlushCompositions(configuration, stagingFrame, compositionScene);
-
-        WebGPU api = WebGPURuntime.GetApi();
-        using WebGPUHandle.HandleReference queueReference = capability.QueueHandle.AcquireReference();
-
-        Buffer2DRegion<TPixel> uploadRegion = compositionBounds is Rectangle cb && cb.Width > 0 && cb.Height > 0
-            ? stagingRegion.GetSubRegion(cb)
-            : stagingRegion;
-
-        uint destX = compositionBounds is Rectangle cbx ? (uint)cbx.X : 0;
-        uint destY = compositionBounds is Rectangle cby ? (uint)cby.Y : 0;
-
-        using WebGPUHandle.HandleReference textureReference = capability.TargetTextureHandle.AcquireReference();
-        WebGPUFlushContext.UploadTextureFromRegion(
-            api,
-            (Queue*)queueReference.Handle,
-            (Texture*)textureReference.Handle,
-            uploadRegion,
-            configuration.MemoryAllocator,
-            destX,
-            destY,
-            0);
     }
 
     /// <summary>
@@ -396,8 +314,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             return;
         }
 
-        this.DiagnosticLastFlushUsedGPU = false;
-        this.DiagnosticLastSceneFailure = null;
         this.DiagnosticLastFlushUsedChunking = false;
         this.lastChunkingBindingFailure = WebGPUSceneDispatch.BindingLimitBuffer.None;
         WebGPUSceneSchedulingArena.Dispose(this.cachedSchedulingArena);

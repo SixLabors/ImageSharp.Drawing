@@ -700,7 +700,7 @@ internal readonly struct WebGPUSceneBufferSizes
         uint drawObjectCount = checked((uint)scene.DrawTagCount);
         uint drawReducedCount = workgroupCounts.DrawReduceX;
         uint drawMonoidCount = drawObjectCount;
-        uint infoCount = checked((uint)scene.InfoWordCount);
+        uint infoCount = checked((uint)scene.InfoBufferWordCount);
         uint clipInputCount = checked((uint)scene.ClipCount);
         uint clipElementCount = checked((uint)scene.ClipCount);
         uint clipBicCount = clipInputCount / 256U;

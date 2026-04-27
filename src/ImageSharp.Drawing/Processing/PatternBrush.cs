@@ -1,9 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Numerics;
-using SixLabors.ImageSharp.Memory;
-
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
@@ -30,12 +27,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 public sealed class PatternBrush : Brush
 {
     /// <summary>
-    /// The pattern.
-    /// </summary>
-    private readonly DenseMatrix<Color> pattern;
-    private readonly DenseMatrix<Vector4> patternVector;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="PatternBrush"/> class.
     /// </summary>
     /// <param name="foreColor">Color of the fore.</param>
@@ -54,21 +45,16 @@ public sealed class PatternBrush : Brush
     /// <param name="pattern">The pattern.</param>
     internal PatternBrush(Color foreColor, Color backColor, in DenseMatrix<bool> pattern)
     {
-        Vector4 foreColorVector = foreColor.ToScaledVector4();
-        Vector4 backColorVector = backColor.ToScaledVector4();
-        this.pattern = new DenseMatrix<Color>(pattern.Columns, pattern.Rows);
-        this.patternVector = new DenseMatrix<Vector4>(pattern.Columns, pattern.Rows);
+        this.Pattern = new DenseMatrix<Color>(pattern.Columns, pattern.Rows);
         for (int i = 0; i < pattern.Data.Length; i++)
         {
             if (pattern.Data[i])
             {
-                this.pattern.Data[i] = foreColor;
-                this.patternVector.Data[i] = foreColorVector;
+                this.Pattern.Data[i] = foreColor;
             }
             else
             {
-                this.pattern.Data[i] = backColor;
-                this.patternVector.Data[i] = backColorVector;
+                this.Pattern.Data[i] = backColor;
             }
         }
     }
@@ -77,24 +63,19 @@ public sealed class PatternBrush : Brush
     /// Initializes a new instance of the <see cref="PatternBrush"/> class.
     /// </summary>
     /// <param name="brush">The brush.</param>
-    internal PatternBrush(PatternBrush brush)
-    {
-        this.pattern = brush.pattern;
-        this.patternVector = brush.patternVector;
-    }
+    internal PatternBrush(PatternBrush brush) => this.Pattern = brush.Pattern;
 
     /// <summary>
     /// Gets the pattern color matrix.
     /// </summary>
-    public DenseMatrix<Color> Pattern => this.pattern;
+    public DenseMatrix<Color> Pattern { get; }
 
     /// <inheritdoc />
     public override bool Equals(Brush? other)
     {
         if (other is PatternBrush sb)
         {
-            return sb.pattern.Equals(this.pattern)
-                && sb.patternVector.Equals(this.patternVector);
+            return sb.Pattern.Equals(this.Pattern);
         }
 
         return false;
@@ -102,7 +83,7 @@ public sealed class PatternBrush : Brush
 
     /// <inheritdoc/>
     public override int GetHashCode()
-        => HashCode.Combine(this.pattern, this.patternVector);
+        => this.Pattern.GetHashCode();
 
     /// <inheritdoc />
     public override BrushRenderer<TPixel> CreateRenderer<TPixel>(
@@ -115,7 +96,7 @@ public sealed class PatternBrush : Brush
             configuration,
             options,
             canvasWidth,
-            this.pattern.ToPixelMatrix<TPixel>());
+            this.Pattern.ToPixelMatrix<TPixel>());
 
     /// <summary>
     /// The pattern brush applicator.
