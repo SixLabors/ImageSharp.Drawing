@@ -26,6 +26,8 @@ internal static class WebGPUSceneEncoder
     private const int StyleWordCount = 5;
     private const int TileWidth = 16;
     private const int TileHeight = 16;
+    private const float PointStrokeSegmentHalfLength = 1F / 128F;
+    private const float StrokeMicroSegmentEpsilon = 1F / 64F;
     private static readonly GraphicsOptions DefaultClipGraphicsOptions = new();
 
     /// <summary>
@@ -1459,10 +1461,22 @@ internal static class WebGPUSceneEncoder
         float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
         float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
         lineCount = EstimateStrokeLineCount(geometry, pen, widthScale);
+        int encodedContourCount = 0;
 
         for (int i = 0; i < geometry.Contours.Count; i++)
         {
             LinearContour contour = geometry.Contours[i];
+            if (TryGetPointStrokeContour(geometry, contour, out PointF point))
+            {
+                EncodePointStrokeContour(
+                    point,
+                    pointTranslateX,
+                    pointTranslateY,
+                    ref pathTags,
+                    ref pathData);
+                encodedContourCount++;
+                continue;
+            }
 
             int markerWordCount = contour.IsClosed ? 2 : 4;
             Span<uint> contourData = pathData.GetAppendSpan(2 + (contour.SegmentCount * 2) + markerWordCount);
@@ -1501,15 +1515,46 @@ internal static class WebGPUSceneEncoder
 
             pathData.Advance(contourData.Length);
             pathTags.Advance(contourTags.Length);
+            encodedContourCount++;
         }
 
-        if (geometry.Info.SegmentCount == 0)
+        if (encodedContourCount == 0)
         {
             return 0;
         }
 
         pathTags.Add(PackPathTag(PathTag.Path));
         return 1;
+    }
+
+    /// <summary>
+    /// Encodes one point-like stroke contour as a tiny centered open segment.
+    /// </summary>
+    private static void EncodePointStrokeContour(
+        PointF point,
+        float pointTranslateX,
+        float pointTranslateY,
+        ref OwnedStream<byte> pathTags,
+        ref OwnedStream<uint> pathData)
+    {
+        PointF start = new(point.X - PointStrokeSegmentHalfLength, point.Y);
+        PointF end = new(point.X + PointStrokeSegmentHalfLength, point.Y);
+        PointF tangentEnd = GetStrokeMarkerTangentPoint(start, end);
+
+        Span<uint> contourData = pathData.GetAppendSpan(8);
+        Span<byte> contourTags = pathTags.GetAppendSpan(2);
+        contourData[0] = BitcastSingle(start.X + pointTranslateX);
+        contourData[1] = BitcastSingle(start.Y + pointTranslateY);
+        contourData[2] = BitcastSingle(end.X + pointTranslateX);
+        contourData[3] = BitcastSingle(end.Y + pointTranslateY);
+        contourTags[0] = PackPathTag(PathTag.LineToF32);
+        contourData[4] = BitcastSingle(start.X + pointTranslateX);
+        contourData[5] = BitcastSingle(start.Y + pointTranslateY);
+        contourData[6] = BitcastSingle(tangentEnd.X + pointTranslateX);
+        contourData[7] = BitcastSingle(tangentEnd.Y + pointTranslateY);
+        contourTags[1] = PackPathTag(PathTag.QuadToF32 | PathTag.SubpathEnd);
+        pathData.Advance(contourData.Length);
+        pathTags.Advance(contourTags.Length);
     }
 
     /// <summary>
@@ -1528,6 +1573,7 @@ internal static class WebGPUSceneEncoder
     {
         float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
         float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
+        NormalizePointStrokeSegment(ref start, ref end);
         PointF firstTangentEndPoint = GetStrokeMarkerTangentPoint(start, end);
 
         Span<uint> contourData = pathData.GetAppendSpan(8);
@@ -1547,6 +1593,45 @@ internal static class WebGPUSceneEncoder
         pathTags.Add(PackPathTag(PathTag.Path));
         lineCount = EstimateStrokeLineCountForOpenSegment(pen, widthScale);
         return 1;
+    }
+
+    /// <summary>
+    /// Gets whether a contour collapses to the point-stroke path used by the CPU rasterizer.
+    /// </summary>
+    private static bool TryGetPointStrokeContour(LinearGeometry geometry, LinearContour contour, out PointF point)
+    {
+        point = default;
+        if (contour.PointCount == 0)
+        {
+            return false;
+        }
+
+        point = geometry.Points[contour.PointStart];
+        for (int i = 1; i < contour.PointCount; i++)
+        {
+            PointF next = geometry.Points[contour.PointStart + i];
+            if (Vector2.DistanceSquared(next, point) > StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Replaces a point-like explicit stroke segment with the tiny tangent segment used for point strokes.
+    /// </summary>
+    private static void NormalizePointStrokeSegment(ref PointF start, ref PointF end)
+    {
+        if (Vector2.DistanceSquared(start, end) > StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon)
+        {
+            return;
+        }
+
+        PointF center = new((start.X + end.X) * 0.5F, (start.Y + end.Y) * 0.5F);
+        start = new PointF(center.X - PointStrokeSegmentHalfLength, center.Y);
+        end = new PointF(center.X + PointStrokeSegmentHalfLength, center.Y);
     }
 
     /// <summary>

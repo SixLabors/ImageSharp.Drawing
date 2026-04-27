@@ -898,6 +898,46 @@ public partial class WebGPUDrawingBackendTests
         AssertBackendPairReferenceOutputs(provider, "DrawPath_Stroke", defaultImage, nativeSurfaceImage);
     }
 
+    [WebGPUTheory]
+    [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32, LineCap.Square)]
+    [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32, LineCap.Round)]
+    public void DrawPath_PointStroke_LineCap_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider, LineCap lineCap)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        PathBuilder pathBuilder = new();
+        pathBuilder.AddLine(new PointF(128, 128), new PointF(128, 128));
+
+        IPath path = pathBuilder.Build();
+        Pen pen = new SolidPen(new PenOptions(Color.DarkBlue, 48F)
+        {
+            StrokeOptions = new StrokeOptions { LineCap = lineCap }
+        });
+
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Draw(pen, path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, $"DrawPath_PointStroke_LineCap_{lineCap}", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.03F);
+        AssertBackendPairReferenceOutputs(provider, $"DrawPath_PointStroke_LineCap_{lineCap}", defaultImage, nativeSurfaceImage);
+    }
+
     public static TheoryData<LineJoin> LineJoinValues { get; } = new()
     {
         LineJoin.Miter,
@@ -2290,6 +2330,4 @@ the evil Galactic Empire.";
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
         AssertBackendPairReferenceOutputs(provider, "SaveLayer_MixedSaveAndSaveLayer", defaultImage, nativeSurfaceImage);
     }
-
 }
-
