@@ -46,28 +46,6 @@ public interface IDrawingCanvas : IDisposable
     public int Save(DrawingOptions options, params IPath[] clipPaths);
 
     /// <summary>
-    /// Saves the current drawing state and begins an isolated compositing layer.
-    /// Subsequent draw commands are recorded into an isolated logical layer. When
-    /// <see cref="Restore"/> closes the layer, that layer becomes eligible for
-    /// composition during the next <see cref="Flush"/> or <see cref="IDisposable.Dispose"/>.
-    /// </summary>
-    /// <returns>The save count after the layer state has been pushed.</returns>
-    public int SaveLayer();
-
-    /// <summary>
-    /// Saves the current drawing state and begins an isolated compositing layer.
-    /// Subsequent draw commands are recorded into an isolated logical layer. When
-    /// <see cref="Restore"/> closes the layer, that layer is composed during the next
-    /// <see cref="Flush"/> or <see cref="IDisposable.Dispose"/> using the specified
-    /// <paramref name="layerOptions"/> (blend mode, alpha composition, opacity).
-    /// </summary>
-    /// <param name="layerOptions">
-    /// Graphics options controlling how the layer is composited on restore.
-    /// </param>
-    /// <returns>The save count after the layer state has been pushed.</returns>
-    public int SaveLayer(GraphicsOptions layerOptions);
-
-    /// <summary>
     /// Saves the current drawing state and begins an isolated compositing layer
     /// bounded to a subregion. Subsequent draw commands are recorded into that isolated
     /// logical layer. When <see cref="Restore"/> closes the layer, it is composed during
@@ -114,30 +92,11 @@ public interface IDrawingCanvas : IDisposable
     public IDrawingCanvas CreateRegion(Rectangle region);
 
     /// <summary>
-    /// Clears the whole canvas using the given brush and clear-style composition options.
-    /// </summary>
-    /// <param name="brush">Brush used to shade destination pixels during clear.</param>
-    public void Clear(Brush brush);
-
-    /// <summary>
-    /// Clears a local region using the given brush and clear-style composition options.
-    /// </summary>
-    /// <param name="brush">Brush used to shade destination pixels during clear.</param>
-    /// <param name="region">Region to clear in local coordinates.</param>
-    public void Clear(Brush brush, Rectangle region);
-
-    /// <summary>
     /// Clears a path region using the given brush and clear-style composition options.
     /// </summary>
     /// <param name="brush">Brush used to shade destination pixels during clear.</param>
     /// <param name="path">The path region to clear.</param>
     public void Clear(Brush brush, IPath path);
-
-    /// <summary>
-    /// Fills the whole canvas using the given brush.
-    /// </summary>
-    /// <param name="brush">Brush used to shade destination pixels.</param>
-    public void Fill(Brush brush);
 
     /// <summary>
     /// Fills a path in local coordinates using the given brush.

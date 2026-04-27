@@ -406,22 +406,6 @@ internal static unsafe partial class WebGPURuntime
         }
     }
 
-    /// <summary>
-    /// Process-exit cleanup callback.
-    /// </summary>
-    /// <param name="sender">Event sender.</param>
-    /// <param name="e">Event arguments.</param>
-    private static void OnProcessExit(object? sender, EventArgs e)
-    {
-        _ = sender;
-        _ = e;
-
-        lock (Sync)
-        {
-            DisposeRuntimeCore();
-        }
-    }
-
     private static void DisposeRuntimeCore()
     {
         ClearDeviceStateCache();
@@ -476,7 +460,14 @@ internal static unsafe partial class WebGPURuntime
     {
         if (!processExitHooked)
         {
-            AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
+            AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+            {
+                lock (Sync)
+                {
+                    DisposeRuntimeCore();
+                }
+            };
+
             processExitHooked = true;
         }
 

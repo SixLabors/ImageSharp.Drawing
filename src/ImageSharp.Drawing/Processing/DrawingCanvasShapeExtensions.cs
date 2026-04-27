@@ -4,10 +4,38 @@
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Convenience shape helpers that build paths and forward to the core <see cref="IDrawingCanvas"/> fill and draw primitives.
+/// Convenience canvas helpers that forward to the core <see cref="IDrawingCanvas"/> primitives.
 /// </summary>
 public static class DrawingCanvasShapeExtensions
 {
+    /// <summary>
+    /// Saves the current drawing state and begins an isolated compositing layer over the whole canvas.
+    /// </summary>
+    /// <param name="canvas">The destination canvas.</param>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    public static int SaveLayer(this IDrawingCanvas canvas)
+        => canvas.SaveLayer(new GraphicsOptions(), canvas.Bounds);
+
+    /// <summary>
+    /// Saves the current drawing state and begins an isolated compositing layer over the whole canvas.
+    /// </summary>
+    /// <param name="canvas">The destination canvas.</param>
+    /// <param name="layerOptions">Graphics options controlling how the layer is composited on restore.</param>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    public static int SaveLayer(this IDrawingCanvas canvas, GraphicsOptions layerOptions)
+        => canvas.SaveLayer(layerOptions, canvas.Bounds);
+
+    /// <summary>
+    /// Fills the whole canvas using the given brush.
+    /// </summary>
+    /// <param name="canvas">The destination canvas.</param>
+    /// <param name="brush">Brush used to shade destination pixels.</param>
+    public static void Fill(this IDrawingCanvas canvas, Brush brush)
+    {
+        Rectangle bounds = canvas.Bounds;
+        canvas.Fill(brush, new RectangularPolygon(bounds.X, bounds.Y, bounds.Width, bounds.Height));
+    }
+
     /// <summary>
     /// Fills a local region using the given brush.
     /// </summary>
@@ -16,6 +44,26 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="region">Region to fill in local coordinates.</param>
     public static void Fill(this IDrawingCanvas canvas, Brush brush, Rectangle region)
         => canvas.Fill(brush, new RectangularPolygon(region.X, region.Y, region.Width, region.Height));
+
+    /// <summary>
+    /// Clears the whole canvas using the given brush and clear-style composition options.
+    /// </summary>
+    /// <param name="canvas">The destination canvas.</param>
+    /// <param name="brush">Brush used to shade destination pixels during clear.</param>
+    public static void Clear(this IDrawingCanvas canvas, Brush brush)
+    {
+        Rectangle bounds = canvas.Bounds;
+        canvas.Clear(brush, new RectangularPolygon(bounds.X, bounds.Y, bounds.Width, bounds.Height));
+    }
+
+    /// <summary>
+    /// Clears a local region using the given brush and clear-style composition options.
+    /// </summary>
+    /// <param name="canvas">The destination canvas.</param>
+    /// <param name="brush">Brush used to shade destination pixels during clear.</param>
+    /// <param name="region">Region to clear in local coordinates.</param>
+    public static void Clear(this IDrawingCanvas canvas, Brush brush, Rectangle region)
+        => canvas.Clear(brush, new RectangularPolygon(region.X, region.Y, region.Width, region.Height));
 
     /// <summary>
     /// Fills all paths in a collection using the given brush.

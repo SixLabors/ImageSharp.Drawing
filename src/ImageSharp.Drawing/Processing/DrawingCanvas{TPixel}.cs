@@ -192,14 +192,6 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public int SaveLayer()
-        => this.SaveLayer(new GraphicsOptions());
-
-    /// <inheritdoc />
-    public int SaveLayer(GraphicsOptions layerOptions)
-        => this.SaveLayer(layerOptions, this.Bounds);
-
-    /// <inheritdoc />
     public int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds)
     {
         this.EnsureNotDisposed();
@@ -279,32 +271,12 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         => this.CreateRegion(region);
 
     /// <inheritdoc />
-    public void Clear(Brush brush)
-    {
-        DrawingCanvasState state = this.ResolveState();
-        DrawingOptions options = state.Options.CloneForClearOperation();
-        this.ExecuteWithTemporaryState(options, state.ClipPaths, () => this.Fill(brush));
-    }
-
-    /// <inheritdoc />
-    public void Clear(Brush brush, Rectangle region)
-    {
-        DrawingCanvasState state = this.ResolveState();
-        DrawingOptions options = state.Options.CloneForClearOperation();
-        this.ExecuteWithTemporaryState(options, state.ClipPaths, () => this.Fill(brush, region));
-    }
-
-    /// <inheritdoc />
     public void Clear(Brush brush, IPath path)
     {
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions options = state.Options.CloneForClearOperation();
         this.ExecuteWithTemporaryState(options, state.ClipPaths, () => this.Fill(brush, path));
     }
-
-    /// <inheritdoc />
-    public void Fill(Brush brush)
-        => this.Fill(brush, new RectangularPolygon(this.Bounds.X, this.Bounds.Y, this.Bounds.Width, this.Bounds.Height));
 
     /// <inheritdoc />
     public void Fill(Brush brush, IPath path)
