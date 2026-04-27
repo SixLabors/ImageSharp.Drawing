@@ -163,41 +163,35 @@ internal static partial class DefaultRasterizer
         /// <param name="contained">Indicates whether the stroked contour is fully contained within the interest.</param>
         private void ProcessContour(ReadOnlySpan<PointF> contourPoints, bool isClosed, bool contained)
         {
-            StrokeContourSegment[] rentedSegments = ArrayPool<StrokeContourSegment>.Shared.Rent(contourPoints.Length);
-            try
+            using IMemoryOwner<StrokeContourSegment> rentedSegmentsOwner = this.Allocator.Allocate<StrokeContourSegment>(contourPoints.Length);
+            Span<StrokeContourSegment> rentedSegments = rentedSegmentsOwner.Memory.Span;
+            int segmentCount = this.BuildContourSegments(
+                contourPoints,
+                isClosed,
+                rentedSegments,
+                out int distinctPointCount,
+                out PointF pointLike);
+
+            if (segmentCount == 0)
             {
-                int segmentCount = this.BuildContourSegments(
-                    contourPoints,
-                    isClosed,
-                    rentedSegments,
-                    out int distinctPointCount,
-                    out PointF pointLike);
-
-                if (segmentCount == 0)
-                {
-                    this.EmitPointStrokeContour(pointLike, contained);
-                    return;
-                }
-
-                if (segmentCount == 1 || distinctPointCount == 2)
-                {
-                    StrokeContourSegment segment = rentedSegments[0];
-                    this.EmitOpenSegmentStrokeContour(segment.Start, segment.End, contained);
-                    return;
-                }
-
-                if (isClosed)
-                {
-                    this.EmitClosedStrokeContour(rentedSegments.AsSpan(0, segmentCount), contained);
-                    return;
-                }
-
-                this.EmitOpenStrokeContour(rentedSegments.AsSpan(0, segmentCount), contained);
+                this.EmitPointStrokeContour(pointLike, contained);
+                return;
             }
-            finally
+
+            if (segmentCount == 1 || distinctPointCount == 2)
             {
-                ArrayPool<StrokeContourSegment>.Shared.Return(rentedSegments);
+                StrokeContourSegment segment = rentedSegments[0];
+                this.EmitOpenSegmentStrokeContour(segment.Start, segment.End, contained);
+                return;
             }
+
+            if (isClosed)
+            {
+                this.EmitClosedStrokeContour(rentedSegments[..segmentCount], contained);
+                return;
+            }
+
+            this.EmitOpenStrokeContour(rentedSegments[..segmentCount], contained);
         }
 
         /// <summary>
