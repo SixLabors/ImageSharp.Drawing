@@ -47,8 +47,8 @@ public static class DrawingCanvasFactoryExtensions
 
         return new DrawingCanvas<TPixel>(
             configuration,
-            new Buffer2DRegion<TPixel>(frame.PixelBuffer),
             options,
+            new Buffer2DRegion<TPixel>(frame.PixelBuffer),
             clipPaths);
     }
 
@@ -57,33 +57,33 @@ public static class DrawingCanvasFactoryExtensions
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="image">The image containing the frame.</param>
-    /// <param name="frameIndex">The zero-based frame index to target.</param>
     /// <param name="options">Initial drawing options for this canvas instance.</param>
+    /// <param name="frameIndex">The zero-based frame index to target.</param>
     /// <param name="clipPaths">Initial clip paths for this canvas instance.</param>
     /// <returns>A drawing canvas targeting the selected frame.</returns>
     public static DrawingCanvas<TPixel> CreateCanvas<TPixel>(
         this Image<TPixel> image,
-        int frameIndex,
         DrawingOptions options,
+        int frameIndex,
         params IPath[] clipPaths)
         where TPixel : unmanaged, IPixel<TPixel>
-        => CreateCanvas(image, frameIndex, image.Configuration, options, clipPaths);
+        => CreateCanvas(image, image.Configuration, options, frameIndex, clipPaths);
 
     /// <summary>
     /// Creates a drawing canvas over a specific frame of an image.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="image">The image containing the frame.</param>
-    /// <param name="frameIndex">The zero-based frame index to target.</param>
     /// <param name="configuration">The configuration to use for this canvas instance.</param>
     /// <param name="options">Initial drawing options for this canvas instance.</param>
+    /// <param name="frameIndex">The zero-based frame index to target.</param>
     /// <param name="clipPaths">Initial clip paths for this canvas instance.</param>
     /// <returns>A drawing canvas targeting the selected frame.</returns>
     public static DrawingCanvas<TPixel> CreateCanvas<TPixel>(
         this Image<TPixel> image,
-        int frameIndex,
         Configuration configuration,
         DrawingOptions options,
+        int frameIndex,
         params IPath[] clipPaths)
         where TPixel : unmanaged, IPixel<TPixel>
     {

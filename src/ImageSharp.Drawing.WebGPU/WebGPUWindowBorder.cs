@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Describes the window chrome and resize behavior for a <see cref="WebGPUWindow{TPixel}"/>.
+/// Describes the window border around a <see cref="WebGPUWindow{TPixel}"/>.
 /// </summary>
 public enum WebGPUWindowBorder
 {
@@ -19,7 +19,7 @@ public enum WebGPUWindowBorder
     Fixed,
 
     /// <summary>
-    /// Hides the standard window border and title bar for a borderless look.
+    /// Hides the standard window border and title bar.
     /// </summary>
     Hidden,
 }

@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-namespace WebGPUHostedWindowDemo;
+namespace WebGPUHostedSurfaceDemo;
 
 internal static class Program
 {

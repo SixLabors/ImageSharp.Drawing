@@ -473,14 +473,14 @@ public partial class WebGPUDrawingBackendTests
         nativeSurfaceConfiguration.SetDrawingBackend(nativeSurfaceBackend);
 
         using (DrawingCanvas<TPixel> firstCanvas =
-               new(nativeSurfaceConfiguration, nativeSurfaceBackend, renderTarget.NativeFrame, drawingOptions))
+               new(nativeSurfaceConfiguration, drawingOptions, nativeSurfaceBackend, renderTarget.NativeFrame))
         {
             DrawFirstFrame(firstCanvas);
             firstCanvas.Flush();
         }
 
         using (DrawingCanvas<TPixel> secondCanvas =
-               new(nativeSurfaceConfiguration, nativeSurfaceBackend, renderTarget.NativeFrame, drawingOptions))
+               new(nativeSurfaceConfiguration, drawingOptions, nativeSurfaceBackend, renderTarget.NativeFrame))
         {
             DrawSecondFrame(secondCanvas);
             secondCanvas.Flush();
@@ -616,14 +616,14 @@ public partial class WebGPUDrawingBackendTests
         nativeSurfaceConfiguration.SetDrawingBackend(nativeSurfaceBackend);
 
         using (DrawingCanvas<TPixel> nativeSurfaceClearCanvas =
-               new(nativeSurfaceConfiguration, nativeSurfaceBackend, renderTarget.NativeFrame, clearOptions))
+               new(nativeSurfaceConfiguration, clearOptions, nativeSurfaceBackend, renderTarget.NativeFrame))
         {
             nativeSurfaceClearCanvas.Fill(clearBrush);
             nativeSurfaceClearCanvas.Flush();
         }
 
         using (DrawingCanvas<TPixel> nativeSurfaceDrawCanvas =
-               new(nativeSurfaceConfiguration, nativeSurfaceBackend, renderTarget.NativeFrame, drawingOptions))
+               new(nativeSurfaceConfiguration, drawingOptions, nativeSurfaceBackend, renderTarget.NativeFrame))
         {
             nativeSurfaceDrawCanvas.DrawText(textOptions, text, drawBrush, null);
             nativeSurfaceDrawCanvas.Flush();
@@ -764,12 +764,12 @@ public partial class WebGPUDrawingBackendTests
         if (initialImage is not null)
         {
             using DrawingCanvas<TPixel> initialCanvas =
-                new(configuration, backend, renderTarget.NativeFrame, new DrawingOptions());
+                new(configuration, new DrawingOptions(), backend, renderTarget.NativeFrame);
             initialCanvas.DrawImage(initialImage, initialImage.Bounds, targetBounds);
             initialCanvas.Flush();
         }
 
-        using DrawingCanvas<TPixel> canvas = new(configuration, backend, renderTarget.NativeFrame, options);
+        using DrawingCanvas<TPixel> canvas = new(configuration, options, backend, renderTarget.NativeFrame);
         drawAction(canvas);
         canvas.Flush();
         assertBackend?.Invoke(backend);
@@ -1309,7 +1309,7 @@ public partial class WebGPUDrawingBackendTests
         nativeConfig.SetDrawingBackend(nativeSurfaceBackend);
 
         using (DrawingCanvas<TPixel> canvas1 =
-               new(nativeConfig, nativeSurfaceBackend, renderTarget.NativeFrame, drawingOptions))
+               new(nativeConfig, drawingOptions, nativeSurfaceBackend, renderTarget.NativeFrame))
         {
             canvas1.Clear(Brushes.Solid(Color.White));
             canvas1.Fill(redBrush, rect1);
@@ -1317,7 +1317,7 @@ public partial class WebGPUDrawingBackendTests
         }
 
         using (DrawingCanvas<TPixel> canvas2 =
-               new(nativeConfig, nativeSurfaceBackend, renderTarget.NativeFrame, drawingOptions))
+               new(nativeConfig, drawingOptions, nativeSurfaceBackend, renderTarget.NativeFrame))
         {
             canvas2.Fill(blueBrush, rect2);
             canvas2.Flush();

@@ -80,8 +80,8 @@ public partial class DrawingCanvasTests
 
         using (DrawingCanvas<TPixel> canvas = new(
                    configuration,
-                   new NativeCanvasFrame<TPixel>(target.Bounds, nativeSurface),
-                   new DrawingOptions()))
+                   new DrawingOptions(),
+                   new NativeCanvasFrame<TPixel>(target.Bounds, nativeSurface)))
         {
             DrawProcessScenario(canvas);
             canvas.Apply(blurPath, ctx => ctx.GaussianBlur(6F));

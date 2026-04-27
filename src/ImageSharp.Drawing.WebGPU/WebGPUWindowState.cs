@@ -9,22 +9,22 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 public enum WebGPUWindowState
 {
     /// <summary>
-    /// Opens as a normal restored window using its configured size and position.
+    /// Opens as a normal restored window using its configured size.
     /// </summary>
     Normal = 0,
 
     /// <summary>
-    /// Starts minimized to the taskbar or dock.
+    /// Opens minimized to the taskbar or dock.
     /// </summary>
     Minimized,
 
     /// <summary>
-    /// Starts maximized to fill the normal desktop work area.
+    /// Opens maximized to fill the normal desktop work area.
     /// </summary>
     Maximized,
 
     /// <summary>
-    /// Starts in fullscreen mode and occupies the full display.
+    /// Opens in fullscreen mode and occupies the full display.
     /// </summary>
     Fullscreen,
 }

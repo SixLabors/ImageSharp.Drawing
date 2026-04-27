@@ -5,8 +5,8 @@ using System.Diagnostics.CodeAnalysis;
 using Silk.NET.Maths;
 using Silk.NET.Windowing;
 using SixLabors.ImageSharp.PixelFormats;
-using SilkWindowBorder = Silk.NET.Windowing.WindowBorder;
-using SilkWindowState = Silk.NET.Windowing.WindowState;
+using NativeWindowBorder = Silk.NET.Windowing.WindowBorder;
+using NativeWindowState = Silk.NET.Windowing.WindowState;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -14,24 +14,21 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// A self-contained WebGPU-backed window that owns the platform window, the WebGPU device and queue, the surface
 /// and swap chain, and the per-frame texture acquire/present cycle, exposing a <see cref="DrawingCanvas{TPixel}"/>
 /// for each frame. Use <see cref="Run(Action{DrawingCanvas{TPixel}})"/> to let the window drive rendering, or
-/// <see cref="TryAcquireFrame(TimeSpan, out WebGPUWindowFrame{TPixel}?)"/> to drive the frame loop yourself.
+/// <see cref="TryAcquireFrame(out WebGPUSurfaceFrame{TPixel}?)"/> to drive the frame loop yourself.
 /// </summary>
 /// <typeparam name="TPixel">The canvas pixel format.</typeparam>
 /// <remarks>
 /// Use this type when ImageSharp.Drawing owns the application's window. To render into a window owned by a host
 /// application or UI framework, wrap the host's device and queue with <see cref="WebGPUDeviceContext{TPixel}"/>
 /// and pass the host's per-frame swap-chain texture to
-/// <see cref="WebGPUDeviceContext{TPixel}.CreateCanvas(nint, nint, WebGPUTextureFormatId, int, int, DrawingOptions)"/> instead.
+/// <see cref="WebGPUDeviceContext{TPixel}.CreateCanvas(DrawingOptions, nint, nint, WebGPUTextureFormatId, int, int)"/> instead.
 /// </remarks>
 public sealed class WebGPUWindow<TPixel> : IDisposable
     where TPixel : unmanaged, IPixel<TPixel>
 {
-    private const int CallbackTimeoutMilliseconds = 10_000;
-
     private readonly IWindow window;
-    private readonly WebGPUWindowResources<TPixel> resources;
+    private readonly WebGPUSurfaceResources<TPixel> resources;
     private bool isDisposed;
-    private long frameIndex;
     private WebGPUPresentMode presentMode;
 
     /// <summary>
@@ -71,7 +68,7 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
         try
         {
             this.window.Initialize();
-            this.resources = WebGPUWindowResources<TPixel>.Create(
+            this.resources = WebGPUSurfaceResources<TPixel>.Create(
                 configuration,
                 this.window,
                 this.presentMode,
@@ -89,7 +86,7 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
         this.window.Closing += () => this.Closing?.Invoke();
         this.window.FocusChanged += isFocused => this.FocusChanged?.Invoke(isFocused);
         this.window.Move += position => this.Moved?.Invoke(ToPoint(position));
-        this.window.StateChanged += state => this.StateChanged?.Invoke(FromSilk(state));
+        this.window.StateChanged += state => this.StateChanged?.Invoke(FromNative(state));
         this.window.FileDrop += files => this.FilesDropped?.Invoke(files);
     }
 
@@ -99,7 +96,7 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     public event Action<TimeSpan>? Update;
 
     /// <summary>
-    /// Raised when the client size changes.
+    /// Raised when the client-area size in window coordinates changes.
     /// </summary>
     public event Action<Size>? Resized;
 
@@ -107,6 +104,11 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     /// Raised when the framebuffer size changes.
     /// </summary>
     public event Action<Size>? FramebufferResized;
+
+    /// <summary>
+    /// Raised when the window is closing.
+    /// </summary>
+    public event Action? Closing;
 
     /// <summary>
     /// Raised when the window focus changes.
@@ -129,11 +131,6 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     public event Action<string[]>? FilesDropped;
 
     /// <summary>
-    /// Raised when the window is closing.
-    /// </summary>
-    public event Action? Closing;
-
-    /// <summary>
     /// Gets the configuration provided when the window was created.
     /// </summary>
     public Configuration Configuration { get; }
@@ -148,7 +145,7 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Gets or sets the client size in pixels.
+    /// Gets or sets the client-area size in window coordinates.
     /// </summary>
     public Size ClientSize
     {
@@ -162,7 +159,7 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     public Size FramebufferSize => ToSize(this.window.FramebufferSize);
 
     /// <summary>
-    /// Gets the ratio between framebuffer pixels and client pixels.
+    /// Gets the ratio between framebuffer pixels and client coordinate units.
     /// </summary>
     public float RenderScale
     {
@@ -182,7 +179,7 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Gets or sets the window position.
+    /// Gets or sets the window position in screen coordinates.
     /// </summary>
     public Point Position
     {
@@ -227,9 +224,9 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Gets or sets a value indicating whether the window is top-most.
+    /// Gets or sets a value indicating whether the window stays above normal windows.
     /// </summary>
-    public bool TopMost
+    public bool IsTopMost
     {
         get => this.window.TopMost;
         set => this.window.TopMost = value;
@@ -245,22 +242,12 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Gets the elapsed time in seconds since the window was created.
-    /// </summary>
-    public double Time => this.window.Time;
-
-    /// <summary>
-    /// Gets the native window handle.
-    /// </summary>
-    public nint Handle => this.window.Handle;
-
-    /// <summary>
     /// Gets or sets the window state.
     /// </summary>
     public WebGPUWindowState WindowState
     {
-        get => FromSilk(this.window.WindowState);
-        set => this.window.WindowState = ToSilk(value);
+        get => FromNative(this.window.WindowState);
+        set => this.window.WindowState = ToNative(value);
     }
 
     /// <summary>
@@ -268,8 +255,8 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     /// </summary>
     public WebGPUWindowBorder WindowBorder
     {
-        get => FromSilk(this.window.WindowBorder);
-        set => this.window.WindowBorder = ToSilk(value);
+        get => FromNative(this.window.WindowBorder);
+        set => this.window.WindowBorder = ToNative(value);
     }
 
     /// <summary>
@@ -291,7 +278,7 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     public WebGPUTextureFormatId Format { get; }
 
     /// <summary>
-    /// Tries to acquire the next drawable window frame.
+    /// Tries to acquire the next drawable frame.
     /// </summary>
     /// <param name="frame">Receives the acquired frame on success.</param>
     /// <returns>
@@ -302,30 +289,14 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     /// to be handled as normal retry behavior instead of exceptions. Dispose the returned frame when you
     /// are done with it to present it and release its per-frame resources.
     /// </remarks>
-    public bool TryAcquireFrame([NotNullWhen(true)] out WebGPUWindowFrame<TPixel>? frame)
-        => this.TryAcquireFrameCore(TimeSpan.Zero, out frame, new DrawingOptions());
+    public bool TryAcquireFrame([NotNullWhen(true)] out WebGPUSurfaceFrame<TPixel>? frame)
+        => this.TryAcquireFrameCore(new DrawingOptions(), out frame);
 
     /// <summary>
-    /// Tries to acquire the next drawable window frame.
+    /// Tries to acquire the next drawable frame.
     /// </summary>
-    /// <param name="deltaTime">The elapsed time since the previous frame.</param>
-    /// <param name="frame">Receives the acquired frame on success.</param>
-    /// <returns>
-    /// <see langword="true"/> when a frame is available; otherwise <see langword="false"/> when the frame should be retried later.
-    /// </returns>
-    /// <remarks>
-    /// Use this overload when you are driving the render loop yourself and want to provide timing information
-    /// for the acquired frame. Dispose the returned frame when you are done with it to present it and release
-    /// its per-frame resources.
-    /// </remarks>
-    public bool TryAcquireFrame(TimeSpan deltaTime, [NotNullWhen(true)] out WebGPUWindowFrame<TPixel>? frame)
-        => this.TryAcquireFrameCore(deltaTime, out frame, new DrawingOptions());
-
-    /// <summary>
-    /// Tries to acquire the next drawable window frame.
-    /// </summary>
-    /// <param name="frame">Receives the acquired frame on success.</param>
     /// <param name="options">The drawing options for the acquired frame.</param>
+    /// <param name="frame">Receives the acquired frame on success.</param>
     /// <returns>
     /// <see langword="true"/> when a frame is available; otherwise <see langword="false"/> when the frame should be retried later.
     /// </returns>
@@ -335,54 +306,54 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     /// a zero-sized framebuffer. Dispose the returned frame when you are done with it to present it and release
     /// its per-frame resources.
     /// </remarks>
-    public bool TryAcquireFrame([NotNullWhen(true)] out WebGPUWindowFrame<TPixel>? frame, DrawingOptions options)
-        => this.TryAcquireFrameCore(TimeSpan.Zero, out frame, options);
-
-    /// <summary>
-    /// Tries to acquire the next drawable window frame.
-    /// </summary>
-    /// <param name="deltaTime">The elapsed time since the previous frame.</param>
-    /// <param name="frame">Receives the acquired frame on success.</param>
-    /// <param name="options">The drawing options for the acquired frame.</param>
-    /// <returns>
-    /// <see langword="true"/> when a frame is available; otherwise <see langword="false"/> when the frame should be retried later.
-    /// </returns>
-    /// <remarks>
-    /// This method is intended for manual frame loops. A <see langword="false"/> result means no drawable
-    /// frame is available right now, for example because the surface was lost, outdated, timed out, or has
-    /// a zero-sized framebuffer. Dispose the returned frame when you are done with it to present it and release
-    /// its per-frame resources.
-    /// </remarks>
-    public bool TryAcquireFrame(TimeSpan deltaTime, [NotNullWhen(true)] out WebGPUWindowFrame<TPixel>? frame, DrawingOptions options)
-        => this.TryAcquireFrameCore(deltaTime, out frame, options);
+    public bool TryAcquireFrame(DrawingOptions options, [NotNullWhen(true)] out WebGPUSurfaceFrame<TPixel>? frame)
+        => this.TryAcquireFrameCore(options, out frame);
 
     /// <summary>
     /// Runs the window's event loop and renders one WebGPU frame per render callback.
     /// </summary>
     /// <param name="render">The per-frame render callback.</param>
-    public void Run(Action<WebGPUWindowFrame<TPixel>> render)
-        => this.Run(render, new DrawingOptions());
+    public void Run(Action<WebGPUSurfaceFrame<TPixel>> render)
+        => this.Run(new DrawingOptions(), render);
 
     /// <summary>
     /// Runs the window's event loop and renders one WebGPU frame per render callback.
     /// </summary>
-    /// <param name="render">The per-frame render callback.</param>
     /// <param name="options">The drawing options applied to each acquired frame.</param>
-    public void Run(Action<WebGPUWindowFrame<TPixel>> render, DrawingOptions options)
+    /// <param name="render">The per-frame render callback.</param>
+    public void Run(DrawingOptions options, Action<WebGPUSurfaceFrame<TPixel>> render)
+    {
+        Guard.NotNull(render, nameof(render));
+        this.Run(options, (frame, _) => render(frame));
+    }
+
+    /// <summary>
+    /// Runs the window's event loop and renders one WebGPU frame per render callback.
+    /// </summary>
+    /// <param name="render">The per-frame render callback. The second argument is elapsed time since the previous render callback.</param>
+    public void Run(Action<WebGPUSurfaceFrame<TPixel>, TimeSpan> render)
+        => this.Run(new DrawingOptions(), render);
+
+    /// <summary>
+    /// Runs the window's event loop and renders one WebGPU frame per render callback.
+    /// </summary>
+    /// <param name="options">The drawing options applied to each acquired frame.</param>
+    /// <param name="render">The per-frame render callback. The second argument is elapsed time since the previous render callback.</param>
+    public void Run(DrawingOptions options, Action<WebGPUSurfaceFrame<TPixel>, TimeSpan> render)
     {
         Guard.NotNull(render, nameof(render));
         this.ThrowIfDisposed();
 
         void OnRender(double deltaTime)
         {
-            if (!this.TryAcquireFrameCore(TimeSpan.FromSeconds(deltaTime), out WebGPUWindowFrame<TPixel>? frame, options))
+            if (!this.TryAcquireFrameCore(options, out WebGPUSurfaceFrame<TPixel>? frame))
             {
                 return;
             }
 
             using (frame)
             {
-                render(frame);
+                render(frame, TimeSpan.FromSeconds(deltaTime));
             }
         }
 
@@ -417,17 +388,17 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     /// </summary>
     /// <param name="render">The per-frame render callback.</param>
     public void Run(Action<DrawingCanvas<TPixel>> render)
-        => this.Run(render, new DrawingOptions());
+        => this.Run(new DrawingOptions(), render);
 
     /// <summary>
     /// Runs the window's event loop and renders one WebGPU canvas per render callback.
     /// </summary>
-    /// <param name="render">The per-frame render callback.</param>
     /// <param name="options">The drawing options applied to each acquired frame.</param>
-    public void Run(Action<DrawingCanvas<TPixel>> render, DrawingOptions options)
+    /// <param name="render">The per-frame render callback.</param>
+    public void Run(DrawingOptions options, Action<DrawingCanvas<TPixel>> render)
     {
         Guard.NotNull(render, nameof(render));
-        this.Run(frame => render(frame.Canvas), options);
+        this.Run(options, frame => render(frame.Canvas));
     }
 
     /// <summary>
@@ -521,17 +492,13 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     }
 
     private bool TryAcquireFrameCore(
-        TimeSpan deltaTime,
-        [NotNullWhen(true)] out WebGPUWindowFrame<TPixel>? frame,
-        DrawingOptions options)
+        DrawingOptions options,
+        [NotNullWhen(true)] out WebGPUSurfaceFrame<TPixel>? frame)
     {
         this.ThrowIfDisposed();
         return this.resources.TryAcquireFrame(
             this.presentMode,
-            this.ClientSize,
             this.FramebufferSize,
-            deltaTime,
-            this.frameIndex++,
             options,
             out frame);
     }
@@ -563,9 +530,9 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
         silkOptions.FramesPerSecond = options.FramesPerSecond;
         silkOptions.UpdatesPerSecond = options.UpdatesPerSecond;
         silkOptions.IsEventDriven = options.IsEventDriven;
-        silkOptions.TopMost = options.TopMost;
-        silkOptions.WindowState = ToSilk(options.WindowState);
-        silkOptions.WindowBorder = ToSilk(options.WindowBorder);
+        silkOptions.WindowState = ToNative(options.WindowState);
+        silkOptions.WindowBorder = ToNative(options.WindowBorder);
+        silkOptions.TopMost = options.IsTopMost;
         return silkOptions;
     }
 
@@ -577,11 +544,11 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
 
     private static Point ToPoint(Vector2D<int> value) => new(value.X, value.Y);
 
-    private static SilkWindowState ToSilk(WebGPUWindowState state) => (SilkWindowState)(int)state;
+    private static NativeWindowState ToNative(WebGPUWindowState state) => (NativeWindowState)(int)state;
 
-    private static WebGPUWindowState FromSilk(SilkWindowState state) => (WebGPUWindowState)(int)state;
+    private static WebGPUWindowState FromNative(NativeWindowState state) => (WebGPUWindowState)(int)state;
 
-    private static SilkWindowBorder ToSilk(WebGPUWindowBorder border) => (SilkWindowBorder)(int)border;
+    private static NativeWindowBorder ToNative(WebGPUWindowBorder border) => (NativeWindowBorder)(int)border;
 
-    private static WebGPUWindowBorder FromSilk(SilkWindowBorder border) => (WebGPUWindowBorder)(int)border;
+    private static WebGPUWindowBorder FromNative(NativeWindowBorder border) => (WebGPUWindowBorder)(int)border;
 }

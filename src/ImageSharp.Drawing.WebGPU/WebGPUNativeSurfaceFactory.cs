@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// Low-level escape hatch for constructing a <see cref="NativeSurface"/> directly from raw WebGPU handles.
 /// </summary>
 /// <remarks>
-/// Most callers should use <see cref="WebGPUDeviceContext{TPixel}.CreateCanvas(nint, nint, WebGPUTextureFormatId, int, int, DrawingOptions)"/>
+/// Most callers should use <see cref="WebGPUDeviceContext{TPixel}.CreateCanvas(DrawingOptions, nint, nint, WebGPUTextureFormatId, int, int)"/>
 /// or <see cref="WebGPUDeviceContext{TPixel}.CreateFrame(nint, nint, WebGPUTextureFormatId, int, int)"/> instead, which wrap this factory
 /// and validate handle/format compatibility against the canvas pixel type. Use this factory only when you need a
 /// <see cref="NativeSurface"/> independent of <see cref="WebGPUDeviceContext{TPixel}"/>.

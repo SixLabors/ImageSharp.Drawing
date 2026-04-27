@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.4.11626.88
@@ -15,7 +15,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImageSharp.Drawing.WebGPU.S
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DrawingBackendBenchmark", "samples\DrawingBackendBenchmark\DrawingBackendBenchmark.csproj", "{0AF23A97-CD73-409A-AA29-D214AA400AB0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebGPUHostedWindowDemo", "samples\WebGPUHostedWindowDemo\WebGPUHostedWindowDemo.csproj", "{478855A1-ECEA-4DF6-9D7B-0342EA26726E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebGPUHostedSurfaceDemo", "samples\WebGPUHostedSurfaceDemo\WebGPUHostedSurfaceDemo.csproj", "{478855A1-ECEA-4DF6-9D7B-0342EA26726E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

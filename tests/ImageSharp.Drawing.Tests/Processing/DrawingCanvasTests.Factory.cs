@@ -35,7 +35,7 @@ public partial class DrawingCanvasTests
             rootCanvas.Flush();
         }
 
-        using (DrawingCanvas<Rgba32> secondCanvas = image.CreateCanvas(1, new DrawingOptions()))
+        using (DrawingCanvas<Rgba32> secondCanvas = image.CreateCanvas(new DrawingOptions(), 1))
         {
             secondCanvas.Clear(Brushes.Solid(Color.MediumPurple));
             secondCanvas.Flush();
@@ -52,9 +52,9 @@ public partial class DrawingCanvasTests
         image.Frames.AddFrame(image.Frames.RootFrame);
 
         ArgumentOutOfRangeException low = Assert.Throws<ArgumentOutOfRangeException>(
-            () => image.CreateCanvas(-1, new DrawingOptions()));
+            () => image.CreateCanvas(new DrawingOptions(), -1));
         ArgumentOutOfRangeException high = Assert.Throws<ArgumentOutOfRangeException>(
-            () => image.CreateCanvas(image.Frames.Count, new DrawingOptions()));
+            () => image.CreateCanvas(new DrawingOptions(), image.Frames.Count));
 
         Assert.Equal("frameIndex", low.ParamName);
         Assert.Equal("frameIndex", high.ParamName);

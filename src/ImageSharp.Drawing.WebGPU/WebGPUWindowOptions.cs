@@ -8,8 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </summary>
 /// <remarks>
 /// These values describe the initial window and scheduling configuration used during construction. Most callers only
-/// need to set <see cref="Title"/>, <see cref="Size"/>, and <see cref="PresentMode"/>. The created
-/// <see cref="WebGPUWindow{TPixel}"/> can still change many of these values later.
+/// need to set <see cref="Title"/>, <see cref="Size"/>, and <see cref="PresentMode"/>.
 /// </remarks>
 public sealed class WebGPUWindowOptions
 {
@@ -19,7 +18,7 @@ public sealed class WebGPUWindowOptions
     public string Title { get; set; } = "ImageSharp.Drawing WebGPU";
 
     /// <summary>
-    /// Gets or sets the initial client-area size in pixels.
+    /// Gets or sets the initial client-area size in window coordinates.
     /// </summary>
     public Size Size { get; set; } = new(1280, 720);
 
@@ -60,19 +59,19 @@ public sealed class WebGPUWindowOptions
     public bool IsEventDriven { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether the window should stay above normal windows.
-    /// </summary>
-    public bool TopMost { get; set; }
-
-    /// <summary>
     /// Gets or sets the initial window state such as normal, maximized, or fullscreen.
     /// </summary>
     public WebGPUWindowState WindowState { get; set; } = WebGPUWindowState.Normal;
 
     /// <summary>
-    /// Gets or sets the initial window chrome and resize behavior.
+    /// Gets or sets the initial window border mode.
     /// </summary>
     public WebGPUWindowBorder WindowBorder { get; set; } = WebGPUWindowBorder.Resizable;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the window should stay above normal windows.
+    /// </summary>
+    public bool IsTopMost { get; set; }
 
     /// <summary>
     /// Gets or sets how completed frames are queued for presentation to the display.

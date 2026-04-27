@@ -5,7 +5,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
-    <RootNamespace>WebGPUHostedWindowDemo</RootNamespace>
+    <RootNamespace>WebGPUHostedSurfaceDemo</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

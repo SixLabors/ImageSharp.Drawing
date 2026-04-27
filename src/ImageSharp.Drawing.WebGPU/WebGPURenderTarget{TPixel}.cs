@@ -162,7 +162,7 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     {
         this.ThrowIfDisposed();
         this.Graphics.ThrowIfDisposed();
-        return new DrawingCanvas<TPixel>(this.Graphics.Configuration, this.Graphics.Backend, this.NativeFrame, options);
+        return new DrawingCanvas<TPixel>(this.Graphics.Configuration, options, this.Graphics.Backend, this.NativeFrame);
     }
 
     /// <summary>

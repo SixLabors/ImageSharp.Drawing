@@ -16,8 +16,8 @@ The sample opens an `800x600` window, draws a dark background, animates 1000 bou
 This demo is the clearest reference for the window-first WebGPU API surface:
 
 - `WebGPUWindow<TPixel>` owns the OS window, WebGPU surface, adapter, device, queue, and swapchain configuration.
-- `WebGPUWindowFrame<TPixel>` represents one acquired drawable frame.
-- `WebGPUWindowFrame<TPixel>.Canvas` is the normal `DrawingCanvas<TPixel>` you already use elsewhere in ImageSharp.Drawing.
+- `WebGPUSurfaceFrame<TPixel>` represents one acquired drawable frame.
+- `WebGPUSurfaceFrame<TPixel>.Canvas` is the normal `DrawingCanvas<TPixel>` you already use elsewhere in ImageSharp.Drawing.
 - disposing the frame flushes pending canvas work, presents the surface texture, and releases the per-frame WebGPU handles.
 
 That means sample code stays focused on drawing and animation instead of explicit texture acquisition, presentation, or interop setup.
@@ -108,7 +108,7 @@ Separating animation from rendering keeps the sample structure close to a normal
 this.window.Run(this.OnRender);
 ```
 
-`WebGPUWindow<TPixel>.Run(...)` acquires one `WebGPUWindowFrame<TPixel>` per render callback and disposes it automatically after your callback returns. In this sample that means you do not call `Present()` or `Flush()` yourself.
+`WebGPUWindow<TPixel>.Run(...)` acquires one `WebGPUSurfaceFrame<TPixel>` per render callback and disposes it automatically after your callback returns. In this sample that means you do not call `Present()` or `Flush()` yourself.
 
 Inside `OnRender(...)` the sample:
 
@@ -143,7 +143,7 @@ The culling is simple but effective: large amounts of off-screen text never get 
 
 ## Frame lifetime and flushing
 
-This sample uses the `Run(Action<WebGPUWindowFrame<TPixel>>)` overload, so frame lifetime is important:
+This sample uses the `Run(Action<WebGPUSurfaceFrame<TPixel>>)` overload, so frame lifetime is important:
 
 1. the window acquires the current surface texture
 2. the frame wraps that texture in a `DrawingCanvas<TPixel>`
@@ -171,7 +171,7 @@ So this demo is best understood as "ImageSharp.Drawing rendered into a native We
 If you want control over your own loop instead of `Run(...)`, use `TryAcquireFrame(...)`:
 
 ```csharp
-if (window.TryAcquireFrame(out WebGPUWindowFrame<Bgra32>? frame))
+if (window.TryAcquireFrame(out WebGPUSurfaceFrame<Bgra32>? frame))
 {
     using (frame)
     {

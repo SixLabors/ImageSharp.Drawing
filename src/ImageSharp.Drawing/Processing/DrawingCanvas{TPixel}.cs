@@ -64,15 +64,15 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class.
     /// </summary>
     /// <param name="configuration">The active processing configuration.</param>
-    /// <param name="targetRegion">The destination target region.</param>
     /// <param name="options">Initial drawing options for this canvas instance.</param>
+    /// <param name="targetRegion">The destination target region.</param>
     /// <param name="clipPaths">Initial clip paths for this canvas instance.</param>
     public DrawingCanvas(
         Configuration configuration,
-        Buffer2DRegion<TPixel> targetRegion,
         DrawingOptions options,
+        Buffer2DRegion<TPixel> targetRegion,
         params IPath[] clipPaths)
-        : this(configuration, new MemoryCanvasFrame<TPixel>(targetRegion), options, clipPaths)
+        : this(configuration, options, new MemoryCanvasFrame<TPixel>(targetRegion), clipPaths)
     {
     }
 
@@ -80,15 +80,15 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class.
     /// </summary>
     /// <param name="configuration">The active processing configuration.</param>
-    /// <param name="targetFrame">The destination frame.</param>
     /// <param name="options">Initial drawing options for this canvas instance.</param>
+    /// <param name="targetFrame">The destination frame.</param>
     /// <param name="clipPaths">Initial clip paths for this canvas instance.</param>
     public DrawingCanvas(
         Configuration configuration,
-        ICanvasFrame<TPixel> targetFrame,
         DrawingOptions options,
+        ICanvasFrame<TPixel> targetFrame,
         params IPath[] clipPaths)
-        : this(configuration, configuration.GetDrawingBackend(), targetFrame, options, clipPaths)
+        : this(configuration, options, configuration.GetDrawingBackend(), targetFrame, clipPaths)
     {
     }
 
@@ -96,15 +96,15 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class with an explicit backend and initial state.
     /// </summary>
     /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="options">Initial drawing options for this canvas instance.</param>
     /// <param name="backend">The drawing backend implementation.</param>
     /// <param name="targetFrame">The destination frame.</param>
-    /// <param name="options">Initial drawing options for this canvas instance.</param>
     /// <param name="clipPaths">Initial clip paths for this canvas instance.</param>
     public DrawingCanvas(
         Configuration configuration,
+        DrawingOptions options,
         IDrawingBackend backend,
         ICanvasFrame<TPixel> targetFrame,
-        DrawingOptions options,
         params IPath[] clipPaths)
         : this(
             configuration,

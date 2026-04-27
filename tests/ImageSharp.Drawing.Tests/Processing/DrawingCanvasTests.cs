@@ -26,8 +26,8 @@ public partial class DrawingCanvasTests
         where TPixel : unmanaged, IPixel<TPixel>
         => new(
             provider.Configuration,
-            image.Frames.RootFrame.PixelBuffer.GetRegion(),
-            options);
+            options,
+            image.Frames.RootFrame.PixelBuffer.GetRegion());
 
     private static PathBuilder CreateClosedPathBuilder()
     {

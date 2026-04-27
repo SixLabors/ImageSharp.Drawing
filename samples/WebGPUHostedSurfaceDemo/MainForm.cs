@@ -3,15 +3,15 @@
 
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
-using WebGPUHostedWindowDemo.Controls;
-using WebGPUHostedWindowDemo.Scenes;
+using WebGPUHostedSurfaceDemo.Controls;
+using WebGPUHostedSurfaceDemo.Scenes;
 
-namespace WebGPUHostedWindowDemo;
+namespace WebGPUHostedSurfaceDemo;
 
 /// <summary>
 /// Main window for the sample. A tab control switches between two demo scenes, each hosted by its own
-/// <see cref="WebGPURenderControl"/> instance. This demonstrates that multiple independent hosted windows
-/// can coexist in the same WinForms process without touching Silk, surfaces, or swap-chains in user code.
+/// <see cref="WebGPURenderControl"/> instance. This demonstrates that multiple independent hosted surfaces
+/// can coexist in the same WinForms process without managing surfaces or swapchains in user code.
 /// </summary>
 internal sealed class MainForm : Form
 {
@@ -23,7 +23,7 @@ internal sealed class MainForm : Form
 
     public MainForm()
     {
-        this.Text = "ImageSharp.Drawing WebGPU — Hosted Window Demo";
+        this.Text = "ImageSharp.Drawing WebGPU - Hosted Surface Demo";
         this.ClientSize = new Size(1280, 800);
         this.StartPosition = FormStartPosition.CenterScreen;
         this.BackColor = Color.FromArgb(11, 18, 32);
@@ -86,13 +86,13 @@ internal sealed class MainForm : Form
 
     private void OnPaintClock(DrawingCanvas<Bgra32> canvas, TimeSpan delta)
     {
-        Size s = this.clockControl.ClientSize;
+        Size s = this.clockControl.FramebufferSize;
         this.clockScene.Paint(canvas, new SixLabors.ImageSharp.Size(s.Width, s.Height), delta);
     }
 
     private void OnPaintTiger(DrawingCanvas<Bgra32> canvas, TimeSpan delta)
     {
-        Size s = this.tigerControl.ClientSize;
+        Size s = this.tigerControl.FramebufferSize;
         this.tigerScene.Paint(canvas, new SixLabors.ImageSharp.Size(s.Width, s.Height), delta);
         this.tigerStatusLabel.Text = this.tigerScene.StatusText;
     }

@@ -10,21 +10,18 @@ using SilkPresentMode = Silk.NET.WebGPU.PresentMode;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Owning container for the per-window WebGPU stack: instance, surface, adapter, device, queue, drawing context,
+/// Owning container for the per-surface WebGPU stack: instance, surface, adapter, device, queue, drawing context,
 /// and the negotiated swapchain texture format.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Provides a single static <see cref="Create"/> factory that bootstraps every handle in order and leaves the surface
 /// initially configured against <paramref>initialPresentMode</paramref> and <paramref>initialFramebufferSize</paramref>.
-/// Callers hold the returned instance for the lifetime of the window and dispose it when the window tears down.
+/// Callers hold the returned instance for the lifetime of the rendering surface and dispose it when the surface tears down.
 /// </para>
 /// <para>
-/// Shared by the two public window types: <see cref="WebGPUWindow{TPixel}"/> (where this type binds to a library-owned
-/// Silk <c>IWindow</c>) and <see cref="WebGPUHostedWindow{TPixel}"/> (where this type binds to an externally-owned
-/// native window via <see cref="SilkNativeWindowAdapter"/>). Neither caller owns the Silk types directly; they pass
-/// an <see cref="INativeWindowSource"/> and this class drives surface creation, per-frame texture acquisition, and
-/// swapchain reconfiguration.
+/// Shared by the owned-window and hosted-surface entry points. Both provide a native surface source while this class owns the WebGPU
+/// handles, surface creation, per-frame texture acquisition, and swapchain reconfiguration.
 /// </para>
 /// <para>
 /// All handle fields are non-null after successful construction. <see cref="Dispose"/> releases them in reverse
@@ -34,7 +31,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <typeparam name="TPixel">The canvas pixel format. Must map to a WebGPU texture format that
 /// <see cref="WebGPUDrawingBackend.TryGetCompositeTextureFormat{TPixel}(out WebGPUTextureFormatId, out FeatureName)"/>
 /// recognizes, otherwise <see cref="Create"/> throws <see cref="NotSupportedException"/>.</typeparam>
-internal sealed unsafe class WebGPUWindowResources<TPixel> : IDisposable
+internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
     where TPixel : unmanaged, IPixel<TPixel>
 {
     /// <summary>
@@ -46,18 +43,18 @@ internal sealed unsafe class WebGPUWindowResources<TPixel> : IDisposable
     private bool frameInFlight;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUWindowResources{TPixel}"/> class with already-acquired handles.
+    /// Initializes a new instance of the <see cref="WebGPUSurfaceResources{TPixel}"/> class with already-acquired handles.
     /// Only invoked by <see cref="Create"/> after every handle has been successfully bootstrapped.
     /// </summary>
     /// <param name="api">The shared WebGPU API loader.</param>
     /// <param name="instanceHandle">The owned WebGPU instance handle.</param>
-    /// <param name="surfaceHandle">The owned WebGPU surface handle attached to the hosting native window.</param>
+    /// <param name="surfaceHandle">The owned WebGPU surface handle attached to the native host.</param>
     /// <param name="adapterHandle">The owned adapter handle selected for <paramref name="surfaceHandle"/>.</param>
     /// <param name="deviceHandle">The owned device handle requested from <paramref name="adapterHandle"/>.</param>
     /// <param name="queueHandle">The owned default queue handle paired with <paramref name="deviceHandle"/>.</param>
     /// <param name="graphics">The drawing context bound to <paramref name="deviceHandle"/> and <paramref name="queueHandle"/>.</param>
     /// <param name="format">The negotiated swapchain texture format for <typeparamref name="TPixel"/>.</param>
-    private WebGPUWindowResources(
+    private WebGPUSurfaceResources(
         WebGPU api,
         WebGPUInstanceHandle instanceHandle,
         WebGPUSurfaceHandle surfaceHandle,
@@ -88,7 +85,7 @@ internal sealed unsafe class WebGPUWindowResources<TPixel> : IDisposable
     public WebGPUInstanceHandle InstanceHandle { get; }
 
     /// <summary>
-    /// Gets the WebGPU surface attached to the hosting native window. The surface is reconfigured whenever
+    /// Gets the WebGPU surface attached to the native host. The surface is reconfigured whenever
     /// <see cref="ConfigureSurface"/> runs and released on <see cref="Dispose"/>.
     /// </summary>
     public WebGPUSurfaceHandle SurfaceHandle { get; }
@@ -121,13 +118,11 @@ internal sealed unsafe class WebGPUWindowResources<TPixel> : IDisposable
     public WebGPUTextureFormatId Format { get; }
 
     /// <summary>
-    /// Bootstraps the full per-window WebGPU stack bound to <paramref name="nativeSource"/> and leaves the surface
+    /// Bootstraps the full per-surface WebGPU stack bound to <paramref name="nativeSource"/> and leaves the surface
     /// configured against <paramref name="initialPresentMode"/> and <paramref name="initialFramebufferSize"/>.
     /// </summary>
     /// <param name="configuration">The ImageSharp configuration the drawing context will use for its rendering backend.</param>
-    /// <param name="nativeSource">The native window source that provides the platform handles for surface creation.
-    /// Supplied by the owning window type (a Silk <c>IWindow</c> for <see cref="WebGPUWindow{TPixel}"/>, a
-    /// <see cref="SilkNativeWindowAdapter"/> for <see cref="WebGPUHostedWindow{TPixel}"/>).</param>
+    /// <param name="nativeSource">The native surface source that provides the platform handles for surface creation.</param>
     /// <param name="initialPresentMode">The present mode to apply to the first surface configuration.</param>
     /// <param name="initialFramebufferSize">The framebuffer size to apply to the first surface configuration. Zero-area
     /// sizes are permitted and leave the surface unconfigured until the caller invokes <see cref="ConfigureSurface"/>
@@ -138,7 +133,7 @@ internal sealed unsafe class WebGPUWindowResources<TPixel> : IDisposable
     /// Thrown when any of the underlying WebGPU bootstrap steps fail. All partially-acquired handles are released
     /// before the exception propagates.
     /// </exception>
-    public static WebGPUWindowResources<TPixel> Create(
+    public static WebGPUSurfaceResources<TPixel> Create(
         Configuration configuration,
         INativeWindowSource nativeSource,
         WebGPUPresentMode initialPresentMode,
@@ -198,7 +193,7 @@ internal sealed unsafe class WebGPUWindowResources<TPixel> : IDisposable
             queueHandle = new WebGPUQueueHandle(api, (nint)queue, ownsHandle: true);
             graphics = new WebGPUDeviceContext<TPixel>(configuration, deviceHandle, queueHandle);
 
-            WebGPUWindowResources<TPixel> resources = new(
+            WebGPUSurfaceResources<TPixel> resources = new(
                 api,
                 instanceHandle,
                 surfaceHandle,
@@ -270,16 +265,14 @@ internal sealed unsafe class WebGPUWindowResources<TPixel> : IDisposable
 
     /// <summary>
     /// Acquires the next presentable frame from <see cref="SurfaceHandle"/> and wraps it as a
-    /// <see cref="WebGPUWindowFrame{TPixel}"/> with a ready-to-use <see cref="DrawingCanvas{TPixel}"/>.
+    /// <see cref="WebGPUSurfaceFrame{TPixel}"/> with a ready-to-use <see cref="DrawingCanvas{TPixel}"/>.
     /// </summary>
     /// <param name="presentMode">The present mode applied when the surface needs to be reconfigured in response to a
     /// <c>Timeout</c>/<c>Outdated</c>/<c>Lost</c> acquire status.</param>
-    /// <param name="clientSize">The current client-area size in pixels, reported verbatim on the returned frame.</param>
     /// <param name="framebufferSize">The current framebuffer size in pixels. A zero-area value causes the method to
     /// return <see langword="false"/> without touching the surface. Otherwise this size is used both for the returned
-    /// frame bounds and for any in-place surface reconfiguration triggered by a non-success acquire status.</param>
-    /// <param name="deltaTime">The elapsed time since the previous frame, reported verbatim on the returned frame.</param>
-    /// <param name="frameIndex">The frame index, reported verbatim on the returned frame.</param>
+    /// frame's <see cref="WebGPUSurfaceFrame{TPixel}.FramebufferSize"/> and for any in-place surface
+    /// reconfiguration triggered by a non-success acquire status.</param>
     /// <param name="options">The drawing options that seed the canvas on the returned frame.</param>
     /// <param name="frame">Receives the acquired frame on success.</param>
     /// <returns><see langword="true"/> when a frame is available; <see langword="false"/> when no drawable frame is
@@ -289,12 +282,9 @@ internal sealed unsafe class WebGPUWindowResources<TPixel> : IDisposable
     /// (<c>OutOfMemory</c>, <c>DeviceLost</c>), or when texture-view creation fails for an otherwise valid surface texture.</exception>
     public bool TryAcquireFrame(
         WebGPUPresentMode presentMode,
-        Size clientSize,
         Size framebufferSize,
-        TimeSpan deltaTime,
-        long frameIndex,
         DrawingOptions options,
-        [NotNullWhen(true)] out WebGPUWindowFrame<TPixel>? frame)
+        [NotNullWhen(true)] out WebGPUSurfaceFrame<TPixel>? frame)
     {
         frame = null;
 
@@ -303,9 +293,8 @@ internal sealed unsafe class WebGPUWindowResources<TPixel> : IDisposable
             return false;
         }
 
-        // Reject acquire while a previously-issued frame is still outstanding. wgpu-native's surface
-        // state machine doesn't tolerate overlapping acquires, and some hosts (WinForms DWM pumping
-        // during SurfacePresent, Silk message loops calling into user callbacks) can dispatch a paint
+        // Reject acquire while a previously-issued frame is still outstanding. The native surface
+        // state machine doesn't tolerate overlapping acquires, and some hosts can dispatch a paint
         // before the current frame's Dispose returns.
         if (this.frameInFlight)
         {
@@ -355,25 +344,21 @@ internal sealed unsafe class WebGPUWindowResources<TPixel> : IDisposable
             textureHandle = new WebGPUTextureHandle(this.Api, (nint)surfaceTexture.Texture, ownsHandle: true);
             textureViewHandle = new WebGPUTextureViewHandle(this.Api, (nint)textureView, ownsHandle: true);
             DrawingCanvas<TPixel> canvas = this.Graphics.CreateCanvas(
+                options,
                 textureHandle,
                 textureViewHandle,
                 this.Format,
                 framebufferSize.Width,
-                framebufferSize.Height,
-                options);
+                framebufferSize.Height);
 
             this.frameInFlight = true;
-            frame = new WebGPUWindowFrame<TPixel>(
+            frame = new WebGPUSurfaceFrame<TPixel>(
                 this.Api,
                 this.SurfaceHandle,
                 textureHandle,
                 textureViewHandle,
                 canvas,
-                new Rectangle(0, 0, framebufferSize.Width, framebufferSize.Height),
-                clientSize,
                 framebufferSize,
-                deltaTime,
-                frameIndex,
                 onDisposed: () => this.frameInFlight = false);
 
             return true;

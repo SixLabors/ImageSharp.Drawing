@@ -7,7 +7,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
 /// Binds ImageSharp.Drawing's WebGPU backend to an externally-owned device and queue.
-/// Use <see cref="CreateCanvas(nint, nint, WebGPUTextureFormatId, int, int, DrawingOptions)"/> to render into a
+/// Use <see cref="CreateCanvas(DrawingOptions, nint, nint, WebGPUTextureFormatId, int, int)"/> to render into a
 /// host-supplied texture (typically a swap-chain back buffer for UI-framework embedding), or
 /// <see cref="CreateRenderTarget(int, int)"/> to allocate an offscreen target on the same device.
 /// </summary>
@@ -201,23 +201,23 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         int width,
         int height)
         => this.CreateCanvas(
+            new DrawingOptions(),
             CreateExternalTextureHandle(textureHandle),
             CreateExternalTextureViewHandle(textureViewHandle),
             format,
             width,
-            height,
-            new DrawingOptions());
+            height);
 
     /// <summary>
     /// Creates a drawing canvas that renders directly into an externally-owned WebGPU texture, typically the per-frame
     /// swap-chain back buffer obtained from <c>wgpuSurfaceGetCurrentTexture</c> on a host-owned surface.
     /// </summary>
+    /// <param name="options">The initial drawing options.</param>
     /// <param name="textureHandle">The external WebGPU texture handle.</param>
     /// <param name="textureViewHandle">The external WebGPU texture-view handle.</param>
     /// <param name="format">The texture format identifier. Must match the format expected for <typeparamref name="TPixel"/>.</param>
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
-    /// <param name="options">The initial drawing options.</param>
     /// <returns>A drawing canvas targeting the external texture.</returns>
     /// <remarks>
     /// The caller retains ownership of the texture and view; this context does not release them.
@@ -225,13 +225,13 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     /// Dispose the returned canvas before the host calls <c>wgpuSurfacePresent</c>, then create a new canvas on the next frame.
     /// </remarks>
     public DrawingCanvas<TPixel> CreateCanvas(
+        DrawingOptions options,
         nint textureHandle,
         nint textureViewHandle,
         WebGPUTextureFormatId format,
         int width,
-        int height,
-        DrawingOptions options)
-        => this.CreateCanvas(CreateExternalTextureHandle(textureHandle), CreateExternalTextureViewHandle(textureViewHandle), format, width, height, options);
+        int height)
+        => this.CreateCanvas(options, CreateExternalTextureHandle(textureHandle), CreateExternalTextureViewHandle(textureViewHandle), format, width, height);
 
     /// <summary>
     /// Disposes the drawing backend owned by this context.
@@ -273,21 +273,21 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     /// <summary>
     /// Creates a drawing canvas over wrapped texture handles that are already in this assembly's ownership model.
     /// </summary>
+    /// <param name="options">The initial drawing options.</param>
     /// <param name="textureHandle">The wrapped texture handle.</param>
     /// <param name="textureViewHandle">The wrapped texture-view handle.</param>
     /// <param name="format">The texture format identifier.</param>
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
-    /// <param name="options">The initial drawing options.</param>
     /// <returns>A drawing canvas targeting the supplied handles.</returns>
     internal DrawingCanvas<TPixel> CreateCanvas(
+        DrawingOptions options,
         WebGPUTextureHandle textureHandle,
         WebGPUTextureViewHandle textureViewHandle,
         WebGPUTextureFormatId format,
         int width,
-        int height,
-        DrawingOptions options)
-        => new(this.Configuration, this.Backend, this.CreateFrame(textureHandle, textureViewHandle, format, width, height), options);
+        int height)
+        => new(this.Configuration, options, this.Backend, this.CreateFrame(textureHandle, textureViewHandle, format, width, height));
 
     /// <summary>
     /// Validates that <typeparamref name="TPixel"/> can be represented by the WebGPU backend.

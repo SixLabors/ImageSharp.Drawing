@@ -6,11 +6,12 @@ using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.PixelFormats;
+using ImageSharpSize = SixLabors.ImageSharp.Size;
 
-namespace WebGPUHostedWindowDemo.Controls;
+namespace WebGPUHostedSurfaceDemo.Controls;
 
 /// <summary>
-/// A reusable WinForms control that embeds a <see cref="WebGPUHostedWindow{TPixel}"/> and drives a continuous
+/// A reusable WinForms control that embeds a <see cref="WebGPUHostedSurface{TPixel}"/> and drives a continuous
 /// render loop via <see cref="Application.Idle"/>. Callers hook <see cref="PaintFrame"/> with their scene logic;
 /// the control handles construction, resize, acquire/present, and teardown.
 /// </summary>
@@ -19,7 +20,8 @@ public sealed partial class WebGPURenderControl : Control
     private const int WM_MOVING = 0x0216;
     private const int WM_EXITSIZEMOVE = 0x0232;
 
-    private WebGPUHostedWindow<Bgra32>? window;
+    private WebGPUHostedSurface<Bgra32>? surface;
+    private Size framebufferSize;
     private bool idleHooked;
     private long lastTicks;
     private System.Windows.Forms.Timer? titleBarMoveTimer;
@@ -40,24 +42,32 @@ public sealed partial class WebGPURenderControl : Control
     }
 
     /// <summary>
-    /// Raised each frame once the hosted window has acquired a drawable frame.
+    /// Raised each frame once the hosted surface has acquired a drawable frame. The canvas dimensions match
+    /// <see cref="FramebufferSize"/>.
     /// </summary>
     public event Action<DrawingCanvas<Bgra32>, TimeSpan>? PaintFrame;
+
+    /// <summary>
+    /// Gets the drawable framebuffer size in pixels.
+    /// </summary>
+    public Size FramebufferSize => this.framebufferSize;
 
     /// <inheritdoc />
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
 
-        int width = Math.Max(this.ClientSize.Width, 1);
-        int height = Math.Max(this.ClientSize.Height, 1);
+        // WinForms ClientSize is the HWND client rectangle size; pass it through as the drawable framebuffer size.
+        this.framebufferSize = this.ClientSize;
+        ImageSharpSize initialFramebufferSize = new(
+            Math.Max(this.framebufferSize.Width, 1),
+            Math.Max(this.framebufferSize.Height, 1));
 
-        this.window = new WebGPUHostedWindow<Bgra32>(
-            WebGPUWindowHost.Win32(
+        this.surface = new WebGPUHostedSurface<Bgra32>(
+            WebGPUSurfaceHost.Win32(
                 this.Handle,
                 Marshal.GetHINSTANCE(typeof(WebGPURenderControl).Module)),
-            width,
-            height);
+            initialFramebufferSize);
 
         this.lastTicks = Stopwatch.GetTimestamp();
         Application.Idle += this.OnApplicationIdle;
@@ -65,7 +75,7 @@ public sealed partial class WebGPURenderControl : Control
 
         // Application.Idle stops firing during a title-bar drag (modal move loop).
         // Attach a NativeWindow to the parent form's handle so we can see WM_MOVING
-        // — which fires only during title-bar drags, never during border resizes —
+        // which fires only during title-bar drags, never during border resizes,
         // and drive a short Timer during those. Border resize is left untouched.
         Form? parentForm = this.FindForm();
         if (parentForm is not null && parentForm.IsHandleCreated)
@@ -97,8 +107,9 @@ public sealed partial class WebGPURenderControl : Control
             this.titleBarMoveTimer = null;
         }
 
-        this.window?.Dispose();
-        this.window = null;
+        this.surface?.Dispose();
+        this.surface = null;
+        this.framebufferSize = Size.Empty;
         base.OnHandleDestroyed(e);
     }
 
@@ -106,9 +117,11 @@ public sealed partial class WebGPURenderControl : Control
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        if (this.window is not null && this.ClientSize.Width > 0 && this.ClientSize.Height > 0)
+        if (this.surface is not null)
         {
-            this.window.Resize(this.ClientSize.Width, this.ClientSize.Height);
+            // WinForms ClientSize is the HWND client rectangle size; pass it through as the drawable framebuffer size.
+            this.framebufferSize = this.ClientSize;
+            this.surface.Resize(new ImageSharpSize(this.framebufferSize.Width, this.framebufferSize.Height));
         }
     }
 
@@ -122,8 +135,8 @@ public sealed partial class WebGPURenderControl : Control
     protected override void OnPaint(PaintEventArgs e) => this.RenderOnce();
 
     // Application.Idle fires once when the WinForms message queue drains. Rendering only once
-    // would leave the scene frozen between user input events, so we loop here — re-rendering as
-    // long as the queue stays empty — and exit the moment a message arrives so WinForms can
+    // would leave the scene frozen between user input events, so we loop here, re-rendering as
+    // long as the queue stays empty, and exit the moment a message arrives so WinForms can
     // process it. Frame pacing is delegated to the swap-chain present mode: with Fifo (v-sync)
     // TryAcquireFrame blocks until the display is ready, so this loop naturally runs at the
     // display's refresh rate without a software timer capping it.
@@ -159,12 +172,12 @@ public sealed partial class WebGPURenderControl : Control
 
     private void RenderOnce()
     {
-        if (this.window is null || this.ClientSize.Width <= 0 || this.ClientSize.Height <= 0)
+        if (this.surface is null || this.framebufferSize.Width <= 0 || this.framebufferSize.Height <= 0)
         {
             return;
         }
 
-        if (!this.window.TryAcquireFrame(out WebGPUWindowFrame<Bgra32>? frame))
+        if (!this.surface.TryAcquireFrame(out WebGPUSurfaceFrame<Bgra32>? frame))
         {
             return;
         }
@@ -180,7 +193,7 @@ public sealed partial class WebGPURenderControl : Control
     }
 
     // PeekMessage with wRemoveMsg = 0 (PM_NOREMOVE) asks the OS "is there a message waiting?" without
-    // dequeuing it. Returning 0 means the queue is empty — the canonical "is the app idle right now"
+    // dequeuing it. Returning 0 means the queue is empty, the canonical "is the app idle right now"
     // check used by the WinForms continuous-render idiom. Cheaper than any managed alternative and the
     // only way to tell whether WinForms is about to break out of Application.Idle on the next pump.
     [StructLayout(LayoutKind.Sequential)]

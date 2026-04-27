@@ -147,7 +147,7 @@ public static class Program
         /// The window loop disposes the frame after this callback returns, which flushes any queued canvas work,
         /// presents the swapchain texture, and releases the per-frame WebGPU handles.
         /// </remarks>
-        private void OnRender(WebGPUWindowFrame<Bgra32> frame)
+        private void OnRender(WebGPUSurfaceFrame<Bgra32> frame)
         {
             DrawingCanvas<Bgra32> canvas = frame.Canvas;
             canvas.Fill(Brushes.Solid(Color.FromPixel(new Bgra32(30, 30, 40, 255))));

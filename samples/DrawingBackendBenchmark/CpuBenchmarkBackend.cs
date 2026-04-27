@@ -33,7 +33,7 @@ internal sealed class CpuBenchmarkBackend : IBenchmarkBackend
         Buffer2DRegion<Bgra32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
-        using (DrawingCanvas<Bgra32> canvas = new(this.configuration, region, new DrawingOptions()))
+        using (DrawingCanvas<Bgra32> canvas = new(this.configuration, new DrawingOptions(), region))
         {
             VisualLine.RenderLinesToCanvas(canvas, lines);
             canvas.Flush();

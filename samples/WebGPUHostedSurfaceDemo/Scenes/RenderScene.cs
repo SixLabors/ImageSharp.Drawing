@@ -5,7 +5,7 @@ using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using Size = SixLabors.ImageSharp.Size;
 
-namespace WebGPUHostedWindowDemo.Scenes;
+namespace WebGPUHostedSurfaceDemo.Scenes;
 
 /// <summary>
 /// Base class for a demo scene rendered into a shared <see cref="WebGPURenderControl"/>.
@@ -21,7 +21,7 @@ internal abstract class RenderScene
     /// <summary>
     /// Draws the scene into <paramref name="canvas"/> for the current frame.
     /// </summary>
-    /// <param name="canvas">The per-frame drawing canvas bound to the hosted window's swap-chain texture.</param>
+    /// <param name="canvas">The per-frame drawing canvas bound to the hosted surface's swap-chain texture.</param>
     /// <param name="viewportSize">The framebuffer size in pixels.</param>
     /// <param name="deltaTime">Elapsed time since the previous frame.</param>
     public abstract void Paint(DrawingCanvas<Bgra32> canvas, Size viewportSize, TimeSpan deltaTime);

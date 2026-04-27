@@ -14,7 +14,7 @@ using Size = SixLabors.ImageSharp.Size;
 using SizeF = SixLabors.ImageSharp.SizeF;
 using SolidBrush = SixLabors.ImageSharp.Drawing.Processing.SolidBrush;
 
-namespace WebGPUHostedWindowDemo.Scenes;
+namespace WebGPUHostedSurfaceDemo.Scenes;
 
 /// <summary>
 /// Loads the Ghostscript Tiger SVG via the shared <see cref="SvgBenchmarkHelper"/> and renders it with
@@ -64,7 +64,7 @@ internal sealed class TigerViewerScene : RenderScene
             return
                 $"zoom : {this.zoom:0.####}×\n" +
                 $"pan  : ({this.panXY.X:0.##}, {this.panXY.Y:0.##})\n" +
-                $"mouse: dev=({this.lastMouseDevice.X:0},{this.lastMouseDevice.Y:0}) world=({world.X:0.##},{world.Y:0.##})";
+                $"mouse: device=({this.lastMouseDevice.X:0},{this.lastMouseDevice.Y:0}) world=({world.X:0.##},{world.Y:0.##})";
         }
     }
 
@@ -72,7 +72,7 @@ internal sealed class TigerViewerScene : RenderScene
     {
         _ = deltaTime;
 
-        if (this.needsInitialFit)
+        if (this.needsInitialFit || viewportSize != this.lastViewportSize)
         {
             this.FitToView(viewportSize);
             this.needsInitialFit = false;
