@@ -32,6 +32,8 @@ public sealed partial class WebGPURenderControl : Control
     /// </summary>
     public WebGPURenderControl()
     {
+        // WebGPU presents directly to the native surface. Normal WinForms buffering and background
+        // painting would add flicker or unnecessary work, so the control opts into direct user painting.
         this.SetStyle(
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.Opaque |
@@ -57,12 +59,16 @@ public sealed partial class WebGPURenderControl : Control
     {
         base.OnHandleCreated(e);
 
+        // A hosted surface can only be created once the native HWND exists. The surface borrows the HWND;
+        // WinForms still owns the control, handle lifetime, and layout.
         // WinForms ClientSize is the HWND client rectangle size; pass it through as the drawable framebuffer size.
         this.framebufferSize = this.ClientSize;
         ImageSharpSize initialFramebufferSize = new(
             Math.Max(this.framebufferSize.Width, 1),
             Math.Max(this.framebufferSize.Height, 1));
 
+        // The module handle is required by the Win32 surface descriptor. It identifies the process module
+        // that owns the window class backing this control.
         this.surface = new WebGPUHostedSurface<Bgra32>(
             WebGPUSurfaceHost.Win32(
                 this.Handle,
@@ -177,6 +183,8 @@ public sealed partial class WebGPURenderControl : Control
             return;
         }
 
+        // Frame acquisition can fail transiently while the surface is unavailable, for example during resize
+        // or device recovery. Skipping the frame keeps the UI message loop responsive.
         if (!this.surface.TryAcquireFrame(out WebGPUSurfaceFrame<Bgra32>? frame))
         {
             return;
@@ -188,6 +196,8 @@ public sealed partial class WebGPURenderControl : Control
 
         using (frame)
         {
+            // The canvas records drawing work against the acquired surface texture. Disposing the frame
+            // flushes that work, presents the texture, and releases the per-frame native handles.
             this.PaintFrame?.Invoke(frame.Canvas, delta);
         }
     }

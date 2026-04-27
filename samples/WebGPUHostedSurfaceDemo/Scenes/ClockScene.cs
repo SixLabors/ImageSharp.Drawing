@@ -3,8 +3,6 @@
 
 using System.Globalization;
 using System.Numerics;
-using SixLabors.Fonts;
-using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
@@ -25,24 +23,27 @@ using VerticalAlignment = SixLabors.Fonts.VerticalAlignment;
 namespace WebGPUHostedSurfaceDemo.Scenes;
 
 /// <summary>
-/// Animated analog clock. Validates continuous render, curves, thin-stroke antialiasing, and text rendering.
+/// Animated analog clock. Validates continuous render, curves, thin-stroke antialiasing, text rendering,
+/// and canvas transforms against a constantly changing scene.
 /// </summary>
 internal sealed class ClockScene : RenderScene
 {
-    private static readonly Color BackgroundColor = Color.ParseHex("#101828");
-    private static readonly Color DialColor = Color.ParseHex("#F5F7FA");
-    private static readonly Color DialRimColor = Color.ParseHex("#1D2939");
-    private static readonly Color MinorTickColor = Color.ParseHex("#475467");
-    private static readonly Color MajorTickColor = Color.ParseHex("#1D2939");
-    private static readonly Color HourHandColor = Color.ParseHex("#1D2939");
-    private static readonly Color MinuteHandColor = Color.ParseHex("#1D2939");
-    private static readonly Color SecondHandColor = Color.ParseHex("#D92D20");
-    private static readonly Color NumeralColor = Color.ParseHex("#1D2939");
+    private static readonly Color BackgroundColor = Color.MidnightBlue;
+    private static readonly Color DialColor = Color.WhiteSmoke;
+    private static readonly Color DialRimColor = Color.DarkSlateGray;
+    private static readonly Color MinorTickColor = Color.SlateGray;
+    private static readonly Color MajorTickColor = Color.DarkSlateGray;
+    private static readonly Color HourHandColor = Color.DarkSlateGray;
+    private static readonly Color MinuteHandColor = Color.DarkSlateGray;
+    private static readonly Color SecondHandColor = Color.OrangeRed;
+    private static readonly Color NumeralColor = Color.DarkSlateGray;
 
     private readonly Font numeralFont;
 
     public ClockScene()
     {
+        // Resolve the font family once. The actual font size is derived from the current framebuffer size
+        // each frame so the clock remains proportional while resizing.
         FontFamily family = SystemFonts.Collection.Families.FirstOrDefault();
         this.numeralFont = family.Name is null
             ? SystemFonts.CreateFont(SystemFonts.Families.First().Name, 32f, FontStyle.Regular)
@@ -53,13 +54,13 @@ internal sealed class ClockScene : RenderScene
 
     public override void Paint(DrawingCanvas<Bgra32> canvas, Size viewportSize, TimeSpan deltaTime)
     {
-        _ = deltaTime;
-
         // Background clear.
         canvas.Fill(
             Brushes.Solid(BackgroundColor),
             new RectangularPolygon(0, 0, viewportSize.Width, viewportSize.Height));
 
+        // The scene is rebuilt from the framebuffer size each frame. That keeps resize handling simple
+        // and demonstrates drawing directly in surface pixel coordinates.
         SizeF center = viewportSize / 2f;
         float cx = center.Width;
         float cy = center.Height;
@@ -98,6 +99,7 @@ internal sealed class ClockScene : RenderScene
         Font font = this.numeralFont.Family.CreateFont(numeralSize, FontStyle.Bold);
         for (int hour = 1; hour <= 12; hour++)
         {
+            // Text origin is placed at the numeral center and alignment keeps the glyphs centered there.
             float angle = (MathF.Tau * hour / 12f) - (MathF.PI / 2f);
             PointF origin = new(
                 cx + (MathF.Cos(angle) * numeralRadius),
@@ -115,6 +117,8 @@ internal sealed class ClockScene : RenderScene
 
         // Hands. Each hand is authored once as a canonical path pointing straight up
         // along -Y and then rotated + translated via Matrix4x4 to its live position.
+        // The scene samples wall-clock time instead of integrating deltaTime, so missed
+        // frames do not make the clock drift.
         DateTime now = DateTime.Now;
         float hourAngle = (MathF.Tau * (now.Hour % 12) / 12f) + (MathF.Tau * now.Minute / (12f * 60f));
         float minuteAngle = (MathF.Tau * now.Minute / 60f) + (MathF.Tau * now.Second / (60f * 60f));

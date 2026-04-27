@@ -19,6 +19,7 @@ namespace WebGPUHostedSurfaceDemo.Scenes;
 /// <summary>
 /// Loads the Ghostscript Tiger SVG via the shared <see cref="SvgBenchmarkHelper"/> and renders it with
 /// drag-to-pan and wheel-to-zoom. Validates transform handling, curves, and fill+stroke quality at arbitrary zoom.
+/// The parsed SVG geometry is reused every frame; only the canvas transform changes while interacting.
 /// </summary>
 internal sealed class TigerViewerScene : RenderScene
 {
@@ -36,6 +37,8 @@ internal sealed class TigerViewerScene : RenderScene
 
     public TigerViewerScene()
     {
+        // Parse and build the SVG once. The draw loop below reuses the built paths and brushes so pan/zoom
+        // interaction measures rendering and transform work, not repeated SVG parsing.
         string svgPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Ghostscript_Tiger.svg");
         List<SvgBenchmarkHelper.SvgElement> parsed = SvgBenchmarkHelper.ParseSvg(svgPath);
         List<(IPath Path, SolidBrush? Fill, SolidPen? Stroke)> built = [];
@@ -70,10 +73,10 @@ internal sealed class TigerViewerScene : RenderScene
 
     public override void Paint(DrawingCanvas<Bgra32> canvas, Size viewportSize, TimeSpan deltaTime)
     {
-        _ = deltaTime;
-
         if (this.needsInitialFit || viewportSize != this.lastViewportSize)
         {
+            // The first frame and every resize recenter the artwork. User pan/zoom then operates from
+            // that fitted world-space view.
             this.FitToView(viewportSize);
             this.needsInitialFit = false;
         }
@@ -85,6 +88,9 @@ internal sealed class TigerViewerScene : RenderScene
             new RectangularPolygon(0, 0, viewportSize.Width, viewportSize.Height));
 
         SizeF screenCenter = viewportSize / 2f;
+
+        // The tiger paths remain in SVG/world coordinates. The canvas transform maps them into
+        // framebuffer pixels each frame, so pan and zoom are cheap matrix changes.
         Matrix4x4 worldToScreen =
             Matrix4x4.CreateTranslation(new Vector3(-this.panXY, 0)) *
             Matrix4x4.CreateScale(this.zoom, this.zoom, 1f) *
@@ -93,6 +99,8 @@ internal sealed class TigerViewerScene : RenderScene
         DrawingOptions options = new() { Transform = worldToScreen };
         canvas.Save(options);
 
+        // Save/Restore confines the world transform to the SVG draw calls. Any UI overlay drawn later can
+        // stay in device coordinates without undoing the matrix manually.
         foreach ((IPath path, SolidBrush? fill, SolidPen? stroke) in this.elements)
         {
             if (fill is not null)
@@ -122,6 +130,8 @@ internal sealed class TigerViewerScene : RenderScene
         this.lastMouseDevice = new PointF(e.X, e.Y);
         if (this.lastDragPoint is PointF last && (e.Button & MouseButtons.Left) != 0)
         {
+            // Mouse movement arrives in device pixels. Dividing by zoom converts the drag distance back
+            // into world units so pan speed is stable at every zoom level.
             this.panXY -= (new Vector2(e.X, e.Y) - (Vector2)last) / this.zoom;
             this.lastDragPoint = new PointF(e.X, e.Y);
         }
@@ -145,6 +155,7 @@ internal sealed class TigerViewerScene : RenderScene
         SizeF screenCenter = this.lastViewportSize * .5f;
         Vector2 cursorFromCenter = new(e.X - screenCenter.Width, e.Y - screenCenter.Height);
 
+        // Zoom around the cursor by preserving the world-space point beneath it before and after scaling.
         Vector2 worldUnderCursor = this.panXY + (cursorFromCenter / this.zoom);
 
         float factor = e.Delta > 0 ? 1.15f : 1f / 1.15f;
@@ -164,6 +175,8 @@ internal sealed class TigerViewerScene : RenderScene
         float zoomX = (viewportSize.Width - padding) / this.sceneBounds.Width;
         float zoomY = (viewportSize.Height - padding) / this.sceneBounds.Height;
         this.zoom = MathF.Max(0.1f, MathF.Min(zoomX, zoomY));
+
+        // panXY stores the world coordinate placed at the center of the framebuffer.
         this.panXY = new Vector2(
             this.sceneBounds.X + (this.sceneBounds.Width * 0.5f),
             this.sceneBounds.Y + (this.sceneBounds.Height * 0.5f));
@@ -176,6 +189,7 @@ internal sealed class TigerViewerScene : RenderScene
             return new RectangleF(0, 0, 200, 200);
         }
 
+        // The bounds are used only for initial fit-to-view; rendering still uses the original paths.
         RectangleF union = items[0].Path.Bounds;
         for (int i = 1; i < items.Count; i++)
         {

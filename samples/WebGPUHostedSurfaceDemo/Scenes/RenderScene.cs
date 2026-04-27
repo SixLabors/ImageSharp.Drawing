@@ -8,8 +8,8 @@ using Size = SixLabors.ImageSharp.Size;
 namespace WebGPUHostedSurfaceDemo.Scenes;
 
 /// <summary>
-/// Base class for a demo scene rendered into a shared <see cref="WebGPURenderControl"/>.
-/// Derived scenes override <see cref="Paint"/> and optionally the mouse handlers.
+/// Base class for a demo scene rendered into a <see cref="WebGPURenderControl"/>.
+/// The host owns frame acquisition; the scene owns only drawing and input state.
 /// </summary>
 internal abstract class RenderScene
 {
@@ -23,7 +23,7 @@ internal abstract class RenderScene
     /// </summary>
     /// <param name="canvas">The per-frame drawing canvas bound to the hosted surface's swap-chain texture.</param>
     /// <param name="viewportSize">The framebuffer size in pixels.</param>
-    /// <param name="deltaTime">Elapsed time since the previous frame.</param>
+    /// <param name="deltaTime">Elapsed time since the previous frame. Scenes that render from absolute state can ignore it.</param>
     public abstract void Paint(DrawingCanvas<Bgra32> canvas, Size viewportSize, TimeSpan deltaTime);
 
     /// <summary>
