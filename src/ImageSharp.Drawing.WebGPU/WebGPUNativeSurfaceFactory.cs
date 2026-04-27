@@ -69,8 +69,7 @@ public static class WebGPUNativeSurfaceFactory
         Guard.MustBeGreaterThan(height, 0, nameof(height));
         ValidatePixelCompatibility<TPixel>(targetFormat);
 
-        NativeSurface nativeSurface = new(TPixel.GetPixelTypeInfo());
-        nativeSurface.SetCapability(new WebGPUSurfaceCapability(
+        return new WebGPUNativeSurface(new WebGPUSurfaceCapability(
             deviceHandle,
             queueHandle,
             targetTextureHandle,
@@ -78,7 +77,6 @@ public static class WebGPUNativeSurfaceFactory
             targetFormat,
             width,
             height));
-        return nativeSurface;
     }
 
     /// <summary>

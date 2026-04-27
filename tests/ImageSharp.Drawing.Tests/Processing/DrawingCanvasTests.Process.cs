@@ -74,7 +74,7 @@ public partial class DrawingCanvasTests
         MemoryCanvasFrame<TPixel> proxyFrame = new(new Buffer2DRegion<TPixel>(target.Frames.RootFrame.PixelBuffer));
         MirroringCpuReadbackTestBackend<TPixel> mirroringBackend = new(proxyFrame, target);
 
-        NativeSurface nativeSurface = new(TPixel.GetPixelTypeInfo());
+        NativeSurface nativeSurface = new NoCapabilityNativeSurface();
         Configuration configuration = provider.Configuration.Clone();
         configuration.SetDrawingBackend(mirroringBackend);
 
@@ -156,6 +156,16 @@ public partial class DrawingCanvasTests
         pathBuilder.AddLine(165, 160, 110, 80);
         pathBuilder.CloseAllFigures();
         return pathBuilder.Build();
+    }
+
+    private sealed class NoCapabilityNativeSurface : NativeSurface
+    {
+        public override bool TryGetCapability<TCapability>(out TCapability capability)
+            where TCapability : class
+        {
+            capability = null!;
+            return false;
+        }
     }
 
     /// <summary>

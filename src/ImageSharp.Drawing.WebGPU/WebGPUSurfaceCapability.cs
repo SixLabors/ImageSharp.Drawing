@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Native WebGPU surface capability attached to <see cref="NativeSurface"/>.
+/// Native WebGPU surface capability exposed by a <see cref="NativeSurface"/>.
 /// </summary>
 /// <remarks>
 /// The backing WebGPU device, queue, texture, and texture view must remain valid while canvases target this surface.
