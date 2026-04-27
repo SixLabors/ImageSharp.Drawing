@@ -11,7 +11,7 @@ public partial class DrawingCanvasTests
 {
     [Theory]
     [WithBlankImage(360, 220, PixelTypes.Rgba32)]
-    public void Draw_NormalizeOutputFalse_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
+    public void Draw_SelfIntersectingStroke_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> target = provider.GetImage();

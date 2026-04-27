@@ -3,26 +3,15 @@
 
 namespace SixLabors.ImageSharp.Drawing;
 
-/// <summary>
-/// Specifies the shape to be used at the ends of open lines or paths when stroking.
-/// </summary>
+/// <inheritdoc cref="PolygonClipper.LineCap" />
 public enum LineCap
 {
-    /// <summary>
-    /// The stroke ends exactly at the endpoint.
-    /// No extension is added beyond the path's end coordinates.
-    /// </summary>
+    /// <inheritdoc cref="PolygonClipper.LineCap.Butt" />
     Butt,
 
-    /// <summary>
-    /// The stroke extends beyond the endpoint by half the line width,
-    /// producing a square edge.
-    /// </summary>
+    /// <inheritdoc cref="PolygonClipper.LineCap.Square" />
     Square,
 
-    /// <summary>
-    /// The stroke ends with a semicircular cap,
-    /// extending beyond the endpoint by half the line width.
-    /// </summary>
+    /// <inheritdoc cref="PolygonClipper.LineCap.Round" />
     Round
 }

@@ -98,8 +98,7 @@ internal static class StrokedShapeGenerator
                 LineCap.Round => PolygonClipper.LineCap.Round,
                 LineCap.Square => PolygonClipper.LineCap.Square,
                 _ => PolygonClipper.LineCap.Butt,
-            },
-            NormalizeOutput = options.NormalizeOutput
+            }
         };
 
         return o;

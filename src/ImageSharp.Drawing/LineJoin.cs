@@ -3,40 +3,21 @@
 
 namespace SixLabors.ImageSharp.Drawing;
 
-/// <summary>
-/// Specifies how the connection between two consecutive line segments (a join)
-/// is rendered when stroking paths or polygons.
-/// </summary>
+/// <inheritdoc cref="PolygonClipper.LineJoin" />
 public enum LineJoin
 {
-    /// <summary>
-    /// Joins lines by extending their outer edges until they meet at a sharp corner.
-    /// The miter length is limited by the miter limit; if exceeded, the join may fall back to a bevel.
-    /// </summary>
+    /// <inheritdoc cref="PolygonClipper.LineJoin.Miter" />
     Miter = 0,
 
-    /// <summary>
-    /// Joins lines by extending their outer edges to form a miter,
-    /// but if the miter length exceeds the miter limit, the join is truncated
-    /// at the limit distance rather than falling back to a bevel.
-    /// </summary>
+    /// <inheritdoc cref="PolygonClipper.LineJoin.MiterRevert" />
     MiterRevert = 1,
 
-    /// <summary>
-    /// Joins lines by connecting them with a circular arc centered at the join point,
-    /// producing a smooth, rounded corner.
-    /// </summary>
+    /// <inheritdoc cref="PolygonClipper.LineJoin.Round" />
     Round = 2,
 
-    /// <summary>
-    /// Joins lines by connecting the outer corners directly with a straight line,
-    /// forming a flat edge at the join point.
-    /// </summary>
+    /// <inheritdoc cref="PolygonClipper.LineJoin.Bevel" />
     Bevel = 3,
 
-    /// <summary>
-    /// Joins lines by forming a miter, but if the miter limit is exceeded,
-    /// the join falls back to a round join instead of a bevel.
-    /// </summary>
+    /// <inheritdoc cref="PolygonClipper.LineJoin.MiterRound" />
     MiterRound = 4
 }
