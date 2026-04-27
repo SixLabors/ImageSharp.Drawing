@@ -429,22 +429,15 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
 
         try
         {
-            if (!TryRequestAdapter(api, instance, surface, out adapter, out string? adapterError))
-            {
-                throw new InvalidOperationException(adapterError);
-            }
-
+            adapter = RequestAdapter(api, instance, surface);
             adapterHandle = new WebGPUAdapterHandle(api, (nint)adapter, ownsHandle: true);
-            if (!TryRequestDevice(api, adapter, requiredFeature, out Device* device, out string? deviceError))
-            {
-                throw new InvalidOperationException(deviceError);
-            }
 
+            Device* device = RequestDevice(api, adapter, requiredFeature);
             deviceHandle = new WebGPUDeviceHandle(api, (nint)device, ownsHandle: true);
             Queue* queue = api.DeviceGetQueue(device);
             if (queue is null)
             {
-                throw new InvalidOperationException("WebGPU queue acquisition failed.");
+                throw new InvalidOperationException("The WebGPU device did not provide a default queue.");
             }
 
             queueHandle = new WebGPUQueueHandle(api, (nint)queue, ownsHandle: true);
@@ -520,21 +513,16 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Requests a high-performance adapter compatible with <paramref name="surface"/> and waits synchronously on the
-    /// asynchronous callback, up to <see cref="CallbackTimeoutMilliseconds"/>.
+    /// Requests a high-performance adapter compatible with <paramref name="surface"/>.
     /// </summary>
     /// <param name="api">The shared WebGPU API loader.</param>
     /// <param name="instance">The WebGPU instance the adapter is requested from.</param>
     /// <param name="surface">The surface the adapter must be compatible with.</param>
-    /// <param name="adapter">Receives the requested adapter on success.</param>
-    /// <param name="error">Receives the failure reason when the adapter request cannot complete.</param>
-    /// <returns><see langword="true"/> when the adapter was returned by the native callback; otherwise <see langword="false"/>.</returns>
-    private static bool TryRequestAdapter(
+    /// <returns>The requested adapter.</returns>
+    private static Adapter* RequestAdapter(
         WebGPU api,
         Instance* instance,
-        Surface* surface,
-        out Adapter* adapter,
-        out string? error)
+        Surface* surface)
     {
         RequestAdapterStatus callbackStatus = RequestAdapterStatus.Unknown;
         Adapter* callbackAdapter = null;
@@ -559,20 +547,15 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
         api.InstanceRequestAdapter(instance, in options, callbackPtr, null);
         if (!callbackReady.Wait(CallbackTimeoutMilliseconds))
         {
-            adapter = null;
-            error = "Timed out while waiting for the WebGPU adapter request callback.";
-            return false;
+            throw new InvalidOperationException("Timed out while waiting for the WebGPU adapter request callback.");
         }
 
-        adapter = callbackAdapter;
         if (callbackStatus != RequestAdapterStatus.Success || callbackAdapter is null)
         {
-            error = $"WebGPU adapter request failed with status '{callbackStatus}'.";
-            return false;
+            throw new InvalidOperationException($"The WebGPU runtime failed to acquire a surface-compatible adapter. Status: '{callbackStatus}'.");
         }
 
-        error = null;
-        return true;
+        return callbackAdapter;
     }
 
     /// <summary>
@@ -583,21 +566,15 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
     /// <param name="api">The shared WebGPU API loader.</param>
     /// <param name="adapter">The adapter the device is requested from.</param>
     /// <param name="requiredFeature">The feature to enable on the requested device, or <see cref="FeatureName.Undefined"/> for none.</param>
-    /// <param name="device">Receives the requested device on success.</param>
-    /// <param name="error">Receives the failure reason when the device request cannot complete.</param>
-    /// <returns><see langword="true"/> when the device was returned by the native callback; otherwise <see langword="false"/>.</returns>
-    private static bool TryRequestDevice(
+    /// <returns>The requested device.</returns>
+    private static Device* RequestDevice(
         WebGPU api,
         Adapter* adapter,
-        FeatureName requiredFeature,
-        out Device* device,
-        out string? error)
+        FeatureName requiredFeature)
     {
         if (requiredFeature != FeatureName.Undefined && !api.AdapterHasFeature(adapter, requiredFeature))
         {
-            device = null;
-            error = $"The selected adapter does not support required feature '{requiredFeature}'.";
-            return false;
+            throw new NotSupportedException($"The selected WebGPU adapter does not support required feature '{requiredFeature}'.");
         }
 
         RequestDeviceStatus callbackStatus = RequestDeviceStatus.Unknown;
@@ -628,20 +605,15 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
         api.AdapterRequestDevice(adapter, in descriptor, callbackPtr, null);
         if (!callbackReady.Wait(CallbackTimeoutMilliseconds))
         {
-            device = null;
-            error = "Timed out while waiting for the WebGPU device request callback.";
-            return false;
+            throw new InvalidOperationException("Timed out while waiting for the WebGPU device request callback.");
         }
 
-        device = callbackDevice;
         if (callbackStatus != RequestDeviceStatus.Success || callbackDevice is null)
         {
-            error = $"WebGPU device request failed with status '{callbackStatus}'.";
-            return false;
+            throw new InvalidOperationException($"The WebGPU runtime failed to acquire a device. Status: '{callbackStatus}'.");
         }
 
-        error = null;
-        return true;
+        return callbackDevice;
     }
 
     /// <summary>

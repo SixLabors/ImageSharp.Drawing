@@ -55,20 +55,15 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
             graphics.ThrowIfDisposed();
 
             WebGPU api = WebGPURuntime.GetApi();
-            if (!WebGPURenderTargetAllocation.TryCreateRenderTarget<TPixel>(
-                    api,
-                    graphics.DeviceHandle,
-                    graphics.QueueHandle,
-                    width,
-                    height,
-                    out NativeSurface surface,
-                    out WebGPUTextureHandle? textureHandle,
-                    out WebGPUTextureViewHandle? textureViewHandle,
-                    out WebGPUTextureFormatId format,
-                    out string allocationError))
-            {
-                throw new InvalidOperationException(allocationError);
-            }
+            NativeSurface surface = WebGPURenderTargetAllocation.CreateRenderTarget<TPixel>(
+                api,
+                graphics.DeviceHandle,
+                graphics.QueueHandle,
+                width,
+                height,
+                out WebGPUTextureHandle textureHandle,
+                out WebGPUTextureViewHandle textureViewHandle,
+                out WebGPUTextureFormatId format);
 
             this.TextureHandle = textureHandle;
             this.TextureViewHandle = textureViewHandle;
