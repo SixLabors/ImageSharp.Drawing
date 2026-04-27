@@ -318,10 +318,10 @@ public sealed class RadialGradientBrush : GradientBrush
                     TwoPointToUnitLine(p0, p1),
                     0F,
                     scaled * scaled,
-                    IsStrip: true,
-                    IsCircular: false,
-                    IsFocalOnCircle: false,
-                    IsSwapped: false);
+                    isStrip: true,
+                    isCircular: false,
+                    isFocalOnCircle: false,
+                    isSwapped: false);
             }
 
             bool isCircular = false;
@@ -385,10 +385,10 @@ public sealed class RadialGradientBrush : GradientBrush
                 transform,
                 focalX,
                 radius,
-                IsStrip: false,
-                IsCircular: isCircular,
-                IsFocalOnCircle: isFocalOnCircle,
-                IsSwapped: isSwapped);
+                isStrip: false,
+                isCircular: isCircular,
+                isFocalOnCircle: isFocalOnCircle,
+                isSwapped: isSwapped);
         }
 
         private static float Distance(Vector2 p0, Vector2 p1) => Vector2.Distance(p0, p1);
@@ -415,13 +415,39 @@ public sealed class RadialGradientBrush : GradientBrush
                 p0.X,
                 p0.Y);
 
-        private readonly record struct ConicalGradientParameters(
-            Matrix3x2 Transform,
-            float FocalX,
-            float Radius,
-            bool IsStrip,
-            bool IsCircular,
-            bool IsFocalOnCircle,
-            bool IsSwapped);
+        private readonly struct ConicalGradientParameters
+        {
+            public ConicalGradientParameters(
+                Matrix3x2 transform,
+                float focalX,
+                float radius,
+                bool isStrip,
+                bool isCircular,
+                bool isFocalOnCircle,
+                bool isSwapped)
+            {
+                this.Transform = transform;
+                this.FocalX = focalX;
+                this.Radius = radius;
+                this.IsStrip = isStrip;
+                this.IsCircular = isCircular;
+                this.IsFocalOnCircle = isFocalOnCircle;
+                this.IsSwapped = isSwapped;
+            }
+
+            public Matrix3x2 Transform { get; }
+
+            public float FocalX { get; }
+
+            public float Radius { get; }
+
+            public bool IsStrip { get; }
+
+            public bool IsCircular { get; }
+
+            public bool IsFocalOnCircle { get; }
+
+            public bool IsSwapped { get; }
+        }
     }
 }

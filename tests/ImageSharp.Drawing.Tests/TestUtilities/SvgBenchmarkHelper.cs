@@ -21,12 +21,32 @@ internal static partial class SvgBenchmarkHelper
     /// <summary>
     /// A single parsed SVG path element with fill, stroke, and per-element transform.
     /// </summary>
-    internal readonly record struct SvgElement(
-        string PathData,
-        ISColor Fill,
-        ISColor Stroke,
-        float StrokeWidth,
-        Matrix4x4? Transform);
+    internal readonly struct SvgElement
+    {
+        public SvgElement(
+            string pathData,
+            ISColor fill,
+            ISColor stroke,
+            float strokeWidth,
+            Matrix4x4? transform)
+        {
+            this.PathData = pathData;
+            this.Fill = fill;
+            this.Stroke = stroke;
+            this.StrokeWidth = strokeWidth;
+            this.Transform = transform;
+        }
+
+        public string PathData { get; }
+
+        public ISColor Fill { get; }
+
+        public ISColor Stroke { get; }
+
+        public float StrokeWidth { get; }
+
+        public Matrix4x4? Transform { get; }
+    }
 
     /// <summary>
     /// Parses an SVG file into a list of <see cref="SvgElement"/>s.

@@ -93,15 +93,40 @@ internal static class WebGPUSceneDispatch
     /// <summary>
     /// Describes one binding-limit failure reported while planning a staged scene.
     /// </summary>
-    /// <param name="Buffer">The staged-scene binding that exceeded the current device limit.</param>
-    /// <param name="RequiredBytes">The number of bytes required by that binding.</param>
-    /// <param name="LimitBytes">The maximum number of bytes the current device allows for that binding.</param>
-    public readonly record struct BindingLimitFailure(BindingLimitBuffer Buffer, nuint RequiredBytes, nuint LimitBytes)
+    public readonly struct BindingLimitFailure
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="BindingLimitFailure"/> struct.
+        /// </summary>
+        /// <param name="buffer">The staged-scene binding that exceeded the current device limit.</param>
+        /// <param name="requiredBytes">The number of bytes required by that binding.</param>
+        /// <param name="limitBytes">The maximum number of bytes the current device allows for that binding.</param>
+        public BindingLimitFailure(BindingLimitBuffer buffer, nuint requiredBytes, nuint limitBytes)
+        {
+            this.Buffer = buffer;
+            this.RequiredBytes = requiredBytes;
+            this.LimitBytes = limitBytes;
+        }
+
         /// <summary>
         /// Gets the empty binding-limit result.
         /// </summary>
         public static BindingLimitFailure None { get; } = new(BindingLimitBuffer.None, 0, 0);
+
+        /// <summary>
+        /// Gets the staged-scene binding that exceeded the current device limit.
+        /// </summary>
+        public BindingLimitBuffer Buffer { get; }
+
+        /// <summary>
+        /// Gets the number of bytes required by the binding.
+        /// </summary>
+        public nuint RequiredBytes { get; }
+
+        /// <summary>
+        /// Gets the maximum number of bytes the current device allows for the binding.
+        /// </summary>
+        public nuint LimitBytes { get; }
 
         /// <summary>
         /// Gets a value indicating whether one binding exceeded the current device limit.

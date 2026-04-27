@@ -278,16 +278,14 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     public WebGPUTextureFormatId Format { get; }
 
     /// <summary>
-    /// Tries to acquire the next drawable frame.
+    /// Tries to acquire the next drawable frame using default drawing options.
     /// </summary>
     /// <param name="frame">Receives the acquired frame on success.</param>
     /// <returns>
     /// <see langword="true"/> when a frame is available; otherwise <see langword="false"/> when the frame should be retried later.
     /// </returns>
     /// <remarks>
-    /// Use this overload when you are driving the render loop yourself and want frame acquisition failures
-    /// to be handled as normal retry behavior instead of exceptions. Dispose the returned frame when you
-    /// are done with it to present it and release its per-frame resources.
+    /// Use this overload when the default drawing options are sufficient.
     /// </remarks>
     public bool TryAcquireFrame([NotNullWhen(true)] out WebGPUSurfaceFrame<TPixel>? frame)
         => this.TryAcquireFrameCore(new DrawingOptions(), out frame);
@@ -301,10 +299,10 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     /// <see langword="true"/> when a frame is available; otherwise <see langword="false"/> when the frame should be retried later.
     /// </returns>
     /// <remarks>
-    /// This method is intended for manual frame loops. A <see langword="false"/> result means no drawable
-    /// frame is available right now, for example because the surface was lost, outdated, timed out, or has
-    /// a zero-sized framebuffer. Dispose the returned frame when you are done with it to present it and release
-    /// its per-frame resources.
+    /// Use this overload when you are driving the render loop yourself and need explicit drawing options.
+    /// A <see langword="false"/> result means no drawable frame is available right now, for example because the
+    /// surface was lost, outdated, timed out, has a zero-sized framebuffer, or the window recovered from device loss.
+    /// Dispose the returned frame when you are done with it to present it and release its per-frame resources.
     /// </remarks>
     public bool TryAcquireFrame(DrawingOptions options, [NotNullWhen(true)] out WebGPUSurfaceFrame<TPixel>? frame)
         => this.TryAcquireFrameCore(options, out frame);

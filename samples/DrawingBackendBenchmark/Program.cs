@@ -22,8 +22,27 @@ internal static class Program
 /// <summary>
 /// Running statistics for the render-time samples collected during one benchmark run.
 /// </summary>
-internal readonly record struct BenchmarkStatistics(double MeanMilliseconds, double StdDevMilliseconds)
+internal readonly struct BenchmarkStatistics
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BenchmarkStatistics"/> struct.
+    /// </summary>
+    public BenchmarkStatistics(double meanMilliseconds, double stdDevMilliseconds)
+    {
+        this.MeanMilliseconds = meanMilliseconds;
+        this.StdDevMilliseconds = stdDevMilliseconds;
+    }
+
+    /// <summary>
+    /// Gets the mean render time in milliseconds.
+    /// </summary>
+    public double MeanMilliseconds { get; }
+
+    /// <summary>
+    /// Gets the render-time standard deviation in milliseconds.
+    /// </summary>
+    public double StdDevMilliseconds { get; }
+
     /// <summary>
     /// Computes the mean and standard deviation for the current sample window.
     /// </summary>

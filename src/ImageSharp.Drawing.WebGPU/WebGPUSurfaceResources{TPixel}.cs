@@ -41,12 +41,15 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
 
     private bool isDisposed;
     private bool frameInFlight;
+    private readonly FeatureName requiredFeature;
+    private readonly Configuration configuration;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUSurfaceResources{TPixel}"/> class with already-acquired handles.
     /// Only invoked by <see cref="Create"/> after every handle has been successfully bootstrapped.
     /// </summary>
     /// <param name="api">The shared WebGPU API loader.</param>
+    /// <param name="configuration">The ImageSharp configuration the drawing context uses for its rendering backend.</param>
     /// <param name="instanceHandle">The owned WebGPU instance handle.</param>
     /// <param name="surfaceHandle">The owned WebGPU surface handle attached to the native host.</param>
     /// <param name="adapterHandle">The owned adapter handle selected for <paramref name="surfaceHandle"/>.</param>
@@ -54,17 +57,21 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
     /// <param name="queueHandle">The owned default queue handle paired with <paramref name="deviceHandle"/>.</param>
     /// <param name="graphics">The drawing context bound to <paramref name="deviceHandle"/> and <paramref name="queueHandle"/>.</param>
     /// <param name="format">The negotiated swapchain texture format for <typeparamref name="TPixel"/>.</param>
+    /// <param name="requiredFeature">The optional WebGPU feature required by the selected texture format.</param>
     private WebGPUSurfaceResources(
         WebGPU api,
+        Configuration configuration,
         WebGPUInstanceHandle instanceHandle,
         WebGPUSurfaceHandle surfaceHandle,
         WebGPUAdapterHandle adapterHandle,
         WebGPUDeviceHandle deviceHandle,
         WebGPUQueueHandle queueHandle,
         WebGPUDeviceContext<TPixel> graphics,
-        WebGPUTextureFormatId format)
+        WebGPUTextureFormatId format,
+        FeatureName requiredFeature)
     {
         this.Api = api;
+        this.configuration = configuration;
         this.InstanceHandle = instanceHandle;
         this.SurfaceHandle = surfaceHandle;
         this.AdapterHandle = adapterHandle;
@@ -72,6 +79,7 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
         this.QueueHandle = queueHandle;
         this.Graphics = graphics;
         this.Format = format;
+        this.requiredFeature = requiredFeature;
     }
 
     /// <summary>
@@ -93,23 +101,23 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
     /// <summary>
     /// Gets the adapter selected for the current surface. Released on <see cref="Dispose"/>.
     /// </summary>
-    public WebGPUAdapterHandle AdapterHandle { get; }
+    public WebGPUAdapterHandle AdapterHandle { get; private set; }
 
     /// <summary>
     /// Gets the logical device requested from <see cref="AdapterHandle"/>. Released on <see cref="Dispose"/>.
     /// </summary>
-    public WebGPUDeviceHandle DeviceHandle { get; }
+    public WebGPUDeviceHandle DeviceHandle { get; private set; }
 
     /// <summary>
     /// Gets the default queue for <see cref="DeviceHandle"/>. Released on <see cref="Dispose"/>.
     /// </summary>
-    public WebGPUQueueHandle QueueHandle { get; }
+    public WebGPUQueueHandle QueueHandle { get; private set; }
 
     /// <summary>
     /// Gets the drawing context bound to <see cref="DeviceHandle"/>/<see cref="QueueHandle"/>, used to wrap acquired
     /// per-frame textures into <see cref="DrawingCanvas{TPixel}"/> instances.
     /// </summary>
-    public WebGPUDeviceContext<TPixel> Graphics { get; }
+    public WebGPUDeviceContext<TPixel> Graphics { get; private set; }
 
     /// <summary>
     /// Gets the swapchain texture format chosen for <typeparamref name="TPixel"/> at construction time.
@@ -147,13 +155,9 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
         WebGPU api = WebGPURuntime.GetApi();
         Instance* instance = null;
         Surface* surface = null;
-        Adapter* adapter = null;
         WebGPUInstanceHandle? instanceHandle = null;
         WebGPUSurfaceHandle? surfaceHandle = null;
-        WebGPUAdapterHandle? adapterHandle = null;
-        WebGPUDeviceHandle? deviceHandle = null;
-        WebGPUQueueHandle? queueHandle = null;
-        WebGPUDeviceContext<TPixel>? graphics = null;
+        DeviceResources? deviceResources = null;
 
         try
         {
@@ -172,53 +176,29 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
             }
 
             surfaceHandle = new WebGPUSurfaceHandle(api, (nint)surface, ownsHandle: true);
-            if (!TryRequestAdapter(api, instance, surface, out adapter, out string? adapterError))
-            {
-                throw new InvalidOperationException(adapterError);
-            }
-
-            adapterHandle = new WebGPUAdapterHandle(api, (nint)adapter, ownsHandle: true);
-            if (!TryRequestDevice(api, adapter, requiredFeature, out Device* device, out string? deviceError))
-            {
-                throw new InvalidOperationException(deviceError);
-            }
-
-            Queue* queue = api.DeviceGetQueue(device);
-            if (queue is null)
-            {
-                throw new InvalidOperationException("WebGPU queue acquisition failed.");
-            }
-
-            deviceHandle = new WebGPUDeviceHandle(api, (nint)device, ownsHandle: true);
-            queueHandle = new WebGPUQueueHandle(api, (nint)queue, ownsHandle: true);
-            graphics = new WebGPUDeviceContext<TPixel>(configuration, deviceHandle, queueHandle);
+            deviceResources = CreateDeviceResources(api, configuration, instance, surface, requiredFeature);
 
             WebGPUSurfaceResources<TPixel> resources = new(
                 api,
+                configuration,
                 instanceHandle,
                 surfaceHandle,
-                adapterHandle,
-                deviceHandle,
-                queueHandle,
-                graphics,
-                format);
+                deviceResources.AdapterHandle,
+                deviceResources.DeviceHandle,
+                deviceResources.QueueHandle,
+                deviceResources.Graphics,
+                format,
+                requiredFeature);
 
             resources.ConfigureSurface(initialPresentMode, initialFramebufferSize);
+            deviceResources = null;
             return resources;
         }
         catch
         {
-            graphics?.Dispose();
-            queueHandle?.Dispose();
-            deviceHandle?.Dispose();
-            adapterHandle?.Dispose();
+            deviceResources?.Dispose();
             surfaceHandle?.Dispose();
             instanceHandle?.Dispose();
-
-            if (adapterHandle is null && adapter is not null)
-            {
-                api.AdapterRelease(adapter);
-            }
 
             if (surfaceHandle is null && surface is not null)
             {
@@ -248,6 +228,22 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
             return;
         }
 
+        this.ConfigureSurfaceCore(presentMode, framebufferSize, this.DeviceHandle);
+    }
+
+    /// <summary>
+    /// Reconfigures <see cref="SurfaceHandle"/> against the supplied device handle.
+    /// </summary>
+    /// <param name="presentMode">The present mode applied to the swapchain.</param>
+    /// <param name="framebufferSize">The framebuffer size in pixels.</param>
+    /// <param name="deviceHandle">The device handle used by the new surface configuration.</param>
+    private void ConfigureSurfaceCore(WebGPUPresentMode presentMode, Size framebufferSize, WebGPUDeviceHandle deviceHandle)
+    {
+        if (framebufferSize.Width <= 0 || framebufferSize.Height <= 0)
+        {
+            return;
+        }
+
         SurfaceConfiguration surfaceConfiguration = new()
         {
             Usage = TextureUsage.RenderAttachment | TextureUsage.CopyDst | TextureUsage.TextureBinding,
@@ -258,7 +254,7 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
         };
 
         using WebGPUHandle.HandleReference surfaceReference = this.SurfaceHandle.AcquireReference();
-        using WebGPUHandle.HandleReference deviceReference = this.DeviceHandle.AcquireReference();
+        using WebGPUHandle.HandleReference deviceReference = deviceHandle.AcquireReference();
         surfaceConfiguration.Device = (Device*)deviceReference.Handle;
         this.Api.SurfaceConfigure((Surface*)surfaceReference.Handle, ref surfaceConfiguration);
     }
@@ -276,10 +272,9 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
     /// <param name="options">The drawing options that seed the canvas on the returned frame.</param>
     /// <param name="frame">Receives the acquired frame on success.</param>
     /// <returns><see langword="true"/> when a frame is available; <see langword="false"/> when no drawable frame is
-    /// available right now (zero-area framebuffer, or the surface was timed out / outdated / lost and has been
-    /// transparently reconfigured for the next attempt).</returns>
-    /// <exception cref="InvalidOperationException">Thrown on unrecoverable acquire status values
-    /// (<c>OutOfMemory</c>, <c>DeviceLost</c>), or when texture-view creation fails for an otherwise valid surface texture.</exception>
+    /// available right now (zero-area framebuffer, recoverable surface acquisition status, or recovered device loss).</returns>
+    /// <exception cref="InvalidOperationException">Thrown on an out-of-memory acquire status, or when texture-view
+    /// creation or device recovery fails.</exception>
     public bool TryAcquireFrame(
         WebGPUPresentMode presentMode,
         Size framebufferSize,
@@ -320,8 +315,16 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
                 this.ConfigureSurface(presentMode, framebufferSize);
                 return false;
 
-            case SurfaceGetCurrentTextureStatus.OutOfMemory:
             case SurfaceGetCurrentTextureStatus.DeviceLost:
+                if (surfaceTexture.Texture is not null)
+                {
+                    this.Api.TextureRelease(surfaceTexture.Texture);
+                }
+
+                this.RecoverDeviceResources(presentMode, framebufferSize);
+                return false;
+
+            case SurfaceGetCurrentTextureStatus.OutOfMemory:
                 if (surfaceTexture.Texture is not null)
                 {
                     this.Api.TextureRelease(surfaceTexture.Texture);
@@ -400,6 +403,120 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
         this.SurfaceHandle.Dispose();
         this.InstanceHandle.Dispose();
         this.isDisposed = true;
+    }
+
+    /// <summary>
+    /// Requests the adapter, device, queue, and drawing context for an existing surface.
+    /// </summary>
+    /// <param name="api">The shared WebGPU API loader.</param>
+    /// <param name="configuration">The ImageSharp configuration the drawing context will use.</param>
+    /// <param name="instance">The instance that owns the surface.</param>
+    /// <param name="surface">The surface the adapter must be compatible with.</param>
+    /// <param name="requiredFeature">The optional WebGPU feature required by the selected texture format.</param>
+    /// <returns>The acquired device resources. The caller owns the returned handles.</returns>
+    private static DeviceResources CreateDeviceResources(
+        WebGPU api,
+        Configuration configuration,
+        Instance* instance,
+        Surface* surface,
+        FeatureName requiredFeature)
+    {
+        Adapter* adapter = null;
+        WebGPUAdapterHandle? adapterHandle = null;
+        WebGPUDeviceHandle? deviceHandle = null;
+        WebGPUQueueHandle? queueHandle = null;
+        WebGPUDeviceContext<TPixel>? graphics = null;
+
+        try
+        {
+            if (!TryRequestAdapter(api, instance, surface, out adapter, out string? adapterError))
+            {
+                throw new InvalidOperationException(adapterError);
+            }
+
+            adapterHandle = new WebGPUAdapterHandle(api, (nint)adapter, ownsHandle: true);
+            if (!TryRequestDevice(api, adapter, requiredFeature, out Device* device, out string? deviceError))
+            {
+                throw new InvalidOperationException(deviceError);
+            }
+
+            deviceHandle = new WebGPUDeviceHandle(api, (nint)device, ownsHandle: true);
+            Queue* queue = api.DeviceGetQueue(device);
+            if (queue is null)
+            {
+                throw new InvalidOperationException("WebGPU queue acquisition failed.");
+            }
+
+            queueHandle = new WebGPUQueueHandle(api, (nint)queue, ownsHandle: true);
+            graphics = new WebGPUDeviceContext<TPixel>(configuration, deviceHandle, queueHandle);
+
+            DeviceResources resources = new(adapterHandle, deviceHandle, queueHandle, graphics);
+            adapterHandle = null;
+            deviceHandle = null;
+            queueHandle = null;
+            graphics = null;
+            return resources;
+        }
+        catch
+        {
+            graphics?.Dispose();
+            queueHandle?.Dispose();
+            deviceHandle?.Dispose();
+            adapterHandle?.Dispose();
+
+            if (adapterHandle is null && adapter is not null)
+            {
+                api.AdapterRelease(adapter);
+            }
+
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Recovers the device-owned portion of the surface stack after device loss.
+    /// The existing instance and surface remain valid; only adapter, device, queue, and drawing context are replaced.
+    /// </summary>
+    /// <param name="presentMode">The present mode applied to the recovered swapchain.</param>
+    /// <param name="framebufferSize">The framebuffer size in pixels.</param>
+    private void RecoverDeviceResources(WebGPUPresentMode presentMode, Size framebufferSize)
+    {
+        DeviceResources? deviceResources = null;
+
+        try
+        {
+            using WebGPUHandle.HandleReference instanceReference = this.InstanceHandle.AcquireReference();
+            using WebGPUHandle.HandleReference surfaceReference = this.SurfaceHandle.AcquireReference();
+            deviceResources = CreateDeviceResources(
+                this.Api,
+                this.configuration,
+                (Instance*)instanceReference.Handle,
+                (Surface*)surfaceReference.Handle,
+                this.requiredFeature);
+
+            this.ConfigureSurfaceCore(presentMode, framebufferSize, deviceResources.DeviceHandle);
+
+            WebGPUDeviceContext<TPixel> oldGraphics = this.Graphics;
+            WebGPUQueueHandle oldQueueHandle = this.QueueHandle;
+            WebGPUDeviceHandle oldDeviceHandle = this.DeviceHandle;
+            WebGPUAdapterHandle oldAdapterHandle = this.AdapterHandle;
+
+            this.Graphics = deviceResources.Graphics;
+            this.QueueHandle = deviceResources.QueueHandle;
+            this.DeviceHandle = deviceResources.DeviceHandle;
+            this.AdapterHandle = deviceResources.AdapterHandle;
+            deviceResources = null;
+
+            oldGraphics.Dispose();
+            oldQueueHandle.Dispose();
+            oldDeviceHandle.Dispose();
+            oldAdapterHandle.Dispose();
+        }
+        catch
+        {
+            deviceResources?.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
@@ -525,5 +642,39 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
 
         error = null;
         return true;
+    }
+
+    /// <summary>
+    /// Owns one acquired adapter/device/queue/context set while it is being transferred into the surface resources.
+    /// </summary>
+    private sealed class DeviceResources : IDisposable
+    {
+        public DeviceResources(
+            WebGPUAdapterHandle adapterHandle,
+            WebGPUDeviceHandle deviceHandle,
+            WebGPUQueueHandle queueHandle,
+            WebGPUDeviceContext<TPixel> graphics)
+        {
+            this.AdapterHandle = adapterHandle;
+            this.DeviceHandle = deviceHandle;
+            this.QueueHandle = queueHandle;
+            this.Graphics = graphics;
+        }
+
+        public WebGPUAdapterHandle AdapterHandle { get; }
+
+        public WebGPUDeviceHandle DeviceHandle { get; }
+
+        public WebGPUQueueHandle QueueHandle { get; }
+
+        public WebGPUDeviceContext<TPixel> Graphics { get; }
+
+        public void Dispose()
+        {
+            this.Graphics.Dispose();
+            this.QueueHandle.Dispose();
+            this.DeviceHandle.Dispose();
+            this.AdapterHandle.Dispose();
+        }
     }
 }
