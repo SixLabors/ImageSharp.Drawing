@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
@@ -21,33 +20,11 @@ public sealed unsafe partial class WebGPUDrawingBackend
     private const int ReadbackCallbackTimeoutMilliseconds = 5000;
 
     /// <inheritdoc />
-    public bool TryReadRegion<TPixel>(
+    public void ReadRegion<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
         Rectangle sourceRectangle,
         Buffer2DRegion<TPixel> destination)
-        where TPixel : unmanaged, IPixel<TPixel>
-        => this.TryReadRegion(configuration, target, sourceRectangle, destination, out _);
-
-    /// <summary>
-    /// Attempts to read source pixels from the target into a caller-provided buffer.
-    /// </summary>
-    /// <typeparam name="TPixel">The pixel format.</typeparam>
-    /// <param name="configuration">The active processing configuration.</param>
-    /// <param name="target">The target frame.</param>
-    /// <param name="sourceRectangle">Source rectangle in target-local coordinates.</param>
-    /// <param name="destination">
-    /// The caller-allocated region to receive the pixel data.
-    /// Must be at least as large as <paramref name="sourceRectangle"/> (clamped to target bounds).
-    /// </param>
-    /// <param name="error">Receives the failure reason when readback cannot complete.</param>
-    /// <returns><see langword="true"/> when readback succeeds; otherwise <see langword="false"/>.</returns>
-    public bool TryReadRegion<TPixel>(
-        Configuration configuration,
-        ICanvasFrame<TPixel> target,
-        Rectangle sourceRectangle,
-        Buffer2DRegion<TPixel> destination,
-        [NotNullWhen(false)] out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         this.ThrowIfDisposed();
@@ -62,15 +39,13 @@ public sealed unsafe partial class WebGPUDrawingBackend
             capability.QueueHandle.IsInvalid ||
             capability.TargetTextureHandle.IsInvalid)
         {
-            error = "The target does not expose a native WebGPU surface with valid device, queue, and texture handles for readback.";
-            return false;
+            throw new NotSupportedException("The target does not expose a native WebGPU surface with valid device, queue, and texture handles for readback.");
         }
 
         if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId expectedFormat, out FeatureName requiredFeature) ||
             expectedFormat != capability.TargetFormat)
         {
-            error = $"Pixel type '{typeof(TPixel).Name}' cannot be read back from target format '{capability.TargetFormat}'.";
-            return false;
+            throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' cannot be read back from target format '{capability.TargetFormat}'.");
         }
 
         // Convert canvas-local source coordinates to absolute native-surface coordinates.
@@ -85,8 +60,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
         if (source.Width <= 0 || source.Height <= 0)
         {
-            error = "The requested readback rectangle does not intersect the target bounds.";
-            return false;
+            throw new ArgumentException("The requested readback rectangle does not intersect the target bounds.", nameof(sourceRectangle));
         }
 
         WebGPU api = WebGPURuntime.GetApi();
@@ -100,8 +74,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
         if (requiredFeature != FeatureName.Undefined
             && !WebGPURuntime.GetOrCreateDeviceState(api, capability.DeviceHandle).HasFeature(requiredFeature))
         {
-            error = $"The target device does not support WebGPU feature '{requiredFeature}' required to read back pixel type '{typeof(TPixel).Name}'.";
-            return false;
+            throw new NotSupportedException($"The target device does not support WebGPU feature '{requiredFeature}' required to read back pixel type '{typeof(TPixel).Name}'.");
         }
 
         Queue* queue = (Queue*)queueReference.Handle;
@@ -129,16 +102,14 @@ public sealed unsafe partial class WebGPUDrawingBackend
             readbackBuffer = api.DeviceCreateBuffer(device, in bufferDescriptor);
             if (readbackBuffer is null)
             {
-                error = "The WebGPU device could not create a readback buffer.";
-                return false;
+                throw new InvalidOperationException("The WebGPU device could not create a readback buffer.");
             }
 
             CommandEncoderDescriptor encoderDescriptor = default;
             commandEncoder = api.DeviceCreateCommandEncoder(device, in encoderDescriptor);
             if (commandEncoder is null)
             {
-                error = "The WebGPU device could not create a command encoder for readback.";
-                return false;
+                throw new InvalidOperationException("The WebGPU device could not create a command encoder for readback.");
             }
 
             // Copy only the requested source rect from the target texture into the readback buffer.
@@ -168,8 +139,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             commandBuffer = api.CommandEncoderFinish(commandEncoder, in commandBufferDescriptor);
             if (commandBuffer is null)
             {
-                error = "The WebGPU device could not finalize the readback command buffer.";
-                return false;
+                throw new InvalidOperationException("The WebGPU device could not finalize the readback command buffer.");
             }
 
             api.QueueSubmit(queue, 1, ref commandBuffer);
@@ -192,16 +162,14 @@ public sealed unsafe partial class WebGPUDrawingBackend
             api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, (nuint)readbackByteCount, callback, null);
             if (!WaitForMapSignal(wgpuExtension, device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
             {
-                error = $"The WebGPU device could not map the readback buffer. Status: '{mapStatus}'.";
-                return false;
+                throw new InvalidOperationException($"The WebGPU device could not map the readback buffer. Status: '{mapStatus}'.");
             }
 
             void* mapped = api.BufferGetConstMappedRange(readbackBuffer, 0, (nuint)readbackByteCount);
             if (mapped is null)
             {
                 api.BufferUnmap(readbackBuffer);
-                error = "The WebGPU device mapped the readback buffer but returned no readable data.";
-                return false;
+                throw new InvalidOperationException("The WebGPU device mapped the readback buffer but returned no readable data.");
             }
 
             try
@@ -218,8 +186,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                         .CopyTo(MemoryMarshal.AsBytes(destination.DangerousGetRowSpan(y)));
                 }
 
-                error = null;
-                return true;
+                return;
             }
             finally
             {

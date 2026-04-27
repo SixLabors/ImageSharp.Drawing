@@ -430,7 +430,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     }
 
     /// <inheritdoc />
-    public bool TryReadRegion<TPixel>(
+    public void ReadRegion<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
         Rectangle sourceRectangle,
@@ -443,7 +443,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         // CPU backend readback is available only when the target exposes CPU pixels.
         if (!target.TryGetCpuRegion(out Buffer2DRegion<TPixel> sourceRegion))
         {
-            return false;
+            throw new NotSupportedException($"{nameof(DefaultDrawingBackend)} requires CPU-accessible frame targets for readback.");
         }
 
         // Clamp the request to the target region to avoid out-of-range row slicing.
@@ -453,18 +453,17 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
 
         if (clipped.Width <= 0 || clipped.Height <= 0)
         {
-            return false;
+            throw new ArgumentException("The requested readback rectangle does not intersect the target bounds.", nameof(sourceRectangle));
         }
 
         int copyWidth = Math.Min(clipped.Width, destination.Width);
         int copyHeight = Math.Min(clipped.Height, destination.Height);
+
         for (int y = 0; y < copyHeight; y++)
         {
             sourceRegion.DangerousGetRowSpan(clipped.Y + y)
                 .Slice(clipped.X, copyWidth)
                 .CopyTo(destination.DangerousGetRowSpan(y));
         }
-
-        return true;
     }
 }

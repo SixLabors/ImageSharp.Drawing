@@ -199,15 +199,11 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
                 nameof(destination));
         }
 
-        if (!this.Graphics.Backend.TryReadRegion(
-                this.Graphics.Configuration,
-                this.NativeFrame,
-                new Rectangle(0, 0, this.Width, this.Height),
-                new Buffer2DRegion<TPixel>(destination.Frames.RootFrame.PixelBuffer),
-                out string? error))
-        {
-            throw new InvalidOperationException(error);
-        }
+        this.Graphics.Backend.ReadRegion(
+            this.Graphics.Configuration,
+            this.NativeFrame,
+            new Rectangle(0, 0, this.Width, this.Height),
+            new Buffer2DRegion<TPixel>(destination.Frames.RootFrame.PixelBuffer));
     }
 
     /// <summary>

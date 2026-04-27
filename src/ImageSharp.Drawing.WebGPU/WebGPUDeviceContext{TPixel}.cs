@@ -167,7 +167,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     /// <returns>A canvas frame backed by the external WebGPU texture.</returns>
     /// <remarks>
     /// The caller retains ownership of the texture and view; this context does not release them.
-    /// The texture must have been created with <c>RenderAttachment | TextureBinding</c> usage.
+    /// The texture must have been created with <c>RenderAttachment | CopySrc | CopyDst | TextureBinding</c> usage.
     /// Both handles are typically valid only for the current frame: dispose any consumer of the returned frame
     /// before the host calls <c>wgpuSurfacePresent</c>, then re-acquire on the next frame.
     /// </remarks>
@@ -191,7 +191,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     /// <returns>A drawing canvas targeting the external texture.</returns>
     /// <remarks>
     /// The caller retains ownership of the texture and view; this context does not release them.
-    /// The texture must have been created with <c>RenderAttachment | TextureBinding</c> usage.
+    /// The texture must have been created with <c>RenderAttachment | CopySrc | CopyDst | TextureBinding</c> usage.
     /// Dispose the returned canvas before the host calls <c>wgpuSurfacePresent</c>, then create a new canvas on the next frame.
     /// </remarks>
     public DrawingCanvas<TPixel> CreateCanvas(
@@ -221,7 +221,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     /// <returns>A drawing canvas targeting the external texture.</returns>
     /// <remarks>
     /// The caller retains ownership of the texture and view; this context does not release them.
-    /// The texture must have been created with <c>RenderAttachment | TextureBinding</c> usage.
+    /// The texture must have been created with <c>RenderAttachment | CopySrc | CopyDst | TextureBinding</c> usage.
     /// Dispose the returned canvas before the host calls <c>wgpuSurfacePresent</c>, then create a new canvas on the next frame.
     /// </remarks>
     public DrawingCanvas<TPixel> CreateCanvas(

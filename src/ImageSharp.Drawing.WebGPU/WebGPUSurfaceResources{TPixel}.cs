@@ -246,7 +246,7 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
 
         SurfaceConfiguration surfaceConfiguration = new()
         {
-            Usage = TextureUsage.RenderAttachment | TextureUsage.CopyDst | TextureUsage.TextureBinding,
+            Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst | TextureUsage.TextureBinding,
             Format = WebGPUTextureFormatMapper.ToSilk(this.Format),
             PresentMode = (SilkPresentMode)(int)presentMode,
             Width = (uint)framebufferSize.Width,

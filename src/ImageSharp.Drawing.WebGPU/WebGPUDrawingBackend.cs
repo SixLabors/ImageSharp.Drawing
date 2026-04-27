@@ -217,14 +217,11 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         Buffer2DRegion<TPixel> stagingRegion = new(stagingBuffer, targetBounds);
         ICanvasFrame<TPixel> stagingFrame = new MemoryCanvasFrame<TPixel>(stagingRegion);
 
-        if (!this.TryReadRegion(
-                configuration,
-                target,
-                new Rectangle(0, 0, targetBounds.Width, targetBounds.Height),
-                stagingRegion))
-        {
-            throw new NotSupportedException("WebGPU fallback requires readback from the native target.");
-        }
+        this.ReadRegion(
+            configuration,
+            target,
+            new Rectangle(0, 0, targetBounds.Width, targetBounds.Height),
+            stagingRegion);
 
         this.fallbackBackend.FlushCompositions(configuration, stagingFrame, compositionScene);
 

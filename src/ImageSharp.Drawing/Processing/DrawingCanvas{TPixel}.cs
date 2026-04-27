@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
@@ -352,11 +351,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
             return;
         }
 
-        if (!this.TryCreateProcessSourceImage(sourceRect, out Image<TPixel>? sourceImage))
-        {
-            throw new NotSupportedException("Canvas process operations require access to the current target pixels.");
-        }
-
+        Image<TPixel> sourceImage = this.CreateProcessSourceImage(sourceRect);
         sourceImage.Mutate(operation);
 
         Point brushOffset = new(
@@ -1009,26 +1004,30 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <summary>
-    /// Attempts to create a source image for process-in-path operations.
+    /// Creates a source image for process-in-path operations.
     /// </summary>
     /// <param name="sourceRect">Source rectangle in local canvas coordinates.</param>
-    /// <param name="sourceImage">The readback image when available.</param>
-    /// <returns><see langword="true"/> when source pixels were resolved.</returns>
-    private bool TryCreateProcessSourceImage(Rectangle sourceRect, [NotNullWhen(true)] out Image<TPixel>? sourceImage)
+    /// <returns>The readback image.</returns>
+    private Image<TPixel> CreateProcessSourceImage(Rectangle sourceRect)
     {
-        sourceImage = new Image<TPixel>(this.configuration, sourceRect.Width, sourceRect.Height);
-        if (!this.backend.TryReadRegion(
+        Image<TPixel> sourceImage = new(this.configuration, sourceRect.Width, sourceRect.Height);
+
+        try
+        {
+            this.backend.ReadRegion(
                 this.configuration,
                 this.targetFrame,
                 sourceRect,
-                new Buffer2DRegion<TPixel>(sourceImage.Frames.RootFrame.PixelBuffer)))
-        {
-            sourceImage.Dispose();
-            sourceImage = null;
-            return false;
-        }
+                new Buffer2DRegion<TPixel>(sourceImage.Frames.RootFrame.PixelBuffer));
 
-        return true;
+            return sourceImage;
+        }
+        catch
+        {
+            // Ownership only transfers to the caller after readback succeeds.
+            sourceImage.Dispose();
+            throw;
+        }
     }
 
     /// <inheritdoc />

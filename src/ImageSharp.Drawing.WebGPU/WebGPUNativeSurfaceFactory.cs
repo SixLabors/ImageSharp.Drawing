@@ -30,7 +30,7 @@ public static class WebGPUNativeSurfaceFactory
     /// <returns>A configured <see cref="NativeSurface"/> instance.</returns>
     /// <remarks>
     /// These handles must originate from the same process WebGPU runtime used by ImageSharp.Drawing.WebGPU.
-    /// The target texture must support render attachment and texture binding usage.
+    /// The target texture must support render attachment, copy source, copy destination, and texture binding usage.
     /// </remarks>
     public static NativeSurface Create<TPixel>(
         nint deviceHandle,

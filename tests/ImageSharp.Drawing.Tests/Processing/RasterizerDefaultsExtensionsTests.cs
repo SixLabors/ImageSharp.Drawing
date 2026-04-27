@@ -55,12 +55,14 @@ public class RasterizerDefaultsExtensionsTests
         {
         }
 
-        public bool TryReadRegion<TPixel>(
+        public void ReadRegion<TPixel>(
             Configuration configuration,
             ICanvasFrame<TPixel> target,
             Rectangle sourceRectangle,
             Buffer2DRegion<TPixel> destination)
             where TPixel : unmanaged, IPixel<TPixel>
-            => false;
+        {
+            throw new NotSupportedException();
+        }
     }
 }

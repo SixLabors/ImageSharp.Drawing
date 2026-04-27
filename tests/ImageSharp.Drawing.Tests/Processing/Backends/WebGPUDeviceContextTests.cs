@@ -88,13 +88,10 @@ public class WebGPUDeviceContextTests
         using WebGPUDrawingBackend backend = new();
         using Image<Rgba32> image = new(12, 10);
 
-        Assert.True(
-            backend.TryReadRegion(
-                Configuration.Default,
-                target.NativeFrame,
-                target.Bounds,
-                new Buffer2DRegion<Rgba32>(image.Frames.RootFrame.PixelBuffer),
-                out string readError),
-            readError);
+        backend.ReadRegion(
+            Configuration.Default,
+            target.NativeFrame,
+            target.Bounds,
+            new Buffer2DRegion<Rgba32>(image.Frames.RootFrame.PixelBuffer));
     }
 }

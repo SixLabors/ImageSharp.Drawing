@@ -29,7 +29,7 @@ public interface IDrawingBackend
         where TPixel : unmanaged, IPixel<TPixel>;
 
     /// <summary>
-    /// Attempts to read source pixels from the target into a caller-provided buffer.
+    /// Reads source pixels from the target into a caller-provided buffer.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="configuration">The active processing configuration.</param>
@@ -39,8 +39,7 @@ public interface IDrawingBackend
     /// The caller-allocated region to receive the pixel data.
     /// Must be at least as large as <paramref name="sourceRectangle"/> (clamped to target bounds).
     /// </param>
-    /// <returns><see langword="true"/> when readback succeeds; otherwise <see langword="false"/>.</returns>
-    public bool TryReadRegion<TPixel>(
+    public void ReadRegion<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
         Rectangle sourceRectangle,

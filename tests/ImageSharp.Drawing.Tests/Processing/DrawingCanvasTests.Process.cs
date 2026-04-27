@@ -192,7 +192,7 @@ public partial class DrawingCanvasTests
             DefaultDrawingBackend.Instance.FlushCompositions(configuration, typedProxyFrame, compositionScene);
         }
 
-        public bool TryReadRegion<TTargetPixel>(
+        public void ReadRegion<TTargetPixel>(
             Configuration configuration,
             ICanvasFrame<TTargetPixel> target,
             Rectangle sourceRectangle,
@@ -203,7 +203,7 @@ public partial class DrawingCanvasTests
 
             if (this.readbackSource is null)
             {
-                return false;
+                throw new NotSupportedException();
             }
 
             this.ReadbackCallCount++;
@@ -211,7 +211,7 @@ public partial class DrawingCanvasTests
             Rectangle clipped = Rectangle.Intersect(this.readbackSource.Bounds, sourceRectangle);
             if (clipped.Width <= 0 || clipped.Height <= 0)
             {
-                return false;
+                throw new ArgumentException("The requested readback rectangle does not intersect the target bounds.", nameof(sourceRectangle));
             }
 
             using Image<TPixel> cropped = this.readbackSource.Clone(ctx => ctx.Crop(clipped));
@@ -219,12 +219,11 @@ public partial class DrawingCanvasTests
             Buffer2D<TTargetPixel> source = converted.Frames.RootFrame.PixelBuffer;
             int copyWidth = Math.Min(source.Width, destination.Width);
             int copyHeight = Math.Min(source.Height, destination.Height);
+
             for (int y = 0; y < copyHeight; y++)
             {
                 source.DangerousGetRowSpan(y).Slice(0, copyWidth).CopyTo(destination.DangerousGetRowSpan(y));
             }
-
-            return true;
         }
     }
 }
