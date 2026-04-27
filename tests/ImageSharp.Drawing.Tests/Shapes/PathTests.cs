@@ -85,4 +85,56 @@ public class PathTests
 
         Assert.False(segments.MoveNext());
     }
+
+    [Fact]
+    public void PathCollection_EnumerableConstructor_PreservesPaths()
+    {
+        IPath first = new RectangularPolygon(1, 2, 3, 4);
+        IPath second = new RectangularPolygon(10, 20, 5, 6);
+
+        PathCollection collection = new(new[] { first, second }.AsEnumerable());
+
+        IPath[] paths = collection.ToArray();
+        Assert.Equal(2, paths.Length);
+        Assert.Same(first, paths[0]);
+        Assert.Same(second, paths[1]);
+    }
+
+    [Fact]
+    public void PathCollection_Bounds_AggregatesPathBounds()
+    {
+        PathCollection collection = new(
+            new RectangularPolygon(1, 2, 3, 4),
+            new RectangularPolygon(10, 20, 5, 6));
+
+        Assert.Equal(new RectangleF(1, 2, 14, 24), collection.Bounds);
+    }
+
+    [Fact]
+    public void PathCollection_Bounds_ReturnsEmptyForEmptyCollection()
+    {
+        PathCollection collection = new();
+
+        Assert.Equal(RectangleF.Empty, collection.Bounds);
+    }
+
+    [Fact]
+    public void PathCollection_Transform_TransformsEachPath()
+    {
+        PathCollection collection = new(
+            new RectangularPolygon(1, 2, 3, 4),
+            new RectangularPolygon(10, 20, 5, 6));
+        Matrix4x4 matrix = Matrix4x4.CreateTranslation(7, 11, 0);
+
+        IPathCollection transformed = collection.Transform(matrix);
+
+        Assert.NotSame(collection, transformed);
+        Assert.Equal(new RectangleF(8, 13, 14, 24), transformed.Bounds);
+        Assert.Equal(new RectangleF(1, 2, 14, 24), collection.Bounds);
+
+        RectangleF[] transformedBounds = transformed.Select(x => x.Bounds).ToArray();
+        Assert.Equal(2, transformedBounds.Length);
+        Assert.Equal(new RectangleF(8, 13, 3, 4), transformedBounds[0]);
+        Assert.Equal(new RectangleF(17, 31, 5, 6), transformedBounds[1]);
+    }
 }
