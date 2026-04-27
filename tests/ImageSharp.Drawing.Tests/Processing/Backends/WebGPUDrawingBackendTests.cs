@@ -64,6 +64,48 @@ public partial class WebGPUDrawingBackendTests
     }
 
     [WebGPUTheory]
+    [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
+    public void FillPath_UncontainedGeometry_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        PathBuilder pathBuilder = new();
+        pathBuilder.AddLines(
+        [
+            new PointF(-96, 128.5F),
+            new PointF(128.5F, -88),
+            new PointF(352, 128.5F),
+            new PointF(128.5F, 344)
+        ]);
+        pathBuilder.CloseFigure();
+
+        IPath path = pathBuilder.Build();
+        Brush brush = Brushes.Solid(Color.MediumPurple);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, "FillPath_UncontainedGeometry", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.3F);
+        AssertBackendPairReferenceOutputs(provider, "FillPath_UncontainedGeometry", defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
     [WithSolidFilledImages(512, 512, "White", PixelTypes.Rgba32)]
     public void FillPath_AliasedWithThreshold_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
