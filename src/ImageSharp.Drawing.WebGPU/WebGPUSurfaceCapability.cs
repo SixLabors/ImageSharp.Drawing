@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <remarks>
 /// The backing WebGPU device, queue, texture, and texture view must remain valid while canvases target this surface.
 /// </remarks>
-public sealed class WebGPUSurfaceCapability
+internal sealed class WebGPUSurfaceCapability
 {
     private readonly WebGPUDeviceHandle deviceHandle;
     private readonly WebGPUQueueHandle queueHandle;
@@ -62,15 +62,15 @@ public sealed class WebGPUSurfaceCapability
     /// <summary>
     /// Gets the native render target texture format identifier.
     /// </summary>
-    public WebGPUTextureFormatId TargetFormat { get; }
+    internal WebGPUTextureFormatId TargetFormat { get; }
 
     /// <summary>
     /// Gets the surface width in pixels.
     /// </summary>
-    public int Width { get; }
+    internal int Width { get; }
 
     /// <summary>
     /// Gets the surface height in pixels.
     /// </summary>
-    public int Height { get; }
+    internal int Height { get; }
 }

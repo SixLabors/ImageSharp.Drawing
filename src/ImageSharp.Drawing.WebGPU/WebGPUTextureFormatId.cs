@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Supported WebGPU texture format identifiers used by <see cref="WebGPUSurfaceCapability"/>.
+/// Supported texture format identifiers for native WebGPU targets.
 /// </summary>
 /// <remarks>
 /// Only formats with storage texture binding support are included.
