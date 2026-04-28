@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
@@ -45,6 +46,49 @@ public partial class DrawingCanvasTests
         int count = canvas.SaveLayer(new GraphicsOptions(), new Rectangle(10, 10, 32, 32));
         Assert.Equal(2, count);
         Assert.Equal(2, canvas.SaveCount);
+    }
+
+    [Fact]
+    public void SaveLayer_WithBounds_DoesNotShiftCanvasCoordinates()
+    {
+        TestImageProvider<Rgba32> provider = TestImageProvider<Rgba32>.Blank(1, 1);
+        using Image<Rgba32> target = new(64, 64);
+        using (DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Fill(new SolidBrush(Color.White));
+
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(10, 10, 32, 32));
+            canvas.Fill(new SolidBrush(Color.Red), new RectangularPolygon(10, 10, 10, 10));
+            canvas.Restore();
+        }
+
+        Assert.Equal(new Rgba32(255, 0, 0, 255), target[15, 15]);
+        Assert.Equal(new Rgba32(255, 255, 255, 255), target[25, 25]);
+    }
+
+    [Fact]
+    public void SaveLayer_WithBounds_UsesCurrentTransformForLayerBounds()
+    {
+        TestImageProvider<Rgba32> provider = TestImageProvider<Rgba32>.Blank(1, 1);
+        using Image<Rgba32> target = new(64, 64);
+        using (DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Fill(new SolidBrush(Color.White));
+
+            DrawingOptions translatedOptions = new()
+            {
+                Transform = Matrix4x4.CreateTranslation(20, 0, 0)
+            };
+
+            canvas.Save(translatedOptions);
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(10, 10, 10, 10));
+            canvas.Fill(new SolidBrush(Color.Red), new RectangularPolygon(10, 10, 10, 10));
+            canvas.Restore();
+            canvas.Restore();
+        }
+
+        Assert.Equal(new Rgba32(255, 0, 0, 255), target[35, 15]);
+        Assert.Equal(new Rgba32(255, 255, 255, 255), target[15, 15]);
     }
 
     [Fact]

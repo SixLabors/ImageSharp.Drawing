@@ -395,6 +395,41 @@ internal sealed partial class FlushScene : IDisposable
     }
 
     /// <summary>
+    /// Computes the row-slot range a fill or stroke command may write to. When the command was
+    /// recorded inside a SaveLayer the row distribution is confined to the layer's row bands so
+    /// a command's geometry cannot leak into rows that lie above or below the layer's
+    /// <see cref="CompositionCommand.TargetBounds"/>. Outside any layer (root or region scope)
+    /// the command is allowed to address every row; constraining row distribution by the
+    /// region's bounds would change long-standing rendering behaviour for region-only paths.
+    /// </summary>
+    /// <param name="commandTargetBounds">The command's absolute target bounds.</param>
+    /// <param name="firstTargetRowBandIndex">The first row-band index covered by the partition.</param>
+    /// <param name="totalRowSlots">The total number of row slots owned by the partition.</param>
+    /// <param name="isInsideLayer">True if the command was recorded inside a SaveLayer scope.</param>
+    /// <param name="rowStart">The first row slot the command may write to.</param>
+    /// <param name="rowEnd">The exclusive end row slot the command may write to.</param>
+    private static void GetEffectiveRowSlotRange(
+        Rectangle commandTargetBounds,
+        int firstTargetRowBandIndex,
+        int totalRowSlots,
+        bool isInsideLayer,
+        out int rowStart,
+        out int rowEnd)
+    {
+        if (!isInsideLayer)
+        {
+            rowStart = 0;
+            rowEnd = totalRowSlots;
+            return;
+        }
+
+        int firstRowBand = commandTargetBounds.Top / DefaultRasterizer.DefaultTileHeight;
+        int lastRowBand = (commandTargetBounds.Bottom - 1) / DefaultRasterizer.DefaultTileHeight;
+        rowStart = Math.Max(0, firstRowBand - firstTargetRowBandIndex);
+        rowEnd = Math.Min(totalRowSlots, lastRowBand - firstTargetRowBandIndex + 1);
+    }
+
+    /// <summary>
     /// Identifies whether a command contributes retained per-row layer control operations.
     /// </summary>
     private static bool TryGetLayerOperation(
@@ -624,7 +659,8 @@ internal sealed partial class FlushScene : IDisposable
         fillItems[commandIndex] = new FillSceneItem(preparedFill.Brush, preparedFill.GraphicsOptions, preparedFill.BrushBounds, preparedFill.Rasterizable);
         fillItemCount++;
         AccumulateFillItemStats(preparedFill.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
-        AppendFillRowOperations(rowBuilders, 0, rowBuilders.Length, firstTargetRowBandIndex, commandIndex, preparedFill.Rasterizable, allocator);
+        GetEffectiveRowSlotRange(command.TargetBounds, firstTargetRowBandIndex, rowBuilders.Length, command.IsInsideLayer, out int rowStart, out int rowEnd);
+        AppendFillRowOperations(rowBuilders, rowStart, rowEnd, firstTargetRowBandIndex, commandIndex, preparedFill.Rasterizable, allocator);
     }
 
     private static void ProcessStrokePathCommand(
@@ -649,7 +685,8 @@ internal sealed partial class FlushScene : IDisposable
         strokeItems[commandIndex] = new StrokeSceneItem(preparedStroke.Brush, preparedStroke.GraphicsOptions, preparedStroke.BrushBounds, preparedStroke.Rasterizable);
         strokeItemCount++;
         AccumulateStrokeItemStats(preparedStroke.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
-        AppendStrokeRowOperations(rowBuilders, 0, targetRowCount, firstTargetRowBandIndex, commandIndex, preparedStroke.Rasterizable, allocator);
+        GetEffectiveRowSlotRange(command.TargetBounds, firstTargetRowBandIndex, targetRowCount, command.IsInsideLayer, out int rowStart, out int rowEnd);
+        AppendStrokeRowOperations(rowBuilders, rowStart, rowEnd, firstTargetRowBandIndex, commandIndex, preparedStroke.Rasterizable, allocator);
     }
 
     private static void ProcessLineSegmentCommand(
@@ -674,7 +711,8 @@ internal sealed partial class FlushScene : IDisposable
         strokeItems[commandIndex] = new StrokeSceneItem(preparedStroke.Brush, preparedStroke.GraphicsOptions, preparedStroke.BrushBounds, preparedStroke.Rasterizable);
         strokeItemCount++;
         AccumulateStrokeItemStats(preparedStroke.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
-        AppendStrokeRowOperations(rowBuilders, 0, targetRowCount, firstTargetRowBandIndex, commandIndex, preparedStroke.Rasterizable, allocator);
+        GetEffectiveRowSlotRange(command.TargetBounds, firstTargetRowBandIndex, targetRowCount, command.IsInsideLayer, out int rowStart, out int rowEnd);
+        AppendStrokeRowOperations(rowBuilders, rowStart, rowEnd, firstTargetRowBandIndex, commandIndex, preparedStroke.Rasterizable, allocator);
     }
 
     private static void ProcessPolylineCommand(
@@ -699,7 +737,8 @@ internal sealed partial class FlushScene : IDisposable
         strokeItems[commandIndex] = new StrokeSceneItem(preparedStroke.Brush, preparedStroke.GraphicsOptions, preparedStroke.BrushBounds, preparedStroke.Rasterizable);
         strokeItemCount++;
         AccumulateStrokeItemStats(preparedStroke.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
-        AppendStrokeRowOperations(rowBuilders, 0, targetRowCount, firstTargetRowBandIndex, commandIndex, preparedStroke.Rasterizable, allocator);
+        GetEffectiveRowSlotRange(command.TargetBounds, firstTargetRowBandIndex, targetRowCount, command.IsInsideLayer, out int rowStart, out int rowEnd);
+        AppendStrokeRowOperations(rowBuilders, rowStart, rowEnd, firstTargetRowBandIndex, commandIndex, preparedStroke.Rasterizable, allocator);
     }
 
     private static void AppendLayerOperations(

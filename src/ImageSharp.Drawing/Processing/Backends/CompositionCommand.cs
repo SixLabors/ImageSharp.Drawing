@@ -50,7 +50,8 @@ public readonly struct CompositionCommand
         Rectangle targetBounds,
         Rectangle layerBounds,
         Point destinationOffset,
-        IReadOnlyList<IPath>? clipPaths)
+        IReadOnlyList<IPath>? clipPaths,
+        bool isInsideLayer)
     {
         this.Kind = kind;
         this.sourcePath = sourcePath;
@@ -62,6 +63,7 @@ public readonly struct CompositionCommand
         this.LayerBounds = layerBounds;
         this.DestinationOffset = destinationOffset;
         this.clipPaths = clipPaths;
+        this.IsInsideLayer = isInsideLayer;
     }
 
     /// <summary>
@@ -129,6 +131,11 @@ public readonly struct CompositionCommand
     public ShapeOptions ShapeOptions => this.drawingOptions?.ShapeOptions ?? throw new InvalidOperationException("Layer commands do not carry shape options.");
 
     /// <summary>
+    /// Gets a value indicating whether the command was recorded inside a layer.
+    /// </summary>
+    public bool IsInsideLayer { get; }
+
+    /// <summary>
     /// Creates a fill-path composition command.
     /// </summary>
     /// <param name="path">Path in target-local coordinates.</param>
@@ -138,6 +145,7 @@ public readonly struct CompositionCommand
     /// <param name="targetBounds">The absolute bounds of the logical target for this command.</param>
     /// <param name="destinationOffset">Absolute destination offset where coverage is composited.</param>
     /// <param name="clipPaths">Optional clip paths supplied with the command.</param>
+    /// <param name="isInsideLayer">True if the command was recorded inside a layer.</param>
     /// <returns>The composition command.</returns>
     public static CompositionCommand Create(
         IPath path,
@@ -145,8 +153,9 @@ public readonly struct CompositionCommand
         DrawingOptions drawingOptions,
         in RasterizerOptions rasterizerOptions,
         Rectangle targetBounds,
-        Point destinationOffset = default,
-        IReadOnlyList<IPath>? clipPaths = null)
+        Point destinationOffset,
+        IReadOnlyList<IPath>? clipPaths,
+        bool isInsideLayer)
         => new(
             CompositionCommandKind.FillLayer,
             path,
@@ -157,10 +166,12 @@ public readonly struct CompositionCommand
             targetBounds,
             default,
             destinationOffset,
-            clipPaths);
+            clipPaths,
+            isInsideLayer);
 
     /// <summary>
-    /// Creates a begin-layer composition command.
+    /// Creates a begin-layer composition command. <see cref="IsInsideLayer"/> is false on the
+    /// BeginLayer marker itself; the flag is only meaningful for fills/strokes that follow it.
     /// </summary>
     /// <param name="layerBounds">The absolute bounds of the layer.</param>
     /// <param name="graphicsOptions">The compositing options used when the layer closes.</param>
@@ -176,10 +187,12 @@ public readonly struct CompositionCommand
             layerBounds,
             layerBounds,
             default,
-            null);
+            null,
+            false);
 
     /// <summary>
-    /// Creates an end-layer composition command.
+    /// Creates an end-layer composition command. <see cref="IsInsideLayer"/> is false on the
+    /// EndLayer marker itself; the flag is only meaningful for fills/strokes that preceded it.
     /// </summary>
     /// <param name="layerBounds">The absolute bounds of the layer being closed.</param>
     /// <param name="graphicsOptions">The compositing options used by the layer.</param>
@@ -195,5 +208,6 @@ public readonly struct CompositionCommand
             layerBounds,
             layerBounds,
             default,
-            null);
+            null,
+            false);
 }

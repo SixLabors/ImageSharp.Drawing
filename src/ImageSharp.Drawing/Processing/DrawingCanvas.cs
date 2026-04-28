@@ -52,8 +52,15 @@ public abstract class DrawingCanvas : IDisposable
     /// the next <see cref="Flush"/> or <see cref="IDisposable.Dispose"/> using the specified
     /// <paramref name="layerOptions"/>.
     /// </summary>
+    /// <remarks>
+    /// The layer bounds are expressed in the current local coordinate system and are
+    /// transformed with the active drawing transform when the layer is created. They
+    /// limit allocation and compositing only; they do not change the canvas coordinate
+    /// system used by commands recorded inside the layer.
+    /// </remarks>
     /// <param name="layerOptions">
-    /// Graphics options controlling how the layer is composited on restore.
+    /// Graphics options controlling how the closed layer is composited against the parent canvas
+    /// when composition runs (on the next <see cref="Flush"/> or <see cref="IDisposable.Dispose"/>).
     /// </param>
     /// <param name="bounds">
     /// The local bounds of the layer. Only this region is allocated and composited.

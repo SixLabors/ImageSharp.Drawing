@@ -208,7 +208,9 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                     preparedOptions,
                     in rasterizerOptions,
                     composition.TargetBounds,
-                    composition.DestinationOffset);
+                    composition.DestinationOffset,
+                    null,
+                    composition.IsInsideLayer);
             }
         }
         else if (command is StrokePathCompositionSceneCommand strokePathCommand)
@@ -237,7 +239,9 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                         preparedOptions,
                         in rasterizerOptions,
                         composition.TargetBounds,
-                        composition.DestinationOffset));
+                        composition.DestinationOffset,
+                        null,
+                        composition.IsInsideLayer));
             }
             else
             {
@@ -253,7 +257,8 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                         composition.TargetBounds,
                         composition.DestinationOffset,
                         composition.Pen,
-                        null);
+                        null,
+                        composition.IsInsideLayer);
                 }
             }
         }

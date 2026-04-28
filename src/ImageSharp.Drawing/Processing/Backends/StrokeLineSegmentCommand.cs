@@ -25,6 +25,7 @@ public readonly struct StrokeLineSegmentCommand
     /// <param name="targetBounds">The absolute bounds of the logical target.</param>
     /// <param name="destinationOffset">The absolute destination offset of the command.</param>
     /// <param name="pen">The stroke metadata.</param>
+    /// <param name="isInsideLayer">True if the command was recorded inside a layer.</param>
     public StrokeLineSegmentCommand(
         PointF sourceStart,
         PointF sourceEnd,
@@ -33,7 +34,8 @@ public readonly struct StrokeLineSegmentCommand
         in RasterizerOptions rasterizerOptions,
         Rectangle targetBounds,
         Point destinationOffset,
-        Pen pen)
+        Pen pen,
+        bool isInsideLayer)
     {
         this.sourceStart = sourceStart;
         this.sourceEnd = sourceEnd;
@@ -43,6 +45,7 @@ public readonly struct StrokeLineSegmentCommand
         this.TargetBounds = targetBounds;
         this.DestinationOffset = destinationOffset;
         this.Pen = pen;
+        this.IsInsideLayer = isInsideLayer;
     }
 
     /// <summary>
@@ -94,6 +97,11 @@ public readonly struct StrokeLineSegmentCommand
     /// Gets the command transform.
     /// </summary>
     public Matrix4x4 Transform => this.drawingOptions.Transform;
+
+    /// <summary>
+    /// Gets a value indicating whether the command was recorded inside a layer.
+    /// </summary>
+    public bool IsInsideLayer { get; }
 
     /// <summary>
     /// Computes the conservative stroked bounds of one two-point line segment.

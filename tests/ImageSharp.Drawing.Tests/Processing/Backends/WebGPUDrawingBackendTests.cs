@@ -2267,7 +2267,7 @@ the evil Galactic Empire.";
         {
             canvas.Fill(Brushes.Solid(Color.White));
 
-            // Layer restricted to a sub-region; draw within the layer's local bounds.
+            // Layer bounds restrict compositing without shifting canvas coordinates.
             canvas.SaveLayer(new GraphicsOptions(), new Rectangle(16, 16, 96, 96));
             canvas.Fill(Brushes.Solid(Color.Green), new RectangularPolygon(0, 0, 96, 96));
             canvas.Restore();
@@ -2328,5 +2328,92 @@ the evil Galactic Empire.";
         DebugSaveBackendPair(provider, "SaveLayer_MixedSaveAndSaveLayer", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
         AssertBackendPairReferenceOutputs(provider, "SaveLayer_MixedSaveAndSaveLayer", defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(320, 220, "White", PixelTypes.Rgba32)]
+    public void CreateRegion_NestedRegionsAndStateIsolation_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+
+        static void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+            canvas.Fill(Brushes.Solid(Color.GhostWhite.WithAlpha(0.85F)), new Rectangle(12, 12, 296, 196));
+
+            DrawingOptions rootOptions = new()
+            {
+                Transform = Matrix4x4.CreateTranslation(6F, 4F, 0)
+            };
+
+            IPath rootClip = new EllipsePolygon(new PointF(160, 110), new SizeF(252, 164));
+            _ = canvas.Save(rootOptions, rootClip);
+
+            using (DrawingCanvas outerRegion = canvas.CreateRegion(new Rectangle(30, 24, 240, 156)))
+            {
+                outerRegion.Fill(Brushes.Solid(Color.LightBlue.WithAlpha(0.35F)), new Rectangle(0, 0, 240, 156));
+                outerRegion.Draw(Pens.Solid(Color.DarkBlue, 3F), new Rectangle(0, 0, 240, 156));
+
+                DrawingOptions outerOptions = new()
+                {
+                    Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.18F, new Vector2(120, 78)))
+                };
+
+                _ = outerRegion.Save(outerOptions, new RectangularPolygon(18, 14, 204, 128));
+
+                outerRegion.Fill(Brushes.Solid(Color.MediumPurple.WithAlpha(0.35F)), new Rectangle(16, 16, 208, 124));
+
+                using (DrawingCanvas innerRegion = outerRegion.CreateRegion(new Rectangle(52, 34, 132, 82)))
+                {
+                    innerRegion.Clear(Brushes.Solid(Color.LightGoldenrodYellow.WithAlpha(0.8F)));
+
+                    DrawingOptions innerOptions = new()
+                    {
+                        Transform = new Matrix4x4(Matrix3x2.CreateSkew(0.18F, 0F))
+                    };
+
+                    _ = innerRegion.Save(innerOptions, new EllipsePolygon(new PointF(66, 41), new SizeF(102, 58)));
+
+                    innerRegion.Fill(Brushes.Solid(Color.SeaGreen.WithAlpha(0.55F)), new Rectangle(0, 0, 132, 82));
+                    innerRegion.DrawLine(
+                        Pens.Solid(Color.DarkRed, 4F),
+                        new PointF(0, 80),
+                        new PointF(66, 0),
+                        new PointF(132, 74));
+
+                    innerRegion.Restore();
+
+                    innerRegion.Draw(Pens.DashDot(Color.Black.WithAlpha(0.75F), 2F), new Rectangle(4, 4, 124, 74));
+                }
+
+                outerRegion.Restore();
+
+                outerRegion.Fill(Brushes.Solid(Color.OrangeRed.WithAlpha(0.6F)), new Rectangle(8, 112, 90, 30));
+                outerRegion.DrawLine(Pens.Solid(Color.Black, 3F), new PointF(8, 8), new PointF(232, 148));
+            }
+
+            canvas.RestoreTo(1);
+
+            canvas.Draw(Pens.Solid(Color.DarkSlateGray, 3F), new Rectangle(8, 8, 304, 204));
+            canvas.DrawLine(Pens.Dash(Color.Gray, 2F), new PointF(20, 200), new PointF(300, 20));
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, "CreateRegion_NestedRegionsAndStateIsolation", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairReferenceOutputs(provider, "CreateRegion_NestedRegionsAndStateIsolation", defaultImage, nativeSurfaceImage);
     }
 }

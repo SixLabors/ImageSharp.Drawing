@@ -23,6 +23,7 @@ public readonly struct StrokePolylineCommand
     /// <param name="targetBounds">The absolute bounds of the logical target.</param>
     /// <param name="destinationOffset">The absolute destination offset of the command.</param>
     /// <param name="pen">The stroke metadata.</param>
+    /// <param name="isInsideLayer">True if the command was recorded inside a layer.</param>
     public StrokePolylineCommand(
         PointF[] sourcePoints,
         Brush brush,
@@ -30,7 +31,8 @@ public readonly struct StrokePolylineCommand
         in RasterizerOptions rasterizerOptions,
         Rectangle targetBounds,
         Point destinationOffset,
-        Pen pen)
+        Pen pen,
+        bool isInsideLayer)
     {
         ArgumentNullException.ThrowIfNull(sourcePoints);
         if (sourcePoints.Length < 2)
@@ -45,6 +47,7 @@ public readonly struct StrokePolylineCommand
         this.TargetBounds = targetBounds;
         this.DestinationOffset = destinationOffset;
         this.Pen = pen;
+        this.IsInsideLayer = isInsideLayer;
     }
 
     /// <summary>
@@ -91,6 +94,11 @@ public readonly struct StrokePolylineCommand
     /// Gets the command transform.
     /// </summary>
     public Matrix4x4 Transform => this.drawingOptions.Transform;
+
+    /// <summary>
+    /// Gets a value indicating whether the command was recorded inside a layer.
+    /// </summary>
+    public bool IsInsideLayer { get; }
 
     /// <summary>
     /// Computes the conservative stroked bounds of one open polyline.

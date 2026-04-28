@@ -14,14 +14,17 @@ internal sealed class DrawingCanvasState
     /// <param name="options">Drawing options for this state.</param>
     /// <param name="clipPaths">Clip paths for this state.</param>
     /// <param name="targetBounds">Absolute target bounds used for commands recorded in this state.</param>
+    /// <param name="destinationOffset">Absolute destination offset for paths recorded in local canvas coordinates.</param>
     public DrawingCanvasState(
         DrawingOptions options,
         IReadOnlyList<IPath> clipPaths,
-        Rectangle targetBounds)
+        Rectangle targetBounds,
+        Point destinationOffset)
     {
         this.Options = options;
         this.ClipPaths = clipPaths;
         this.TargetBounds = targetBounds;
+        this.DestinationOffset = destinationOffset;
     }
 
     /// <summary>
@@ -42,6 +45,11 @@ internal sealed class DrawingCanvasState
     /// Gets the absolute target bounds used for commands recorded in this state.
     /// </summary>
     public Rectangle TargetBounds { get; }
+
+    /// <summary>
+    /// Gets the absolute destination offset for paths recorded in local canvas coordinates.
+    /// </summary>
+    public Point DestinationOffset { get; }
 
     /// <summary>
     /// Gets a value indicating whether this state represents a compositing layer.

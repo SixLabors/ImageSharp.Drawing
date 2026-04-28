@@ -25,6 +25,7 @@ public readonly struct StrokePathCommand
     /// <param name="destinationOffset">The absolute destination offset of the command.</param>
     /// <param name="pen">The stroke metadata.</param>
     /// <param name="clipPaths">Optional clip paths supplied with the command.</param>
+    /// <param name="isInsideLayer">True if the command was recorded inside a layer.</param>
     public StrokePathCommand(
         IPath sourcePath,
         Brush brush,
@@ -33,7 +34,8 @@ public readonly struct StrokePathCommand
         Rectangle targetBounds,
         Point destinationOffset,
         Pen pen,
-        IReadOnlyList<IPath>? clipPaths = null)
+        IReadOnlyList<IPath>? clipPaths,
+        bool isInsideLayer)
     {
         this.sourcePath = sourcePath;
         this.drawingOptions = drawingOptions;
@@ -43,6 +45,7 @@ public readonly struct StrokePathCommand
         this.TargetBounds = targetBounds;
         this.DestinationOffset = destinationOffset;
         this.Pen = pen;
+        this.IsInsideLayer = isInsideLayer;
     }
 
     /// <summary>
@@ -99,4 +102,9 @@ public readonly struct StrokePathCommand
     /// Gets the shape options carried by the command.
     /// </summary>
     public ShapeOptions ShapeOptions => this.drawingOptions.ShapeOptions;
+
+    /// <summary>
+    /// Gets a value indicating whether the command was recorded inside a layer.
+    /// </summary>
+    public bool IsInsideLayer { get; }
 }

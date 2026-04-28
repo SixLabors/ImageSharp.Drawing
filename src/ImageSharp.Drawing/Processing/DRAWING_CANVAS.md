@@ -237,6 +237,12 @@ When `SaveLayer(...)` is called, the canvas:
 3. records `BeginLayer`
 4. pushes a state snapshot that marks the new layer scope
 
+The layer bounds are expressed in the active local coordinate system, so the canvas
+transform in effect at `SaveLayer(...)` time is applied when resolving the layer's
+absolute target bounds. The resolved bounds limit isolation, allocation, and final
+composition. They do not shift the canvas coordinate system; draw commands inside a
+bounded layer still use the same local coordinates as the parent canvas.
+
 When the layer is later closed through `Restore()` or `RestoreTo(...)`, the canvas records `EndLayer`.
 
 The actual isolation is implemented later by the backend.

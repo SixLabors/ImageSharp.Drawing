@@ -110,7 +110,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             backend,
             targetFrame,
             new DrawingCanvasBatcher<TPixel>(configuration, backend, targetFrame),
-            new DrawingCanvasState(options, clipPaths, targetFrame.Bounds),
+            new DrawingCanvasState(options, clipPaths, targetFrame.Bounds, targetFrame.Bounds.Location),
             true)
     {
     }
@@ -169,7 +169,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         // Push a non-layer copy of the current state.
         // Only states pushed by SaveLayer() should trigger layer compositing on restore.
-        this.savedStates.Push(new DrawingCanvasState(current.Options, current.ClipPaths, current.TargetBounds));
+        this.savedStates.Push(new DrawingCanvasState(current.Options, current.ClipPaths, current.TargetBounds, current.DestinationOffset));
         return this.savedStates.Count;
     }
 
@@ -185,7 +185,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         _ = this.Save();
         DrawingCanvasState current = this.ResolveState();
-        DrawingCanvasState state = new(options, clipPaths, current.TargetBounds);
+        DrawingCanvasState state = new(options, clipPaths, current.TargetBounds, current.DestinationOffset);
         _ = this.savedStates.Pop();
         this.savedStates.Push(state);
         return this.savedStates.Count;
@@ -196,19 +196,17 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     {
         this.EnsureNotDisposed();
         Guard.NotNull(layerOptions, nameof(layerOptions));
+        Guard.MustBeGreaterThan(bounds.Width, 0, nameof(bounds));
+        Guard.MustBeGreaterThan(bounds.Height, 0, nameof(bounds));
 
-        Rectangle layerBounds = Rectangle.Intersect(this.Bounds, bounds);
-        Rectangle absoluteLayerBounds = new(
-            this.targetFrame.Bounds.X + layerBounds.X,
-            this.targetFrame.Bounds.Y + layerBounds.Y,
-            layerBounds.Width,
-            layerBounds.Height);
+        DrawingCanvasState currentState = this.ResolveState();
+        Rectangle absoluteLayerBounds = ResolveLayerBounds(currentState, bounds);
 
         // Keep layer boundaries in the shared command stream so the backend can lower them inline.
         this.batcher.AddComposition(CompositionCommand.CreateBeginLayer(absoluteLayerBounds, layerOptions));
 
-        DrawingCanvasState currentState = this.ResolveState();
-        DrawingCanvasState layerState = new(currentState.Options, currentState.ClipPaths, absoluteLayerBounds)
+        // A bounded layer clips and allocates the isolated target, but it does not shift the canvas coordinate system.
+        DrawingCanvasState layerState = new(currentState.Options, currentState.ClipPaths, absoluteLayerBounds, currentState.DestinationOffset)
         {
             IsLayer = true,
             LayerOptions = layerOptions,
@@ -258,7 +256,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             this.backend,
             childFrame,
             this.batcher,
-            new DrawingCanvasState(currentState.Options, currentState.ClipPaths, childFrame.Bounds)
+            new DrawingCanvasState(currentState.Options, currentState.ClipPaths, childFrame.Bounds, childFrame.Bounds.Location)
             {
                 IsLayer = currentState.IsLayer,
                 LayerOptions = currentState.LayerOptions,
@@ -757,7 +755,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
 
         // Commands carry their absolute target bounds and destination origin explicitly.
-        // Region canvases therefore only need to update state.TargetBounds.
+        // Bounded layers can clip the target while preserving the active canvas coordinate origin.
         if (pen is null)
         {
             this.batcher.AddComposition(
@@ -767,8 +765,9 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                     options,
                     in rasterizerOptions,
                     state.TargetBounds,
-                    state.TargetBounds.Location,
-                    clipPaths));
+                    state.DestinationOffset,
+                    clipPaths,
+                    state.IsLayer));
             return;
         }
 
@@ -779,9 +778,10 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 options,
                 in rasterizerOptions,
                 state.TargetBounds,
-                state.TargetBounds.Location,
+                state.DestinationOffset,
                 pen,
-                clipPaths));
+                clipPaths,
+                state.IsLayer));
     }
 
     /// <summary>
@@ -821,8 +821,9 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 options,
                 in rasterizerOptions,
                 state.TargetBounds,
-                state.TargetBounds.Location,
-                pen));
+                state.DestinationOffset,
+                pen,
+                state.IsLayer));
     }
 
     /// <summary>
@@ -860,8 +861,9 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 options,
                 in rasterizerOptions,
                 state.TargetBounds,
-                state.TargetBounds.Location,
-                pen));
+                state.DestinationOffset,
+                pen,
+                state.IsLayer));
     }
 
     /// <summary>
@@ -1116,8 +1118,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         DrawingCanvasState state = this.ResolveState();
         Point destinationOffset = new(
-            state.TargetBounds.X + operation.RenderLocation.X,
-            state.TargetBounds.Y + operation.RenderLocation.Y);
+            state.DestinationOffset.X + operation.RenderLocation.X,
+            state.DestinationOffset.Y + operation.RenderLocation.Y);
 
         Pen? pen = operation.Kind == DrawingOperationKind.Draw ? operation.Pen : null;
 
@@ -1153,7 +1155,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                     in rasterizerOptions,
                     state.TargetBounds,
                     destinationOffset,
-                    clipPaths));
+                    clipPaths,
+                    state.IsLayer));
         }
 
         return new StrokePathCompositionSceneCommand(
@@ -1165,7 +1168,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 state.TargetBounds,
                 destinationOffset,
                 pen,
-                clipPaths));
+                clipPaths,
+                state.IsLayer));
     }
 
     /// <summary>
@@ -1179,6 +1183,31 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             (int)MathF.Floor(bounds.Top),
             (int)MathF.Ceiling(bounds.Right),
             (int)MathF.Ceiling(bounds.Bottom));
+
+    /// <summary>
+    /// Resolves local layer bounds to absolute target bounds using the active transform.
+    /// </summary>
+    /// <param name="state">The current drawing state.</param>
+    /// <param name="bounds">The layer bounds in local canvas coordinates.</param>
+    /// <returns>The absolute layer bounds clipped to the active target.</returns>
+    private static Rectangle ResolveLayerBounds(DrawingCanvasState state, Rectangle bounds)
+    {
+        RectangleF transformedBounds = bounds;
+        Matrix4x4 transform = state.Options.Transform;
+        if (!transform.IsIdentity)
+        {
+            transformedBounds = RectangleF.Transform(transformedBounds, transform);
+        }
+
+        Rectangle localLayerBounds = ToConservativeBounds(transformedBounds);
+        Rectangle absoluteLayerBounds = new(
+            state.DestinationOffset.X + localLayerBounds.X,
+            state.DestinationOffset.Y + localLayerBounds.Y,
+            localLayerBounds.Width,
+            localLayerBounds.Height);
+
+        return Rectangle.Intersect(state.TargetBounds, absoluteLayerBounds);
+    }
 
     /// <summary>
     /// Creates resize options used for image drawing operations.
