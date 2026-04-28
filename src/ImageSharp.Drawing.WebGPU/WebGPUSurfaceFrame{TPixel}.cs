@@ -56,10 +56,10 @@ public sealed unsafe class WebGPUSurfaceFrame<TPixel> : IDisposable
         {
             this.Canvas.Flush();
             this.api.SurfacePresent((Surface*)this.surfaceReference.Handle);
+            this.Canvas.Dispose();
         }
         finally
         {
-            this.Canvas.Dispose();
             this.textureViewHandle.Dispose();
             this.textureHandle.Dispose();
             this.surfaceReference.Dispose();
