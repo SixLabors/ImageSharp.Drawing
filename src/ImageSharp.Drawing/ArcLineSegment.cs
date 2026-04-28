@@ -3,7 +3,6 @@
 
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 namespace SixLabors.ImageSharp.Drawing;
 
@@ -219,13 +218,16 @@ public class ArcLineSegment : ILineSegment
 
     private static PointF[] EllipticArcToBezierCurve(Vector2 from, Vector2 center, Vector2 radius, float xAngle, float startAngle, float sweepAngle)
     {
-        List<PointF> points = [];
-
         float s = startAngle;
         float e = s + sweepAngle;
         bool neg = e < s;
         float sign = neg ? -1 : 1;
         float remain = Math.Abs(e - s);
+        int curveCount = Math.Max((int)MathF.Ceiling(remain / (MathF.PI / 4F)), 1);
+
+        // Arc flattening retains the final point array, so use the builder to avoid the
+        // intermediate collection and copy a list would generate.
+        FlattenedPointBuilder points = new(curveCount * 4);
 
         Vector2 prev = EllipticArcPoint(center, radius, xAngle, s);
 
@@ -244,10 +246,9 @@ public class ArcLineSegment : ILineSegment
 
             CubicBezierLineSegment bezier = new(from, q1, q2, p2);
             int bezierCount = bezier.LinearVertexCount(Vector2.One);
-            int startIndex = points.Count;
-            CollectionsMarshal.SetCount(points, startIndex + bezierCount);
-            Span<PointF> destination = CollectionsMarshal.AsSpan(points).Slice(startIndex, bezierCount);
+            Span<PointF> destination = points.GetAppendSpan(bezierCount);
             bezier.CopyTo(destination, skipFirstPoint: false, Vector2.One);
+            points.Advance(bezierCount);
 
             from = p2;
 
@@ -256,7 +257,7 @@ public class ArcLineSegment : ILineSegment
             prev = p2;
         }
 
-        return [.. points];
+        return points.Detach();
     }
 
     private static void EndpointToCenterArcParams(

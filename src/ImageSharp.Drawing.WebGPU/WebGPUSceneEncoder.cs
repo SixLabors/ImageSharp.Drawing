@@ -163,8 +163,10 @@ internal static class WebGPUSceneEncoder
             this.DrawData = new OwnedStream<uint>(allocator, Math.Max(commandCount, 16));
             this.Transforms = new OwnedStream<uint>(allocator, 8);
             this.Styles = new OwnedStream<uint>(allocator, Math.Max(commandCount * StyleWordCount, 16));
-            this.GradientPixels = new OwnedStream<uint>(allocator, Math.Max(commandCount * GradientWidth, GradientWidth));
-            this.PathGradientData = new OwnedStream<uint>(allocator, Math.Max(commandCount * PathGradientHeaderWordCount, 16));
+
+            // Gradient payloads are sparse in common scenes, so grow these only when a gradient brush is encoded.
+            this.GradientPixels = new OwnedStream<uint>(allocator, 16);
+            this.PathGradientData = new OwnedStream<uint>(allocator, 16);
             this.Images = [];
             this.FillCount = 0;
             this.PathCount = 0;

@@ -43,6 +43,8 @@ public static class Program
     {
         private const int BallCount = 1000;
         private static readonly TimeSpan FpsUpdateInterval = TimeSpan.FromSeconds(1);
+        private static readonly Brush BackgroundBrush = Brushes.Solid(Color.FromPixel(new Bgra32(30, 30, 40, 255)));
+        private static readonly Brush TextBrush = Brushes.Solid(Color.FromPixel(new Bgra32(70, 70, 100, 255)));
 
         private readonly WebGPUWindow<Bgra32> window;
         private readonly Random rng = new(42);
@@ -151,13 +153,12 @@ public static class Program
         {
             DrawingCanvas canvas = frame.Canvas;
             Rectangle bounds = canvas.Bounds;
-            canvas.Fill(Brushes.Solid(Color.FromPixel(new Bgra32(30, 30, 40, 255))));
+            canvas.Fill(BackgroundBrush);
 
             for (int i = 0; i < this.balls.Length; i++)
             {
                 ref Ball ball = ref this.balls[i];
-                EllipsePolygon ellipse = new(ball.X, ball.Y, ball.Radius);
-                canvas.Fill(Brushes.Solid(ball.Color), ellipse);
+                ball.Draw(canvas);
             }
 
             this.DrawScrollingText(canvas, bounds.Width, bounds.Height);
@@ -193,7 +194,6 @@ public static class Program
 
             Matrix3x2 translation = Matrix3x2.CreateTranslation(0, y);
             RectangleF viewport = new(0, 0, width, height);
-            Brush textBrush = Brushes.Solid(Color.FromPixel(new Bgra32(70, 70, 100, 255)));
             DrawingOptions translatedOptions = new()
             {
                 Transform = new Matrix4x4(translation),
@@ -215,7 +215,7 @@ public static class Program
                     continue;
                 }
 
-                canvas.Fill(textBrush, path);
+                canvas.Fill(TextBrush, path);
             }
 
             canvas.Restore();
@@ -232,7 +232,27 @@ public static class Program
         public float VelocityX;
         public float VelocityY;
         public float Radius;
-        public Color Color;
+        private readonly Brush brush;
+        private readonly EllipsePolygon shape;
+        private readonly DrawingOptions drawingOptions;
+
+        private Ball(
+            float x,
+            float y,
+            float velocityX,
+            float velocityY,
+            float radius,
+            Brush brush)
+        {
+            this.X = x;
+            this.Y = y;
+            this.VelocityX = velocityX;
+            this.VelocityY = velocityY;
+            this.Radius = radius;
+            this.brush = brush;
+            this.shape = new EllipsePolygon(0, 0, radius);
+            this.drawingOptions = new DrawingOptions();
+        }
 
         /// <summary>
         /// Creates a random ball that fits within the current framebuffer bounds.
@@ -244,19 +264,36 @@ public static class Program
         public static Ball CreateRandom(Random rng, int width, int height)
         {
             float radius = 20F + (rng.NextSingle() * 40F);
-            return new Ball
-            {
-                X = radius + (rng.NextSingle() * (width - (2 * radius))),
-                Y = radius + (rng.NextSingle() * (height - (2 * radius))),
-                VelocityX = (100F + (rng.NextSingle() * 200F)) * (rng.Next(2) == 0 ? -1 : 1),
-                VelocityY = (100F + (rng.NextSingle() * 200F)) * (rng.Next(2) == 0 ? -1 : 1),
-                Radius = radius,
-                Color = Color.FromPixel(new Bgra32(
-                    (byte)(80 + rng.Next(176)),
-                    (byte)(80 + rng.Next(176)),
-                    (byte)(80 + rng.Next(176)),
-                    200)),
-            };
+            Color color = Color.FromPixel(new Bgra32(
+                (byte)(80 + rng.Next(176)),
+                (byte)(80 + rng.Next(176)),
+                (byte)(80 + rng.Next(176)),
+                200));
+
+            return new Ball(
+                radius + (rng.NextSingle() * (width - (2 * radius))),
+                radius + (rng.NextSingle() * (height - (2 * radius))),
+                (100F + (rng.NextSingle() * 200F)) * (rng.Next(2) == 0 ? -1 : 1),
+                (100F + (rng.NextSingle() * 200F)) * (rng.Next(2) == 0 ? -1 : 1),
+                radius,
+                Brushes.Solid(color));
+        }
+
+        /// <summary>
+        /// Draws the retained ball shape at its current animated location.
+        /// </summary>
+        /// <remarks>
+        /// The ellipse is centered at the origin and moved through per-ball drawing options so the path geometry
+        /// remains cached across frames without allocating a new shape each render.
+        /// </remarks>
+        /// <param name="canvas">The destination canvas for the current frame.</param>
+        public void Draw(DrawingCanvas canvas)
+        {
+            this.drawingOptions.Transform = Matrix4x4.CreateTranslation(this.X, this.Y, 0);
+
+            canvas.Save(this.drawingOptions);
+            canvas.Fill(this.brush, this.shape);
+            canvas.Restore();
         }
 
         /// <summary>

@@ -136,7 +136,10 @@ public sealed class CubicBezierLineSegment : ILineSegment
     private static PointF[] FlattenCurve(PointF[] controlPoints, Vector2 scale)
     {
         int curveCount = (controlPoints.Length - 1) / 3;
-        List<PointF> output = new(curveCount * 4);
+
+        // Flattened points are cached as a retained array, so use the builder to avoid
+        // the intermediate collection and copy a list would generate.
+        FlattenedPointBuilder output = new(curveCount * 4);
 
         for (int curveIndex = 0; curveIndex < curveCount; curveIndex++)
         {
@@ -148,14 +151,14 @@ public sealed class CubicBezierLineSegment : ILineSegment
 
             if (curveIndex == 0)
             {
-                output.Add(p0);
+                output.Add((PointF)p0);
             }
 
-            SubdivideAndAppend(0F, 1F, p0, p1, p2, p3, output, 0);
-            output.Add(p3);
+            SubdivideAndAppend(0F, 1F, p0, p1, p2, p3, ref output, 0);
+            output.Add((PointF)p3);
         }
 
-        return [.. output];
+        return output.Detach();
     }
 
     /// <summary>
@@ -168,7 +171,7 @@ public sealed class CubicBezierLineSegment : ILineSegment
         Vector2 p1,
         Vector2 p2,
         Vector2 p3,
-        List<PointF> output,
+        ref FlattenedPointBuilder output,
         int depth)
     {
         if (depth > 999)
@@ -192,9 +195,9 @@ public sealed class CubicBezierLineSegment : ILineSegment
 
         if (Vector2.Dot(leftDirection, rightDirection) > DivisionThreshold || Math.Abs(midT - 0.5f) < 0.0001f)
         {
-            SubdivideAndAppend(t0, midT, p0, p1, p2, p3, output, depth + 1);
-            output.Add(mid);
-            SubdivideAndAppend(midT, t1, p0, p1, p2, p3, output, depth + 1);
+            SubdivideAndAppend(t0, midT, p0, p1, p2, p3, ref output, depth + 1);
+            output.Add((PointF)mid);
+            SubdivideAndAppend(midT, t1, p0, p1, p2, p3, ref output, depth + 1);
         }
     }
 
