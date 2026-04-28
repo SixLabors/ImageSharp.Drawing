@@ -46,7 +46,7 @@ internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend
         WebGPURenderTarget<Bgra32> renderTarget = this.EnsureRenderTarget(width, height);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
-        using (DrawingCanvas<Bgra32> canvas = renderTarget.CreateCanvas(new DrawingOptions()))
+        using (DrawingCanvas canvas = renderTarget.CreateCanvas(new DrawingOptions()))
         {
             VisualLine.RenderLinesToCanvas(canvas, lines);
             canvas.Flush();

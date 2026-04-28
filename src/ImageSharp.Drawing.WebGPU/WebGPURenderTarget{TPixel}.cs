@@ -145,7 +145,7 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     /// Creates a drawing canvas over this render target.
     /// </summary>
     /// <returns>A drawing canvas targeting this render target.</returns>
-    public DrawingCanvas<TPixel> CreateCanvas()
+    public DrawingCanvas CreateCanvas()
         => this.CreateCanvas(new DrawingOptions());
 
     /// <summary>
@@ -153,7 +153,7 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     /// </summary>
     /// <param name="options">The initial drawing options.</param>
     /// <returns>A drawing canvas targeting this render target.</returns>
-    public DrawingCanvas<TPixel> CreateCanvas(DrawingOptions options)
+    public DrawingCanvas CreateCanvas(DrawingOptions options)
     {
         this.ThrowIfDisposed();
         this.Graphics.ThrowIfDisposed();

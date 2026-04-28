@@ -7,10 +7,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// Represents the per-frame painting callback executed by <see cref="PaintExtensions.Paint(IImageProcessingContext, CanvasAction)"/>.
 /// </summary>
 /// <param name="canvas">The drawing canvas for the current image frame.</param>
-public delegate void CanvasAction(IDrawingCanvas canvas);
+public delegate void CanvasAction(DrawingCanvas canvas);
 
 /// <summary>
-/// Adds image-processing extensions that paint each frame through <see cref="IDrawingCanvas"/>.
+/// Adds image-processing extensions that paint each frame through <see cref="DrawingCanvas"/>.
 /// </summary>
 public static class PaintExtensions
 {

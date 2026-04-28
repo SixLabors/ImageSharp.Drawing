@@ -100,7 +100,7 @@ public partial class DrawingCanvasTests
     {
         Configuration configuration = Configuration.Default.Clone();
         using Image<Rgba32> target = new(configuration, 48, 36);
-        using DrawingCanvas<Rgba32> canvas = target.CreateCanvas(new DrawingOptions());
+        using DrawingCanvas canvas = target.CreateCanvas(new DrawingOptions());
 
         bool callbackInvoked = false;
         bool sameConfiguration = false;
@@ -118,7 +118,7 @@ public partial class DrawingCanvasTests
         Assert.True(sameConfiguration);
     }
 
-    private static void DrawProcessScenario(IDrawingCanvas canvas)
+    private static void DrawProcessScenario(DrawingCanvas canvas)
     {
         canvas.Clear(Brushes.Solid(Color.White));
 

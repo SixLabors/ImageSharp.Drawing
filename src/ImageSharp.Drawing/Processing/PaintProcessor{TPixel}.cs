@@ -7,7 +7,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
 /// Executes the <see cref="PaintProcessor"/> callback for a specific pixel type by creating a
-/// <see cref="DrawingCanvas{TPixel}"/> over each frame.
+/// <see cref="DrawingCanvas"/> over each frame.
 /// </summary>
 /// <typeparam name="TPixel">The pixel format.</typeparam>
 internal sealed class PaintProcessor<TPixel> : ImageProcessor<TPixel>
@@ -37,7 +37,7 @@ internal sealed class PaintProcessor<TPixel> : ImageProcessor<TPixel>
     /// <inheritdoc />
     protected override void OnFrameApply(ImageFrame<TPixel> source)
     {
-        using DrawingCanvas<TPixel> canvas = source.CreateCanvas(this.Configuration, this.definition.Options);
+        using DrawingCanvas canvas = source.CreateCanvas(this.Configuration, this.definition.Options);
         this.action(canvas);
     }
 }

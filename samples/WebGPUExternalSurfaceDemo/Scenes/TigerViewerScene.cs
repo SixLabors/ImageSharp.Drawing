@@ -71,7 +71,7 @@ internal sealed class TigerViewerScene : RenderScene
         }
     }
 
-    public override void Paint(DrawingCanvas<Bgra32> canvas, TimeSpan deltaTime)
+    public override void Paint(DrawingCanvas canvas, TimeSpan deltaTime)
     {
         Size viewportSize = canvas.Bounds.Size;
 

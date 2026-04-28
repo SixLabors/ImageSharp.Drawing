@@ -46,7 +46,7 @@ public sealed partial class WebGPURenderControl : Control
     /// <summary>
     /// Raised each frame once the external surface has acquired a drawable frame.
     /// </summary>
-    public event Action<DrawingCanvas<Bgra32>, TimeSpan>? PaintFrame;
+    public event Action<DrawingCanvas, TimeSpan>? PaintFrame;
 
     /// <inheritdoc />
     protected override void OnHandleCreated(EventArgs e)

@@ -157,7 +157,7 @@ public class FillParis
     [Benchmark]
     public void ImageSharpWebGPU()
     {
-        using DrawingCanvas<Rgba32> canvas = this.webGpuTarget.CreateCanvas();
+        using DrawingCanvas canvas = this.webGpuTarget.CreateCanvas();
         foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
         {
             if (fill is not null)

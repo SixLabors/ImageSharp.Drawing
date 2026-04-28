@@ -42,7 +42,7 @@ public class WebGPUDeviceContextTests
     {
         using WebGPUDeviceContext<Rgba32> drawing = new();
         using WebGPURenderTarget<Rgba32> target = drawing.CreateRenderTarget(32, 24);
-        using (DrawingCanvas<Rgba32> canvas = drawing.CreateCanvas(
+        using (DrawingCanvas canvas = drawing.CreateCanvas(
                    new DrawingOptions(),
                    target.TextureHandle,
                    target.TextureViewHandle,
@@ -63,7 +63,7 @@ public class WebGPUDeviceContextTests
     {
         using WebGPUDeviceContext<Rgba32> drawing = new();
         using WebGPURenderTarget<Rgba32> target = drawing.CreateRenderTarget(18, 14);
-        using (DrawingCanvas<Rgba32> canvas = target.CreateCanvas())
+        using (DrawingCanvas canvas = target.CreateCanvas())
         {
             canvas.Fill(Brushes.Solid(Color.Green), new RectangularPolygon(0, 0, 18, 14));
             canvas.Flush();

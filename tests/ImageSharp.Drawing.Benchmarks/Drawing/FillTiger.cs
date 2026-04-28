@@ -182,7 +182,7 @@ public class FillTiger
     [Benchmark]
     public void ImageSharpWebGPU()
     {
-        using DrawingCanvas<Rgba32> canvas = this.webGpuTarget.CreateCanvas();
+        using DrawingCanvas canvas = this.webGpuTarget.CreateCanvas();
         foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
         {
             if (fill is not null)
@@ -262,7 +262,7 @@ public class FillTiger
         }));
 
         WebGPURenderTarget<Rgba32> webGpuTarget = new(width, height);
-        using (DrawingCanvas<Rgba32> canvas = webGpuTarget.CreateCanvas())
+        using (DrawingCanvas canvas = webGpuTarget.CreateCanvas())
         {
             foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in baked)
             {
@@ -392,7 +392,7 @@ public class FillTiger
         }));
 
         WebGPURenderTarget<Rgba32> webGpuTarget = new(width, height);
-        using (DrawingCanvas<Rgba32> canvas = webGpuTarget.CreateCanvas())
+        using (DrawingCanvas canvas = webGpuTarget.CreateCanvas())
         {
             canvas.Save(new DrawingOptions { Transform = transform4 });
             foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in isElements)

@@ -52,7 +52,7 @@ internal sealed class ClockScene : RenderScene
 
     public override string DisplayName => "Clock";
 
-    public override void Paint(DrawingCanvas<Bgra32> canvas, TimeSpan deltaTime)
+    public override void Paint(DrawingCanvas canvas, TimeSpan deltaTime)
     {
         Size viewportSize = canvas.Bounds.Size;
 
@@ -134,7 +134,7 @@ internal sealed class ClockScene : RenderScene
     }
 
     private static void DrawHand(
-        DrawingCanvas<Bgra32> canvas,
+        DrawingCanvas canvas,
         float cx,
         float cy,
         float angleRadiansFromNoon,

@@ -68,7 +68,7 @@ public class DrawTextRepeatedGlyphs
     [Benchmark(Baseline = true, Description = "DrawingCanvas Default Backend")]
     public void DrawingCanvasDefaultBackend()
     {
-        using DrawingCanvas<Rgba32> canvas = this.defaultImage.CreateCanvas(this.drawingOptions);
+        using DrawingCanvas canvas = this.defaultImage.CreateCanvas(this.drawingOptions);
         canvas.DrawText(this.textOptions, this.text, this.brush, null);
         canvas.Flush();
     }
@@ -76,7 +76,7 @@ public class DrawTextRepeatedGlyphs
     [Benchmark(Description = "DrawingCanvas WebGPU Backend (NativeSurface)")]
     public void DrawingCanvasWebGPUBackendNativeSurface()
     {
-        using DrawingCanvas<Rgba32> canvas = this.webGpuTarget.CreateCanvas(this.drawingOptions);
+        using DrawingCanvas canvas = this.webGpuTarget.CreateCanvas(this.drawingOptions);
         canvas.DrawText(this.textOptions, this.text, this.brush, null);
         canvas.Flush();
     }

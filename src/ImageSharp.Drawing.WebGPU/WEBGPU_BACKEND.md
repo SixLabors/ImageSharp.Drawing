@@ -30,7 +30,7 @@ The public WebGPU surface area around this backend is small and target-first. Mo
 - `WebGPUDeviceContext<TPixel>` wraps a shared or caller-owned device and queue and creates native-only or hybrid frames and canvases over external textures
 - `WebGPUNativeSurfaceFactory` is the low-level escape hatch for caller-owned native targets
 
-Those types all exist to get a `DrawingCanvas<TPixel>` over a native WebGPU target. Once the canvas flushes, `WebGPUDrawingBackend` becomes the execution boundary.
+Those types all exist to get a `DrawingCanvas` over a native WebGPU target. Once the canvas flushes, `WebGPUDrawingBackend` becomes the execution boundary.
 
 The support probes also live outside the backend:
 
@@ -157,7 +157,7 @@ The public object graph around those responsibilities is also separate:
 
 - `WebGPUEnvironment` handles explicit support probes
 - `WebGPUWindow<TPixel>`, `WebGPUExternalSurface<TPixel>`, and `WebGPURenderTarget<TPixel>` are the recommended target constructors; `WebGPUDeviceContext<TPixel>` and `WebGPUNativeSurfaceFactory` are advanced interop escape hatches for caller-owned devices or surfaces
-- `DrawingCanvas<TPixel>` hands a prepared `CompositionScene` to the backend
+- `DrawingCanvas` hands a prepared `CompositionScene` to the backend
 
 ## The Flush Boundary
 

@@ -192,7 +192,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     /// The texture must have been created with <c>RenderAttachment | CopySrc | CopyDst | TextureBinding</c> usage.
     /// Dispose the returned canvas before the host calls <c>wgpuSurfacePresent</c>, then create a new canvas on the next frame.
     /// </remarks>
-    public DrawingCanvas<TPixel> CreateCanvas(
+    public DrawingCanvas CreateCanvas(
         nint textureHandle,
         nint textureViewHandle,
         WebGPUTextureFormatId format,
@@ -222,7 +222,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     /// The texture must have been created with <c>RenderAttachment | CopySrc | CopyDst | TextureBinding</c> usage.
     /// Dispose the returned canvas before the host calls <c>wgpuSurfacePresent</c>, then create a new canvas on the next frame.
     /// </remarks>
-    public DrawingCanvas<TPixel> CreateCanvas(
+    public DrawingCanvas CreateCanvas(
         DrawingOptions options,
         nint textureHandle,
         nint textureViewHandle,
@@ -278,14 +278,18 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
     /// <returns>A drawing canvas targeting the supplied handles.</returns>
-    internal DrawingCanvas<TPixel> CreateCanvas(
+    internal DrawingCanvas CreateCanvas(
         DrawingOptions options,
         WebGPUTextureHandle textureHandle,
         WebGPUTextureViewHandle textureViewHandle,
         WebGPUTextureFormatId format,
         int width,
         int height)
-        => new(this.Configuration, options, this.Backend, this.CreateFrame(textureHandle, textureViewHandle, format, width, height));
+        => new DrawingCanvas<TPixel>(
+            this.Configuration,
+            options,
+            this.Backend,
+            this.CreateFrame(textureHandle, textureViewHandle, format, width, height));
 
     /// <summary>
     /// Validates that <typeparamref name="TPixel"/> can be represented by the WebGPU backend.

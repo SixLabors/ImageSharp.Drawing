@@ -1,6 +1,6 @@
 # DrawingCanvas
 
-`DrawingCanvas<TPixel>` is the high-level drawing surface used by ImageSharp.Drawing. It lets the library expose one drawing model while supporting very different execution targets:
+`DrawingCanvas` is the high-level drawing surface used by ImageSharp.Drawing. It lets the library expose one drawing model while supporting very different execution targets:
 
 - CPU rasterization into memory
 - GPU execution through native surfaces
@@ -8,7 +8,7 @@
 
 That unification is the hard part. The public API wants to feel immediate and simple: fill a path, draw text, save state, restore state, draw into a region, maybe draw into a layer. The backends, however, do not all want the same kind of work. A CPU rasterizer wants rows, spans, and direct pixel access. A GPU backend wants compact command data, stable batching, and a single handoff point. A vector exporter would want semantic geometry rather than already-rasterized pixels.
 
-The architecture around `DrawingCanvas<TPixel>` exists to absorb that mismatch.
+The architecture around `DrawingCanvas` and its typed implementation exists to absorb that mismatch.
 
 This document explains that architecture from the outside in. The goal is to help a newcomer understand what problem each piece solves before diving into methods and types.
 
@@ -31,7 +31,7 @@ The CPU backend can cheaply mutate a memory buffer row by row. The GPU backend w
 
 So the architecture chooses a different approach:
 
-`DrawingCanvas<TPixel>` records drawing intent first, normalizes that intent at flush time, and only then hands the work to the backend.
+`DrawingCanvas` records drawing intent first, normalizes that intent at flush time, and only then hands the work to the backend.
 
 That one decision explains most of the surrounding design.
 
@@ -55,12 +55,16 @@ Before looking at the flow, it helps to define the major terms in the sense used
 
 ### Canvas
 
-`DrawingCanvas<TPixel>` is the public drawing facade. It owns the current drawing state, accepts commands, and decides when to flush.
+`DrawingCanvas` is the public drawing facade. It owns the current drawing state, accepts commands, and decides when to flush.
 
 It is not the rasterizer. It is the object that makes the public drawing model coherent.
 
 Most callers reach that model through `IImageProcessingContext.Paint(...)`, while lower-level code can
 also create a canvas directly with the `CreateCanvas(...)` extension methods.
+
+`DrawingCanvas<TPixel>` is the typed implementation that carries the target pixel format for brush normalization,
+readback, and backend execution. Factory methods return `DrawingCanvas` so CPU and GPU entry points expose the same
+canvas-facing API while still constructing the typed implementation internally.
 
 ### Batcher
 
@@ -100,11 +104,12 @@ The backend receives a scene and a target frame. It decides how to execute that 
 
 There are two backend-selection paths in the architecture:
 
-- the ordinary public `DrawingCanvas<TPixel>` constructors resolve the backend from `Configuration`
+- direct `DrawingCanvas<TPixel>` construction resolves the backend from `Configuration`
 - specialized infrastructure can construct a canvas with an explicit backend
 
 The ordinary CPU entry points include `Paint(...)` on `IImageProcessingContext` and the `CreateCanvas(...)`
-extension methods on `Image<TPixel>` and `ImageFrame<TPixel>`, which route into those same constructors.
+extension methods on `Image`, `Image<TPixel>`, and `ImageFrame<TPixel>`. Those factories return `DrawingCanvas`
+and route into the typed implementation internally.
 
 That explicit-backend path matters for the WebGPU helpers. `WebGPUWindow<TPixel>`, `WebGPURenderTarget<TPixel>`, and `WebGPUDeviceContext<TPixel>` create canvases that point directly at their owned `WebGPUDrawingBackend` instance instead of storing that backend on the caller's `Configuration`.
 
@@ -332,7 +337,7 @@ The WebGPU public helpers reach this point in a target-first way:
 - `WebGPURenderTarget<TPixel>` owns an offscreen native target and can pair it with CPU memory through hybrid frames
 - `WebGPUDeviceContext<TPixel>` wraps shared or caller-owned device state and creates native-only or hybrid frames and canvases over native textures
 
-Those helpers all create `DrawingCanvas<TPixel>` instances with an explicit `WebGPUDrawingBackend`, so GPU execution stays attached to the WebGPU object that owns the native target and backend lifetime.
+Those helpers all create typed canvas instances with an explicit `WebGPUDrawingBackend`, so GPU execution stays attached to the WebGPU object that owns the native target and backend lifetime while callers work through `DrawingCanvas`.
 
 The backend is free to choose a very different execution model because the canvas has already solved the shared semantics problem.
 
@@ -340,7 +345,7 @@ The backend is free to choose a very different execution model because the canva
 
 If you are new to this code, the most useful mental model is:
 
-`DrawingCanvas<TPixel>` is a stateful front end that records drawing intent, `DrawingCanvasBatcher<TPixel>` is the deferred handoff boundary, and the backend is the executor of a prepared scene.
+`DrawingCanvas` is the stateful front end that records drawing intent, `DrawingCanvas<TPixel>` is the typed implementation, `DrawingCanvasBatcher<TPixel>` is the deferred handoff boundary, and the backend is the executor of a prepared scene.
 
 Everything else serves that flow.
 
@@ -360,15 +365,16 @@ Once those ideas are clear, the code stops looking like a random collection of t
 
 If you want to move from the architecture into the code, this is the best order.
 
-1. `DrawingCanvas{TPixel}.cs`
-2. `DrawingCanvasExtensions.cs`
-3. `DrawingCanvasBatcher{TPixel}.cs`
-4. `CompositionCommand.cs`
-5. `DefaultDrawingBackend.cs`
-6. `FlushScene.cs`
-7. `WebGPUEnvironment.cs`
-8. `WebGPUWindow{TPixel}.cs`, `WebGPURenderTarget{TPixel}.cs`, and `WebGPUDeviceContext{TPixel}.cs`
-9. `WebGPUDrawingBackend` and its scene/dispatch types
+1. `DrawingCanvas.cs`
+2. `DrawingCanvas{TPixel}.cs`
+3. `DrawingCanvasFactoryExtensions.cs` and `DrawingCanvasShapeExtensions.cs`
+4. `DrawingCanvasBatcher{TPixel}.cs`
+5. `CompositionCommand.cs`
+6. `DefaultDrawingBackend.cs`
+7. `FlushScene.cs`
+8. `WebGPUEnvironment.cs`
+9. `WebGPUWindow{TPixel}.cs`, `WebGPURenderTarget{TPixel}.cs`, and `WebGPUDeviceContext{TPixel}.cs`
+10. `WebGPUDrawingBackend` and its scene/dispatch types
 
 That path follows the real runtime flow:
 

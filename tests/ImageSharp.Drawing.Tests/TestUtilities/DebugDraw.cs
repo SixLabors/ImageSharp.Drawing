@@ -45,7 +45,7 @@ internal class DebugDraw
 
     private static PointF P(float x, float y) => new(x, y);
 
-    private static void DrawGrid(IDrawingCanvas canvas, RectangleF rect, float gridSize)
+    private static void DrawGrid(DrawingCanvas canvas, RectangleF rect, float gridSize)
     {
         for (float x = rect.Left; x <= rect.Right; x += gridSize)
         {

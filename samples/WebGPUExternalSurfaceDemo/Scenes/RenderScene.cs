@@ -23,7 +23,7 @@ internal abstract class RenderScene
     /// </summary>
     /// <param name="canvas">The per-frame drawing canvas bound to the external surface's swap-chain texture.</param>
     /// <param name="deltaTime">Elapsed time since the previous frame. Scenes that render from absolute state can ignore it.</param>
-    public abstract void Paint(DrawingCanvas<Bgra32> canvas, TimeSpan deltaTime);
+    public abstract void Paint(DrawingCanvas canvas, TimeSpan deltaTime);
 
     /// <summary>
     /// Handles a mouse-button press. Default implementation is a no-op.

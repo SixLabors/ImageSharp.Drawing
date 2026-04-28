@@ -7,7 +7,7 @@ It exists to demonstrate:
 - creating a `WebGPUExternalSurface<Bgra32>` from a `WebGPUSurfaceHost`
 - keeping the external surface synchronized with the host control's drawable framebuffer size
 - acquiring `WebGPUSurfaceFrame<TPixel>` instances manually
-- drawing with the normal `DrawingCanvas<TPixel>` API
+- drawing with the normal `DrawingCanvas` API
 - presenting by disposing the acquired frame
 
 ## Running
@@ -113,7 +113,7 @@ The scenes are deliberately ordinary canvas code:
 
 Each scene receives:
 
-- `DrawingCanvas<Bgra32>` for the acquired frame
+- `DrawingCanvas` for the acquired frame
 - elapsed time since the previous frame
 
 ## Files

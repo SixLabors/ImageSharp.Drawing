@@ -6,7 +6,7 @@ It exists to show the intended shape of a real-time app:
 
 - create a `WebGPUWindow<Bgra32>`
 - let the window own swapchain acquisition and presentation
-- draw with the normal `DrawingCanvas<Bgra32>` API
+- draw with the normal `DrawingCanvas` API
 - present by ending the acquired frame
 
 The sample opens an `800x600` window, draws a dark background, animates 1000 bouncing ellipses, scrolls a block of pre-shaped text, and updates the window title with frame timing statistics.
@@ -17,7 +17,7 @@ This demo is the clearest reference for the window-first WebGPU API surface:
 
 - `WebGPUWindow<TPixel>` owns the OS window, WebGPU surface, adapter, device, queue, and swapchain configuration.
 - `WebGPUSurfaceFrame<TPixel>` represents one acquired drawable frame.
-- `WebGPUSurfaceFrame<TPixel>.Canvas` is the normal `DrawingCanvas<TPixel>` you already use elsewhere in ImageSharp.Drawing.
+- `WebGPUSurfaceFrame<TPixel>.Canvas` is the normal `DrawingCanvas` you already use elsewhere in ImageSharp.Drawing.
 - disposing the frame flushes pending canvas work, presents the surface texture, and releases the per-frame WebGPU handles.
 
 That means sample code stays focused on drawing and animation instead of explicit texture acquisition, presentation, or interop setup.
@@ -112,7 +112,7 @@ this.window.Run(this.OnRender);
 
 Inside `OnRender(...)` the sample:
 
-1. grabs `DrawingCanvas<Bgra32> canvas = frame.Canvas`
+1. grabs `DrawingCanvas canvas = frame.Canvas`
 2. fills the full frame with a solid background color
 3. draws the scrolling text block
 4. fills one ellipse per ball
@@ -146,7 +146,7 @@ The culling is simple but effective: large amounts of off-screen text never get 
 This sample uses the `Run(Action<WebGPUSurfaceFrame<TPixel>>)` overload, so frame lifetime is important:
 
 1. the window acquires the current surface texture
-2. the frame wraps that texture in a `DrawingCanvas<TPixel>`
+2. the frame wraps that texture in a `DrawingCanvas`
 3. your render callback queues draw operations
 4. frame disposal flushes the canvas and presents the surface
 5. the frame releases the texture and texture view
@@ -175,7 +175,7 @@ if (window.TryAcquireFrame(out WebGPUSurfaceFrame<Bgra32>? frame))
 {
     using (frame)
     {
-        DrawingCanvas<Bgra32> canvas = frame.Canvas;
+        DrawingCanvas canvas = frame.Canvas;
         canvas.Fill(Brushes.Solid(Color.Black));
         canvas.Fill(Brushes.Solid(Color.CornflowerBlue), new EllipsePolygon(200, 150, 80));
     }

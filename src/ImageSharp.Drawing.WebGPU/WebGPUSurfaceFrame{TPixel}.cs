@@ -26,7 +26,7 @@ public sealed unsafe class WebGPUSurfaceFrame<TPixel> : IDisposable
         WebGPUSurfaceHandle surfaceHandle,
         WebGPUTextureHandle textureHandle,
         WebGPUTextureViewHandle textureViewHandle,
-        DrawingCanvas<TPixel> canvas,
+        DrawingCanvas canvas,
         Action? onDisposed = null)
     {
         this.api = api;
@@ -40,7 +40,7 @@ public sealed unsafe class WebGPUSurfaceFrame<TPixel> : IDisposable
     /// <summary>
     /// Gets the drawing canvas for the acquired frame.
     /// </summary>
-    public DrawingCanvas<TPixel> Canvas { get; }
+    public DrawingCanvas Canvas { get; }
 
     /// <summary>
     /// Disposes the frame, flushing and presenting it, then releasing the per-frame WebGPU resources.

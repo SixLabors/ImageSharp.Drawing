@@ -115,7 +115,7 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
 
     /// <summary>
     /// Gets the drawing context bound to <see cref="DeviceHandle"/>/<see cref="QueueHandle"/>, used to wrap acquired
-    /// per-frame textures into <see cref="DrawingCanvas{TPixel}"/> instances.
+    /// per-frame textures into <see cref="DrawingCanvas"/> instances.
     /// </summary>
     public WebGPUDeviceContext<TPixel> Graphics { get; private set; }
 
@@ -261,7 +261,7 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
 
     /// <summary>
     /// Acquires the next presentable frame from <see cref="SurfaceHandle"/> and wraps it as a
-    /// <see cref="WebGPUSurfaceFrame{TPixel}"/> with a ready-to-use <see cref="DrawingCanvas{TPixel}"/>.
+    /// <see cref="WebGPUSurfaceFrame{TPixel}"/> with a ready-to-use <see cref="DrawingCanvas"/>.
     /// </summary>
     /// <param name="presentMode">The present mode applied when the surface needs to be reconfigured in response to a
     /// <c>Timeout</c>/<c>Outdated</c>/<c>Lost</c> acquire status.</param>
@@ -345,7 +345,7 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
         {
             textureHandle = new WebGPUTextureHandle(this.Api, (nint)surfaceTexture.Texture, ownsHandle: true);
             textureViewHandle = new WebGPUTextureViewHandle(this.Api, (nint)textureView, ownsHandle: true);
-            DrawingCanvas<TPixel> canvas = this.Graphics.CreateCanvas(
+            DrawingCanvas canvas = this.Graphics.CreateCanvas(
                 options,
                 textureHandle,
                 textureViewHandle,

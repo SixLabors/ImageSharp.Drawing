@@ -149,7 +149,7 @@ public static class Program
         /// </remarks>
         private void OnRender(WebGPUSurfaceFrame<Bgra32> frame)
         {
-            DrawingCanvas<Bgra32> canvas = frame.Canvas;
+            DrawingCanvas canvas = frame.Canvas;
             Rectangle bounds = canvas.Bounds;
             canvas.Fill(Brushes.Solid(Color.FromPixel(new Bgra32(30, 30, 40, 255))));
 
@@ -180,7 +180,7 @@ public static class Program
         /// <param name="canvas">The destination canvas for the current frame.</param>
         /// <param name="width">The current framebuffer width.</param>
         /// <param name="height">The current framebuffer height.</param>
-        private void DrawScrollingText(DrawingCanvas<Bgra32> canvas, int width, int height)
+        private void DrawScrollingText(DrawingCanvas canvas, int width, int height)
         {
             if (this.scrollTextHeight <= 0)
             {

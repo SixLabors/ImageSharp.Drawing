@@ -10,17 +10,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// <summary>
 /// Represents a drawing canvas over a frame target.
 /// </summary>
-public interface IDrawingCanvas : IDisposable
+public abstract class DrawingCanvas : IDisposable
 {
     /// <summary>
     /// Gets the local bounds of this canvas.
     /// </summary>
-    public Rectangle Bounds { get; }
+    public abstract Rectangle Bounds { get; }
 
     /// <summary>
     /// Gets the number of saved states currently on the canvas stack.
     /// </summary>
-    public int SaveCount { get; }
+    public abstract int SaveCount { get; }
 
     /// <summary>
     /// Saves the current drawing state on the state stack.
@@ -31,7 +31,7 @@ public interface IDrawingCanvas : IDisposable
     /// <see cref="Save()"/>, those mutations are visible when restoring.
     /// </remarks>
     /// <returns>The save count after the state has been pushed.</returns>
-    public int Save();
+    public abstract int Save();
 
     /// <summary>
     /// Saves the current drawing state and replaces the active state with the provided options and clip paths.
@@ -43,7 +43,7 @@ public interface IDrawingCanvas : IDisposable
     /// <param name="options">Drawing options for the new active state.</param>
     /// <param name="clipPaths">Clip paths for the new active state.</param>
     /// <returns>The save count after the previous state has been pushed.</returns>
-    public int Save(DrawingOptions options, params IPath[] clipPaths);
+    public abstract int Save(DrawingOptions options, params IPath[] clipPaths);
 
     /// <summary>
     /// Saves the current drawing state and begins an isolated compositing layer
@@ -59,7 +59,7 @@ public interface IDrawingCanvas : IDisposable
     /// The local bounds of the layer. Only this region is allocated and composited.
     /// </param>
     /// <returns>The save count after the layer state has been pushed.</returns>
-    public int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds);
+    public abstract int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds);
 
     /// <summary>
     /// Restores the most recently saved state.
@@ -69,7 +69,7 @@ public interface IDrawingCanvas : IDisposable
     /// the layer is closed in the deferred scene. Actual composition happens during the
     /// next <see cref="Flush"/> or <see cref="IDisposable.Dispose"/>.
     /// </remarks>
-    public void Restore();
+    public abstract void Restore();
 
     /// <summary>
     /// Restores to a specific save count.
@@ -82,42 +82,42 @@ public interface IDrawingCanvas : IDisposable
     /// <see cref="Flush"/> or <see cref="IDisposable.Dispose"/>.
     /// </remarks>
     /// <param name="saveCount">The save count to restore to.</param>
-    public void RestoreTo(int saveCount);
+    public abstract void RestoreTo(int saveCount);
 
     /// <summary>
     /// Creates a child canvas over a subregion in local coordinates.
     /// </summary>
     /// <param name="region">The child region in local coordinates.</param>
     /// <returns>A child canvas with local origin at (0,0).</returns>
-    public IDrawingCanvas CreateRegion(Rectangle region);
+    public abstract DrawingCanvas CreateRegion(Rectangle region);
 
     /// <summary>
     /// Clears a path region using the given brush and clear-style composition options.
     /// </summary>
     /// <param name="brush">Brush used to shade destination pixels during clear.</param>
     /// <param name="path">The path region to clear.</param>
-    public void Clear(Brush brush, IPath path);
+    public abstract void Clear(Brush brush, IPath path);
 
     /// <summary>
     /// Fills a path in local coordinates using the given brush.
     /// </summary>
     /// <param name="brush">Brush used to shade covered pixels.</param>
     /// <param name="path">The path to fill.</param>
-    public void Fill(Brush brush, IPath path);
+    public abstract void Fill(Brush brush, IPath path);
 
     /// <summary>
     /// Applies an image-processing operation to a local region.
     /// </summary>
     /// <param name="region">The local region to process.</param>
     /// <param name="operation">The image-processing operation to apply to the region.</param>
-    public void Apply(Rectangle region, Action<IImageProcessingContext> operation);
+    public abstract void Apply(Rectangle region, Action<IImageProcessingContext> operation);
 
     /// <summary>
     /// Applies an image-processing operation to a region described by a path builder.
     /// </summary>
     /// <param name="pathBuilder">The path builder describing the region to process.</param>
     /// <param name="operation">The image-processing operation to apply to the region.</param>
-    public void Apply(PathBuilder pathBuilder, Action<IImageProcessingContext> operation);
+    public abstract void Apply(PathBuilder pathBuilder, Action<IImageProcessingContext> operation);
 
     /// <summary>
     /// Applies an image-processing operation to a path region.
@@ -127,21 +127,21 @@ public interface IDrawingCanvas : IDisposable
     /// </remarks>
     /// <param name="path">The path region to process.</param>
     /// <param name="operation">The image-processing operation to apply to the region.</param>
-    public void Apply(IPath path, Action<IImageProcessingContext> operation);
+    public abstract void Apply(IPath path, Action<IImageProcessingContext> operation);
 
     /// <summary>
     /// Draws a polyline outline using the provided pen and drawing options.
     /// </summary>
     /// <param name="pen">Pen used to generate the line outline.</param>
     /// <param name="points">Polyline points.</param>
-    public void DrawLine(Pen pen, params PointF[] points);
+    public abstract void DrawLine(Pen pen, params PointF[] points);
 
     /// <summary>
     /// Draws a path outline in local coordinates using the given pen.
     /// </summary>
     /// <param name="pen">Pen used to generate the outline fill path.</param>
     /// <param name="path">The path to stroke.</param>
-    public void Draw(Pen pen, IPath path);
+    public abstract void Draw(Pen pen, IPath path);
 
     /// <summary>
     /// Draws text onto this canvas.
@@ -150,7 +150,7 @@ public interface IDrawingCanvas : IDisposable
     /// <param name="text">The text to draw.</param>
     /// <param name="brush">Optional brush used to fill glyphs.</param>
     /// <param name="pen">Optional pen used to outline glyphs.</param>
-    public void DrawText(
+    public abstract void DrawText(
         RichTextOptions textOptions,
         ReadOnlySpan<char> text,
         Brush? brush,
@@ -162,7 +162,7 @@ public interface IDrawingCanvas : IDisposable
     /// <param name="brush">Brush used to fill glyph layers.</param>
     /// <param name="pen">Pen used to outline dominant painted layers.</param>
     /// <param name="glyphs">Layered glyph geometry to draw.</param>
-    public void DrawGlyphs(
+    public abstract void DrawGlyphs(
         Brush brush,
         Pen pen,
         IEnumerable<GlyphPathCollection> glyphs);
@@ -187,7 +187,7 @@ public interface IDrawingCanvas : IDisposable
     /// Those overloads skip the per-character and per-line array materialization performed here.
     /// </para>
     /// </remarks>
-    public TextMetrics MeasureText(RichTextOptions textOptions, ReadOnlySpan<char> text);
+    public abstract TextMetrics MeasureText(RichTextOptions textOptions, ReadOnlySpan<char> text);
 
     /// <summary>
     /// Draws an image source region into a destination rectangle.
@@ -198,7 +198,7 @@ public interface IDrawingCanvas : IDisposable
     /// <param name="sampler">
     /// Optional resampler used when scaling or transforming the image. Defaults to <see cref="KnownResamplers.Bicubic"/>.
     /// </param>
-    public void DrawImage(
+    public abstract void DrawImage(
         Image image,
         Rectangle sourceRect,
         RectangleF destinationRect,
@@ -207,5 +207,8 @@ public interface IDrawingCanvas : IDisposable
     /// <summary>
     /// Flushes queued drawing commands to the target in submission order.
     /// </summary>
-    public void Flush();
+    public abstract void Flush();
+
+    /// <inheritdoc />
+    public abstract void Dispose();
 }

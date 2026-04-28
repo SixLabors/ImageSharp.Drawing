@@ -182,7 +182,7 @@ public partial class ProcessWithDrawingCanvasTests
     }
 
     private static void FillImageBrushDrawFull(
-        IDrawingCanvas canvas,
+        DrawingCanvas canvas,
         Size size,
         ImageBrush<Rgba32> brush,
         ImageBrush<Rgba32> halfBrush,

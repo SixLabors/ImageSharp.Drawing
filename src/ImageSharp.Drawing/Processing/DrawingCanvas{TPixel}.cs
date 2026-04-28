@@ -16,7 +16,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// A drawing canvas over a frame target.
 /// </summary>
 /// <typeparam name="TPixel">The pixel format.</typeparam>
-public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
+public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     where TPixel : unmanaged, IPixel<TPixel>
 {
     /// <summary>
@@ -156,13 +156,13 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public Rectangle Bounds { get; }
+    public override Rectangle Bounds { get; }
 
     /// <inheritdoc />
-    public int SaveCount => this.savedStates.Count;
+    public override int SaveCount => this.savedStates.Count;
 
     /// <inheritdoc />
-    public int Save()
+    public override int Save()
     {
         this.EnsureNotDisposed();
         DrawingCanvasState current = this.ResolveState();
@@ -174,7 +174,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public int Save(DrawingOptions options, params IPath[] clipPaths)
+    public override int Save(DrawingOptions options, params IPath[] clipPaths)
         => this.SaveCore(options, clipPaths);
 
     private int SaveCore(DrawingOptions options, IReadOnlyList<IPath> clipPaths)
@@ -192,7 +192,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds)
+    public override int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(layerOptions, nameof(layerOptions));
@@ -219,7 +219,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public void Restore()
+    public override void Restore()
     {
         this.EnsureNotDisposed();
         if (this.savedStates.Count <= 1)
@@ -235,7 +235,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public void RestoreTo(int saveCount)
+    public override void RestoreTo(int saveCount)
     {
         this.EnsureNotDisposed();
         Guard.MustBeBetweenOrEqualTo(saveCount, 1, this.savedStates.Count, nameof(saveCount));
@@ -243,8 +243,8 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         this.RestoreToCore(saveCount);
     }
 
-    /// <inheritdoc cref="IDrawingCanvas.CreateRegion(Rectangle)" />
-    public DrawingCanvas<TPixel> CreateRegion(Rectangle region)
+    /// <inheritdoc cref="DrawingCanvas.CreateRegion(Rectangle)" />
+    public override DrawingCanvas<TPixel> CreateRegion(Rectangle region)
     {
         this.EnsureNotDisposed();
 
@@ -267,11 +267,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    IDrawingCanvas IDrawingCanvas.CreateRegion(Rectangle region)
-        => this.CreateRegion(region);
-
-    /// <inheritdoc />
-    public void Clear(Brush brush, IPath path)
+    public override void Clear(Brush brush, IPath path)
     {
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions options = state.Options.CloneForClearOperation();
@@ -279,7 +275,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public void Fill(Brush brush, IPath path)
+    public override void Fill(Brush brush, IPath path)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(path, nameof(path));
@@ -288,18 +284,18 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public void Apply(Rectangle region, Action<IImageProcessingContext> operation)
+    public override void Apply(Rectangle region, Action<IImageProcessingContext> operation)
         => this.Apply(new RectangularPolygon(region), operation);
 
     /// <inheritdoc />
-    public void Apply(PathBuilder pathBuilder, Action<IImageProcessingContext> operation)
+    public override void Apply(PathBuilder pathBuilder, Action<IImageProcessingContext> operation)
     {
         Guard.NotNull(pathBuilder, nameof(pathBuilder));
         this.Apply(pathBuilder.Build(), operation);
     }
 
     /// <inheritdoc />
-    public void Apply(IPath path, Action<IImageProcessingContext> operation)
+    public override void Apply(IPath path, Action<IImageProcessingContext> operation)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(path, nameof(path));
@@ -378,7 +374,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public void DrawLine(Pen pen, params PointF[] points)
+    public override void DrawLine(Pen pen, params PointF[] points)
     {
         Guard.NotNull(points, nameof(points));
 
@@ -418,7 +414,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public void Draw(Pen pen, IPath path)
+    public override void Draw(Pen pen, IPath path)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(pen, nameof(pen));
@@ -445,7 +441,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public void DrawText(
+    public override void DrawText(
         RichTextOptions textOptions,
         ReadOnlySpan<char> text,
         Brush? brush,
@@ -475,7 +471,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public void DrawGlyphs(
+    public override void DrawGlyphs(
         Brush brush,
         Pen pen,
         IEnumerable<GlyphPathCollection> glyphs)
@@ -544,14 +540,14 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public TextMetrics MeasureText(RichTextOptions textOptions, ReadOnlySpan<char> text)
+    public override TextMetrics MeasureText(RichTextOptions textOptions, ReadOnlySpan<char> text)
     {
         this.EnsureNotDisposed();
         return TextMeasurer.Measure(text, textOptions);
     }
 
     /// <inheritdoc />
-    void IDrawingCanvas.DrawImage(
+    public override void DrawImage(
         Image image,
         Rectangle sourceRect,
         RectangleF destinationRect,
@@ -570,7 +566,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         this.DrawImageCore(convertedImage, sourceRect, destinationRect, sampler, ownsSourceImage: true);
     }
 
-    /// <inheritdoc cref="IDrawingCanvas.DrawImage(Image, Rectangle, RectangleF, IResampler?)" />
+    /// <inheritdoc cref="DrawingCanvas.DrawImage(Image, Rectangle, RectangleF, IResampler?)" />
     public void DrawImage(
         Image<TPixel> image,
         Rectangle sourceRect,
@@ -1003,7 +999,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public void Flush()
+    public override void Flush()
     {
         this.EnsureNotDisposed();
         try
@@ -1017,7 +1013,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public void Dispose()
+    public override void Dispose()
     {
         if (this.isDisposed)
         {

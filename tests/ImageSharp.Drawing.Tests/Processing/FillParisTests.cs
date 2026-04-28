@@ -48,7 +48,7 @@ public class FillParisTests
     public void FillParis_ImageSharp_WebGPU()
     {
         using WebGPURenderTarget<Rgba32> target = new(Width, Height);
-        using DrawingCanvas<Rgba32> canvas = target.CreateCanvas();
+        using DrawingCanvas canvas = target.CreateCanvas();
 
         foreach ((IPath path, SolidBrush fill, SolidPen stroke) in IsElements)
         {

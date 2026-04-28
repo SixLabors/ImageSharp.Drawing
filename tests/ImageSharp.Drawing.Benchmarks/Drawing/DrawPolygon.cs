@@ -166,7 +166,7 @@ public abstract class DrawPolygon
     [Benchmark]
     public void ImageSharpWebGPU()
     {
-        using DrawingCanvas<Rgba32> canvas = this.webGpuTarget.CreateCanvas();
+        using DrawingCanvas canvas = this.webGpuTarget.CreateCanvas();
         canvas.Draw(this.isPen, this.imageSharpPath);
         canvas.Flush();
     }

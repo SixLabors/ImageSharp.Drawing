@@ -90,7 +90,7 @@ public class DrawTextOutline
         }
 
         static void DrawTextOldVersion(
-            IDrawingCanvas canvas,
+            DrawingCanvas canvas,
             DrawingOptions options,
             TextOptions textOptions,
             string text,

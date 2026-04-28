@@ -35,7 +35,7 @@ internal sealed class ApplyReadbackScene : RenderScene
 
     public override string DisplayName => "Apply";
 
-    public override void Paint(DrawingCanvas<Bgra32> canvas, TimeSpan deltaTime)
+    public override void Paint(DrawingCanvas canvas, TimeSpan deltaTime)
     {
         Size viewportSize = canvas.Bounds.Size;
 
@@ -77,7 +77,7 @@ internal sealed class ApplyReadbackScene : RenderScene
         this.regionScale = Math.Clamp(this.regionScale * factor, .5F, 2.4F);
     }
 
-    private static void DrawPattern(DrawingCanvas<Bgra32> canvas, Size viewportSize)
+    private static void DrawPattern(DrawingCanvas canvas, Size viewportSize)
     {
         float stripeWidth = Math.Max(18F, viewportSize.Width / 18F);
         float height = viewportSize.Height;

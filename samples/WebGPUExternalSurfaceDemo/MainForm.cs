@@ -116,15 +116,15 @@ internal sealed class MainForm : Form
         this.Controls.Add(tabs);
     }
 
-    private void OnPaintClock(DrawingCanvas<Bgra32> canvas, TimeSpan delta)
+    private void OnPaintClock(DrawingCanvas canvas, TimeSpan delta)
         => this.clockScene.Paint(canvas, delta);
 
-    private void OnPaintTiger(DrawingCanvas<Bgra32> canvas, TimeSpan delta)
+    private void OnPaintTiger(DrawingCanvas canvas, TimeSpan delta)
     {
         this.tigerScene.Paint(canvas, delta);
         this.tigerStatusLabel.Text = this.tigerScene.StatusText;
     }
 
-    private void OnPaintApply(DrawingCanvas<Bgra32> canvas, TimeSpan delta)
+    private void OnPaintApply(DrawingCanvas canvas, TimeSpan delta)
         => this.applyScene.Paint(canvas, delta);
 }

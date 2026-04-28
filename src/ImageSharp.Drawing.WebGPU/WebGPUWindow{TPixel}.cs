@@ -12,8 +12,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
 /// A self-contained WebGPU-backed window that owns the platform window, the WebGPU device and queue, the surface
-/// and swap chain, and the per-frame texture acquire/present cycle, exposing a <see cref="DrawingCanvas{TPixel}"/>
-/// for each frame. Use <see cref="Run(Action{DrawingCanvas{TPixel}})"/> to let the window drive rendering, or
+/// and swap chain, and the per-frame texture acquire/present cycle, exposing a <see cref="DrawingCanvas"/>
+/// for each frame. Use <see cref="Run(Action{DrawingCanvas})"/> to let the window drive rendering, or
 /// <see cref="TryAcquireFrame(out WebGPUSurfaceFrame{TPixel}?)"/> to drive the frame loop yourself.
 /// </summary>
 /// <typeparam name="TPixel">The canvas pixel format.</typeparam>
@@ -385,7 +385,7 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     /// Runs the window's event loop and renders one WebGPU canvas per render callback.
     /// </summary>
     /// <param name="render">The per-frame render callback.</param>
-    public void Run(Action<DrawingCanvas<TPixel>> render)
+    public void Run(Action<DrawingCanvas> render)
         => this.Run(new DrawingOptions(), render);
 
     /// <summary>
@@ -393,7 +393,7 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     /// </summary>
     /// <param name="options">The drawing options applied to each acquired frame.</param>
     /// <param name="render">The per-frame render callback.</param>
-    public void Run(DrawingOptions options, Action<DrawingCanvas<TPixel>> render)
+    public void Run(DrawingOptions options, Action<DrawingCanvas> render)
     {
         Guard.NotNull(render, nameof(render));
         this.Run(options, frame => render(frame.Canvas));

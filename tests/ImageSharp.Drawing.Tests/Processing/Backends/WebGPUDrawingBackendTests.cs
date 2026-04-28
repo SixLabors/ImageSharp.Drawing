@@ -43,7 +43,7 @@ public partial class WebGPUDrawingBackendTests
         RectangularPolygon polygon = new(48.25F, 63.5F, 401.25F, 302.75F);
         Brush brush = Brushes.Solid(Color.Black);
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, polygon);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, polygon);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -85,7 +85,7 @@ public partial class WebGPUDrawingBackendTests
 
         IPath path = pathBuilder.Build();
         Brush brush = Brushes.Solid(Color.MediumPurple);
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, path);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, path);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -118,7 +118,7 @@ public partial class WebGPUDrawingBackendTests
         EllipsePolygon ellipse = new(256, 256, 200, 150);
         Brush brush = Brushes.Solid(Color.Black);
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, ellipse);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, ellipse);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -153,7 +153,7 @@ public partial class WebGPUDrawingBackendTests
 
         using Image<TPixel> foreground = provider.GetImage();
         Brush brush = new ImageBrush<TPixel>(foreground, new RectangleF(32, 24, 192, 144), new Point(13, -9));
-        void DrawAction(DrawingCanvas<TPixel> canvas)
+        void DrawAction(DrawingCanvas canvas)
         {
             canvas.Clear(clearBrush);
             canvas.Fill(brush, polygon);
@@ -214,7 +214,7 @@ public partial class WebGPUDrawingBackendTests
 
         IPath path = pathBuilder.Build();
         Brush brush = Brushes.Solid(Color.Black);
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, path);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, path);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -259,7 +259,7 @@ public partial class WebGPUDrawingBackendTests
             }
         };
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, polygon);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, polygon);
 
         using Image<TPixel> baseImage = provider.GetImage();
         using Image<TPixel> defaultImage = baseImage.Clone();
@@ -310,7 +310,7 @@ public partial class WebGPUDrawingBackendTests
 
         using Image<TPixel> foreground = provider.GetImage();
         Brush brush = new ImageBrush<TPixel>(foreground, new RectangleF(32, 24, 192, 144), new Point(13, -9));
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, polygon);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, polygon);
 
         using Image<TPixel> baseImage = provider.GetImage();
         using Image<TPixel> defaultImage = baseImage.Clone();
@@ -357,7 +357,7 @@ public partial class WebGPUDrawingBackendTests
         string text = "Sphinx of black quartz, judge my vow\n0123456789";
         Brush brush = Brushes.Solid(Color.Black);
         Pen pen = Pens.Solid(Color.OrangeRed, 2F);
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.DrawText(textOptions, text, brush, pen);
+        void DrawAction(DrawingCanvas canvas) => canvas.DrawText(textOptions, text, brush, pen);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -394,7 +394,7 @@ public partial class WebGPUDrawingBackendTests
         RectangularPolygon polygon = new(48.25F, 63.5F, 401.25F, 302.75F);
         Brush brush = Brushes.Solid(Color.Black);
         Brush clearBrush = Brushes.Solid(Color.White);
-        void DrawAction(DrawingCanvas<TPixel> canvas)
+        void DrawAction(DrawingCanvas canvas)
         {
             canvas.Clear(clearBrush);
             canvas.Fill(brush, polygon);
@@ -431,11 +431,11 @@ public partial class WebGPUDrawingBackendTests
         RectangularPolygon localPolygon = new(16.25F, 24.5F, 250.5F, 160.75F);
         Brush brush = Brushes.Solid(Color.Black);
         Brush clearBrush = Brushes.Solid(Color.White);
-        void DrawAction(DrawingCanvas<TPixel> canvas)
+        void DrawAction(DrawingCanvas canvas)
         {
             canvas.Clear(clearBrush);
 
-            using DrawingCanvas<TPixel> regionCanvas = canvas.CreateRegion(region);
+            using DrawingCanvas regionCanvas = canvas.CreateRegion(region);
             regionCanvas.Fill(brush, localPolygon);
         }
 
@@ -477,13 +477,13 @@ public partial class WebGPUDrawingBackendTests
         RectangularPolygon firstRect = new(18, 26, 176, 92);
         RectangularPolygon secondRect = new(96, 54, 42, 38);
 
-        void DrawFirstFrame(DrawingCanvas<TPixel> canvas)
+        void DrawFirstFrame(DrawingCanvas canvas)
         {
             canvas.Fill(firstBackground);
             canvas.Fill(firstFill, firstRect);
         }
 
-        void DrawSecondFrame(DrawingCanvas<TPixel> canvas)
+        void DrawSecondFrame(DrawingCanvas canvas)
         {
             canvas.Fill(secondBackground);
             canvas.Fill(secondFill, secondRect);
@@ -525,7 +525,7 @@ public partial class WebGPUDrawingBackendTests
         DrawingOptions drawingOptions = new();
         IPath blurPath = CreateBlurEllipsePath();
         IPath pixelatePath = CreatePixelateTrianglePath();
-        void DrawAction(DrawingCanvas<TPixel> canvas)
+        void DrawAction(DrawingCanvas canvas)
         {
             DrawProcessScenario(canvas);
             canvas.Apply(blurPath, ctx => ctx.GaussianBlur(6F));
@@ -567,7 +567,7 @@ public partial class WebGPUDrawingBackendTests
 
         string text = new('A', 200);
         Brush brush = Brushes.Solid(Color.Black);
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.DrawText(textOptions, text, brush, null);
+        void DrawAction(DrawingCanvas canvas) => canvas.DrawText(textOptions, text, brush, null);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -620,13 +620,13 @@ public partial class WebGPUDrawingBackendTests
         Brush drawBrush = Brushes.Solid(Color.HotPink);
         Brush clearBrush = Brushes.Solid(Color.White);
         using Image<TPixel> defaultImage = provider.GetImage();
-        using (DrawingCanvas<TPixel> defaultClearCanvas = defaultImage.CreateCanvas(Configuration.Default, clearOptions))
+        using (DrawingCanvas defaultClearCanvas = defaultImage.CreateCanvas(Configuration.Default, clearOptions))
         {
             defaultClearCanvas.Fill(clearBrush);
             defaultClearCanvas.Flush();
         }
 
-        using (DrawingCanvas<TPixel> defaultDrawCanvas = defaultImage.CreateCanvas(Configuration.Default, drawingOptions))
+        using (DrawingCanvas defaultDrawCanvas = defaultImage.CreateCanvas(Configuration.Default, drawingOptions))
         {
             defaultDrawCanvas.DrawText(textOptions, text, drawBrush, null);
             defaultDrawCanvas.Flush();
@@ -657,10 +657,10 @@ public partial class WebGPUDrawingBackendTests
         AssertBackendPairReferenceOutputs(provider, "RepeatedGlyphs_AfterClear", defaultImage, nativeSurfaceImage);
     }
 
-    private static void RenderWithDefaultBackend<TPixel>(Image<TPixel> image, DrawingOptions options, Action<DrawingCanvas<TPixel>> drawAction)
+    private static void RenderWithDefaultBackend<TPixel>(Image<TPixel> image, DrawingOptions options, Action<DrawingCanvas> drawAction)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        using DrawingCanvas<TPixel> canvas = image.CreateCanvas(Configuration.Default, options);
+        using DrawingCanvas canvas = image.CreateCanvas(Configuration.Default, options);
         drawAction(canvas);
         canvas.Flush();
     }
@@ -729,8 +729,7 @@ public partial class WebGPUDrawingBackendTests
     private static EllipsePolygon CreateBlurEllipsePath()
         => new(new PointF(55, 40), new SizeF(110, 80));
 
-    private static void DrawProcessScenario<TPixel>(DrawingCanvas<TPixel> canvas)
-        where TPixel : unmanaged, IPixel<TPixel>
+    private static void DrawProcessScenario(DrawingCanvas canvas)
     {
         canvas.Clear(Brushes.Solid(Color.White));
 
@@ -772,7 +771,7 @@ public partial class WebGPUDrawingBackendTests
         int height,
         WebGPUDrawingBackend backend,
         DrawingOptions options,
-        Action<DrawingCanvas<TPixel>> drawAction,
+        Action<DrawingCanvas> drawAction,
         Image<TPixel> initialImage = null)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -878,7 +877,7 @@ public partial class WebGPUDrawingBackendTests
         pb.CloseFigure();
         IPath path = pb.Build();
         Pen pen = Pens.Solid(Color.DarkBlue, 4F);
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Draw(pen, path);
+        void DrawAction(DrawingCanvas canvas) => canvas.Draw(pen, path);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -918,7 +917,7 @@ public partial class WebGPUDrawingBackendTests
             StrokeOptions = new StrokeOptions { LineCap = lineCap }
         });
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Draw(pen, path);
+        void DrawAction(DrawingCanvas canvas) => canvas.Draw(pen, path);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -974,9 +973,9 @@ public partial class WebGPUDrawingBackendTests
             StrokeOptions = new StrokeOptions { LineJoin = lineJoin }
         });
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Draw(pen, path);
+        void DrawAction(DrawingCanvas canvas) => canvas.Draw(pen, path);
         IPath outline = path.GenerateOutline(pen.StrokeWidth, pen.StrokeOptions);
-        void DrawReference(DrawingCanvas<TPixel> canvas) => canvas.Fill(pen.StrokeFill, outline);
+        void DrawReference(DrawingCanvas canvas) => canvas.Fill(pen.StrokeFill, outline);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1043,9 +1042,9 @@ public partial class WebGPUDrawingBackendTests
             StrokeOptions = new StrokeOptions { LineCap = lineCap }
         });
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Draw(pen, path);
+        void DrawAction(DrawingCanvas canvas) => canvas.Draw(pen, path);
         IPath outline = path.GenerateOutline(pen.StrokeWidth, pen.StrokeOptions);
-        void DrawReference(DrawingCanvas<TPixel> canvas) => canvas.Fill(pen.StrokeFill, outline);
+        void DrawReference(DrawingCanvas canvas) => canvas.Fill(pen.StrokeFill, outline);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1100,7 +1099,7 @@ public partial class WebGPUDrawingBackendTests
         };
 
         Brush brush = Brushes.Solid(Color.Black);
-        void DrawAction(DrawingCanvas<TPixel> canvas)
+        void DrawAction(DrawingCanvas canvas)
         {
             for (int i = 0; i < 20; i++)
             {
@@ -1166,7 +1165,7 @@ public partial class WebGPUDrawingBackendTests
 
         IPath path = pathBuilder.Build();
         Brush brush = Brushes.Solid(Color.Black);
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, path);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, path);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1202,7 +1201,7 @@ public partial class WebGPUDrawingBackendTests
         // Large polygon spanning most of the image to exercise many tiles.
         Brush brush = Brushes.Solid(Color.Black);
         EllipsePolygon ellipse = new(new PointF(400, 300), new SizeF(700, 500));
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, ellipse);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, ellipse);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1234,7 +1233,7 @@ public partial class WebGPUDrawingBackendTests
 
         Brush brush = Brushes.Solid(Color.Black);
         IPath denseGrid = CreateLargeSceneDenseRectangleGridPath();
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, denseGrid);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, denseGrid);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1265,7 +1264,7 @@ public partial class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         Rectangle[] layerBounds = CreateClipReduceLayerBounds(layerCount, defaultImage.Bounds);
 
-        void DrawAction(DrawingCanvas<TPixel> canvas)
+        void DrawAction(DrawingCanvas canvas)
         {
             canvas.Fill(Brushes.Solid(Color.White));
             for (int i = 0; i < layerBounds.Length; i++)
@@ -1311,13 +1310,13 @@ public partial class WebGPUDrawingBackendTests
 
         // Default backend: two separate flushes.
         using Image<TPixel> defaultImage = provider.GetImage();
-        using (DrawingCanvas<TPixel> canvas1 = defaultImage.CreateCanvas(Configuration.Default, drawingOptions))
+        using (DrawingCanvas canvas1 = defaultImage.CreateCanvas(Configuration.Default, drawingOptions))
         {
             canvas1.Fill(redBrush, rect1);
             canvas1.Flush();
         }
 
-        using (DrawingCanvas<TPixel> canvas2 = defaultImage.CreateCanvas(Configuration.Default, drawingOptions))
+        using (DrawingCanvas canvas2 = defaultImage.CreateCanvas(Configuration.Default, drawingOptions))
         {
             canvas2.Fill(blueBrush, rect2);
             canvas2.Flush();
@@ -1369,7 +1368,7 @@ public partial class WebGPUDrawingBackendTests
             new ColorStop(0.5F, Color.Green),
             new ColorStop(1, Color.Blue));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, ellipse);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, ellipse);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1413,7 +1412,7 @@ public partial class WebGPUDrawingBackendTests
             new ColorStop(0, Color.Yellow),
             new ColorStop(1, Color.Purple));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1451,7 +1450,7 @@ public partial class WebGPUDrawingBackendTests
             new ColorStop(0, Color.White),
             new ColorStop(1, Color.DarkRed));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1491,7 +1490,7 @@ public partial class WebGPUDrawingBackendTests
             new ColorStop(0, Color.Yellow),
             new ColorStop(1, Color.Navy));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1530,7 +1529,7 @@ public partial class WebGPUDrawingBackendTests
             new ColorStop(0, Color.Cyan),
             new ColorStop(1, Color.Magenta));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1571,7 +1570,7 @@ public partial class WebGPUDrawingBackendTests
             new ColorStop(0.67F, Color.Blue),
             new ColorStop(1, Color.Red));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, ellipse);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, ellipse);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1610,7 +1609,7 @@ public partial class WebGPUDrawingBackendTests
             new ColorStop(0, Color.Orange),
             new ColorStop(1, Color.Teal));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1671,12 +1670,12 @@ public partial class WebGPUDrawingBackendTests
         ],
         Color.White);
 
-        void DrawAction(DrawingCanvas<TPixel> canvas)
+        void DrawAction(DrawingCanvas canvas)
         {
             canvas.Fill(persistedBrush, persistedShape);
             canvas.Flush();
 
-            using DrawingCanvas<TPixel> regionCanvas = canvas.CreateRegion(region);
+            using DrawingCanvas regionCanvas = canvas.CreateRegion(region);
             regionCanvas.Fill(brush, localPolygon);
         }
 
@@ -1710,7 +1709,7 @@ public partial class WebGPUDrawingBackendTests
         RectangularPolygon rect = new(16, 16, 224, 224);
         Brush brush = Brushes.Horizontal(Color.Black, Color.White);
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1743,7 +1742,7 @@ public partial class WebGPUDrawingBackendTests
         EllipsePolygon ellipse = new(128, 128, 100);
         Brush brush = Brushes.ForwardDiagonal(Color.DarkGreen, Color.LightGray);
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, ellipse);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, ellipse);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1776,7 +1775,7 @@ public partial class WebGPUDrawingBackendTests
         RectangularPolygon rect = new(16, 16, 224, 224);
         Brush brush = new RecolorBrush(Color.Red, Color.Blue, 0.5F);
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1815,7 +1814,7 @@ public partial class WebGPUDrawingBackendTests
             new ColorStop(0, Color.Coral),
             new ColorStop(1, Color.SteelBlue));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1855,7 +1854,7 @@ public partial class WebGPUDrawingBackendTests
             new ColorStop(0.5F, Color.DarkViolet),
             new ColorStop(1, Color.White));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -2051,7 +2050,7 @@ the evil Galactic Empire.";
         DrawingOptions hullOptions = new() { Transform = hullTransform };
         DrawingOptions towerOptions = new() { Transform = towerTransform };
 
-        void DrawAction(DrawingCanvas<TPixel> canvas)
+        void DrawAction(DrawingCanvas canvas)
         {
             // Bottom hull (draw first, behind stern).
             canvas.Save(hullOptions);
@@ -2114,7 +2113,7 @@ the evil Galactic Empire.";
         Brush brush = Brushes.Solid(Color.Red);
         RectangularPolygon polygon = new(10, 10, 80, 80);
 
-        void DrawAction(DrawingCanvas<TPixel> canvas)
+        void DrawAction(DrawingCanvas canvas)
         {
             canvas.Fill(Brushes.Solid(Color.White));
             canvas.SaveLayer();
@@ -2149,7 +2148,7 @@ the evil Galactic Empire.";
         Brush brush = Brushes.Solid(Color.Red);
         RectangularPolygon polygon = new(10, 10, 80, 80);
 
-        void DrawAction(DrawingCanvas<TPixel> canvas)
+        void DrawAction(DrawingCanvas canvas)
         {
             canvas.Fill(Brushes.Solid(Color.White));
             canvas.SaveLayer(new GraphicsOptions { BlendPercentage = 0.5f });
@@ -2182,7 +2181,7 @@ the evil Galactic Empire.";
     {
         DrawingOptions drawingOptions = new();
 
-        static void DrawAction(DrawingCanvas<TPixel> canvas)
+        static void DrawAction(DrawingCanvas canvas)
         {
             canvas.Fill(Brushes.Solid(Color.White));
 
@@ -2223,7 +2222,7 @@ the evil Galactic Empire.";
     {
         DrawingOptions drawingOptions = new();
 
-        static void DrawAction(DrawingCanvas<TPixel> canvas)
+        static void DrawAction(DrawingCanvas canvas)
         {
             canvas.Fill(Brushes.Solid(Color.White));
             canvas.Fill(Brushes.Solid(Color.Red), new RectangularPolygon(20, 20, 88, 88));
@@ -2264,7 +2263,7 @@ the evil Galactic Empire.";
     {
         DrawingOptions drawingOptions = new();
 
-        static void DrawAction(DrawingCanvas<TPixel> canvas)
+        static void DrawAction(DrawingCanvas canvas)
         {
             canvas.Fill(Brushes.Solid(Color.White));
 
@@ -2299,7 +2298,7 @@ the evil Galactic Empire.";
     {
         DrawingOptions drawingOptions = new();
 
-        static void DrawAction(DrawingCanvas<TPixel> canvas)
+        static void DrawAction(DrawingCanvas canvas)
         {
             canvas.Fill(Brushes.Solid(Color.White));
 

@@ -8,7 +8,7 @@ This rasterizer is based on ideas and implementation techniques from the Blaze p
 
 This document explains the rasterizer as a newcomer needs to understand it:
 
-- where the rasterizer fits relative to `DrawingCanvas<TPixel>` and `DefaultDrawingBackend`
+- where the rasterizer fits relative to `DrawingCanvas` and `DefaultDrawingBackend`
 - what problem the rasterizer is solving inside the CPU backend
 - why the rasterizer is split into retained geometry building and band execution
 - what retained geometry, bands, and coverage mean in this architecture
@@ -16,7 +16,7 @@ This document explains the rasterizer as a newcomer needs to understand it:
 
 ## Where The Rasterizer Fits
 
-`DefaultRasterizer` sits below `DrawingCanvas<TPixel>` and `DefaultDrawingBackend`.
+`DefaultRasterizer` sits below `DrawingCanvas`, the typed canvas implementation, and `DefaultDrawingBackend`.
 
 The canvas records commands, the batcher prepares them into a `CompositionScene`, and `DefaultDrawingBackend` chooses the row-oriented execution plan for the flush. `DefaultRasterizer` then handles the narrower geometry-to-coverage problem inside that CPU execution path.
 
@@ -133,7 +133,7 @@ The rasterizer sits in the middle of the CPU backend pipeline.
 Upstream:
 
 - `CompositionCommand` preparation produces prepared geometry
-- `DrawingCanvas<TPixel>` and `DrawingCanvasBatcher<TPixel>` have already selected and called the CPU backend
+- the typed canvas implementation and `DrawingCanvasBatcher<TPixel>` have already selected and called the CPU backend
 - `FlushScene` decides which items are visible and when they execute
 
 Downstream:
@@ -428,15 +428,16 @@ That separation is one of the main architectural advantages of the current CPU p
 
 If you are new to this part of the library, read the rasterizer in this order:
 
-1. `DrawingCanvas{TPixel}.cs`
-2. `DrawingCanvasBatcher{TPixel}.cs`
-3. `DefaultDrawingBackend.cs`
-4. `FlushScene.cs`
-5. `CreateRasterizableGeometry(...)` in `DefaultRasterizer.cs`
-6. `Linearizer<TL>` and the concrete linearizers in `DefaultRasterizer.Linearizer.cs`
-7. retained line types in `DefaultRasterizer.RetainedTypes.cs`
-8. `ExecuteRasterizableBand(...)` in `DefaultRasterizer.cs`
-9. `Context` in `DefaultRasterizer.cs`
+1. `DrawingCanvas.cs`
+2. `DrawingCanvas{TPixel}.cs`
+3. `DrawingCanvasBatcher{TPixel}.cs`
+4. `DefaultDrawingBackend.cs`
+5. `FlushScene.cs`
+6. `CreateRasterizableGeometry(...)` in `DefaultRasterizer.cs`
+7. `Linearizer<TL>` and the concrete linearizers in `DefaultRasterizer.Linearizer.cs`
+8. retained line types in `DefaultRasterizer.RetainedTypes.cs`
+9. `ExecuteRasterizableBand(...)` in `DefaultRasterizer.cs`
+10. `Context` in `DefaultRasterizer.cs`
 
 That order mirrors the data lifecycle:
 

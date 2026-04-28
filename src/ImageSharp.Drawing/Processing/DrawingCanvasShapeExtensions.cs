@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Convenience canvas helpers that forward to the core <see cref="IDrawingCanvas"/> primitives.
+/// Convenience canvas helpers that forward to the core <see cref="DrawingCanvas"/> primitives.
 /// </summary>
 public static class DrawingCanvasShapeExtensions
 {
@@ -13,7 +13,7 @@ public static class DrawingCanvasShapeExtensions
     /// </summary>
     /// <param name="canvas">The destination canvas.</param>
     /// <returns>The save count after the layer state has been pushed.</returns>
-    public static int SaveLayer(this IDrawingCanvas canvas)
+    public static int SaveLayer(this DrawingCanvas canvas)
         => canvas.SaveLayer(new GraphicsOptions(), canvas.Bounds);
 
     /// <summary>
@@ -22,7 +22,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="canvas">The destination canvas.</param>
     /// <param name="layerOptions">Graphics options controlling how the layer is composited on restore.</param>
     /// <returns>The save count after the layer state has been pushed.</returns>
-    public static int SaveLayer(this IDrawingCanvas canvas, GraphicsOptions layerOptions)
+    public static int SaveLayer(this DrawingCanvas canvas, GraphicsOptions layerOptions)
         => canvas.SaveLayer(layerOptions, canvas.Bounds);
 
     /// <summary>
@@ -30,7 +30,7 @@ public static class DrawingCanvasShapeExtensions
     /// </summary>
     /// <param name="canvas">The destination canvas.</param>
     /// <param name="brush">Brush used to shade destination pixels.</param>
-    public static void Fill(this IDrawingCanvas canvas, Brush brush)
+    public static void Fill(this DrawingCanvas canvas, Brush brush)
     {
         Rectangle bounds = canvas.Bounds;
         canvas.Fill(brush, new RectangularPolygon(bounds));
@@ -42,7 +42,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="canvas">The destination canvas.</param>
     /// <param name="brush">Brush used to shade destination pixels.</param>
     /// <param name="region">Region to fill in local coordinates.</param>
-    public static void Fill(this IDrawingCanvas canvas, Brush brush, Rectangle region)
+    public static void Fill(this DrawingCanvas canvas, Brush brush, Rectangle region)
         => canvas.Fill(brush, new RectangularPolygon(region));
 
     /// <summary>
@@ -50,7 +50,7 @@ public static class DrawingCanvasShapeExtensions
     /// </summary>
     /// <param name="canvas">The destination canvas.</param>
     /// <param name="brush">Brush used to shade destination pixels during clear.</param>
-    public static void Clear(this IDrawingCanvas canvas, Brush brush)
+    public static void Clear(this DrawingCanvas canvas, Brush brush)
     {
         Rectangle bounds = canvas.Bounds;
         canvas.Clear(brush, new RectangularPolygon(bounds));
@@ -62,7 +62,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="canvas">The destination canvas.</param>
     /// <param name="brush">Brush used to shade destination pixels during clear.</param>
     /// <param name="region">Region to clear in local coordinates.</param>
-    public static void Clear(this IDrawingCanvas canvas, Brush brush, Rectangle region)
+    public static void Clear(this DrawingCanvas canvas, Brush brush, Rectangle region)
         => canvas.Clear(brush, new RectangularPolygon(region));
 
     /// <summary>
@@ -71,7 +71,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="canvas">The destination canvas.</param>
     /// <param name="brush">Brush used to shade covered pixels.</param>
     /// <param name="paths">Path collection to fill.</param>
-    public static void Fill(this IDrawingCanvas canvas, Brush brush, IPathCollection paths)
+    public static void Fill(this DrawingCanvas canvas, Brush brush, IPathCollection paths)
     {
         Guard.NotNull(paths, nameof(paths));
 
@@ -87,7 +87,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="canvas">The destination canvas.</param>
     /// <param name="brush">Brush used to shade covered pixels.</param>
     /// <param name="pathBuilder">The path builder describing the fill region.</param>
-    public static void Fill(this IDrawingCanvas canvas, Brush brush, PathBuilder pathBuilder)
+    public static void Fill(this DrawingCanvas canvas, Brush brush, PathBuilder pathBuilder)
     {
         Guard.NotNull(pathBuilder, nameof(pathBuilder));
         canvas.Fill(brush, pathBuilder.Build());
@@ -100,7 +100,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="brush">Brush used to shade covered pixels.</param>
     /// <param name="center">Ellipse center point in local coordinates.</param>
     /// <param name="size">Ellipse width and height in local coordinates.</param>
-    public static void FillEllipse(this IDrawingCanvas canvas, Brush brush, PointF center, SizeF size)
+    public static void FillEllipse(this DrawingCanvas canvas, Brush brush, PointF center, SizeF size)
         => canvas.Fill(brush, new EllipsePolygon(center, size));
 
     /// <summary>
@@ -113,7 +113,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="rotation">Ellipse rotation in degrees.</param>
     /// <param name="startAngle">Arc start angle in degrees.</param>
     /// <param name="sweepAngle">Arc sweep angle in degrees.</param>
-    public static void FillArc(this IDrawingCanvas canvas, Brush brush, PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)
+    public static void FillArc(this DrawingCanvas canvas, Brush brush, PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)
         => canvas.Fill(brush, new Path(new ArcLineSegment(center, radius, rotation, startAngle, sweepAngle)));
 
     /// <summary>
@@ -126,7 +126,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="rotation">Ellipse rotation in degrees.</param>
     /// <param name="startAngle">Pie start angle in degrees.</param>
     /// <param name="sweepAngle">Pie sweep angle in degrees.</param>
-    public static void FillPie(this IDrawingCanvas canvas, Brush brush, PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)
+    public static void FillPie(this DrawingCanvas canvas, Brush brush, PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)
         => canvas.Fill(brush, new Pie(center, radius, rotation, startAngle, sweepAngle));
 
     /// <summary>
@@ -138,7 +138,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="radius">Pie radii in local coordinates.</param>
     /// <param name="startAngle">Pie start angle in degrees.</param>
     /// <param name="sweepAngle">Pie sweep angle in degrees.</param>
-    public static void FillPie(this IDrawingCanvas canvas, Brush brush, PointF center, SizeF radius, float startAngle, float sweepAngle)
+    public static void FillPie(this DrawingCanvas canvas, Brush brush, PointF center, SizeF radius, float startAngle, float sweepAngle)
         => canvas.Fill(brush, new Pie(center, radius, startAngle, sweepAngle));
 
     /// <summary>
@@ -151,7 +151,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="rotation">Ellipse rotation in degrees.</param>
     /// <param name="startAngle">Arc start angle in degrees.</param>
     /// <param name="sweepAngle">Arc sweep angle in degrees.</param>
-    public static void DrawArc(this IDrawingCanvas canvas, Pen pen, PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)
+    public static void DrawArc(this DrawingCanvas canvas, Pen pen, PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)
         => canvas.Draw(pen, new Path(new ArcLineSegment(center, radius, rotation, startAngle, sweepAngle)));
 
     /// <summary>
@@ -160,7 +160,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="canvas">The destination canvas.</param>
     /// <param name="pen">Pen used to generate the bezier outline.</param>
     /// <param name="points">Bezier control points.</param>
-    public static void DrawBezier(this IDrawingCanvas canvas, Pen pen, params PointF[] points)
+    public static void DrawBezier(this DrawingCanvas canvas, Pen pen, params PointF[] points)
     {
         Guard.NotNull(points, nameof(points));
         canvas.Draw(pen, new Path(new CubicBezierLineSegment(points)));
@@ -173,7 +173,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="pen">Pen used to generate the ellipse outline.</param>
     /// <param name="center">Ellipse center point in local coordinates.</param>
     /// <param name="size">Ellipse width and height in local coordinates.</param>
-    public static void DrawEllipse(this IDrawingCanvas canvas, Pen pen, PointF center, SizeF size)
+    public static void DrawEllipse(this DrawingCanvas canvas, Pen pen, PointF center, SizeF size)
         => canvas.Draw(pen, new EllipsePolygon(center, size));
 
     /// <summary>
@@ -186,7 +186,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="rotation">Ellipse rotation in degrees.</param>
     /// <param name="startAngle">Pie start angle in degrees.</param>
     /// <param name="sweepAngle">Pie sweep angle in degrees.</param>
-    public static void DrawPie(this IDrawingCanvas canvas, Pen pen, PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)
+    public static void DrawPie(this DrawingCanvas canvas, Pen pen, PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)
         => canvas.Draw(pen, new Pie(center, radius, rotation, startAngle, sweepAngle));
 
     /// <summary>
@@ -198,7 +198,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="radius">Pie radii in local coordinates.</param>
     /// <param name="startAngle">Pie start angle in degrees.</param>
     /// <param name="sweepAngle">Pie sweep angle in degrees.</param>
-    public static void DrawPie(this IDrawingCanvas canvas, Pen pen, PointF center, SizeF radius, float startAngle, float sweepAngle)
+    public static void DrawPie(this DrawingCanvas canvas, Pen pen, PointF center, SizeF radius, float startAngle, float sweepAngle)
         => canvas.Draw(pen, new Pie(center, radius, startAngle, sweepAngle));
 
     /// <summary>
@@ -207,7 +207,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="canvas">The destination canvas.</param>
     /// <param name="pen">Pen used to generate the rectangle outline.</param>
     /// <param name="region">Rectangle region to stroke.</param>
-    public static void Draw(this IDrawingCanvas canvas, Pen pen, Rectangle region)
+    public static void Draw(this DrawingCanvas canvas, Pen pen, Rectangle region)
         => canvas.Draw(pen, new RectangularPolygon(region));
 
     /// <summary>
@@ -216,7 +216,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="canvas">The destination canvas.</param>
     /// <param name="pen">Pen used to generate outlines.</param>
     /// <param name="paths">Path collection to stroke.</param>
-    public static void Draw(this IDrawingCanvas canvas, Pen pen, IPathCollection paths)
+    public static void Draw(this DrawingCanvas canvas, Pen pen, IPathCollection paths)
     {
         Guard.NotNull(paths, nameof(paths));
 
@@ -232,7 +232,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="canvas">The destination canvas.</param>
     /// <param name="pen">Pen used to generate the outline fill path.</param>
     /// <param name="pathBuilder">The path builder describing the path to stroke.</param>
-    public static void Draw(this IDrawingCanvas canvas, Pen pen, PathBuilder pathBuilder)
+    public static void Draw(this DrawingCanvas canvas, Pen pen, PathBuilder pathBuilder)
     {
         Guard.NotNull(pathBuilder, nameof(pathBuilder));
         canvas.Draw(pen, pathBuilder.Build());

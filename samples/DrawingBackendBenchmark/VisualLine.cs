@@ -70,7 +70,7 @@ internal readonly struct VisualLine
     /// <summary>
     /// Draws the shared benchmark scene into the supplied canvas.
     /// </summary>
-    public static void RenderLinesToCanvas(DrawingCanvas<Bgra32> canvas, ReadOnlySpan<VisualLine> lines)
+    public static void RenderLinesToCanvas(DrawingCanvas canvas, ReadOnlySpan<VisualLine> lines)
     {
         canvas.Restore();
         canvas.Fill(BackgroundBrush);

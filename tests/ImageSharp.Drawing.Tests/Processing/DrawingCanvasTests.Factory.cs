@@ -13,7 +13,7 @@ public partial class DrawingCanvasTests
     {
         using Image<Rgba32> image = new(48, 36);
 
-        using (DrawingCanvas<Rgba32> canvas = image.Frames.RootFrame.CreateCanvas(
+        using (DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(
                    new DrawingOptions()))
         {
             canvas.Clear(Brushes.Solid(Color.SeaGreen));
@@ -29,13 +29,13 @@ public partial class DrawingCanvasTests
         using Image<Rgba32> image = new(40, 30);
         image.Frames.AddFrame(image.Frames.RootFrame);
 
-        using (DrawingCanvas<Rgba32> rootCanvas = image.CreateCanvas(new DrawingOptions()))
+        using (DrawingCanvas rootCanvas = image.CreateCanvas(new DrawingOptions()))
         {
             rootCanvas.Clear(Brushes.Solid(Color.White));
             rootCanvas.Flush();
         }
 
-        using (DrawingCanvas<Rgba32> secondCanvas = image.CreateCanvas(new DrawingOptions(), 1))
+        using (DrawingCanvas secondCanvas = image.CreateCanvas(new DrawingOptions(), 1))
         {
             secondCanvas.Clear(Brushes.Solid(Color.MediumPurple));
             secondCanvas.Flush();
@@ -43,6 +43,29 @@ public partial class DrawingCanvasTests
 
         Assert.Equal(Color.White.ToPixel<Rgba32>(), image.Frames.RootFrame[8, 8]);
         Assert.Equal(Color.MediumPurple.ToPixel<Rgba32>(), image.Frames[1][8, 8]);
+    }
+
+    [Fact]
+    public void CreateCanvas_FromNonGenericImage_TargetsRequestedFrame()
+    {
+        using Image image = new Image<Rgba32>(40, 30);
+        image.Frames.AddFrame(image.Frames.RootFrame);
+
+        using (DrawingCanvas rootCanvas = image.CreateCanvas(new DrawingOptions()))
+        {
+            rootCanvas.Clear(Brushes.Solid(Color.White));
+            rootCanvas.Flush();
+        }
+
+        using (DrawingCanvas secondCanvas = image.CreateCanvas(new DrawingOptions(), 1))
+        {
+            secondCanvas.Clear(Brushes.Solid(Color.MediumPurple));
+            secondCanvas.Flush();
+        }
+
+        Image<Rgba32> typedImage = Assert.IsType<Image<Rgba32>>(image);
+        Assert.Equal(Color.White.ToPixel<Rgba32>(), typedImage.Frames.RootFrame[8, 8]);
+        Assert.Equal(Color.MediumPurple.ToPixel<Rgba32>(), typedImage.Frames[1][8, 8]);
     }
 
     [Fact]
