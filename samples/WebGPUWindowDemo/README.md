@@ -108,7 +108,7 @@ Separating animation from rendering keeps the sample structure close to a normal
 this.window.Run(this.OnRender);
 ```
 
-`WebGPUWindow<TPixel>.Run(...)` acquires one `WebGPUSurfaceFrame<TPixel>` per render callback and disposes it automatically after your callback returns. In this sample that means you do not call `Present()` or `Flush()` yourself.
+`WebGPUWindow<TPixel>.Run(...)` acquires one `WebGPUSurfaceFrame<TPixel>` per render callback and disposes it automatically after your callback returns. In this sample that means you do not call `Flush()` yourself.
 
 Inside `OnRender(...)` the sample:
 
@@ -154,7 +154,7 @@ This sample uses the `Run(Action<WebGPUSurfaceFrame<TPixel>>)` overload, so fram
 Two practical consequences:
 
 - you do not need to call `canvas.Flush()` in this sample
-- you only need `frame.Present()` if you are driving frames manually and want to present before disposal
+- manual frame loops should dispose each acquired frame exactly once
 
 ## What actually runs on the GPU
 
@@ -186,7 +186,7 @@ Notes:
 
 - a `false` result is normal retry behavior, not necessarily an error
 - this can happen when the surface is outdated, lost, timed out, or the framebuffer is currently zero-sized
-- disposing the frame is normally enough; explicit `Present()` is optional
+- disposing the frame flushes queued canvas work, presents the surface, and releases per-frame resources
 
 ## Resize behavior
 
