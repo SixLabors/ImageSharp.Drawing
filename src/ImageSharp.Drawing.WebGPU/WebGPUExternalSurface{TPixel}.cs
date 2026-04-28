@@ -12,7 +12,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// size notifications forwarded through <see cref="Resize(Size)"/>.
 /// </summary>
 /// <typeparam name="TPixel">The canvas pixel format.</typeparam>
-public sealed class WebGPUHostedSurface<TPixel> : IDisposable
+public sealed class WebGPUExternalSurface<TPixel> : IDisposable
     where TPixel : unmanaged, IPixel<TPixel>
 {
     private readonly WebGPUSurfaceResources<TPixel> resources;
@@ -21,41 +21,41 @@ public sealed class WebGPUHostedSurface<TPixel> : IDisposable
     private bool isDisposed;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUHostedSurface{TPixel}"/> class.
+    /// Initializes a new instance of the <see cref="WebGPUExternalSurface{TPixel}"/> class.
     /// </summary>
     /// <param name="host">The native surface host that the WebGPU surface will attach to.</param>
     /// <param name="framebufferSize">The initial framebuffer size in pixels.</param>
-    public WebGPUHostedSurface(WebGPUSurfaceHost host, Size framebufferSize)
-        : this(Configuration.Default, host, framebufferSize, new WebGPUHostedSurfaceOptions())
+    public WebGPUExternalSurface(WebGPUSurfaceHost host, Size framebufferSize)
+        : this(Configuration.Default, host, framebufferSize, new WebGPUExternalSurfaceOptions())
     {
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUHostedSurface{TPixel}"/> class.
+    /// Initializes a new instance of the <see cref="WebGPUExternalSurface{TPixel}"/> class.
     /// </summary>
     /// <param name="host">The native surface host that the WebGPU surface will attach to.</param>
     /// <param name="framebufferSize">The initial framebuffer size in pixels.</param>
-    /// <param name="options">The hosted surface options.</param>
-    public WebGPUHostedSurface(
+    /// <param name="options">The external surface options.</param>
+    public WebGPUExternalSurface(
         WebGPUSurfaceHost host,
         Size framebufferSize,
-        WebGPUHostedSurfaceOptions options)
+        WebGPUExternalSurfaceOptions options)
         : this(Configuration.Default, host, framebufferSize, options)
     {
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUHostedSurface{TPixel}"/> class.
+    /// Initializes a new instance of the <see cref="WebGPUExternalSurface{TPixel}"/> class.
     /// </summary>
     /// <param name="configuration">The configuration instance to bind to the created backend.</param>
     /// <param name="host">The native surface host that the WebGPU surface will attach to.</param>
     /// <param name="framebufferSize">The initial framebuffer size in pixels.</param>
-    /// <param name="options">The hosted surface options.</param>
-    public WebGPUHostedSurface(
+    /// <param name="options">The external surface options.</param>
+    public WebGPUExternalSurface(
         Configuration configuration,
         WebGPUSurfaceHost host,
         Size framebufferSize,
-        WebGPUHostedSurfaceOptions options)
+        WebGPUExternalSurfaceOptions options)
     {
         Guard.NotNull(configuration, nameof(configuration));
         Guard.NotNull(options, nameof(options));
@@ -74,7 +74,7 @@ public sealed class WebGPUHostedSurface<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Gets the configuration provided when the hosted surface was created.
+    /// Gets the configuration provided when the external surface was created.
     /// </summary>
     public Configuration Configuration { get; }
 
@@ -102,7 +102,7 @@ public sealed class WebGPUHostedSurface<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Notifies the hosted surface that the drawable framebuffer has resized and reconfigures the swapchain when the
+    /// Notifies the external surface that the drawable framebuffer has resized and reconfigures the swapchain when the
     /// size changes.
     /// </summary>
     /// <param name="framebufferSize">The new framebuffer size in pixels.</param>

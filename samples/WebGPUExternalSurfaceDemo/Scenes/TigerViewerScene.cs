@@ -14,7 +14,7 @@ using Size = SixLabors.ImageSharp.Size;
 using SizeF = SixLabors.ImageSharp.SizeF;
 using SolidBrush = SixLabors.ImageSharp.Drawing.Processing.SolidBrush;
 
-namespace WebGPUHostedSurfaceDemo.Scenes;
+namespace WebGPUExternalSurfaceDemo.Scenes;
 
 /// <summary>
 /// Loads the Ghostscript Tiger SVG via the shared <see cref="SvgBenchmarkHelper"/> and renders it with

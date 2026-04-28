@@ -20,7 +20,7 @@ using SizeF = SixLabors.ImageSharp.SizeF;
 using SystemFonts = SixLabors.Fonts.SystemFonts;
 using VerticalAlignment = SixLabors.Fonts.VerticalAlignment;
 
-namespace WebGPUHostedSurfaceDemo.Scenes;
+namespace WebGPUExternalSurfaceDemo.Scenes;
 
 /// <summary>
 /// Animated analog clock. Validates continuous render, curves, thin-stroke antialiasing, text rendering,

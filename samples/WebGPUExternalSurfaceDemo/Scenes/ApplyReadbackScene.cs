@@ -14,10 +14,10 @@ using Rectangle = SixLabors.ImageSharp.Rectangle;
 using Size = SixLabors.ImageSharp.Size;
 using SizeF = SixLabors.ImageSharp.SizeF;
 
-namespace WebGPUHostedSurfaceDemo.Scenes;
+namespace WebGPUExternalSurfaceDemo.Scenes;
 
 /// <summary>
-/// Hosted-surface scene that exercises canvas readback by applying CPU image processors to regions of the current frame.
+/// External surface scene that exercises canvas readback by applying CPU image processors to regions of the current frame.
 /// Pointer movement changes the processed regions so readback cost can be assessed interactively.
 /// </summary>
 internal sealed class ApplyReadbackScene : RenderScene

@@ -4,13 +4,13 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Options for creating a <see cref="WebGPUHostedSurface{TPixel}"/>.
+/// Options for creating a <see cref="WebGPUExternalSurface{TPixel}"/>.
 /// </summary>
 /// <remarks>
 /// Only values that are meaningful for an externally-owned surface are exposed here.
 /// Lifecycle, title, position, border, and state belong to the host application and its UI framework.
 /// </remarks>
-public sealed class WebGPUHostedSurfaceOptions
+public sealed class WebGPUExternalSurfaceOptions
 {
     /// <summary>
     /// Gets or sets how completed frames are queued for presentation to the display.

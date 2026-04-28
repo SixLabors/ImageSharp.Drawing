@@ -1,10 +1,10 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-namespace WebGPUHostedSurfaceDemo;
+namespace WebGPUExternalSurfaceDemo;
 
 /// <summary>
-/// Entry point for the hosted WebGPU surface sample.
+/// Entry point for the external WebGPU surface sample.
 /// </summary>
 internal static class Program
 {

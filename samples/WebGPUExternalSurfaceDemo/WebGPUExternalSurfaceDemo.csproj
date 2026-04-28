@@ -5,7 +5,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
-    <RootNamespace>WebGPUHostedSurfaceDemo</RootNamespace>
+    <RootNamespace>WebGPUExternalSurfaceDemo</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

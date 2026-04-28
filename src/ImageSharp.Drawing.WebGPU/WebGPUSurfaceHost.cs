@@ -22,12 +22,12 @@ internal enum WebGPUSurfaceHostKind
 }
 
 /// <summary>
-/// Describes the externally-owned native drawable that a <see cref="WebGPUHostedSurface{TPixel}"/> should attach to.
+/// Describes the externally-owned native drawable that a <see cref="WebGPUExternalSurface{TPixel}"/> should attach to.
 /// Use the factory method that matches the host toolkit or platform that owns the drawable surface.
 /// </summary>
 /// <remarks>
 /// Construct via the platform-specific factory methods. The caller retains ownership of the underlying handles;
-/// the hosted surface never releases them.
+/// the external surface never releases them.
 /// </remarks>
 public readonly struct WebGPUSurfaceHost
 {

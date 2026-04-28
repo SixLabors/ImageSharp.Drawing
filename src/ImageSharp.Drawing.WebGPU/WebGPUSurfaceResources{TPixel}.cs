@@ -20,7 +20,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// Callers hold the returned instance for the lifetime of the rendering surface and dispose it when the surface tears down.
 /// </para>
 /// <para>
-/// Shared by the owned-window and hosted-surface entry points. Both provide a native surface source while this class owns the WebGPU
+/// Shared by the owned-window and external-surface entry points. Both provide a native surface source while this class owns the WebGPU
 /// handles, surface creation, per-frame texture acquisition, and swapchain reconfiguration.
 /// </para>
 /// <para>

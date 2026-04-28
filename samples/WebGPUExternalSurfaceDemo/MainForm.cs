@@ -3,14 +3,14 @@
 
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
-using WebGPUHostedSurfaceDemo.Controls;
-using WebGPUHostedSurfaceDemo.Scenes;
+using WebGPUExternalSurfaceDemo.Controls;
+using WebGPUExternalSurfaceDemo.Scenes;
 
-namespace WebGPUHostedSurfaceDemo;
+namespace WebGPUExternalSurfaceDemo;
 
 /// <summary>
-/// Main window for the sample. A tab control switches between demo scenes, each hosted by its own
-/// <see cref="WebGPURenderControl"/> instance. This demonstrates that multiple independent hosted surfaces
+/// Main window for the sample. A tab control switches between demo scenes, each displayed in its own
+/// <see cref="WebGPURenderControl"/> instance. This demonstrates that multiple independent external surfaces
 /// can coexist in the same WinForms process without managing surfaces or swapchains in user code.
 /// </summary>
 internal sealed class MainForm : Form
@@ -25,7 +25,7 @@ internal sealed class MainForm : Form
 
     public MainForm()
     {
-        this.Text = "ImageSharp.Drawing WebGPU - Hosted Surface Demo";
+        this.Text = "ImageSharp.Drawing WebGPU - External Surface Demo";
         this.ClientSize = new Size(1280, 800);
         this.StartPosition = FormStartPosition.CenterScreen;
         this.BackColor = Color.FromArgb(11, 18, 32);
@@ -34,7 +34,7 @@ internal sealed class MainForm : Form
         this.tigerScene = new TigerViewerScene();
         this.applyScene = new ApplyReadbackScene();
 
-        // Each tab gets its own render control and hosted surface. This mirrors real UI applications where
+        // Each tab gets its own render control and external surface. This mirrors real UI applications where
         // separate controls or panels own their own native drawable areas.
         this.clockControl = new WebGPURenderControl { Dock = DockStyle.Fill };
         this.clockControl.PaintFrame += this.OnPaintClock;

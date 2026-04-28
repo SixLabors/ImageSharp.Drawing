@@ -8,10 +8,10 @@ using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.PixelFormats;
 using ImageSharpSize = SixLabors.ImageSharp.Size;
 
-namespace WebGPUHostedSurfaceDemo.Controls;
+namespace WebGPUExternalSurfaceDemo.Controls;
 
 /// <summary>
-/// A reusable WinForms control that embeds a <see cref="WebGPUHostedSurface{TPixel}"/> and drives a continuous
+/// A reusable WinForms control that embeds a <see cref="WebGPUExternalSurface{TPixel}"/> and drives a continuous
 /// render loop via <see cref="Application.Idle"/>. Callers hook <see cref="PaintFrame"/> with their scene logic;
 /// the control handles construction, resize, acquire/present, and teardown.
 /// </summary>
@@ -20,7 +20,7 @@ public sealed partial class WebGPURenderControl : Control
     private const int WM_MOVING = 0x0216;
     private const int WM_EXITSIZEMOVE = 0x0232;
 
-    private WebGPUHostedSurface<Bgra32>? surface;
+    private WebGPUExternalSurface<Bgra32>? surface;
     private Size framebufferSize;
     private bool idleHooked;
     private long lastTicks;
@@ -44,7 +44,7 @@ public sealed partial class WebGPURenderControl : Control
     }
 
     /// <summary>
-    /// Raised each frame once the hosted surface has acquired a drawable frame. The canvas dimensions match
+    /// Raised each frame once the external surface has acquired a drawable frame. The canvas dimensions match
     /// <see cref="FramebufferSize"/>.
     /// </summary>
     public event Action<DrawingCanvas<Bgra32>, TimeSpan>? PaintFrame;
@@ -59,7 +59,7 @@ public sealed partial class WebGPURenderControl : Control
     {
         base.OnHandleCreated(e);
 
-        // A hosted surface can only be created once the native HWND exists. The surface borrows the HWND;
+        // An external surface can only be created once the native HWND exists. The surface borrows the HWND;
         // WinForms still owns the control, handle lifetime, and layout.
         // WinForms ClientSize is the HWND client rectangle size; pass it through as the drawable framebuffer size.
         this.framebufferSize = this.ClientSize;
@@ -69,7 +69,7 @@ public sealed partial class WebGPURenderControl : Control
 
         // The module handle is required by the Win32 surface descriptor. It identifies the process module
         // that owns the window class backing this control.
-        this.surface = new WebGPUHostedSurface<Bgra32>(
+        this.surface = new WebGPUExternalSurface<Bgra32>(
             WebGPUSurfaceHost.Win32(
                 this.Handle,
                 Marshal.GetHINSTANCE(typeof(WebGPURenderControl).Module)),
