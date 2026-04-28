@@ -955,9 +955,11 @@ public static class Program
                 imageArea.Width / 2F,
                 imageArea.Height);
 
-            // Defaults are (levels: 10, brushSize: 15); a smaller brushSize gives tighter,
-            // more detailed strokes and more levels widens the colour palette.
-            canvas.Apply(afterRegion, ctx => ctx.OilPaint(levels: 15, brushSize: 5));
+            // Saturate(amount > 1) boosts colour intensity before OilPaint smears the pixels
+            // into painterly strokes; the saturated input gives the strokes more visible
+            // contrast. OilPaint defaults are (levels: 10, brushSize: 15); the smaller
+            // brushSize and slightly higher levels here produce tighter strokes.
+            canvas.Apply(afterRegion, ctx => ctx.Saturate(1.6F).OilPaint(levels: 15, brushSize: 5));
 
             // Divider line so the eye can lock onto the wipe boundary even on flat regions of
             // the photograph (sky, water) where the colour change alone would be subtle.
