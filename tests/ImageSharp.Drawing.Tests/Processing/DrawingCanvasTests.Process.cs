@@ -100,19 +100,19 @@ public partial class DrawingCanvasTests
     {
         Configuration configuration = Configuration.Default.Clone();
         using Image<Rgba32> target = new(configuration, 48, 36);
-        using DrawingCanvas canvas = target.CreateCanvas(new DrawingOptions());
-
         bool callbackInvoked = false;
         bool sameConfiguration = false;
 
-        canvas.Fill(Brushes.Solid(Color.CornflowerBlue));
-        canvas.Apply(new Rectangle(8, 6, 28, 20), ctx =>
+        target.Mutate(c => c.Paint(canvas =>
         {
-            callbackInvoked = true;
-            sameConfiguration = ReferenceEquals(configuration, ctx.Configuration);
-            ctx.GaussianBlur(2F);
-        });
-        canvas.Flush();
+            canvas.Fill(Brushes.Solid(Color.CornflowerBlue));
+            canvas.Apply(new Rectangle(8, 6, 28, 20), ctx =>
+            {
+                callbackInvoked = true;
+                sameConfiguration = ReferenceEquals(configuration, ctx.Configuration);
+                ctx.GaussianBlur(2F);
+            });
+        }));
 
         Assert.True(callbackInvoked);
         Assert.True(sameConfiguration);

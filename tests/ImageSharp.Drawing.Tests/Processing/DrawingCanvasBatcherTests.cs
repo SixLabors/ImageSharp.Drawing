@@ -22,7 +22,7 @@ public class DrawingCanvasBatcherTests
 
         IPath path = new RectangularPolygon(4, 6, 18, 12);
         DrawingOptions options = new();
-        using DrawingCanvas canvas = image.CreateCanvas(options);
+        using DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, options);
         Brush brushA = Brushes.Solid(Color.Red);
         Brush brushB = Brushes.Solid(Color.Blue);
 
@@ -47,7 +47,7 @@ public class DrawingCanvasBatcherTests
 
         IPath path = new RectangularPolygon(4, 6, 18, 12);
         DrawingOptions options = new();
-        using DrawingCanvas canvas = image.CreateCanvas(options);
+        using DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, options);
 
         canvas.Fill(Brushes.Solid(Color.Red), path);
         canvas.Fill(Brushes.Solid(Color.Blue), path);
@@ -71,7 +71,7 @@ public class DrawingCanvasBatcherTests
 
         IPath path = new RectangularPolygon(10, 10, 40, 40);
         DrawingOptions options = new();
-        using DrawingCanvas canvas = image.CreateCanvas(options);
+        using DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, options);
 
         for (int i = 0; i < 10; i++)
         {
@@ -107,7 +107,7 @@ public class DrawingCanvasBatcherTests
         string text = new('A', 200);
         Brush brush = Brushes.Solid(Color.Black);
 
-        using DrawingCanvas canvas = image.CreateCanvas(drawingOptions);
+        using DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, drawingOptions);
         canvas.DrawText(textOptions, text, brush, pen: null);
         canvas.Flush();
 
@@ -126,7 +126,7 @@ public class DrawingCanvasBatcherTests
         configuration.SetDrawingBackend(backend);
         using Image<Rgba32> image = new(configuration, 80, 80);
 
-        using DrawingCanvas canvas = image.CreateCanvas(new DrawingOptions());
+        using DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, new DrawingOptions());
         canvas.DrawLine(new SolidPen(Color.Red, 5F), new PointF(8, 12), new PointF(70, 64));
         canvas.Flush();
 
@@ -146,7 +146,7 @@ public class DrawingCanvasBatcherTests
         configuration.SetDrawingBackend(backend);
         using Image<Rgba32> image = new(configuration, 80, 80);
 
-        using DrawingCanvas canvas = image.CreateCanvas(new DrawingOptions());
+        using DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, new DrawingOptions());
         canvas.DrawLine(Pens.Dash(Color.Red, 5F), new PointF(8, 12), new PointF(70, 64));
         canvas.Flush();
 
@@ -173,7 +173,7 @@ public class DrawingCanvasBatcherTests
             }
         };
 
-        using DrawingCanvas canvas = image.CreateCanvas(new DrawingOptions());
+        using DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, new DrawingOptions());
         canvas.Draw(new SolidPen(options), new Path([new PointF(8, 40), new PointF(40, 8), new PointF(72, 40)]));
         canvas.Flush();
 

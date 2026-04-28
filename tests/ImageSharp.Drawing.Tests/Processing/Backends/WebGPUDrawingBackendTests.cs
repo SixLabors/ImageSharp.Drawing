@@ -619,36 +619,26 @@ public partial class WebGPUDrawingBackendTests
         string text = new('A', glyphCount);
         Brush drawBrush = Brushes.Solid(Color.HotPink);
         Brush clearBrush = Brushes.Solid(Color.White);
-        using Image<TPixel> defaultImage = provider.GetImage();
-        using (DrawingCanvas defaultClearCanvas = defaultImage.CreateCanvas(Configuration.Default, clearOptions))
+        void DrawAction(DrawingCanvas canvas)
         {
-            defaultClearCanvas.Fill(clearBrush);
-            defaultClearCanvas.Flush();
+            canvas.Fill(clearBrush);
+            canvas.Flush();
+            canvas.Save(drawingOptions);
+            canvas.DrawText(textOptions, text, drawBrush, null);
+            canvas.Restore();
         }
 
-        using (DrawingCanvas defaultDrawCanvas = defaultImage.CreateCanvas(Configuration.Default, drawingOptions))
-        {
-            defaultDrawCanvas.DrawText(textOptions, text, drawBrush, null);
-            defaultDrawCanvas.Flush();
-        }
+        using Image<TPixel> defaultImage = provider.GetImage();
+        defaultImage.Mutate(c => c.Paint(clearOptions, DrawAction));
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using WebGPURenderTarget<TPixel> renderTarget = new(defaultImage.Width, defaultImage.Height);
         Configuration nativeSurfaceConfiguration = Configuration.Default.Clone();
         nativeSurfaceConfiguration.SetDrawingBackend(nativeSurfaceBackend);
 
-        using (DrawingCanvas<TPixel> nativeSurfaceClearCanvas =
-               new(nativeSurfaceConfiguration, clearOptions, nativeSurfaceBackend, renderTarget.NativeFrame))
+        using (DrawingCanvas<TPixel> nativeSurfaceCanvas = new(nativeSurfaceConfiguration, clearOptions, nativeSurfaceBackend, renderTarget.NativeFrame))
         {
-            nativeSurfaceClearCanvas.Fill(clearBrush);
-            nativeSurfaceClearCanvas.Flush();
-        }
-
-        using (DrawingCanvas<TPixel> nativeSurfaceDrawCanvas =
-               new(nativeSurfaceConfiguration, drawingOptions, nativeSurfaceBackend, renderTarget.NativeFrame))
-        {
-            nativeSurfaceDrawCanvas.DrawText(textOptions, text, drawBrush, null);
-            nativeSurfaceDrawCanvas.Flush();
+            DrawAction(nativeSurfaceCanvas);
         }
 
         using Image<TPixel> nativeSurfaceImage = renderTarget.Readback();
@@ -657,13 +647,8 @@ public partial class WebGPUDrawingBackendTests
         AssertBackendPairReferenceOutputs(provider, "RepeatedGlyphs_AfterClear", defaultImage, nativeSurfaceImage);
     }
 
-    private static void RenderWithDefaultBackend<TPixel>(Image<TPixel> image, DrawingOptions options, Action<DrawingCanvas> drawAction)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        using DrawingCanvas canvas = image.CreateCanvas(Configuration.Default, options);
-        drawAction(canvas);
-        canvas.Flush();
-    }
+    private static void RenderWithDefaultBackend<TPixel>(Image<TPixel> image, DrawingOptions options, CanvasAction drawAction)
+        where TPixel : unmanaged, IPixel<TPixel> => image.Mutate(c => c.Paint(options, drawAction));
 
     private static IPath CreateLargeSceneDenseRectangleGridPath()
     {
@@ -1307,40 +1292,25 @@ public partial class WebGPUDrawingBackendTests
         Brush blueBrush = Brushes.Solid(Color.Blue);
         RectangularPolygon rect1 = new(20, 20, 120, 80);
         RectangularPolygon rect2 = new(160, 100, 120, 80);
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.Fill(redBrush, rect1);
+            canvas.Flush();
+            canvas.Fill(blueBrush, rect2);
+        }
 
-        // Default backend: two separate flushes.
         using Image<TPixel> defaultImage = provider.GetImage();
-        using (DrawingCanvas canvas1 = defaultImage.CreateCanvas(Configuration.Default, drawingOptions))
-        {
-            canvas1.Fill(redBrush, rect1);
-            canvas1.Flush();
-        }
+        defaultImage.Mutate(c => c.Paint(drawingOptions, DrawAction));
 
-        using (DrawingCanvas canvas2 = defaultImage.CreateCanvas(Configuration.Default, drawingOptions))
-        {
-            canvas2.Fill(blueBrush, rect2);
-            canvas2.Flush();
-        }
-
-        // Native surface: two separate flushes reusing same backend.
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using WebGPURenderTarget<TPixel> renderTarget = new(defaultImage.Width, defaultImage.Height);
         Configuration nativeConfig = Configuration.Default.Clone();
         nativeConfig.SetDrawingBackend(nativeSurfaceBackend);
 
-        using (DrawingCanvas<TPixel> canvas1 =
-               new(nativeConfig, drawingOptions, nativeSurfaceBackend, renderTarget.NativeFrame))
+        using (DrawingCanvas<TPixel> canvas = new(nativeConfig, drawingOptions, nativeSurfaceBackend, renderTarget.NativeFrame))
         {
-            canvas1.Clear(Brushes.Solid(Color.White));
-            canvas1.Fill(redBrush, rect1);
-            canvas1.Flush();
-        }
-
-        using (DrawingCanvas<TPixel> canvas2 =
-               new(nativeConfig, drawingOptions, nativeSurfaceBackend, renderTarget.NativeFrame))
-        {
-            canvas2.Fill(blueBrush, rect2);
-            canvas2.Flush();
+            DrawAction(canvas);
         }
 
         using Image<TPixel> nativeSurfaceImage = renderTarget.Readback();

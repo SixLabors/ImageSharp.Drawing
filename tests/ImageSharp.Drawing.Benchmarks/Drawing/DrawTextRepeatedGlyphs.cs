@@ -6,6 +6,7 @@ using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing;
 
@@ -68,9 +69,9 @@ public class DrawTextRepeatedGlyphs
     [Benchmark(Baseline = true, Description = "DrawingCanvas Default Backend")]
     public void DrawingCanvasDefaultBackend()
     {
-        using DrawingCanvas canvas = this.defaultImage.CreateCanvas(this.drawingOptions);
-        canvas.DrawText(this.textOptions, this.text, this.brush, null);
-        canvas.Flush();
+        this.defaultImage.Mutate(c => c.Paint(
+            this.drawingOptions,
+            canvas => canvas.DrawText(this.textOptions, this.text, this.brush, null)));
     }
 
     [Benchmark(Description = "DrawingCanvas WebGPU Backend (NativeSurface)")]
