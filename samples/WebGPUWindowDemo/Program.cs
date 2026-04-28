@@ -142,7 +142,7 @@ public static class Program
         /// <summary>
         /// Draws one frame into the acquired WebGPU window surface.
         /// </summary>
-        /// <param name="frame">The acquired frame that exposes the canvas and per-frame timing data.</param>
+        /// <param name="frame">The acquired frame that exposes the drawing canvas.</param>
         /// <remarks>
         /// The window loop disposes the frame after this callback returns, which flushes any queued canvas work,
         /// presents the swapchain texture, and releases the per-frame WebGPU handles.
@@ -150,6 +150,7 @@ public static class Program
         private void OnRender(WebGPUSurfaceFrame<Bgra32> frame)
         {
             DrawingCanvas<Bgra32> canvas = frame.Canvas;
+            Rectangle bounds = canvas.Bounds;
             canvas.Fill(Brushes.Solid(Color.FromPixel(new Bgra32(30, 30, 40, 255))));
 
             for (int i = 0; i < this.balls.Length; i++)
@@ -159,7 +160,7 @@ public static class Program
                 canvas.Fill(Brushes.Solid(ball.Color), ellipse);
             }
 
-            this.DrawScrollingText(canvas, frame.FramebufferSize.Width, frame.FramebufferSize.Height);
+            this.DrawScrollingText(canvas, bounds.Width, bounds.Height);
 
             this.frameCount++;
             TimeSpan elapsed = this.fpsWindow.Elapsed;

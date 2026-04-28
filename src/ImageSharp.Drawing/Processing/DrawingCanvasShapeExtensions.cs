@@ -33,7 +33,7 @@ public static class DrawingCanvasShapeExtensions
     public static void Fill(this IDrawingCanvas canvas, Brush brush)
     {
         Rectangle bounds = canvas.Bounds;
-        canvas.Fill(brush, new RectangularPolygon(bounds.X, bounds.Y, bounds.Width, bounds.Height));
+        canvas.Fill(brush, new RectangularPolygon(bounds));
     }
 
     /// <summary>
@@ -43,7 +43,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="brush">Brush used to shade destination pixels.</param>
     /// <param name="region">Region to fill in local coordinates.</param>
     public static void Fill(this IDrawingCanvas canvas, Brush brush, Rectangle region)
-        => canvas.Fill(brush, new RectangularPolygon(region.X, region.Y, region.Width, region.Height));
+        => canvas.Fill(brush, new RectangularPolygon(region));
 
     /// <summary>
     /// Clears the whole canvas using the given brush and clear-style composition options.
@@ -53,7 +53,7 @@ public static class DrawingCanvasShapeExtensions
     public static void Clear(this IDrawingCanvas canvas, Brush brush)
     {
         Rectangle bounds = canvas.Bounds;
-        canvas.Clear(brush, new RectangularPolygon(bounds.X, bounds.Y, bounds.Width, bounds.Height));
+        canvas.Clear(brush, new RectangularPolygon(bounds));
     }
 
     /// <summary>
@@ -63,7 +63,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="brush">Brush used to shade destination pixels during clear.</param>
     /// <param name="region">Region to clear in local coordinates.</param>
     public static void Clear(this IDrawingCanvas canvas, Brush brush, Rectangle region)
-        => canvas.Clear(brush, new RectangularPolygon(region.X, region.Y, region.Width, region.Height));
+        => canvas.Clear(brush, new RectangularPolygon(region));
 
     /// <summary>
     /// Fills all paths in a collection using the given brush.
@@ -208,7 +208,7 @@ public static class DrawingCanvasShapeExtensions
     /// <param name="pen">Pen used to generate the rectangle outline.</param>
     /// <param name="region">Rectangle region to stroke.</param>
     public static void Draw(this IDrawingCanvas canvas, Pen pen, Rectangle region)
-        => canvas.Draw(pen, new RectangularPolygon(region.X, region.Y, region.Width, region.Height));
+        => canvas.Draw(pen, new RectangularPolygon(region));
 
     /// <summary>
     /// Draws all paths in a collection using the provided pen.

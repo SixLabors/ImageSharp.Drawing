@@ -117,27 +117,14 @@ internal sealed class MainForm : Form
     }
 
     private void OnPaintClock(DrawingCanvas<Bgra32> canvas, TimeSpan delta)
-    {
-        Size s = this.clockControl.FramebufferSize;
-
-        // Scene coordinates match the drawable framebuffer, not the form's layout bounds.
-        this.clockScene.Paint(canvas, new SixLabors.ImageSharp.Size(s.Width, s.Height), delta);
-    }
+        => this.clockScene.Paint(canvas, delta);
 
     private void OnPaintTiger(DrawingCanvas<Bgra32> canvas, TimeSpan delta)
     {
-        Size s = this.tigerControl.FramebufferSize;
-
-        // Scene coordinates match the drawable framebuffer, not the form's layout bounds.
-        this.tigerScene.Paint(canvas, new SixLabors.ImageSharp.Size(s.Width, s.Height), delta);
+        this.tigerScene.Paint(canvas, delta);
         this.tigerStatusLabel.Text = this.tigerScene.StatusText;
     }
 
     private void OnPaintApply(DrawingCanvas<Bgra32> canvas, TimeSpan delta)
-    {
-        Size s = this.applyControl.FramebufferSize;
-
-        // Scene coordinates match the drawable framebuffer, not the form's layout bounds.
-        this.applyScene.Paint(canvas, new SixLabors.ImageSharp.Size(s.Width, s.Height), delta);
-    }
+        => this.applyScene.Paint(canvas, delta);
 }

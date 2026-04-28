@@ -71,8 +71,10 @@ internal sealed class TigerViewerScene : RenderScene
         }
     }
 
-    public override void Paint(DrawingCanvas<Bgra32> canvas, Size viewportSize, TimeSpan deltaTime)
+    public override void Paint(DrawingCanvas<Bgra32> canvas, TimeSpan deltaTime)
     {
+        Size viewportSize = canvas.Bounds.Size;
+
         if (this.needsInitialFit || viewportSize != this.lastViewportSize)
         {
             // The first frame and every resize recenter the artwork. User pan/zoom then operates from
@@ -83,9 +85,7 @@ internal sealed class TigerViewerScene : RenderScene
 
         this.lastViewportSize = viewportSize;
 
-        canvas.Fill(
-            Brushes.Solid(BackgroundColor),
-            new RectangularPolygon(0, 0, viewportSize.Width, viewportSize.Height));
+        canvas.Fill(Brushes.Solid(BackgroundColor), canvas.Bounds);
 
         SizeF screenCenter = viewportSize / 2f;
 

@@ -44,15 +44,9 @@ public sealed partial class WebGPURenderControl : Control
     }
 
     /// <summary>
-    /// Raised each frame once the external surface has acquired a drawable frame. The canvas dimensions match
-    /// <see cref="FramebufferSize"/>.
+    /// Raised each frame once the external surface has acquired a drawable frame.
     /// </summary>
     public event Action<DrawingCanvas<Bgra32>, TimeSpan>? PaintFrame;
-
-    /// <summary>
-    /// Gets the drawable framebuffer size in pixels.
-    /// </summary>
-    public Size FramebufferSize => this.framebufferSize;
 
     /// <inheritdoc />
     protected override void OnHandleCreated(EventArgs e)

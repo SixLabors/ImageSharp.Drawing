@@ -35,14 +35,11 @@ internal sealed class ApplyReadbackScene : RenderScene
 
     public override string DisplayName => "Apply";
 
-    public override void Paint(DrawingCanvas<Bgra32> canvas, Size viewportSize, TimeSpan deltaTime)
+    public override void Paint(DrawingCanvas<Bgra32> canvas, TimeSpan deltaTime)
     {
-        if (viewportSize.Width <= 0 || viewportSize.Height <= 0)
-        {
-            return;
-        }
+        Size viewportSize = canvas.Bounds.Size;
 
-        canvas.Fill(Brushes.Solid(BackgroundColor), new RectangularPolygon(0, 0, viewportSize.Width, viewportSize.Height));
+        canvas.Fill(Brushes.Solid(BackgroundColor), canvas.Bounds);
         DrawPattern(canvas, viewportSize);
 
         // Keep both regions tied to the pointer so every movement exercises readback from a different part
@@ -63,7 +60,7 @@ internal sealed class ApplyReadbackScene : RenderScene
         canvas.Apply(edgeRegion, ctx => ctx.DetectEdges());
         canvas.Apply(blurRegion, ctx => ctx.GaussianBlur(Math.Max(3F, Math.Min(viewportSize.Width, viewportSize.Height) / 120F)));
 
-        canvas.Draw(Pens.Solid(OutlineColor, 3), new RectangularPolygon(edgeRegion.X, edgeRegion.Y, edgeRegion.Width, edgeRegion.Height));
+        canvas.Draw(Pens.Solid(OutlineColor, 3), new RectangularPolygon(edgeRegion));
         canvas.Draw(Pens.Solid(OutlineColor, 3), blurRegion);
     }
 

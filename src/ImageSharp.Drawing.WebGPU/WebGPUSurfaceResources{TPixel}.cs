@@ -266,9 +266,8 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
     /// <param name="presentMode">The present mode applied when the surface needs to be reconfigured in response to a
     /// <c>Timeout</c>/<c>Outdated</c>/<c>Lost</c> acquire status.</param>
     /// <param name="framebufferSize">The current framebuffer size in pixels. A zero-area value causes the method to
-    /// return <see langword="false"/> without touching the surface. Otherwise this size is used both for the returned
-    /// frame's <see cref="WebGPUSurfaceFrame{TPixel}.FramebufferSize"/> and for any in-place surface
-    /// reconfiguration triggered by a non-success acquire status.</param>
+    /// return <see langword="false"/> without touching the surface. Otherwise this size is used for the returned
+    /// frame canvas and for any in-place surface reconfiguration triggered by a non-success acquire status.</param>
     /// <param name="options">The drawing options that seed the canvas on the returned frame.</param>
     /// <param name="frame">Receives the acquired frame on success.</param>
     /// <returns><see langword="true"/> when a frame is available; <see langword="false"/> when no drawable frame is
@@ -361,7 +360,6 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
                 textureHandle,
                 textureViewHandle,
                 canvas,
-                framebufferSize,
                 onDisposed: () => this.frameInFlight = false);
 
             return true;

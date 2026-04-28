@@ -289,7 +289,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
 
     /// <inheritdoc />
     public void Apply(Rectangle region, Action<IImageProcessingContext> operation)
-        => this.Apply(new RectangularPolygon(region.X, region.Y, region.Width, region.Height), operation);
+        => this.Apply(new RectangularPolygon(region), operation);
 
     /// <inheritdoc />
     public void Apply(PathBuilder pathBuilder, Action<IImageProcessingContext> operation)

@@ -52,12 +52,12 @@ internal sealed class ClockScene : RenderScene
 
     public override string DisplayName => "Clock";
 
-    public override void Paint(DrawingCanvas<Bgra32> canvas, Size viewportSize, TimeSpan deltaTime)
+    public override void Paint(DrawingCanvas<Bgra32> canvas, TimeSpan deltaTime)
     {
+        Size viewportSize = canvas.Bounds.Size;
+
         // Background clear.
-        canvas.Fill(
-            Brushes.Solid(BackgroundColor),
-            new RectangularPolygon(0, 0, viewportSize.Width, viewportSize.Height));
+        canvas.Fill(Brushes.Solid(BackgroundColor), canvas.Bounds);
 
         // The scene is rebuilt from the framebuffer size each frame. That keeps resize handling simple
         // and demonstrates drawing directly in surface pixel coordinates.

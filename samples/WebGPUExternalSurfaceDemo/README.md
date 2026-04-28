@@ -75,7 +75,7 @@ this.framebufferSize = this.ClientSize;
 this.surface.Resize(new ImageSharpSize(this.framebufferSize.Width, this.framebufferSize.Height));
 ```
 
-The sample stores that size as `FramebufferSize` so scene code can draw in the same pixel coordinate space as the acquired frame.
+The acquired frame exposes the same pixel coordinate space through `frame.Canvas.Bounds`.
 
 ### Frame Acquisition
 
@@ -114,7 +114,6 @@ The scenes are deliberately ordinary canvas code:
 Each scene receives:
 
 - `DrawingCanvas<Bgra32>` for the acquired frame
-- the current framebuffer size
 - elapsed time since the previous frame
 
 ## Files

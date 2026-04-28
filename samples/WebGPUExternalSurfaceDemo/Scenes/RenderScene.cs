@@ -22,9 +22,8 @@ internal abstract class RenderScene
     /// Draws the scene into <paramref name="canvas"/> for the current frame.
     /// </summary>
     /// <param name="canvas">The per-frame drawing canvas bound to the external surface's swap-chain texture.</param>
-    /// <param name="viewportSize">The framebuffer size in pixels.</param>
     /// <param name="deltaTime">Elapsed time since the previous frame. Scenes that render from absolute state can ignore it.</param>
-    public abstract void Paint(DrawingCanvas<Bgra32> canvas, Size viewportSize, TimeSpan deltaTime);
+    public abstract void Paint(DrawingCanvas<Bgra32> canvas, TimeSpan deltaTime);
 
     /// <summary>
     /// Handles a mouse-button press. Default implementation is a no-op.

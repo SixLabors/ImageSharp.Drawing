@@ -29,7 +29,6 @@ public sealed unsafe class WebGPUSurfaceFrame<TPixel> : IDisposable
         WebGPUTextureHandle textureHandle,
         WebGPUTextureViewHandle textureViewHandle,
         DrawingCanvas<TPixel> canvas,
-        Size framebufferSize,
         Action? onDisposed = null)
     {
         this.api = api;
@@ -37,7 +36,6 @@ public sealed unsafe class WebGPUSurfaceFrame<TPixel> : IDisposable
         this.textureHandle = textureHandle;
         this.textureViewHandle = textureViewHandle;
         this.Canvas = canvas;
-        this.FramebufferSize = framebufferSize;
         this.onDisposed = onDisposed;
     }
 
@@ -45,11 +43,6 @@ public sealed unsafe class WebGPUSurfaceFrame<TPixel> : IDisposable
     /// Gets the drawing canvas for the acquired frame.
     /// </summary>
     public DrawingCanvas<TPixel> Canvas { get; }
-
-    /// <summary>
-    /// Gets the framebuffer size at frame acquisition time.
-    /// </summary>
-    public Size FramebufferSize { get; }
 
     /// <summary>
     /// Flushes pending canvas work and presents the frame on screen.
