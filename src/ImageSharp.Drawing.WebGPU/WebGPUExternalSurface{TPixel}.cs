@@ -16,7 +16,7 @@ public sealed class WebGPUExternalSurface<TPixel> : IDisposable
     where TPixel : unmanaged, IPixel<TPixel>
 {
     private readonly WebGPUSurfaceResources<TPixel> resources;
-    private WebGPUPresentMode presentMode;
+    private readonly WebGPUPresentMode presentMode;
     private Size framebufferSize;
     private bool isDisposed;
 
@@ -62,7 +62,6 @@ public sealed class WebGPUExternalSurface<TPixel> : IDisposable
         Guard.MustBeGreaterThan(framebufferSize.Width, 0, nameof(framebufferSize));
         Guard.MustBeGreaterThan(framebufferSize.Height, 0, nameof(framebufferSize));
 
-        this.Configuration = configuration;
         this.presentMode = options.PresentMode;
         this.framebufferSize = framebufferSize;
         this.resources = WebGPUSurfaceResources<TPixel>.Create(
@@ -70,35 +69,6 @@ public sealed class WebGPUExternalSurface<TPixel> : IDisposable
             new SilkNativeSurfaceAdapter(host),
             this.presentMode,
             this.framebufferSize);
-        this.Format = this.resources.Format;
-    }
-
-    /// <summary>
-    /// Gets the configuration provided when the external surface was created.
-    /// </summary>
-    public Configuration Configuration { get; }
-
-    /// <summary>
-    /// Gets the swapchain texture format.
-    /// </summary>
-    public WebGPUTextureFormatId Format { get; }
-
-    /// <summary>
-    /// Gets the current framebuffer size in pixels.
-    /// </summary>
-    public Size FramebufferSize => this.framebufferSize;
-
-    /// <summary>
-    /// Gets or sets the swapchain present mode.
-    /// </summary>
-    public WebGPUPresentMode PresentMode
-    {
-        get => this.presentMode;
-        set
-        {
-            this.presentMode = value;
-            this.resources.ConfigureSurface(this.presentMode, this.framebufferSize);
-        }
     }
 
     /// <summary>
