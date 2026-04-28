@@ -64,7 +64,7 @@ public partial class DrawingCanvasTests
 
     [Theory]
     [WithBlankImage(220, 160, PixelTypes.Rgba32)]
-    public void Process_NoCpuFrame_WithReadbackCapability_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
+    public void Process_NoCpuFrame_UsesBackendReadback_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> target = provider.GetImage();
@@ -74,7 +74,7 @@ public partial class DrawingCanvasTests
         MemoryCanvasFrame<TPixel> proxyFrame = new(new Buffer2DRegion<TPixel>(target.Frames.RootFrame.PixelBuffer));
         MirroringCpuReadbackTestBackend<TPixel> mirroringBackend = new(proxyFrame, target);
 
-        NativeSurface nativeSurface = new NoCapabilityNativeSurface();
+        NativeSurface nativeSurface = new UnsupportedNativeSurface();
         Configuration configuration = provider.Configuration.Clone();
         configuration.SetDrawingBackend(mirroringBackend);
 
@@ -158,14 +158,10 @@ public partial class DrawingCanvasTests
         return pathBuilder.Build();
     }
 
-    private sealed class NoCapabilityNativeSurface : NativeSurface
+    private sealed class UnsupportedNativeSurface : NativeSurface
     {
-        public override bool TryGetCapability<TCapability>(out TCapability capability)
-            where TCapability : class
-        {
-            capability = null!;
-            return false;
-        }
+        public override TNativeTarget GetNativeTarget<TNativeTarget>()
+            => throw new NotSupportedException();
     }
 
     /// <summary>

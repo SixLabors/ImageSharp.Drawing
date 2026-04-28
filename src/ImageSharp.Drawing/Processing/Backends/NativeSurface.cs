@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Diagnostics.CodeAnalysis;
-
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -18,11 +16,10 @@ public abstract class NativeSurface
     }
 
     /// <summary>
-    /// Attempts to get a backend capability by type.
+    /// Gets a backend-specific native target by type.
     /// </summary>
-    /// <typeparam name="TCapability">Capability type.</typeparam>
-    /// <param name="capability">Capability instance when available.</param>
-    /// <returns><see langword="true"/> when found.</returns>
-    public abstract bool TryGetCapability<TCapability>([NotNullWhen(true)] out TCapability? capability)
-        where TCapability : class;
+    /// <typeparam name="TNativeTarget">Native target type.</typeparam>
+    /// <returns>The native target.</returns>
+    public abstract TNativeTarget GetNativeTarget<TNativeTarget>()
+        where TNativeTarget : class;
 }

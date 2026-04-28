@@ -33,19 +33,23 @@ public sealed unsafe partial class WebGPUDrawingBackend
         Guard.NotNull(destination.Buffer, nameof(destination));
 
         // Readback is only available for native WebGPU targets with valid interop handles.
-        if (!target.TryGetNativeSurface(out NativeSurface? nativeSurface) ||
-            !nativeSurface.TryGetCapability(out WebGPUSurfaceCapability? capability) ||
-            capability.DeviceHandle.IsInvalid ||
-            capability.QueueHandle.IsInvalid ||
-            capability.TargetTextureHandle.IsInvalid)
+        if (!target.TryGetNativeSurface(out NativeSurface? nativeSurface))
         {
-            throw new NotSupportedException("The target does not expose a native WebGPU surface with valid device, queue, and texture handles for readback.");
+            throw new NotSupportedException("The target does not expose a native surface for readback.");
+        }
+
+        WebGPUNativeTarget nativeTarget = nativeSurface.GetNativeTarget<WebGPUNativeTarget>();
+        if (nativeTarget.DeviceHandle.IsInvalid ||
+            nativeTarget.QueueHandle.IsInvalid ||
+            nativeTarget.TargetTextureHandle.IsInvalid)
+        {
+            throw new NotSupportedException("The target does not expose valid WebGPU device, queue, and texture handles for readback.");
         }
 
         if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId expectedFormat, out FeatureName requiredFeature) ||
-            expectedFormat != capability.TargetFormat)
+            expectedFormat != nativeTarget.TargetFormat)
         {
-            throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' cannot be read back from target format '{capability.TargetFormat}'.");
+            throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' cannot be read back from target format '{nativeTarget.TargetFormat}'.");
         }
 
         // Convert canvas-local source coordinates to absolute native-surface coordinates.
@@ -55,7 +59,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             sourceRectangle.Width,
             sourceRectangle.Height);
 
-        Rectangle surfaceBounds = new(0, 0, capability.Width, capability.Height);
+        Rectangle surfaceBounds = new(0, 0, nativeTarget.Width, nativeTarget.Height);
         Rectangle source = Rectangle.Intersect(surfaceBounds, absoluteSource);
 
         if (source.Width <= 0 || source.Height <= 0)
@@ -65,14 +69,14 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
         WebGPU api = WebGPURuntime.GetApi();
         Wgpu wgpuExtension = WebGPURuntime.GetWgpuExtension();
-        using WebGPUHandle.HandleReference deviceReference = capability.DeviceHandle.AcquireReference();
-        using WebGPUHandle.HandleReference queueReference = capability.QueueHandle.AcquireReference();
-        using WebGPUHandle.HandleReference textureReference = capability.TargetTextureHandle.AcquireReference();
+        using WebGPUHandle.HandleReference deviceReference = nativeTarget.DeviceHandle.AcquireReference();
+        using WebGPUHandle.HandleReference queueReference = nativeTarget.QueueHandle.AcquireReference();
+        using WebGPUHandle.HandleReference textureReference = nativeTarget.TargetTextureHandle.AcquireReference();
 
         Device* device = (Device*)deviceReference.Handle;
 
         if (requiredFeature != FeatureName.Undefined
-            && !WebGPURuntime.GetOrCreateDeviceState(api, capability.DeviceHandle).HasFeature(requiredFeature))
+            && !WebGPURuntime.GetOrCreateDeviceState(api, nativeTarget.DeviceHandle).HasFeature(requiredFeature))
         {
             throw new NotSupportedException($"The target device does not support WebGPU feature '{requiredFeature}' required to read back pixel type '{typeof(TPixel).Name}'.");
         }

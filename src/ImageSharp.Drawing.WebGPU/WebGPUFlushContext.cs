@@ -172,17 +172,25 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         MemoryAllocator memoryAllocator)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        WebGPUSurfaceCapability? nativeCapability = TryGetNativeSurfaceCapability(frame, expectedTextureFormat);
-        if (nativeCapability is null)
+        if (!frame.TryGetNativeSurface(out NativeSurface? nativeSurface))
         {
             return null;
         }
 
+        WebGPUNativeTarget nativeTarget = nativeSurface.GetNativeTarget<WebGPUNativeTarget>();
         WebGPU api = WebGPURuntime.GetApi();
-        TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeCapability.TargetFormat);
+        TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeTarget.TargetFormat);
         Rectangle bounds = frame.Bounds;
-        Rectangle nativeBounds = new(0, 0, nativeCapability.Width, nativeCapability.Height);
-        WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(api, nativeCapability.DeviceHandle);
+        Rectangle nativeBounds = new(0, 0, nativeTarget.Width, nativeTarget.Height);
+        WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(api, nativeTarget.DeviceHandle);
+
+        if (nativeTarget.DeviceHandle.IsInvalid ||
+            nativeTarget.QueueHandle.IsInvalid ||
+            nativeTarget.TargetTextureViewHandle.IsInvalid ||
+            textureFormat != expectedTextureFormat)
+        {
+            return null;
+        }
 
         if (requiredFeature != FeatureName.Undefined && !deviceState.HasFeature(requiredFeature))
         {
@@ -200,10 +208,10 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         return new WebGPUFlushContext(
             api,
             WebGPURuntime.GetWgpuExtension(),
-            nativeCapability.DeviceHandle,
-            nativeCapability.QueueHandle,
-            nativeCapability.TargetTextureHandle,
-            nativeCapability.TargetTextureViewHandle,
+            nativeTarget.DeviceHandle,
+            nativeTarget.QueueHandle,
+            nativeTarget.TargetTextureHandle,
+            nativeTarget.TargetTextureViewHandle,
             in bounds,
             textureFormat,
             memoryAllocator,
@@ -484,42 +492,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.cachedSourceTextureViews.Clear();
 
         this.disposed = true;
-    }
-
-    /// <summary>
-    /// Tries to obtain a native WebGPU surface capability from the canvas frame.
-    /// </summary>
-    /// <typeparam name="TPixel">The pixel type of the canvas frame.</typeparam>
-    /// <param name="frame">The frame being flushed.</param>
-    /// <param name="expectedTextureFormat">The texture format required by the current WebGPU path.</param>
-    /// <returns>The compatible surface capability, or <see langword="null"/> when the frame cannot expose one.</returns>
-    private static WebGPUSurfaceCapability? TryGetNativeSurfaceCapability<TPixel>(ICanvasFrame<TPixel> frame, TextureFormat expectedTextureFormat)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        if (!frame.TryGetNativeSurface(out NativeSurface? nativeSurface) ||
-            !nativeSurface.TryGetCapability(out WebGPUSurfaceCapability? capability))
-        {
-            return null;
-        }
-
-        if (capability.DeviceHandle.IsInvalid ||
-            capability.QueueHandle.IsInvalid ||
-            capability.TargetTextureViewHandle.IsInvalid ||
-            WebGPUTextureFormatMapper.ToSilk(capability.TargetFormat) != expectedTextureFormat)
-        {
-            return null;
-        }
-
-        Rectangle bounds = frame.Bounds;
-        if (bounds.X < 0 ||
-            bounds.Y < 0 ||
-            bounds.Right > capability.Width ||
-            bounds.Bottom > capability.Height)
-        {
-            return null;
-        }
-
-        return capability;
     }
 
     /// <summary>

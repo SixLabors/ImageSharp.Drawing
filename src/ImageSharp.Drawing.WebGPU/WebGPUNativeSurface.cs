@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Diagnostics.CodeAnalysis;
-
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -10,26 +8,24 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </summary>
 internal sealed class WebGPUNativeSurface : NativeSurface
 {
-    private readonly WebGPUSurfaceCapability capability;
+    private readonly WebGPUNativeTarget target;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUNativeSurface"/> class.
     /// </summary>
-    /// <param name="capability">The WebGPU capability exposed by this surface.</param>
-    internal WebGPUNativeSurface(WebGPUSurfaceCapability capability)
-        => this.capability = capability;
+    /// <param name="target">The WebGPU target exposed by this surface.</param>
+    internal WebGPUNativeSurface(WebGPUNativeTarget target)
+        => this.target = target;
 
     /// <inheritdoc />
-    public override bool TryGetCapability<TCapability>([NotNullWhen(true)] out TCapability? capability)
-        where TCapability : class
+    public override TNativeTarget GetNativeTarget<TNativeTarget>()
+        where TNativeTarget : class
     {
-        if (this.capability is TCapability typed)
+        if (this.target is TNativeTarget typed)
         {
-            capability = typed;
-            return true;
+            return typed;
         }
 
-        capability = null;
-        return false;
+        throw new NotSupportedException($"The native surface does not expose a native target of type '{typeof(TNativeTarget).Name}'.");
     }
 }

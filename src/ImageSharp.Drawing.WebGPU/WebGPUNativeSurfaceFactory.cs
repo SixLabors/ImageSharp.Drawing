@@ -69,7 +69,7 @@ public static class WebGPUNativeSurfaceFactory
         Guard.MustBeGreaterThan(height, 0, nameof(height));
         ValidatePixelCompatibility<TPixel>(targetFormat);
 
-        return new WebGPUNativeSurface(new WebGPUSurfaceCapability(
+        return new WebGPUNativeSurface(new WebGPUNativeTarget(
             deviceHandle,
             queueHandle,
             targetTextureHandle,
