@@ -43,8 +43,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     private WebGPUSceneDispatch.BindingLimitBuffer lastChunkingBindingFailure;
     private bool isDisposed;
 
-    private static readonly Dictionary<Type, CompositePixelRegistration> CompositePixelHandlers = CreateCompositePixelHandlers();
-
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUDrawingBackend"/> class.
     /// </summary>
