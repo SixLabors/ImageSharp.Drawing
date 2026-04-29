@@ -184,7 +184,6 @@ public sealed partial class WebGPUDrawingBackend
         /// <param name="pixelType">The registered pixel CLR type.</param>
         /// <param name="textureFormat">The matching WebGPU texture format.</param>
         /// <param name="sampleType">The sampled texture type for this format.</param>
-        /// <param name="pixelSizeInBytes">The unmanaged pixel size in bytes.</param>
         /// <param name="requiredFeature">Optional device feature required for storage binding support.</param>
         /// <param name="shaderTraits">Shader-facing read/write traits for this format.</param>
         public CompositePixelRegistration(
