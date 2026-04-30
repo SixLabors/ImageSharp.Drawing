@@ -36,8 +36,10 @@ public class FillTiger
 
     private Image<Rgba32> image;
     private List<(IPath Path, Processing.SolidBrush Fill, SolidPen Stroke)> isElements;
+    private DrawingBackendScene imageSharpRetainedScene;
 
-    private WebGPURenderTarget<Rgba32> webGpuTarget;
+    private WebGPURenderTarget webGpuTarget;
+    private DrawingBackendScene webGpuRetainedScene;
 
     [Params(1000, 100)]
     public int Dimensions { get; set; }
@@ -66,8 +68,10 @@ public class FillTiger
 
         this.image = new Image<Rgba32>(width, height);
         this.isElements = SvgBenchmarkHelper.BuildImageSharpElements(elements, scale);
+        this.imageSharpRetainedScene = CreateImageSharpRetainedScene(this.image, this.isElements);
 
-        this.webGpuTarget = new WebGPURenderTarget<Rgba32>(width, height);
+        this.webGpuTarget = new WebGPURenderTarget(width, height);
+        this.webGpuRetainedScene = CreateWebGpuRetainedScene(this.webGpuTarget, this.isElements);
     }
 
     [IterationSetup]
@@ -99,8 +103,10 @@ public class FillTiger
         this.sdGraphics.Dispose();
         this.sdBitmap.Dispose();
 
+        this.imageSharpRetainedScene.Dispose();
         this.image.Dispose();
 
+        this.webGpuRetainedScene.Dispose();
         this.webGpuTarget.Dispose();
     }
 
@@ -141,62 +147,34 @@ public class FillTiger
 
     [Benchmark]
     public void ImageSharp()
-        => this.image.Mutate(c => c.Paint(canvas =>
-        {
-            foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
-            {
-                if (fill is not null)
-                {
-                    canvas.Fill(fill, path);
-                }
+        => this.image.Mutate(c => c.Paint(canvas => DrawImageSharpElements(canvas, this.isElements)));
 
-                if (stroke is not null)
-                {
-                    canvas.Draw(stroke, path);
-                }
-            }
-        }));
+    [Benchmark]
+    public void ImageSharpRetainedScene()
+        => this.image.Mutate(c => c.Paint(canvas => canvas.RenderScene(this.imageSharpRetainedScene)));
 
     [Benchmark]
     public void ImageSharp_SingleThreaded()
     {
         Configuration configuration = this.image.Configuration.Clone();
         configuration.MaxDegreeOfParallelism = 1;
-        this.image.Mutate(configuration, c => c.Paint(canvas =>
-        {
-            foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
-            {
-                if (fill is not null)
-                {
-                    canvas.Fill(fill, path);
-                }
-
-                if (stroke is not null)
-                {
-                    canvas.Draw(stroke, path);
-                }
-            }
-        }));
+        this.image.Mutate(configuration, c => c.Paint(canvas => DrawImageSharpElements(canvas, this.isElements)));
     }
 
     [Benchmark]
     public void ImageSharpWebGPU()
     {
         using DrawingCanvas canvas = this.webGpuTarget.CreateCanvas();
-        foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
-        {
-            if (fill is not null)
-            {
-                canvas.Fill(fill, path);
-            }
-
-            if (stroke is not null)
-            {
-                canvas.Draw(stroke, path);
-            }
-        }
+        DrawImageSharpElements(canvas, this.isElements);
 
         canvas.Flush();
+    }
+
+    [Benchmark]
+    public void ImageSharpWebGPURetainedScene()
+    {
+        using DrawingCanvas canvas = this.webGpuTarget.CreateCanvas();
+        canvas.RenderScene(this.webGpuRetainedScene);
     }
 
     public static void VerifyOutput(int dimensions = 1000)
@@ -209,6 +187,11 @@ public class FillTiger
         bench.ImageSharp();
         bench.ImageSharpWebGPU();
 
+        FillTiger retainedBench = new() { Dimensions = dimensions };
+        retainedBench.Setup();
+        retainedBench.ImageSharpRetainedScene();
+        retainedBench.ImageSharpWebGPURetainedScene();
+
         PrintWebGpuDiagnostics(bench);
 
         SvgBenchmarkHelper.VerifyOutput(
@@ -220,6 +203,16 @@ public class FillTiger
             bench.image,
             bench.webGpuTarget);
 
+        SvgBenchmarkHelper.VerifyOutput(
+            $"tiger-{dimensions}-retained",
+            bench.Dimensions,
+            bench.Dimensions,
+            bench.skSurface,
+            bench.sdBitmap,
+            retainedBench.image,
+            retainedBench.webGpuTarget);
+
+        retainedBench.Cleanup();
         bench.Cleanup();
     }
 
@@ -261,7 +254,7 @@ public class FillTiger
             }
         }));
 
-        WebGPURenderTarget<Rgba32> webGpuTarget = new(width, height);
+        WebGPURenderTarget webGpuTarget = new(width, height);
         using (DrawingCanvas canvas = webGpuTarget.CreateCanvas())
         {
             foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in baked)
@@ -295,7 +288,7 @@ public class FillTiger
         Directory.CreateDirectory(dir);
         image.Save(System.IO.Path.Combine(dir, tag + "-imagesharp.png"));
 
-        using Image<Rgba32> gpuImage = webGpuTarget.Readback();
+        using Image<Rgba32> gpuImage = webGpuTarget.Readback<Rgba32>();
         gpuImage.SaveAsPng(System.IO.Path.Combine(dir, tag + "-webgpu.png"));
 
         Console.WriteLine($"Output saved to: {dir}");
@@ -391,7 +384,7 @@ public class FillTiger
             canvas.Restore();
         }));
 
-        WebGPURenderTarget<Rgba32> webGpuTarget = new(width, height);
+        WebGPURenderTarget webGpuTarget = new(width, height);
         using (DrawingCanvas canvas = webGpuTarget.CreateCanvas())
         {
             canvas.Save(new DrawingOptions { Transform = transform4 });
@@ -447,12 +440,50 @@ public class FillTiger
 
     private static void PrintWebGpuDiagnostics(FillTiger bench)
     {
-        WebGPUDrawingBackend backend = bench.webGpuTarget.Graphics.Backend;
+        WebGPUDrawingBackend backend = bench.webGpuTarget.Backend;
 
         Console.WriteLine();
         Console.WriteLine($"=== WebGPU flush diagnostics (dim={bench.Dimensions}) ===");
         Console.WriteLine($"  UsedChunking : {backend.DiagnosticLastFlushUsedChunking} (binding failure: {backend.DiagnosticLastChunkingBindingFailure})");
         Console.WriteLine("=== end WebGPU diagnostics ===");
         Console.WriteLine();
+    }
+
+    private static DrawingBackendScene CreateImageSharpRetainedScene(
+        Image<Rgba32> image,
+        List<(IPath Path, Processing.SolidBrush Fill, SolidPen Stroke)> elements)
+    {
+        using DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(image.Configuration, new DrawingOptions());
+        DrawImageSharpElements(canvas, elements);
+
+        return canvas.CreateScene();
+    }
+
+    private static DrawingBackendScene CreateWebGpuRetainedScene(
+        WebGPURenderTarget target,
+        List<(IPath Path, Processing.SolidBrush Fill, SolidPen Stroke)> elements)
+    {
+        using DrawingCanvas canvas = target.CreateCanvas();
+        DrawImageSharpElements(canvas, elements);
+
+        return canvas.CreateScene();
+    }
+
+    private static void DrawImageSharpElements(
+        DrawingCanvas canvas,
+        List<(IPath Path, Processing.SolidBrush Fill, SolidPen Stroke)> elements)
+    {
+        foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in elements)
+        {
+            if (fill is not null)
+            {
+                canvas.Fill(fill, path);
+            }
+
+            if (stroke is not null)
+            {
+                canvas.Draw(stroke, path);
+            }
+        }
     }
 }

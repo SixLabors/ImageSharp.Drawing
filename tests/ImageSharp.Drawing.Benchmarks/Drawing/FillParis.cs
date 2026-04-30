@@ -40,8 +40,10 @@ public class FillParis
     private Image<Rgba32> image;
     private List<SvgBenchmarkHelper.SvgElement> parsedElements;
     private List<(IPath Path, Processing.SolidBrush Fill, SolidPen Stroke)> isElements;
+    private DrawingBackendScene imageSharpRetainedScene;
 
-    private WebGPURenderTarget<Rgba32> webGpuTarget;
+    private WebGPURenderTarget webGpuTarget;
+    private DrawingBackendScene webGpuRetainedScene;
 
     [GlobalSetup]
     public void Setup()
@@ -63,8 +65,10 @@ public class FillParis
 
         this.image = new Image<Rgba32>(Width, Height);
         this.isElements = SvgBenchmarkHelper.BuildImageSharpElements(this.parsedElements, Scale);
+        this.imageSharpRetainedScene = CreateImageSharpRetainedScene(this.image, this.isElements);
 
-        this.webGpuTarget = new WebGPURenderTarget<Rgba32>(Width, Height);
+        this.webGpuTarget = new WebGPURenderTarget(Width, Height);
+        this.webGpuRetainedScene = CreateWebGpuRetainedScene(this.webGpuTarget, this.isElements);
     }
 
     [IterationSetup]
@@ -96,8 +100,10 @@ public class FillParis
         this.sdGraphics.Dispose();
         this.sdBitmap.Dispose();
 
+        this.imageSharpRetainedScene.Dispose();
         this.image.Dispose();
 
+        this.webGpuRetainedScene.Dispose();
         this.webGpuTarget.Dispose();
     }
 
@@ -138,40 +144,26 @@ public class FillParis
 
     [Benchmark]
     public void ImageSharp()
-        => this.image.Mutate(c => c.Paint(canvas =>
-        {
-            foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
-            {
-                if (fill is not null)
-                {
-                    canvas.Fill(fill, path);
-                }
+        => this.image.Mutate(c => c.Paint(canvas => DrawImageSharpElements(canvas, this.isElements)));
 
-                if (stroke is not null)
-                {
-                    canvas.Draw(stroke, path);
-                }
-            }
-        }));
+    [Benchmark]
+    public void ImageSharpRetainedScene()
+        => this.image.Mutate(c => c.Paint(canvas => canvas.RenderScene(this.imageSharpRetainedScene)));
 
     [Benchmark]
     public void ImageSharpWebGPU()
     {
         using DrawingCanvas canvas = this.webGpuTarget.CreateCanvas();
-        foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
-        {
-            if (fill is not null)
-            {
-                canvas.Fill(fill, path);
-            }
-
-            if (stroke is not null)
-            {
-                canvas.Draw(stroke, path);
-            }
-        }
+        DrawImageSharpElements(canvas, this.isElements);
 
         canvas.Flush();
+    }
+
+    [Benchmark]
+    public void ImageSharpWebGPURetainedScene()
+    {
+        using DrawingCanvas canvas = this.webGpuTarget.CreateCanvas();
+        canvas.RenderScene(this.webGpuRetainedScene);
     }
 
     internal static void VerifyOutput()
@@ -184,6 +176,11 @@ public class FillParis
         bench.ImageSharp();
         bench.ImageSharpWebGPU();
 
+        FillParis retainedBench = new();
+        retainedBench.Setup();
+        retainedBench.ImageSharpRetainedScene();
+        retainedBench.ImageSharpWebGPURetainedScene();
+
         SvgBenchmarkHelper.VerifyOutput(
             "paris",
             Width,
@@ -193,6 +190,16 @@ public class FillParis
             bench.image,
             bench.webGpuTarget);
 
+        SvgBenchmarkHelper.VerifyOutput(
+            "paris-retained",
+            Width,
+            Height,
+            bench.skSurface,
+            bench.sdBitmap,
+            retainedBench.image,
+            retainedBench.webGpuTarget);
+
+        retainedBench.Cleanup();
         bench.Cleanup();
     }
 
@@ -218,5 +225,43 @@ public class FillParis
         }
 
         bench.Cleanup();
+    }
+
+    private static DrawingBackendScene CreateImageSharpRetainedScene(
+        Image<Rgba32> image,
+        List<(IPath Path, Processing.SolidBrush Fill, SolidPen Stroke)> elements)
+    {
+        using DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(image.Configuration, new DrawingOptions());
+        DrawImageSharpElements(canvas, elements);
+
+        return canvas.CreateScene();
+    }
+
+    private static DrawingBackendScene CreateWebGpuRetainedScene(
+        WebGPURenderTarget target,
+        List<(IPath Path, Processing.SolidBrush Fill, SolidPen Stroke)> elements)
+    {
+        using DrawingCanvas canvas = target.CreateCanvas();
+        DrawImageSharpElements(canvas, elements);
+
+        return canvas.CreateScene();
+    }
+
+    private static void DrawImageSharpElements(
+        DrawingCanvas canvas,
+        List<(IPath Path, Processing.SolidBrush Fill, SolidPen Stroke)> elements)
+    {
+        foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in elements)
+        {
+            if (fill is not null)
+            {
+                canvas.Fill(fill, path);
+            }
+
+            if (stroke is not null)
+            {
+                canvas.Draw(stroke, path);
+            }
+        }
     }
 }
