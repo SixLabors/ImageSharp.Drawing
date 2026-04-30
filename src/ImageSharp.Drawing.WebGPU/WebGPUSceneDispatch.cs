@@ -188,7 +188,7 @@ internal static class WebGPUSceneDispatch
         bindingLimitFailure = BindingLimitFailure.None;
         WebGPUEncodedScene? encodedScene = null;
 
-        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId, out FeatureName requiredFeature))
+        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormat formatId, out FeatureName requiredFeature))
         {
             error = $"The staged WebGPU scene pipeline does not support pixel format '{typeof(TPixel).Name}'.";
             return false;

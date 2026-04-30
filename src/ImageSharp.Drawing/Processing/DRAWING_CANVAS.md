@@ -109,7 +109,7 @@ There are two backend-selection paths in the architecture:
 The ordinary CPU entry point is `Paint(...)` on `IImageProcessingContext`, which routes into the typed
 implementation internally.
 
-That explicit-backend path matters for the WebGPU helpers. `WebGPUWindow<TPixel>`, `WebGPURenderTarget<TPixel>`, and `WebGPUDeviceContext<TPixel>` create canvases that point directly at their owned `WebGPUDrawingBackend` instance instead of storing that backend on the caller's `Configuration`.
+That explicit-backend path matters for the WebGPU helpers. `WebGPUWindow`, `WebGPURenderTarget`, and `WebGPUDeviceContext` create canvases that point directly at their owned `WebGPUDrawingBackend` instance instead of storing that backend on the caller's `Configuration`.
 
 ### Frame
 
@@ -337,9 +337,9 @@ It benefits from the same canvas-level decisions:
 
 The WebGPU public helpers reach this point in a target-first way:
 
-- `WebGPUWindow<TPixel>` acquires a presentable native target per frame
-- `WebGPURenderTarget<TPixel>` owns an offscreen native target and can pair it with CPU memory through hybrid frames
-- `WebGPUDeviceContext<TPixel>` wraps shared or caller-owned device state and creates native-only or hybrid frames and canvases over native textures
+- `WebGPUWindow` acquires a presentable native target per frame
+- `WebGPURenderTarget` owns an offscreen native target and can pair it with CPU memory through hybrid frames
+- `WebGPUDeviceContext` wraps shared or caller-owned device state and creates native-only or hybrid frames and canvases over native textures
 
 Those helpers all create typed canvas instances with an explicit `WebGPUDrawingBackend`, so GPU execution stays attached to the WebGPU object that owns the native target and backend lifetime while callers work through `DrawingCanvas`.
 
@@ -377,7 +377,7 @@ If you want to move from the architecture into the code, this is the best order.
 6. `DefaultDrawingBackend.cs`
 7. `FlushScene.cs`
 8. `WebGPUEnvironment.cs`
-9. `WebGPUWindow{TPixel}.cs`, `WebGPURenderTarget{TPixel}.cs`, and `WebGPUDeviceContext{TPixel}.cs`
+9. `WebGPUWindow.cs`, `WebGPURenderTarget.cs`, and `WebGPUDeviceContext.cs`
 10. `WebGPUDrawingBackend` and its scene/dispatch types
 
 That path follows the real runtime flow:

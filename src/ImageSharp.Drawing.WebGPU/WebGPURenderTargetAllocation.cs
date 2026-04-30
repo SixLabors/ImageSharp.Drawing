@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using Silk.NET.WebGPU;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -12,28 +11,26 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 internal static unsafe class WebGPURenderTargetAllocation
 {
     /// <summary>
-    /// Allocates a WebGPU render target for the specified pixel type.
+    /// Allocates a WebGPU render target for the specified texture format.
     /// </summary>
-    /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="api">The WebGPU API instance used to allocate native resources.</param>
     /// <param name="deviceHandle">The wrapped <c>WGPUDevice*</c> handle.</param>
     /// <param name="queueHandle">The wrapped <c>WGPUQueue*</c> handle.</param>
+    /// <param name="format">The target texture format.</param>
     /// <param name="width">The texture width in pixels.</param>
     /// <param name="height">The texture height in pixels.</param>
     /// <param name="textureHandle">Receives the allocated wrapped <c>WGPUTexture*</c> handle.</param>
     /// <param name="textureViewHandle">Receives the allocated wrapped <c>WGPUTextureView*</c> handle.</param>
-    /// <param name="formatId">Receives the allocated texture format identifier.</param>
     /// <returns>The native surface wrapping the allocated texture.</returns>
-    internal static NativeSurface CreateRenderTarget<TPixel>(
+    internal static NativeSurface CreateRenderTarget(
         WebGPU api,
         WebGPUDeviceHandle deviceHandle,
         WebGPUQueueHandle queueHandle,
+        WebGPUTextureFormat format,
         int width,
         int height,
         out WebGPUTextureHandle textureHandle,
-        out WebGPUTextureViewHandle textureViewHandle,
-        out WebGPUTextureFormatId formatId)
-        where TPixel : unmanaged, IPixel<TPixel>
+        out WebGPUTextureViewHandle textureViewHandle)
     {
         if (deviceHandle.IsInvalid)
         {
@@ -48,9 +45,9 @@ internal static unsafe class WebGPURenderTargetAllocation
         Guard.MustBeGreaterThan(width, 0, nameof(width));
         Guard.MustBeGreaterThan(height, 0, nameof(height));
 
-        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out formatId, out FeatureName requiredFeature))
+        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormatInfo(format, out TextureFormat textureFormat, out FeatureName requiredFeature))
         {
-            throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' is not supported by the WebGPU backend.");
+            throw new NotSupportedException($"Texture format '{format}' is not supported by the WebGPU backend.");
         }
 
         using WebGPUHandle.HandleReference deviceReference = deviceHandle.AcquireReference();
@@ -59,10 +56,9 @@ internal static unsafe class WebGPURenderTargetAllocation
         if (requiredFeature != FeatureName.Undefined &&
             !WebGPURuntime.GetOrCreateDeviceState(api, deviceHandle).HasFeature(requiredFeature))
         {
-            throw new NotSupportedException($"The WebGPU device does not support required feature '{requiredFeature}' for pixel type '{typeof(TPixel).Name}'.");
+            throw new NotSupportedException($"The WebGPU device does not support required feature '{requiredFeature}' for texture format '{format}'.");
         }
 
-        TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(formatId);
         TextureDescriptor textureDescriptor = new()
         {
             Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst | TextureUsage.TextureBinding | TextureUsage.StorageBinding,
@@ -103,12 +99,12 @@ internal static unsafe class WebGPURenderTargetAllocation
         {
             createdTextureHandle = new WebGPUTextureHandle(api, (nint)texture, ownsHandle: true);
             createdTextureViewHandle = new WebGPUTextureViewHandle(api, (nint)textureView, ownsHandle: true);
-            NativeSurface surface = WebGPUNativeSurfaceFactory.Create<TPixel>(
+            NativeSurface surface = WebGPUNativeSurfaceFactory.Create(
                 deviceHandle,
                 queueHandle,
                 createdTextureHandle,
                 createdTextureViewHandle,
-                formatId,
+                format,
                 width,
                 height);
             textureHandle = createdTextureHandle;

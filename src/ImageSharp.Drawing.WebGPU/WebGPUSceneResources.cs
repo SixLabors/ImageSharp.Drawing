@@ -33,7 +33,7 @@ internal static unsafe class WebGPUSceneResources
     {
         resources = default;
 
-        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId expectedFormatId))
+        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormat expectedFormatId))
         {
             error = $"The staged WebGPU scene pipeline does not support pixel format '{typeof(TPixel).Name}'.";
             return false;

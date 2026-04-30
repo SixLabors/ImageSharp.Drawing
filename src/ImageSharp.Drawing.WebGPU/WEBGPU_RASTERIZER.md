@@ -14,7 +14,7 @@ Together, these types turn one prepared flush into a staged GPU scene, schedule 
 
 This document starts after two earlier boundaries have already been crossed:
 
-- public WebGPU setup has already selected or created a native target through `WebGPUWindow<TPixel>`, `WebGPURenderTarget<TPixel>`, `WebGPUDeviceContext<TPixel>`, or `WebGPUNativeSurfaceFactory`
+- public WebGPU setup has already selected or created a native target through `WebGPUWindow`, `WebGPUExternalSurface`, `WebGPURenderTarget`, or `WebGPUNativeSurfaceFactory`
 - `WebGPUDrawingBackend` has already decided that the flush should stay on the GPU path
 
 Support probing through `WebGPUEnvironment` also sits outside this document. The rasterizer describes execution of one staged scene, not environment detection or object construction.

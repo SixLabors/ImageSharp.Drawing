@@ -4,7 +4,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Silk.NET.Maths;
 using Silk.NET.Windowing;
-using SixLabors.ImageSharp.PixelFormats;
 using NativeWindowBorder = Silk.NET.Windowing.WindowBorder;
 using NativeWindowState = Silk.NET.Windowing.WindowState;
 
@@ -14,25 +13,21 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// A self-contained WebGPU-backed window that owns the platform window, the WebGPU device and queue, the surface
 /// and swap chain, and the per-frame texture acquire/present cycle, exposing a <see cref="DrawingCanvas"/>
 /// for each frame. Use <see cref="Run(Action{DrawingCanvas})"/> to let the window drive rendering, or
-/// <see cref="TryAcquireFrame(out WebGPUSurfaceFrame{TPixel}?)"/> to drive the frame loop yourself.
+/// <see cref="TryAcquireFrame(out WebGPUSurfaceFrame?)"/> to drive the frame loop yourself.
 /// </summary>
-/// <typeparam name="TPixel">The canvas pixel format.</typeparam>
 /// <remarks>
 /// Use this type when ImageSharp.Drawing owns the application's window. To render into a window owned by a host
-/// application or UI framework, wrap the host's device and queue with <see cref="WebGPUDeviceContext{TPixel}"/>
-/// and pass the host's per-frame swap-chain texture to
-/// <see cref="WebGPUDeviceContext{TPixel}.CreateCanvas(DrawingOptions, nint, nint, WebGPUTextureFormatId, int, int)"/> instead.
+/// application or UI framework, use <see cref="WebGPUExternalSurface"/>.
 /// </remarks>
-public sealed class WebGPUWindow<TPixel> : IDisposable
-    where TPixel : unmanaged, IPixel<TPixel>
+public sealed class WebGPUWindow : IDisposable
 {
     private readonly IWindow window;
-    private readonly WebGPUSurfaceResources<TPixel> resources;
+    private readonly WebGPUSurfaceResources resources;
     private bool isDisposed;
     private WebGPUPresentMode presentMode;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUWindow{TPixel}"/> class.
+    /// Initializes a new instance of the <see cref="WebGPUWindow"/> class.
     /// </summary>
     public WebGPUWindow()
         : this(Configuration.Default, new WebGPUWindowOptions())
@@ -40,7 +35,7 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUWindow{TPixel}"/> class.
+    /// Initializes a new instance of the <see cref="WebGPUWindow"/> class.
     /// </summary>
     /// <param name="options">The window creation options.</param>
     public WebGPUWindow(WebGPUWindowOptions options)
@@ -49,28 +44,24 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUWindow{TPixel}"/> class.
+    /// Initializes a new instance of the <see cref="WebGPUWindow"/> class.
     /// </summary>
     /// <param name="configuration">The configuration instance to bind to the created backend.</param>
     /// <param name="options">The window creation options.</param>
     public WebGPUWindow(Configuration configuration, WebGPUWindowOptions options)
     {
-        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId expectedFormat))
-        {
-            throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' is not supported by the WebGPU backend.");
-        }
-
         this.window = Window.Create(CreateSilkOptions(options));
         this.Configuration = configuration;
-        this.Format = expectedFormat;
+        this.Format = options.Format;
         this.presentMode = options.PresentMode;
 
         try
         {
             this.window.Initialize();
-            this.resources = WebGPUSurfaceResources<TPixel>.Create(
+            this.resources = WebGPUSurfaceResources.Create(
                 configuration,
                 this.window,
+                this.Format,
                 this.presentMode,
                 ToSize(this.window.FramebufferSize));
         }
@@ -275,7 +266,7 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     /// <summary>
     /// Gets the swapchain texture format.
     /// </summary>
-    public WebGPUTextureFormatId Format { get; }
+    public WebGPUTextureFormat Format { get; }
 
     /// <summary>
     /// Tries to acquire the next drawable frame using default drawing options.
@@ -287,7 +278,7 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     /// <remarks>
     /// Use this overload when the default drawing options are sufficient.
     /// </remarks>
-    public bool TryAcquireFrame([NotNullWhen(true)] out WebGPUSurfaceFrame<TPixel>? frame)
+    public bool TryAcquireFrame([NotNullWhen(true)] out WebGPUSurfaceFrame? frame)
         => this.TryAcquireFrameCore(new DrawingOptions(), out frame);
 
     /// <summary>
@@ -304,14 +295,14 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     /// surface was lost, outdated, timed out, has a zero-sized framebuffer, or the window recovered from device loss.
     /// Dispose the returned frame when you are done with it to present it and release its per-frame resources.
     /// </remarks>
-    public bool TryAcquireFrame(DrawingOptions options, [NotNullWhen(true)] out WebGPUSurfaceFrame<TPixel>? frame)
+    public bool TryAcquireFrame(DrawingOptions options, [NotNullWhen(true)] out WebGPUSurfaceFrame? frame)
         => this.TryAcquireFrameCore(options, out frame);
 
     /// <summary>
     /// Runs the window's event loop and renders one WebGPU frame per render callback.
     /// </summary>
     /// <param name="render">The per-frame render callback.</param>
-    public void Run(Action<WebGPUSurfaceFrame<TPixel>> render)
+    public void Run(Action<WebGPUSurfaceFrame> render)
         => this.Run(new DrawingOptions(), render);
 
     /// <summary>
@@ -319,7 +310,7 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     /// </summary>
     /// <param name="options">The drawing options applied to each acquired frame.</param>
     /// <param name="render">The per-frame render callback.</param>
-    public void Run(DrawingOptions options, Action<WebGPUSurfaceFrame<TPixel>> render)
+    public void Run(DrawingOptions options, Action<WebGPUSurfaceFrame> render)
     {
         Guard.NotNull(render, nameof(render));
         this.Run(options, (frame, _) => render(frame));
@@ -329,7 +320,7 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     /// Runs the window's event loop and renders one WebGPU frame per render callback.
     /// </summary>
     /// <param name="render">The per-frame render callback. The second argument is elapsed time since the previous render callback.</param>
-    public void Run(Action<WebGPUSurfaceFrame<TPixel>, TimeSpan> render)
+    public void Run(Action<WebGPUSurfaceFrame, TimeSpan> render)
         => this.Run(new DrawingOptions(), render);
 
     /// <summary>
@@ -337,14 +328,14 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
     /// </summary>
     /// <param name="options">The drawing options applied to each acquired frame.</param>
     /// <param name="render">The per-frame render callback. The second argument is elapsed time since the previous render callback.</param>
-    public void Run(DrawingOptions options, Action<WebGPUSurfaceFrame<TPixel>, TimeSpan> render)
+    public void Run(DrawingOptions options, Action<WebGPUSurfaceFrame, TimeSpan> render)
     {
         Guard.NotNull(render, nameof(render));
         this.ThrowIfDisposed();
 
         void OnRender(double deltaTime)
         {
-            if (!this.TryAcquireFrameCore(options, out WebGPUSurfaceFrame<TPixel>? frame))
+            if (!this.TryAcquireFrameCore(options, out WebGPUSurfaceFrame? frame))
             {
                 return;
             }
@@ -491,7 +482,7 @@ public sealed class WebGPUWindow<TPixel> : IDisposable
 
     private bool TryAcquireFrameCore(
         DrawingOptions options,
-        [NotNullWhen(true)] out WebGPUSurfaceFrame<TPixel>? frame)
+        [NotNullWhen(true)] out WebGPUSurfaceFrame? frame)
     {
         this.ThrowIfDisposed();
         return this.resources.TryAcquireFrame(

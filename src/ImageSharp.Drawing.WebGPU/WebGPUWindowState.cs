@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Describes the startup or current state of a <see cref="WebGPUWindow{TPixel}"/>.
+/// Describes the startup or current state of a <see cref="WebGPUWindow"/>.
 /// </summary>
 public enum WebGPUWindowState
 {

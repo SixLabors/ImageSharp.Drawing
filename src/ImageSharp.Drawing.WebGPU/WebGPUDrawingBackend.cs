@@ -80,7 +80,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     {
         this.ThrowIfDisposed();
 
-        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId, out FeatureName requiredFeature))
+        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormat formatId, out FeatureName requiredFeature))
         {
             throw new NotSupportedException($"The WebGPU backend does not support pixel format '{typeof(TPixel).Name}'.");
         }
@@ -128,7 +128,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             throw new InvalidOperationException("The retained scene is not a WebGPU drawing backend scene.");
         }
 
-        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId, out FeatureName requiredFeature))
+        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormat formatId, out FeatureName requiredFeature))
         {
             throw new NotSupportedException($"The WebGPU backend does not support pixel format '{typeof(TPixel).Name}'.");
         }
@@ -261,7 +261,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// <returns><see langword="true"/> when the target can accept a WebGPU scene.</returns>
     private static bool TryGetSceneTarget<TPixel>(
         ICanvasFrame<TPixel> target,
-        WebGPUTextureFormatId expectedFormat,
+        WebGPUTextureFormat expectedFormat,
         FeatureName requiredFeature,
         out TextureFormat textureFormat,
         out Rectangle targetBounds)

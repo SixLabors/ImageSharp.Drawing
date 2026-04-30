@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Describes the window border around a <see cref="WebGPUWindow{TPixel}"/>.
+/// Describes the window border around a <see cref="WebGPUWindow"/>.
 /// </summary>
 public enum WebGPUWindowBorder
 {

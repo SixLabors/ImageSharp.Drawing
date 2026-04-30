@@ -46,7 +46,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             throw new NotSupportedException("The target does not expose valid WebGPU device, queue, and texture handles for readback.");
         }
 
-        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId expectedFormat, out FeatureName requiredFeature) ||
+        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormat expectedFormat, out FeatureName requiredFeature) ||
             expectedFormat != nativeTarget.TargetFormat)
         {
             throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' cannot be read back from target format '{nativeTarget.TargetFormat}'.");

@@ -9,43 +9,72 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
 /// An offscreen WebGPU render target.
-/// Use this type when you want to render to a GPU-backed target and optionally read the result back with
-/// <see cref="Readback"/> or <see cref="ReadbackInto(Image{TPixel})"/>.
 /// </summary>
-/// <typeparam name="TPixel">The canvas pixel format.</typeparam>
 /// <remarks>
-/// The constructors on this type allocate a target on the shared process WebGPU device. To allocate offscreen
-/// targets against an externally-owned device (for example, a host UI framework's WebGPU device), call
-/// <see cref="WebGPUDeviceContext{TPixel}.CreateRenderTarget(int, int)"/> instead.
+/// The constructors on this type allocate a target on the shared process WebGPU device.
 /// </remarks>
-public sealed class WebGPURenderTarget<TPixel> : IDisposable
-    where TPixel : unmanaged, IPixel<TPixel>
+public sealed class WebGPURenderTarget : IDisposable
 {
     private readonly bool ownsGraphics;
     private bool isDisposed;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPURenderTarget{TPixel}"/> class using the shared process-level device.
+    /// Initializes a new instance of the <see cref="WebGPURenderTarget"/> class using the shared process-level device and default RGBA8 format.
     /// </summary>
     /// <param name="width">The target width in pixels.</param>
     /// <param name="height">The target height in pixels.</param>
     public WebGPURenderTarget(int width, int height)
-        : this(Configuration.Default, width, height)
+        : this(Configuration.Default, WebGPUTextureFormat.Rgba8Unorm, width, height)
     {
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPURenderTarget{TPixel}"/> class using the shared process-level device.
+    /// Initializes a new instance of the <see cref="WebGPURenderTarget"/> class using the shared process-level device.
+    /// </summary>
+    /// <param name="format">The target texture format.</param>
+    /// <param name="width">The target width in pixels.</param>
+    /// <param name="height">The target height in pixels.</param>
+    public WebGPURenderTarget(
+        WebGPUTextureFormat format,
+        int width,
+        int height)
+        : this(Configuration.Default, format, width, height)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPURenderTarget"/> class using the shared process-level device and default RGBA8 format.
     /// </summary>
     /// <param name="configuration">The configuration instance to bind to the created backend.</param>
     /// <param name="width">The target width in pixels.</param>
     /// <param name="height">The target height in pixels.</param>
     public WebGPURenderTarget(Configuration configuration, int width, int height)
-        : this(new WebGPUDeviceContext<TPixel>(configuration), ownsGraphics: true, width, height)
+        : this(configuration, WebGPUTextureFormat.Rgba8Unorm, width, height)
     {
     }
 
-    private WebGPURenderTarget(WebGPUDeviceContext<TPixel> graphics, bool ownsGraphics, int width, int height)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPURenderTarget"/> class using the shared process-level device.
+    /// </summary>
+    /// <param name="configuration">The configuration instance to bind to the created backend.</param>
+    /// <param name="format">The target texture format.</param>
+    /// <param name="width">The target width in pixels.</param>
+    /// <param name="height">The target height in pixels.</param>
+    public WebGPURenderTarget(
+        Configuration configuration,
+        WebGPUTextureFormat format,
+        int width,
+        int height)
+        : this(new WebGPUDeviceContext(configuration), ownsGraphics: true, format, width, height)
+    {
+    }
+
+    private WebGPURenderTarget(
+        WebGPUDeviceContext graphics,
+        bool ownsGraphics,
+        WebGPUTextureFormat format,
+        int width,
+        int height)
     {
         this.Graphics = graphics;
         this.ownsGraphics = ownsGraphics;
@@ -55,22 +84,21 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
             graphics.ThrowIfDisposed();
 
             WebGPU api = WebGPURuntime.GetApi();
-            NativeSurface surface = WebGPURenderTargetAllocation.CreateRenderTarget<TPixel>(
+            NativeSurface surface = WebGPURenderTargetAllocation.CreateRenderTarget(
                 api,
                 graphics.DeviceHandle,
                 graphics.QueueHandle,
+                format,
                 width,
                 height,
                 out WebGPUTextureHandle textureHandle,
-                out WebGPUTextureViewHandle textureViewHandle,
-                out WebGPUTextureFormatId format);
+                out WebGPUTextureViewHandle textureViewHandle);
 
             this.TextureHandle = textureHandle;
             this.TextureViewHandle = textureViewHandle;
             this.Surface = surface;
             this.Format = format;
             this.Bounds = new Rectangle(0, 0, width, height);
-            this.NativeFrame = new NativeCanvasFrame<TPixel>(this.Bounds, surface);
         }
         catch
         {
@@ -84,21 +112,20 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     }
 
     /// <summary>
+    /// Gets the WebGPU drawing backend used by this target.
+    /// </summary>
+    internal WebGPUDrawingBackend Backend => this.Graphics.Backend;
+
+    /// <summary>
     /// Gets the graphics device context used by this target.
     /// </summary>
-    public WebGPUDeviceContext<TPixel> Graphics { get; }
+    private WebGPUDeviceContext Graphics { get; }
 
     /// <summary>
     /// Gets the native surface backing this render target.
-    /// Most callers should use <see cref="CreateCanvas()"/> or <see cref="Readback"/> instead.
+    /// Most callers should use <see cref="CreateCanvas()"/> or <see cref="Readback{TPixel}"/> instead.
     /// </summary>
     public NativeSurface Surface { get; }
-
-    /// <summary>
-    /// Gets the frame over this render target.
-    /// Most callers should use <see cref="CreateCanvas()"/> instead.
-    /// </summary>
-    public NativeCanvasFrame<TPixel> NativeFrame { get; }
 
     /// <summary>
     /// Gets the target width in pixels.
@@ -116,9 +143,9 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     public Rectangle Bounds { get; }
 
     /// <summary>
-    /// Gets the allocated texture format identifier.
+    /// Gets the allocated texture format.
     /// </summary>
-    public WebGPUTextureFormatId Format { get; }
+    public WebGPUTextureFormat Format { get; }
 
     /// <summary>
     /// Gets the owned wrapped texture handle behind this render target.
@@ -129,17 +156,6 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     /// Gets the owned wrapped texture-view handle bound when this render target is used as a native surface.
     /// </summary>
     internal WebGPUTextureViewHandle TextureViewHandle { get; }
-
-    /// <summary>
-    /// Creates a frame over this render target.
-    /// </summary>
-    /// <returns>The frame over this render target.</returns>
-    public NativeCanvasFrame<TPixel> CreateFrame()
-    {
-        this.ThrowIfDisposed();
-        this.Graphics.ThrowIfDisposed();
-        return this.NativeFrame;
-    }
 
     /// <summary>
     /// Creates a drawing canvas over this render target.
@@ -157,14 +173,23 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     {
         this.ThrowIfDisposed();
         this.Graphics.ThrowIfDisposed();
-        return new DrawingCanvas<TPixel>(this.Graphics.Configuration, options, this.Graphics.Backend, this.NativeFrame);
+
+        return WebGPUCanvasFactory.CreateCanvas(
+            this.Graphics.Configuration,
+            options,
+            this.Graphics.Backend,
+            this.Bounds,
+            this.Surface,
+            this.Format);
     }
 
     /// <summary>
     /// Reads the current GPU texture contents back into a new CPU image.
     /// </summary>
+    /// <typeparam name="TPixel">The destination image pixel format.</typeparam>
     /// <returns>The readback image.</returns>
-    public Image<TPixel> Readback()
+    public Image<TPixel> Readback<TPixel>()
+        where TPixel : unmanaged, IPixel<TPixel>
     {
         this.ThrowIfDisposed();
         this.Graphics.ThrowIfDisposed();
@@ -185,8 +210,10 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     /// <summary>
     /// Reads the current GPU texture contents back into an existing CPU image.
     /// </summary>
+    /// <typeparam name="TPixel">The destination image pixel format.</typeparam>
     /// <param name="destination">The destination image that receives the readback pixels.</param>
-    public void ReadbackInto(Image<TPixel> destination)
+    public void ReadbackInto<TPixel>(Image<TPixel> destination)
+        where TPixel : unmanaged, IPixel<TPixel>
     {
         Guard.NotNull(destination, nameof(destination));
         this.ThrowIfDisposed();
@@ -199,9 +226,13 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
                 nameof(destination));
         }
 
+        NativeCanvasFrame<TPixel> frame = WebGPUCanvasFactory.CreateFrame<TPixel>(this.Bounds, this.Surface);
+
+        // ReadRegion owns the pixel-format check because it is the point where
+        // typed CPU pixels are copied from the native WebGPU texture.
         this.Graphics.Backend.ReadRegion(
             this.Graphics.Configuration,
-            this.NativeFrame,
+            frame,
             new Rectangle(0, 0, this.Width, this.Height),
             new Buffer2DRegion<TPixel>(destination.Frames.RootFrame.PixelBuffer));
     }
@@ -228,14 +259,14 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Allocates an owned render target for the specified generic context and size.
+    /// Allocates an owned render target for the specified context, format, and size.
     /// </summary>
-    /// <param name="graphics">The creating graphics context.</param>
-    /// <param name="width">The target width in pixels.</param>
-    /// <param name="height">The target height in pixels.</param>
-    /// <returns>The created render target.</returns>
-    internal static WebGPURenderTarget<TPixel> CreateFromContext(WebGPUDeviceContext<TPixel> graphics, int width, int height)
-        => new(graphics, ownsGraphics: false, width, height);
+    internal static WebGPURenderTarget CreateFromContext(
+        WebGPUDeviceContext graphics,
+        WebGPUTextureFormat format,
+        int width,
+        int height)
+        => new(graphics, ownsGraphics: false, format, width, height);
 
     private void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);

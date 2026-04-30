@@ -77,7 +77,7 @@ public sealed partial class WebGPUDrawingBackend
     /// <see langword="true"/> when the pixel type has a registered GPU format mapping; otherwise <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static bool TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId)
+    internal static bool TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormat formatId)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         if (!TryFind(typeof(TPixel), out CompositePixelRegistration r))
@@ -104,7 +104,7 @@ public sealed partial class WebGPUDrawingBackend
     /// <see langword="true"/> when the pixel type has a registered GPU format mapping; otherwise <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static bool TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId, out FeatureName requiredFeature)
+    internal static bool TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormat formatId, out FeatureName requiredFeature)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         if (!TryFind(typeof(TPixel), out CompositePixelRegistration r))
@@ -115,6 +115,30 @@ public sealed partial class WebGPUDrawingBackend
         }
 
         formatId = WebGPUTextureFormatMapper.FromSilk(r.TextureFormat);
+        requiredFeature = r.RequiredFeature;
+        return true;
+    }
+
+    /// <summary>
+    /// Resolves native format information for one public WebGPU texture format.
+    /// </summary>
+    /// <param name="format">The public WebGPU texture format.</param>
+    /// <param name="textureFormat">Receives the native texture format on success.</param>
+    /// <param name="requiredFeature">Receives the device feature required for storage binding.</param>
+    /// <returns><see langword="true"/> when the format is supported by the drawing backend.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static bool TryGetCompositeTextureFormatInfo(
+        WebGPUTextureFormat format,
+        out TextureFormat textureFormat,
+        out FeatureName requiredFeature)
+    {
+        textureFormat = WebGPUTextureFormatMapper.ToSilk(format);
+        if (!TryFind(textureFormat, out CompositePixelRegistration r))
+        {
+            requiredFeature = FeatureName.Undefined;
+            return false;
+        }
+
         requiredFeature = r.RequiredFeature;
         return true;
     }

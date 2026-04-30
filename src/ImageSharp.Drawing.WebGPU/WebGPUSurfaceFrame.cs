@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using Silk.NET.WebGPU;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -10,9 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// A single acquired drawable frame returned by a WebGPU surface.
 /// Use the <see cref="Canvas"/> to draw the frame contents, then dispose the frame to show it on screen.
 /// </summary>
-/// <typeparam name="TPixel">The canvas pixel format.</typeparam>
-public sealed unsafe class WebGPUSurfaceFrame<TPixel> : IDisposable
-    where TPixel : unmanaged, IPixel<TPixel>
+public sealed unsafe class WebGPUSurfaceFrame : IDisposable
 {
     private readonly WebGPU api;
     private WebGPUHandle.HandleReference surfaceReference;

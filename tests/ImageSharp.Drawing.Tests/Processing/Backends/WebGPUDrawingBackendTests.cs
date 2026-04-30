@@ -494,25 +494,35 @@ public partial class WebGPUDrawingBackendTests
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawSecondFrame);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
-        using WebGPURenderTarget<TPixel> renderTarget = new(defaultImage.Width, defaultImage.Height);
+        using WebGPURenderTarget renderTarget = new(defaultImage.Width, defaultImage.Height);
         Configuration nativeSurfaceConfiguration = Configuration.Default.Clone();
         nativeSurfaceConfiguration.SetDrawingBackend(nativeSurfaceBackend);
 
-        using (DrawingCanvas<TPixel> firstCanvas =
-               new(nativeSurfaceConfiguration, drawingOptions, nativeSurfaceBackend, renderTarget.NativeFrame))
+        using (DrawingCanvas firstCanvas = WebGPUCanvasFactory.CreateCanvas(
+                   nativeSurfaceConfiguration,
+                   drawingOptions,
+                   nativeSurfaceBackend,
+                   renderTarget.Bounds,
+                   renderTarget.Surface,
+                   renderTarget.Format))
         {
             DrawFirstFrame(firstCanvas);
             firstCanvas.Flush();
         }
 
-        using (DrawingCanvas<TPixel> secondCanvas =
-               new(nativeSurfaceConfiguration, drawingOptions, nativeSurfaceBackend, renderTarget.NativeFrame))
+        using (DrawingCanvas secondCanvas = WebGPUCanvasFactory.CreateCanvas(
+                   nativeSurfaceConfiguration,
+                   drawingOptions,
+                   nativeSurfaceBackend,
+                   renderTarget.Bounds,
+                   renderTarget.Surface,
+                   renderTarget.Format))
         {
             DrawSecondFrame(secondCanvas);
             secondCanvas.Flush();
         }
 
-        using Image<TPixel> nativeSurfaceImage = renderTarget.Readback();
+        using Image<TPixel> nativeSurfaceImage = renderTarget.Readback<TPixel>();
         DebugSaveBackendPair(provider, "Fill_RepeatedFrames", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
     }
@@ -632,16 +642,22 @@ public partial class WebGPUDrawingBackendTests
         defaultImage.Mutate(c => c.Paint(clearOptions, DrawAction));
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
-        using WebGPURenderTarget<TPixel> renderTarget = new(defaultImage.Width, defaultImage.Height);
+        using WebGPURenderTarget renderTarget = new(defaultImage.Width, defaultImage.Height);
         Configuration nativeSurfaceConfiguration = Configuration.Default.Clone();
         nativeSurfaceConfiguration.SetDrawingBackend(nativeSurfaceBackend);
 
-        using (DrawingCanvas<TPixel> nativeSurfaceCanvas = new(nativeSurfaceConfiguration, clearOptions, nativeSurfaceBackend, renderTarget.NativeFrame))
+        using (DrawingCanvas nativeSurfaceCanvas = WebGPUCanvasFactory.CreateCanvas(
+                   nativeSurfaceConfiguration,
+                   clearOptions,
+                   nativeSurfaceBackend,
+                   renderTarget.Bounds,
+                   renderTarget.Surface,
+                   renderTarget.Format))
         {
             DrawAction(nativeSurfaceCanvas);
         }
 
-        using Image<TPixel> nativeSurfaceImage = renderTarget.Readback();
+        using Image<TPixel> nativeSurfaceImage = renderTarget.Readback<TPixel>();
         DebugSaveBackendPair(provider, "RepeatedGlyphs_AfterClear", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 2F);
         AssertBackendPairReferenceOutputs(provider, "RepeatedGlyphs_AfterClear", defaultImage, nativeSurfaceImage);
@@ -760,25 +776,37 @@ public partial class WebGPUDrawingBackendTests
         Image<TPixel> initialImage = null)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        using WebGPURenderTarget<TPixel> renderTarget = new(width, height);
+        using WebGPURenderTarget renderTarget = new(width, height);
         Configuration configuration = Configuration.Default.Clone();
         configuration.SetDrawingBackend(backend);
         Rectangle targetBounds = new(0, 0, width, height);
 
         if (initialImage is not null)
         {
-            using (DrawingCanvas<TPixel> initialCanvas = new(configuration, new DrawingOptions(), backend, renderTarget.NativeFrame))
+            using (DrawingCanvas initialCanvas = WebGPUCanvasFactory.CreateCanvas(
+                       configuration,
+                       new DrawingOptions(),
+                       backend,
+                       renderTarget.Bounds,
+                       renderTarget.Surface,
+                       renderTarget.Format))
             {
                 initialCanvas.DrawImage(initialImage, initialImage.Bounds, targetBounds);
             }
         }
 
-        using (DrawingCanvas<TPixel> canvas = new(configuration, options, backend, renderTarget.NativeFrame))
+        using (DrawingCanvas canvas = WebGPUCanvasFactory.CreateCanvas(
+                   configuration,
+                   options,
+                   backend,
+                   renderTarget.Bounds,
+                   renderTarget.Surface,
+                   renderTarget.Format))
         {
             drawAction(canvas);
         }
 
-        return renderTarget.Readback();
+        return renderTarget.Readback<TPixel>();
     }
 
     private static void DebugSaveBackendPair<TPixel>(
@@ -1305,16 +1333,22 @@ public partial class WebGPUDrawingBackendTests
         defaultImage.Mutate(c => c.Paint(drawingOptions, DrawAction));
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
-        using WebGPURenderTarget<TPixel> renderTarget = new(defaultImage.Width, defaultImage.Height);
+        using WebGPURenderTarget renderTarget = new(defaultImage.Width, defaultImage.Height);
         Configuration nativeConfig = Configuration.Default.Clone();
         nativeConfig.SetDrawingBackend(nativeSurfaceBackend);
 
-        using (DrawingCanvas<TPixel> canvas = new(nativeConfig, drawingOptions, nativeSurfaceBackend, renderTarget.NativeFrame))
+        using (DrawingCanvas canvas = WebGPUCanvasFactory.CreateCanvas(
+                   nativeConfig,
+                   drawingOptions,
+                   nativeSurfaceBackend,
+                   renderTarget.Bounds,
+                   renderTarget.Surface,
+                   renderTarget.Format))
         {
             DrawAction(canvas);
         }
 
-        using Image<TPixel> nativeSurfaceImage = renderTarget.Readback();
+        using Image<TPixel> nativeSurfaceImage = renderTarget.Readback<TPixel>();
         DebugSaveBackendPair(provider, "MultipleFlushes", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
         AssertBackendPairReferenceOutputs(provider, "MultipleFlushes", defaultImage, nativeSurfaceImage);

@@ -4,7 +4,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Silk.NET.Core.Contexts;
 using Silk.NET.WebGPU;
-using SixLabors.ImageSharp.PixelFormats;
 using SilkPresentMode = Silk.NET.WebGPU.PresentMode;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -28,11 +27,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// acquisition order.
 /// </para>
 /// </remarks>
-/// <typeparam name="TPixel">The canvas pixel format. Must map to a WebGPU texture format that
-/// <see cref="WebGPUDrawingBackend.TryGetCompositeTextureFormat{TPixel}(out WebGPUTextureFormatId, out FeatureName)"/>
-/// recognizes, otherwise <see cref="Create"/> throws <see cref="NotSupportedException"/>.</typeparam>
-internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
-    where TPixel : unmanaged, IPixel<TPixel>
+internal sealed unsafe class WebGPUSurfaceResources : IDisposable
 {
     /// <summary>
     /// Upper bound for the asynchronous adapter and device request callbacks. Exceeding this throws.
@@ -45,7 +40,7 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
     private readonly Configuration configuration;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUSurfaceResources{TPixel}"/> class with already-acquired handles.
+    /// Initializes a new instance of the <see cref="WebGPUSurfaceResources"/> class with already-acquired handles.
     /// Only invoked by <see cref="Create"/> after every handle has been successfully bootstrapped.
     /// </summary>
     /// <param name="api">The shared WebGPU API loader.</param>
@@ -56,7 +51,7 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
     /// <param name="deviceHandle">The owned device handle requested from <paramref name="adapterHandle"/>.</param>
     /// <param name="queueHandle">The owned default queue handle paired with <paramref name="deviceHandle"/>.</param>
     /// <param name="graphics">The drawing context bound to <paramref name="deviceHandle"/> and <paramref name="queueHandle"/>.</param>
-    /// <param name="format">The negotiated swapchain texture format for <typeparamref name="TPixel"/>.</param>
+    /// <param name="format">The negotiated swapchain texture format.</param>
     /// <param name="requiredFeature">The optional WebGPU feature required by the selected texture format.</param>
     private WebGPUSurfaceResources(
         WebGPU api,
@@ -66,8 +61,8 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
         WebGPUAdapterHandle adapterHandle,
         WebGPUDeviceHandle deviceHandle,
         WebGPUQueueHandle queueHandle,
-        WebGPUDeviceContext<TPixel> graphics,
-        WebGPUTextureFormatId format,
+        WebGPUDeviceContext graphics,
+        WebGPUTextureFormat format,
         FeatureName requiredFeature)
     {
         this.Api = api;
@@ -117,13 +112,13 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
     /// Gets the drawing context bound to <see cref="DeviceHandle"/>/<see cref="QueueHandle"/>, used to wrap acquired
     /// per-frame textures into <see cref="DrawingCanvas"/> instances.
     /// </summary>
-    public WebGPUDeviceContext<TPixel> Graphics { get; private set; }
+    internal WebGPUDeviceContext Graphics { get; private set; }
 
     /// <summary>
-    /// Gets the swapchain texture format chosen for <typeparamref name="TPixel"/> at construction time.
+    /// Gets the swapchain texture format chosen at construction time.
     /// Stable for the lifetime of this instance.
     /// </summary>
-    public WebGPUTextureFormatId Format { get; }
+    public WebGPUTextureFormat Format { get; }
 
     /// <summary>
     /// Bootstraps the full per-surface WebGPU stack bound to <paramref name="nativeSource"/> and leaves the surface
@@ -131,25 +126,27 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
     /// </summary>
     /// <param name="configuration">The ImageSharp configuration the drawing context will use for its rendering backend.</param>
     /// <param name="nativeSource">The native surface source that provides the platform handles for surface creation.</param>
+    /// <param name="format">The swapchain texture format.</param>
     /// <param name="initialPresentMode">The present mode to apply to the first surface configuration.</param>
     /// <param name="initialFramebufferSize">The framebuffer size to apply to the first surface configuration. Zero-area
     /// sizes are permitted and leave the surface unconfigured until the caller invokes <see cref="ConfigureSurface"/>
     /// with a positive size.</param>
     /// <returns>The fully initialized resource container. The caller owns it and must call <see cref="Dispose"/>.</returns>
-    /// <exception cref="NotSupportedException">Thrown when <typeparamref name="TPixel"/> does not map to a supported WebGPU texture format.</exception>
+    /// <exception cref="NotSupportedException">Thrown when <paramref name="format"/> is not supported by the WebGPU backend.</exception>
     /// <exception cref="InvalidOperationException">
     /// Thrown when any of the underlying WebGPU bootstrap steps fail. All partially-acquired handles are released
     /// before the exception propagates.
     /// </exception>
-    public static WebGPUSurfaceResources<TPixel> Create(
+    public static WebGPUSurfaceResources Create(
         Configuration configuration,
         INativeWindowSource nativeSource,
+        WebGPUTextureFormat format,
         WebGPUPresentMode initialPresentMode,
         Size initialFramebufferSize)
     {
-        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId format, out FeatureName requiredFeature))
+        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormatInfo(format, out _, out FeatureName requiredFeature))
         {
-            throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' is not supported by the WebGPU backend.");
+            throw new NotSupportedException($"Texture format '{format}' is not supported by the WebGPU backend.");
         }
 
         WebGPU api = WebGPURuntime.GetApi();
@@ -178,7 +175,7 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
             surfaceHandle = new WebGPUSurfaceHandle(api, (nint)surface, ownsHandle: true);
             deviceResources = CreateDeviceResources(api, configuration, instance, surface, requiredFeature);
 
-            WebGPUSurfaceResources<TPixel> resources = new(
+            WebGPUSurfaceResources resources = new(
                 api,
                 configuration,
                 instanceHandle,
@@ -261,7 +258,7 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
 
     /// <summary>
     /// Acquires the next presentable frame from <see cref="SurfaceHandle"/> and wraps it as a
-    /// <see cref="WebGPUSurfaceFrame{TPixel}"/> with a ready-to-use <see cref="DrawingCanvas"/>.
+    /// <see cref="WebGPUSurfaceFrame"/> with a ready-to-use <see cref="DrawingCanvas"/>.
     /// </summary>
     /// <param name="presentMode">The present mode applied when the surface needs to be reconfigured in response to a
     /// <c>Timeout</c>/<c>Outdated</c>/<c>Lost</c> acquire status.</param>
@@ -278,7 +275,7 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
         WebGPUPresentMode presentMode,
         Size framebufferSize,
         DrawingOptions options,
-        [NotNullWhen(true)] out WebGPUSurfaceFrame<TPixel>? frame)
+        [NotNullWhen(true)] out WebGPUSurfaceFrame? frame)
     {
         frame = null;
 
@@ -354,7 +351,7 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
                 framebufferSize.Height);
 
             this.frameInFlight = true;
-            frame = new WebGPUSurfaceFrame<TPixel>(
+            frame = new WebGPUSurfaceFrame(
                 this.Api,
                 this.SurfaceHandle,
                 textureHandle,
@@ -423,7 +420,7 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
         WebGPUAdapterHandle? adapterHandle = null;
         WebGPUDeviceHandle? deviceHandle = null;
         WebGPUQueueHandle? queueHandle = null;
-        WebGPUDeviceContext<TPixel>? graphics = null;
+        WebGPUDeviceContext? graphics = null;
 
         try
         {
@@ -439,7 +436,7 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
             }
 
             queueHandle = new WebGPUQueueHandle(api, (nint)queue, ownsHandle: true);
-            graphics = new WebGPUDeviceContext<TPixel>(configuration, deviceHandle, queueHandle);
+            graphics = new WebGPUDeviceContext(configuration, deviceHandle, queueHandle);
 
             DeviceResources resources = new(adapterHandle, deviceHandle, queueHandle, graphics);
             adapterHandle = null;
@@ -487,7 +484,7 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
 
             this.ConfigureSurfaceCore(presentMode, framebufferSize, deviceResources.DeviceHandle);
 
-            WebGPUDeviceContext<TPixel> oldGraphics = this.Graphics;
+            WebGPUDeviceContext oldGraphics = this.Graphics;
             WebGPUQueueHandle oldQueueHandle = this.QueueHandle;
             WebGPUDeviceHandle oldDeviceHandle = this.DeviceHandle;
             WebGPUAdapterHandle oldAdapterHandle = this.AdapterHandle;
@@ -623,7 +620,7 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
             WebGPUAdapterHandle adapterHandle,
             WebGPUDeviceHandle deviceHandle,
             WebGPUQueueHandle queueHandle,
-            WebGPUDeviceContext<TPixel> graphics)
+            WebGPUDeviceContext graphics)
         {
             this.AdapterHandle = adapterHandle;
             this.DeviceHandle = deviceHandle;
@@ -637,7 +634,7 @@ internal sealed unsafe class WebGPUSurfaceResources<TPixel> : IDisposable
 
         public WebGPUQueueHandle QueueHandle { get; }
 
-        public WebGPUDeviceContext<TPixel> Graphics { get; }
+        internal WebGPUDeviceContext Graphics { get; }
 
         public void Dispose()
         {

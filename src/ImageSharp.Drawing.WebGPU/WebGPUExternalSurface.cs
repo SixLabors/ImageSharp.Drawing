@@ -2,26 +2,23 @@
 // Licensed under the Six Labors Split License.
 
 using System.Diagnostics.CodeAnalysis;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// A WebGPU rendering surface bound to an externally-owned native host. Unlike <see cref="WebGPUWindow{TPixel}"/>,
+/// A WebGPU rendering surface bound to an externally-owned native host. Unlike <see cref="WebGPUWindow"/>,
 /// this type does not own a platform window; the host application owns the UI object, its lifecycle, and the drawable
 /// size notifications forwarded through <see cref="Resize(Size)"/>.
 /// </summary>
-/// <typeparam name="TPixel">The canvas pixel format.</typeparam>
-public sealed class WebGPUExternalSurface<TPixel> : IDisposable
-    where TPixel : unmanaged, IPixel<TPixel>
+public sealed class WebGPUExternalSurface : IDisposable
 {
-    private readonly WebGPUSurfaceResources<TPixel> resources;
+    private readonly WebGPUSurfaceResources resources;
     private readonly WebGPUPresentMode presentMode;
     private Size framebufferSize;
     private bool isDisposed;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUExternalSurface{TPixel}"/> class.
+    /// Initializes a new instance of the <see cref="WebGPUExternalSurface"/> class.
     /// </summary>
     /// <param name="host">The native surface host that the WebGPU surface will attach to.</param>
     /// <param name="framebufferSize">The initial framebuffer size in pixels.</param>
@@ -31,7 +28,7 @@ public sealed class WebGPUExternalSurface<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUExternalSurface{TPixel}"/> class.
+    /// Initializes a new instance of the <see cref="WebGPUExternalSurface"/> class.
     /// </summary>
     /// <param name="host">The native surface host that the WebGPU surface will attach to.</param>
     /// <param name="framebufferSize">The initial framebuffer size in pixels.</param>
@@ -45,7 +42,7 @@ public sealed class WebGPUExternalSurface<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUExternalSurface{TPixel}"/> class.
+    /// Initializes a new instance of the <see cref="WebGPUExternalSurface"/> class.
     /// </summary>
     /// <param name="configuration">The configuration instance to bind to the created backend.</param>
     /// <param name="host">The native surface host that the WebGPU surface will attach to.</param>
@@ -64,9 +61,10 @@ public sealed class WebGPUExternalSurface<TPixel> : IDisposable
 
         this.presentMode = options.PresentMode;
         this.framebufferSize = framebufferSize;
-        this.resources = WebGPUSurfaceResources<TPixel>.Create(
+        this.resources = WebGPUSurfaceResources.Create(
             configuration,
             new SilkNativeSurfaceAdapter(host),
+            options.Format,
             this.presentMode,
             this.framebufferSize);
     }
@@ -98,7 +96,7 @@ public sealed class WebGPUExternalSurface<TPixel> : IDisposable
     /// </summary>
     /// <param name="frame">Receives the acquired frame on success.</param>
     /// <returns><see langword="true"/> when a frame is available; otherwise <see langword="false"/>.</returns>
-    public bool TryAcquireFrame([NotNullWhen(true)] out WebGPUSurfaceFrame<TPixel>? frame)
+    public bool TryAcquireFrame([NotNullWhen(true)] out WebGPUSurfaceFrame? frame)
         => this.TryAcquireFrameCore(new DrawingOptions(), out frame);
 
     /// <summary>
@@ -107,7 +105,7 @@ public sealed class WebGPUExternalSurface<TPixel> : IDisposable
     /// <param name="options">The drawing options for the acquired frame.</param>
     /// <param name="frame">Receives the acquired frame on success.</param>
     /// <returns><see langword="true"/> when a frame is available; otherwise <see langword="false"/>.</returns>
-    public bool TryAcquireFrame(DrawingOptions options, [NotNullWhen(true)] out WebGPUSurfaceFrame<TPixel>? frame)
+    public bool TryAcquireFrame(DrawingOptions options, [NotNullWhen(true)] out WebGPUSurfaceFrame? frame)
         => this.TryAcquireFrameCore(options, out frame);
 
     /// <inheritdoc />
@@ -124,7 +122,7 @@ public sealed class WebGPUExternalSurface<TPixel> : IDisposable
 
     private bool TryAcquireFrameCore(
         DrawingOptions options,
-        [NotNullWhen(true)] out WebGPUSurfaceFrame<TPixel>? frame)
+        [NotNullWhen(true)] out WebGPUSurfaceFrame? frame)
     {
         this.ThrowIfDisposed();
         return this.resources.TryAcquireFrame(

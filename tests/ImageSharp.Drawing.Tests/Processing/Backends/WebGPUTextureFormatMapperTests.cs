@@ -11,17 +11,17 @@ public class WebGPUTextureFormatMapperTests
     [Fact]
     public void Mapper_UsesExactSilkEnumValues_ForAllSupportedFormats()
     {
-        (WebGPUTextureFormatId Drawing, TextureFormat Silk)[] mappings =
+        (WebGPUTextureFormat Drawing, TextureFormat Silk)[] mappings =
         [
-            (WebGPUTextureFormatId.Rgba8Unorm, TextureFormat.Rgba8Unorm),
-            (WebGPUTextureFormatId.Rgba8Snorm, TextureFormat.Rgba8Snorm),
-            (WebGPUTextureFormatId.Bgra8Unorm, TextureFormat.Bgra8Unorm),
-            (WebGPUTextureFormatId.Rgba16Float, TextureFormat.Rgba16float)
+            (WebGPUTextureFormat.Rgba8Unorm, TextureFormat.Rgba8Unorm),
+            (WebGPUTextureFormat.Rgba8Snorm, TextureFormat.Rgba8Snorm),
+            (WebGPUTextureFormat.Bgra8Unorm, TextureFormat.Bgra8Unorm),
+            (WebGPUTextureFormat.Rgba16Float, TextureFormat.Rgba16float)
         ];
 
-        Assert.Equal(Enum.GetValues<WebGPUTextureFormatId>().Length, mappings.Length);
+        Assert.Equal(Enum.GetValues<WebGPUTextureFormat>().Length, mappings.Length);
 
-        foreach ((WebGPUTextureFormatId drawing, TextureFormat silk) in mappings)
+        foreach ((WebGPUTextureFormat drawing, TextureFormat silk) in mappings)
         {
             Assert.Equal((int)silk, (int)drawing);
             Assert.Equal(silk, WebGPUTextureFormatMapper.ToSilk(drawing));
