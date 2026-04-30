@@ -14,8 +14,6 @@ public partial class DrawingCanvasTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> target = provider.GetImage();
-        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions());
-
         IPath leftPath = CreatePentagramPath(new PointF(96, 110), 78F);
         IPath rightPath = CreatePentagramPath(new PointF(264, 110), 78F);
 
@@ -29,22 +27,24 @@ public partial class DrawingCanvasTests
             ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.NonZero }
         };
 
-        canvas.Clear(Brushes.Solid(Color.White));
-        canvas.Fill(Brushes.Solid(Color.AliceBlue.WithAlpha(0.7F)), new Rectangle(12, 12, 336, 196));
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.Fill(Brushes.Solid(Color.AliceBlue.WithAlpha(0.7F)), new Rectangle(12, 12, 336, 196));
 
-        _ = canvas.Save(evenOddOptions);
-        canvas.Fill(Brushes.Solid(Color.DeepPink.WithAlpha(0.85F)), leftPath);
-        canvas.Restore();
+            _ = canvas.Save(evenOddOptions);
+            canvas.Fill(Brushes.Solid(Color.DeepPink.WithAlpha(0.85F)), leftPath);
+            canvas.Restore();
 
-        _ = canvas.Save(nonZeroOptions);
-        canvas.Fill(Brushes.Solid(Color.DeepPink.WithAlpha(0.85F)), rightPath);
-        canvas.Restore();
+            _ = canvas.Save(nonZeroOptions);
+            canvas.Fill(Brushes.Solid(Color.DeepPink.WithAlpha(0.85F)), rightPath);
+            canvas.Restore();
 
-        canvas.Draw(Pens.Solid(Color.Black, 3F), leftPath);
-        canvas.Draw(Pens.Solid(Color.Black, 3F), rightPath);
-        canvas.DrawLine(Pens.Dash(Color.Gray, 2F), new PointF(180, 20), new PointF(180, 200));
-        canvas.Draw(Pens.Solid(Color.Black, 2F), new Rectangle(8, 8, 344, 204));
-        canvas.Flush();
+            canvas.Draw(Pens.Solid(Color.Black, 3F), leftPath);
+            canvas.Draw(Pens.Solid(Color.Black, 3F), rightPath);
+            canvas.DrawLine(Pens.Dash(Color.Gray, 2F), new PointF(180, 20), new PointF(180, 200));
+            canvas.Draw(Pens.Solid(Color.Black, 2F), new Rectangle(8, 8, 344, 204));
+        }
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);

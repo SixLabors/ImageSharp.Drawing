@@ -51,11 +51,10 @@ public class WebGPUDeviceContextTests
                    24))
         {
             canvas.Fill(Brushes.Solid(Color.Red), new RectangularPolygon(0, 0, 32, 24));
-            canvas.Flush();
-
-            using Image<Rgba32> readback = target.Readback();
-            Assert.NotEqual(default, readback[16, 12]);
         }
+
+        using Image<Rgba32> readback = target.Readback();
+        Assert.NotEqual(default, readback[16, 12]);
     }
 
     [WebGPUFact]
@@ -66,11 +65,10 @@ public class WebGPUDeviceContextTests
         using (DrawingCanvas canvas = target.CreateCanvas())
         {
             canvas.Fill(Brushes.Solid(Color.Green), new RectangularPolygon(0, 0, 18, 14));
-            canvas.Flush();
-
-            using Image<Rgba32> readback = target.Readback();
-            Assert.NotEqual(default, readback[9, 7]);
         }
+
+        using Image<Rgba32> readback = target.Readback();
+        Assert.NotEqual(default, readback[9, 7]);
     }
 
     [WebGPUFact]

@@ -149,7 +149,7 @@ internal static class WebGPUSceneDispatch
     public static bool TryCreateStagedScene<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
-        CompositionScene scene,
+        DrawingCommandBatch scene,
         WebGPUSceneBumpSizes bumpSizes,
         ref WebGPUSceneResourceArena? resourceArena,
         out WebGPUStagedScene stagedScene,
@@ -174,7 +174,7 @@ internal static class WebGPUSceneDispatch
     public static bool TryCreateStagedScene<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
-        CompositionScene scene,
+        DrawingCommandBatch scene,
         WebGPUSceneBumpSizes bumpSizes,
         ref WebGPUSceneResourceArena? resourceArena,
         out bool exceedsBindingLimit,
@@ -258,6 +258,99 @@ internal static class WebGPUSceneDispatch
         catch
         {
             encodedScene?.Dispose();
+            flushContext.Dispose();
+            stagedScene = default;
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Builds flush-scoped GPU resources for a retained encoded scene.
+    /// </summary>
+    public static bool TryCreateStagedScene<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> target,
+        WebGPUEncodedScene encodedScene,
+        TextureFormat textureFormat,
+        FeatureName requiredFeature,
+        WebGPUSceneBumpSizes bumpSizes,
+        ref WebGPUSceneResourceArena? resourceArena,
+        out bool exceedsBindingLimit,
+        out BindingLimitFailure bindingLimitFailure,
+        out WebGPUStagedScene stagedScene,
+        out string? error)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        stagedScene = default;
+        exceedsBindingLimit = false;
+        bindingLimitFailure = BindingLimitFailure.None;
+
+        WebGPUFlushContext? flushContext = WebGPUFlushContext.Create(
+            target,
+            textureFormat,
+            requiredFeature,
+            configuration.MemoryAllocator);
+
+        if (flushContext is null)
+        {
+            error = "Failed to create a WebGPU flush context for the retained scene pipeline.";
+            return false;
+        }
+
+        try
+        {
+            WebGPUSceneBumpSizes seededBumpSizes = SeedSceneBumpSizes(bumpSizes, encodedScene);
+            WebGPUSceneConfig config = WebGPUSceneConfig.Create(encodedScene, seededBumpSizes);
+            uint baseColor = 0U;
+            bool chunkingRequired = false;
+
+            if (!TryValidateBindingSizes(encodedScene, config, flushContext.DeviceState.MaxStorageBufferBindingSize, out bindingLimitFailure, out error))
+            {
+                if (!IsChunkableBindingFailure(bindingLimitFailure.Buffer))
+                {
+                    exceedsBindingLimit = true;
+                    flushContext.Dispose();
+                    stagedScene = default;
+                    return false;
+                }
+
+                chunkingRequired = true;
+            }
+
+            if (encodedScene.FillCount == 0)
+            {
+                stagedScene = new WebGPUStagedScene(
+                    flushContext,
+                    encodedScene,
+                    config,
+                    default,
+                    chunkingRequired ? bindingLimitFailure : BindingLimitFailure.None,
+                    ownsEncodedScene: false);
+
+                error = null;
+                return true;
+            }
+
+            if (!WebGPUSceneResources.TryCreate<TPixel>(flushContext, encodedScene, config, baseColor, ref resourceArena, out WebGPUSceneResourceSet resources, out error))
+            {
+                flushContext.Dispose();
+                stagedScene = default;
+                return false;
+            }
+
+            stagedScene = new WebGPUStagedScene(
+                flushContext,
+                encodedScene,
+                config,
+                resources,
+                chunkingRequired ? bindingLimitFailure : BindingLimitFailure.None,
+                ownsEncodedScene: false);
+
+            error = null;
+            return true;
+        }
+        catch
+        {
             flushContext.Dispose();
             stagedScene = default;
             throw;
@@ -891,9 +984,13 @@ internal static class WebGPUSceneDispatch
 
     /// <summary>
     /// Reuses the existing scheduling arena if every buffer is large enough for this scene,
-    /// otherwise disposes it and creates a new one. The arena is cached across flushes on
-    /// the backend so repeated renders of the same scene create zero GPU buffers.
+    /// otherwise disposes it and creates a new one.
     /// </summary>
+    /// <remarks>
+    /// The caller passes the rented arena by reference and must return the final value left in
+    /// that reference. When this method replaces an undersized arena, it clears the reference
+    /// immediately after disposal and stores a new arena only after creation succeeds.
+    /// </remarks>
     private static bool TryEnsureSchedulingArena(
         WebGPUFlushContext flushContext,
         WebGPUSceneBufferSizes bufferSizes,
@@ -908,14 +1005,16 @@ internal static class WebGPUSceneDispatch
         }
 
         WebGPUSceneSchedulingArena.Dispose(arena);
-        return TryCreateSchedulingArena(flushContext, bufferSizes, readbackByteLength, ref arena, out error);
+        arena = null;
+
+        return TryCreateSchedulingArena(flushContext, bufferSizes, readbackByteLength, out arena, out error);
     }
 
     private static unsafe bool TryCreateSchedulingArena(
         WebGPUFlushContext flushContext,
         WebGPUSceneBufferSizes bufferSizes,
         nuint readbackByteLength,
-        [NotNullWhen(true)] ref WebGPUSceneSchedulingArena? arena,
+        [NotNullWhen(true)] out WebGPUSceneSchedulingArena? arena,
         out string? error)
     {
         arena = null;
@@ -1118,7 +1217,7 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        // Persist actual GPU usage so the next flush starts with known-good sizes.
+        // Return actual GPU usage so the caller can cache known-good sizes for later renders.
         grownBumpSizes = new WebGPUSceneBumpSizes(
             Math.Max(bumpAllocators.Lines, stagedScene.Config.BumpSizes.Lines),
             Math.Max(bumpAllocators.Binning, stagedScene.Config.BumpSizes.Binning),
@@ -3720,12 +3819,24 @@ internal readonly struct WebGPUStagedScene : IDisposable
         WebGPUSceneConfig config,
         WebGPUSceneResourceSet resources,
         WebGPUSceneDispatch.BindingLimitFailure bindingLimitFailure)
+        : this(flushContext, encodedScene, config, resources, bindingLimitFailure, ownsEncodedScene: true)
+    {
+    }
+
+    public WebGPUStagedScene(
+        WebGPUFlushContext flushContext,
+        WebGPUEncodedScene encodedScene,
+        WebGPUSceneConfig config,
+        WebGPUSceneResourceSet resources,
+        WebGPUSceneDispatch.BindingLimitFailure bindingLimitFailure,
+        bool ownsEncodedScene)
     {
         this.FlushContext = flushContext;
         this.EncodedScene = encodedScene;
         this.Config = config;
         this.Resources = resources;
         this.BindingLimitFailure = bindingLimitFailure;
+        this.OwnsEncodedScene = ownsEncodedScene;
     }
 
     /// <summary>
@@ -3754,11 +3865,20 @@ internal readonly struct WebGPUStagedScene : IDisposable
     public WebGPUSceneDispatch.BindingLimitFailure BindingLimitFailure { get; }
 
     /// <summary>
+    /// Gets a value indicating whether this staged scene owns the encoded scene.
+    /// </summary>
+    public bool OwnsEncodedScene { get; }
+
+    /// <summary>
     /// Releases the encoded scene and the flush context that owns the tracked native resources.
     /// </summary>
     public void Dispose()
     {
-        this.EncodedScene.Dispose();
+        if (this.OwnsEncodedScene)
+        {
+            this.EncodedScene.Dispose();
+        }
+
         this.FlushContext.Dispose();
     }
 }
@@ -3837,8 +3957,12 @@ internal readonly unsafe struct WebGPUSceneSchedulingResources
 }
 
 /// <summary>
-/// Flush-local reusable scheduling scratch and readback buffers.
+/// Reusable scheduling scratch and readback buffers.
 /// </summary>
+/// <remarks>
+/// The buffers are mutable scratch state written by scheduling passes, so an arena is exclusive
+/// to one render while rented. The owner may cache it after render completion for later reuse.
+/// </remarks>
 internal sealed unsafe class WebGPUSceneSchedulingArena
 {
     public WebGPUSceneSchedulingArena(

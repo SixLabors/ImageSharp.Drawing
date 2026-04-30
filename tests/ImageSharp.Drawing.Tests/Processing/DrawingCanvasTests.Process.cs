@@ -184,10 +184,11 @@ public partial class DrawingCanvasTests
 
         public Configuration? LastReadbackConfiguration { get; private set; }
 
-        public void FlushCompositions<TTargetPixel>(
+        public DrawingBackendScene CreateScene<TTargetPixel>(
             Configuration configuration,
             ICanvasFrame<TTargetPixel> target,
-            CompositionScene compositionScene)
+            DrawingCommandBatch commandBatch,
+            IReadOnlyList<IDisposable>? ownedResources = null)
             where TTargetPixel : unmanaged, IPixel<TTargetPixel>
         {
             if (this.proxyFrame is not ICanvasFrame<TTargetPixel> typedProxyFrame)
@@ -195,7 +196,21 @@ public partial class DrawingCanvasTests
                 throw new NotSupportedException("Mirroring test backend pixel format mismatch.");
             }
 
-            DefaultDrawingBackend.Instance.FlushCompositions(configuration, typedProxyFrame, compositionScene);
+            return DefaultDrawingBackend.Instance.CreateScene(configuration, typedProxyFrame, commandBatch, ownedResources);
+        }
+
+        public void RenderScene<TTargetPixel>(
+            Configuration configuration,
+            ICanvasFrame<TTargetPixel> target,
+            DrawingBackendScene scene)
+            where TTargetPixel : unmanaged, IPixel<TTargetPixel>
+        {
+            if (this.proxyFrame is not ICanvasFrame<TTargetPixel> typedProxyFrame)
+            {
+                throw new NotSupportedException("Mirroring test backend pixel format mismatch.");
+            }
+
+            DefaultDrawingBackend.Instance.RenderScene(configuration, typedProxyFrame, scene);
         }
 
         public void ReadRegion<TTargetPixel>(

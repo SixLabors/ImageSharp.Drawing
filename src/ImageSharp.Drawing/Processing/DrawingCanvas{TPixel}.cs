@@ -109,7 +109,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             configuration,
             backend,
             targetFrame,
-            new DrawingCanvasBatcher<TPixel>(configuration, backend, targetFrame),
+            new DrawingCanvasBatcher<TPixel>(configuration),
             new DrawingCanvasState(options, clipPaths, targetFrame.Bounds, targetFrame.Bounds.Location),
             true)
     {
@@ -299,39 +299,18 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         Guard.NotNull(path, nameof(path));
         Guard.NotNull(operation, nameof(operation));
 
-        // This operation samples the current destination state. Flush queued commands first
-        // so readback observes strict draw-order semantics.
-        this.Flush();
-
         DrawingCanvasState state = this.ResolveState();
-        DrawingOptions effectiveOptions = state.Options;
+        ApplyBarrier barrier = new(
+            path.AsClosedPath(),
+            state.Options,
+            state.ClipPaths,
+            this.Bounds,
+            state.TargetBounds,
+            state.DestinationOffset,
+            state.IsLayer,
+            operation);
 
-        IPath closed = path.AsClosedPath();
-
-        RectangleF rawBounds = RectangleF.Transform(closed.Bounds, effectiveOptions.Transform);
-
-        Rectangle sourceRect = ToConservativeBounds(rawBounds);
-        sourceRect = Rectangle.Intersect(this.Bounds, sourceRect);
-        if (sourceRect.Width <= 0 || sourceRect.Height <= 0)
-        {
-            return;
-        }
-
-        Image<TPixel> sourceImage = this.CreateProcessSourceImage(sourceRect);
-        sourceImage.Mutate(operation);
-
-        Point brushOffset = new(
-            sourceRect.X - (int)MathF.Floor(rawBounds.Left),
-            sourceRect.Y - (int)MathF.Floor(rawBounds.Top));
-        ImageBrush<TPixel> brush = new(sourceImage, sourceImage.Bounds, brushOffset);
-
-        this.pendingImageResources.Add(sourceImage);
-        this.PrepareCompositionCore(
-            closed,
-            brush,
-            effectiveOptions,
-            RasterizerSamplingOrigin.PixelBoundary,
-            state.ClipPaths);
+        this.batcher.AddApplyBarrier(barrier);
     }
 
     /// <summary>
@@ -574,6 +553,36 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         this.EnsureNotDisposed();
         Guard.NotNull(image, nameof(image));
         this.DrawImageCore(image, sourceRect, destinationRect, sampler, ownsSourceImage: false);
+    }
+
+    /// <inheritdoc />
+    public override DrawingBackendScene CreateScene()
+    {
+        this.EnsureNotDisposed();
+
+        IDisposable[]? ownedResources = this.DetachPendingImageResources();
+
+        try
+        {
+            return this.batcher.CreateScene(this.backend, this.targetFrame, ownedResources);
+        }
+        catch
+        {
+            DisposeOwnedResources(ownedResources);
+            throw;
+        }
+        finally
+        {
+            this.batcher.ClearCommandBatch();
+        }
+    }
+
+    /// <inheritdoc />
+    public override void RenderScene(DrawingBackendScene scene)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(scene, nameof(scene));
+        this.batcher.AddScene(scene);
     }
 
     private void DrawImageCore(
@@ -973,45 +982,11 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         }
     }
 
-    /// <summary>
-    /// Creates a source image for process-in-path operations.
-    /// </summary>
-    /// <param name="sourceRect">Source rectangle in local canvas coordinates.</param>
-    /// <returns>The readback image.</returns>
-    private Image<TPixel> CreateProcessSourceImage(Rectangle sourceRect)
-    {
-        Image<TPixel> sourceImage = new(this.configuration, sourceRect.Width, sourceRect.Height);
-
-        try
-        {
-            this.backend.ReadRegion(
-                this.configuration,
-                this.targetFrame,
-                sourceRect,
-                new Buffer2DRegion<TPixel>(sourceImage.Frames.RootFrame.PixelBuffer));
-
-            return sourceImage;
-        }
-        catch
-        {
-            // Ownership only transfers to the caller after readback succeeds.
-            sourceImage.Dispose();
-            throw;
-        }
-    }
-
     /// <inheritdoc />
     public override void Flush()
     {
         this.EnsureNotDisposed();
-        try
-        {
-            this.batcher.FlushCompositions();
-        }
-        finally
-        {
-            this.DisposePendingImageResources();
-        }
+        this.batcher.SealCommands();
     }
 
     /// <inheritdoc />
@@ -1029,7 +1004,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             this.RestoreToCore(1);
             if (this.ownsBatcher)
             {
-                this.batcher.FlushCompositions();
+                this.RenderRecordedTimeline();
             }
         }
         finally
@@ -1048,6 +1023,93 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// </summary>
     private void EnsureNotDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
+
+    /// <summary>
+    /// Renders the recorded timeline owned by the root canvas during disposal.
+    /// </summary>
+    /// <remarks>
+    /// Command-range entries are lowered to short-lived backend scenes here. Scene entries
+    /// reference retained scenes that were recorded earlier through <see cref="DrawingCanvas.RenderScene"/>.
+    /// </remarks>
+    private void RenderRecordedTimeline()
+    {
+        if (!this.batcher.HasRecordedWork)
+        {
+            return;
+        }
+
+        this.batcher.SealAndPrepareCommands();
+        try
+        {
+            for (int i = 0; i < this.batcher.TimelineEntryCount; i++)
+            {
+                DrawingCanvasTimelineEntry entry = this.batcher.GetEntry(i);
+                switch (entry.Kind)
+                {
+                    case DrawingCanvasTimelineEntryKind.CommandRange:
+                        this.RenderCommandBatch(this.batcher.CreateCommandBatch(entry));
+                        break;
+
+                    case DrawingCanvasTimelineEntryKind.ApplyBarrier:
+                        this.RenderApplyBarrier(this.batcher.GetApplyBarrier(entry.Index));
+                        break;
+
+                    case DrawingCanvasTimelineEntryKind.Scene:
+                        this.backend.RenderScene(
+                            this.configuration,
+                            this.targetFrame,
+                            this.batcher.GetInsertedScene(entry.Index));
+
+                        break;
+                }
+            }
+        }
+        finally
+        {
+            this.batcher.ClearCommandBatch();
+        }
+    }
+
+    /// <summary>
+    /// Creates and renders one backend scene for a prepared command batch.
+    /// </summary>
+    /// <param name="commandBatch">The command batch to render.</param>
+    private void RenderCommandBatch(DrawingCommandBatch commandBatch)
+    {
+        using DrawingBackendScene scene = this.backend.CreateScene(
+            this.configuration,
+            this.targetFrame,
+            commandBatch);
+
+        this.backend.RenderScene(this.configuration, this.targetFrame, scene);
+    }
+
+    /// <summary>
+    /// Executes one apply barrier at its replay position.
+    /// </summary>
+    /// <param name="barrier">The apply barrier to execute.</param>
+    private void RenderApplyBarrier(ApplyBarrier barrier)
+    {
+        DrawingCommandBatch? maybeCommandBatch = barrier.CreateWriteBackBatch(
+            this.configuration,
+            this.backend,
+            this.targetFrame,
+            out IDisposable? ownedResource);
+
+        if (maybeCommandBatch is not DrawingCommandBatch commandBatch)
+        {
+            return;
+        }
+
+        try
+        {
+            this.RenderCommandBatch(commandBatch);
+        }
+        finally
+        {
+            ownedResource?.Dispose();
+        }
+    }
 
     /// <summary>
     /// Restores the saved-state stack to <paramref name="saveCount"/> without public guard checks.
@@ -1374,5 +1436,44 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         }
 
         this.pendingImageResources.Clear();
+    }
+
+    /// <summary>
+    /// Transfers pending image resources to a retained scene.
+    /// </summary>
+    /// <returns>The resources that must remain alive for the retained scene, or <see langword="null"/> when none exist.</returns>
+    private IDisposable[]? DetachPendingImageResources()
+    {
+        if (this.pendingImageResources.Count == 0)
+        {
+            return null;
+        }
+
+        IDisposable[] resources = new IDisposable[this.pendingImageResources.Count];
+
+        for (int i = 0; i < this.pendingImageResources.Count; i++)
+        {
+            resources[i] = this.pendingImageResources[i];
+        }
+
+        this.pendingImageResources.Clear();
+        return resources;
+    }
+
+    /// <summary>
+    /// Disposes resources that failed to transfer to a retained scene.
+    /// </summary>
+    /// <param name="resources">The resources to dispose.</param>
+    private static void DisposeOwnedResources(IDisposable[]? resources)
+    {
+        if (resources is null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < resources.Length; i++)
+        {
+            resources[i].Dispose();
+        }
     }
 }

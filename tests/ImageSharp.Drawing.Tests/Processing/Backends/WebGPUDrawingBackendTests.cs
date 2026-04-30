@@ -767,15 +767,16 @@ public partial class WebGPUDrawingBackendTests
 
         if (initialImage is not null)
         {
-            using DrawingCanvas<TPixel> initialCanvas =
-                new(configuration, new DrawingOptions(), backend, renderTarget.NativeFrame);
-            initialCanvas.DrawImage(initialImage, initialImage.Bounds, targetBounds);
-            initialCanvas.Flush();
+            using (DrawingCanvas<TPixel> initialCanvas = new(configuration, new DrawingOptions(), backend, renderTarget.NativeFrame))
+            {
+                initialCanvas.DrawImage(initialImage, initialImage.Bounds, targetBounds);
+            }
         }
 
-        using DrawingCanvas<TPixel> canvas = new(configuration, options, backend, renderTarget.NativeFrame);
-        drawAction(canvas);
-        canvas.Flush();
+        using (DrawingCanvas<TPixel> canvas = new(configuration, options, backend, renderTarget.NativeFrame))
+        {
+            drawAction(canvas);
+        }
 
         return renderTarget.Readback();
     }

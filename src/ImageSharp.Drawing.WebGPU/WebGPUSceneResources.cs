@@ -103,7 +103,10 @@ internal static unsafe class WebGPUSceneResources
         }
 
         // Arena miss; create all buffers fresh and build a new arena.
+        // Dispose() releases the native buffers, so clear the ref immediately.
+        // Otherwise a later failure path could return a disposed arena to the scene/backend cache.
         WebGPUSceneResourceArena.Dispose(arena);
+        arena = null;
 
         if (!TryCreateAndUploadCombinedInfoBinDataBuffer(
                 flushContext,
@@ -1059,10 +1062,13 @@ internal readonly unsafe struct WebGPUSceneResourceSet
 }
 
 /// <summary>
-/// Cross-flush reusable scene resource buffers. Cached on the backend via
-/// <c>Interlocked.Exchange</c> so repeated renders of the same scene create
-/// zero GPU buffers after the first frame. Textures are not pooled.
+/// Reusable scene resource buffers owned by either a retained scene or the backend eager cache.
 /// </summary>
+/// <remarks>
+/// These buffers hold per-render resource contents after each upload, so callers must rent one
+/// arena for exclusive use during staging and return it only after the staged scene has finished.
+/// Textures are intentionally excluded because gradient and image-atlas contents are scene-dependent.
+/// </remarks>
 internal sealed unsafe class WebGPUSceneResourceArena
 {
     public WebGPUSceneResourceArena(

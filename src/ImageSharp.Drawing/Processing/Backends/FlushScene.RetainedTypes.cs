@@ -53,7 +53,6 @@ internal sealed partial class FlushScene
             this.Kind = kind;
             this.ItemIndex = itemIndex;
             this.LocalRowIndex = localRowIndex;
-            this.CommandIndex = -1;
             this.LayerBounds = default;
         }
 
@@ -61,14 +60,13 @@ internal sealed partial class FlushScene
         /// Initializes a new instance of the <see cref="SceneOperation"/> struct for a layer control operation.
         /// </summary>
         /// <param name="kind">The layer operation kind.</param>
-        /// <param name="commandIndex">The source command index.</param>
         /// <param name="layerBounds">The retained row-local layer bounds.</param>
-        public SceneOperation(CompositionCommandKind kind, int commandIndex, Rectangle layerBounds)
+        /// <param name="itemIndex">The retained layer-options index for begin-layer operations.</param>
+        public SceneOperation(CompositionCommandKind kind, Rectangle layerBounds, int itemIndex)
         {
             this.Kind = kind == CompositionCommandKind.BeginLayer ? SceneOperationKind.BeginLayer : SceneOperationKind.EndLayer;
-            this.ItemIndex = -1;
+            this.ItemIndex = itemIndex;
             this.LocalRowIndex = -1;
-            this.CommandIndex = commandIndex;
             this.LayerBounds = layerBounds;
         }
 
@@ -86,11 +84,6 @@ internal sealed partial class FlushScene
         /// Gets the retained rasterizable row index for fill operations.
         /// </summary>
         public int LocalRowIndex { get; }
-
-        /// <summary>
-        /// Gets the source command index for layer operations.
-        /// </summary>
-        public int CommandIndex { get; }
 
         /// <summary>
         /// Gets the retained row-local layer bounds for layer operations.

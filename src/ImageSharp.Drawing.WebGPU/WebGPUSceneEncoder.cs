@@ -82,14 +82,14 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Encodes composition commands into flush-scoped scene buffers.
     /// </summary>
-    /// <param name="scene">The scene to encode.</param>
+    /// <param name="scene">The command batch to encode.</param>
     /// <param name="targetBounds">The root target bounds used for target-local coordinate conversion.</param>
     /// <param name="allocator">The allocator used for temporary and packed scene storage.</param>
     /// <param name="encodedScene">Receives the encoded scene on success.</param>
     /// <param name="error">Receives the staged-scene support failure reason when encoding fails.</param>
     /// <returns><see langword="true"/> when the scene encoded successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryEncode(
-        CompositionScene scene,
+        DrawingCommandBatch scene,
         in Rectangle targetBounds,
         MemoryAllocator allocator,
         out WebGPUEncodedScene encodedScene,
@@ -330,7 +330,7 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Appends all supported scene operations into the mutable scene streams.
         /// </summary>
-        internal bool TryBuild(CompositionScene scene, out string? error)
+        internal bool TryBuild(DrawingCommandBatch scene, out string? error)
         {
             for (int i = 0; i < scene.CommandCount; i++)
             {

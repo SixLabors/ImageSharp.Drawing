@@ -17,15 +17,37 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     public static DefaultDrawingBackend Instance { get; } = new();
 
     /// <inheritdoc />
-    public void FlushCompositions<TPixel>(
+    public DrawingBackendScene CreateScene<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
-        CompositionScene compositionScene)
+        DrawingCommandBatch commandBatch,
+        IReadOnlyList<IDisposable>? ownedResources = null)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        if (compositionScene.CommandCount == 0)
+        if (!target.TryGetCpuRegion(out _))
         {
-            return;
+            throw new NotSupportedException($"{nameof(DefaultDrawingBackend)} requires CPU-accessible frame targets.");
+        }
+
+        FlushScene scene = FlushScene.Create(
+            commandBatch,
+            target.Bounds,
+            configuration.MemoryAllocator,
+            configuration.MaxDegreeOfParallelism);
+
+        return new DefaultDrawingBackendScene(scene, target.Bounds, ownedResources);
+    }
+
+    /// <inheritdoc />
+    public void RenderScene<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> target,
+        DrawingBackendScene scene)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (scene is not DefaultDrawingBackendScene cpuScene)
+        {
+            throw new InvalidOperationException("The retained scene is not a CPU drawing backend scene.");
         }
 
         if (!target.TryGetCpuRegion(out Buffer2DRegion<TPixel> destinationFrame))
@@ -33,18 +55,15 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             throw new NotSupportedException($"{nameof(DefaultDrawingBackend)} requires CPU-accessible frame targets.");
         }
 
-        using FlushScene scene = FlushScene.Create(
-            compositionScene,
-            target.Bounds,
-            configuration.MemoryAllocator,
-            configuration.MaxDegreeOfParallelism);
-
-        if (scene.RowCount == 0)
+        if (target.Bounds != cpuScene.Bounds)
         {
-            return;
+            throw new InvalidOperationException("The target bounds do not match the retained CPU scene bounds.");
         }
 
-        ExecuteScene(configuration, destinationFrame, compositionScene.Commands, scene);
+        if (cpuScene.Scene is FlushScene flushScene && flushScene.RowCount != 0)
+        {
+            ExecuteScene(configuration, destinationFrame, flushScene);
+        }
     }
 
     /// <summary>
@@ -53,12 +72,10 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="configuration">The active processing configuration.</param>
     /// <param name="destinationFrame">The destination CPU region.</param>
-    /// <param name="commands">The original composition commands referenced by the retained scene.</param>
     /// <param name="scene">The retained scene to execute.</param>
     private static void ExecuteScene<TPixel>(
         Configuration configuration,
         Buffer2DRegion<TPixel> destinationFrame,
-        IReadOnlyList<CompositionSceneCommand> commands,
         FlushScene scene)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -97,7 +114,6 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
                 ExecuteSceneRow(
                     configuration,
                     destinationFrame,
-                    commands,
                     scene,
                     scene.Rows[rowIndex],
                     state);
@@ -113,14 +129,12 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="configuration">The active processing configuration.</param>
     /// <param name="destinationFrame">The destination CPU region.</param>
-    /// <param name="commands">The original composition commands.</param>
     /// <param name="scene">The retained flush scene.</param>
     /// <param name="row">The retained scene row to execute.</param>
     /// <param name="state">The worker-local scratch and compositing state.</param>
     private static void ExecuteSceneRow<TPixel>(
         Configuration configuration,
         Buffer2DRegion<TPixel> destinationFrame,
-        IReadOnlyList<CompositionSceneCommand> commands,
         FlushScene scene,
         in FlushScene.SceneRow row,
         WorkerState<TPixel> state)
@@ -153,11 +167,13 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
                     switch (operation.Kind)
                     {
                         case FlushScene.SceneOperationKind.BeginLayer:
+                            GraphicsOptions? layerOptions = scene.LayerOptions[operation.ItemIndex];
+
                             targetStack[targetCount++] =
                                 new BandTarget<TPixel>(
                                     configuration.MemoryAllocator.Allocate2D<TPixel>(operation.LayerBounds.Width, operation.LayerBounds.Height, AllocationOptions.Clean),
                                     operation.LayerBounds,
-                                    ((PathCompositionSceneCommand)commands[operation.CommandIndex]).Command.GraphicsOptions);
+                                    layerOptions);
                             break;
 
                         case FlushScene.SceneOperationKind.EndLayer:

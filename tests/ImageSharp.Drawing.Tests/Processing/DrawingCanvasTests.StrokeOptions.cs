@@ -15,8 +15,6 @@ public partial class DrawingCanvasTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> target = provider.GetImage();
-        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions());
-
         IPath leftPath = CreateBowTiePath(new RectangleF(28, 34, 128, 152));
         IPath rightPath = CreateBowTiePath(new RectangleF(204, 34, 128, 152));
 
@@ -29,19 +27,21 @@ public partial class DrawingCanvasTests
             ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.EvenOdd }
         };
 
-        canvas.Clear(Brushes.Solid(Color.White));
-        canvas.Fill(Brushes.Solid(Color.GhostWhite.WithAlpha(0.85F)), new Rectangle(12, 12, 336, 196));
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.Fill(Brushes.Solid(Color.GhostWhite.WithAlpha(0.85F)), new Rectangle(12, 12, 336, 196));
 
-        _ = canvas.Save(evenOddOptions);
-        canvas.Draw(pen, leftPath);
-        canvas.Draw(pen, rightPath);
-        canvas.Restore();
+            _ = canvas.Save(evenOddOptions);
+            canvas.Draw(pen, leftPath);
+            canvas.Draw(pen, rightPath);
+            canvas.Restore();
 
-        canvas.Draw(Pens.Solid(Color.DarkSlateGray, 2F), leftPath);
-        canvas.Draw(Pens.Solid(Color.DarkSlateGray, 2F), rightPath);
-        canvas.DrawLine(Pens.DashDot(Color.Gray, 2F), new PointF(180, 20), new PointF(180, 200));
-        canvas.Draw(Pens.Solid(Color.Black, 2F), new Rectangle(8, 8, 344, 204));
-        canvas.Flush();
+            canvas.Draw(Pens.Solid(Color.DarkSlateGray, 2F), leftPath);
+            canvas.Draw(Pens.Solid(Color.DarkSlateGray, 2F), rightPath);
+            canvas.DrawLine(Pens.DashDot(Color.Gray, 2F), new PointF(180, 20), new PointF(180, 200));
+            canvas.Draw(Pens.Solid(Color.Black, 2F), new Rectangle(8, 8, 344, 204));
+        }
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(ImageComparer.TolerantPercentage(0.0001F), provider, appendSourceFileOrDescription: false);

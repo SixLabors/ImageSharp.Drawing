@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
+using System.Threading;
 using Silk.NET.WebGPU;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -36,10 +37,12 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     // can start closer to the scene sizes the current device has already proven it needs.
     private WebGPUSceneBumpSizes bumpSizes = WebGPUSceneBumpSizes.Initial();
 
-    // Cached arenas for cross-flush buffer reuse. Rented via Interlocked.Exchange at flush
-    // start and returned at flush end so parallel flushes on different threads don't contend.
+    // Cached arenas for short-lived scene reuse. Interlocked.Exchange makes each
+    // cache a one-item rent slot: parallel flushes can race for reuse, but only
+    // one caller can remove a given arena from the slot.
     private WebGPUSceneSchedulingArena? cachedSchedulingArena;
     private WebGPUSceneResourceArena? cachedResourceArena;
+
     private WebGPUSceneDispatch.BindingLimitBuffer lastChunkingBindingFailure;
     private bool isDisposed;
 
@@ -70,97 +73,295 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     public string DiagnosticLastChunkingBindingFailure => this.lastChunkingBindingFailure.ToString();
 
     /// <inheritdoc />
-    public void FlushCompositions<TPixel>(
+    public DrawingBackendScene CreateScene<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
-        CompositionScene compositionScene)
+        DrawingCommandBatch commandBatch,
+        IReadOnlyList<IDisposable>? ownedResources = null)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         this.ThrowIfDisposed();
-        if (compositionScene.CommandCount == 0)
+
+        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId, out FeatureName requiredFeature))
         {
-            return;
+            throw new NotSupportedException($"The WebGPU backend does not support pixel format '{typeof(TPixel).Name}'.");
+        }
+
+        if (!TryGetSceneTarget(
+                target,
+                formatId,
+                requiredFeature,
+                out TextureFormat textureFormat,
+                out Rectangle targetBounds))
+        {
+            throw new NotSupportedException("The target cannot create a WebGPU flush context.");
+        }
+
+        if (!WebGPUSceneEncoder.TryEncode(
+                commandBatch,
+                targetBounds,
+                configuration.MemoryAllocator,
+                out WebGPUEncodedScene encodedScene,
+                out string? error))
+        {
+            throw new InvalidOperationException(error);
+        }
+
+        return new WebGPUDrawingBackendScene(
+            encodedScene,
+            textureFormat,
+            requiredFeature,
+            targetBounds,
+            this.bumpSizes,
+            ownedResources);
+    }
+
+    /// <inheritdoc />
+    public void RenderScene<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> target,
+        DrawingBackendScene scene)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        this.ThrowIfDisposed();
+
+        if (scene is not WebGPUDrawingBackendScene webGPUScene)
+        {
+            throw new InvalidOperationException("The retained scene is not a WebGPU drawing backend scene.");
+        }
+
+        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId, out FeatureName requiredFeature))
+        {
+            throw new NotSupportedException($"The WebGPU backend does not support pixel format '{typeof(TPixel).Name}'.");
+        }
+
+        if (!TryGetSceneTarget(
+                target,
+                formatId,
+                requiredFeature,
+                out TextureFormat textureFormat,
+                out Rectangle targetBounds))
+        {
+            throw new NotSupportedException("The target cannot create a WebGPU flush context.");
+        }
+
+        if (targetBounds != webGPUScene.Bounds)
+        {
+            throw new InvalidOperationException("The target bounds do not match the retained WebGPU scene bounds.");
         }
 
         this.DiagnosticLastFlushUsedChunking = false;
         this.lastChunkingBindingFailure = WebGPUSceneDispatch.BindingLimitBuffer.None;
-        WebGPUSceneBumpSizes currentBumpSizes = this.bumpSizes;
 
-        // Rent the cached scheduling arena. Null on first flush or if another thread has it.
-        // Returned in the finally block for the next flush to reuse.
-        WebGPUSceneSchedulingArena? schedulingArena = Interlocked.Exchange(ref this.cachedSchedulingArena, null);
-        WebGPUSceneResourceArena? resourceArena = Interlocked.Exchange(ref this.cachedResourceArena, null);
+        WebGPUSceneBumpSizes currentBumpSizes = webGPUScene.BumpSizes;
+        WebGPUSceneResourceArena? resourceArena = null;
+        WebGPUSceneSchedulingArena? schedulingArena = null;
+        string? error;
+
         try
         {
-            // Retry loop: scratch allocators start small and the GPU reports actual demand.
-            // Earlier scheduling overflows can hide later-stage demand, so a first-use flush
-            // can require several passes before the capacities converge. Successful sizes are
-            // persisted in this.bumpSizes, so later flushes usually run without retries.
-            for (int attempt = 0; attempt < MaxDynamicGrowthAttempts; attempt++)
+            if (webGPUScene.TextureFormat != textureFormat || webGPUScene.RequiredFeature != requiredFeature)
             {
-                if (!WebGPUSceneDispatch.TryCreateStagedScene(
-                        configuration,
-                        target,
-                        compositionScene,
-                        currentBumpSizes,
-                        ref resourceArena,
-                        out bool exceedsBindingLimit,
-                        out _,
-                        out WebGPUStagedScene stagedScene,
-                        out string? error))
+                throw new InvalidOperationException("The retained WebGPU scene format does not match the target format.");
+            }
+
+            WebGPUEncodedScene? encodedScene = webGPUScene.EncodedScene;
+
+            if (encodedScene is not null && encodedScene.FillCount != 0)
+            {
+                // Scene arenas are rented once for the render. If a concurrent render
+                // owns them, the backend cache supplies independent scratch buffers.
+                resourceArena ??= webGPUScene.RentResourceArena() ?? this.RentResourceArena();
+                schedulingArena ??= webGPUScene.RentSchedulingArena() ?? this.RentSchedulingArena();
+
+                bool renderCompleted = false;
+
+                // Retry loop: scratch allocators start small and the GPU reports actual demand.
+                // The retained scene keeps the largest observed size so later renders avoid
+                // rediscovering the same growth.
+                for (int attempt = 0; attempt < MaxDynamicGrowthAttempts; attempt++)
                 {
-                    throw new InvalidOperationException(
-                        exceedsBindingLimit
-                            ? error ?? "The staged WebGPU scene exceeded the current binding limits."
-                            : error ?? "Failed to create the staged WebGPU scene.");
+                    if (!WebGPUSceneDispatch.TryCreateStagedScene(
+                            configuration,
+                            target,
+                            encodedScene,
+                            textureFormat,
+                            requiredFeature,
+                            currentBumpSizes,
+                            ref resourceArena,
+                            out bool exceedsBindingLimit,
+                            out _,
+                            out WebGPUStagedScene stagedScene,
+                            out error))
+                    {
+                        throw new InvalidOperationException(
+                            exceedsBindingLimit
+                                ? error ?? "The staged WebGPU scene exceeded the current binding limits."
+                                : error ?? "Failed to create the staged WebGPU scene.");
+                    }
+
+                    try
+                    {
+                        if (stagedScene.BindingLimitFailure.Buffer != WebGPUSceneDispatch.BindingLimitBuffer.None)
+                        {
+                            this.DiagnosticLastFlushUsedChunking = true;
+                            this.lastChunkingBindingFailure = stagedScene.BindingLimitFailure.Buffer;
+                        }
+
+                        bool renderSucceeded = WebGPUSceneDispatch.TryRenderStagedScene(
+                            ref stagedScene,
+                            ref schedulingArena,
+                            out bool requiresGrowth,
+                            out WebGPUSceneBumpSizes grownBumpSizes,
+                            out error);
+
+                        if (renderSucceeded)
+                        {
+                            currentBumpSizes = MaxBumpSizes(currentBumpSizes, grownBumpSizes);
+                            renderCompleted = true;
+                            break;
+                        }
+
+                        if (requiresGrowth)
+                        {
+                            currentBumpSizes = MaxBumpSizes(currentBumpSizes, grownBumpSizes);
+                            continue;
+                        }
+
+                        throw new InvalidOperationException(error ?? "The staged WebGPU scene dispatch failed.");
+                    }
+                    finally
+                    {
+                        stagedScene.Dispose();
+                    }
                 }
 
-                try
+                if (!renderCompleted)
                 {
-                    this.DiagnosticLastFlushUsedChunking = stagedScene.BindingLimitFailure.Buffer != WebGPUSceneDispatch.BindingLimitBuffer.None;
-                    this.lastChunkingBindingFailure = stagedScene.BindingLimitFailure.Buffer;
-
-                    if (stagedScene.EncodedScene.FillCount == 0)
-                    {
-                        return;
-                    }
-
-                    bool renderSucceeded = WebGPUSceneDispatch.TryRenderStagedScene(
-                        ref stagedScene,
-                        ref schedulingArena,
-                        out bool requiresGrowth,
-                        out WebGPUSceneBumpSizes grownBumpSizes,
-                        out error);
-
-                    if (renderSucceeded)
-                    {
-                        // Persist GPU-reported actual usage for next flush.
-                        this.bumpSizes = grownBumpSizes;
-                        return;
-                    }
-
-                    if (requiresGrowth)
-                    {
-                        // Bump overflow; retry with GPU-reported sizes.
-                        currentBumpSizes = grownBumpSizes;
-                        continue;
-                    }
-
-                    throw new InvalidOperationException(error ?? "The staged WebGPU scene dispatch failed.");
-                }
-                finally
-                {
-                    stagedScene.Dispose();
+                    throw new InvalidOperationException("The staged WebGPU scene exceeded the current dynamic growth retry budget.");
                 }
             }
 
-            throw new InvalidOperationException("The staged WebGPU scene exceeded the current dynamic growth retry budget.");
+            webGPUScene.UpdateBumpSizes(currentBumpSizes);
+            this.bumpSizes = currentBumpSizes;
         }
         finally
         {
-            // Return arenas for the next flush. If another thread already returned one,
-            // dispose the displaced arena (at most one survives in the cache).
+            webGPUScene.ReturnArenas(resourceArena, schedulingArena, this);
+        }
+    }
+
+    /// <summary>
+    /// Validates the target information needed to encode a retained WebGPU scene.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="target">The target frame.</param>
+    /// <param name="expectedFormat">The expected WebGPU texture format.</param>
+    /// <param name="requiredFeature">The optional feature required by the texture format.</param>
+    /// <param name="textureFormat">Receives the native WebGPU texture format.</param>
+    /// <param name="targetBounds">Receives the target bounds.</param>
+    /// <returns><see langword="true"/> when the target can accept a WebGPU scene.</returns>
+    private static bool TryGetSceneTarget<TPixel>(
+        ICanvasFrame<TPixel> target,
+        WebGPUTextureFormatId expectedFormat,
+        FeatureName requiredFeature,
+        out TextureFormat textureFormat,
+        out Rectangle targetBounds)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        textureFormat = default;
+        targetBounds = default;
+
+        if (!target.TryGetNativeSurface(out NativeSurface? nativeSurface))
+        {
+            return false;
+        }
+
+        WebGPUNativeTarget nativeTarget = nativeSurface.GetNativeTarget<WebGPUNativeTarget>();
+        if (nativeTarget.DeviceHandle.IsInvalid ||
+            nativeTarget.QueueHandle.IsInvalid ||
+            nativeTarget.TargetTextureViewHandle.IsInvalid ||
+            nativeTarget.TargetFormat != expectedFormat)
+        {
+            return false;
+        }
+
+        targetBounds = target.Bounds;
+        Rectangle nativeBounds = new(0, 0, nativeTarget.Width, nativeTarget.Height);
+        if (!nativeBounds.Contains(targetBounds))
+        {
+            return false;
+        }
+
+        WebGPU api = WebGPURuntime.GetApi();
+        WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(api, nativeTarget.DeviceHandle);
+        if (requiredFeature != FeatureName.Undefined && !deviceState.HasFeature(requiredFeature))
+        {
+            return false;
+        }
+
+        textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeTarget.TargetFormat);
+        return true;
+    }
+
+    /// <summary>
+    /// Computes the maximum scratch capacities observed across render attempts.
+    /// </summary>
+    /// <param name="left">The first scratch-capacity set.</param>
+    /// <param name="right">The second scratch-capacity set.</param>
+    /// <returns>The maximum scratch-capacity set.</returns>
+    private static WebGPUSceneBumpSizes MaxBumpSizes(
+        WebGPUSceneBumpSizes left,
+        WebGPUSceneBumpSizes right)
+        => new(
+            Math.Max(left.Lines, right.Lines),
+            Math.Max(left.Binning, right.Binning),
+            Math.Max(left.PathRows, right.PathRows),
+            Math.Max(left.PathTiles, right.PathTiles),
+            Math.Max(left.SegCounts, right.SegCounts),
+            Math.Max(left.Segments, right.Segments),
+            Math.Max(left.BlendSpill, right.BlendSpill),
+            Math.Max(left.Ptcl, right.Ptcl));
+
+    /// <summary>
+    /// Rents the cached scene resource arena for a render, leaving the backend cache empty.
+    /// </summary>
+    internal WebGPUSceneResourceArena? RentResourceArena()
+        => Interlocked.Exchange(ref this.cachedResourceArena, null);
+
+    /// <summary>
+    /// Rents the cached scheduling arena for a render, leaving the backend cache empty.
+    /// </summary>
+    internal WebGPUSceneSchedulingArena? RentSchedulingArena()
+        => Interlocked.Exchange(ref this.cachedSchedulingArena, null);
+
+    /// <summary>
+    /// Returns reusable arenas to this backend cache.
+    /// </summary>
+    internal void ReturnArenas(
+        WebGPUSceneResourceArena? resourceArena,
+        WebGPUSceneSchedulingArena? schedulingArena)
+    {
+        if (this.isDisposed)
+        {
+            WebGPUSceneSchedulingArena.Dispose(schedulingArena);
+            WebGPUSceneResourceArena.Dispose(resourceArena);
+            return;
+        }
+
+        // Null arenas mean this scene never reached that allocation stage; do not overwrite
+        // a warm backend cache with null when disposing an unrendered or empty scene.
+        if (schedulingArena is not null)
+        {
+            // The backend cache intentionally holds at most one arena of each kind.
+            // A displaced arena means another thread returned a cache candidate first.
             WebGPUSceneSchedulingArena.Dispose(Interlocked.Exchange(ref this.cachedSchedulingArena, schedulingArena));
+        }
+
+        if (resourceArena is not null)
+        {
+            // The exchanged-out arena is no longer reachable from any render path, so it
+            // must be released immediately instead of being left for final backend disposal.
             WebGPUSceneResourceArena.Dispose(Interlocked.Exchange(ref this.cachedResourceArena, resourceArena));
         }
     }
@@ -316,9 +517,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         this.DiagnosticLastFlushUsedChunking = false;
         this.lastChunkingBindingFailure = WebGPUSceneDispatch.BindingLimitBuffer.None;
-        WebGPUSceneSchedulingArena.Dispose(this.cachedSchedulingArena);
-        WebGPUSceneResourceArena.Dispose(this.cachedResourceArena);
         this.isDisposed = true;
+
+        WebGPUSceneSchedulingArena.Dispose(Interlocked.Exchange(ref this.cachedSchedulingArena, null));
+        WebGPUSceneResourceArena.Dispose(Interlocked.Exchange(ref this.cachedResourceArena, null));
     }
 
     /// <summary>
