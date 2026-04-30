@@ -120,28 +120,6 @@ public sealed partial class WebGPUDrawingBackend
     }
 
     /// <summary>
-    /// Resolves the sampled texture type for a registered composite texture format.
-    /// </summary>
-    /// <param name="textureFormat">The WebGPU texture format.</param>
-    /// <param name="sampleType">Receives the sampled texture type on success.</param>
-    /// <returns>
-    /// <see langword="true"/> when the format is one of the explicitly registered composite formats;
-    /// otherwise <see langword="false"/>.
-    /// </returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static bool TryGetCompositeTextureSampleType(TextureFormat textureFormat, out TextureSampleType sampleType)
-    {
-        if (!TryFind(textureFormat, out CompositePixelRegistration r))
-        {
-            sampleType = default;
-            return false;
-        }
-
-        sampleType = r.SampleType;
-        return true;
-    }
-
-    /// <summary>
     /// Resolves the shader-side read/write traits for a registered composite texture format.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
