@@ -15,19 +15,6 @@ internal sealed unsafe class WebGPUAdapterHandle : WebGPUHandle
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUAdapterHandle"/> class.
     /// </summary>
-    /// <param name="adapterHandle">The WebGPU adapter handle value.</param>
-    /// <param name="ownsHandle">
-    /// <see langword="true"/> when this wrapper owns the adapter and must release it;
-    /// <see langword="false"/> when the caller retains ownership.
-    /// </param>
-    internal WebGPUAdapterHandle(nint adapterHandle, bool ownsHandle)
-        : this(ownsHandle ? WebGPURuntime.GetApi() : null, adapterHandle, ownsHandle)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUAdapterHandle"/> class.
-    /// </summary>
     /// <param name="api">
     /// The WebGPU API facade used to release the handle when this wrapper owns it,
     /// or <see langword="null"/> when the wrapper is non-owning.
