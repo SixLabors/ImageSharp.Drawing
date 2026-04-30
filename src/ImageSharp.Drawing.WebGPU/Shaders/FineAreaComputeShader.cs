@@ -16,7 +16,6 @@ internal static class FineAreaComputeShader
     private const string OutputStoreMarker = "textureStore(output, vec2<i32>(coords), rgba_sep);";
     private const string PremulAlphaMarker = "fn premul_alpha(rgba: vec4<f32>) -> vec4<f32> {";
 
-    private static readonly object CacheSync = new();
     private static readonly Dictionary<TextureFormat, byte[]> ShaderCache = [];
 
     /// <summary>
@@ -36,7 +35,7 @@ internal static class FineAreaComputeShader
             return false;
         }
 
-        lock (CacheSync)
+        lock (ShaderCache)
         {
             if (ShaderCache.TryGetValue(textureFormat, out byte[]? cachedCode))
             {
