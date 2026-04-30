@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
 using WgpuBuffer = Silk.NET.WebGPU.Buffer;
 
@@ -10,6 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 internal static unsafe partial class WebGPURuntime
 {
     private static readonly ConcurrentDictionary<nint, DeviceSharedState> DeviceStateCache = new();
+    private static readonly object DeviceStateCacheSync = new();
 
     /// <summary>
     /// Gets or creates process-scoped shared resources for the specified device.
@@ -20,19 +22,18 @@ internal static unsafe partial class WebGPURuntime
     internal static DeviceSharedState GetOrCreateDeviceState(WebGPU api, WebGPUDeviceHandle deviceHandle)
     {
         nint cacheKey = deviceHandle.DangerousGetHandle();
-        if (DeviceStateCache.TryGetValue(cacheKey, out DeviceSharedState? existing))
-        {
-            return existing;
-        }
 
-        DeviceSharedState created = new(api, deviceHandle);
-        DeviceSharedState winner = DeviceStateCache.GetOrAdd(cacheKey, created);
-        if (!ReferenceEquals(winner, created))
+        lock (DeviceStateCacheSync)
         {
-            created.Dispose();
-        }
+            if (DeviceStateCache.TryGetValue(cacheKey, out DeviceSharedState? existing))
+            {
+                return existing;
+            }
 
-        return winner;
+            DeviceSharedState created = new(api, deviceHandle);
+            DeviceStateCache[cacheKey] = created;
+            return created;
+        }
     }
 
     /// <summary>
@@ -40,12 +41,15 @@ internal static unsafe partial class WebGPURuntime
     /// </summary>
     private static void ClearDeviceStateCache()
     {
-        foreach (DeviceSharedState state in DeviceStateCache.Values)
+        lock (DeviceStateCacheSync)
         {
-            state.Dispose();
-        }
+            foreach (DeviceSharedState state in DeviceStateCache.Values)
+            {
+                state.Dispose();
+            }
 
-        DeviceStateCache.Clear();
+            DeviceStateCache.Clear();
+        }
     }
 
     /// <summary>
@@ -59,6 +63,7 @@ internal static unsafe partial class WebGPURuntime
         private readonly ConcurrentDictionary<string, SharedBufferInfrastructure> sharedBuffers = new(StringComparer.Ordinal);
         private readonly HashSet<FeatureName> deviceFeatures;
         private WebGPUHandle.HandleReference deviceReference;
+        private PfnErrorCallback uncapturedErrorCallback;
         private bool disposed;
 
         internal DeviceSharedState(WebGPU api, WebGPUDeviceHandle deviceHandle)
@@ -68,12 +73,15 @@ internal static unsafe partial class WebGPURuntime
 
             try
             {
+                this.uncapturedErrorCallback = PfnErrorCallback.From(HandleUncapturedError);
                 this.Device = (Device*)this.deviceReference.Handle;
+                this.Api.DeviceSetUncapturedErrorCallback(this.Device, this.uncapturedErrorCallback, null);
                 this.deviceFeatures = EnumerateDeviceFeatures(api, this.Device);
                 this.MaxStorageBufferBindingSize = QueryMaxStorageBufferBindingSize(api, this.Device);
             }
             catch
             {
+                this.uncapturedErrorCallback.Dispose();
                 this.deviceReference.Dispose();
                 throw;
             }
@@ -120,6 +128,34 @@ internal static unsafe partial class WebGPURuntime
         /// <returns><see langword="true"/> when the device has the feature; otherwise <see langword="false"/>.</returns>
         public bool HasFeature(FeatureName feature)
             => this.deviceFeatures.Contains(feature);
+
+        /// <summary>
+        /// Forwards uncaptured native WebGPU errors through the public environment callback.
+        /// </summary>
+        private static void HandleUncapturedError(ErrorType errorType, byte* message, void* userData)
+        {
+            _ = userData;
+
+            string errorMessage = message is null
+                ? string.Empty
+                : Marshal.PtrToStringUTF8((nint)message) ?? string.Empty;
+
+            WebGPUEnvironment.ReportUncapturedError(ToPublicErrorType(errorType), errorMessage);
+        }
+
+        /// <summary>
+        /// Maps Silk's native error enum to the public API enum without exposing Silk types.
+        /// </summary>
+        private static WebGPUErrorType ToPublicErrorType(ErrorType errorType)
+            => errorType switch
+            {
+                ErrorType.NoError => WebGPUErrorType.NoError,
+                ErrorType.Validation => WebGPUErrorType.Validation,
+                ErrorType.OutOfMemory => WebGPUErrorType.OutOfMemory,
+                ErrorType.Internal => WebGPUErrorType.Internal,
+                ErrorType.DeviceLost => WebGPUErrorType.DeviceLost,
+                _ => WebGPUErrorType.Unknown
+            };
 
         /// <summary>
         /// Snapshots the feature set currently reported by the native device.
@@ -190,23 +226,7 @@ internal static unsafe partial class WebGPURuntime
             bindGroupLayout = null;
             pipeline = null;
 
-            if (this.disposed)
-            {
-                error = "WebGPU device state is disposed.";
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(pipelineKey))
-            {
-                error = "Composite pipeline key cannot be empty.";
-                return false;
-            }
-
-            if (shaderCode.IsEmpty)
-            {
-                error = $"Composite shader code is missing for pipeline '{pipelineKey}'.";
-                return false;
-            }
+            ObjectDisposedException.ThrowIf(this.disposed, this);
 
             CompositePipelineInfrastructure infrastructure = this.compositePipelines.GetOrAdd(
                 pipelineKey,
@@ -276,29 +296,7 @@ internal static unsafe partial class WebGPURuntime
             bindGroupLayout = null;
             pipeline = null;
 
-            if (this.disposed)
-            {
-                error = "WebGPU device state is disposed.";
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(pipelineKey))
-            {
-                error = "Composite compute pipeline key cannot be empty.";
-                return false;
-            }
-
-            if (shaderCode.IsEmpty)
-            {
-                error = $"Composite compute shader code is missing for pipeline '{pipelineKey}'.";
-                return false;
-            }
-
-            if (entryPoint.IsEmpty)
-            {
-                error = $"Composite compute entry point is missing for pipeline '{pipelineKey}'.";
-                return false;
-            }
+            ObjectDisposedException.ThrowIf(this.disposed, this);
 
             CompositeComputePipelineInfrastructure infrastructure = this.compositeComputePipelines.GetOrAdd(
                 pipelineKey,
@@ -365,23 +363,7 @@ internal static unsafe partial class WebGPURuntime
             buffer = null;
             capacity = 0;
 
-            if (this.disposed)
-            {
-                error = "WebGPU device state is disposed.";
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(bufferKey))
-            {
-                error = "Shared buffer key cannot be empty.";
-                return false;
-            }
-
-            if (requiredSize == 0)
-            {
-                error = $"Shared buffer '{bufferKey}' requires a non-zero size.";
-                return false;
-            }
+            ObjectDisposedException.ThrowIf(this.disposed, this);
 
             SharedBufferInfrastructure infrastructure = this.sharedBuffers.GetOrAdd(
                 bufferKey,
@@ -466,6 +448,10 @@ internal static unsafe partial class WebGPURuntime
             }
 
             this.sharedBuffers.Clear();
+
+            // Clear the native callback slot before freeing Silk's delegate thunk.
+            this.Api.DeviceSetUncapturedErrorCallback(this.Device, default, null);
+            this.uncapturedErrorCallback.Dispose();
 
             this.deviceReference.Dispose();
             this.disposed = true;

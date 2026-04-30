@@ -104,6 +104,11 @@ internal sealed class WebGPUDeviceContext : IDisposable
 
         this.DeviceHandle = deviceHandle;
         this.QueueHandle = queueHandle;
+
+        // Device-scoped shared state owns the uncaptured-error callback, so create it
+        // before any later surface or render-target work can report native validation errors.
+        _ = WebGPURuntime.GetOrCreateDeviceState(WebGPURuntime.GetApi(), deviceHandle);
+
         this.Backend = new WebGPUDrawingBackend();
         this.Configuration = configuration;
     }
