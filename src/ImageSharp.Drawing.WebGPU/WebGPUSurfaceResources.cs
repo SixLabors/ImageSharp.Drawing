@@ -9,7 +9,7 @@ using SilkPresentMode = Silk.NET.WebGPU.PresentMode;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Owning container for the per-surface WebGPU stack: instance, surface, adapter, device, queue, drawing context,
+/// Owning container for the per-surface WebGPU stack: instance, surface, adapter, device, queue, device context,
 /// and the negotiated swapchain texture format.
 /// </summary>
 /// <remarks>
@@ -38,19 +38,20 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     private bool frameInFlight;
     private readonly FeatureName requiredFeature;
     private readonly Configuration configuration;
+    private WebGPUDeviceContext deviceContext;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUSurfaceResources"/> class with already-acquired handles.
     /// Only invoked by <see cref="Create"/> after every handle has been successfully bootstrapped.
     /// </summary>
     /// <param name="api">The shared WebGPU API loader.</param>
-    /// <param name="configuration">The ImageSharp configuration the drawing context uses for its rendering backend.</param>
+    /// <param name="configuration">The ImageSharp configuration the device context uses for its rendering backend.</param>
     /// <param name="instanceHandle">The owned WebGPU instance handle.</param>
     /// <param name="surfaceHandle">The owned WebGPU surface handle attached to the native host.</param>
     /// <param name="adapterHandle">The owned adapter handle selected for <paramref name="surfaceHandle"/>.</param>
     /// <param name="deviceHandle">The owned device handle requested from <paramref name="adapterHandle"/>.</param>
     /// <param name="queueHandle">The owned default queue handle paired with <paramref name="deviceHandle"/>.</param>
-    /// <param name="graphics">The drawing context bound to <paramref name="deviceHandle"/> and <paramref name="queueHandle"/>.</param>
+    /// <param name="deviceContext">The device context bound to <paramref name="deviceHandle"/> and <paramref name="queueHandle"/>.</param>
     /// <param name="format">The negotiated swapchain texture format.</param>
     /// <param name="requiredFeature">The optional WebGPU feature required by the selected texture format.</param>
     private WebGPUSurfaceResources(
@@ -61,7 +62,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         WebGPUAdapterHandle adapterHandle,
         WebGPUDeviceHandle deviceHandle,
         WebGPUQueueHandle queueHandle,
-        WebGPUDeviceContext graphics,
+        WebGPUDeviceContext deviceContext,
         WebGPUTextureFormat format,
         FeatureName requiredFeature)
     {
@@ -72,7 +73,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         this.AdapterHandle = adapterHandle;
         this.DeviceHandle = deviceHandle;
         this.QueueHandle = queueHandle;
-        this.Graphics = graphics;
+        this.deviceContext = deviceContext;
         this.Format = format;
         this.requiredFeature = requiredFeature;
     }
@@ -109,12 +110,6 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     public WebGPUQueueHandle QueueHandle { get; private set; }
 
     /// <summary>
-    /// Gets the drawing context bound to <see cref="DeviceHandle"/>/<see cref="QueueHandle"/>, used to wrap acquired
-    /// per-frame textures into <see cref="DrawingCanvas"/> instances.
-    /// </summary>
-    internal WebGPUDeviceContext Graphics { get; private set; }
-
-    /// <summary>
     /// Gets the swapchain texture format chosen at construction time.
     /// Stable for the lifetime of this instance.
     /// </summary>
@@ -124,7 +119,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     /// Bootstraps the full per-surface WebGPU stack bound to <paramref name="nativeSource"/> and leaves the surface
     /// configured against <paramref name="initialPresentMode"/> and <paramref name="initialFramebufferSize"/>.
     /// </summary>
-    /// <param name="configuration">The ImageSharp configuration the drawing context will use for its rendering backend.</param>
+    /// <param name="configuration">The ImageSharp configuration the device context will use for its rendering backend.</param>
     /// <param name="nativeSource">The native surface source that provides the platform handles for surface creation.</param>
     /// <param name="format">The swapchain texture format.</param>
     /// <param name="initialPresentMode">The present mode to apply to the first surface configuration.</param>
@@ -180,7 +175,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
                 deviceResources.AdapterHandle,
                 deviceResources.DeviceHandle,
                 deviceResources.QueueHandle,
-                deviceResources.Graphics,
+                deviceResources.DeviceContext,
                 format,
                 requiredFeature);
 
@@ -339,7 +334,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         {
             textureHandle = new WebGPUTextureHandle(this.Api, (nint)surfaceTexture.Texture, ownsHandle: true);
             textureViewHandle = new WebGPUTextureViewHandle(this.Api, (nint)textureView, ownsHandle: true);
-            DrawingCanvas canvas = this.Graphics.CreateCanvas(
+            DrawingCanvas canvas = this.deviceContext.CreateCanvas(
                 options,
                 textureHandle,
                 textureViewHandle,
@@ -378,7 +373,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     }
 
     /// <summary>
-    /// Releases every owned handle in reverse acquisition order (graphics context, queue, device, adapter, surface, instance).
+    /// Releases every owned handle in reverse acquisition order (device context, queue, device, adapter, surface, instance).
     /// Idempotent; subsequent calls are no-ops.
     /// </summary>
     public void Dispose()
@@ -388,7 +383,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
             return;
         }
 
-        this.Graphics.Dispose();
+        this.deviceContext.Dispose();
         this.QueueHandle.Dispose();
         this.DeviceHandle.Dispose();
         this.AdapterHandle.Dispose();
@@ -398,10 +393,10 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     }
 
     /// <summary>
-    /// Requests the adapter, device, queue, and drawing context for an existing surface.
+    /// Requests the adapter, device, queue, and device context for an existing surface.
     /// </summary>
     /// <param name="api">The shared WebGPU API loader.</param>
-    /// <param name="configuration">The ImageSharp configuration the drawing context will use.</param>
+    /// <param name="configuration">The ImageSharp configuration the device context will use.</param>
     /// <param name="instance">The instance that owns the surface.</param>
     /// <param name="surface">The surface the adapter must be compatible with.</param>
     /// <param name="requiredFeature">The optional WebGPU feature required by the selected texture format.</param>
@@ -417,7 +412,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         WebGPUAdapterHandle? adapterHandle = null;
         WebGPUDeviceHandle? deviceHandle = null;
         WebGPUQueueHandle? queueHandle = null;
-        WebGPUDeviceContext? graphics = null;
+        WebGPUDeviceContext? deviceContext = null;
 
         try
         {
@@ -433,18 +428,18 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
             }
 
             queueHandle = new WebGPUQueueHandle(api, (nint)queue, ownsHandle: true);
-            graphics = new WebGPUDeviceContext(configuration, deviceHandle, queueHandle);
+            deviceContext = new WebGPUDeviceContext(configuration, deviceHandle, queueHandle);
 
-            DeviceResources resources = new(adapterHandle, deviceHandle, queueHandle, graphics);
+            DeviceResources resources = new(adapterHandle, deviceHandle, queueHandle, deviceContext);
             adapterHandle = null;
             deviceHandle = null;
             queueHandle = null;
-            graphics = null;
+            deviceContext = null;
             return resources;
         }
         catch
         {
-            graphics?.Dispose();
+            deviceContext?.Dispose();
             queueHandle?.Dispose();
             deviceHandle?.Dispose();
             adapterHandle?.Dispose();
@@ -460,7 +455,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
 
     /// <summary>
     /// Recovers the device-owned portion of the surface stack after device loss.
-    /// The existing instance and surface remain valid; only adapter, device, queue, and drawing context are replaced.
+    /// The existing instance and surface remain valid; only adapter, device, queue, and device context are replaced.
     /// </summary>
     /// <param name="presentMode">The present mode applied to the recovered swapchain.</param>
     /// <param name="framebufferSize">The framebuffer size in pixels.</param>
@@ -481,18 +476,18 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
 
             this.ConfigureSurfaceCore(presentMode, framebufferSize, deviceResources.DeviceHandle);
 
-            WebGPUDeviceContext oldGraphics = this.Graphics;
+            WebGPUDeviceContext oldDeviceContext = this.deviceContext;
             WebGPUQueueHandle oldQueueHandle = this.QueueHandle;
             WebGPUDeviceHandle oldDeviceHandle = this.DeviceHandle;
             WebGPUAdapterHandle oldAdapterHandle = this.AdapterHandle;
 
-            this.Graphics = deviceResources.Graphics;
+            this.deviceContext = deviceResources.DeviceContext;
             this.QueueHandle = deviceResources.QueueHandle;
             this.DeviceHandle = deviceResources.DeviceHandle;
             this.AdapterHandle = deviceResources.AdapterHandle;
             deviceResources = null;
 
-            oldGraphics.Dispose();
+            oldDeviceContext.Dispose();
             oldQueueHandle.Dispose();
             oldDeviceHandle.Dispose();
             oldAdapterHandle.Dispose();
@@ -617,12 +612,12 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
             WebGPUAdapterHandle adapterHandle,
             WebGPUDeviceHandle deviceHandle,
             WebGPUQueueHandle queueHandle,
-            WebGPUDeviceContext graphics)
+            WebGPUDeviceContext deviceContext)
         {
             this.AdapterHandle = adapterHandle;
             this.DeviceHandle = deviceHandle;
             this.QueueHandle = queueHandle;
-            this.Graphics = graphics;
+            this.DeviceContext = deviceContext;
         }
 
         public WebGPUAdapterHandle AdapterHandle { get; }
@@ -631,11 +626,11 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
 
         public WebGPUQueueHandle QueueHandle { get; }
 
-        internal WebGPUDeviceContext Graphics { get; }
+        internal WebGPUDeviceContext DeviceContext { get; }
 
         public void Dispose()
         {
-            this.Graphics.Dispose();
+            this.DeviceContext.Dispose();
             this.QueueHandle.Dispose();
             this.DeviceHandle.Dispose();
             this.AdapterHandle.Dispose();

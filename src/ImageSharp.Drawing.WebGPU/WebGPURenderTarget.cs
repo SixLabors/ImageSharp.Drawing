@@ -15,7 +15,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </remarks>
 public sealed class WebGPURenderTarget : IDisposable
 {
-    private readonly bool ownsGraphics;
+    private readonly WebGPUDeviceContext deviceContext;
+    private readonly bool ownsDeviceContext;
     private bool isDisposed;
 
     /// <summary>
@@ -65,29 +66,29 @@ public sealed class WebGPURenderTarget : IDisposable
         WebGPUTextureFormat format,
         int width,
         int height)
-        : this(new WebGPUDeviceContext(configuration), ownsGraphics: true, format, width, height)
+        : this(new WebGPUDeviceContext(configuration), true, format, width, height)
     {
     }
 
     private WebGPURenderTarget(
-        WebGPUDeviceContext graphics,
-        bool ownsGraphics,
+        WebGPUDeviceContext deviceContext,
+        bool ownsDeviceContext,
         WebGPUTextureFormat format,
         int width,
         int height)
     {
-        this.Graphics = graphics;
-        this.ownsGraphics = ownsGraphics;
+        this.deviceContext = deviceContext;
+        this.ownsDeviceContext = ownsDeviceContext;
 
         try
         {
-            graphics.ThrowIfDisposed();
+            deviceContext.ThrowIfDisposed();
 
             WebGPU api = WebGPURuntime.GetApi();
             NativeSurface surface = WebGPURenderTargetAllocation.CreateRenderTarget(
                 api,
-                graphics.DeviceHandle,
-                graphics.QueueHandle,
+                deviceContext.DeviceHandle,
+                deviceContext.QueueHandle,
                 format,
                 width,
                 height,
@@ -102,9 +103,9 @@ public sealed class WebGPURenderTarget : IDisposable
         }
         catch
         {
-            if (ownsGraphics)
+            if (ownsDeviceContext)
             {
-                graphics.Dispose();
+                deviceContext.Dispose();
             }
 
             throw;
@@ -114,12 +115,7 @@ public sealed class WebGPURenderTarget : IDisposable
     /// <summary>
     /// Gets the WebGPU drawing backend used by this target.
     /// </summary>
-    internal WebGPUDrawingBackend Backend => this.Graphics.Backend;
-
-    /// <summary>
-    /// Gets the graphics device context used by this target.
-    /// </summary>
-    private WebGPUDeviceContext Graphics { get; }
+    internal WebGPUDrawingBackend Backend => this.deviceContext.Backend;
 
     /// <summary>
     /// Gets the native surface backing this render target.
@@ -172,12 +168,12 @@ public sealed class WebGPURenderTarget : IDisposable
     public DrawingCanvas CreateCanvas(DrawingOptions options)
     {
         this.ThrowIfDisposed();
-        this.Graphics.ThrowIfDisposed();
+        this.deviceContext.ThrowIfDisposed();
 
         return WebGPUCanvasFactory.CreateCanvas(
-            this.Graphics.Configuration,
+            this.deviceContext.Configuration,
             options,
-            this.Graphics.Backend,
+            this.deviceContext.Backend,
             this.Bounds,
             this.Surface,
             this.Format);
@@ -192,7 +188,7 @@ public sealed class WebGPURenderTarget : IDisposable
         where TPixel : unmanaged, IPixel<TPixel>
     {
         this.ThrowIfDisposed();
-        this.Graphics.ThrowIfDisposed();
+        this.deviceContext.ThrowIfDisposed();
 
         Image<TPixel> image = new(this.Width, this.Height);
         try
@@ -217,7 +213,7 @@ public sealed class WebGPURenderTarget : IDisposable
     {
         Guard.NotNull(destination, nameof(destination));
         this.ThrowIfDisposed();
-        this.Graphics.ThrowIfDisposed();
+        this.deviceContext.ThrowIfDisposed();
 
         if (destination.Width != this.Width || destination.Height != this.Height)
         {
@@ -230,8 +226,8 @@ public sealed class WebGPURenderTarget : IDisposable
 
         // ReadRegion owns the pixel-format check because it is the point where
         // typed CPU pixels are copied from the native WebGPU texture.
-        this.Graphics.Backend.ReadRegion(
-            this.Graphics.Configuration,
+        this.deviceContext.Backend.ReadRegion(
+            this.deviceContext.Configuration,
             frame,
             new Rectangle(0, 0, this.Width, this.Height),
             new Buffer2DRegion<TPixel>(destination.Frames.RootFrame.PixelBuffer));
@@ -250,9 +246,9 @@ public sealed class WebGPURenderTarget : IDisposable
         this.TextureViewHandle.Dispose();
         this.TextureHandle.Dispose();
 
-        if (this.ownsGraphics)
+        if (this.ownsDeviceContext)
         {
-            this.Graphics.Dispose();
+            this.deviceContext.Dispose();
         }
 
         this.isDisposed = true;
@@ -262,11 +258,11 @@ public sealed class WebGPURenderTarget : IDisposable
     /// Allocates an owned render target for the specified context, format, and size.
     /// </summary>
     internal static WebGPURenderTarget CreateFromContext(
-        WebGPUDeviceContext graphics,
+        WebGPUDeviceContext deviceContext,
         WebGPUTextureFormat format,
         int width,
         int height)
-        => new(graphics, ownsGraphics: false, format, width, height);
+        => new(deviceContext, false, format, width, height);
 
     private void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
