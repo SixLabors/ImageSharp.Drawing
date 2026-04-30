@@ -271,7 +271,7 @@ internal sealed class WebGPUDeviceContext : IDisposable
         Guard.NotNull(textureHandle, nameof(textureHandle));
         Guard.NotNull(textureViewHandle, nameof(textureViewHandle));
 
-        return WebGPUNativeSurfaceFactory.Create(
+        return WebGPUNativeSurface.Create(
             this.DeviceHandle,
             this.QueueHandle,
             textureHandle,

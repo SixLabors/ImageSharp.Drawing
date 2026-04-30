@@ -16,18 +16,14 @@ This document explains the backend as a newcomer would need to understand it:
 
 ## Where The Public WebGPU Types Fit
 
-The public WebGPU surface area around this backend is small and target-first. Most applications only reach for the recommended types; the advanced types exist as escape hatches for unusual interop scenarios.
+The public WebGPU surface area around this backend is small and target-first.
 
-**Recommended types** — the entry points most applications should use:
+**Public types** — the entry points applications should use:
 
 - `WebGPUEnvironment` exposes explicit support probes for the library-managed WebGPU environment
 - `WebGPUWindow` owns a native window and either runs a render loop or returns `WebGPUSurfaceFrame` instances through `TryAcquireFrame(...)`
 - `WebGPUExternalSurface` attaches to a caller-owned native host via `WebGPUSurfaceHost`; the host application owns the UI object and tells the external surface when the drawable framebuffer resizes
-- `WebGPURenderTarget` owns an offscreen native target for GPU rendering, hybrid CPU plus GPU canvases, and readback
-
-**Advanced types** — interop escape hatches for applications that already own a native texture target:
-
-- `WebGPUNativeSurfaceFactory` is the low-level escape hatch for caller-owned native targets
+- `WebGPURenderTarget` owns an offscreen native target for GPU rendering and readback
 
 `WebGPUDeviceContext` is internal infrastructure used by targets and surfaces. It is not part of the public WebGPU entry-point model.
 
@@ -149,7 +145,7 @@ The expensive staged work is delegated:
 The public object graph around those responsibilities is also separate:
 
 - `WebGPUEnvironment` handles explicit support probes
-- `WebGPUWindow`, `WebGPUExternalSurface`, and `WebGPURenderTarget` are the public target constructors; `WebGPUNativeSurfaceFactory` remains the low-level interop escape hatch for caller-owned textures
+- `WebGPUWindow`, `WebGPUExternalSurface`, and `WebGPURenderTarget` are the public target constructors
 - `DrawingCanvas` hands prepared `DrawingCommandBatch` ranges to the backend
 
 ## The Backend Boundary
@@ -269,7 +265,7 @@ The easiest way to keep this backend straight is to remember that it is not the 
 If that model is clear, the major types fall into place:
 
 - `WebGPUEnvironment` exposes explicit support probes
-- `WebGPUWindow`, `WebGPUExternalSurface`, and `WebGPURenderTarget` are the recommended target types; `WebGPUNativeSurfaceFactory` is the advanced interop escape hatch
+- `WebGPUWindow`, `WebGPUExternalSurface`, and `WebGPURenderTarget` are the public target types
 - `WebGPUDrawingBackend` orchestrates and decides policy
 - `WebGPUFlushContext` owns one flush's execution state
 - `WebGPURuntime` owns longer-lived device state

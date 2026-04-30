@@ -14,7 +14,7 @@ Together, these types turn one retained encoded scene into staged GPU work, sche
 
 This document starts after two earlier boundaries have already been crossed:
 
-- public WebGPU setup has already selected or created a native target through `WebGPUWindow`, `WebGPUExternalSurface`, `WebGPURenderTarget`, or `WebGPUNativeSurfaceFactory`
+- public WebGPU setup has already selected or created a native target through `WebGPUWindow`, `WebGPUExternalSurface`, or `WebGPURenderTarget`
 - `WebGPUDrawingBackend.RenderScene<TPixel>(...)` has already validated the typed native target
 
 Support probing through `WebGPUEnvironment` also sits outside this document. The rasterizer describes execution of one staged scene, not environment detection or object construction.

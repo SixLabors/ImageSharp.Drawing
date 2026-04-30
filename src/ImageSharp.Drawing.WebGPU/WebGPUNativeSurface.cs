@@ -17,6 +17,36 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     internal WebGPUNativeSurface(WebGPUNativeTarget target)
         => this.target = target;
 
+    /// <summary>
+    /// Creates a native surface over wrapped WebGPU texture handles.
+    /// </summary>
+    internal static NativeSurface Create(
+        WebGPUDeviceHandle deviceHandle,
+        WebGPUQueueHandle queueHandle,
+        WebGPUTextureHandle targetTextureHandle,
+        WebGPUTextureViewHandle targetTextureViewHandle,
+        WebGPUTextureFormat targetFormat,
+        int width,
+        int height)
+    {
+        Guard.NotNull(deviceHandle, nameof(deviceHandle));
+        Guard.NotNull(queueHandle, nameof(queueHandle));
+        Guard.NotNull(targetTextureHandle, nameof(targetTextureHandle));
+        Guard.NotNull(targetTextureViewHandle, nameof(targetTextureViewHandle));
+
+        Guard.MustBeGreaterThan(width, 0, nameof(width));
+        Guard.MustBeGreaterThan(height, 0, nameof(height));
+
+        return new WebGPUNativeSurface(new WebGPUNativeTarget(
+            deviceHandle,
+            queueHandle,
+            targetTextureHandle,
+            targetTextureViewHandle,
+            targetFormat,
+            width,
+            height));
+    }
+
     /// <inheritdoc />
     public override TNativeTarget GetNativeTarget<TNativeTarget>()
         where TNativeTarget : class

@@ -121,7 +121,7 @@ public sealed class WebGPURenderTarget : IDisposable
     /// Gets the native surface backing this render target.
     /// Most callers should use <see cref="CreateCanvas()"/> or <see cref="Readback{TPixel}"/> instead.
     /// </summary>
-    public NativeSurface Surface { get; }
+    internal NativeSurface Surface { get; }
 
     /// <summary>
     /// Gets the target width in pixels.

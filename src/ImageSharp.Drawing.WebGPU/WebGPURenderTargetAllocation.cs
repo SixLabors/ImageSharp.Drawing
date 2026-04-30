@@ -96,7 +96,7 @@ internal static unsafe class WebGPURenderTargetAllocation
         {
             createdTextureHandle = new WebGPUTextureHandle(api, (nint)texture, ownsHandle: true);
             createdTextureViewHandle = new WebGPUTextureViewHandle(api, (nint)textureView, ownsHandle: true);
-            NativeSurface surface = WebGPUNativeSurfaceFactory.Create(
+            NativeSurface surface = WebGPUNativeSurface.Create(
                 deviceHandle,
                 queueHandle,
                 createdTextureHandle,
