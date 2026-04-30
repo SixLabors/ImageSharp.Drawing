@@ -4,7 +4,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
-using WgpuBuffer = Silk.NET.WebGPU.Buffer;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -53,14 +52,13 @@ internal static unsafe partial class WebGPURuntime
     }
 
     /// <summary>
-    /// Shared device-scoped caches for pipelines, bind groups, and reusable GPU resources.
+    /// Shared device-scoped caches for pipelines and pipeline layouts.
     /// </summary>
     internal sealed class DeviceSharedState : IDisposable
     {
         private const nuint DefaultMaxStorageBufferBindingSize = 128U * 1024U * 1024U;
         private readonly ConcurrentDictionary<string, CompositePipelineInfrastructure> compositePipelines = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, CompositeComputePipelineInfrastructure> compositeComputePipelines = new(StringComparer.Ordinal);
-        private readonly ConcurrentDictionary<string, SharedBufferInfrastructure> sharedBuffers = new(StringComparer.Ordinal);
         private readonly HashSet<FeatureName> deviceFeatures;
         private WebGPUHandle.HandleReference deviceReference;
         private PfnErrorCallback uncapturedErrorCallback;
@@ -350,68 +348,7 @@ internal static unsafe partial class WebGPURuntime
         }
 
         /// <summary>
-        /// Gets or creates a reusable shared buffer for device-scoped operations.
-        /// </summary>
-        public bool TryGetOrCreateSharedBuffer(
-            string bufferKey,
-            BufferUsage usage,
-            nuint requiredSize,
-            out WgpuBuffer* buffer,
-            out nuint capacity,
-            out string? error)
-        {
-            buffer = null;
-            capacity = 0;
-
-            ObjectDisposedException.ThrowIf(this.disposed, this);
-
-            SharedBufferInfrastructure infrastructure = this.sharedBuffers.GetOrAdd(
-                bufferKey,
-                static _ => new SharedBufferInfrastructure());
-            lock (infrastructure)
-            {
-                if (infrastructure.Buffer is not null &&
-                    infrastructure.Capacity >= requiredSize &&
-                    infrastructure.Usage == usage)
-                {
-                    buffer = infrastructure.Buffer;
-                    capacity = infrastructure.Capacity;
-                    error = null;
-                    return true;
-                }
-
-                if (infrastructure.Buffer is not null)
-                {
-                    this.Api.BufferRelease(infrastructure.Buffer);
-                    infrastructure.Buffer = null;
-                    infrastructure.Capacity = 0;
-                }
-
-                BufferDescriptor descriptor = new()
-                {
-                    Usage = usage,
-                    Size = requiredSize
-                };
-
-                WgpuBuffer* createdBuffer = this.Api.DeviceCreateBuffer(this.Device, in descriptor);
-                if (createdBuffer is null)
-                {
-                    error = $"Failed to create shared buffer '{bufferKey}'.";
-                    return false;
-                }
-
-                infrastructure.Buffer = createdBuffer;
-                infrastructure.Capacity = requiredSize;
-                infrastructure.Usage = usage;
-                buffer = createdBuffer;
-                capacity = requiredSize;
-                error = null;
-                return true;
-            }
-        }
-
-        /// <summary>
-        /// Releases all cached pipelines and buffers owned by this state.
+        /// Releases all cached pipelines owned by this state.
         /// </summary>
         public void Dispose()
         {
@@ -433,21 +370,6 @@ internal static unsafe partial class WebGPURuntime
             }
 
             this.compositeComputePipelines.Clear();
-
-            foreach (SharedBufferInfrastructure infrastructure in this.sharedBuffers.Values)
-            {
-                lock (infrastructure)
-                {
-                    if (infrastructure.Buffer is not null)
-                    {
-                        this.Api.BufferRelease(infrastructure.Buffer);
-                        infrastructure.Buffer = null;
-                        infrastructure.Capacity = 0;
-                    }
-                }
-            }
-
-            this.sharedBuffers.Clear();
 
             // Clear the native callback slot before freeing Silk's delegate thunk.
             this.Api.DeviceSetUncapturedErrorCallback(this.Device, default, null);
@@ -730,13 +652,5 @@ internal static unsafe partial class WebGPURuntime
             public ComputePipeline* Pipeline { get; set; }
         }
 
-        private sealed class SharedBufferInfrastructure
-        {
-            public WgpuBuffer* Buffer { get; set; }
-
-            public nuint Capacity { get; set; }
-
-            public BufferUsage Usage { get; set; }
-        }
     }
 }
