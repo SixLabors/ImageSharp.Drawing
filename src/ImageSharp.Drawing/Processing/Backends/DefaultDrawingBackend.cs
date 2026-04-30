@@ -17,25 +17,19 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     public static DefaultDrawingBackend Instance { get; } = new();
 
     /// <inheritdoc />
-    public DrawingBackendScene CreateScene<TPixel>(
+    public DrawingBackendScene CreateScene(
         Configuration configuration,
-        ICanvasFrame<TPixel> target,
+        Rectangle targetBounds,
         DrawingCommandBatch commandBatch,
         IReadOnlyList<IDisposable>? ownedResources = null)
-        where TPixel : unmanaged, IPixel<TPixel>
     {
-        if (!target.TryGetCpuRegion(out _))
-        {
-            throw new NotSupportedException($"{nameof(DefaultDrawingBackend)} requires CPU-accessible frame targets.");
-        }
-
         FlushScene scene = FlushScene.Create(
             commandBatch,
-            target.Bounds,
+            targetBounds,
             configuration.MemoryAllocator,
             configuration.MaxDegreeOfParallelism);
 
-        return new DefaultDrawingBackendScene(scene, target.Bounds, ownedResources);
+        return new DefaultDrawingBackendScene(scene, targetBounds, ownedResources);
     }
 
     /// <inheritdoc />

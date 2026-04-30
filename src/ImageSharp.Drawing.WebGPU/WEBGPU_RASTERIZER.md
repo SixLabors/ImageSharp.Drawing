@@ -10,12 +10,12 @@ In this codebase, the WebGPU rasterizer is not a single type with one scan-conve
 - `WebGPUSceneDispatch`
 - the WGSL shader set under `Shaders/WgslSource`
 
-Together, these types turn one prepared flush into a staged GPU scene, schedule that scene into tile-relative work, run the fine raster pass, and write final pixels.
+Together, these types turn one retained encoded scene into staged GPU work, schedule that scene into tile-relative work, run the fine raster pass, and write final pixels.
 
 This document starts after two earlier boundaries have already been crossed:
 
 - public WebGPU setup has already selected or created a native target through `WebGPUWindow`, `WebGPUExternalSurface`, `WebGPURenderTarget`, or `WebGPUNativeSurfaceFactory`
-- `WebGPUDrawingBackend` has already decided that the flush should stay on the GPU path
+- `WebGPUDrawingBackend.RenderScene<TPixel>(...)` has already validated the typed native target
 
 Support probing through `WebGPUEnvironment` also sits outside this document. The rasterizer describes execution of one staged scene, not environment detection or object construction.
 
@@ -34,7 +34,7 @@ The GPU path needs:
 - explicit scratch resources for intermediate scheduling work
 - a predictable pass order from encoded scene to final pixel writes
 
-That is why the GPU path is staged. It does not try to paint commands directly. It encodes the flush into a GPU-friendly scene, runs scheduling passes that transform that scene into tile-relative work, and then runs a final fine pass that produces pixels.
+That is why the GPU path is staged. It does not try to paint commands directly. It uses the retained encoded scene, runs scheduling passes that transform that scene into tile-relative work, and then runs a final fine pass that produces pixels.
 
 ## The Core Idea
 
@@ -42,7 +42,7 @@ The WebGPU rasterizer is a staged scene pipeline.
 
 Its central idea is:
 
-> encode one flush into a packed GPU scene, transform that scene through scheduling passes into tile-relative segment work, then run one fine raster pass that writes the final pixels
+> stage one retained encoded scene, transform that scene through scheduling passes into tile-relative segment work, then run one fine raster pass that writes the final pixels
 
 That split explains the major responsibilities:
 
@@ -55,7 +55,7 @@ That split explains the major responsibilities:
 
 ### Encoded Scene
 
-The encoded scene is the packed GPU-facing representation of one prepared flush.
+The encoded scene is the packed GPU-facing representation of one prepared command batch.
 
 It is not final pixels. It is the compact data the shaders will consume to derive those pixels.
 
@@ -91,7 +91,7 @@ The fine pass is the final raster stage. It consumes the scheduled scene data an
 
 ### Chunking
 
-Chunking is the oversized-scene execution path used when one flush would otherwise exceed the device's single-binding limits for staged scene data such as `segments`.
+Chunking is the oversized-scene execution path used when one retained scene would otherwise exceed the device's single-binding limits for staged scene data such as `segments`.
 
 The scene stays whole at encode time, but GPU consumption is windowed into chunk-local tile-row slices so the staged pipeline can stay within device limits.
 
@@ -289,15 +289,15 @@ The staged rasterizer and the backend solve different problems.
 
 The rasterizer decides:
 
-- how one flush is encoded into a GPU scene
+- how one retained scene is staged for GPU execution
 - how that scene is planned
 - how the scheduling passes are recorded
 - how the fine pass is dispatched
 
 The backend decides:
 
-- whether this flush can stay on the GPU
-- how fallback works
+- how retained scene creation is separated from typed target rendering
+- how the native target and `TPixel` requirements are validated at render time
 - how flush-scoped work relates to runtime and device-scoped state
 
 The public setup layer decides:
@@ -326,7 +326,7 @@ encoded scene -> planning -> resources -> staged execution -> shader contract
 
 The easiest way to reason about the WebGPU rasterizer is this:
 
-it is a staged scene pipeline. It encodes one prepared flush into a GPU-friendly scene, plans the work and scratch resources for that scene, transforms the scene through scheduling passes into tile-relative segment work, and runs one fine pass that writes the final pixels.
+it is a staged scene pipeline. It stages one retained encoded scene, plans the work and scratch resources for that scene, transforms the scene through scheduling passes into tile-relative segment work, and runs one fine pass that writes the final pixels.
 
 If that model is clear, the major types fall into place:
 

@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Silk.NET.WebGPU;
-
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -34,23 +32,17 @@ public sealed class WebGPUDrawingBackendScene : DrawingBackendScene
     /// Initializes a new instance of the <see cref="WebGPUDrawingBackendScene"/> class.
     /// </summary>
     /// <param name="encodedScene">The retained encoded scene.</param>
-    /// <param name="textureFormat">The WebGPU texture format required by the scene.</param>
-    /// <param name="requiredFeature">The optional WebGPU feature required by the texture format.</param>
     /// <param name="bounds">The target bounds used to encode the scene.</param>
     /// <param name="bumpSizes">The initial scratch capacities for the scene.</param>
     /// <param name="ownedResources">Resources that must stay alive for the retained scene.</param>
     internal WebGPUDrawingBackendScene(
         WebGPUEncodedScene encodedScene,
-        TextureFormat textureFormat,
-        FeatureName requiredFeature,
         Rectangle bounds,
         WebGPUSceneBumpSizes bumpSizes,
         IReadOnlyList<IDisposable>? ownedResources)
         : base(bounds, ownedResources)
     {
         this.EncodedScene = encodedScene;
-        this.TextureFormat = textureFormat;
-        this.RequiredFeature = requiredFeature;
         this.UpdateBumpSizes(bumpSizes);
     }
 
@@ -58,16 +50,6 @@ public sealed class WebGPUDrawingBackendScene : DrawingBackendScene
     /// Gets the retained encoded scene when this is a leaf scene.
     /// </summary>
     internal WebGPUEncodedScene? EncodedScene { get; }
-
-    /// <summary>
-    /// Gets the WebGPU texture format required by the scene.
-    /// </summary>
-    internal TextureFormat TextureFormat { get; }
-
-    /// <summary>
-    /// Gets the optional WebGPU feature required by the texture format.
-    /// </summary>
-    internal FeatureName RequiredFeature { get; }
 
     /// <summary>
     /// Gets the scratch capacities for the scene.

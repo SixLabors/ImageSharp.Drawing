@@ -14,6 +14,6 @@ internal static class WebGPUTextureSampleTypeHelper
     /// <summary>
     /// Resolves the sampled texture type used when a composite shader reads the specified format.
     /// </summary>
-    public static bool TryGetInputSampleType(TextureFormat textureFormat, out TextureSampleType sampleType)
-        => WebGPUDrawingBackend.TryGetCompositeTextureSampleType(textureFormat, out sampleType);
+    public static TextureSampleType GetInputSampleType(TextureFormat textureFormat)
+        => WebGPUDrawingBackend.GetCompositeTextureSampleType(textureFormat);
 }

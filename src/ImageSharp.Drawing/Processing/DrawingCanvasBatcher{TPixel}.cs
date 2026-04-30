@@ -186,12 +186,12 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     /// Creates a retained backend scene from the recorded timeline.
     /// </summary>
     /// <param name="backend">The backend used to create the retained scene.</param>
-    /// <param name="target">The target frame used for target-dependent scene creation.</param>
-    /// <param name="ownedResources">Resources that must stay alive for the returned scene.</param>
+    /// <param name="targetBounds">The target bounds used for target-dependent scene creation.</param>
+    /// <param name="ownedResources">The resources that must stay alive for the returned scene.</param>
     /// <returns>The retained backend scene.</returns>
     public DrawingBackendScene CreateScene(
         IDrawingBackend backend,
-        ICanvasFrame<TPixel> target,
+        Rectangle targetBounds,
         IReadOnlyList<IDisposable>? ownedResources)
     {
         if (!this.HasRecordedWork)
@@ -203,7 +203,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 
         return backend.CreateScene(
             this.configuration,
-            target,
+            targetBounds,
             new DrawingCommandBatch(this.commands, this.commandCount, this.layerCommandCount > 0),
             ownedResources);
     }

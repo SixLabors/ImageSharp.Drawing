@@ -15,7 +15,7 @@ namespace DrawingBackendBenchmark;
 /// </summary>
 internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend
 {
-    private WebGPURenderTarget<Bgra32>? renderTarget;
+    private WebGPURenderTarget? renderTarget;
     private int cachedWidth;
     private int cachedHeight;
 
@@ -43,7 +43,7 @@ internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend
     /// </summary>
     public BenchmarkRenderResult Render(ReadOnlySpan<VisualLine> lines, int width, int height, bool capturePreview)
     {
-        WebGPURenderTarget<Bgra32> renderTarget = this.EnsureRenderTarget(width, height);
+        WebGPURenderTarget renderTarget = this.EnsureRenderTarget(width, height);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
         using (DrawingCanvas canvas = renderTarget.CreateCanvas(new DrawingOptions()))
@@ -60,7 +60,7 @@ internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend
         {
             try
             {
-                preview = renderTarget.Readback();
+                preview = renderTarget.Readback<Bgra32>();
             }
             catch (Exception ex)
             {
@@ -87,7 +87,7 @@ internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend
         this.renderTarget = null;
     }
 
-    private WebGPURenderTarget<Bgra32> EnsureRenderTarget(int width, int height)
+    private WebGPURenderTarget EnsureRenderTarget(int width, int height)
     {
         if (this.renderTarget is not null && this.cachedWidth == width && this.cachedHeight == height)
         {
@@ -95,7 +95,7 @@ internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend
         }
 
         this.renderTarget?.Dispose();
-        this.renderTarget = new WebGPURenderTarget<Bgra32>(width, height);
+        this.renderTarget = new WebGPURenderTarget(WebGPUTextureFormat.Bgra8Unorm, width, height);
         this.cachedWidth = width;
         this.cachedHeight = height;
         return this.renderTarget;

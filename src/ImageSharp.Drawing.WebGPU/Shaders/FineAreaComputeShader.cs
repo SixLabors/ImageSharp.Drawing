@@ -26,22 +26,15 @@ internal static class FineAreaComputeShader
     /// <summary>
     /// Gets or generates the fine-pass shader specialized for the requested output texture format.
     /// </summary>
-    public static bool TryGetCode(TextureFormat textureFormat, out byte[] code, out string? error)
+    public static byte[] GetCode(TextureFormat textureFormat)
     {
-        if (!TryGetTraits(textureFormat, out ShaderTraits traits))
-        {
-            code = [];
-            error = $"Scene fine shader does not support texture format '{textureFormat}'.";
-            return false;
-        }
+        ShaderTraits traits = GetTraits(textureFormat);
 
         lock (ShaderCache)
         {
             if (ShaderCache.TryGetValue(textureFormat, out byte[]? cachedCode))
             {
-                code = cachedCode;
-                error = null;
-                return true;
+                return cachedCode;
             }
 
             string source = GeneratedWgslShaderSources.FineText;
@@ -50,14 +43,12 @@ internal static class FineAreaComputeShader
             source = source.Replace(PremulAlphaMarker, $"{traits.EncodeOutputFunction}\n\n{PremulAlphaMarker}", StringComparison.Ordinal);
 
             int byteCount = Encoding.UTF8.GetByteCount(source);
-            code = new byte[byteCount + 1];
+            byte[] code = new byte[byteCount + 1];
             _ = Encoding.UTF8.GetBytes(source, code);
             code[^1] = 0;
             ShaderCache[textureFormat] = code;
+            return code;
         }
-
-        error = null;
-        return true;
     }
 
     /// <summary>
@@ -98,25 +89,20 @@ internal static class FineAreaComputeShader
         return true;
     }
 
-    private static bool TryGetTraits(TextureFormat textureFormat, out ShaderTraits traits)
+    private static ShaderTraits GetTraits(TextureFormat textureFormat)
     {
-        if (!WebGPUDrawingBackend.TryGetCompositeTextureShaderTraits(textureFormat, out WebGPUDrawingBackend.CompositeTextureShaderTraits compositeTraits))
-        {
-            traits = default;
-            return false;
-        }
+        WebGPUDrawingBackend.CompositeTextureShaderTraits compositeTraits = WebGPUDrawingBackend.GetCompositeTextureShaderTraits(textureFormat);
 
-        traits = compositeTraits.EncodingKind switch
+#pragma warning disable CS8524
+        return compositeTraits.EncodingKind switch
         {
             WebGPUDrawingBackend.CompositeTextureEncodingKind.Float => CreateFloatTraits(compositeTraits.OutputFormat),
             WebGPUDrawingBackend.CompositeTextureEncodingKind.Snorm => CreateSnormTraits(compositeTraits.OutputFormat),
             WebGPUDrawingBackend.CompositeTextureEncodingKind.Uint8 => CreateUintTraits(compositeTraits.OutputFormat, 255F),
             WebGPUDrawingBackend.CompositeTextureEncodingKind.Uint16 => CreateUintTraits(compositeTraits.OutputFormat, 65535F),
-            WebGPUDrawingBackend.CompositeTextureEncodingKind.Sint16 => CreateSintTraits(compositeTraits.OutputFormat, -32768F, 32767F),
-            _ => default
+            WebGPUDrawingBackend.CompositeTextureEncodingKind.Sint16 => CreateSintTraits(compositeTraits.OutputFormat, -32768F, 32767F)
         };
-
-        return true;
+#pragma warning restore CS8524
     }
 
     private static ShaderTraits CreateFloatTraits(string outputFormat)

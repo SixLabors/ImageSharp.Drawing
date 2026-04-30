@@ -210,7 +210,13 @@ internal static class WebGPUSceneDispatch
 
         try
         {
-            if (!WebGPUSceneEncoder.TryEncode(scene, flushContext.TargetBounds, flushContext.MemoryAllocator, out WebGPUEncodedScene createdScene, out error))
+            if (!WebGPUSceneEncoder.TryEncode(
+                    scene,
+                    flushContext.TargetBounds,
+                    flushContext.MemoryAllocator,
+                    configuration.MaxDegreeOfParallelism,
+                    out WebGPUEncodedScene createdScene,
+                    out error))
             {
                 flushContext.Dispose();
                 stagedScene = default;
@@ -2714,18 +2720,9 @@ internal static class WebGPUSceneDispatch
         out string? error)
     {
         bool useAliasedThreshold = encodedScene.FineRasterizationMode == RasterizationMode.Aliased;
-        byte[] shaderCode;
-        if (useAliasedThreshold)
-        {
-            if (!FineAliasedThresholdComputeShader.TryGetCode(flushContext.TextureFormat, out shaderCode, out error))
-            {
-                return false;
-            }
-        }
-        else if (!FineAreaComputeShader.TryGetCode(flushContext.TextureFormat, out shaderCode, out error))
-        {
-            return false;
-        }
+        byte[] shaderCode = useAliasedThreshold
+            ? FineAliasedThresholdComputeShader.GetCode(flushContext.TextureFormat)
+            : FineAreaComputeShader.GetCode(flushContext.TextureFormat);
 
         bool LayoutFactory(WebGPU api, Device* device, out BindGroupLayout* layout, out string? layoutError)
             => useAliasedThreshold

@@ -33,26 +33,13 @@ internal static unsafe class WebGPUSceneResources
     {
         resources = default;
 
-        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormat expectedFormatId))
-        {
-            error = $"The staged WebGPU scene pipeline does not support pixel format '{typeof(TPixel).Name}'.";
-            return false;
-        }
-
-        TextureFormat expectedTextureFormat = WebGPUTextureFormatMapper.ToSilk(expectedFormatId);
-        if (flushContext.TextureFormat != expectedTextureFormat)
-        {
-            error = $"Scene resource texture format '{flushContext.TextureFormat}' does not match the required '{expectedTextureFormat}' for pixel type '{typeof(TPixel).Name}'.";
-            return false;
-        }
-
         // Textures are scene-dependent and not pooled.
         if (!TryCreateGradientTexture(flushContext, scene, out TextureView* gradientTextureView, out error))
         {
             return false;
         }
 
-        if (!TryCreateImageAtlasTexture<TPixel>(flushContext, scene, expectedTextureFormat, out TextureView* imageAtlasTextureView, out error))
+        if (!TryCreateImageAtlasTexture<TPixel>(flushContext, scene, flushContext.TextureFormat, out TextureView* imageAtlasTextureView, out error))
         {
             return false;
         }

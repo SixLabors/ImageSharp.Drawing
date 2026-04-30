@@ -40,7 +40,7 @@ public sealed unsafe class WebGPUSurfaceFrame : IDisposable
     public DrawingCanvas Canvas { get; }
 
     /// <summary>
-    /// Disposes the frame, flushing and presenting it, then releasing the per-frame WebGPU resources.
+    /// Disposes the frame, rendering and presenting it, then releasing the per-frame WebGPU resources.
     /// </summary>
     public void Dispose()
     {
@@ -51,9 +51,10 @@ public sealed unsafe class WebGPUSurfaceFrame : IDisposable
 
         try
         {
-            this.Canvas.Flush();
-            this.api.SurfacePresent((Surface*)this.surfaceReference.Handle);
+            // Canvas disposal replays the recorded timeline. Present only after rendering has submitted work for
+            // this acquired surface texture.
             this.Canvas.Dispose();
+            this.api.SurfacePresent((Surface*)this.surfaceReference.Handle);
         }
         finally
         {

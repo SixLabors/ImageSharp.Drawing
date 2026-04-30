@@ -47,13 +47,12 @@ public class RasterizerDefaultsExtensionsTests
 
     private sealed class RecordingDrawingBackend : IDrawingBackend
     {
-        public DrawingBackendScene CreateScene<TPixel>(
+        public DrawingBackendScene CreateScene(
             Configuration configuration,
-            ICanvasFrame<TPixel> target,
+            Rectangle targetBounds,
             DrawingCommandBatch commandBatch,
             IReadOnlyList<IDisposable>? ownedResources = null)
-            where TPixel : unmanaged, IPixel<TPixel>
-            => new RecordingScene(target.Bounds, ownedResources);
+            => new RecordingScene(targetBounds, ownedResources);
 
         public void RenderScene<TPixel>(
             Configuration configuration,

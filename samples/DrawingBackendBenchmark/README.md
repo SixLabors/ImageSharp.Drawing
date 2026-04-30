@@ -45,21 +45,21 @@ For each iteration the form:
 4. updates the running mean and standard deviation
 5. captures a preview image only on the last iteration
 
-That last point matters: preview capture is intentionally outside the measured timing path. The reported time measures scene submission and backend flush work only. Any readback, clone, or bitmap conversion needed for the UI happens afterward.
+That last point matters: preview capture is intentionally outside the measured timing path. The reported time measures canvas replay and backend submission work only. Any readback, clone, or bitmap conversion needed for the UI happens afterward.
 
 ## Timing model
 
 All backends follow the same basic timing rule:
 
 - start the stopwatch immediately before drawing the scene
-- stop it immediately after the backend flush or submission boundary
+- stop it immediately after the backend render or submission boundary
 - capture preview pixels only after the stopwatch stops
 
 In practice that means:
 
-- `CPU` measures drawing into the cached `Image<Bgra32>` through `DrawingCanvas.Flush()`
+- `CPU` measures drawing into the cached `Image<Bgra32>` through canvas disposal replay
 - `SkiaSharp` measures drawing through `SKCanvas.Flush()` and optional GPU context flush
-- `WebGPU` measures drawing through `DrawingCanvas.Flush()` into the offscreen `WebGPURenderTarget<Bgra32>`
+- `WebGPU` measures drawing through canvas disposal replay into the offscreen `WebGPURenderTarget`
 
 So the numbers are comparable as "render and submit" timings, not "render plus preview extraction" timings.
 
@@ -69,7 +69,7 @@ The sample uses a fixed benchmark size, so the backends keep their render target
 
 - `CpuBenchmarkBackend` caches one `Image<Bgra32>`
 - `SkiaSharpBenchmarkBackend` caches one `SKSurface`
-- `WebGpuBenchmarkBackend` caches one `WebGPURenderTarget<Bgra32>`
+- `WebGpuBenchmarkBackend` caches one `WebGPURenderTarget`
 
 This keeps the benchmark focused on scene rendering rather than repeated target allocation noise.
 
@@ -78,11 +78,11 @@ This keeps the benchmark focused on scene rendering rather than repeated target 
 The WebGPU backend is intentionally small:
 
 - it probes support up front with `WebGPUEnvironment.ProbeComputePipelineSupport()`
-- it renders into an owned offscreen `WebGPURenderTarget<Bgra32>`
-- it draws through `CreateCanvas(...)`, not a hybrid CPU plus GPU canvas
+- it renders into an owned offscreen `WebGPURenderTarget`
+- it draws through `CreateCanvas(...)`
 - it reads back the final frame only when the UI requests the last-iteration preview
 
-The status line also reports whether the last WebGPU flush completed on the staged GPU path or had to fall back to CPU execution.
+The status line also reports whether the last WebGPU render used chunked staged execution.
 
 ## File guide
 

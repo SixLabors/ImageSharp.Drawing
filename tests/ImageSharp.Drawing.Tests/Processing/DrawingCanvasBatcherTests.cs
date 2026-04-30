@@ -217,12 +217,11 @@ public class DrawingCanvasBatcherTests
             default,
             []);
 
-        public DrawingBackendScene CreateScene<TPixel>(
+        public DrawingBackendScene CreateScene(
             Configuration configuration,
-            ICanvasFrame<TPixel> target,
+            Rectangle targetBounds,
             DrawingCommandBatch commandBatch,
             IReadOnlyList<IDisposable>? ownedResources = null)
-            where TPixel : unmanaged, IPixel<TPixel>
         {
             this.PreparedCommands = commandBatch.Commands.ToArray();
 
@@ -263,13 +262,13 @@ public class DrawingCanvasBatcherTests
 
             if (this.Definitions.Count == 0)
             {
-                return new CapturedScene(target.Bounds, ownedResources);
+                return new CapturedScene(targetBounds, ownedResources);
             }
 
             this.LastDefinition = this.Definitions[^1];
             this.HasDefinition = true;
 
-            return new CapturedScene(target.Bounds, ownedResources);
+            return new CapturedScene(targetBounds, ownedResources);
         }
 
         public void RenderScene<TPixel>(

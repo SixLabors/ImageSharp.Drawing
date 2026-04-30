@@ -24,6 +24,7 @@ internal static class WebGPUSceneEncoder
     private const int PathGradientHeaderWordCount = 4;
     private const int PathGradientEdgeWordCount = 6;
     private const int StyleWordCount = 5;
+    private const int TransformWordCount = 9;
     private const int TileWidth = 16;
     private const int TileHeight = 16;
     private const float PointStrokeSegmentHalfLength = 1F / 128F;
@@ -85,6 +86,7 @@ internal static class WebGPUSceneEncoder
     /// <param name="scene">The command batch to encode.</param>
     /// <param name="targetBounds">The root target bounds used for target-local coordinate conversion.</param>
     /// <param name="allocator">The allocator used for temporary and packed scene storage.</param>
+    /// <param name="maxDegreeOfParallelism">The maximum degree of parallelism used for encoder planning.</param>
     /// <param name="encodedScene">Receives the encoded scene on success.</param>
     /// <param name="error">Receives the staged-scene support failure reason when encoding fails.</param>
     /// <returns><see langword="true"/> when the scene encoded successfully; otherwise, <see langword="false"/>.</returns>
@@ -92,6 +94,7 @@ internal static class WebGPUSceneEncoder
         DrawingCommandBatch scene,
         in Rectangle targetBounds,
         MemoryAllocator allocator,
+        int maxDegreeOfParallelism,
         out WebGPUEncodedScene encodedScene,
         out string? error)
     {
@@ -102,10 +105,15 @@ internal static class WebGPUSceneEncoder
             return true;
         }
 
-        SupportedSubsetSceneEncoding encoding = new(allocator, scene.CommandCount, targetBounds);
+        int firstTargetRowBandIndex = targetBounds.Top / TileHeight;
+        int lastTargetRowBandIndex = (targetBounds.Bottom - 1) / TileHeight;
+        int targetRowCount = (lastTargetRowBandIndex - firstTargetRowBandIndex) + 1;
+
+        SceneEncodingPlan plan = SceneEncodingPlan.Create(scene, maxDegreeOfParallelism, targetRowCount);
+        SupportedSubsetSceneEncoding encoding = new(allocator, targetBounds, plan);
         try
         {
-            if (!encoding.TryBuild(scene, out error))
+            if (!encoding.TryBuild(scene, plan, out error))
             {
                 encodedScene = WebGPUEncodedScene.Empty;
                 return false;
@@ -129,6 +137,365 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
+    /// Encoding plan produced before the mutable scene streams are allocated.
+    /// </summary>
+    private readonly struct SceneEncodingPlan
+    {
+        private readonly LinearGeometry?[]? geometries;
+
+        public SceneEncodingPlan(
+            int pathTagCapacity,
+            int pathDataWordCapacity,
+            int drawTagCapacity,
+            int drawDataWordCapacity,
+            int transformWordCapacity,
+            int styleWordCapacity,
+            int gradientPixelCapacity,
+            int pathGradientDataWordCapacity,
+            LinearGeometry?[]? geometries)
+        {
+            this.PathTagCapacity = pathTagCapacity;
+            this.PathDataWordCapacity = pathDataWordCapacity;
+            this.DrawTagCapacity = drawTagCapacity;
+            this.DrawDataWordCapacity = drawDataWordCapacity;
+            this.TransformWordCapacity = transformWordCapacity;
+            this.StyleWordCapacity = styleWordCapacity;
+            this.GradientPixelCapacity = gradientPixelCapacity;
+            this.PathGradientDataWordCapacity = pathGradientDataWordCapacity;
+            this.geometries = geometries;
+        }
+
+        /// <summary>
+        /// Gets the initial byte capacity for path tags.
+        /// </summary>
+        public int PathTagCapacity { get; }
+
+        /// <summary>
+        /// Gets the initial word capacity for path data.
+        /// </summary>
+        public int PathDataWordCapacity { get; }
+
+        /// <summary>
+        /// Gets the initial draw-tag capacity.
+        /// </summary>
+        public int DrawTagCapacity { get; }
+
+        /// <summary>
+        /// Gets the initial word capacity for draw data.
+        /// </summary>
+        public int DrawDataWordCapacity { get; }
+
+        /// <summary>
+        /// Gets the initial word capacity for transforms.
+        /// </summary>
+        public int TransformWordCapacity { get; }
+
+        /// <summary>
+        /// Gets the initial word capacity for styles.
+        /// </summary>
+        public int StyleWordCapacity { get; }
+
+        /// <summary>
+        /// Gets the initial gradient-pixel capacity.
+        /// </summary>
+        public int GradientPixelCapacity { get; }
+
+        /// <summary>
+        /// Gets the initial path-gradient data capacity.
+        /// </summary>
+        public int PathGradientDataWordCapacity { get; }
+
+        /// <summary>
+        /// Creates an encoding plan for the supplied command batch.
+        /// </summary>
+        public static SceneEncodingPlan Create(
+            DrawingCommandBatch scene,
+            int maxDegreeOfParallelism,
+            int targetRowCount)
+        {
+            int commandCount = scene.CommandCount;
+            int partitionCount = GetPartitionCount(maxDegreeOfParallelism, commandCount, targetRowCount);
+
+            if (partitionCount <= 1)
+            {
+                return CreateDefault(commandCount);
+            }
+
+            LinearGeometry?[] geometries = new LinearGeometry?[commandCount];
+            SceneCapacityEstimate[] estimates = new SceneCapacityEstimate[partitionCount];
+
+            _ = Parallel.For(
+                0,
+                partitionCount,
+                CreateParallelOptions(maxDegreeOfParallelism, partitionCount),
+                partitionIndex =>
+                {
+                    int commandStart = (partitionIndex * commandCount) / partitionCount;
+                    int commandEnd = ((partitionIndex + 1) * commandCount) / partitionCount;
+                    SceneCapacityEstimate estimate = default;
+
+                    for (int i = commandStart; i < commandEnd; i++)
+                    {
+                        estimate.Add(EstimateCommand(scene.Commands[i], i, geometries));
+                    }
+
+                    estimates[partitionIndex] = estimate;
+                });
+
+            SceneCapacityEstimate total = SceneCapacityEstimate.CreateInitial();
+            for (int i = 0; i < estimates.Length; i++)
+            {
+                total.Add(estimates[i]);
+            }
+
+            return total.ToPlan(commandCount, geometries);
+        }
+
+        /// <summary>
+        /// Gets prepared geometry for a command when the parallel plan computed it.
+        /// </summary>
+        public LinearGeometry? GetGeometry(int commandIndex)
+            => this.geometries?[commandIndex];
+
+        public static SceneEncodingPlan CreateDefault(int commandCount)
+            => new(
+                Math.Max(commandCount * 8, 256),
+                Math.Max(commandCount * 16, 256),
+                Math.Max(commandCount, 16),
+                Math.Max(commandCount, 16),
+                16,
+                Math.Max(commandCount * StyleWordCount, 16),
+                16,
+                16,
+                null);
+    }
+
+    /// <summary>
+    /// Accumulates initial stream capacities for one large-batch encoder plan.
+    /// </summary>
+    private struct SceneCapacityEstimate
+    {
+        public long PathTagCount;
+        public long PathDataWordCount;
+        public long DrawTagCount;
+        public long DrawDataWordCount;
+        public long TransformWordCount;
+        public long StyleWordCount;
+        public long GradientPixelCount;
+        public long PathGradientDataWordCount;
+
+        /// <summary>
+        /// Creates the initial estimate for the transform emitted by every scene.
+        /// </summary>
+        public static SceneCapacityEstimate CreateInitial()
+            => new()
+            {
+                PathTagCount = 1,
+                TransformWordCount = WebGPUSceneEncoder.TransformWordCount
+            };
+
+        /// <summary>
+        /// Adds another estimate into this accumulator.
+        /// </summary>
+        public void Add(in SceneCapacityEstimate other)
+        {
+            this.PathTagCount += other.PathTagCount;
+            this.PathDataWordCount += other.PathDataWordCount;
+            this.DrawTagCount += other.DrawTagCount;
+            this.DrawDataWordCount += other.DrawDataWordCount;
+            this.TransformWordCount += other.TransformWordCount;
+            this.StyleWordCount += other.StyleWordCount;
+            this.GradientPixelCount += other.GradientPixelCount;
+            this.PathGradientDataWordCount += other.PathGradientDataWordCount;
+        }
+
+        /// <summary>
+        /// Adds capacity for one encoded fill path.
+        /// </summary>
+        public void AddFill(LinearGeometryInfo geometryInfo, Brush brush)
+        {
+            uint drawTag = GetDrawTag(brush);
+            this.PathTagCount += geometryInfo.SegmentCount + 3L;
+            this.PathDataWordCount += (geometryInfo.ContourCount * 2L) + (geometryInfo.SegmentCount * 2L);
+            this.AddDrawPayload(drawTag, brush);
+        }
+
+        /// <summary>
+        /// Adds capacity for one encoded stroked path.
+        /// </summary>
+        public void AddStroke(LinearGeometry geometry, Brush brush)
+        {
+            uint drawTag = GetDrawTag(brush);
+            int markerWordCount = 0;
+
+            for (int i = 0; i < geometry.Contours.Count; i++)
+            {
+                markerWordCount += geometry.Contours[i].IsClosed ? 2 : 4;
+            }
+
+            this.PathTagCount += geometry.Info.SegmentCount + geometry.Info.ContourCount + 3L;
+            this.PathDataWordCount += (geometry.Info.ContourCount * 2L) + (geometry.Info.SegmentCount * 2L) + markerWordCount;
+            this.AddDrawPayload(drawTag, brush);
+        }
+
+        /// <summary>
+        /// Adds capacity for one encoded explicit two-point stroke.
+        /// </summary>
+        public void AddOpenSegmentStroke(Brush brush)
+        {
+            uint drawTag = GetDrawTag(brush);
+            this.PathTagCount += 4;
+            this.PathDataWordCount += 8;
+            this.AddDrawPayload(drawTag, brush);
+        }
+
+        /// <summary>
+        /// Adds capacity for one begin-layer marker.
+        /// </summary>
+        public void AddBeginLayer()
+        {
+            this.PathTagCount += 6;
+            this.PathDataWordCount += 10;
+            this.DrawTagCount++;
+            this.DrawDataWordCount += 2;
+            this.StyleWordCount += WebGPUSceneEncoder.StyleWordCount;
+        }
+
+        /// <summary>
+        /// Adds capacity for one end-layer marker.
+        /// </summary>
+        public void AddEndLayer()
+        {
+            this.PathTagCount++;
+            this.DrawTagCount++;
+        }
+
+        /// <summary>
+        /// Converts the accumulated counts into an encoder plan.
+        /// </summary>
+        public readonly SceneEncodingPlan ToPlan(int commandCount, LinearGeometry?[] geometries)
+        {
+            SceneEncodingPlan defaults = SceneEncodingPlan.CreateDefault(commandCount);
+
+            return new SceneEncodingPlan(
+                Math.Max(defaults.PathTagCapacity, checked((int)this.PathTagCount)),
+                Math.Max(defaults.PathDataWordCapacity, checked((int)this.PathDataWordCount)),
+                Math.Max(defaults.DrawTagCapacity, checked((int)this.DrawTagCount)),
+                Math.Max(defaults.DrawDataWordCapacity, checked((int)this.DrawDataWordCount)),
+                Math.Max(defaults.TransformWordCapacity, checked((int)this.TransformWordCount)),
+                Math.Max(defaults.StyleWordCapacity, checked((int)this.StyleWordCount)),
+                Math.Max(defaults.GradientPixelCapacity, checked((int)this.GradientPixelCount)),
+                Math.Max(defaults.PathGradientDataWordCapacity, checked((int)this.PathGradientDataWordCount)),
+                geometries);
+        }
+
+        private void AddDrawPayload(uint drawTag, Brush brush)
+        {
+            this.DrawTagCount++;
+            this.DrawDataWordCount += GetDrawDataWordCount(drawTag);
+            this.TransformWordCount += WebGPUSceneEncoder.TransformWordCount;
+            this.StyleWordCount += WebGPUSceneEncoder.StyleWordCount;
+
+            if (DrawTagUsesGradientRamp(drawTag))
+            {
+                this.GradientPixelCount += GradientWidth;
+            }
+
+            this.PathGradientDataWordCount += GetPathGradientDataWordCount(brush);
+        }
+    }
+
+    /// <summary>
+    /// Estimates one command and stores prepared geometry for the sequential append phase.
+    /// </summary>
+    private static SceneCapacityEstimate EstimateCommand(
+        CompositionSceneCommand command,
+        int commandIndex,
+        LinearGeometry?[] geometries)
+    {
+        SceneCapacityEstimate estimate = default;
+
+        if (command is PathCompositionSceneCommand pathCommand)
+        {
+            CompositionCommand composition = pathCommand.Command;
+            switch (composition.Kind)
+            {
+                case CompositionCommandKind.FillLayer:
+                    if (!IsSupportedBrush(composition.Brush))
+                    {
+                        return estimate;
+                    }
+
+                    LinearGeometry fillGeometry = composition.SourcePath.ToLinearGeometry(ExtractScale(composition.Transform));
+                    geometries[commandIndex] = fillGeometry;
+                    estimate.AddFill(fillGeometry.Info, composition.Brush);
+                    return estimate;
+
+                case CompositionCommandKind.BeginLayer:
+                    estimate.AddBeginLayer();
+                    return estimate;
+
+                case CompositionCommandKind.EndLayer:
+                    estimate.AddEndLayer();
+                    return estimate;
+            }
+        }
+
+        if (command is StrokePathCompositionSceneCommand strokePathCommand)
+        {
+            StrokePathCommand composition = strokePathCommand.Command;
+            if (!IsSupportedBrush(composition.Brush))
+            {
+                return estimate;
+            }
+
+            LinearGeometry strokeGeometry = composition.SourcePath.ToLinearGeometry(ExtractScale(composition.Transform));
+            geometries[commandIndex] = strokeGeometry;
+            estimate.AddStroke(strokeGeometry, composition.Brush);
+            return estimate;
+        }
+
+        if (command is LineSegmentCompositionSceneCommand lineSegmentCommand)
+        {
+            StrokeLineSegmentCommand composition = lineSegmentCommand.Command;
+            if (IsSupportedBrush(composition.Brush))
+            {
+                estimate.AddOpenSegmentStroke(composition.Brush);
+            }
+
+            return estimate;
+        }
+
+        StrokePolylineCommand polyline = ((PolylineCompositionSceneCommand)command).Command;
+        if (!IsSupportedBrush(polyline.Brush))
+        {
+            return estimate;
+        }
+
+        LinearGeometry polylineGeometry = LinearGeometry.CreateOpenPolyline(polyline.SourcePoints, ExtractScale(polyline.Transform));
+        geometries[commandIndex] = polylineGeometry;
+        estimate.AddStroke(polylineGeometry, polyline.Brush);
+        return estimate;
+    }
+
+    /// <summary>
+    /// Computes the number of useful partitions for encoder planning.
+    /// </summary>
+    private static int GetPartitionCount(
+        int maxDegreeOfParallelism,
+        int workItemCount,
+        int secondaryLimit)
+        => Math.Min(
+            maxDegreeOfParallelism == -1 ? Environment.ProcessorCount : maxDegreeOfParallelism,
+            Math.Min(workItemCount, secondaryLimit));
+
+    /// <summary>
+    /// Creates the parallel options for encoder planning.
+    /// </summary>
+    private static ParallelOptions CreateParallelOptions(int maxDegreeOfParallelism, int partitionCount)
+        => new() { MaxDegreeOfParallelism = Math.Min(maxDegreeOfParallelism, partitionCount) };
+
+    /// <summary>
     /// Mutable flush-scoped encoder state used while appending supported commands into contiguous scene streams.
     /// </summary>
     private ref struct SupportedSubsetSceneEncoding
@@ -150,23 +517,23 @@ internal static class WebGPUSceneEncoder
         /// Initializes a new instance of the <see cref="SupportedSubsetSceneEncoding"/> struct.
         /// </summary>
         /// <param name="allocator">The allocator used for all temporary scene streams.</param>
-        /// <param name="commandCount">The total prepared command count for the flush.</param>
         /// <param name="rootTargetBounds">The root target bounds used for target-local coordinate conversion.</param>
+        /// <param name="plan">The large-batch encoding plan used for initial stream sizing and prepared geometry.</param>
         internal SupportedSubsetSceneEncoding(
             MemoryAllocator allocator,
-            int commandCount,
-            in Rectangle rootTargetBounds)
+            in Rectangle rootTargetBounds,
+            in SceneEncodingPlan plan)
         {
-            this.PathTags = new OwnedStream<byte>(allocator, Math.Max(commandCount * 8, 256));
-            this.PathData = new OwnedStream<uint>(allocator, Math.Max(commandCount * 16, 256));
-            this.DrawTags = new OwnedStream<uint>(allocator, Math.Max(commandCount, 16));
-            this.DrawData = new OwnedStream<uint>(allocator, Math.Max(commandCount, 16));
-            this.Transforms = new OwnedStream<uint>(allocator, 8);
-            this.Styles = new OwnedStream<uint>(allocator, Math.Max(commandCount * StyleWordCount, 16));
+            this.PathTags = new OwnedStream<byte>(allocator, plan.PathTagCapacity);
+            this.PathData = new OwnedStream<uint>(allocator, plan.PathDataWordCapacity);
+            this.DrawTags = new OwnedStream<uint>(allocator, plan.DrawTagCapacity);
+            this.DrawData = new OwnedStream<uint>(allocator, plan.DrawDataWordCapacity);
+            this.Transforms = new OwnedStream<uint>(allocator, plan.TransformWordCapacity);
+            this.Styles = new OwnedStream<uint>(allocator, plan.StyleWordCapacity);
 
             // Gradient payloads are sparse in common scenes, so grow these only when a gradient brush is encoded.
-            this.GradientPixels = new OwnedStream<uint>(allocator, 16);
-            this.PathGradientData = new OwnedStream<uint>(allocator, 16);
+            this.GradientPixels = new OwnedStream<uint>(allocator, plan.GradientPixelCapacity);
+            this.PathGradientData = new OwnedStream<uint>(allocator, plan.PathGradientDataWordCapacity);
             this.Images = [];
             this.FillCount = 0;
             this.PathCount = 0;
@@ -330,21 +697,25 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Appends all supported scene operations into the mutable scene streams.
         /// </summary>
-        internal bool TryBuild(DrawingCommandBatch scene, out string? error)
+        internal bool TryBuild(
+            DrawingCommandBatch scene,
+            in SceneEncodingPlan plan,
+            out string? error)
         {
             for (int i = 0; i < scene.CommandCount; i++)
             {
                 CompositionSceneCommand command = scene.Commands[i];
+                LinearGeometry? geometry = plan.GetGeometry(i);
                 if (command is PathCompositionSceneCommand pathCommand)
                 {
-                    if (!this.TryAppend(pathCommand.Command, out error))
+                    if (!this.TryAppend(pathCommand.Command, geometry, out error))
                     {
                         return false;
                     }
                 }
                 else if (command is StrokePathCompositionSceneCommand strokePathCommand)
                 {
-                    if (!this.TryAppend(strokePathCommand.Command, out error))
+                    if (!this.TryAppend(strokePathCommand.Command, geometry, out error))
                     {
                         return false;
                     }
@@ -358,7 +729,7 @@ internal static class WebGPUSceneEncoder
                 }
                 else
                 {
-                    if (!this.TryAppend(((PolylineCompositionSceneCommand)command).Command, out error))
+                    if (!this.TryAppend(((PolylineCompositionSceneCommand)command).Command, geometry, out error))
                     {
                         return false;
                     }
@@ -372,7 +743,10 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Appends one prepared fill-path or layer-based command to the scene streams when the command kind is supported.
         /// </summary>
-        private bool TryAppend(in CompositionCommand command, out string? error)
+        private bool TryAppend(
+            in CompositionCommand command,
+            LinearGeometry? geometry,
+            out string? error)
         {
             switch (command.Kind)
             {
@@ -391,7 +765,7 @@ internal static class WebGPUSceneEncoder
                     Matrix4x4 fillResidual = ComputeResidual(ExtractScale(command.Transform), command.Transform);
                     this.AppendTransformIfChanged(GetSceneTransform(fillResidual, resolved.RasterizerOptions.SamplingOrigin));
 
-                    this.AppendPlainFill(resolved);
+                    this.AppendPlainFill(resolved, geometry);
                     error = null;
                     return true;
 
@@ -413,7 +787,10 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Appends one prepared stroked path command to the scene streams.
         /// </summary>
-        private bool TryAppend(in StrokePathCommand command, out string? error)
+        private bool TryAppend(
+            in StrokePathCommand command,
+            LinearGeometry? geometry,
+            out string? error)
         {
             if (!TryResolveCommand(command, out ResolvedPathCommand resolved))
             {
@@ -428,7 +805,7 @@ internal static class WebGPUSceneEncoder
 
             Matrix4x4 strokeResidual = ComputeResidual(ExtractScale(command.Transform), command.Transform);
             this.AppendTransformIfChanged(GetSceneTransform(strokeResidual, resolved.RasterizerOptions.SamplingOrigin));
-            this.AppendPlainStroke(resolved, command.Pen);
+            this.AppendPlainStroke(resolved, command.Pen, geometry);
             error = null;
             return true;
         }
@@ -474,7 +851,10 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Appends one prepared explicit polyline stroke to the scene streams.
         /// </summary>
-        private bool TryAppend(in StrokePolylineCommand command, out string? error)
+        private bool TryAppend(
+            in StrokePolylineCommand command,
+            LinearGeometry? geometry,
+            out string? error)
         {
             if (!TryResolveCommand(command, out ResolvedPolylineCommand resolved))
             {
@@ -490,7 +870,7 @@ internal static class WebGPUSceneEncoder
             Vector2 polylineScale = ExtractScale(command.Transform);
             Matrix4x4 polylineResidual = ComputeResidual(polylineScale, command.Transform);
             this.AppendTransformIfChanged(GetSceneTransform(polylineResidual, resolved.RasterizerOptions.SamplingOrigin));
-            LinearGeometry geometry = LinearGeometry.CreateOpenPolyline(resolved.Points, polylineScale);
+            geometry ??= LinearGeometry.CreateOpenPolyline(resolved.Points, polylineScale);
             float widthScale = GetTransformWidthScale(command.Transform);
             this.AppendExplicitStroke(
                 resolved.Brush,
@@ -565,7 +945,9 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Encodes one visible fill command into the path, draw, style, and auxiliary payload streams.
         /// </summary>
-        private void AppendPlainFill(in ResolvedPathCommand command)
+        private void AppendPlainFill(
+            in ResolvedPathCommand command,
+            LinearGeometry? geometry)
         {
             uint drawTag = GetDrawTag(command.Brush);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
@@ -580,7 +962,7 @@ internal static class WebGPUSceneEncoder
                 style3 != this.lastStyle3 ||
                 style4 != this.lastStyle4;
             Vector2 scale = ExtractScale(command.Transform);
-            LinearGeometry geometry = command.Path.ToLinearGeometry(scale);
+            geometry ??= command.Path.ToLinearGeometry(scale);
 
             // Reserve the exact words/tags this item can append before encoding so the
             // subsequent Add calls stay on the already-allocated contiguous spans.
@@ -644,7 +1026,6 @@ internal static class WebGPUSceneEncoder
                 drawTag,
                 scale,
                 command.Transform,
-                command.DestinationOffset,
                 this.rootTargetBounds,
                 ref this.DrawData,
                 ref this.GradientPixels,
@@ -657,10 +1038,13 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Encodes one visible stroke command into the path, draw, style, and auxiliary payload streams.
         /// </summary>
-        private void AppendPlainStroke(in ResolvedPathCommand command, Pen pen)
+        private void AppendPlainStroke(
+            in ResolvedPathCommand command,
+            Pen pen,
+            LinearGeometry? geometry)
         {
             Vector2 scale = ExtractScale(command.Transform);
-            LinearGeometry geometry = command.Path.ToLinearGeometry(scale);
+            geometry ??= command.Path.ToLinearGeometry(scale);
             float widthScale = GetTransformWidthScale(command.Transform);
             uint drawTag = GetDrawTag(command.Brush);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
@@ -735,7 +1119,6 @@ internal static class WebGPUSceneEncoder
                 drawTag,
                 scale,
                 command.Transform,
-                command.DestinationOffset,
                 this.rootTargetBounds,
                 ref this.DrawData,
                 ref this.GradientPixels,
@@ -833,7 +1216,6 @@ internal static class WebGPUSceneEncoder
                 drawTag,
                 scale,
                 transform,
-                destinationOffset,
                 this.rootTargetBounds,
                 ref this.DrawData,
                 ref this.GradientPixels,
@@ -932,7 +1314,6 @@ internal static class WebGPUSceneEncoder
                 drawTag,
                 scale,
                 transform,
-                destinationOffset,
                 this.rootTargetBounds,
                 ref this.DrawData,
                 ref this.GradientPixels,
@@ -2223,7 +2604,6 @@ internal static class WebGPUSceneEncoder
         uint drawTag,
         Vector2 scale,
         Matrix4x4 transform,
-        Point destinationOffset,
         Rectangle rootTargetBounds,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,

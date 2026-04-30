@@ -13,24 +13,22 @@ public interface IDrawingBackend
     /// <summary>
     /// Creates a retained backend scene from a prepared command batch.
     /// </summary>
-    /// <typeparam name="TPixel">The pixel format.</typeparam>
-    /// <param name="configuration">Active processing configuration.</param>
-    /// <param name="target">Destination frame used for target-dependent scene creation.</param>
-    /// <param name="commandBatch">Scene commands in submission order.</param>
-    /// <param name="ownedResources">Resources that must stay alive for the returned scene.</param>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="targetBounds">The target bounds used for target-dependent scene data.</param>
+    /// <param name="commandBatch">The scene commands in submission order.</param>
+    /// <param name="ownedResources">The resources that must stay alive for the returned scene.</param>
     /// <returns>A retained backend scene.</returns>
-    public DrawingBackendScene CreateScene<TPixel>(
+    public DrawingBackendScene CreateScene(
         Configuration configuration,
-        ICanvasFrame<TPixel> target,
+        Rectangle targetBounds,
         DrawingCommandBatch commandBatch,
-        IReadOnlyList<IDisposable>? ownedResources = null)
-        where TPixel : unmanaged, IPixel<TPixel>;
+        IReadOnlyList<IDisposable>? ownedResources = null);
 
     /// <summary>
     /// Renders a retained backend scene into the target.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    /// <param name="configuration">Active processing configuration.</param>
+    /// <param name="configuration">The active processing configuration.</param>
     /// <param name="target">The target frame.</param>
     /// <param name="scene">The retained backend scene to render.</param>
     public void RenderScene<TPixel>(
@@ -45,7 +43,7 @@ public interface IDrawingBackend
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="configuration">The active processing configuration.</param>
     /// <param name="target">The target frame.</param>
-    /// <param name="sourceRectangle">Source rectangle in target-local coordinates.</param>
+    /// <param name="sourceRectangle">The source rectangle in target-local coordinates.</param>
     /// <param name="destination">The destination region that receives the copied pixels.</param>
     public void ReadRegion<TPixel>(
         Configuration configuration,

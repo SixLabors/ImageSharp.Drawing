@@ -31,7 +31,7 @@ The CPU backend can cheaply mutate a memory buffer row by row. The GPU backend w
 
 So the architecture chooses a different approach:
 
-`DrawingCanvas` records drawing intent first, normalizes that intent at flush time, and only then hands the work to the backend.
+`DrawingCanvas` records drawing intent first, normalizes that intent when replaying or creating a retained scene, and only then hands the work to the backend.
 
 That one decision explains most of the surrounding design.
 
@@ -39,15 +39,15 @@ That one decision explains most of the surrounding design.
 
 The canvas is a deferred renderer.
 
-Drawing calls do not rasterize immediately. They create `CompositionCommand` records and queue them into `DrawingCanvasBatcher<TPixel>`. The expensive normalization work happens later, during flush, when the batcher prepares those commands and passes a `CompositionScene` to the backend.
+Drawing calls do not rasterize immediately. They create `CompositionCommand` records and queue them into `DrawingCanvasBatcher<TPixel>`. The expensive normalization work happens later, during replay, when the batcher prepares those commands and hands `DrawingCommandBatch` ranges to the backend.
 
 That gives the architecture three important benefits.
 
 First, the public API stays backend-agnostic. A fill is a fill, whether the target is CPU memory or a GPU surface.
 
-Second, the expensive work can happen once, in one shared place. Transform application, stroke expansion, clip application, and prepared-geometry setup are not reimplemented independently by every backend.
+Second, the expensive shared command work can happen once, in one shared place. Transform application, stroke expansion, clip application, and dash expansion are not reimplemented independently by every backend.
 
-Third, the backend receives a much more stable handoff. Instead of reacting to a long stream of public API calls, it receives a prepared scene with consistent semantics.
+Third, the backend receives a much more stable handoff. Instead of reacting to a long stream of public API calls, it receives prepared command batches with consistent semantics.
 
 ## The Most Important Terms
 
@@ -67,7 +67,7 @@ canvas-facing API while still constructing the typed implementation internally.
 
 ### Batcher
 
-`DrawingCanvasBatcher<TPixel>` is the deferred command queue. It stores pending `CompositionCommand` values, prepares them during flush, builds a `CompositionScene`, and calls `IDrawingBackend.FlushCompositions(...)`.
+`DrawingCanvasBatcher<TPixel>` is the deferred command queue. It stores pending `CompositionCommand` values, records the canvas replay timeline, prepares commands during replay, and creates `DrawingCommandBatch` values for command-range entries.
 
 It is the bridge between the immediate-looking public API and the deferred backend handoff.
 
@@ -79,16 +79,15 @@ The command remains relatively close to the original user request. It may hold t
 
 ### Preparation
 
-Preparation is the flush-time normalization step that turns recorded intent into backend-ready geometry and metadata. It is split across two stages:
+Preparation is the normalization step that turns recorded intent into backend-ready commands.
 
-1. `DrawingCanvasBatcher<TPixel>.PrepareCommands(...)` runs first and only when needed. It applies command transforms, expands strokes to fill paths, and applies clip paths so that clipped commands reach the backend as ordinary fills. It also expands dashed strokes when a stroke pattern is present.
-2. The CPU backend then calls `FlushScene.Create(...)`, which lowers each command into a row-oriented retained representation through `TryPrepareFillPath` / `TryPrepareStrokePath`. That is where prepared rasterizable geometry is built, brushes are bound to the prepared coordinate space, and bounds and raster interest are recomputed.
+`DrawingCanvasBatcher<TPixel>.PrepareCommands(...)` runs only when needed. It applies command transforms, expands strokes to fill paths, applies clip paths so clipped commands reach the backend as ordinary fills, and expands dashed strokes when a stroke pattern is present.
 
-Preparation is where the architecture moves from "what the caller asked for" to "what the backend can execute".
+Preparation stops at `DrawingCommandBatch`. Backend-specific lowering happens after that, inside `IDrawingBackend.CreateScene(...)`.
 
-### Scene
+### Command Batch
 
-`CompositionScene` is the prepared batch handed to the backend. It contains the command stream and scene-level facts such as whether layers are present.
+`DrawingCommandBatch` is the prepared command range handed to the backend. It contains the command stream for one contiguous range and scene-level facts such as whether that range contains layer boundaries.
 
 It is the backend handoff boundary.
 
@@ -99,7 +98,7 @@ It is the backend handoff boundary.
 - `DefaultDrawingBackend` for CPU rendering
 - `WebGPUDrawingBackend` for GPU rendering through native surfaces
 
-The backend receives a scene and a target frame. It decides how to execute that prepared work.
+The backend creates retained scenes from command batches and renders retained scenes into typed target frames.
 
 There are two backend-selection paths in the architecture:
 
@@ -109,7 +108,7 @@ There are two backend-selection paths in the architecture:
 The ordinary CPU entry point is `Paint(...)` on `IImageProcessingContext`, which routes into the typed
 implementation internally.
 
-That explicit-backend path matters for the WebGPU helpers. `WebGPUWindow`, `WebGPURenderTarget`, and `WebGPUDeviceContext` create canvases that point directly at their owned `WebGPUDrawingBackend` instance instead of storing that backend on the caller's `Configuration`.
+That explicit-backend path matters for the WebGPU helpers. `WebGPUWindow`, `WebGPUExternalSurface`, and `WebGPURenderTarget` create canvases that point directly at their owned `WebGPUDrawingBackend` instance instead of storing that backend on the caller's `Configuration`.
 
 ### Frame
 
@@ -169,38 +168,38 @@ The canvas does not try to fully rasterize anything here.
 
 Commands go into `DrawingCanvasBatcher<TPixel>`.
 
-The batcher exists so the canvas does not need to talk to the backend for every single API call. It accumulates work until a flush boundary is reached.
+The batcher exists so the canvas does not need to talk to the backend for every single API call. It accumulates work until a timeline boundary is reached.
 
-The flush boundary usually comes from:
+The replay boundary usually comes from:
 
-- explicit `Flush()`
-- `Process(...)`, which needs read-modify-write behavior
+- explicit `Flush()`, which seals the current command range
+- `Apply(...)`, which needs read-modify-write behavior
+- `RenderScene(...)`, which inserts an existing retained scene into the timeline
 - disposal of the owning canvas
 
-### Step 3: Flush prepares commands
+### Step 3: The batcher prepares commands
 
-When the batcher flushes, it prepares every command. This is where the architecture does the heavy shared work that would otherwise be duplicated across backends.
+When the root canvas is disposed, or when the caller creates a retained scene, the batcher seals any pending commands and prepares the command buffer. This is where the architecture does the heavy shared work that would otherwise be duplicated across backends.
 
-For a typical path-based command, preparation does the following in concept:
+For a typical path-based command, canvas preparation does the following in concept:
 
 1. transform the source path into its final geometry space
 2. if a pen is present, expand the stroke to fill geometry
 3. apply clip paths
-4. build or reuse prepared geometry
-5. transform the brush into the same prepared geometry space
-6. recompute bounds and raster interest
+4. transform the brush into the same command space
+5. leave backend-specific retained geometry construction to `CreateScene(...)`
 
 This is the architectural center of gravity. It is the shared normalization stage that makes the backends simpler.
 
-### Step 4: The backend executes a prepared scene
+### Step 4: The backend creates and renders scenes
 
-After preparation, the batcher creates a `CompositionScene` and calls `backend.FlushCompositions(...)`.
+After preparation, disposal replay walks the canvas timeline in order. Command-range entries become short-lived retained scenes through `backend.CreateScene(...)`, and those scenes are then rendered through `backend.RenderScene(...)`.
 
 From that point the CPU and GPU paths diverge.
 
-The CPU backend lowers the scene into a row-oriented retained representation through `FlushScene` and then composites into memory.
+The CPU backend lowers each command batch into a row-oriented retained representation through `FlushScene` during `CreateScene(...)` and then composites into memory during `RenderScene(...)`.
 
-The WebGPU backend lowers the same scene into its staged GPU representation, uploads resources, and dispatches GPU work.
+The WebGPU backend encodes each command batch into its retained GPU representation during `CreateScene(...)`, then uploads render-scoped resources and dispatches GPU work during `RenderScene(...)`.
 
 The architecture is successful if both backends can differ dramatically here without needing the public canvas model itself to fork.
 
@@ -278,7 +277,7 @@ The child:
 - wraps the parent target in `CanvasRegionFrame<TPixel>`
 - keeps using the same backend
 - keeps using the same shared batcher
-- keeps participating in the same deferred flush model
+- keeps participating in the same deferred replay model
 
 The child canvas has local coordinates starting at `(0, 0)`, but its frame bounds resolve to the correct absolute position inside the parent target.
 
@@ -306,26 +305,30 @@ That is why `DrawImage(...)` should be understood as "prepare an image-backed br
 
 ## What The CPU Backend Receives
 
-Once the scene reaches `DefaultDrawingBackend`, the public drawing model is already normalized.
+Once a command batch reaches `DefaultDrawingBackend.CreateScene(...)`, the public drawing model is already normalized.
 
 The CPU backend does not need to understand every public API call individually. It works with:
 
 - prepared commands
 - layer boundaries
-- the destination frame
+- target bounds during `CreateScene(...)`
+- the destination frame during `RenderScene<TPixel>(...)`
 
-It lowers the scene into a retained row-oriented structure through `FlushScene`, allocates temporary backing buffers for layers when needed, and composites the final result into the target frame.
+It lowers each command batch into a retained row-oriented structure through `FlushScene`. Later, `RenderScene<TPixel>(...)` acquires the CPU destination frame, allocates temporary backing buffers for layers when needed, and composites the final result into the target frame.
 
 That is the payoff of the architecture: the CPU backend is solving a rendering problem, not a public-API interpretation problem.
 
 ## What The WebGPU Backend Receives
 
-The WebGPU backend receives the same scene shape, but it lowers it into a staged GPU-oriented format.
+The WebGPU backend receives the same command batch shape, but it splits retained scene creation from render-scoped GPU work.
 
-That includes:
+`CreateScene(...)` handles:
 
-- encoding prepared scene data
-- creating native resources
+- encoding prepared command data
+
+`RenderScene<TPixel>(...)` handles:
+
+- creating render-scoped native resources
 - planning dispatches
 - executing the GPU pipeline
 
@@ -338,8 +341,8 @@ It benefits from the same canvas-level decisions:
 The WebGPU public helpers reach this point in a target-first way:
 
 - `WebGPUWindow` acquires a presentable native target per frame
-- `WebGPURenderTarget` owns an offscreen native target and can pair it with CPU memory through hybrid frames
-- `WebGPUDeviceContext` wraps shared or caller-owned device state and creates native-only or hybrid frames and canvases over native textures
+- `WebGPURenderTarget` owns an offscreen native target for GPU drawing and readback
+- `WebGPUExternalSurface` attaches WebGPU drawing to a caller-owned native host
 
 Those helpers all create typed canvas instances with an explicit `WebGPUDrawingBackend`, so GPU execution stays attached to the WebGPU object that owns the native target and backend lifetime while callers work through `DrawingCanvas`.
 
@@ -349,7 +352,7 @@ The backend is free to choose a very different execution model because the canva
 
 If you are new to this code, the most useful mental model is:
 
-`DrawingCanvas` is the stateful front end that records drawing intent, `DrawingCanvas<TPixel>` is the typed implementation, `DrawingCanvasBatcher<TPixel>` is the deferred handoff boundary, and the backend is the executor of a prepared scene.
+`DrawingCanvas` is the stateful front end that records drawing intent, `DrawingCanvas<TPixel>` is the typed implementation, `DrawingCanvasBatcher<TPixel>` is the deferred handoff boundary, and the backend creates and renders retained scenes from prepared command batches.
 
 Everything else serves that flow.
 
@@ -377,11 +380,11 @@ If you want to move from the architecture into the code, this is the best order.
 6. `DefaultDrawingBackend.cs`
 7. `FlushScene.cs`
 8. `WebGPUEnvironment.cs`
-9. `WebGPUWindow.cs`, `WebGPURenderTarget.cs`, and `WebGPUDeviceContext.cs`
+9. `WebGPUWindow.cs`, `WebGPUExternalSurface.cs`, and `WebGPURenderTarget.cs`
 10. `WebGPUDrawingBackend` and its scene/dispatch types
 
 That path follows the real runtime flow:
 
-public API -> recorded command -> prepared scene -> backend selection -> backend execution
+public API -> recorded command -> prepared command batch -> backend scene creation -> backend scene rendering
 
 Following the code in that order is much easier than starting from the backend internals first.

@@ -60,11 +60,6 @@ public static class WebGPUNativeSurfaceFactory
         Guard.MustBeGreaterThan(width, 0, nameof(width));
         Guard.MustBeGreaterThan(height, 0, nameof(height));
 
-        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormatInfo(targetFormat, out _, out _))
-        {
-            throw new NotSupportedException($"Texture format '{targetFormat}' is not supported by the WebGPU backend.");
-        }
-
         return new WebGPUNativeSurface(new WebGPUNativeTarget(
             deviceHandle,
             queueHandle,

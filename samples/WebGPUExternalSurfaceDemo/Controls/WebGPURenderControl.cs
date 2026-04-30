@@ -5,13 +5,12 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
-using SixLabors.ImageSharp.PixelFormats;
 using ImageSharpSize = SixLabors.ImageSharp.Size;
 
 namespace WebGPUExternalSurfaceDemo.Controls;
 
 /// <summary>
-/// A reusable WinForms control that embeds a <see cref="WebGPUExternalSurface{TPixel}"/> and drives a continuous
+/// A reusable WinForms control that embeds a <see cref="WebGPUExternalSurface"/> and drives a continuous
 /// render loop via <see cref="Application.Idle"/>. Callers hook <see cref="PaintFrame"/> with their scene logic;
 /// the control handles construction, resize, acquire/present, and teardown.
 /// </summary>
@@ -20,7 +19,7 @@ public sealed partial class WebGPURenderControl : Control
     private const int WM_MOVING = 0x0216;
     private const int WM_EXITSIZEMOVE = 0x0232;
 
-    private WebGPUExternalSurface<Bgra32>? surface;
+    private WebGPUExternalSurface? surface;
     private Size framebufferSize;
     private bool idleHooked;
     private long lastTicks;
@@ -63,11 +62,15 @@ public sealed partial class WebGPURenderControl : Control
 
         // The module handle is required by the Win32 surface descriptor. It identifies the process module
         // that owns the window class backing this control.
-        this.surface = new WebGPUExternalSurface<Bgra32>(
+        this.surface = new WebGPUExternalSurface(
             WebGPUSurfaceHost.Win32(
                 this.Handle,
                 Marshal.GetHINSTANCE(typeof(WebGPURenderControl).Module)),
-            initialFramebufferSize);
+            initialFramebufferSize,
+            new WebGPUExternalSurfaceOptions
+            {
+                Format = WebGPUTextureFormat.Bgra8Unorm
+            });
 
         this.lastTicks = Stopwatch.GetTimestamp();
         Application.Idle += this.OnApplicationIdle;
@@ -179,7 +182,7 @@ public sealed partial class WebGPURenderControl : Control
 
         // Frame acquisition can fail transiently while the surface is unavailable, for example during resize
         // or device recovery. Skipping the frame keeps the UI message loop responsive.
-        if (!this.surface.TryAcquireFrame(out WebGPUSurfaceFrame<Bgra32>? frame))
+        if (!this.surface.TryAcquireFrame(out WebGPUSurfaceFrame? frame))
         {
             return;
         }
@@ -191,7 +194,7 @@ public sealed partial class WebGPURenderControl : Control
         using (frame)
         {
             // The canvas records drawing work against the acquired surface texture. Disposing the frame
-            // flushes that work, presents the texture, and releases the per-frame native handles.
+            // renders that work, presents the texture, and releases the per-frame native handles.
             this.PaintFrame?.Invoke(frame.Canvas, delta);
         }
     }

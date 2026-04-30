@@ -144,10 +144,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         WebGPUPresentMode initialPresentMode,
         Size initialFramebufferSize)
     {
-        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormatInfo(format, out _, out FeatureName requiredFeature))
-        {
-            throw new NotSupportedException($"Texture format '{format}' is not supported by the WebGPU backend.");
-        }
+        WebGPUDrawingBackend.GetCompositeTextureFormatInfo(format, out _, out FeatureName requiredFeature);
 
         WebGPU api = WebGPURuntime.GetApi();
         Instance* instance = null;

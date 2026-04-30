@@ -71,34 +71,19 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     public string DiagnosticLastChunkingBindingFailure => this.lastChunkingBindingFailure.ToString();
 
     /// <inheritdoc />
-    public DrawingBackendScene CreateScene<TPixel>(
+    public DrawingBackendScene CreateScene(
         Configuration configuration,
-        ICanvasFrame<TPixel> target,
+        Rectangle targetBounds,
         DrawingCommandBatch commandBatch,
         IReadOnlyList<IDisposable>? ownedResources = null)
-        where TPixel : unmanaged, IPixel<TPixel>
     {
         this.ThrowIfDisposed();
-
-        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormat formatId, out FeatureName requiredFeature))
-        {
-            throw new NotSupportedException($"The WebGPU backend does not support pixel format '{typeof(TPixel).Name}'.");
-        }
-
-        if (!TryGetSceneTarget(
-                target,
-                formatId,
-                requiredFeature,
-                out TextureFormat textureFormat,
-                out Rectangle targetBounds))
-        {
-            throw new NotSupportedException("The target cannot create a WebGPU flush context.");
-        }
 
         if (!WebGPUSceneEncoder.TryEncode(
                 commandBatch,
                 targetBounds,
                 configuration.MemoryAllocator,
+                configuration.MaxDegreeOfParallelism,
                 out WebGPUEncodedScene encodedScene,
                 out string? error))
         {
@@ -107,8 +92,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         return new WebGPUDrawingBackendScene(
             encodedScene,
-            textureFormat,
-            requiredFeature,
             targetBounds,
             this.bumpSizes,
             ownedResources);
@@ -158,11 +141,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         try
         {
-            if (webGPUScene.TextureFormat != textureFormat || webGPUScene.RequiredFeature != requiredFeature)
-            {
-                throw new InvalidOperationException("The retained WebGPU scene format does not match the target format.");
-            }
-
             WebGPUEncodedScene? encodedScene = webGPUScene.EncodedScene;
 
             if (encodedScene is not null && encodedScene.FillCount != 0)
@@ -250,7 +228,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     }
 
     /// <summary>
-    /// Validates the target information needed to encode a retained WebGPU scene.
+    /// Validates the target information needed to render a retained WebGPU scene.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="target">The target frame.</param>

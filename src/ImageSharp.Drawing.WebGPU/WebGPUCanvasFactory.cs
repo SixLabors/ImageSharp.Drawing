@@ -20,6 +20,7 @@ internal static class WebGPUCanvasFactory
         Rectangle bounds,
         NativeSurface surface,
         WebGPUTextureFormat format)
+#pragma warning disable CS8524
         => format switch
         {
             WebGPUTextureFormat.Rgba8Unorm => CreateCanvas<Rgba32>(
@@ -48,10 +49,9 @@ internal static class WebGPUCanvasFactory
                 options,
                 backend,
                 bounds,
-                surface),
-
-            _ => throw new NotSupportedException($"Texture format '{format}' is not supported by the WebGPU backend.")
+                surface)
         };
+#pragma warning restore CS8524
 
     /// <summary>
     /// Creates a typed frame over a WebGPU native surface.

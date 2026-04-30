@@ -184,20 +184,12 @@ public partial class DrawingCanvasTests
 
         public Configuration? LastReadbackConfiguration { get; private set; }
 
-        public DrawingBackendScene CreateScene<TTargetPixel>(
+        public DrawingBackendScene CreateScene(
             Configuration configuration,
-            ICanvasFrame<TTargetPixel> target,
+            Rectangle targetBounds,
             DrawingCommandBatch commandBatch,
             IReadOnlyList<IDisposable>? ownedResources = null)
-            where TTargetPixel : unmanaged, IPixel<TTargetPixel>
-        {
-            if (this.proxyFrame is not ICanvasFrame<TTargetPixel> typedProxyFrame)
-            {
-                throw new NotSupportedException("Mirroring test backend pixel format mismatch.");
-            }
-
-            return DefaultDrawingBackend.Instance.CreateScene(configuration, typedProxyFrame, commandBatch, ownedResources);
-        }
+            => DefaultDrawingBackend.Instance.CreateScene(configuration, targetBounds, commandBatch, ownedResources);
 
         public void RenderScene<TTargetPixel>(
             Configuration configuration,

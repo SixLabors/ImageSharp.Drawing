@@ -564,7 +564,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         try
         {
-            return this.batcher.CreateScene(this.backend, this.targetFrame, ownedResources);
+            return this.batcher.CreateScene(this.backend, this.targetFrame.Bounds, ownedResources);
         }
         catch
         {
@@ -1078,7 +1078,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     {
         using DrawingBackendScene scene = this.backend.CreateScene(
             this.configuration,
-            this.targetFrame,
+            this.targetFrame.Bounds,
             commandBatch);
 
         this.backend.RenderScene(this.configuration, this.targetFrame, scene);

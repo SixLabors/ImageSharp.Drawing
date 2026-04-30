@@ -29,7 +29,6 @@ public static class Program
     private const string DisplayFontFile = "WendyOne-Regular.ttf";
 
     private static readonly Size SampleSize = new(960, 640);
-    private static readonly Brush PageBrush = Brushes.Solid(Color.White);
     private static readonly FontCollection SampleFonts = new();
     private static readonly FontFamily ArabicFontFamily = LoadFontFamily(ArabicFontFile);
     private static readonly FontFamily CjkFontFamily = LoadFontFamily(CjkFontFile);
@@ -1199,7 +1198,7 @@ public static class Program
     private static void SaveImage(Image image, string fileName)
     {
         string fullPath = IOPath.Combine(AppContext.BaseDirectory, OutputDirectory, fileName);
-        IODirectory.CreateDirectory(IOPath.GetDirectoryName(fullPath)!);
+        IODirectory.CreateDirectory(IOPath.GetDirectoryName(fullPath));
         image.Save(fullPath);
     }
 

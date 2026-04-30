@@ -1,12 +1,12 @@
 # DefaultDrawingBackend
 
-`DefaultDrawingBackend` is the CPU execution backend for ImageSharp.Drawing. It receives one flush worth of prepared drawing commands, turns them into row-local raster work, executes that work with reusable scratch, and writes the result into a CPU destination buffer.
+`DefaultDrawingBackend` is the CPU execution backend for ImageSharp.Drawing. It creates retained CPU scenes from prepared drawing command batches, executes those scenes with reusable scratch, and writes the result into a CPU destination buffer.
 
 This document explains the backend as a system rather than as a list of methods. The goal is to help a newcomer understand:
 
 - where the CPU backend fits in the canvas/backend selection model
 - what problem the CPU backend is solving
-- why the backend is organized around a flush-scoped execution plan
+- why the backend is organized around a retained row-oriented execution plan
 - what `FlushScene` means in this architecture
 - how rasterization, brush application, and layer composition fit together
 
@@ -40,7 +40,7 @@ If the CPU backend executed commands directly from the incoming scene, each work
 
 So the backend takes a different approach:
 
-it turns the whole flush into a row-oriented execution plan first, then executes that plan.
+it turns the whole command batch into a row-oriented execution plan first, then executes that plan.
 
 That decision explains most of the backend architecture.
 
@@ -50,11 +50,11 @@ The CPU backend is a flush executor, not a command-at-a-time painter.
 
 Its central idea is:
 
-> convert a flush into row-local raster work once, then execute rows directly with reusable worker-local scratch
+> convert a command batch into row-local raster work once, then execute rows directly with reusable worker-local scratch
 
 That is why the backend is built around `FlushScene`.
 
-`FlushScene` is a flush-scoped execution plan. It exists only for the life of one backend flush. Its job is to take a prepared command stream and reorganize it into a form that is cheap for the row executor to consume.
+`FlushScene` is a retained execution plan. In non-retained rendering it is short-lived and disposed after one replay entry; in retained rendering it can live with the returned `DefaultDrawingBackendScene`. Its job is to take a prepared command stream and reorganize it into a form that is cheap for the row executor to consume.
 
 If that idea is clear, most of the important types fall into place.
 
@@ -65,19 +65,19 @@ If that idea is clear, most of the important types fall into place.
 `DefaultDrawingBackend` is the top-level CPU executor. It owns backend policy and orchestration:
 
 - acquiring a writable CPU destination
-- creating the flush-scoped execution plan
+- creating the retained execution plan
 - executing that plan
 - handling CPU layer composition
 
 It does not own every detail of geometry planning or scan conversion.
 
-It also does not own backend selection. By the time `FlushCompositions(...)` is called, the typed canvas implementation has already chosen the backend instance that will receive the prepared scene.
+It also does not own backend selection. By the time `CreateScene(...)` or `RenderScene(...)` is called, the typed canvas implementation has already chosen the backend instance that will receive the prepared work.
 
 ### Scene
 
-In the canvas architecture, the backend receives a `CompositionScene`. That scene already contains prepared commands and explicit layer boundaries.
+In the canvas architecture, the backend receives a `DrawingCommandBatch`. That batch already contains prepared commands and explicit layer boundaries for one contiguous command range.
 
-For the CPU backend, that incoming scene is the starting point, not the final execution form.
+For the CPU backend, that incoming batch is the starting point, not the final execution form.
 
 ### Flush Scene
 
@@ -85,9 +85,9 @@ For the CPU backend, that incoming scene is the starting point, not the final ex
 
 In this codebase, `FlushScene` means:
 
-"the retained, row-oriented execution plan for one CPU flush"
+"the retained, row-oriented execution plan for one CPU command batch"
 
-It owns the flush-local information needed to make execution cheap:
+It owns the retained information needed to make execution cheap:
 
 - the visible prepared commands
 - retained rasterizable geometry
@@ -141,25 +141,26 @@ This is how the backend avoids allocating fresh buffers for every row item durin
 
 ## The Big Picture Flow
 
-The easiest way to understand the backend is to follow one flush from entry to execution.
+The easiest way to understand the backend is to follow one command batch from scene creation to execution.
 
 ```mermaid
 flowchart TD
-    A[DrawingCanvas flush] --> B[DefaultDrawingBackend.FlushCompositions]
-    B --> C[Acquire CPU destination]
-    B --> D[FlushScene.Create]
-    D --> E[Prepare visible items]
-    E --> F[Build row-local execution plan]
-    F --> G[Execute rows in parallel]
-    G --> H[DefaultRasterizer emits coverage]
-    H --> I[BrushRenderer shades pixels]
-    I --> J[Destination frame updated]
+    A[DrawingCanvas disposal replay] --> B[DefaultDrawingBackend.CreateScene]
+    B --> C[FlushScene.Create]
+    C --> D[Prepare visible items]
+    D --> E[Build row-local execution plan]
+    E --> F[DefaultDrawingBackend.RenderScene]
+    F --> G[Acquire CPU destination]
+    G --> H[Execute rows in parallel]
+    H --> I[DefaultRasterizer emits coverage]
+    I --> J[BrushRenderer shades pixels]
+    J --> K[Destination frame updated]
 ```
 
 There are three major stages in that flow:
 
-1. establish the destination frame
-2. build the flush-scoped execution plan
+1. build the retained execution plan
+2. establish the destination frame
 3. execute rows using that plan
 
 ## What `DefaultDrawingBackend` Owns
@@ -168,15 +169,15 @@ There are three major stages in that flow:
 
 Its responsibilities are:
 
-- acquire a writable CPU region from the target frame
 - create a `FlushScene`
+- acquire a writable CPU region from the target frame
 - execute that scene
 - provide CPU layer composition services
 - manage frame usage for CPU-backed targets
 
 The expensive work is delegated:
 
-- `FlushScene` owns flush-local planning
+- `FlushScene` owns retained row planning
 - `DefaultRasterizer` owns scan conversion
 - `BrushRenderer<TPixel>` owns brush-specific shading
 
@@ -185,8 +186,8 @@ That split keeps each type focused on one class of problem.
 The canvas layer above that split is also important:
 
 - `DrawingCanvas` records public drawing intent
-- `DrawingCanvasBatcher<TPixel>` prepares commands and constructs `CompositionScene`
-- `DefaultDrawingBackend` executes the prepared scene on a CPU destination
+- `DrawingCanvasBatcher<TPixel>` prepares commands and constructs `DrawingCommandBatch` values
+- `DefaultDrawingBackend` executes the retained scene on a CPU destination
 
 ## Building The Flush Scene
 
@@ -357,7 +358,7 @@ If you are new to this backend, read the code in this order:
 
 That order mirrors the runtime flow:
 
-canvas and backend selection -> backend orchestration -> flush planning -> row execution structures -> worker helpers -> scan conversion
+canvas and backend selection -> backend orchestration -> retained row planning -> row execution structures -> worker helpers -> scan conversion
 
 ## The Mental Model To Keep
 

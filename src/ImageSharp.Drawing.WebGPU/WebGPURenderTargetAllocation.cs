@@ -45,10 +45,7 @@ internal static unsafe class WebGPURenderTargetAllocation
         Guard.MustBeGreaterThan(width, 0, nameof(width));
         Guard.MustBeGreaterThan(height, 0, nameof(height));
 
-        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormatInfo(format, out TextureFormat textureFormat, out FeatureName requiredFeature))
-        {
-            throw new NotSupportedException($"Texture format '{format}' is not supported by the WebGPU backend.");
-        }
+        WebGPUDrawingBackend.GetCompositeTextureFormatInfo(format, out TextureFormat textureFormat, out FeatureName requiredFeature);
 
         using WebGPUHandle.HandleReference deviceReference = deviceHandle.AcquireReference();
 
