@@ -1355,6 +1355,175 @@ public partial class WebGPUDrawingBackendTests
     }
 
     [WebGPUTheory]
+    [WithSolidFilledImages(160, 120, "White", PixelTypes.Rgba32)]
+    public void RetainedScene_MixedWithApplyBarriersAndRegularCommands_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        static void DrawRetainedScene(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(32, 22, 64, 52));
+            canvas.Flush();
+            canvas.Fill(Brushes.Solid(Color.Blue), new Rectangle(72, 46, 48, 48));
+        }
+
+        static void DrawInlineFlow(DrawingCanvas canvas)
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.Fill(Brushes.Solid(Color.Yellow), new Rectangle(0, 0, 48, 120));
+            canvas.Fill(Brushes.Solid(Color.Purple), new Rectangle(16, 16, 24, 24));
+
+            // The marker gives the pre-scene Apply barrier non-flat pixels for Invert to modify.
+            canvas.Apply(new Rectangle(8, 8, 44, 44), ctx => ctx.Invert());
+            DrawRetainedScene(canvas);
+            canvas.Fill(Brushes.Solid(Color.Black), new Rectangle(40, 30, 24, 24));
+
+            // The inline reference keeps the same ordering without retaining the middle scene.
+            canvas.Apply(new Rectangle(32, 22, 88, 72), ctx => ctx.GaussianBlur(6F));
+            DrawRetainedScene(canvas);
+            canvas.Fill(Brushes.Solid(Color.Green), new Rectangle(88, 58, 44, 28));
+        }
+
+        static void DrawRetainedFlow(DrawingCanvas canvas, DrawingBackendScene retainedScene)
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.Fill(Brushes.Solid(Color.Yellow), new Rectangle(0, 0, 48, 120));
+            canvas.Fill(Brushes.Solid(Color.Purple), new Rectangle(16, 16, 24, 24));
+
+            // The retained scene must replay between barriers exactly where RenderScene records it.
+            canvas.Apply(new Rectangle(8, 8, 44, 44), ctx => ctx.Invert());
+            canvas.RenderScene(retainedScene);
+            canvas.Fill(Brushes.Solid(Color.Black), new Rectangle(40, 30, 24, 24));
+            canvas.Apply(new Rectangle(32, 22, 88, 72), ctx => ctx.GaussianBlur(6F));
+            canvas.RenderScene(retainedScene);
+            canvas.Fill(Brushes.Solid(Color.Green), new Rectangle(88, 58, 44, 28));
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        defaultImage.Mutate(c => c.Paint(drawingOptions, DrawInlineFlow));
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        Configuration nativeConfig = Configuration.Default.Clone();
+        nativeConfig.SetDrawingBackend(nativeSurfaceBackend);
+
+        using WebGPURenderTarget sceneRenderTarget = new(defaultImage.Width, defaultImage.Height);
+        using DrawingCanvas nativeSceneCanvas = WebGPUCanvasFactory.CreateCanvas(
+            nativeConfig,
+            drawingOptions,
+            nativeSurfaceBackend,
+            sceneRenderTarget.Bounds,
+            sceneRenderTarget.Surface,
+            sceneRenderTarget.Format);
+
+        // Create the scene through the WebGPU backend so the test covers retained encoding and replay.
+        DrawRetainedScene(nativeSceneCanvas);
+
+        using DrawingBackendScene nativeScene = nativeSceneCanvas.CreateScene();
+        using WebGPURenderTarget renderTarget = new(defaultImage.Width, defaultImage.Height);
+        using (DrawingCanvas nativeCanvas = WebGPUCanvasFactory.CreateCanvas(
+                   nativeConfig,
+                   drawingOptions,
+                   nativeSurfaceBackend,
+                   renderTarget.Bounds,
+                   renderTarget.Surface,
+                   renderTarget.Format))
+        {
+            DrawRetainedFlow(nativeCanvas, nativeScene);
+        }
+
+        using Image<TPixel> nativeSurfaceImage = renderTarget.Readback<TPixel>();
+        DebugSaveBackendPair(provider, "RetainedScene_MixedWithApplyBarriers", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairReferenceOutputs(provider, "RetainedScene_MixedWithApplyBarriers", defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(160, 120, "White", PixelTypes.Rgba32)]
+    public void RetainedScene_WithLayerCommands_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        static void DrawRetainedScene(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(24, 20, 92, 64));
+
+            // Layer boundaries inside the retained scene must survive scene creation and replay.
+            canvas.SaveLayer(
+                new GraphicsOptions { BlendPercentage = 0.65F },
+                new Rectangle(36, 26, 76, 52));
+
+            canvas.Fill(Brushes.Solid(Color.Blue), new Rectangle(54, 34, 76, 46));
+            canvas.Restore();
+            canvas.Fill(Brushes.Solid(Color.Green), new Rectangle(92, 62, 30, 28));
+        }
+
+        static void DrawInlineFlow(DrawingCanvas canvas)
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.Fill(Brushes.Solid(Color.Orange), new Rectangle(0, 0, 52, 120));
+
+            // The default reference draws the retained-scene contents inline at the same position.
+            DrawRetainedScene(canvas);
+            canvas.Fill(Brushes.Solid(Color.Black), new Rectangle(122, 8, 16, 96));
+        }
+
+        static void DrawRetainedFlow(DrawingCanvas canvas, DrawingBackendScene retainedScene)
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.Fill(Brushes.Solid(Color.Orange), new Rectangle(0, 0, 52, 120));
+
+            // RenderScene is the only difference from the inline reference above.
+            canvas.RenderScene(retainedScene);
+            canvas.Fill(Brushes.Solid(Color.Black), new Rectangle(122, 8, 16, 96));
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        defaultImage.Mutate(c => c.Paint(drawingOptions, DrawInlineFlow));
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        Configuration nativeConfig = Configuration.Default.Clone();
+        nativeConfig.SetDrawingBackend(nativeSurfaceBackend);
+
+        using WebGPURenderTarget sceneRenderTarget = new(defaultImage.Width, defaultImage.Height);
+        using DrawingCanvas nativeSceneCanvas = WebGPUCanvasFactory.CreateCanvas(
+            nativeConfig,
+            drawingOptions,
+            nativeSurfaceBackend,
+            sceneRenderTarget.Bounds,
+            sceneRenderTarget.Surface,
+            sceneRenderTarget.Format);
+
+        // Create the scene through the WebGPU backend so retained layer commands are encoded.
+        DrawRetainedScene(nativeSceneCanvas);
+
+        using DrawingBackendScene nativeScene = nativeSceneCanvas.CreateScene();
+        using WebGPURenderTarget renderTarget = new(defaultImage.Width, defaultImage.Height);
+        using (DrawingCanvas nativeCanvas = WebGPUCanvasFactory.CreateCanvas(
+                   nativeConfig,
+                   drawingOptions,
+                   nativeSurfaceBackend,
+                   renderTarget.Bounds,
+                   renderTarget.Surface,
+                   renderTarget.Format))
+        {
+            DrawRetainedFlow(nativeCanvas, nativeScene);
+        }
+
+        using Image<TPixel> nativeSurfaceImage = renderTarget.Readback<TPixel>();
+        DebugSaveBackendPair(provider, "RetainedScene_WithLayerCommands", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairReferenceOutputs(provider, "RetainedScene_WithLayerCommands", defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_WithLinearGradientBrush_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
