@@ -23,6 +23,7 @@ internal sealed partial class FlushScene : IDisposable
         maxLayerDepth: 0,
         fillItems: [],
         strokeItems: [],
+        layerOptions: [],
         rows: []);
 
     /// <summary>
@@ -39,6 +40,7 @@ internal sealed partial class FlushScene : IDisposable
         int maxLayerDepth,
         FillSceneItem?[] fillItems,
         StrokeSceneItem?[] strokeItems,
+        GraphicsOptions?[] layerOptions,
         SceneRow[] rows)
     {
         this.FillItemCount = fillItemCount;
@@ -51,6 +53,7 @@ internal sealed partial class FlushScene : IDisposable
         this.MaxLayerDepth = maxLayerDepth;
         this.FillItems = fillItems;
         this.StrokeItems = strokeItems;
+        this.LayerOptions = layerOptions;
         this.Rows = rows;
     }
 
@@ -78,6 +81,11 @@ internal sealed partial class FlushScene : IDisposable
     /// Gets the retained visible stroke scene items.
     /// </summary>
     internal StrokeSceneItem?[] StrokeItems { get; }
+
+    /// <summary>
+    /// Gets the retained layer options indexed by begin-layer command index.
+    /// </summary>
+    internal GraphicsOptions?[] LayerOptions { get; }
 
     /// <summary>
     /// Gets the number of scene rows containing executable work.
@@ -126,7 +134,7 @@ internal sealed partial class FlushScene : IDisposable
     /// </param>
     /// <returns>A flush-ready scene.</returns>
     public static FlushScene Create(
-        CompositionScene scene,
+        DrawingCommandBatch scene,
         in Rectangle targetBounds,
         MemoryAllocator allocator,
         int maxDegreeOfParallelism)
@@ -151,6 +159,7 @@ internal sealed partial class FlushScene : IDisposable
 
         FillSceneItem?[] fillItems = new FillSceneItem?[commandCount];
         StrokeSceneItem?[] strokeItems = new StrokeSceneItem?[commandCount];
+        GraphicsOptions?[] layerOptions = new GraphicsOptions?[commandCount];
         int partitionCount = ParallelExecutionHelper.GetPartitionCount(maxDegreeOfParallelism, commandCount, targetRowCount);
         PartitionState[] partitions = new PartitionState[partitionCount];
 
@@ -174,7 +183,8 @@ internal sealed partial class FlushScene : IDisposable
                     targetRowCount,
                     allocator,
                     fillItems,
-                    strokeItems);
+                    strokeItems,
+                    layerOptions);
             });
 
         RowBuilder[] rowBuilders = new RowBuilder[targetRowCount];
@@ -234,6 +244,7 @@ internal sealed partial class FlushScene : IDisposable
             maxLayerDepth,
             fillItems,
             strokeItems,
+            layerOptions,
             sceneRows);
     }
 
@@ -514,7 +525,8 @@ internal sealed partial class FlushScene : IDisposable
         int targetRowCount,
         MemoryAllocator allocator,
         FillSceneItem?[] fillItems,
-        StrokeSceneItem?[] strokeItems)
+        StrokeSceneItem?[] strokeItems,
+        GraphicsOptions?[] layerOptions)
     {
         RowBuilder[] rowBuilders = new RowBuilder[targetRowCount];
         int fillItemCount = 0;
@@ -539,6 +551,7 @@ internal sealed partial class FlushScene : IDisposable
                     allocator,
                     fillItems,
                     strokeItems,
+                    layerOptions,
                     ref fillItemCount,
                     ref strokeItemCount,
                     ref totalEdgeCount,
@@ -614,6 +627,7 @@ internal sealed partial class FlushScene : IDisposable
         MemoryAllocator allocator,
         FillSceneItem?[] fillItems,
         StrokeSceneItem?[] strokeItems,
+        GraphicsOptions?[] layerOptions,
         ref int fillItemCount,
         ref int strokeItemCount,
         ref long totalEdgeCount,
@@ -641,7 +655,16 @@ internal sealed partial class FlushScene : IDisposable
                 currentLayerDepth--;
             }
 
-            AppendLayerOperations(rowBuilders, firstRowSlot, lastRowSlot, layerBounds, operationKind, commandIndex, targetBounds, allocator);
+            int layerOptionsIndex = -1;
+            if (operationKind == CompositionCommandKind.BeginLayer)
+            {
+                // BeginLayer carries the compositing options used later by the matching EndLayer.
+                // Store them at the command index so row operations can keep a compact integer reference.
+                layerOptions[commandIndex] = command.GraphicsOptions;
+                layerOptionsIndex = commandIndex;
+            }
+
+            AppendLayerOperations(rowBuilders, firstRowSlot, lastRowSlot, layerBounds, operationKind, layerOptionsIndex, targetBounds, allocator);
             return;
         }
 
@@ -747,7 +770,7 @@ internal sealed partial class FlushScene : IDisposable
         int lastRowSlot,
         Rectangle layerBandBounds,
         CompositionCommandKind operationKind,
-        int commandIndex,
+        int layerOptionsIndex,
         in Rectangle targetBounds,
         MemoryAllocator allocator)
     {
@@ -762,7 +785,7 @@ internal sealed partial class FlushScene : IDisposable
             int rowTop = targetBounds.Top + (rowSlot * DefaultRasterizer.DefaultTileHeight);
             Rectangle rowBounds = new(targetBounds.Left, rowTop, targetBounds.Width, DefaultRasterizer.DefaultTileHeight);
             Rectangle rowLayerBounds = Rectangle.Intersect(layerBandBounds, rowBounds);
-            builder.Append(new SceneOperation(operationKind, commandIndex, rowLayerBounds));
+            builder.Append(new SceneOperation(operationKind, rowLayerBounds, layerOptionsIndex));
         }
     }
 

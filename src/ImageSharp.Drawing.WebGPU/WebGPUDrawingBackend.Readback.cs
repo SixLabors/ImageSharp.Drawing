@@ -46,10 +46,14 @@ public sealed unsafe partial class WebGPUDrawingBackend
             throw new NotSupportedException("The target does not expose valid WebGPU device, queue, and texture handles for readback.");
         }
 
-        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId expectedFormat, out FeatureName requiredFeature) ||
-            expectedFormat != nativeTarget.TargetFormat)
+        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormat expectedFormat, out FeatureName requiredFeature))
         {
-            throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' cannot be read back from target format '{nativeTarget.TargetFormat}'.");
+            throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' cannot be read back from a WebGPU target.");
+        }
+
+        if (nativeTarget.TargetFormat != expectedFormat)
+        {
+            throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' does not match WebGPU target format '{nativeTarget.TargetFormat}'.");
         }
 
         // Convert canvas-local source coordinates to absolute native-surface coordinates.
@@ -104,11 +108,6 @@ public sealed unsafe partial class WebGPUDrawingBackend
             };
 
             readbackBuffer = api.DeviceCreateBuffer(device, in bufferDescriptor);
-            if (readbackBuffer is null)
-            {
-                throw new InvalidOperationException("The WebGPU device could not create a readback buffer.");
-            }
-
             CommandEncoderDescriptor encoderDescriptor = default;
             commandEncoder = api.DeviceCreateCommandEncoder(device, in encoderDescriptor);
             if (commandEncoder is null)

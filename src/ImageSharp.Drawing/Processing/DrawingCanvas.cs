@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using SixLabors.Fonts;
+using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Text;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
 
@@ -48,8 +49,8 @@ public abstract class DrawingCanvas : IDisposable
     /// <summary>
     /// Saves the current drawing state and begins an isolated compositing layer
     /// bounded to a subregion. Subsequent draw commands are recorded into that isolated
-    /// logical layer. When <see cref="Restore"/> closes the layer, it is composed during
-    /// the next <see cref="Flush"/> or <see cref="IDisposable.Dispose"/> using the specified
+    /// logical layer. When <see cref="Restore"/> closes the layer, it is recorded into the
+    /// canvas timeline and later composed during <see cref="IDisposable.Dispose"/> using the specified
     /// <paramref name="layerOptions"/>.
     /// </summary>
     /// <remarks>
@@ -60,7 +61,7 @@ public abstract class DrawingCanvas : IDisposable
     /// </remarks>
     /// <param name="layerOptions">
     /// Graphics options controlling how the closed layer is composited against the parent canvas
-    /// when composition runs (on the next <see cref="Flush"/> or <see cref="IDisposable.Dispose"/>).
+    /// when the canvas timeline is rendered during <see cref="IDisposable.Dispose"/>.
     /// </param>
     /// <param name="bounds">
     /// The local bounds of the layer. Only this region is allocated and composited.
@@ -73,8 +74,8 @@ public abstract class DrawingCanvas : IDisposable
     /// </summary>
     /// <remarks>
     /// If the most recently saved state was created by a <c>SaveLayer</c> overload,
-    /// the layer is closed in the deferred scene. Actual composition happens during the
-    /// next <see cref="Flush"/> or <see cref="IDisposable.Dispose"/>.
+    /// the layer is closed in the recorded timeline. Actual composition happens during
+    /// <see cref="IDisposable.Dispose"/>.
     /// </remarks>
     public abstract void Restore();
 
@@ -85,8 +86,8 @@ public abstract class DrawingCanvas : IDisposable
     /// State frames above <paramref name="saveCount"/> are discarded,
     /// and the last discarded frame becomes the current state.
     /// If any discarded state was created by a <c>SaveLayer</c> overload,
-    /// those layers are closed in the deferred scene and are composed during the next
-    /// <see cref="Flush"/> or <see cref="IDisposable.Dispose"/>.
+    /// those layers are closed in the recorded timeline and composed during
+    /// <see cref="IDisposable.Dispose"/>.
     /// </remarks>
     /// <param name="saveCount">The save count to restore to.</param>
     public abstract void RestoreTo(int saveCount);
@@ -212,7 +213,19 @@ public abstract class DrawingCanvas : IDisposable
         IResampler? sampler = null);
 
     /// <summary>
-    /// Flushes queued drawing commands to the target in submission order.
+    /// Creates a retained backend scene from the drawing commands currently queued on this canvas.
+    /// </summary>
+    /// <returns>A retained backend scene.</returns>
+    public abstract DrawingBackendScene CreateScene();
+
+    /// <summary>
+    /// Renders a retained backend scene into this canvas target.
+    /// </summary>
+    /// <param name="scene">The retained backend scene to render.</param>
+    public abstract void RenderScene(DrawingBackendScene scene);
+
+    /// <summary>
+    /// Seals queued drawing commands into the canvas timeline.
     /// </summary>
     public abstract void Flush();
 

@@ -22,13 +22,15 @@ public class DrawingCanvasBatcherTests
 
         IPath path = new RectangularPolygon(4, 6, 18, 12);
         DrawingOptions options = new();
-        using DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, options);
         Brush brushA = Brushes.Solid(Color.Red);
         Brush brushB = Brushes.Solid(Color.Blue);
 
-        canvas.Fill(brushA, path);
-        canvas.Fill(brushB, path);
-        canvas.Flush();
+        using (DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, options))
+        {
+            canvas.Fill(brushA, path);
+            canvas.Fill(brushB, path);
+            canvas.Flush();
+        }
 
         Assert.True(backend.HasDefinition);
         Assert.NotNull(backend.LastDefinition.SourcePath);
@@ -47,11 +49,13 @@ public class DrawingCanvasBatcherTests
 
         IPath path = new RectangularPolygon(4, 6, 18, 12);
         DrawingOptions options = new();
-        using DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, options);
 
-        canvas.Fill(Brushes.Solid(Color.Red), path);
-        canvas.Fill(Brushes.Solid(Color.Blue), path);
-        canvas.Flush();
+        using (DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, options))
+        {
+            canvas.Fill(Brushes.Solid(Color.Red), path);
+            canvas.Fill(Brushes.Solid(Color.Blue), path);
+            canvas.Flush();
+        }
 
         Assert.Equal(2, backend.PreparedCommands.Count);
 
@@ -71,14 +75,16 @@ public class DrawingCanvasBatcherTests
 
         IPath path = new RectangularPolygon(10, 10, 40, 40);
         DrawingOptions options = new();
-        using DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, options);
 
-        for (int i = 0; i < 10; i++)
+        using (DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, options))
         {
-            canvas.Fill(Brushes.Solid(Color.FromPixel(new Rgba32((byte)i, 0, 0, 255))), path);
-        }
+            for (int i = 0; i < 10; i++)
+            {
+                canvas.Fill(Brushes.Solid(Color.FromPixel(new Rgba32((byte)i, 0, 0, 255))), path);
+            }
 
-        canvas.Flush();
+            canvas.Flush();
+        }
 
         Assert.Single(backend.Definitions);
         Assert.Equal(10, backend.Definitions[0].Commands.Count);
@@ -107,9 +113,11 @@ public class DrawingCanvasBatcherTests
         string text = new('A', 200);
         Brush brush = Brushes.Solid(Color.Black);
 
-        using DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, drawingOptions);
-        canvas.DrawText(textOptions, text, brush, pen: null);
-        canvas.Flush();
+        using (DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, drawingOptions))
+        {
+            canvas.DrawText(textOptions, text, brush, pen: null);
+            canvas.Flush();
+        }
 
         int totalCommands = backend.PreparedCommands.Count;
         Assert.True(totalCommands > 0);
@@ -126,9 +134,11 @@ public class DrawingCanvasBatcherTests
         configuration.SetDrawingBackend(backend);
         using Image<Rgba32> image = new(configuration, 80, 80);
 
-        using DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, new DrawingOptions());
-        canvas.DrawLine(new SolidPen(Color.Red, 5F), new PointF(8, 12), new PointF(70, 64));
-        canvas.Flush();
+        using (DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, new DrawingOptions()))
+        {
+            canvas.DrawLine(new SolidPen(Color.Red, 5F), new PointF(8, 12), new PointF(70, 64));
+            canvas.Flush();
+        }
 
         Assert.Single(backend.PreparedCommands);
 
@@ -146,9 +156,11 @@ public class DrawingCanvasBatcherTests
         configuration.SetDrawingBackend(backend);
         using Image<Rgba32> image = new(configuration, 80, 80);
 
-        using DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, new DrawingOptions());
-        canvas.DrawLine(Pens.Dash(Color.Red, 5F), new PointF(8, 12), new PointF(70, 64));
-        canvas.Flush();
+        using (DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, new DrawingOptions()))
+        {
+            canvas.DrawLine(Pens.Dash(Color.Red, 5F), new PointF(8, 12), new PointF(70, 64));
+            canvas.Flush();
+        }
 
         Assert.Single(backend.PreparedCommands);
 
@@ -173,9 +185,11 @@ public class DrawingCanvasBatcherTests
             }
         };
 
-        using DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, new DrawingOptions());
-        canvas.Draw(new SolidPen(options), new Path([new PointF(8, 40), new PointF(40, 8), new PointF(72, 40)]));
-        canvas.Flush();
+        using (DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, new DrawingOptions()))
+        {
+            canvas.Draw(new SolidPen(options), new Path([new PointF(8, 40), new PointF(40, 8), new PointF(72, 40)]));
+            canvas.Flush();
+        }
 
         Assert.Single(backend.PreparedCommands);
 
@@ -203,13 +217,13 @@ public class DrawingCanvasBatcherTests
             default,
             []);
 
-        public void FlushCompositions<TPixel>(
+        public DrawingBackendScene CreateScene(
             Configuration configuration,
-            ICanvasFrame<TPixel> target,
-            CompositionScene compositionScene)
-            where TPixel : unmanaged, IPixel<TPixel>
+            Rectangle targetBounds,
+            DrawingCommandBatch commandBatch,
+            IReadOnlyList<IDisposable>? ownedResources = null)
         {
-            this.PreparedCommands = compositionScene.Commands.ToArray();
+            this.PreparedCommands = commandBatch.Commands.ToArray();
 
             Dictionary<CoverageDefinitionKey, int> definitionIndices = [];
             for (int i = 0; i < this.PreparedCommands.Count; i++)
@@ -248,11 +262,21 @@ public class DrawingCanvasBatcherTests
 
             if (this.Definitions.Count == 0)
             {
-                return;
+                return new CapturedScene(targetBounds, ownedResources);
             }
 
             this.LastDefinition = this.Definitions[^1];
             this.HasDefinition = true;
+
+            return new CapturedScene(targetBounds, ownedResources);
+        }
+
+        public void RenderScene<TPixel>(
+            Configuration configuration,
+            ICanvasFrame<TPixel> target,
+            DrawingBackendScene scene)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
         }
 
         public void ReadRegion<TPixel>(
@@ -324,6 +348,20 @@ public class DrawingCanvasBatcherTests
                     (int)this.rasterizationMode,
                     (int)this.samplingOrigin,
                     this.antialiasThresholdBits);
+        }
+
+        private sealed class CapturedScene : DrawingBackendScene
+        {
+            public CapturedScene(
+                Rectangle bounds,
+                IReadOnlyList<IDisposable>? ownedResources)
+                : base(bounds, ownedResources)
+            {
+            }
+
+            protected override void DisposeCore()
+            {
+            }
         }
     }
 }

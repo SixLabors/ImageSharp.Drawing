@@ -18,7 +18,7 @@ This document explains the rasterizer as a newcomer needs to understand it:
 
 `DefaultRasterizer` sits below `DrawingCanvas`, the typed canvas implementation, and `DefaultDrawingBackend`.
 
-The canvas records commands, the batcher prepares them into a `CompositionScene`, and `DefaultDrawingBackend` chooses the row-oriented execution plan for the flush. `DefaultRasterizer` then handles the narrower geometry-to-coverage problem inside that CPU execution path.
+The canvas records commands, the batcher prepares them into `DrawingCommandBatch` ranges, and `DefaultDrawingBackend` chooses the row-oriented execution plan for each retained CPU scene. `DefaultRasterizer` then handles the narrower geometry-to-coverage problem inside that CPU execution path.
 
 That means the rasterizer does not select the backend, own the destination frame, or interpret the public drawing API directly. It receives already-prepared geometry through the CPU backend pipeline, and the backend later routes its coverage into whichever frame exposes the CPU region for the flush.
 

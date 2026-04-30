@@ -43,8 +43,7 @@ public static class RasterizerDefaultsExtensions
     internal static IDrawingBackend GetDrawingBackend(this IImageProcessingContext context)
     {
         if (context.Properties.TryGetValue(typeof(IDrawingBackend), out object? backend) &&
-            backend is IDrawingBackend configured &&
-            configured.IsSupported)
+            backend is IDrawingBackend configured)
         {
             return configured;
         }
@@ -60,8 +59,7 @@ public static class RasterizerDefaultsExtensions
     internal static IDrawingBackend GetDrawingBackend(this Configuration configuration)
     {
         if (configuration.Properties.TryGetValue(typeof(IDrawingBackend), out object? backend) &&
-            backend is IDrawingBackend configured &&
-            configured.IsSupported)
+            backend is IDrawingBackend configured)
         {
             return configured;
         }

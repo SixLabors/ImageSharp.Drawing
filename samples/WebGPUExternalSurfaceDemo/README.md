@@ -4,9 +4,9 @@
 
 It exists to demonstrate:
 
-- creating a `WebGPUExternalSurface<Bgra32>` from a `WebGPUSurfaceHost`
+- creating a `WebGPUExternalSurface` from a `WebGPUSurfaceHost`
 - keeping the external surface synchronized with the host control's drawable framebuffer size
-- acquiring `WebGPUSurfaceFrame<TPixel>` instances manually
+- acquiring `WebGPUSurfaceFrame` instances manually
 - drawing with the normal `DrawingCanvas` API
 - presenting by disposing the acquired frame
 
@@ -21,7 +21,7 @@ Requirements:
 - .NET 8.0 SDK or later
 - Windows, because this sample is a WinForms app
 - a WebGPU-capable desktop backend such as D3D12 or Vulkan
-- adapter support for the storage-capable BGRA format required by `Bgra32`
+- adapter support for the storage-capable BGRA format selected by the sample
 
 When the sample starts you should see a WinForms window with three tabs:
 
@@ -31,7 +31,7 @@ When the sample starts you should see a WinForms window with three tabs:
 
 ## Why This Sample Matters
 
-`WebGPUWindow<TPixel>` owns a top-level native window. `WebGPUExternalSurface<TPixel>` is different: it attaches WebGPU rendering to something the application already owns, such as a control, view, widget, or native surface.
+`WebGPUWindow` owns a top-level native window. `WebGPUExternalSurface` is different: it attaches WebGPU rendering to something the application already owns, such as a control, view, widget, or native surface.
 
 That makes it the integration path for UI frameworks. The host owns:
 
@@ -57,18 +57,22 @@ The reusable integration point is [WebGPURenderControl.cs](d:/GitHub/SixLabors/I
 `WebGPURenderControl.OnHandleCreated(...)` creates the external surface from the WinForms control handle:
 
 ```csharp
-this.surface = new WebGPUExternalSurface<Bgra32>(
+this.surface = new WebGPUExternalSurface(
     WebGPUSurfaceHost.Win32(
         this.Handle,
         Marshal.GetHINSTANCE(typeof(WebGPURenderControl).Module)),
-    initialFramebufferSize);
+    initialFramebufferSize,
+    new WebGPUExternalSurfaceOptions
+    {
+        Format = WebGPUTextureFormat.Bgra8Unorm
+    });
 ```
 
-`WebGPUSurfaceHost` is a small public descriptor for externally-owned native handles. The host keeps ownership of those handles; `WebGPUExternalSurface<TPixel>` only uses them to create and manage the WebGPU rendering surface.
+`WebGPUSurfaceHost` is a small public descriptor for externally-owned native handles. The host keeps ownership of those handles; `WebGPUExternalSurface` only uses them to create and manage the WebGPU rendering surface.
 
 ### Resize
 
-`WebGPUExternalSurface<TPixel>.Resize(...)` expects the drawable framebuffer size in pixels:
+`WebGPUExternalSurface.Resize(...)` expects the drawable framebuffer size in pixels:
 
 ```csharp
 this.framebufferSize = this.ClientSize;
@@ -82,7 +86,7 @@ The acquired frame exposes the same pixel coordinate space through `frame.Canvas
 `RenderOnce()` acquires a frame, invokes user drawing code, and disposes the frame:
 
 ```csharp
-if (!this.surface.TryAcquireFrame(out WebGPUSurfaceFrame<Bgra32>? frame))
+if (!this.surface.TryAcquireFrame(out WebGPUSurfaceFrame? frame))
 {
     return;
 }
@@ -93,7 +97,7 @@ using (frame)
 }
 ```
 
-Disposing the frame flushes pending canvas work, presents the surface texture, and releases the per-frame WebGPU handles.
+Disposing the frame renders pending canvas work, presents the surface texture, and releases the per-frame WebGPU handles.
 
 ### Rendering Loop
 

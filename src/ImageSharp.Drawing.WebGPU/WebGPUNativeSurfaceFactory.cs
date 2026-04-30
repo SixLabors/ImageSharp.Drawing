@@ -1,30 +1,24 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.PixelFormats;
-
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
 /// Low-level escape hatch for constructing a <see cref="NativeSurface"/> directly from raw WebGPU handles.
 /// </summary>
 /// <remarks>
-/// Most callers should use <see cref="WebGPUDeviceContext{TPixel}.CreateCanvas(DrawingOptions, nint, nint, WebGPUTextureFormatId, int, int)"/>
-/// or <see cref="WebGPUDeviceContext{TPixel}.CreateFrame(nint, nint, WebGPUTextureFormatId, int, int)"/> instead, which wrap this factory
-/// and validate handle/format compatibility against the canvas pixel type. Use this factory only when you need a
-/// <see cref="NativeSurface"/> independent of <see cref="WebGPUDeviceContext{TPixel}"/>.
+/// Use this factory only when you need to bind ImageSharp.Drawing to a caller-owned WebGPU texture.
 /// </remarks>
 public static class WebGPUNativeSurfaceFactory
 {
     /// <summary>
     /// Creates a WebGPU-backed <see cref="NativeSurface"/> from external native handles.
     /// </summary>
-    /// <typeparam name="TPixel">Canvas pixel format.</typeparam>
     /// <param name="deviceHandle">The external WebGPU device handle.</param>
     /// <param name="queueHandle">The external WebGPU queue handle.</param>
     /// <param name="targetTextureHandle">The external WebGPU texture handle for writable uploads.</param>
     /// <param name="targetTextureViewHandle">The external WebGPU texture-view handle for render-target binding.</param>
-    /// <param name="targetFormat">Texture format identifier.</param>
+    /// <param name="targetFormat">Texture format.</param>
     /// <param name="width">Surface width in pixels.</param>
     /// <param name="height">Surface height in pixels.</param>
     /// <returns>A configured <see cref="NativeSurface"/> instance.</returns>
@@ -32,16 +26,15 @@ public static class WebGPUNativeSurfaceFactory
     /// These handles must originate from the same process WebGPU runtime used by ImageSharp.Drawing.WebGPU.
     /// The target texture must support render attachment, copy source, copy destination, and texture binding usage.
     /// </remarks>
-    public static NativeSurface Create<TPixel>(
+    public static NativeSurface Create(
         nint deviceHandle,
         nint queueHandle,
         nint targetTextureHandle,
         nint targetTextureViewHandle,
-        WebGPUTextureFormatId targetFormat,
+        WebGPUTextureFormat targetFormat,
         int width,
         int height)
-        where TPixel : unmanaged, IPixel<TPixel>
-        => Create<TPixel>(
+        => Create(
             new WebGPUDeviceHandle(deviceHandle, ownsHandle: false),
             new WebGPUQueueHandle(queueHandle, ownsHandle: false),
             new WebGPUTextureHandle(targetTextureHandle, ownsHandle: false),
@@ -50,15 +43,14 @@ public static class WebGPUNativeSurfaceFactory
             width,
             height);
 
-    internal static NativeSurface Create<TPixel>(
+    internal static NativeSurface Create(
         WebGPUDeviceHandle deviceHandle,
         WebGPUQueueHandle queueHandle,
         WebGPUTextureHandle targetTextureHandle,
         WebGPUTextureViewHandle targetTextureViewHandle,
-        WebGPUTextureFormatId targetFormat,
+        WebGPUTextureFormat targetFormat,
         int width,
         int height)
-        where TPixel : unmanaged, IPixel<TPixel>
     {
         Guard.NotNull(deviceHandle, nameof(deviceHandle));
         Guard.NotNull(queueHandle, nameof(queueHandle));
@@ -67,7 +59,6 @@ public static class WebGPUNativeSurfaceFactory
 
         Guard.MustBeGreaterThan(width, 0, nameof(width));
         Guard.MustBeGreaterThan(height, 0, nameof(height));
-        ValidatePixelCompatibility<TPixel>(targetFormat);
 
         return new WebGPUNativeSurface(new WebGPUNativeTarget(
             deviceHandle,
@@ -77,24 +68,5 @@ public static class WebGPUNativeSurfaceFactory
             targetFormat,
             width,
             height));
-    }
-
-    /// <summary>
-    /// Validates that the requested pixel type maps to the supplied WebGPU texture format.
-    /// </summary>
-    private static void ValidatePixelCompatibility<TPixel>(WebGPUTextureFormatId targetFormat)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId expected))
-        {
-            throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' is not supported by the WebGPU backend.");
-        }
-
-        if (expected != targetFormat)
-        {
-            throw new ArgumentException(
-                $"Target format '{targetFormat}' is not compatible with pixel type '{typeof(TPixel).Name}' (expected '{expected}').",
-                nameof(targetFormat));
-        }
     }
 }

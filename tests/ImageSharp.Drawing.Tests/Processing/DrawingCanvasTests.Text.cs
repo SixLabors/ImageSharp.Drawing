@@ -20,8 +20,6 @@ public partial class DrawingCanvasTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> target = provider.GetImage();
-        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions());
-
         Font font = TestFontUtilities.GetFont(TestFonts.NotoColorEmojiRegular, 100);
         Font fallback = TestFontUtilities.GetFont(TestFonts.OpenSans, 100);
         const string text = "a😨 b😅\r\nc🥲 d🤩";
@@ -44,9 +42,11 @@ public partial class DrawingCanvasTests
 
         IReadOnlyList<GlyphPathCollection> glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
 
-        canvas.Clear(Brushes.Solid(Color.White));
-        canvas.DrawGlyphs(Brushes.Solid(Color.Black), Pens.Solid(Color.Black, 2F), glyphs);
-        canvas.Flush();
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.DrawGlyphs(Brushes.Solid(Color.Black), Pens.Solid(Color.Black, 2F), glyphs);
+        }
 
         target.DebugSave(provider, $"{support}-draw-glyphs", appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(provider, $"{support}-draw-glyphs", appendSourceFileOrDescription: false);
@@ -64,7 +64,6 @@ public partial class DrawingCanvasTests
             Transform = Matrix4x4.CreateTranslation(24F, 22F, 0)
         };
 
-        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, options);
         Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 32);
 
         string text = "Quick wafting zephyrs vex bold Jim.\n" +
@@ -77,36 +76,38 @@ public partial class DrawingCanvasTests
             LineSpacing = 1.45F
         };
 
-        canvas.Clear(Brushes.Solid(Color.White));
-        canvas.Fill(Brushes.Solid(Color.LightSteelBlue.WithAlpha(0.25F)), new Rectangle(0, 0, 712, 276));
-        canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null);
-
-        IReadOnlyList<LineMetrics> lineMetrics = canvas.MeasureText(textOptions, text).Lines;
-        float lineOriginY = textOptions.Origin.Y;
-        for (int i = 0; i < lineMetrics.Count; i++)
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, options))
         {
-            LineMetrics metrics = lineMetrics[i];
-            float startX = metrics.Start;
-            float endX = metrics.Start + metrics.Extent;
-            float topY = lineOriginY;
-            float ascenderY = lineOriginY + metrics.Ascender;
-            float baselineY = lineOriginY + metrics.Baseline;
-            float descenderY = lineOriginY + metrics.Descender;
-            float lineHeightY = lineOriginY + metrics.LineHeight;
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.Fill(Brushes.Solid(Color.LightSteelBlue.WithAlpha(0.25F)), new Rectangle(0, 0, 712, 276));
+            canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null);
 
-            canvas.DrawLine(Pens.Solid(Color.DimGray.WithAlpha(0.8F), 1), new PointF(startX, topY), new PointF(endX, topY));
-            canvas.DrawLine(Pens.Solid(Color.RoyalBlue.WithAlpha(0.9F), 1), new PointF(startX, ascenderY), new PointF(endX, ascenderY));
-            canvas.DrawLine(Pens.Solid(Color.Crimson.WithAlpha(0.9F), 1), new PointF(startX, baselineY), new PointF(endX, baselineY));
-            canvas.DrawLine(Pens.Solid(Color.DarkOrange.WithAlpha(0.9F), 1), new PointF(startX, descenderY), new PointF(endX, descenderY));
-            canvas.DrawLine(Pens.Solid(Color.SeaGreen.WithAlpha(0.9F), 1), new PointF(startX, lineHeightY), new PointF(endX, lineHeightY));
-            canvas.DrawLine(Pens.Solid(Color.DimGray.WithAlpha(0.8F), 1), new PointF(startX, topY), new PointF(startX, lineHeightY));
-            canvas.DrawLine(Pens.Solid(Color.DimGray.WithAlpha(0.8F), 1), new PointF(endX, topY), new PointF(endX, lineHeightY));
+            IReadOnlyList<LineMetrics> lineMetrics = canvas.MeasureText(textOptions, text).Lines;
+            float lineOriginY = textOptions.Origin.Y;
+            for (int i = 0; i < lineMetrics.Count; i++)
+            {
+                LineMetrics metrics = lineMetrics[i];
+                float startX = metrics.Start;
+                float endX = metrics.Start + metrics.Extent;
+                float topY = lineOriginY;
+                float ascenderY = lineOriginY + metrics.Ascender;
+                float baselineY = lineOriginY + metrics.Baseline;
+                float descenderY = lineOriginY + metrics.Descender;
+                float lineHeightY = lineOriginY + metrics.LineHeight;
 
-            lineOriginY += metrics.LineHeight;
+                canvas.DrawLine(Pens.Solid(Color.DimGray.WithAlpha(0.8F), 1), new PointF(startX, topY), new PointF(endX, topY));
+                canvas.DrawLine(Pens.Solid(Color.RoyalBlue.WithAlpha(0.9F), 1), new PointF(startX, ascenderY), new PointF(endX, ascenderY));
+                canvas.DrawLine(Pens.Solid(Color.Crimson.WithAlpha(0.9F), 1), new PointF(startX, baselineY), new PointF(endX, baselineY));
+                canvas.DrawLine(Pens.Solid(Color.DarkOrange.WithAlpha(0.9F), 1), new PointF(startX, descenderY), new PointF(endX, descenderY));
+                canvas.DrawLine(Pens.Solid(Color.SeaGreen.WithAlpha(0.9F), 1), new PointF(startX, lineHeightY), new PointF(endX, lineHeightY));
+                canvas.DrawLine(Pens.Solid(Color.DimGray.WithAlpha(0.8F), 1), new PointF(startX, topY), new PointF(startX, lineHeightY));
+                canvas.DrawLine(Pens.Solid(Color.DimGray.WithAlpha(0.8F), 1), new PointF(endX, topY), new PointF(endX, lineHeightY));
+
+                lineOriginY += metrics.LineHeight;
+            }
+
+            canvas.Draw(Pens.Solid(Color.Black, 2), new Rectangle(0, 0, 712, 276));
         }
-
-        canvas.Draw(Pens.Solid(Color.Black, 2), new Rectangle(0, 0, 712, 276));
-        canvas.Flush();
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
@@ -124,7 +125,6 @@ public partial class DrawingCanvasTests
             Transform = new Matrix4x4(Matrix3x2.CreateRotation(-0.08F, new Vector2(210, 110)))
         };
 
-        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, options);
         Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 36);
         RichTextOptions textOptions = new(font)
         {
@@ -132,14 +132,16 @@ public partial class DrawingCanvasTests
             WrappingLength = 372
         };
 
-        canvas.Clear(Brushes.Solid(Color.White));
-        canvas.DrawText(
-            textOptions,
-            "Canvas text\nwith fill + stroke",
-            Brushes.Solid(Color.MidnightBlue.WithAlpha(0.82F)),
-            Pens.Solid(Color.Gold, 2F));
-        canvas.Draw(Pens.Solid(Color.DimGray, 3), new Rectangle(10, 10, 400, 200));
-        canvas.Flush();
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, options))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.DrawText(
+                textOptions,
+                "Canvas text\nwith fill + stroke",
+                Brushes.Solid(Color.MidnightBlue.WithAlpha(0.82F)),
+                Pens.Solid(Color.Gold, 2F));
+            canvas.Draw(Pens.Solid(Color.DimGray, 3), new Rectangle(10, 10, 400, 200));
+        }
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(ImageComparer.TolerantPercentage(0.0001F), provider, appendSourceFileOrDescription: false);
@@ -151,18 +153,18 @@ public partial class DrawingCanvasTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> target = provider.GetImage();
-        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions());
-
         Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 52);
         RichTextOptions textOptions = new(font)
         {
             Origin = new PointF(18, 42)
         };
 
-        canvas.Clear(Brushes.Solid(Color.White));
-        canvas.Fill(Brushes.Solid(Color.LightSkyBlue.WithAlpha(0.45F)), new Rectangle(12, 14, 296, 152));
-        canvas.DrawText(textOptions, "OUTLINE", brush: null, pen: Pens.Solid(Color.SeaGreen, 3.5F));
-        canvas.Flush();
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.Fill(Brushes.Solid(Color.LightSkyBlue.WithAlpha(0.45F)), new Rectangle(12, 14, 296, 152));
+            canvas.DrawText(textOptions, "OUTLINE", brush: null, pen: Pens.Solid(Color.SeaGreen, 3.5F));
+        }
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
@@ -174,8 +176,6 @@ public partial class DrawingCanvasTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> target = provider.GetImage();
-        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions());
-
         IPath textPath = new EllipsePolygon(new PointF(172, 112), new SizeF(246, 112));
         Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 21);
         RichTextOptions textOptions = new(font)
@@ -187,14 +187,16 @@ public partial class DrawingCanvasTests
             VerticalAlignment = VerticalAlignment.Bottom
         };
 
-        canvas.Clear(Brushes.Solid(Color.White));
-        canvas.Draw(Pens.Solid(Color.SlateGray, 2), textPath);
-        canvas.DrawText(
-            textOptions,
-            "Sphinx of black quartz, judge my vow.",
-            Brushes.Solid(Color.DarkRed.WithAlpha(0.9F)),
-            pen: null);
-        canvas.Flush();
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.Draw(Pens.Solid(Color.SlateGray, 2), textPath);
+            canvas.DrawText(
+                textOptions,
+                "Sphinx of black quartz, judge my vow.",
+                Brushes.Solid(Color.DarkRed.WithAlpha(0.9F)),
+                pen: null);
+        }
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
@@ -206,8 +208,6 @@ public partial class DrawingCanvasTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> target = provider.GetImage();
-        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions());
-
         Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 28);
         Rectangle layoutBounds = new(120, 50, 600, 320);
 
@@ -227,26 +227,28 @@ public partial class DrawingCanvasTests
             "Pack my box with five dozen liquor jugs while zephyrs drift across the bay.\n" +
             "Sphinx of black quartz, judge my vow.";
 
-        canvas.Clear(Brushes.Solid(Color.White));
-        canvas.Fill(Brushes.Solid(Color.LightGoldenrodYellow.WithAlpha(0.45F)), layoutBounds);
-        canvas.Draw(Pens.Solid(Color.SlateGray, 2F), layoutBounds);
-        canvas.DrawLine(
-            Pens.Dash(Color.Gray.WithAlpha(0.8F), 1.5F),
-            new PointF(textOptions.Origin.X, layoutBounds.Top),
-            new PointF(textOptions.Origin.X, layoutBounds.Bottom));
-        canvas.DrawLine(
-            Pens.Dash(Color.Gray.WithAlpha(0.8F), 1.5F),
-            new PointF(layoutBounds.Left, textOptions.Origin.Y),
-            new PointF(layoutBounds.Right, textOptions.Origin.Y));
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.Fill(Brushes.Solid(Color.LightGoldenrodYellow.WithAlpha(0.45F)), layoutBounds);
+            canvas.Draw(Pens.Solid(Color.SlateGray, 2F), layoutBounds);
+            canvas.DrawLine(
+                Pens.Dash(Color.Gray.WithAlpha(0.8F), 1.5F),
+                new PointF(textOptions.Origin.X, layoutBounds.Top),
+                new PointF(textOptions.Origin.X, layoutBounds.Bottom));
+            canvas.DrawLine(
+                Pens.Dash(Color.Gray.WithAlpha(0.8F), 1.5F),
+                new PointF(layoutBounds.Left, textOptions.Origin.Y),
+                new PointF(layoutBounds.Right, textOptions.Origin.Y));
 
-        canvas.DrawText(
-            textOptions,
-            text,
-            Brushes.Solid(Color.DarkBlue.WithAlpha(0.86F)),
-            Pens.Solid(Color.DarkRed.WithAlpha(0.55F), 1.1F));
+            canvas.DrawText(
+                textOptions,
+                text,
+                Brushes.Solid(Color.DarkBlue.WithAlpha(0.86F)),
+                Pens.Solid(Color.DarkRed.WithAlpha(0.55F), 1.1F));
 
-        canvas.Draw(Pens.Solid(Color.Black, 3F), new Rectangle(10, 10, 820, 400));
-        canvas.Flush();
+            canvas.Draw(Pens.Solid(Color.Black, 3F), new Rectangle(10, 10, 820, 400));
+        }
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);

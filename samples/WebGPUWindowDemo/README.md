@@ -4,7 +4,7 @@
 
 It exists to show the intended shape of a real-time app:
 
-- create a `WebGPUWindow<Bgra32>`
+- create a `WebGPUWindow`
 - let the window own swapchain acquisition and presentation
 - draw with the normal `DrawingCanvas` API
 - present by ending the acquired frame
@@ -15,10 +15,10 @@ The sample opens an `800x600` window, draws a dark background, animates 1000 bou
 
 This demo is the clearest reference for the window-first WebGPU API surface:
 
-- `WebGPUWindow<TPixel>` owns the OS window, WebGPU surface, adapter, device, queue, and swapchain configuration.
-- `WebGPUSurfaceFrame<TPixel>` represents one acquired drawable frame.
-- `WebGPUSurfaceFrame<TPixel>.Canvas` is the normal `DrawingCanvas` you already use elsewhere in ImageSharp.Drawing.
-- disposing the frame flushes pending canvas work, presents the surface texture, and releases the per-frame WebGPU handles.
+- `WebGPUWindow` owns the OS window, WebGPU surface, adapter, device, queue, and swapchain configuration.
+- `WebGPUSurfaceFrame` represents one acquired drawable frame.
+- `WebGPUSurfaceFrame.Canvas` is the normal `DrawingCanvas` you already use elsewhere in ImageSharp.Drawing.
+- disposing the frame renders pending canvas work, presents the surface texture, and releases the per-frame WebGPU handles.
 
 That means sample code stays focused on drawing and animation instead of explicit texture acquisition, presentation, or interop setup.
 
@@ -32,7 +32,7 @@ Requirements:
 
 - .NET 8.0 SDK or later
 - a WebGPU-capable desktop backend such as D3D12, Vulkan, or Metal
-- adapter support for the storage-capable BGRA format required by `Bgra32`
+- adapter support for the storage-capable BGRA format selected by the sample
 
 When the sample starts you should see:
 
@@ -50,19 +50,20 @@ Everything lives in [Program.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/
 `Main()` creates the window and chooses the presentation mode:
 
 ```csharp
-using WebGPUWindow<Bgra32> window = new(new WebGPUWindowOptions
+using WebGPUWindow window = new(new WebGPUWindowOptions
 {
     Title = "ImageSharp.Drawing WebGPU Demo",
     Size = new Size(800, 600),
+    Format = WebGPUTextureFormat.Bgra8Unorm,
     PresentMode = WebGPUPresentMode.Fifo,
 });
 ```
 
 Important details:
 
-- `Bgra32` is the pixel type for the canvas and must match the swapchain format expected by the WebGPU backend.
+- `WebGPUTextureFormat.Bgra8Unorm` selects the swapchain format. The WebGPU factory creates the matching typed canvas internally.
 - `WebGPUPresentMode.Fifo` gives normal v-synced presentation behavior.
-- no manual WebGPU bootstrap code is needed in the sample; `WebGPUWindow<TPixel>` handles surface, adapter, device, queue, and swapchain setup internally.
+- no manual WebGPU bootstrap code is needed in the sample; `WebGPUWindow` handles surface, adapter, device, queue, and swapchain setup internally.
 
 ### 2. DemoApp scene initialization
 
@@ -108,7 +109,7 @@ Separating animation from rendering keeps the sample structure close to a normal
 this.window.Run(this.OnRender);
 ```
 
-`WebGPUWindow<TPixel>.Run(...)` acquires one `WebGPUSurfaceFrame<TPixel>` per render callback and disposes it automatically after your callback returns. In this sample that means you do not call `Flush()` yourself.
+`WebGPUWindow.Run(...)` acquires one `WebGPUSurfaceFrame` per render callback and disposes it automatically after your callback returns. In this sample that means you do not call `Flush()` yourself.
 
 Inside `OnRender(...)` the sample:
 
@@ -141,14 +142,14 @@ Instead of rebuilding glyphs every frame, it:
 
 The culling is simple but effective: large amounts of off-screen text never get submitted for rasterization.
 
-## Frame lifetime and flushing
+## Frame lifetime and rendering
 
-This sample uses the `Run(Action<WebGPUSurfaceFrame<TPixel>>)` overload, so frame lifetime is important:
+This sample uses the `Run(Action<WebGPUSurfaceFrame>)` overload, so frame lifetime is important:
 
 1. the window acquires the current surface texture
 2. the frame wraps that texture in a `DrawingCanvas`
 3. your render callback queues draw operations
-4. frame disposal flushes the canvas and presents the surface
+4. frame disposal renders the queued canvas work and presents the surface
 5. the frame releases the texture and texture view
 
 Two practical consequences:
@@ -171,7 +172,7 @@ So this demo is best understood as "ImageSharp.Drawing rendered into a native We
 If you want control over your own loop instead of `Run(...)`, use `TryAcquireFrame(...)`:
 
 ```csharp
-if (window.TryAcquireFrame(out WebGPUSurfaceFrame<Bgra32>? frame))
+if (window.TryAcquireFrame(out WebGPUSurfaceFrame? frame))
 {
     using (frame)
     {
@@ -186,7 +187,7 @@ Notes:
 
 - a `false` result is normal retry behavior, not necessarily an error
 - this can happen when the surface is outdated, lost, timed out, or the framebuffer is currently zero-sized
-- disposing the frame flushes queued canvas work, presents the surface, and releases per-frame resources
+- disposing the frame renders queued canvas work, presents the surface, and releases per-frame resources
 
 ## Resize behavior
 

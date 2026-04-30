@@ -25,10 +25,11 @@ public static class Program
     public static void Main()
     {
         // FIFO is the safest sample default: it presents in display order with normal v-sync behavior.
-        using WebGPUWindow<Bgra32> window = new(new WebGPUWindowOptions
+        using WebGPUWindow window = new(new WebGPUWindowOptions
         {
             Title = "ImageSharp.Drawing WebGPU Demo",
             Size = new Size(800, 600),
+            Format = WebGPUTextureFormat.Bgra8Unorm,
             PresentMode = WebGPUPresentMode.Fifo,
         });
 
@@ -46,7 +47,7 @@ public static class Program
         private static readonly Brush BackgroundBrush = Brushes.Solid(Color.FromPixel(new Bgra32(30, 30, 40, 255)));
         private static readonly Brush TextBrush = Brushes.Solid(Color.FromPixel(new Bgra32(70, 70, 100, 255)));
 
-        private readonly WebGPUWindow<Bgra32> window;
+        private readonly WebGPUWindow window;
         private readonly Random rng = new(42);
         private readonly Stopwatch fpsWindow = Stopwatch.StartNew();
         private Ball[] balls = [];
@@ -70,18 +71,17 @@ public static class Program
             "using a WebGPU compute pipeline that evaluates " +
             "Porter-Duff blending per pixel.\n\n" +
             "The drawing backend automatically manages texture " +
-            "atlases, bind groups, and pipeline state. It falls " +
-            "back to the CPU backend for unsupported pixel " +
-            "formats or when no GPU device is available.\n\n" +
+            "atlases, bind groups, and pipeline state for the " +
+            "native target selected by the window.\n\n" +
             "SixLabors ImageSharp.Drawing\n" +
             "github.com/SixLabors/ImageSharp.Drawing\n\n" +
-            "Built on the new WebGPUWindow<TPixel> wrapper.";
+            "Built on the WebGPUWindow wrapper.";
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DemoApp"/> class.
         /// </summary>
         /// <param name="window">The demo window that supplies update and render callbacks.</param>
-        public DemoApp(WebGPUWindow<Bgra32> window)
+        public DemoApp(WebGPUWindow window)
         {
             this.window = window;
             this.window.Update += this.OnUpdate;
@@ -146,10 +146,10 @@ public static class Program
         /// </summary>
         /// <param name="frame">The acquired frame that exposes the drawing canvas.</param>
         /// <remarks>
-        /// The window loop disposes the frame after this callback returns, which flushes any queued canvas work,
+        /// The window loop disposes the frame after this callback returns, which renders queued canvas work,
         /// presents the swapchain texture, and releases the per-frame WebGPU handles.
         /// </remarks>
-        private void OnRender(WebGPUSurfaceFrame<Bgra32> frame)
+        private void OnRender(WebGPUSurfaceFrame frame)
         {
             DrawingCanvas canvas = frame.Canvas;
             Rectangle bounds = canvas.Bounds;

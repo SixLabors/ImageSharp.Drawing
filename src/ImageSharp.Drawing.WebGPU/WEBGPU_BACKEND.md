@@ -1,6 +1,6 @@
 # WebGPU Backend
 
-`WebGPUDrawingBackend` is the GPU execution backend for ImageSharp.Drawing. It receives one flush worth of prepared drawing commands, decides whether that flush can stay on the staged GPU path, and if so creates and dispatches the staged scene pipeline against a native WebGPU target.
+`WebGPUDrawingBackend` is the GPU execution backend for ImageSharp.Drawing. It creates retained GPU scenes from prepared drawing command batches, then renders those scenes through the staged GPU pipeline against a native WebGPU target.
 
 The WebGPU backend and staged scene pipeline are based on ideas and implementation techniques from Vello, but the current ImageSharp.Drawing implementation is heavily adapted and no longer mirrors Vello one-for-one:
 
@@ -11,8 +11,8 @@ This document explains the backend as a newcomer would need to understand it:
 - where the public WebGPU entry points fit
 - what problem the WebGPU backend is solving
 - what `WebGPUDrawingBackend` actually owns
-- how one flush moves through the backend boundary
-- where fallback, explicit layer handling, and runtime caching fit into the design
+- how one command batch moves through the backend boundary
+- where explicit layer handling and runtime caching fit into the design
 
 ## Where The Public WebGPU Types Fit
 
@@ -21,14 +21,15 @@ The public WebGPU surface area around this backend is small and target-first. Mo
 **Recommended types** — the entry points most applications should use:
 
 - `WebGPUEnvironment` exposes explicit support probes for the library-managed WebGPU environment
-- `WebGPUWindow<TPixel>` owns a native window and either runs a render loop or returns `WebGPUSurfaceFrame<TPixel>` instances through `TryAcquireFrame(...)`
-- `WebGPUExternalSurface<TPixel>` attaches to a caller-owned native host via `WebGPUSurfaceHost`; the host application owns the UI object and tells the external surface when the drawable framebuffer resizes
-- `WebGPURenderTarget<TPixel>` owns an offscreen native target for GPU rendering, hybrid CPU plus GPU canvases, and readback
+- `WebGPUWindow` owns a native window and either runs a render loop or returns `WebGPUSurfaceFrame` instances through `TryAcquireFrame(...)`
+- `WebGPUExternalSurface` attaches to a caller-owned native host via `WebGPUSurfaceHost`; the host application owns the UI object and tells the external surface when the drawable framebuffer resizes
+- `WebGPURenderTarget` owns an offscreen native target for GPU rendering, hybrid CPU plus GPU canvases, and readback
 
-**Advanced types** — interop escape hatches for applications that already own a WebGPU device, queue, or native surface:
+**Advanced types** — interop escape hatches for applications that already own a native texture target:
 
-- `WebGPUDeviceContext<TPixel>` wraps a shared or caller-owned device and queue and creates native-only or hybrid frames and canvases over external textures
 - `WebGPUNativeSurfaceFactory` is the low-level escape hatch for caller-owned native targets
+
+`WebGPUDeviceContext` is internal infrastructure used by targets and surfaces. It is not part of the public WebGPU entry-point model.
 
 Those types all exist to get a `DrawingCanvas` over a native WebGPU target. Once the canvas flushes, `WebGPUDrawingBackend` becomes the execution boundary.
 
@@ -41,19 +42,18 @@ That split keeps support probing separate from flush execution. `WebGPUDrawingBa
 
 ## The Main Problem
 
-The canvas hands the backend a prepared composition scene. That is already a big simplification, but it does not mean the GPU can render that scene directly.
+The canvas hands the backend a prepared command batch. That is already a big simplification, but it does not mean the GPU can render that batch directly.
 
 The backend still has to decide:
 
-- whether the target and scene are eligible for the GPU path
+- whether the typed target can accept the retained WebGPU scene
 - whether the staged scene can be created safely and legally on the current device
-- when the backend should remain on the GPU and when it should fall back
 - how GPU-only concerns such as native targets, flush-scoped resources, and device-scoped caches fit around the staged raster pipeline
 
 That is why the backend layer exists separately from the staged scene pipeline itself.
 
-The raster pipeline solves "how to rasterize this encoded scene on the GPU".  
-`WebGPUDrawingBackend` solves "should this flush go there, and how does the system manage that decision cleanly".
+The raster pipeline solves "how to rasterize this encoded scene on the GPU".
+`WebGPUDrawingBackend` solves "how does this retained scene bind to the current typed target and render cleanly".
 
 ## The Core Idea
 
@@ -61,7 +61,7 @@ The WebGPU backend is a policy and orchestration layer around a staged GPU raste
 
 Its central idea is:
 
-> decide at the backend boundary whether the flush can stay on the GPU, then either run the staged scene pipeline as one flush-scoped unit of work or fall back cleanly
+> create a retained encoded scene from prepared commands, then render that scene as one staged GPU unit of work
 
 That means `WebGPUDrawingBackend` is responsible for entry-point orchestration, not for every low-level GPU detail.
 
@@ -72,8 +72,7 @@ That means `WebGPUDrawingBackend` is responsible for entry-point orchestration, 
 `WebGPUDrawingBackend` is the top-level GPU executor. It owns:
 
 - per-flush diagnostic state
-- staged-scene creation attempts
-- the decision to run the staged path or fall back
+- staged-scene creation attempts during render
 - lowering explicit layer boundaries into the staged scene path
 
 It is the policy boundary of the GPU path.
@@ -106,32 +105,26 @@ most GPU state is flush-scoped, but two cache layers intentionally outlive one f
 
 ### Staged Scene
 
-A staged scene is the GPU-oriented representation of one flush.
+A staged scene is the GPU-oriented render-time representation of one retained encoded scene.
 
-It is produced by the encoder and then consumed by the staged raster pipeline. The staged scene itself is explained in the rasterizer document; from the backend point of view, it is the unit of GPU work that either succeeds as a whole or causes fallback.
-
-### Fallback
-
-Fallback means the backend gives the flush to `DefaultDrawingBackend` and then uploads the CPU result into the native target.
-
-Fallback is part of the design, not an error-handling afterthought. The backend is built to decide as early and cleanly as possible when the staged GPU path cannot or should not run.
+It is produced from the retained encoded scene and then consumed by the staged raster pipeline. The staged scene itself is explained in the rasterizer document; from the backend point of view, it is the render-scoped unit of GPU work.
 
 ## The Big Picture Flow
 
-The easiest way to understand the backend is to follow one normal flush from entry to backend decision.
+The easiest way to understand the backend is to follow one command-range timeline entry from canvas disposal to GPU submission.
 
 ```mermaid
 flowchart TD
-    A[DrawingCanvas.Flush] --> B[WebGPUDrawingBackend.FlushCompositions]
-    B --> C[Clear diagnostics]
-    C --> D[Try create staged scene]
-    D -->|Succeeded| E[Run staged scene pipeline]
-    D -->|Failed or unsupported| F[CPU fallback]
-    E --> G[Flush completes on GPU]
-    F --> H[CPU result uploaded to native target]
+    A[DrawingCanvas disposal replay] --> B[WebGPUDrawingBackend.CreateScene]
+    B --> C[Encode WebGPU scene]
+    C --> D[WebGPUDrawingBackend.RenderScene]
+    D --> E[Create WebGPU flush context]
+    E --> F[Create staged scene resources]
+    F --> G[Run staged scene pipeline]
+    G --> H[GPU target updated]
 ```
 
-The staged scene pipeline itself is described in [`WEBGPU_RASTERIZER.md`](d:/GitHub/SixLabors/ImageSharp.Drawing/src/ImageSharp.Drawing.WebGPU/WEBGPU_RASTERIZER.md). The important backend point is that the whole GPU flush is treated as one coherent attempt.
+The staged scene pipeline itself is described in [`WEBGPU_RASTERIZER.md`](d:/GitHub/SixLabors/ImageSharp.Drawing/src/ImageSharp.Drawing.WebGPU/WEBGPU_RASTERIZER.md). The important backend point is that scene creation is retained and untyped, while rendering is target-bound and typed.
 
 ## What `WebGPUDrawingBackend` Owns
 
@@ -139,12 +132,12 @@ The staged scene pipeline itself is described in [`WEBGPU_RASTERIZER.md`](d:/Git
 
 Its responsibilities are:
 
-- clear per-flush diagnostics
-- try to create a staged scene
-- run the staged path if scene creation succeeds
-- fall back cleanly if any stage fails
+- clear per-render diagnostics
+- encode retained WebGPU scenes from prepared command batches
+- create render-scoped staged scene resources
+- run the staged path
 - keep explicit layer boundaries in the shared flush model until the staged scene encoder lowers them
-- retain the last successful scratch capacities and reuse backend-local GPU arenas across flushes when possible
+- retain the last successful scratch capacities and reuse backend-local GPU arenas across renders when possible
 
 The expensive staged work is delegated:
 
@@ -156,37 +149,44 @@ The expensive staged work is delegated:
 The public object graph around those responsibilities is also separate:
 
 - `WebGPUEnvironment` handles explicit support probes
-- `WebGPUWindow<TPixel>`, `WebGPUExternalSurface<TPixel>`, and `WebGPURenderTarget<TPixel>` are the recommended target constructors; `WebGPUDeviceContext<TPixel>` and `WebGPUNativeSurfaceFactory` are advanced interop escape hatches for caller-owned devices or surfaces
-- `DrawingCanvas` hands a prepared `CompositionScene` to the backend
+- `WebGPUWindow`, `WebGPUExternalSurface`, and `WebGPURenderTarget` are the public target constructors; `WebGPUNativeSurfaceFactory` remains the low-level interop escape hatch for caller-owned textures
+- `DrawingCanvas` hands prepared `DrawingCommandBatch` ranges to the backend
 
-## The Flush Boundary
+## The Backend Boundary
 
-`FlushCompositions<TPixel>(...)` in `WebGPUDrawingBackend.cs` is the top-level scene flush entry point.
+`CreateScene(...)` and `RenderScene<TPixel>(...)` split retained scene creation from typed target rendering.
 
-Its job is intentionally narrow:
+`CreateScene(...)`:
 
-- clear the previous diagnostics
-- try to build a staged GPU scene for the current flush
-- run the staged pipeline if that creation succeeds
-- fall back if creation, validation, or dispatch cannot complete safely
+- receives target bounds and a prepared command batch
+- encodes the retained `WebGPUEncodedScene`
+- stores retained scratch-size state and reusable arena slots with the scene
+- does not need `TPixel`, the target frame, or a `WebGPUFlushContext`
 
-Keeping those decisions at the boundary is important. The backend is designed to avoid discovering halfway through execution that one part of the scene ran on the GPU and another must suddenly fall back.
+`RenderScene<TPixel>(...)`:
 
-## Scene Eligibility
+- validates the retained scene type and target bounds
+- resolves `TPixel` to the WebGPU texture format and required feature
+- creates the render-scoped `WebGPUFlushContext`
+- creates staged resources and dispatches the GPU pipeline
 
-Before the expensive GPU work begins, the backend performs a scene-level eligibility check through the encoder path.
+Keeping those lifetimes separate avoids duplicate target setup when the same retained scene is rendered repeatedly.
 
-That check answers the first important question:
+## Scene Encoding
 
-"is this flush even a candidate for the staged WebGPU path"
+Before render-scoped GPU work begins, `CreateScene(...)` encodes the prepared command batch.
 
-This is distinct from later GPU planning checks. At this stage the backend is only trying to rule out unsupported scene features early, before it starts creating resources or recording dispatches.
+That step answers the first important question:
+
+"can these prepared commands become WebGPU encoded scene data"
+
+This is distinct from later GPU planning checks. Scene encoding uses target bounds and the allocator, but not the typed target frame.
 
 ## Flush Context Creation
 
-If the scene is eligible, the backend creates a `WebGPUFlushContext`.
+When the retained scene is rendered, the backend creates a `WebGPUFlushContext`.
 
-This is the point where the abstract prepared scene becomes tied to:
+This is the point where the retained encoded scene becomes tied to:
 
 - a concrete device
 - a concrete queue
@@ -194,22 +194,6 @@ This is the point where the abstract prepared scene becomes tied to:
 - a concrete command encoder
 
 The flush context is also the ownership boundary for flush-scoped GPU resources. When the flush ends, those resources leave with the context unless they are part of device-shared runtime state.
-
-## Fallback As Part Of The Architecture
-
-If any stage fails, `FlushCompositionsFallback(...)` runs the scene on `DefaultDrawingBackend` and uploads the CPU result into the native target.
-
-Fallback covers cases such as:
-
-- unsupported scene features
-- unsupported target or format conditions
-- binding-limit failures
-- resource-creation failures
-- dispatch failures
-
-The architectural goal is simple:
-
-decide as much as possible up front, fall back cleanly, and avoid leaving the flush half-executed across two backends.
 
 ## Explicit Layers
 
@@ -267,7 +251,7 @@ The staged scene pipeline itself is described in [`WEBGPU_RASTERIZER.md`](d:/Git
 If you want to understand the backend first, read the code in this order:
 
 1. `WebGPUEnvironment.cs`
-2. `WebGPUWindow{TPixel}.cs`, `WebGPUSurfaceFrame{TPixel}.cs`, `WebGPUExternalSurface{TPixel}.cs`, `WebGPUSurfaceHost.cs`, `WebGPURenderTarget{TPixel}.cs`, and `WebGPUDeviceContext{TPixel}.cs`
+2. `WebGPUWindow.cs`, `WebGPUSurfaceFrame.cs`, `WebGPUExternalSurface.cs`, `WebGPUSurfaceHost.cs`, `WebGPURenderTarget.cs`, and `WebGPUDeviceContext.cs`
 3. `WebGPUDrawingBackend.cs`
 4. `WebGPUFlushContext.cs`
 5. `WebGPURuntime.cs`
@@ -280,12 +264,12 @@ support and target setup -> backend policy -> flush context -> runtime lifetime 
 
 ## The Mental Model To Keep
 
-The easiest way to keep this backend straight is to remember that it is not the rasterizer itself. It is the orchestration and policy layer around a staged GPU rasterizer. It decides whether a flush can stay on the GPU, runs that staged path as one flush-scoped unit of work, and falls back cleanly when it cannot.
+The easiest way to keep this backend straight is to remember that it is not the rasterizer itself. It is the orchestration layer around a staged GPU rasterizer. It creates retained encoded scenes from prepared command batches, then renders those scenes as flush-scoped GPU work when a typed native target is available.
 
 If that model is clear, the major types fall into place:
 
 - `WebGPUEnvironment` exposes explicit support probes
-- `WebGPUWindow<TPixel>`, `WebGPUExternalSurface<TPixel>`, and `WebGPURenderTarget<TPixel>` are the recommended target types; `WebGPUDeviceContext<TPixel>` and `WebGPUNativeSurfaceFactory` are advanced interop escape hatches
+- `WebGPUWindow`, `WebGPUExternalSurface`, and `WebGPURenderTarget` are the recommended target types; `WebGPUNativeSurfaceFactory` is the advanced interop escape hatch
 - `WebGPUDrawingBackend` orchestrates and decides policy
 - `WebGPUFlushContext` owns one flush's execution state
 - `WebGPURuntime` owns longer-lived device state

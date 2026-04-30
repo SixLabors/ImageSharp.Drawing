@@ -38,58 +38,6 @@ public sealed partial class WebGPUDrawingBackend
         Sint16
     }
 
-    private static bool TryFind(Type pixelType, out CompositePixelRegistration registration)
-    {
-        foreach (CompositePixelRegistration r in CompositeRegistrations)
-        {
-            if (r.PixelType == pixelType)
-            {
-                registration = r;
-                return true;
-            }
-        }
-
-        registration = default;
-        return false;
-    }
-
-    private static bool TryFind(TextureFormat textureFormat, out CompositePixelRegistration registration)
-    {
-        foreach (CompositePixelRegistration r in CompositeRegistrations)
-        {
-            if (r.TextureFormat == textureFormat)
-            {
-                registration = r;
-                return true;
-            }
-        }
-
-        registration = default;
-        return false;
-    }
-
-    /// <summary>
-    /// Resolves the WebGPU texture format identifier for <typeparamref name="TPixel"/>.
-    /// </summary>
-    /// <typeparam name="TPixel">The requested pixel type.</typeparam>
-    /// <param name="formatId">Receives the mapped texture format identifier on success.</param>
-    /// <returns>
-    /// <see langword="true"/> when the pixel type has a registered GPU format mapping; otherwise <see langword="false"/>.
-    /// </returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static bool TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        if (!TryFind(typeof(TPixel), out CompositePixelRegistration r))
-        {
-            formatId = default;
-            return false;
-        }
-
-        formatId = WebGPUTextureFormatMapper.FromSilk(r.TextureFormat);
-        return true;
-    }
-
     /// <summary>
     /// Resolves the WebGPU texture format identifier and any required device feature
     /// for <typeparamref name="TPixel"/>.
@@ -104,7 +52,7 @@ public sealed partial class WebGPUDrawingBackend
     /// <see langword="true"/> when the pixel type has a registered GPU format mapping; otherwise <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static bool TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId, out FeatureName requiredFeature)
+    internal static bool TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormat formatId, out FeatureName requiredFeature)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         if (!TryFind(typeof(TPixel), out CompositePixelRegistration r))
@@ -120,20 +68,54 @@ public sealed partial class WebGPUDrawingBackend
     }
 
     /// <summary>
+    /// Resolves native format information for one public WebGPU texture format.
+    /// </summary>
+    /// <param name="format">The public WebGPU texture format.</param>
+    /// <param name="textureFormat">Receives the native texture format.</param>
+    /// <param name="requiredFeature">Receives the device feature required for storage binding.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static void GetCompositeTextureFormatInfo(
+        WebGPUTextureFormat format,
+        out TextureFormat textureFormat,
+        out FeatureName requiredFeature)
+    {
+        textureFormat = WebGPUTextureFormatMapper.ToSilk(format);
+        requiredFeature = Find(textureFormat).RequiredFeature;
+    }
+
+    /// <summary>
+    /// Resolves the sampled texture type for a registered composite texture format.
+    /// </summary>
+    /// <param name="textureFormat">The WebGPU texture format.</param>
+    /// <returns>The sampled texture type used when reading the format.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static TextureSampleType GetCompositeTextureSampleType(TextureFormat textureFormat)
+        => Find(textureFormat).SampleType;
+
+    /// <summary>
     /// Resolves the shader-side read/write traits for a registered composite texture format.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static bool TryGetCompositeTextureShaderTraits(TextureFormat textureFormat, out CompositeTextureShaderTraits traits)
+    internal static CompositeTextureShaderTraits GetCompositeTextureShaderTraits(TextureFormat textureFormat)
+        => Find(textureFormat).ShaderTraits;
+
+    private static bool TryFind(Type pixelType, out CompositePixelRegistration registration)
     {
-        if (!TryFind(textureFormat, out CompositePixelRegistration r))
+        foreach (CompositePixelRegistration r in CompositeRegistrations)
         {
-            traits = default;
-            return false;
+            if (r.PixelType == pixelType)
+            {
+                registration = r;
+                return true;
+            }
         }
 
-        traits = r.ShaderTraits;
-        return true;
+        registration = default;
+        return false;
     }
+
+    private static CompositePixelRegistration Find(TextureFormat textureFormat)
+        => Array.Find(CompositeRegistrations, r => r.TextureFormat == textureFormat);
 
     /// <summary>
     /// Shader-facing traits derived from one registered composite texture format.

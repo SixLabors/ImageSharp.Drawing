@@ -6,39 +6,45 @@ using SixLabors.ImageSharp.Memory;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Drawing backend abstraction used by processors.
+/// Defines the contract for creating and rendering retained drawing scenes for canvas targets.
 /// </summary>
 public interface IDrawingBackend
 {
     /// <summary>
-    /// Gets a value indicating whether this backend is available on the current system.
+    /// Creates a retained backend scene from a prepared command batch.
     /// </summary>
-    public bool IsSupported => true;
-
-    /// <summary>
-    /// Flushes queued composition operations for the target.
-    /// </summary>
-    /// <typeparam name="TPixel">The pixel format.</typeparam>
-    /// <param name="configuration">Active processing configuration.</param>
-    /// <param name="target">Destination frame.</param>
-    /// <param name="compositionScene">Scene commands in submission order.</param>
-    public void FlushCompositions<TPixel>(
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="targetBounds">The target bounds used for target-dependent scene data.</param>
+    /// <param name="commandBatch">The scene commands in submission order.</param>
+    /// <param name="ownedResources">The resources that must stay alive for the returned scene.</param>
+    /// <returns>A retained backend scene.</returns>
+    public DrawingBackendScene CreateScene(
         Configuration configuration,
-        ICanvasFrame<TPixel> target,
-        CompositionScene compositionScene)
-        where TPixel : unmanaged, IPixel<TPixel>;
+        Rectangle targetBounds,
+        DrawingCommandBatch commandBatch,
+        IReadOnlyList<IDisposable>? ownedResources = null);
 
     /// <summary>
-    /// Reads source pixels from the target into a caller-provided buffer.
+    /// Renders a retained backend scene into the target.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="configuration">The active processing configuration.</param>
     /// <param name="target">The target frame.</param>
-    /// <param name="sourceRectangle">Source rectangle in target-local coordinates.</param>
-    /// <param name="destination">
-    /// The caller-allocated region to receive the pixel data.
-    /// Must be at least as large as <paramref name="sourceRectangle"/> (clamped to target bounds).
-    /// </param>
+    /// <param name="scene">The retained backend scene to render.</param>
+    public void RenderScene<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> target,
+        DrawingBackendScene scene)
+        where TPixel : unmanaged, IPixel<TPixel>;
+
+    /// <summary>
+    /// Reads source pixels from the target into the destination region.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="target">The target frame.</param>
+    /// <param name="sourceRectangle">The source rectangle in target-local coordinates.</param>
+    /// <param name="destination">The destination region that receives the copied pixels.</param>
     public void ReadRegion<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,

@@ -21,7 +21,7 @@ internal sealed class WebGPUNativeTarget
         WebGPUQueueHandle queueHandle,
         WebGPUTextureHandle targetTextureHandle,
         WebGPUTextureViewHandle targetTextureViewHandle,
-        WebGPUTextureFormatId targetFormat,
+        WebGPUTextureFormat targetFormat,
         int width,
         int height)
     {
@@ -62,7 +62,7 @@ internal sealed class WebGPUNativeTarget
     /// <summary>
     /// Gets the native render target texture format identifier.
     /// </summary>
-    public WebGPUTextureFormatId TargetFormat { get; }
+    public WebGPUTextureFormat TargetFormat { get; }
 
     /// <summary>
     /// Gets the surface width in pixels.

@@ -15,14 +15,14 @@ internal static class WebGPUTextureFormatMapper
     /// </summary>
     /// <param name="formatId">The public texture format identifier.</param>
     /// <returns>The matching <see cref="TextureFormat"/> value.</returns>
-    public static TextureFormat ToSilk(WebGPUTextureFormatId formatId)
+    public static TextureFormat ToSilk(WebGPUTextureFormat formatId)
         => (TextureFormat)(int)formatId;
 
     /// <summary>
     /// Converts a native texture format to the corresponding public WebGPU texture format identifier.
     /// </summary>
     /// <param name="textureFormat">The native texture format.</param>
-    /// <returns>The matching <see cref="WebGPUTextureFormatId"/> value.</returns>
-    public static WebGPUTextureFormatId FromSilk(TextureFormat textureFormat)
-        => (WebGPUTextureFormatId)(int)textureFormat;
+    /// <returns>The matching <see cref="WebGPUTextureFormat"/> value.</returns>
+    public static WebGPUTextureFormat FromSilk(TextureFormat textureFormat)
+        => (WebGPUTextureFormat)(int)textureFormat;
 }

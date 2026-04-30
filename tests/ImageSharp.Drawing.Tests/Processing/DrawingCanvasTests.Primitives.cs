@@ -24,11 +24,11 @@ public partial class DrawingCanvasTests
         };
 
         using Image<TPixel> target = provider.GetImage();
-        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, options);
-
-        canvas.Clear(Brushes.Solid(Color.Black));
-        canvas.Fill(Brushes.Solid(Color.White), new Rectangle(x, y, w, h));
-        canvas.Flush();
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, options))
+        {
+            canvas.Clear(Brushes.Solid(Color.Black));
+            canvas.Fill(Brushes.Solid(Color.White), new Rectangle(x, y, w, h));
+        }
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
 
@@ -99,11 +99,11 @@ public partial class DrawingCanvasTests
         });
 
         using Image<TPixel> target = provider.GetImage();
-        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, options);
-
-        canvas.Clear(Brushes.Solid(Color.Black));
-        canvas.Draw(pen, new Rectangle(x, y, w, h));
-        canvas.Flush();
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, options))
+        {
+            canvas.Clear(Brushes.Solid(Color.Black));
+            canvas.Draw(pen, new Rectangle(x, y, w, h));
+        }
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
 
@@ -135,33 +135,32 @@ public partial class DrawingCanvasTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> target = provider.GetImage();
-        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions());
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
 
-        canvas.Clear(Brushes.Solid(Color.White));
-
-        canvas.Draw(Pens.Solid(Color.DimGray, 3), new Rectangle(10, 10, 220, 140));
-        canvas.DrawEllipse(Pens.Solid(Color.CornflowerBlue, 6), new PointF(120, 80), new SizeF(110, 70));
-        canvas.DrawArc(
-            Pens.Solid(Color.ForestGreen, 4),
-            new PointF(120, 80),
-            new SizeF(90, 46),
-            rotation: 15,
-            startAngle: -25,
-            sweepAngle: 220);
-        canvas.DrawLine(
-            Pens.Solid(Color.OrangeRed, 5),
-            new PointF(18, 140),
-            new PointF(76, 28),
-            new PointF(166, 126),
-            new PointF(222, 20));
-        canvas.DrawBezier(
-            Pens.Solid(Color.MediumVioletRed, 4),
-            new PointF(20, 80),
-            new PointF(70, 18),
-            new PointF(168, 144),
-            new PointF(220, 78));
-
-        canvas.Flush();
+            canvas.Draw(Pens.Solid(Color.DimGray, 3), new Rectangle(10, 10, 220, 140));
+            canvas.DrawEllipse(Pens.Solid(Color.CornflowerBlue, 6), new PointF(120, 80), new SizeF(110, 70));
+            canvas.DrawArc(
+                Pens.Solid(Color.ForestGreen, 4),
+                new PointF(120, 80),
+                new SizeF(90, 46),
+                rotation: 15,
+                startAngle: -25,
+                sweepAngle: 220);
+            canvas.DrawLine(
+                Pens.Solid(Color.OrangeRed, 5),
+                new PointF(18, 140),
+                new PointF(76, 28),
+                new PointF(166, 126),
+                new PointF(222, 20));
+            canvas.DrawBezier(
+                Pens.Solid(Color.MediumVioletRed, 4),
+                new PointF(20, 80),
+                new PointF(70, 18),
+                new PointF(168, 144),
+                new PointF(220, 78));
+        }
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
@@ -173,22 +172,21 @@ public partial class DrawingCanvasTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> target = provider.GetImage();
-        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions());
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
 
-        canvas.Clear(Brushes.Solid(Color.White));
+            canvas.FillArc(
+                Brushes.Solid(Color.CornflowerBlue),
+                new PointF(78, 58),
+                new SizeF(48, 34),
+                rotation: 15,
+                startAngle: -30,
+                sweepAngle: 240);
 
-        canvas.FillArc(
-            Brushes.Solid(Color.CornflowerBlue),
-            new PointF(78, 58),
-            new SizeF(48, 34),
-            rotation: 15,
-            startAngle: -30,
-            sweepAngle: 240);
-
-        canvas.FillPie(Brushes.Solid(Color.Goldenrod), new PointF(150, 70), new SizeF(36, 36), startAngle: 20, sweepAngle: 240);
-        canvas.FillPie(Brushes.Solid(Color.MediumSeaGreen), new PointF(184, 107), new SizeF(30, 21), startAngle: -35, sweepAngle: 220);
-
-        canvas.Flush();
+            canvas.FillPie(Brushes.Solid(Color.Goldenrod), new PointF(150, 70), new SizeF(36, 36), startAngle: 20, sweepAngle: 240);
+            canvas.FillPie(Brushes.Solid(Color.MediumSeaGreen), new PointF(184, 107), new SizeF(30, 21), startAngle: -35, sweepAngle: 220);
+        }
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
@@ -200,14 +198,13 @@ public partial class DrawingCanvasTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> target = provider.GetImage();
-        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions());
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
 
-        canvas.Clear(Brushes.Solid(Color.White));
-
-        canvas.DrawPie(Pens.Solid(Color.DarkSlateBlue, 6), new PointF(77, 75), new SizeF(43, 43), startAngle: -40, sweepAngle: 250);
-        canvas.DrawPie(Pens.Solid(Color.OrangeRed, 4), new PointF(167, 70), new SizeF(35, 26), startAngle: 35, sweepAngle: -210);
-
-        canvas.Flush();
+            canvas.DrawPie(Pens.Solid(Color.DarkSlateBlue, 6), new PointF(77, 75), new SizeF(43, 43), startAngle: -40, sweepAngle: 250);
+            canvas.DrawPie(Pens.Solid(Color.OrangeRed, 4), new PointF(167, 70), new SizeF(35, 26), startAngle: 35, sweepAngle: -210);
+        }
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);

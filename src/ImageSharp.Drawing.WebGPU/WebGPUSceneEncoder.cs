@@ -24,6 +24,7 @@ internal static class WebGPUSceneEncoder
     private const int PathGradientHeaderWordCount = 4;
     private const int PathGradientEdgeWordCount = 6;
     private const int StyleWordCount = 5;
+    private const int TransformWordCount = 9;
     private const int TileWidth = 16;
     private const int TileHeight = 16;
     private const float PointStrokeSegmentHalfLength = 1F / 128F;
@@ -82,16 +83,18 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Encodes composition commands into flush-scoped scene buffers.
     /// </summary>
-    /// <param name="scene">The scene to encode.</param>
+    /// <param name="scene">The command batch to encode.</param>
     /// <param name="targetBounds">The root target bounds used for target-local coordinate conversion.</param>
     /// <param name="allocator">The allocator used for temporary and packed scene storage.</param>
+    /// <param name="maxDegreeOfParallelism">The maximum degree of parallelism used for encoder planning and partitioned encoding.</param>
     /// <param name="encodedScene">Receives the encoded scene on success.</param>
     /// <param name="error">Receives the staged-scene support failure reason when encoding fails.</param>
     /// <returns><see langword="true"/> when the scene encoded successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryEncode(
-        CompositionScene scene,
+        DrawingCommandBatch scene,
         in Rectangle targetBounds,
         MemoryAllocator allocator,
+        int maxDegreeOfParallelism,
         out WebGPUEncodedScene encodedScene,
         out string? error)
     {
@@ -102,10 +105,126 @@ internal static class WebGPUSceneEncoder
             return true;
         }
 
-        SupportedSubsetSceneEncoding encoding = new(allocator, scene.CommandCount, targetBounds);
+        int firstTargetRowBandIndex = targetBounds.Top / TileHeight;
+        int lastTargetRowBandIndex = (targetBounds.Bottom - 1) / TileHeight;
+        int targetRowCount = (lastTargetRowBandIndex - firstTargetRowBandIndex) + 1;
+        int commandCount = scene.CommandCount;
+        int partitionCount = GetPartitionCount(maxDegreeOfParallelism, commandCount, targetRowCount);
+
+        SceneEncodingPlan plan = SceneEncodingPlan.Create(scene, maxDegreeOfParallelism, partitionCount);
+        if (partitionCount > 1)
+        {
+            Rectangle targetRectangle = targetBounds;
+            SceneEncodingPartition?[] partitions = new SceneEncodingPartition?[partitionCount];
+            bool[] failed = new bool[partitionCount];
+            string?[] errors = new string?[partitionCount];
+
+            try
+            {
+                _ = Parallel.For(
+                    0,
+                    partitionCount,
+                    CreateParallelOptions(maxDegreeOfParallelism, partitionCount),
+                    (partitionIndex, loopState) =>
+                    {
+                        // Match the CPU retained scene builder: partitions are contiguous command ranges,
+                        // and the final merge appends them by partition index to preserve timeline order.
+                        int commandStart = (partitionIndex * commandCount) / partitionCount;
+                        int commandEnd = ((partitionIndex + 1) * commandCount) / partitionCount;
+                        SceneEncodingPlan partitionPlan = plan.GetPartitionPlan(partitionIndex);
+                        SupportedSubsetSceneEncoding partitionEncoding = new(allocator, targetRectangle, partitionPlan);
+
+                        try
+                        {
+                            if (!partitionEncoding.TryBuild(scene, partitionPlan, commandStart, commandEnd, out string? partitionError))
+                            {
+                                failed[partitionIndex] = true;
+                                errors[partitionIndex] = partitionError;
+                                loopState.Stop();
+                                return;
+                            }
+
+                            partitions[partitionIndex] = SceneEncodingPartition.Detach(ref partitionEncoding);
+                        }
+                        finally
+                        {
+                            partitionEncoding.Dispose();
+                        }
+                    });
+            }
+            catch
+            {
+                DisposePartitions(partitions);
+                throw;
+            }
+
+            for (int i = 0; i < failed.Length; i++)
+            {
+                if (failed[i])
+                {
+                    DisposePartitions(partitions);
+                    encodedScene = WebGPUEncodedScene.Empty;
+                    error = errors[i];
+                    return false;
+                }
+            }
+
+            int fillCount = 0;
+            bool hasFineRasterizationMode = false;
+            RasterizationMode fineRasterizationMode = RasterizationMode.Antialiased;
+            float fineCoverageThreshold = 0F;
+
+            for (int i = 0; i < partitions.Length; i++)
+            {
+                SceneEncodingPartition partition = partitions[i]!;
+                fillCount += partition.FillCount;
+                if (partition.VisibleFillCount == 0)
+                {
+                    continue;
+                }
+
+                if (!hasFineRasterizationMode)
+                {
+                    fineRasterizationMode = partition.FineRasterizationMode;
+                    fineCoverageThreshold = partition.FineCoverageThreshold;
+                    hasFineRasterizationMode = true;
+                    continue;
+                }
+
+                if (partition.FineRasterizationMode != fineRasterizationMode ||
+                    partition.FineCoverageThreshold != fineCoverageThreshold)
+                {
+                    DisposePartitions(partitions);
+                    encodedScene = WebGPUEncodedScene.Empty;
+                    error = "The staged WebGPU scene pipeline does not support mixed fine rasterization modes or thresholds within one flush.";
+                    return false;
+                }
+            }
+
+            if (fillCount == 0)
+            {
+                DisposePartitions(partitions);
+                encodedScene = WebGPUEncodedScene.Empty;
+                error = null;
+                return true;
+            }
+
+            try
+            {
+                encodedScene = SupportedSubsetSceneResolver.Resolve(partitions, targetBounds, allocator, fineRasterizationMode, fineCoverageThreshold);
+                error = null;
+                return true;
+            }
+            finally
+            {
+                DisposePartitions(partitions);
+            }
+        }
+
+        SupportedSubsetSceneEncoding encoding = new(allocator, targetBounds, plan);
         try
         {
-            if (!encoding.TryBuild(scene, out error))
+            if (!encoding.TryBuild(scene, plan, out error))
             {
                 encodedScene = WebGPUEncodedScene.Empty;
                 return false;
@@ -129,11 +248,403 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
+    /// Disposes any partition encodings that were produced before the parallel operation completed.
+    /// </summary>
+    private static void DisposePartitions(SceneEncodingPartition?[] partitions)
+    {
+        for (int i = 0; i < partitions.Length; i++)
+        {
+            partitions[i]?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Encoding plan produced before the mutable scene streams are allocated.
+    /// </summary>
+    private readonly struct SceneEncodingPlan
+    {
+        private readonly LinearGeometry?[]? geometries;
+
+        public SceneEncodingPlan(
+            int pathTagCapacity,
+            int pathDataWordCapacity,
+            int drawTagCapacity,
+            int drawDataWordCapacity,
+            int transformWordCapacity,
+            int styleWordCapacity,
+            int gradientPixelCapacity,
+            int pathGradientDataWordCapacity,
+            LinearGeometry?[]? geometries,
+            SceneEncodingPlan[]? partitionPlans)
+        {
+            this.PathTagCapacity = pathTagCapacity;
+            this.PathDataWordCapacity = pathDataWordCapacity;
+            this.DrawTagCapacity = drawTagCapacity;
+            this.DrawDataWordCapacity = drawDataWordCapacity;
+            this.TransformWordCapacity = transformWordCapacity;
+            this.StyleWordCapacity = styleWordCapacity;
+            this.GradientPixelCapacity = gradientPixelCapacity;
+            this.PathGradientDataWordCapacity = pathGradientDataWordCapacity;
+            this.geometries = geometries;
+            this.PartitionPlans = partitionPlans;
+        }
+
+        /// <summary>
+        /// Gets the initial byte capacity for path tags.
+        /// </summary>
+        public int PathTagCapacity { get; }
+
+        /// <summary>
+        /// Gets the initial word capacity for path data.
+        /// </summary>
+        public int PathDataWordCapacity { get; }
+
+        /// <summary>
+        /// Gets the initial draw-tag capacity.
+        /// </summary>
+        public int DrawTagCapacity { get; }
+
+        /// <summary>
+        /// Gets the initial word capacity for draw data.
+        /// </summary>
+        public int DrawDataWordCapacity { get; }
+
+        /// <summary>
+        /// Gets the initial word capacity for transforms.
+        /// </summary>
+        public int TransformWordCapacity { get; }
+
+        /// <summary>
+        /// Gets the initial word capacity for styles.
+        /// </summary>
+        public int StyleWordCapacity { get; }
+
+        /// <summary>
+        /// Gets the initial gradient-pixel capacity.
+        /// </summary>
+        public int GradientPixelCapacity { get; }
+
+        /// <summary>
+        /// Gets the initial path-gradient data capacity.
+        /// </summary>
+        public int PathGradientDataWordCapacity { get; }
+
+        /// <summary>
+        /// Gets per-partition capacity plans produced by the parallel planning pass.
+        /// </summary>
+        public SceneEncodingPlan[]? PartitionPlans { get; }
+
+        /// <summary>
+        /// Creates an encoding plan for the supplied command batch.
+        /// </summary>
+        public static SceneEncodingPlan Create(
+            DrawingCommandBatch scene,
+            int maxDegreeOfParallelism,
+            int partitionCount)
+        {
+            int commandCount = scene.CommandCount;
+            if (partitionCount <= 1)
+            {
+                return CreateDefault(commandCount);
+            }
+
+            LinearGeometry?[] geometries = new LinearGeometry?[commandCount];
+            SceneCapacityEstimate[] estimates = new SceneCapacityEstimate[partitionCount];
+
+            _ = Parallel.For(
+                0,
+                partitionCount,
+                CreateParallelOptions(maxDegreeOfParallelism, partitionCount),
+                partitionIndex =>
+                {
+                    int commandStart = (partitionIndex * commandCount) / partitionCount;
+                    int commandEnd = ((partitionIndex + 1) * commandCount) / partitionCount;
+                    SceneCapacityEstimate estimate = default;
+
+                    for (int i = commandStart; i < commandEnd; i++)
+                    {
+                        estimate.Add(EstimateCommand(scene.Commands[i], i, geometries));
+                    }
+
+                    estimates[partitionIndex] = estimate;
+                });
+
+            SceneCapacityEstimate total = SceneCapacityEstimate.CreateInitial();
+            SceneEncodingPlan[] partitionPlans = new SceneEncodingPlan[partitionCount];
+            for (int i = 0; i < estimates.Length; i++)
+            {
+                total.Add(estimates[i]);
+
+                int commandStart = (i * commandCount) / partitionCount;
+                int commandEnd = ((i + 1) * commandCount) / partitionCount;
+                partitionPlans[i] = estimates[i].ToPlan(commandEnd - commandStart, geometries, null);
+            }
+
+            return total.ToPlan(commandCount, geometries, partitionPlans);
+        }
+
+        /// <summary>
+        /// Gets prepared geometry for a command when the parallel plan computed it.
+        /// </summary>
+        public LinearGeometry? GetGeometry(int commandIndex)
+            => this.geometries?[commandIndex];
+
+        /// <summary>
+        /// Gets the stream capacity plan for one contiguous command-range partition.
+        /// </summary>
+        public readonly SceneEncodingPlan GetPartitionPlan(int partitionIndex)
+            => this.PartitionPlans is null ? this : this.PartitionPlans[partitionIndex];
+
+        public static SceneEncodingPlan CreateDefault(int commandCount)
+            => new(
+                Math.Max(commandCount * 8, 256),
+                Math.Max(commandCount * 16, 256),
+                Math.Max(commandCount, 16),
+                Math.Max(commandCount, 16),
+                16,
+                Math.Max(commandCount * StyleWordCount, 16),
+                16,
+                16,
+                null,
+                null);
+    }
+
+    /// <summary>
+    /// Accumulates initial stream capacities for one large-batch encoder plan.
+    /// </summary>
+    private struct SceneCapacityEstimate
+    {
+        public long PathTagCount;
+        public long PathDataWordCount;
+        public long DrawTagCount;
+        public long DrawDataWordCount;
+        public long TransformWordCount;
+        public long StyleWordCount;
+        public long GradientPixelCount;
+        public long PathGradientDataWordCount;
+
+        /// <summary>
+        /// Creates the initial estimate for the transform emitted by every scene.
+        /// </summary>
+        public static SceneCapacityEstimate CreateInitial()
+            => new()
+            {
+                PathTagCount = 1,
+                TransformWordCount = WebGPUSceneEncoder.TransformWordCount
+            };
+
+        /// <summary>
+        /// Adds another estimate into this accumulator.
+        /// </summary>
+        public void Add(in SceneCapacityEstimate other)
+        {
+            this.PathTagCount += other.PathTagCount;
+            this.PathDataWordCount += other.PathDataWordCount;
+            this.DrawTagCount += other.DrawTagCount;
+            this.DrawDataWordCount += other.DrawDataWordCount;
+            this.TransformWordCount += other.TransformWordCount;
+            this.StyleWordCount += other.StyleWordCount;
+            this.GradientPixelCount += other.GradientPixelCount;
+            this.PathGradientDataWordCount += other.PathGradientDataWordCount;
+        }
+
+        /// <summary>
+        /// Adds capacity for one encoded fill path.
+        /// </summary>
+        public void AddFill(LinearGeometryInfo geometryInfo, Brush brush)
+        {
+            uint drawTag = GetDrawTag(brush);
+            this.PathTagCount += geometryInfo.SegmentCount + 3L;
+            this.PathDataWordCount += (geometryInfo.ContourCount * 2L) + (geometryInfo.SegmentCount * 2L);
+            this.AddDrawPayload(drawTag, brush);
+        }
+
+        /// <summary>
+        /// Adds capacity for one encoded stroked path.
+        /// </summary>
+        public void AddStroke(LinearGeometry geometry, Brush brush)
+        {
+            uint drawTag = GetDrawTag(brush);
+            int markerWordCount = 0;
+
+            for (int i = 0; i < geometry.Contours.Count; i++)
+            {
+                markerWordCount += geometry.Contours[i].IsClosed ? 2 : 4;
+            }
+
+            this.PathTagCount += geometry.Info.SegmentCount + geometry.Info.ContourCount + 3L;
+            this.PathDataWordCount += (geometry.Info.ContourCount * 2L) + (geometry.Info.SegmentCount * 2L) + markerWordCount;
+            this.AddDrawPayload(drawTag, brush);
+        }
+
+        /// <summary>
+        /// Adds capacity for one encoded explicit two-point stroke.
+        /// </summary>
+        public void AddOpenSegmentStroke(Brush brush)
+        {
+            uint drawTag = GetDrawTag(brush);
+            this.PathTagCount += 4;
+            this.PathDataWordCount += 8;
+            this.AddDrawPayload(drawTag, brush);
+        }
+
+        /// <summary>
+        /// Adds capacity for one begin-layer marker.
+        /// </summary>
+        public void AddBeginLayer()
+        {
+            this.PathTagCount += 6;
+            this.PathDataWordCount += 10;
+            this.DrawTagCount++;
+            this.DrawDataWordCount += 2;
+            this.StyleWordCount += WebGPUSceneEncoder.StyleWordCount;
+        }
+
+        /// <summary>
+        /// Adds capacity for one end-layer marker.
+        /// </summary>
+        public void AddEndLayer()
+        {
+            this.PathTagCount++;
+            this.DrawTagCount++;
+        }
+
+        /// <summary>
+        /// Converts the accumulated counts into an encoder plan.
+        /// </summary>
+        public readonly SceneEncodingPlan ToPlan(
+            int commandCount,
+            LinearGeometry?[] geometries,
+            SceneEncodingPlan[]? partitionPlans)
+        {
+            SceneEncodingPlan defaults = SceneEncodingPlan.CreateDefault(commandCount);
+
+            return new SceneEncodingPlan(
+                Math.Max(defaults.PathTagCapacity, checked((int)this.PathTagCount)),
+                Math.Max(defaults.PathDataWordCapacity, checked((int)this.PathDataWordCount)),
+                Math.Max(defaults.DrawTagCapacity, checked((int)this.DrawTagCount)),
+                Math.Max(defaults.DrawDataWordCapacity, checked((int)this.DrawDataWordCount)),
+                Math.Max(defaults.TransformWordCapacity, checked((int)this.TransformWordCount)),
+                Math.Max(defaults.StyleWordCapacity, checked((int)this.StyleWordCount)),
+                Math.Max(defaults.GradientPixelCapacity, checked((int)this.GradientPixelCount)),
+                Math.Max(defaults.PathGradientDataWordCapacity, checked((int)this.PathGradientDataWordCount)),
+                geometries,
+                partitionPlans);
+        }
+
+        private void AddDrawPayload(uint drawTag, Brush brush)
+        {
+            this.DrawTagCount++;
+            this.DrawDataWordCount += GetDrawDataWordCount(drawTag);
+            this.TransformWordCount += WebGPUSceneEncoder.TransformWordCount;
+            this.StyleWordCount += WebGPUSceneEncoder.StyleWordCount;
+
+            if (DrawTagUsesGradientRamp(drawTag))
+            {
+                this.GradientPixelCount += GradientWidth;
+            }
+
+            this.PathGradientDataWordCount += GetPathGradientDataWordCount(brush);
+        }
+    }
+
+    /// <summary>
+    /// Estimates one command and stores prepared geometry for the sequential append phase.
+    /// </summary>
+    private static SceneCapacityEstimate EstimateCommand(
+        CompositionSceneCommand command,
+        int commandIndex,
+        LinearGeometry?[] geometries)
+    {
+        SceneCapacityEstimate estimate = default;
+
+        if (command is PathCompositionSceneCommand pathCommand)
+        {
+            CompositionCommand composition = pathCommand.Command;
+            switch (composition.Kind)
+            {
+                case CompositionCommandKind.FillLayer:
+                    if (!IsSupportedBrush(composition.Brush))
+                    {
+                        return estimate;
+                    }
+
+                    LinearGeometry fillGeometry = composition.SourcePath.ToLinearGeometry(ExtractScale(composition.Transform));
+                    geometries[commandIndex] = fillGeometry;
+                    estimate.AddFill(fillGeometry.Info, composition.Brush);
+                    return estimate;
+
+                case CompositionCommandKind.BeginLayer:
+                    estimate.AddBeginLayer();
+                    return estimate;
+
+                case CompositionCommandKind.EndLayer:
+                    estimate.AddEndLayer();
+                    return estimate;
+            }
+        }
+
+        if (command is StrokePathCompositionSceneCommand strokePathCommand)
+        {
+            StrokePathCommand composition = strokePathCommand.Command;
+            if (!IsSupportedBrush(composition.Brush))
+            {
+                return estimate;
+            }
+
+            LinearGeometry strokeGeometry = composition.SourcePath.ToLinearGeometry(ExtractScale(composition.Transform));
+            geometries[commandIndex] = strokeGeometry;
+            estimate.AddStroke(strokeGeometry, composition.Brush);
+            return estimate;
+        }
+
+        if (command is LineSegmentCompositionSceneCommand lineSegmentCommand)
+        {
+            StrokeLineSegmentCommand composition = lineSegmentCommand.Command;
+            if (IsSupportedBrush(composition.Brush))
+            {
+                estimate.AddOpenSegmentStroke(composition.Brush);
+            }
+
+            return estimate;
+        }
+
+        StrokePolylineCommand polyline = ((PolylineCompositionSceneCommand)command).Command;
+        if (!IsSupportedBrush(polyline.Brush))
+        {
+            return estimate;
+        }
+
+        LinearGeometry polylineGeometry = LinearGeometry.CreateOpenPolyline(polyline.SourcePoints, ExtractScale(polyline.Transform));
+        geometries[commandIndex] = polylineGeometry;
+        estimate.AddStroke(polylineGeometry, polyline.Brush);
+        return estimate;
+    }
+
+    /// <summary>
+    /// Computes the number of useful partitions using the same limits as the retained CPU scene builder.
+    /// </summary>
+    private static int GetPartitionCount(
+        int maxDegreeOfParallelism,
+        int workItemCount,
+        int secondaryLimit)
+        => Math.Min(
+            maxDegreeOfParallelism == -1 ? Environment.ProcessorCount : maxDegreeOfParallelism,
+            Math.Min(workItemCount, secondaryLimit));
+
+    /// <summary>
+    /// Creates the parallel options for an already-sized partitioned encoder operation.
+    /// </summary>
+    private static ParallelOptions CreateParallelOptions(int maxDegreeOfParallelism, int partitionCount)
+        => new() { MaxDegreeOfParallelism = Math.Min(maxDegreeOfParallelism, partitionCount) };
+
+    /// <summary>
     /// Mutable flush-scoped encoder state used while appending supported commands into contiguous scene streams.
     /// </summary>
     private ref struct SupportedSubsetSceneEncoding
     {
         private bool hasLastStyle;
+        private bool streamsDetached;
         private bool gradientPixelsDetached;
         private bool pathGradientDataDetached;
         private long estimatedPathRowCount;
@@ -150,23 +661,23 @@ internal static class WebGPUSceneEncoder
         /// Initializes a new instance of the <see cref="SupportedSubsetSceneEncoding"/> struct.
         /// </summary>
         /// <param name="allocator">The allocator used for all temporary scene streams.</param>
-        /// <param name="commandCount">The total prepared command count for the flush.</param>
         /// <param name="rootTargetBounds">The root target bounds used for target-local coordinate conversion.</param>
+        /// <param name="plan">The large-batch encoding plan used for initial stream sizing and prepared geometry.</param>
         internal SupportedSubsetSceneEncoding(
             MemoryAllocator allocator,
-            int commandCount,
-            in Rectangle rootTargetBounds)
+            in Rectangle rootTargetBounds,
+            in SceneEncodingPlan plan)
         {
-            this.PathTags = new OwnedStream<byte>(allocator, Math.Max(commandCount * 8, 256));
-            this.PathData = new OwnedStream<uint>(allocator, Math.Max(commandCount * 16, 256));
-            this.DrawTags = new OwnedStream<uint>(allocator, Math.Max(commandCount, 16));
-            this.DrawData = new OwnedStream<uint>(allocator, Math.Max(commandCount, 16));
-            this.Transforms = new OwnedStream<uint>(allocator, 8);
-            this.Styles = new OwnedStream<uint>(allocator, Math.Max(commandCount * StyleWordCount, 16));
+            this.PathTags = new OwnedStream<byte>(allocator, plan.PathTagCapacity);
+            this.PathData = new OwnedStream<uint>(allocator, plan.PathDataWordCapacity);
+            this.DrawTags = new OwnedStream<uint>(allocator, plan.DrawTagCapacity);
+            this.DrawData = new OwnedStream<uint>(allocator, plan.DrawDataWordCapacity);
+            this.Transforms = new OwnedStream<uint>(allocator, plan.TransformWordCapacity);
+            this.Styles = new OwnedStream<uint>(allocator, plan.StyleWordCapacity);
 
             // Gradient payloads are sparse in common scenes, so grow these only when a gradient brush is encoded.
-            this.GradientPixels = new OwnedStream<uint>(allocator, 16);
-            this.PathGradientData = new OwnedStream<uint>(allocator, 16);
+            this.GradientPixels = new OwnedStream<uint>(allocator, plan.GradientPixelCapacity);
+            this.PathGradientData = new OwnedStream<uint>(allocator, plan.PathGradientDataWordCapacity);
             this.Images = [];
             this.FillCount = 0;
             this.PathCount = 0;
@@ -175,6 +686,7 @@ internal static class WebGPUSceneEncoder
             this.ClipCount = 0;
             this.GradientRowCount = 0;
             this.hasLastStyle = false;
+            this.streamsDetached = false;
             this.gradientPixelsDetached = false;
             this.pathGradientDataDetached = false;
             this.lastStyle0 = 0;
@@ -309,13 +821,21 @@ internal static class WebGPUSceneEncoder
                 this.PathGradientData.Dispose();
             }
 
-            this.Styles.Dispose();
-            this.Transforms.Dispose();
-            this.DrawData.Dispose();
-            this.DrawTags.Dispose();
-            this.PathData.Dispose();
-            this.PathTags.Dispose();
+            if (!this.streamsDetached)
+            {
+                this.Styles.Dispose();
+                this.Transforms.Dispose();
+                this.DrawData.Dispose();
+                this.DrawTags.Dispose();
+                this.PathData.Dispose();
+                this.PathTags.Dispose();
+            }
         }
+
+        /// <summary>
+        /// Marks the main scene streams as detached so disposal does not free retained partition storage.
+        /// </summary>
+        public void MarkStreamsDetached() => this.streamsDetached = true;
 
         /// <summary>
         /// Marks the gradient pixel stream as detached so disposal does not free it twice.
@@ -330,21 +850,36 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Appends all supported scene operations into the mutable scene streams.
         /// </summary>
-        internal bool TryBuild(CompositionScene scene, out string? error)
+        internal bool TryBuild(
+            DrawingCommandBatch scene,
+            in SceneEncodingPlan plan,
+            out string? error)
+            => this.TryBuild(scene, plan, 0, scene.CommandCount, out error);
+
+        /// <summary>
+        /// Appends a contiguous command range into this partition's mutable scene streams.
+        /// </summary>
+        internal bool TryBuild(
+            DrawingCommandBatch scene,
+            in SceneEncodingPlan plan,
+            int commandStart,
+            int commandEnd,
+            out string? error)
         {
-            for (int i = 0; i < scene.CommandCount; i++)
+            for (int i = commandStart; i < commandEnd; i++)
             {
                 CompositionSceneCommand command = scene.Commands[i];
+                LinearGeometry? geometry = plan.GetGeometry(i);
                 if (command is PathCompositionSceneCommand pathCommand)
                 {
-                    if (!this.TryAppend(pathCommand.Command, out error))
+                    if (!this.TryAppend(pathCommand.Command, geometry, out error))
                     {
                         return false;
                     }
                 }
                 else if (command is StrokePathCompositionSceneCommand strokePathCommand)
                 {
-                    if (!this.TryAppend(strokePathCommand.Command, out error))
+                    if (!this.TryAppend(strokePathCommand.Command, geometry, out error))
                     {
                         return false;
                     }
@@ -358,7 +893,7 @@ internal static class WebGPUSceneEncoder
                 }
                 else
                 {
-                    if (!this.TryAppend(((PolylineCompositionSceneCommand)command).Command, out error))
+                    if (!this.TryAppend(((PolylineCompositionSceneCommand)command).Command, geometry, out error))
                     {
                         return false;
                     }
@@ -372,7 +907,10 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Appends one prepared fill-path or layer-based command to the scene streams when the command kind is supported.
         /// </summary>
-        private bool TryAppend(in CompositionCommand command, out string? error)
+        private bool TryAppend(
+            in CompositionCommand command,
+            LinearGeometry? geometry,
+            out string? error)
         {
             switch (command.Kind)
             {
@@ -391,7 +929,7 @@ internal static class WebGPUSceneEncoder
                     Matrix4x4 fillResidual = ComputeResidual(ExtractScale(command.Transform), command.Transform);
                     this.AppendTransformIfChanged(GetSceneTransform(fillResidual, resolved.RasterizerOptions.SamplingOrigin));
 
-                    this.AppendPlainFill(resolved);
+                    this.AppendPlainFill(resolved, geometry);
                     error = null;
                     return true;
 
@@ -413,7 +951,10 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Appends one prepared stroked path command to the scene streams.
         /// </summary>
-        private bool TryAppend(in StrokePathCommand command, out string? error)
+        private bool TryAppend(
+            in StrokePathCommand command,
+            LinearGeometry? geometry,
+            out string? error)
         {
             if (!TryResolveCommand(command, out ResolvedPathCommand resolved))
             {
@@ -428,7 +969,7 @@ internal static class WebGPUSceneEncoder
 
             Matrix4x4 strokeResidual = ComputeResidual(ExtractScale(command.Transform), command.Transform);
             this.AppendTransformIfChanged(GetSceneTransform(strokeResidual, resolved.RasterizerOptions.SamplingOrigin));
-            this.AppendPlainStroke(resolved, command.Pen);
+            this.AppendPlainStroke(resolved, command.Pen, geometry);
             error = null;
             return true;
         }
@@ -474,7 +1015,10 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Appends one prepared explicit polyline stroke to the scene streams.
         /// </summary>
-        private bool TryAppend(in StrokePolylineCommand command, out string? error)
+        private bool TryAppend(
+            in StrokePolylineCommand command,
+            LinearGeometry? geometry,
+            out string? error)
         {
             if (!TryResolveCommand(command, out ResolvedPolylineCommand resolved))
             {
@@ -490,7 +1034,7 @@ internal static class WebGPUSceneEncoder
             Vector2 polylineScale = ExtractScale(command.Transform);
             Matrix4x4 polylineResidual = ComputeResidual(polylineScale, command.Transform);
             this.AppendTransformIfChanged(GetSceneTransform(polylineResidual, resolved.RasterizerOptions.SamplingOrigin));
-            LinearGeometry geometry = LinearGeometry.CreateOpenPolyline(resolved.Points, polylineScale);
+            geometry ??= LinearGeometry.CreateOpenPolyline(resolved.Points, polylineScale);
             float widthScale = GetTransformWidthScale(command.Transform);
             this.AppendExplicitStroke(
                 resolved.Brush,
@@ -565,7 +1109,9 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Encodes one visible fill command into the path, draw, style, and auxiliary payload streams.
         /// </summary>
-        private void AppendPlainFill(in ResolvedPathCommand command)
+        private void AppendPlainFill(
+            in ResolvedPathCommand command,
+            LinearGeometry? geometry)
         {
             uint drawTag = GetDrawTag(command.Brush);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
@@ -580,7 +1126,7 @@ internal static class WebGPUSceneEncoder
                 style3 != this.lastStyle3 ||
                 style4 != this.lastStyle4;
             Vector2 scale = ExtractScale(command.Transform);
-            LinearGeometry geometry = command.Path.ToLinearGeometry(scale);
+            geometry ??= command.Path.ToLinearGeometry(scale);
 
             // Reserve the exact words/tags this item can append before encoding so the
             // subsequent Add calls stay on the already-allocated contiguous spans.
@@ -644,7 +1190,6 @@ internal static class WebGPUSceneEncoder
                 drawTag,
                 scale,
                 command.Transform,
-                command.DestinationOffset,
                 this.rootTargetBounds,
                 ref this.DrawData,
                 ref this.GradientPixels,
@@ -657,10 +1202,13 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Encodes one visible stroke command into the path, draw, style, and auxiliary payload streams.
         /// </summary>
-        private void AppendPlainStroke(in ResolvedPathCommand command, Pen pen)
+        private void AppendPlainStroke(
+            in ResolvedPathCommand command,
+            Pen pen,
+            LinearGeometry? geometry)
         {
             Vector2 scale = ExtractScale(command.Transform);
-            LinearGeometry geometry = command.Path.ToLinearGeometry(scale);
+            geometry ??= command.Path.ToLinearGeometry(scale);
             float widthScale = GetTransformWidthScale(command.Transform);
             uint drawTag = GetDrawTag(command.Brush);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
@@ -735,7 +1283,6 @@ internal static class WebGPUSceneEncoder
                 drawTag,
                 scale,
                 command.Transform,
-                command.DestinationOffset,
                 this.rootTargetBounds,
                 ref this.DrawData,
                 ref this.GradientPixels,
@@ -833,7 +1380,6 @@ internal static class WebGPUSceneEncoder
                 drawTag,
                 scale,
                 transform,
-                destinationOffset,
                 this.rootTargetBounds,
                 ref this.DrawData,
                 ref this.GradientPixels,
@@ -932,7 +1478,6 @@ internal static class WebGPUSceneEncoder
                 drawTag,
                 scale,
                 transform,
-                destinationOffset,
                 this.rootTargetBounds,
                 ref this.DrawData,
                 ref this.GradientPixels,
@@ -1037,24 +1582,314 @@ internal static class WebGPUSceneEncoder
         }
 
         /// <summary>
-        /// Encodes the closing record for the innermost open layer, if one exists.
+        /// Encodes the closing record for the next end-layer command in the retained timeline.
         /// </summary>
         private void AppendEndLayer()
         {
-            if (this.openLayerBounds is not { Count: > 0 })
+            if (this.openLayerBounds is { Count: > 0 })
             {
-                return;
+                this.openLayerBounds.RemoveAt(this.openLayerBounds.Count - 1);
             }
 
-            this.openLayerBounds.RemoveAt(this.openLayerBounds.Count - 1);
-
             // End-layer emission is fixed-size: one EndClip draw tag and one PathTagPath
-            // terminator for the zero-data end marker.
+            // terminator for the zero-data end marker. In parallel encoding, a partition can
+            // see the closing layer command without the matching opener, so the command itself
+            // is the ordering contract rather than the local estimate stack.
             ReserveEndLayerCapacity(ref this.PathTags, ref this.DrawTags);
             this.DrawTags.Add(GpuSceneDrawTag.EndClip);
             this.PathTags.Add(PackPathTag(PathTag.Path));
             this.PathCount++;
             this.ClipCount++;
+        }
+    }
+
+    /// <summary>
+    /// Owns one command-range encoding produced by the parallel scene encoder.
+    /// </summary>
+    private sealed class SceneEncodingPartition : IDisposable
+    {
+        private readonly IMemoryOwner<byte> pathTagsOwner;
+        private readonly IMemoryOwner<uint> pathDataOwner;
+        private readonly IMemoryOwner<uint> drawTagsOwner;
+        private readonly IMemoryOwner<uint> drawDataOwner;
+        private readonly IMemoryOwner<uint> transformsOwner;
+        private readonly IMemoryOwner<uint> stylesOwner;
+        private readonly IMemoryOwner<uint>? gradientPixelsOwner;
+        private readonly IMemoryOwner<uint>? pathGradientDataOwner;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SceneEncodingPartition"/> class.
+        /// </summary>
+        private SceneEncodingPartition(
+            IMemoryOwner<byte> pathTagsOwner,
+            IMemoryOwner<uint> pathDataOwner,
+            IMemoryOwner<uint> drawTagsOwner,
+            IMemoryOwner<uint> drawDataOwner,
+            IMemoryOwner<uint> transformsOwner,
+            IMemoryOwner<uint> stylesOwner,
+            IMemoryOwner<uint>? gradientPixelsOwner,
+            IMemoryOwner<uint>? pathGradientDataOwner,
+            List<GpuImageDescriptor> images,
+            int fillCount,
+            int visibleFillCount,
+            int pathCount,
+            int lineCount,
+            int infoWordCount,
+            int clipCount,
+            int gradientRowCount,
+            int estimatedPathRowCount,
+            int pathTagByteCount,
+            int pathDataWordCount,
+            int drawTagCount,
+            int drawDataWordCount,
+            int transformWordCount,
+            int styleWordCount,
+            int pathGradientDataWordCount,
+            RasterizationMode fineRasterizationMode,
+            float fineCoverageThreshold)
+        {
+            this.pathTagsOwner = pathTagsOwner;
+            this.pathDataOwner = pathDataOwner;
+            this.drawTagsOwner = drawTagsOwner;
+            this.drawDataOwner = drawDataOwner;
+            this.transformsOwner = transformsOwner;
+            this.stylesOwner = stylesOwner;
+            this.gradientPixelsOwner = gradientPixelsOwner;
+            this.pathGradientDataOwner = pathGradientDataOwner;
+            this.Images = images;
+            this.FillCount = fillCount;
+            this.VisibleFillCount = visibleFillCount;
+            this.PathCount = pathCount;
+            this.LineCount = lineCount;
+            this.InfoWordCount = infoWordCount;
+            this.ClipCount = clipCount;
+            this.GradientRowCount = gradientRowCount;
+            this.EstimatedPathRowCount = estimatedPathRowCount;
+            this.PathTagByteCount = pathTagByteCount;
+            this.PathDataWordCount = pathDataWordCount;
+            this.DrawTagCount = drawTagCount;
+            this.DrawDataWordCount = drawDataWordCount;
+            this.TransformWordCount = transformWordCount;
+            this.StyleWordCount = styleWordCount;
+            this.PathGradientDataWordCount = pathGradientDataWordCount;
+            this.FineRasterizationMode = fineRasterizationMode;
+            this.FineCoverageThreshold = fineCoverageThreshold;
+        }
+
+        /// <summary>
+        /// Gets the encoded path-tag bytes.
+        /// </summary>
+        public ReadOnlySpan<byte> PathTags => this.pathTagsOwner.Memory.Span[..this.PathTagByteCount];
+
+        /// <summary>
+        /// Gets the encoded path-data words.
+        /// </summary>
+        public ReadOnlySpan<uint> PathData => this.pathDataOwner.Memory.Span[..this.PathDataWordCount];
+
+        /// <summary>
+        /// Gets the encoded draw tags.
+        /// </summary>
+        public ReadOnlySpan<uint> DrawTags => this.drawTagsOwner.Memory.Span[..this.DrawTagCount];
+
+        /// <summary>
+        /// Gets the encoded draw-data words.
+        /// </summary>
+        public ReadOnlySpan<uint> DrawData => this.drawDataOwner.Memory.Span[..this.DrawDataWordCount];
+
+        /// <summary>
+        /// Gets the encoded transform words.
+        /// </summary>
+        public ReadOnlySpan<uint> Transforms => this.transformsOwner.Memory.Span[..this.TransformWordCount];
+
+        /// <summary>
+        /// Gets the encoded style words.
+        /// </summary>
+        public ReadOnlySpan<uint> Styles => this.stylesOwner.Memory.Span[..this.StyleWordCount];
+
+        /// <summary>
+        /// Gets the packed gradient-ramp pixels.
+        /// </summary>
+        public ReadOnlySpan<uint> GradientPixels
+            => this.gradientPixelsOwner is null
+                ? ReadOnlySpan<uint>.Empty
+                : this.gradientPixelsOwner.Memory.Span[..(this.GradientRowCount * GradientWidth)];
+
+        /// <summary>
+        /// Gets the encoded path-gradient payload words.
+        /// </summary>
+        public ReadOnlySpan<uint> PathGradientData
+            => this.pathGradientDataOwner is null
+                ? ReadOnlySpan<uint>.Empty
+                : this.pathGradientDataOwner.Memory.Span[..this.PathGradientDataWordCount];
+
+        /// <summary>
+        /// Gets the deferred image descriptors recorded by this partition.
+        /// </summary>
+        public List<GpuImageDescriptor> Images { get; }
+
+        /// <summary>
+        /// Gets the number of emitted fill records.
+        /// </summary>
+        public int FillCount { get; }
+
+        /// <summary>
+        /// Gets the number of visible fills accepted by staged-scene validation.
+        /// </summary>
+        public int VisibleFillCount { get; }
+
+        /// <summary>
+        /// Gets the number of emitted paths.
+        /// </summary>
+        public int PathCount { get; }
+
+        /// <summary>
+        /// Gets the number of emitted non-horizontal lines.
+        /// </summary>
+        public int LineCount { get; }
+
+        /// <summary>
+        /// Gets the total info-word count implied by the emitted draw tags.
+        /// </summary>
+        public int InfoWordCount { get; }
+
+        /// <summary>
+        /// Gets the number of emitted clip records.
+        /// </summary>
+        public int ClipCount { get; }
+
+        /// <summary>
+        /// Gets the number of emitted gradient-ramp rows.
+        /// </summary>
+        public int GradientRowCount { get; }
+
+        /// <summary>
+        /// Gets the CPU-side estimate of active tile rows referenced by sparse path metadata.
+        /// </summary>
+        public int EstimatedPathRowCount { get; }
+
+        /// <summary>
+        /// Gets the unpadded path-tag byte count.
+        /// </summary>
+        public int PathTagByteCount { get; }
+
+        /// <summary>
+        /// Gets the path-data word count.
+        /// </summary>
+        public int PathDataWordCount { get; }
+
+        /// <summary>
+        /// Gets the draw-tag count.
+        /// </summary>
+        public int DrawTagCount { get; }
+
+        /// <summary>
+        /// Gets the draw-data word count.
+        /// </summary>
+        public int DrawDataWordCount { get; }
+
+        /// <summary>
+        /// Gets the transform word count.
+        /// </summary>
+        public int TransformWordCount { get; }
+
+        /// <summary>
+        /// Gets the style word count.
+        /// </summary>
+        public int StyleWordCount { get; }
+
+        /// <summary>
+        /// Gets the encoded path-gradient payload word count.
+        /// </summary>
+        public int PathGradientDataWordCount { get; }
+
+        /// <summary>
+        /// Gets the fine-pass rasterization mode selected by this partition.
+        /// </summary>
+        public RasterizationMode FineRasterizationMode { get; }
+
+        /// <summary>
+        /// Gets the aliased coverage threshold selected by this partition.
+        /// </summary>
+        public float FineCoverageThreshold { get; }
+
+        /// <summary>
+        /// Detaches all retained streams from a mutable partition encoder.
+        /// </summary>
+        public static SceneEncodingPartition Detach(ref SupportedSubsetSceneEncoding encoding)
+        {
+            int pathTagByteCount = encoding.PathTags.Count;
+            int pathDataWordCount = encoding.PathData.Count;
+            int drawTagCount = encoding.DrawTags.Count;
+            int drawDataWordCount = encoding.DrawData.Count;
+            int transformWordCount = encoding.Transforms.Count;
+            int styleWordCount = encoding.Styles.Count;
+            int pathGradientDataWordCount = encoding.PathGradientData.Count;
+            int gradientRowCount = encoding.GradientRowCount;
+
+            IMemoryOwner<byte> pathTagsOwner = encoding.PathTags.DetachOwner();
+            IMemoryOwner<uint> pathDataOwner = encoding.PathData.DetachOwner();
+            IMemoryOwner<uint> drawTagsOwner = encoding.DrawTags.DetachOwner();
+            IMemoryOwner<uint> drawDataOwner = encoding.DrawData.DetachOwner();
+            IMemoryOwner<uint> transformsOwner = encoding.Transforms.DetachOwner();
+            IMemoryOwner<uint> stylesOwner = encoding.Styles.DetachOwner();
+            encoding.MarkStreamsDetached();
+
+            IMemoryOwner<uint>? gradientPixelsOwner = null;
+            if (gradientRowCount > 0)
+            {
+                gradientPixelsOwner = encoding.GradientPixels.DetachOwner();
+                encoding.MarkGradientPixelsDetached();
+            }
+
+            IMemoryOwner<uint>? pathGradientDataOwner = null;
+            if (pathGradientDataWordCount > 0)
+            {
+                pathGradientDataOwner = encoding.PathGradientData.DetachOwner();
+                encoding.MarkPathGradientDataDetached();
+            }
+
+            return new SceneEncodingPartition(
+                pathTagsOwner,
+                pathDataOwner,
+                drawTagsOwner,
+                drawDataOwner,
+                transformsOwner,
+                stylesOwner,
+                gradientPixelsOwner,
+                pathGradientDataOwner,
+                encoding.Images,
+                encoding.FillCount,
+                encoding.VisibleFillCount,
+                encoding.PathCount,
+                encoding.LineCount,
+                encoding.InfoWordCount,
+                encoding.ClipCount,
+                gradientRowCount,
+                encoding.EstimatedPathRowCount,
+                pathTagByteCount,
+                pathDataWordCount,
+                drawTagCount,
+                drawDataWordCount,
+                transformWordCount,
+                styleWordCount,
+                pathGradientDataWordCount,
+                encoding.FineRasterizationMode,
+                encoding.FineCoverageThreshold);
+        }
+
+        /// <summary>
+        /// Releases all retained partition stream buffers.
+        /// </summary>
+        public void Dispose()
+        {
+            this.pathTagsOwner.Dispose();
+            this.pathDataOwner.Dispose();
+            this.drawTagsOwner.Dispose();
+            this.drawDataOwner.Dispose();
+            this.transformsOwner.Dispose();
+            this.stylesOwner.Dispose();
+            this.gradientPixelsOwner?.Dispose();
+            this.pathGradientDataOwner?.Dispose();
         }
     }
 
@@ -1145,6 +1980,214 @@ internal static class WebGPUSceneEncoder
             {
                 sceneDataOwner.Dispose();
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// Resolves ordered partition encodings into the final packed scene buffers.
+        /// </summary>
+        public static WebGPUEncodedScene Resolve(
+            SceneEncodingPartition?[] partitions,
+            in Rectangle targetBounds,
+            MemoryAllocator allocator,
+            RasterizationMode fineRasterizationMode,
+            float fineCoverageThreshold)
+        {
+            int pathTagByteCount = 0;
+            int pathDataWordCount = 0;
+            int drawTagCount = 0;
+            int drawDataWordCount = 0;
+            int transformWordCount = 0;
+            int styleWordCount = 0;
+            int pathGradientDataWordCount = 0;
+            int imageCount = 0;
+            int gradientRowCount = 0;
+            int fillCount = 0;
+            int pathCount = 0;
+            int lineCount = 0;
+            int infoWordCount = 0;
+            int clipCount = 0;
+            long estimatedPathRowCount = 0;
+
+            for (int i = 0; i < partitions.Length; i++)
+            {
+                SceneEncodingPartition partition = partitions[i]!;
+                pathTagByteCount += partition.PathTagByteCount;
+                pathDataWordCount += partition.PathDataWordCount;
+                drawTagCount += partition.DrawTagCount;
+                drawDataWordCount += partition.DrawDataWordCount;
+                transformWordCount += partition.TransformWordCount;
+                styleWordCount += partition.StyleWordCount;
+                pathGradientDataWordCount += partition.PathGradientDataWordCount;
+                imageCount += partition.Images.Count;
+                gradientRowCount += partition.GradientRowCount;
+                fillCount += partition.FillCount;
+                pathCount += partition.PathCount;
+                lineCount += partition.LineCount;
+                infoWordCount += partition.InfoWordCount;
+                clipCount += partition.ClipCount;
+                estimatedPathRowCount = Math.Min(estimatedPathRowCount + partition.EstimatedPathRowCount, int.MaxValue);
+            }
+
+            int pathTagWordCount = AlignUp(DivideRoundUp(pathTagByteCount, 4), 256);
+            int drawTagBase = pathTagWordCount + pathDataWordCount;
+            int drawDataBase = drawTagBase + drawTagCount;
+            int transformBase = drawDataBase + drawDataWordCount;
+            int styleBase = transformBase + transformWordCount;
+            int sceneWordCount = styleBase + styleWordCount;
+            GpuSceneLayout layout = new(
+                (uint)drawTagCount,
+                (uint)pathCount,
+                (uint)clipCount,
+                (uint)(infoWordCount + pathGradientDataWordCount),
+                (uint)infoWordCount,
+                0U,
+                0U,
+                (uint)pathTagWordCount,
+                (uint)drawTagBase,
+                (uint)drawDataBase,
+                (uint)transformBase,
+                (uint)styleBase);
+
+            IMemoryOwner<uint>? sceneDataOwner = allocator.Allocate<uint>(sceneWordCount);
+            IMemoryOwner<uint>? gradientPixelsOwner = gradientRowCount == 0 ? null : allocator.Allocate<uint>(gradientRowCount * GradientWidth);
+            IMemoryOwner<uint>? pathGradientDataOwner = pathGradientDataWordCount == 0 ? null : allocator.Allocate<uint>(pathGradientDataWordCount);
+            try
+            {
+                Span<uint> sceneWords = sceneDataOwner.Memory.Span[..sceneWordCount];
+                Span<byte> sceneBytes = MemoryMarshal.Cast<uint, byte>(sceneWords);
+                List<GpuImageDescriptor> images = new(imageCount);
+                int pathTagOffset = 0;
+                int pathDataOffset = 0;
+                int drawTagOffset = 0;
+                int drawDataOffset = 0;
+                int transformOffset = 0;
+                int styleOffset = 0;
+                int gradientRowOffset = 0;
+                int gradientPixelOffset = 0;
+                int pathGradientDataOffset = 0;
+
+                for (int i = 0; i < partitions.Length; i++)
+                {
+                    SceneEncodingPartition partition = partitions[i]!;
+                    partition.PathTags.CopyTo(sceneBytes[pathTagOffset..]);
+                    pathTagOffset += partition.PathTagByteCount;
+
+                    partition.PathData.CopyTo(sceneWords.Slice((int)layout.PathDataBase + pathDataOffset, partition.PathDataWordCount));
+                    pathDataOffset += partition.PathDataWordCount;
+
+                    partition.DrawTags.CopyTo(sceneWords.Slice((int)layout.DrawTagBase + drawTagOffset, partition.DrawTagCount));
+                    drawTagOffset += partition.DrawTagCount;
+
+                    CopyDrawDataWithOffsets(
+                        partition,
+                        sceneWords.Slice((int)layout.DrawDataBase + drawDataOffset, partition.DrawDataWordCount),
+                        gradientRowOffset,
+                        pathGradientDataOffset);
+
+                    for (int imageIndex = 0; imageIndex < partition.Images.Count; imageIndex++)
+                    {
+                        GpuImageDescriptor image = partition.Images[imageIndex];
+                        images.Add(new GpuImageDescriptor(image.Brush, drawDataOffset + image.DrawDataWordOffset));
+                    }
+
+                    drawDataOffset += partition.DrawDataWordCount;
+
+                    partition.Transforms.CopyTo(sceneWords.Slice((int)layout.TransformBase + transformOffset, partition.TransformWordCount));
+                    transformOffset += partition.TransformWordCount;
+
+                    partition.Styles.CopyTo(sceneWords.Slice((int)layout.StyleBase + styleOffset, partition.StyleWordCount));
+                    styleOffset += partition.StyleWordCount;
+
+                    if (partition.GradientRowCount > 0)
+                    {
+                        partition.GradientPixels.CopyTo(gradientPixelsOwner!.Memory.Span.Slice(gradientPixelOffset, partition.GradientRowCount * GradientWidth));
+                        gradientPixelOffset += partition.GradientRowCount * GradientWidth;
+                    }
+
+                    if (partition.PathGradientDataWordCount > 0)
+                    {
+                        partition.PathGradientData.CopyTo(pathGradientDataOwner!.Memory.Span.Slice(pathGradientDataOffset, partition.PathGradientDataWordCount));
+                    }
+
+                    gradientRowOffset += partition.GradientRowCount;
+                    pathGradientDataOffset += partition.PathGradientDataWordCount;
+                }
+
+                sceneBytes[pathTagByteCount..(pathTagWordCount * sizeof(uint))].Clear();
+                WebGPUEncodedScene resolved = new(
+                    targetBounds.Size,
+                    infoWordCount,
+                    sceneDataOwner,
+                    sceneWordCount,
+                    gradientPixelsOwner,
+                    pathGradientDataOwner,
+                    pathGradientDataWordCount,
+                    images,
+                    gradientRowCount,
+                    layout,
+                    fillCount,
+                    pathCount,
+                    lineCount,
+                    pathTagByteCount,
+                    pathTagWordCount,
+                    pathDataWordCount,
+                    drawTagCount,
+                    drawDataWordCount,
+                    transformWordCount,
+                    styleWordCount,
+                    clipCount,
+                    fillCount,
+                    Math.Max((int)estimatedPathRowCount, pathCount),
+                    DivideRoundUp(targetBounds.Width, TileWidth),
+                    DivideRoundUp(targetBounds.Height, TileHeight),
+                    fineRasterizationMode,
+                    fineCoverageThreshold);
+
+                sceneDataOwner = null;
+                gradientPixelsOwner = null;
+                pathGradientDataOwner = null;
+                return resolved;
+            }
+            finally
+            {
+                sceneDataOwner?.Dispose();
+                gradientPixelsOwner?.Dispose();
+                pathGradientDataOwner?.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Copies draw-data while rebasing partition-local auxiliary payload offsets into final scene offsets.
+        /// </summary>
+        private static void CopyDrawDataWithOffsets(
+            SceneEncodingPartition partition,
+            Span<uint> destination,
+            int gradientRowOffset,
+            int pathGradientDataOffset)
+        {
+            ReadOnlySpan<uint> drawTags = partition.DrawTags;
+            ReadOnlySpan<uint> drawData = partition.DrawData;
+            int sourceOffset = 0;
+            int destinationOffset = 0;
+
+            for (int i = 0; i < drawTags.Length; i++)
+            {
+                uint drawTag = drawTags[i];
+                int wordCount = GetDrawDataWordCount(drawTag);
+                drawData.Slice(sourceOffset, wordCount).CopyTo(destination[destinationOffset..]);
+
+                if (DrawTagUsesGradientRamp(drawTag))
+                {
+                    destination[destinationOffset] += (uint)(gradientRowOffset << 2);
+                }
+                else if (drawTag == GpuSceneDrawTag.FillPathGradient)
+                {
+                    destination[destinationOffset] += (uint)pathGradientDataOffset;
+                }
+
+                sourceOffset += wordCount;
+                destinationOffset += wordCount;
             }
         }
 
@@ -2005,6 +3048,7 @@ internal static class WebGPUSceneEncoder
             GpuSceneDrawTag.FillSweepGradient => 5,
             GpuSceneDrawTag.FillPathGradient => 4,
             GpuSceneDrawTag.FillImage => 5,
+            GpuSceneDrawTag.EndClip => 0,
             _ => throw new UnreachableException($"Unsupported draw tag '{drawTag}' reached draw-data sizing.")
         };
 
@@ -2223,7 +3267,6 @@ internal static class WebGPUSceneEncoder
         uint drawTag,
         Vector2 scale,
         Matrix4x4 transform,
-        Point destinationOffset,
         Rectangle rootTargetBounds,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,

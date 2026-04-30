@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Options for creating a <see cref="WebGPUWindow{TPixel}"/>.
+/// Options for creating a <see cref="WebGPUWindow"/>.
 /// </summary>
 /// <remarks>
 /// These values describe the initial window and scheduling configuration used during construction. Most callers only
@@ -82,4 +82,9 @@ public sealed class WebGPUWindowOptions
     /// <see cref="WebGPUPresentMode.Mailbox"/> when you want newer-frame-wins behavior and the backend supports it.
     /// </remarks>
     public WebGPUPresentMode PresentMode { get; set; } = WebGPUPresentMode.Fifo;
+
+    /// <summary>
+    /// Gets or sets the swapchain texture format used by acquired frames.
+    /// </summary>
+    public WebGPUTextureFormat Format { get; set; } = WebGPUTextureFormat.Rgba8Unorm;
 }

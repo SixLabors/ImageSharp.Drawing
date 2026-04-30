@@ -14,8 +14,6 @@ public partial class DrawingCanvasTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> target = provider.GetImage();
-        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions());
-
         Brush linearBrush = new LinearGradientBrush(
             new PointF(18, 22),
             new PointF(192, 140),
@@ -33,12 +31,14 @@ public partial class DrawingCanvasTests
 
         Brush hatchBrush = Brushes.ForwardDiagonal(Color.DarkSlateGray.WithAlpha(0.7F), Color.Transparent);
 
-        canvas.Clear(Brushes.Solid(Color.White));
-        canvas.Fill(linearBrush, new Rectangle(14, 14, 176, 126));
-        canvas.Fill(radialBrush, new EllipsePolygon(new PointF(236, 90), new SizeF(132, 98)));
-        canvas.Fill(hatchBrush, CreateClosedPathBuilder());
-        canvas.Draw(Pens.DashDot(Color.Black, 3), new Rectangle(10, 10, 300, 180));
-        canvas.Flush();
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.Fill(linearBrush, new Rectangle(14, 14, 176, 126));
+            canvas.Fill(radialBrush, new EllipsePolygon(new PointF(236, 90), new SizeF(132, 98)));
+            canvas.Fill(hatchBrush, CreateClosedPathBuilder());
+            canvas.Draw(Pens.DashDot(Color.Black, 3), new Rectangle(10, 10, 300, 180));
+        }
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
@@ -50,8 +50,6 @@ public partial class DrawingCanvasTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> target = provider.GetImage();
-        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions());
-
         Brush gradientBrush = new LinearGradientBrush(
             new PointF(0, 0),
             new PointF(320, 0),
@@ -68,12 +66,14 @@ public partial class DrawingCanvasTests
         Pen dashDotPen = Pens.DashDot(percentBrush, 4F);
         Pen dashDotDotPen = Pens.DashDotDot(Color.Black.WithAlpha(0.75F), 3F);
 
-        canvas.Clear(Brushes.Solid(Color.White));
-        canvas.Draw(dashPen, new Rectangle(16, 14, 288, 170));
-        canvas.DrawEllipse(dotPen, new PointF(162, 100), new SizeF(206, 116));
-        canvas.DrawArc(dashDotPen, new PointF(160, 100), new SizeF(148, 84), rotation: 0, startAngle: 20, sweepAngle: 300);
-        canvas.DrawLine(dashDotDotPen, new PointF(26, 174), new PointF(108, 22), new PointF(212, 164), new PointF(292, 26));
-        canvas.Flush();
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.Draw(dashPen, new Rectangle(16, 14, 288, 170));
+            canvas.DrawEllipse(dotPen, new PointF(162, 100), new SizeF(206, 116));
+            canvas.DrawArc(dashDotPen, new PointF(160, 100), new SizeF(148, 84), rotation: 0, startAngle: 20, sweepAngle: 300);
+            canvas.DrawLine(dashDotDotPen, new PointF(26, 174), new PointF(108, 22), new PointF(212, 164), new PointF(292, 26));
+        }
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);

@@ -29,7 +29,7 @@ public class DrawTextRepeatedGlyphs
     private readonly Brush brush = Brushes.Solid(Color.HotPink);
 
     private Image<Rgba32> defaultImage;
-    private WebGPURenderTarget<Rgba32> webGpuTarget;
+    private WebGPURenderTarget webGpuTarget;
     private RichTextOptions textOptions;
     private string text;
 
@@ -54,7 +54,7 @@ public class DrawTextRepeatedGlyphs
         };
 
         this.defaultImage = new Image<Rgba32>(Width, Height);
-        this.webGpuTarget = new WebGPURenderTarget<Rgba32>(Width, Height);
+        this.webGpuTarget = new WebGPURenderTarget(Width, Height);
 
         this.text = new string('A', this.GlyphCount);
     }

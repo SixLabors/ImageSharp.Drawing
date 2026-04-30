@@ -37,7 +37,7 @@ public abstract class DrawPolygon
 
     private IPath imageSharpPath;
 
-    private WebGPURenderTarget<Rgba32> webGpuTarget;
+    private WebGPURenderTarget webGpuTarget;
 
     protected abstract int Width { get; }
 
@@ -106,7 +106,7 @@ public abstract class DrawPolygon
 
         this.image = new Image<Rgba32>(this.Width, this.Height);
         this.isPen = new SolidPen(Color.White, this.Thickness);
-        this.webGpuTarget = new WebGPURenderTarget<Rgba32>(this.Width, this.Height);
+        this.webGpuTarget = new WebGPURenderTarget(this.Width, this.Height);
 
         this.sdBitmap = new Bitmap(this.Width, this.Height);
         this.sdGraphics = Graphics.FromImage(this.sdBitmap);

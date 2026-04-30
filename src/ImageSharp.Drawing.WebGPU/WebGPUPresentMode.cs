@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Presentation mode used by <see cref="WebGPUWindow{TPixel}"/>.
+/// Presentation mode used by <see cref="WebGPUWindow"/>.
 /// </summary>
 /// <remarks>
 /// Presentation mode controls how completed frames wait for the display. The choice affects tearing, latency,

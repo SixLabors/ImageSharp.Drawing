@@ -47,10 +47,17 @@ public class RasterizerDefaultsExtensionsTests
 
     private sealed class RecordingDrawingBackend : IDrawingBackend
     {
-        public void FlushCompositions<TPixel>(
+        public DrawingBackendScene CreateScene(
+            Configuration configuration,
+            Rectangle targetBounds,
+            DrawingCommandBatch commandBatch,
+            IReadOnlyList<IDisposable>? ownedResources = null)
+            => new RecordingScene(targetBounds, ownedResources);
+
+        public void RenderScene<TPixel>(
             Configuration configuration,
             ICanvasFrame<TPixel> target,
-            CompositionScene compositionScene)
+            DrawingBackendScene scene)
             where TPixel : unmanaged, IPixel<TPixel>
         {
         }
@@ -63,6 +70,20 @@ public class RasterizerDefaultsExtensionsTests
             where TPixel : unmanaged, IPixel<TPixel>
         {
             throw new NotSupportedException();
+        }
+
+        private sealed class RecordingScene : DrawingBackendScene
+        {
+            public RecordingScene(
+                Rectangle bounds,
+                IReadOnlyList<IDisposable>? ownedResources)
+                : base(bounds, ownedResources)
+            {
+            }
+
+            protected override void DisposeCore()
+            {
+            }
         }
     }
 }
