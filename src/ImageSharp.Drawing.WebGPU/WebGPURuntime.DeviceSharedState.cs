@@ -651,6 +651,5 @@ internal static unsafe partial class WebGPURuntime
 
             public ComputePipeline* Pipeline { get; set; }
         }
-
     }
 }

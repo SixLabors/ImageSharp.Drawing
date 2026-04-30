@@ -223,12 +223,11 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// </summary>
     /// <param name="requiredBytes">The required number of bytes for the current flush.</param>
     /// <param name="minimumCapacityBytes">The minimum allocation size to enforce when creating a new buffer.</param>
-    /// <returns><see langword="true"/> if the buffer is available with sufficient capacity; otherwise <see langword="false"/>.</returns>
-    public bool EnsureInstanceBufferCapacity(nuint requiredBytes, nuint minimumCapacityBytes)
+    public void EnsureInstanceBufferCapacity(nuint requiredBytes, nuint minimumCapacityBytes)
     {
         if (this.InstanceBuffer is not null && this.InstanceBufferCapacity >= requiredBytes)
         {
-            return true;
+            return;
         }
 
         if (this.InstanceBuffer is not null)
@@ -247,13 +246,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         using WebGPUHandle.HandleReference deviceReference = this.DeviceHandle.AcquireReference();
         this.InstanceBuffer = this.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in descriptor);
-        if (this.InstanceBuffer is null)
-        {
-            return false;
-        }
-
         this.InstanceBufferCapacity = targetSize;
-        return true;
     }
 
     /// <summary>

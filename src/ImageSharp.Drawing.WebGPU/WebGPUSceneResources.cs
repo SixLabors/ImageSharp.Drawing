@@ -90,102 +90,33 @@ internal static unsafe class WebGPUSceneResources
         }
 
         // Arena miss; create all buffers fresh and build a new arena.
-        // Dispose() releases the native buffers, so clear the ref immediately.
-        // Otherwise a later failure path could return a disposed arena to the scene/backend cache.
         WebGPUSceneResourceArena.Dispose(arena);
         arena = null;
 
-        if (!TryCreateAndUploadCombinedInfoBinDataBuffer(
-                flushContext,
-                scene.InfoWordCount,
-                scene.PathGradientData.Span,
-                checked(config.BufferSizes.BinData.ByteLength + config.BufferSizes.BinHeaders.ByteLength),
-                out WgpuBuffer* infoBinDataBuffer,
-                out error))
-        {
-            return false;
-        }
+        WgpuBuffer* infoBinDataBuffer = CreateAndUploadCombinedInfoBinDataBuffer(
+            flushContext,
+            scene.InfoWordCount,
+            scene.PathGradientData.Span,
+            checked(config.BufferSizes.BinData.ByteLength + config.BufferSizes.BinHeaders.ByteLength));
 
-        if (!TryCreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], config.BufferSizes.PathReduced.Length, out WgpuBuffer* pathReducedBuffer, out error))
-        {
-            return false;
-        }
-
-        if (!TryCreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], config.BufferSizes.PathReduced2.Length, out WgpuBuffer* pathReduced2Buffer, out error))
-        {
-            return false;
-        }
-
-        if (!TryCreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], config.BufferSizes.PathReducedScan.Length, out WgpuBuffer* pathReducedScanBuffer, out error))
-        {
-            return false;
-        }
-
-        if (!TryCreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], config.BufferSizes.PathMonoids.Length, out WgpuBuffer* pathMonoidBuffer, out error))
-        {
-            return false;
-        }
-
-        if (!TryCreateAndUploadBuffer<GpuPathBbox>(flushContext, [], config.BufferSizes.PathBboxes.Length, out WgpuBuffer* pathBboxBuffer, out error))
-        {
-            return false;
-        }
-
-        if (!TryCreateAndUploadBuffer<GpuSceneDrawMonoid>(flushContext, [], config.BufferSizes.DrawReduced.Length, out WgpuBuffer* drawReducedBuffer, out error))
-        {
-            return false;
-        }
-
-        if (!TryCreateAndUploadBuffer<GpuSceneDrawMonoid>(flushContext, [], config.BufferSizes.DrawMonoids.Length, out WgpuBuffer* drawMonoidBuffer, out error))
-        {
-            return false;
-        }
-
-        if (!TryCreateAndUploadBuffer<GpuClipInp>(flushContext, [], config.BufferSizes.ClipInputs.Length, out WgpuBuffer* clipInputBuffer, out error))
-        {
-            return false;
-        }
-
-        if (!TryCreateAndUploadBuffer<GpuClipElement>(flushContext, [], config.BufferSizes.ClipElements.Length, out WgpuBuffer* clipElementBuffer, out error))
-        {
-            return false;
-        }
-
-        if (!TryCreateAndUploadBuffer<GpuBic>(flushContext, [], config.BufferSizes.ClipBics.Length, out WgpuBuffer* clipBicBuffer, out error))
-        {
-            return false;
-        }
-
-        if (!TryCreateAndUploadBuffer<Vector4>(flushContext, [], config.BufferSizes.ClipBboxes.Length, out WgpuBuffer* clipBboxBuffer, out error))
-        {
-            return false;
-        }
-
-        if (!TryCreateAndUploadBuffer<GpuDrawBbox>(flushContext, [], config.BufferSizes.DrawBboxes.Length, out WgpuBuffer* drawBboxBuffer, out error))
-        {
-            return false;
-        }
-
-        if (!TryCreateAndUploadBuffer<GpuScenePath>(flushContext, [], config.BufferSizes.Paths.Length, out WgpuBuffer* pathBuffer, out error))
-        {
-            return false;
-        }
-
-        if (!TryCreateAndUploadBuffer<GpuSceneLine>(flushContext, [], config.BufferSizes.Lines.Length, out WgpuBuffer* lineBuffer, out error))
-        {
-            return false;
-        }
-
-        if (!TryCreateAndUploadBuffer(flushContext, scene.SceneData.Span, (uint)scene.SceneData.Length, out WgpuBuffer* sceneBuffer, out error))
-        {
-            return false;
-        }
+        WgpuBuffer* pathReducedBuffer = CreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], config.BufferSizes.PathReduced.Length);
+        WgpuBuffer* pathReduced2Buffer = CreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], config.BufferSizes.PathReduced2.Length);
+        WgpuBuffer* pathReducedScanBuffer = CreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], config.BufferSizes.PathReducedScan.Length);
+        WgpuBuffer* pathMonoidBuffer = CreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], config.BufferSizes.PathMonoids.Length);
+        WgpuBuffer* pathBboxBuffer = CreateAndUploadBuffer<GpuPathBbox>(flushContext, [], config.BufferSizes.PathBboxes.Length);
+        WgpuBuffer* drawReducedBuffer = CreateAndUploadBuffer<GpuSceneDrawMonoid>(flushContext, [], config.BufferSizes.DrawReduced.Length);
+        WgpuBuffer* drawMonoidBuffer = CreateAndUploadBuffer<GpuSceneDrawMonoid>(flushContext, [], config.BufferSizes.DrawMonoids.Length);
+        WgpuBuffer* clipInputBuffer = CreateAndUploadBuffer<GpuClipInp>(flushContext, [], config.BufferSizes.ClipInputs.Length);
+        WgpuBuffer* clipElementBuffer = CreateAndUploadBuffer<GpuClipElement>(flushContext, [], config.BufferSizes.ClipElements.Length);
+        WgpuBuffer* clipBicBuffer = CreateAndUploadBuffer<GpuBic>(flushContext, [], config.BufferSizes.ClipBics.Length);
+        WgpuBuffer* clipBboxBuffer = CreateAndUploadBuffer<Vector4>(flushContext, [], config.BufferSizes.ClipBboxes.Length);
+        WgpuBuffer* drawBboxBuffer = CreateAndUploadBuffer<GpuDrawBbox>(flushContext, [], config.BufferSizes.DrawBboxes.Length);
+        WgpuBuffer* pathBuffer = CreateAndUploadBuffer<GpuScenePath>(flushContext, [], config.BufferSizes.Paths.Length);
+        WgpuBuffer* lineBuffer = CreateAndUploadBuffer<GpuSceneLine>(flushContext, [], config.BufferSizes.Lines.Length);
+        WgpuBuffer* sceneBuffer = CreateAndUploadBuffer(flushContext, scene.SceneData.Span, (uint)scene.SceneData.Length);
 
         GpuSceneConfig newHeader = CreateHeader(scene, config, baseColor);
-        if (!TryCreateAndUploadScalarBuffer(flushContext, in newHeader, out WgpuBuffer* headerBuffer, out error))
-        {
-            return false;
-        }
+        WgpuBuffer* headerBuffer = CreateAndUploadScalarBuffer(flushContext, in newHeader);
 
         // Build the new arena from the freshly created buffers.
         // These buffers are NOT tracked by the flush context; the arena owns them.
@@ -530,13 +461,11 @@ internal static unsafe class WebGPUSceneResources
     /// <summary>
     /// Creates the combined info/bin-data scratch buffer expected by the scheduling passes.
     /// </summary>
-    private static bool TryCreateAndUploadCombinedInfoBinDataBuffer(
+    private static WgpuBuffer* CreateAndUploadCombinedInfoBinDataBuffer(
         WebGPUFlushContext flushContext,
         int infoWordCount,
         ReadOnlySpan<uint> pathGradientData,
-        nuint dynamicBinByteLength,
-        out WgpuBuffer* buffer,
-        out string? error)
+        nuint dynamicBinByteLength)
     {
         nuint infoByteLength = checked((nuint)(infoWordCount + pathGradientData.Length) * (nuint)Unsafe.SizeOf<uint>());
         nuint totalByteLength = checked(infoByteLength + dynamicBinByteLength);
@@ -553,18 +482,10 @@ internal static unsafe class WebGPUSceneResources
 
         using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
         {
-            buffer = flushContext.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in descriptor);
+            WgpuBuffer* buffer = flushContext.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in descriptor);
+            UploadPathGradientData(flushContext, buffer, infoWordCount, pathGradientData);
+            return buffer;
         }
-
-        if (buffer is null)
-        {
-            error = "Failed to create the staged-scene info/bin-data buffer.";
-            return false;
-        }
-
-        UploadPathGradientData(flushContext, buffer, infoWordCount, pathGradientData);
-        error = null;
-        return true;
     }
 
     private static void UploadPathGradientData(
@@ -803,11 +724,9 @@ internal static unsafe class WebGPUSceneResources
             | (format << 15);
     }
 
-    private static bool TryCreateAndUploadScalarBuffer<T>(
+    private static WgpuBuffer* CreateAndUploadScalarBuffer<T>(
         WebGPUFlushContext flushContext,
-        in T value,
-        out WgpuBuffer* buffer,
-        out string? error)
+        in T value)
         where T : unmanaged
     {
         nuint byteLength = (nuint)Unsafe.SizeOf<T>();
@@ -819,24 +738,16 @@ internal static unsafe class WebGPUSceneResources
 
         using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
         {
-            buffer = flushContext.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in descriptor);
+            WgpuBuffer* buffer = flushContext.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in descriptor);
+            using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
+            flushContext.Api.QueueWriteBuffer(
+                (Queue*)queueReference.Handle,
+                buffer,
+                0,
+                Unsafe.AsPointer(ref Unsafe.AsRef(in value)),
+                byteLength);
+            return buffer;
         }
-
-        if (buffer is null)
-        {
-            error = $"Failed to create a staged-scene scalar buffer for '{typeof(T).Name}'.";
-            return false;
-        }
-
-        using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
-        flushContext.Api.QueueWriteBuffer(
-            (Queue*)queueReference.Handle,
-            buffer,
-            0,
-            Unsafe.AsPointer(ref Unsafe.AsRef(in value)),
-            byteLength);
-        error = null;
-        return true;
     }
 
     /// <summary>
@@ -846,12 +757,10 @@ internal static unsafe class WebGPUSceneResources
     /// Many staging buffers are scratch-only, so the upload branch is intentionally skipped for empty spans.
     /// The method still creates the buffer because later GPU passes depend on the binding existing for the full flush.
     /// </remarks>
-    private static bool TryCreateAndUploadBuffer<T>(
+    private static WgpuBuffer* CreateAndUploadBuffer<T>(
         WebGPUFlushContext flushContext,
         ReadOnlySpan<T> values,
-        uint minimumLength,
-        out WgpuBuffer* buffer,
-        out string? error)
+        uint minimumLength)
         where T : unmanaged
     {
         uint elementCount = Math.Max(Math.Max((uint)values.Length, minimumLength), 1U);
@@ -864,32 +773,24 @@ internal static unsafe class WebGPUSceneResources
 
         using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
         {
-            buffer = flushContext.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in descriptor);
-        }
-
-        if (buffer is null)
-        {
-            error = $"Failed to create a staged-scene buffer for '{typeof(T).Name}'.";
-            return false;
-        }
-
-        if (!values.IsEmpty)
-        {
-            nuint uploadByteLength = checked((nuint)values.Length * (nuint)Unsafe.SizeOf<T>());
-            using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
-            fixed (T* dataPtr = values)
+            WgpuBuffer* buffer = flushContext.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in descriptor);
+            if (!values.IsEmpty)
             {
-                flushContext.Api.QueueWriteBuffer(
-                    (Queue*)queueReference.Handle,
-                    buffer,
-                    0,
-                    dataPtr,
-                    uploadByteLength);
+                nuint uploadByteLength = checked((nuint)values.Length * (nuint)Unsafe.SizeOf<T>());
+                using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
+                fixed (T* dataPtr = values)
+                {
+                    flushContext.Api.QueueWriteBuffer(
+                        (Queue*)queueReference.Handle,
+                        buffer,
+                        0,
+                        dataPtr,
+                        uploadByteLength);
+                }
             }
-        }
 
-        error = null;
-        return true;
+            return buffer;
+        }
     }
 
     /// <summary>

@@ -108,11 +108,6 @@ public sealed unsafe partial class WebGPUDrawingBackend
             };
 
             readbackBuffer = api.DeviceCreateBuffer(device, in bufferDescriptor);
-            if (readbackBuffer is null)
-            {
-                throw new InvalidOperationException("The WebGPU device could not create a readback buffer.");
-            }
-
             CommandEncoderDescriptor encoderDescriptor = default;
             commandEncoder = api.DeviceCreateCommandEncoder(device, in encoderDescriptor);
             if (commandEncoder is null)
