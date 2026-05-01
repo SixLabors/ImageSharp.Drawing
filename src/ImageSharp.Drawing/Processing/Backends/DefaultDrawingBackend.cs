@@ -135,7 +135,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         where TPixel : unmanaged, IPixel<TPixel>
     {
         int bandTop = row.RowBandIndex * DefaultRasterizer.DefaultTileHeight;
-        int localBandTop = bandTop - destinationFrame.Rectangle.Y;
+        int localBandTop = bandTop - destinationFrame.Bounds.Y;
         int bandHeight = Math.Min(DefaultRasterizer.DefaultTileHeight, destinationFrame.Height - localBandTop);
         if (bandHeight <= 0)
         {
@@ -145,7 +145,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         Buffer2DRegion<TPixel> destinationBand = destinationFrame.GetSubRegion(0, localBandTop, destinationFrame.Width, bandHeight);
         BandTarget<TPixel>[] targetStack = state.TargetStack;
         int targetCount = 1;
-        targetStack[0] = new BandTarget<TPixel>(destinationBand, destinationFrame.Rectangle.X, bandTop, null);
+        targetStack[0] = new BandTarget<TPixel>(destinationBand, destinationFrame.Bounds.X, bandTop, null);
         int scratchWidth = GetRowScratchWidth(scene, row, destinationFrame.Width);
         DefaultRasterizer.WorkerScratch scratch = state.GetOrCreateScratch(scratchWidth);
 

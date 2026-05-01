@@ -60,7 +60,7 @@ internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend
         {
             try
             {
-                preview = renderTarget.Readback<Bgra32>();
+                preview = renderTarget.ReadbackImage<Bgra32>();
             }
             catch (Exception ex)
             {

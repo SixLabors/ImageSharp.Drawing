@@ -71,7 +71,7 @@ public partial class DrawingCanvasTests
         IPath blurPath = CreateBlurEllipsePath();
         IPath pixelatePath = CreatePixelateTrianglePath();
 
-        MemoryCanvasFrame<TPixel> proxyFrame = new(new Buffer2DRegion<TPixel>(target.Frames.RootFrame.PixelBuffer));
+        MemoryCanvasFrame<TPixel> proxyFrame = new(target.Frames.RootFrame.PixelBuffer.GetRegion());
         MirroringCpuReadbackTestBackend<TPixel> mirroringBackend = new(proxyFrame, target);
 
         NativeSurface nativeSurface = new UnsupportedNativeSurface();

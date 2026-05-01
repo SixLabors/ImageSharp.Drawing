@@ -550,7 +550,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             // Only use the direct path when the stride satisfies WebGPU's alignment requirement.
             if ((uint)sourceStrideBytes == alignedRowBytes && directByteCount <= packedByteCountEstimate * 2)
             {
-                int startPixelIndex = checked((sourceRegion.Rectangle.Y * sourceRegion.Buffer.RowStride) + sourceRegion.Rectangle.X);
+                int startPixelIndex = checked((sourceRegion.Bounds.Y * sourceRegion.Buffer.RowStride) + sourceRegion.Bounds.X);
                 int startByteOffset = checked(startPixelIndex * pixelSizeInBytes);
                 int uploadByteCount = checked((int)directByteCount);
                 nuint uploadByteCountNuint = checked((nuint)uploadByteCount);

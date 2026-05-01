@@ -35,7 +35,7 @@ public class WebGPUDeviceContextTests
         using Image<Bgra32> destination = new(8, 8);
 
         Assert.Throws<NotSupportedException>(
-            () => target.ReadbackInto(destination));
+            () => target.ReadbackInto(destination.Frames.RootFrame.PixelBuffer.GetRegion()));
     }
 
     [WebGPUFact]
@@ -54,7 +54,7 @@ public class WebGPUDeviceContextTests
             canvas.Fill(Brushes.Solid(Color.Red), new RectangularPolygon(0, 0, 32, 24));
         }
 
-        using Image<Rgba32> readback = target.Readback<Rgba32>();
+        using Image<Rgba32> readback = target.ReadbackImage<Rgba32>();
         Assert.NotEqual(default, readback[16, 12]);
     }
 
@@ -68,8 +68,48 @@ public class WebGPUDeviceContextTests
             canvas.Fill(Brushes.Solid(Color.Green), new RectangularPolygon(0, 0, 18, 14));
         }
 
-        using Image<Rgba32> readback = target.Readback<Rgba32>();
+        using Image<Rgba32> readback = target.ReadbackImage<Rgba32>();
         Assert.NotEqual(default, readback[9, 7]);
+    }
+
+    [WebGPUFact]
+    public void RenderTarget_ReadbackImage_UsesTargetFormat()
+    {
+        using WebGPURenderTarget target = new(WebGPUTextureFormat.Bgra8Unorm, 8, 6);
+        using (DrawingCanvas canvas = target.CreateCanvas())
+        {
+            canvas.Fill(Brushes.Solid(Color.Red), new RectangularPolygon(0, 0, 8, 6));
+        }
+
+        using Image readback = target.ReadbackImage();
+        Image<Bgra32> typedReadback = Assert.IsType<Image<Bgra32>>(readback);
+
+        Assert.Equal(target.Width, typedReadback.Width);
+        Assert.Equal(target.Height, typedReadback.Height);
+    }
+
+    [WebGPUFact]
+    public void RenderTarget_ReadbackInto_BufferRegion_WritesSubregion()
+    {
+        using WebGPURenderTarget target = new(6, 4);
+        using (DrawingCanvas canvas = target.CreateCanvas())
+        {
+            canvas.Fill(Brushes.Solid(Color.Red), new RectangularPolygon(-1, -1, target.Width + 2, target.Height + 2));
+        }
+
+        using Image<Rgba32> destination = new(10, 8, Color.Blue.ToPixel<Rgba32>());
+
+        // The public readback sink is a buffer region so callers can target an ImageFrame,
+        // an arbitrary region of a larger image, or any other Buffer2D-backed destination.
+        Buffer2DRegion<Rgba32> destinationRegion =
+            destination.Frames.RootFrame.PixelBuffer.GetRegion().GetSubRegion(2, 3, target.Width, target.Height);
+
+        target.ReadbackInto(destinationRegion);
+
+        Assert.Equal(Color.Blue.ToPixel<Rgba32>(), destination[1, 1]);
+        Assert.Equal(Color.Red.ToPixel<Rgba32>(), destination[2, 3]);
+        Assert.Equal(Color.Red.ToPixel<Rgba32>(), destination[7, 6]);
+        Assert.Equal(Color.Blue.ToPixel<Rgba32>(), destination[8, 7]);
     }
 
     [WebGPUFact]
@@ -87,6 +127,6 @@ public class WebGPUDeviceContextTests
             Configuration.Default,
             WebGPUCanvasFactory.CreateFrame<Rgba32>(target.Bounds, target.Surface),
             target.Bounds,
-            new Buffer2DRegion<Rgba32>(image.Frames.RootFrame.PixelBuffer));
+            image.Frames.RootFrame.PixelBuffer.GetRegion());
     }
 }

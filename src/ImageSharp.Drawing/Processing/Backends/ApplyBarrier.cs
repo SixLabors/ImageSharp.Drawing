@@ -114,7 +114,7 @@ internal sealed class ApplyBarrier
                 configuration,
                 target,
                 sourceRect,
-                new Buffer2DRegion<TPixel>(sourceImage.Frames.RootFrame.PixelBuffer));
+                sourceImage.Frames.RootFrame.PixelBuffer.GetRegion());
 
             sourceImage.Mutate(this.Operation);
 

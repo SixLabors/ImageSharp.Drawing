@@ -522,7 +522,7 @@ public partial class WebGPUDrawingBackendTests
             secondCanvas.Flush();
         }
 
-        using Image<TPixel> nativeSurfaceImage = renderTarget.Readback<TPixel>();
+        using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
         DebugSaveBackendPair(provider, "Fill_RepeatedFrames", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
     }
@@ -657,7 +657,7 @@ public partial class WebGPUDrawingBackendTests
             DrawAction(nativeSurfaceCanvas);
         }
 
-        using Image<TPixel> nativeSurfaceImage = renderTarget.Readback<TPixel>();
+        using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
         DebugSaveBackendPair(provider, "RepeatedGlyphs_AfterClear", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 2F);
         AssertBackendPairReferenceOutputs(provider, "RepeatedGlyphs_AfterClear", defaultImage, nativeSurfaceImage);
@@ -806,7 +806,7 @@ public partial class WebGPUDrawingBackendTests
             drawAction(canvas);
         }
 
-        return renderTarget.Readback<TPixel>();
+        return renderTarget.ReadbackImage<TPixel>();
     }
 
     private static void DebugSaveBackendPair<TPixel>(
@@ -1348,7 +1348,7 @@ public partial class WebGPUDrawingBackendTests
             DrawAction(canvas);
         }
 
-        using Image<TPixel> nativeSurfaceImage = renderTarget.Readback<TPixel>();
+        using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
         DebugSaveBackendPair(provider, "MultipleFlushes", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
         AssertBackendPairReferenceOutputs(provider, "MultipleFlushes", defaultImage, nativeSurfaceImage);
@@ -1435,7 +1435,7 @@ public partial class WebGPUDrawingBackendTests
             DrawRetainedFlow(nativeCanvas, nativeScene);
         }
 
-        using Image<TPixel> nativeSurfaceImage = renderTarget.Readback<TPixel>();
+        using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
         DebugSaveBackendPair(provider, "RetainedScene_MixedWithApplyBarriers", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
         AssertBackendPairReferenceOutputs(provider, "RetainedScene_MixedWithApplyBarriers", defaultImage, nativeSurfaceImage);
@@ -1517,7 +1517,7 @@ public partial class WebGPUDrawingBackendTests
             DrawRetainedFlow(nativeCanvas, nativeScene);
         }
 
-        using Image<TPixel> nativeSurfaceImage = renderTarget.Readback<TPixel>();
+        using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
         DebugSaveBackendPair(provider, "RetainedScene_WithLayerCommands", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
         AssertBackendPairReferenceOutputs(provider, "RetainedScene_WithLayerCommands", defaultImage, nativeSurfaceImage);

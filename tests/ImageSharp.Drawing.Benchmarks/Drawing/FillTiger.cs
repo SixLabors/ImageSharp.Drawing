@@ -288,7 +288,7 @@ public class FillTiger
         Directory.CreateDirectory(dir);
         image.Save(System.IO.Path.Combine(dir, tag + "-imagesharp.png"));
 
-        using Image<Rgba32> gpuImage = webGpuTarget.Readback<Rgba32>();
+        using Image<Rgba32> gpuImage = webGpuTarget.ReadbackImage<Rgba32>();
         gpuImage.SaveAsPng(System.IO.Path.Combine(dir, tag + "-webgpu.png"));
 
         Console.WriteLine($"Output saved to: {dir}");

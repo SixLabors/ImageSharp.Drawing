@@ -59,7 +59,9 @@ Before looking at the flow, it helps to define the major terms in the sense used
 
 It is not the rasterizer. It is the object that makes the public drawing model coherent.
 
-Callers reach that model through `IImageProcessingContext.Paint(...)`.
+Callers usually reach that model through `IImageProcessingContext.Paint(...)`.
+
+When callers already have an `ImageFrame` or `ImageFrame<TPixel>`, the public `CreateCanvas(...)` frame extensions create a canvas directly over that frame. The caller owns the returned canvas and must dispose it to replay recorded work into the frame.
 
 `DrawingCanvas<TPixel>` is the typed implementation that carries the target pixel format for brush normalization,
 readback, and backend execution. Factory methods return `DrawingCanvas` so CPU and GPU entry points expose the same
@@ -106,7 +108,7 @@ There are two backend-selection paths in the architecture:
 - specialized infrastructure can construct a canvas with an explicit backend
 
 The ordinary CPU entry point is `Paint(...)` on `IImageProcessingContext`, which routes into the typed
-implementation internally.
+implementation internally. Public `ImageFrame` canvas extensions provide the lower-level frame entry point for callers that want to own the canvas lifetime directly.
 
 That explicit-backend path matters for the WebGPU helpers. `WebGPUWindow`, `WebGPUExternalSurface`, and `WebGPURenderTarget` create canvases that point directly at their owned `WebGPUDrawingBackend` instance instead of storing that backend on the caller's `Configuration`.
 

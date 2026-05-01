@@ -64,7 +64,7 @@ public class FillParisTests
             }
         }
 
-        using Image<Rgba32> readbackImage = target.Readback<Rgba32>();
+        using Image<Rgba32> readbackImage = target.ReadbackImage<Rgba32>();
         Assert.True(ContainsNonDefaultPixel(readbackImage));
     }
 

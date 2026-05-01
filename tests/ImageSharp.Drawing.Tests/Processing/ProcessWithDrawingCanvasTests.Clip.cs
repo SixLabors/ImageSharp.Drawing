@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using System.Linq;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;

@@ -102,7 +102,7 @@ public sealed partial class DefaultDrawingBackend
         public BandTarget(Buffer2D<TPixel> owner, Rectangle bounds, GraphicsOptions? graphicsOptions)
         {
             this.owner = owner;
-            this.Region = new Buffer2DRegion<TPixel>(owner);
+            this.Region = owner.GetRegion();
             this.AbsoluteLeft = bounds.X;
             this.AbsoluteTop = bounds.Y;
             this.GraphicsOptions = graphicsOptions;

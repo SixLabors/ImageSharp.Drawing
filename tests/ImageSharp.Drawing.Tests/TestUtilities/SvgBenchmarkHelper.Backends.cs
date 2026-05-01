@@ -135,7 +135,7 @@ internal static partial class SvgBenchmarkHelper
         Console.WriteLine($"Saved {name}-imagesharp.png");
 
         // ImageSharp (WebGPU)
-        using Image<Rgba32> gpuImage = webGpuTarget.Readback<Rgba32>();
+        using Image<Rgba32> gpuImage = webGpuTarget.ReadbackImage<Rgba32>();
         gpuImage.SaveAsPng(System.IO.Path.Combine(outDir, $"{name}-webgpu.png"));
         Console.WriteLine($"Saved {name}-webgpu.png");
 
@@ -277,11 +277,7 @@ internal static partial class SvgBenchmarkHelper
                         y += cy;
                     }
 
-                    gp.AddBezier(
-                        cx * scale, cy * scale,
-                        x1 * scale, y1 * scale,
-                        x2 * scale, y2 * scale,
-                        x * scale, y * scale);
+                    gp.AddBezier(cx * scale, cy * scale, x1 * scale, y1 * scale, x2 * scale, y2 * scale, x * scale, y * scale);
                     lcx = x2;
                     lcy = y2;
                     cx = x;
@@ -309,11 +305,7 @@ internal static partial class SvgBenchmarkHelper
                     float x1 = (2 * cx) - lcx;
                     float y1 = (2 * cy) - lcy;
 
-                    gp.AddBezier(
-                        cx * scale, cy * scale,
-                        x1 * scale, y1 * scale,
-                        x2 * scale, y2 * scale,
-                        x * scale, y * scale);
+                    gp.AddBezier(cx * scale, cy * scale, x1 * scale, y1 * scale, x2 * scale, y2 * scale, x * scale, y * scale);
                     lcx = x2;
                     lcy = y2;
                     cx = x;

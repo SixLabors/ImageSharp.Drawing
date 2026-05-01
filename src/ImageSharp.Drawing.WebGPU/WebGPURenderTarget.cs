@@ -119,7 +119,7 @@ public sealed class WebGPURenderTarget : IDisposable
 
     /// <summary>
     /// Gets the native surface backing this render target.
-    /// Most callers should use <see cref="CreateCanvas()"/> or <see cref="Readback{TPixel}"/> instead.
+    /// Most callers should use <see cref="CreateCanvas()"/> or <see cref="ReadbackImage()"/> instead.
     /// </summary>
     internal NativeSurface Surface { get; }
 
@@ -182,9 +182,24 @@ public sealed class WebGPURenderTarget : IDisposable
     /// <summary>
     /// Reads the current GPU texture contents back into a new CPU image.
     /// </summary>
+    /// <returns>The readback image.</returns>
+    public Image ReadbackImage()
+#pragma warning disable CS8524
+        => this.Format switch
+        {
+            WebGPUTextureFormat.Rgba8Unorm => this.ReadbackImage<Rgba32>(),
+            WebGPUTextureFormat.Bgra8Unorm => this.ReadbackImage<Bgra32>(),
+            WebGPUTextureFormat.Rgba8Snorm => this.ReadbackImage<NormalizedByte4>(),
+            WebGPUTextureFormat.Rgba16Float => this.ReadbackImage<HalfVector4>()
+        };
+#pragma warning restore CS8524
+
+    /// <summary>
+    /// Reads the current GPU texture contents back into a new CPU image.
+    /// </summary>
     /// <typeparam name="TPixel">The destination image pixel format.</typeparam>
     /// <returns>The readback image.</returns>
-    public Image<TPixel> Readback<TPixel>()
+    public Image<TPixel> ReadbackImage<TPixel>()
         where TPixel : unmanaged, IPixel<TPixel>
     {
         this.ThrowIfDisposed();
@@ -193,7 +208,8 @@ public sealed class WebGPURenderTarget : IDisposable
         Image<TPixel> image = new(this.Width, this.Height);
         try
         {
-            this.ReadbackInto(image);
+            this.ReadbackInto(image.Frames.RootFrame.PixelBuffer.GetRegion());
+
             return image;
         }
         catch
@@ -204,33 +220,31 @@ public sealed class WebGPURenderTarget : IDisposable
     }
 
     /// <summary>
-    /// Reads the current GPU texture contents back into an existing CPU image.
+    /// Reads the current GPU texture contents back into an existing CPU buffer region.
     /// </summary>
     /// <typeparam name="TPixel">The destination image pixel format.</typeparam>
-    /// <param name="destination">The destination image that receives the readback pixels.</param>
-    public void ReadbackInto<TPixel>(Image<TPixel> destination)
+    /// <param name="destination">The destination buffer region that receives the readback pixels.</param>
+    public void ReadbackInto<TPixel>(Buffer2DRegion<TPixel> destination)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        Guard.NotNull(destination, nameof(destination));
         this.ThrowIfDisposed();
         this.deviceContext.ThrowIfDisposed();
 
-        if (destination.Width != this.Width || destination.Height != this.Height)
-        {
-            throw new ArgumentException(
-                $"Destination image dimensions ({destination.Width}x{destination.Height}) must match render target dimensions ({this.Width}x{this.Height}).",
-                nameof(destination));
-        }
-
         NativeCanvasFrame<TPixel> frame = WebGPUCanvasFactory.CreateFrame<TPixel>(this.Bounds, this.Surface);
+
+        // A smaller destination region intentionally reads the matching top-left
+        // portion of the render target instead of forcing an intermediate full-size image.
+        int readbackWidth = Math.Min(this.Width, destination.Width);
+        int readbackHeight = Math.Min(this.Height, destination.Height);
+        Rectangle sourceRectangle = new(0, 0, readbackWidth, readbackHeight);
 
         // ReadRegion owns the pixel-format check because it is the point where
         // typed CPU pixels are copied from the native WebGPU texture.
         this.deviceContext.Backend.ReadRegion(
             this.deviceContext.Configuration,
             frame,
-            new Rectangle(0, 0, this.Width, this.Height),
-            new Buffer2DRegion<TPixel>(destination.Frames.RootFrame.PixelBuffer));
+            sourceRectangle,
+            destination);
     }
 
     /// <summary>

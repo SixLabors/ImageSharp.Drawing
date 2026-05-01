@@ -26,7 +26,7 @@ public sealed class MemoryCanvasFrame<TPixel> : ICanvasFrame<TPixel>
     }
 
     /// <inheritdoc />
-    public Rectangle Bounds => this.region.Rectangle;
+    public Rectangle Bounds => this.region.Bounds;
 
     /// <inheritdoc />
     public bool TryGetCpuRegion(out Buffer2DRegion<TPixel> region)
