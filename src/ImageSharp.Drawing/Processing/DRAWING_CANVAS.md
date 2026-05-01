@@ -376,7 +376,7 @@ If you want to move from the architecture into the code, this is the best order.
 
 1. `DrawingCanvas.cs`
 2. `DrawingCanvas{TPixel}.cs`
-3. `DrawingCanvasFactoryExtensions.cs` and `DrawingCanvasShapeExtensions.cs`
+3. `DrawingCanvasFactoryExtensions.cs` and `DrawingCanvas.Shapes.cs`
 4. `DrawingCanvasBatcher{TPixel}.cs`
 5. `CompositionCommand.cs`
 6. `DefaultDrawingBackend.cs`

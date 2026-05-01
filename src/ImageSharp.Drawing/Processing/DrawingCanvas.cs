@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// <summary>
 /// Represents a drawing canvas over a frame target.
 /// </summary>
-public abstract class DrawingCanvas : IDisposable
+public abstract partial class DrawingCanvas : IDisposable
 {
     /// <summary>
     /// Gets the local bounds of this canvas.
