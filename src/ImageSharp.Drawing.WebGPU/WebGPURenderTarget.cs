@@ -85,7 +85,7 @@ public sealed class WebGPURenderTarget : IDisposable
             deviceContext.ThrowIfDisposed();
 
             WebGPU api = WebGPURuntime.GetApi();
-            NativeSurface surface = WebGPUNativeSurface.Create(
+            WebGPUNativeSurface surface = WebGPUNativeSurface.Create(
                 api,
                 deviceContext.DeviceHandle,
                 deviceContext.QueueHandle,
@@ -121,7 +121,7 @@ public sealed class WebGPURenderTarget : IDisposable
     /// Gets the native surface backing this render target.
     /// Most callers should use <see cref="CreateCanvas()"/> or <see cref="ReadbackImage()"/> instead.
     /// </summary>
-    internal NativeSurface Surface { get; }
+    internal WebGPUNativeSurface Surface { get; }
 
     /// <summary>
     /// Gets the target width in pixels.

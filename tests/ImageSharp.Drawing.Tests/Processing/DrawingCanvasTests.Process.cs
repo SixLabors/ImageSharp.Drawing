@@ -160,8 +160,6 @@ public partial class DrawingCanvasTests
 
     private sealed class UnsupportedNativeSurface : NativeSurface
     {
-        public override TNativeTarget GetNativeTarget<TNativeTarget>()
-            => throw new NotSupportedException();
     }
 
     /// <summary>

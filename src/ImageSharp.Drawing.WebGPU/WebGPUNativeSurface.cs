@@ -6,18 +6,77 @@ using Silk.NET.WebGPU;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// WebGPU native drawing target exposed through the backend-agnostic <see cref="NativeSurface"/> contract.
+/// WebGPU native drawing surface exposed through the backend-agnostic <see cref="NativeSurface"/> base type.
 /// </summary>
 internal sealed class WebGPUNativeSurface : NativeSurface
 {
-    private readonly WebGPUNativeTarget target;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUNativeSurface"/> class.
     /// </summary>
-    /// <param name="target">The WebGPU target exposed by this surface.</param>
-    internal WebGPUNativeSurface(WebGPUNativeTarget target)
-        => this.target = target;
+    /// <param name="deviceHandle">The wrapped device handle that owns the target texture.</param>
+    /// <param name="queueHandle">The wrapped queue handle used to submit work against the target texture.</param>
+    /// <param name="targetTextureHandle">The wrapped target texture handle.</param>
+    /// <param name="targetTextureViewHandle">The wrapped target texture-view handle.</param>
+    /// <param name="targetFormat">The target texture format.</param>
+    /// <param name="width">The surface width in pixels.</param>
+    /// <param name="height">The surface height in pixels.</param>
+    public WebGPUNativeSurface(
+        WebGPUDeviceHandle deviceHandle,
+        WebGPUQueueHandle queueHandle,
+        WebGPUTextureHandle targetTextureHandle,
+        WebGPUTextureViewHandle targetTextureViewHandle,
+        WebGPUTextureFormat targetFormat,
+        int width,
+        int height)
+    {
+        Guard.NotNull(deviceHandle, nameof(deviceHandle));
+        Guard.NotNull(queueHandle, nameof(queueHandle));
+        Guard.NotNull(targetTextureHandle, nameof(targetTextureHandle));
+        Guard.NotNull(targetTextureViewHandle, nameof(targetTextureViewHandle));
+
+        this.DeviceHandle = deviceHandle;
+        this.QueueHandle = queueHandle;
+        this.TargetTextureHandle = targetTextureHandle;
+        this.TargetTextureViewHandle = targetTextureViewHandle;
+        this.TargetFormat = targetFormat;
+        this.Width = width;
+        this.Height = height;
+    }
+
+    /// <summary>
+    /// Gets the wrapped device handle that owns the target texture.
+    /// </summary>
+    public WebGPUDeviceHandle DeviceHandle { get; }
+
+    /// <summary>
+    /// Gets the wrapped queue handle used to submit work against the target texture.
+    /// </summary>
+    public WebGPUQueueHandle QueueHandle { get; }
+
+    /// <summary>
+    /// Gets the wrapped target texture handle.
+    /// </summary>
+    public WebGPUTextureHandle TargetTextureHandle { get; }
+
+    /// <summary>
+    /// Gets the wrapped target texture-view handle.
+    /// </summary>
+    public WebGPUTextureViewHandle TargetTextureViewHandle { get; }
+
+    /// <summary>
+    /// Gets the native render target texture format identifier.
+    /// </summary>
+    public WebGPUTextureFormat TargetFormat { get; }
+
+    /// <summary>
+    /// Gets the surface width in pixels.
+    /// </summary>
+    public int Width { get; }
+
+    /// <summary>
+    /// Gets the surface height in pixels.
+    /// </summary>
+    public int Height { get; }
 
     /// <summary>
     /// Allocates a WebGPU render target and creates a native surface over the owned texture handles.
@@ -31,7 +90,7 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     /// <param name="textureHandle">Receives the allocated wrapped <c>WGPUTexture*</c> handle.</param>
     /// <param name="textureViewHandle">Receives the allocated wrapped <c>WGPUTextureView*</c> handle.</param>
     /// <returns>The native surface wrapping the allocated texture.</returns>
-    internal static unsafe NativeSurface Create(
+    internal static unsafe WebGPUNativeSurface Create(
         WebGPU api,
         WebGPUDeviceHandle deviceHandle,
         WebGPUQueueHandle queueHandle,
@@ -105,7 +164,7 @@ internal sealed class WebGPUNativeSurface : NativeSurface
         {
             createdTextureHandle = new WebGPUTextureHandle(api, (nint)texture, ownsHandle: true);
             createdTextureViewHandle = new WebGPUTextureViewHandle(api, (nint)textureView, ownsHandle: true);
-            NativeSurface surface = Create(
+            WebGPUNativeSurface surface = Create(
                 deviceHandle,
                 queueHandle,
                 createdTextureHandle,
@@ -140,7 +199,7 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     /// <summary>
     /// Creates a native surface over wrapped WebGPU texture handles.
     /// </summary>
-    internal static NativeSurface Create(
+    internal static WebGPUNativeSurface Create(
         WebGPUDeviceHandle deviceHandle,
         WebGPUQueueHandle queueHandle,
         WebGPUTextureHandle targetTextureHandle,
@@ -157,25 +216,13 @@ internal sealed class WebGPUNativeSurface : NativeSurface
         Guard.MustBeGreaterThan(width, 0, nameof(width));
         Guard.MustBeGreaterThan(height, 0, nameof(height));
 
-        return new WebGPUNativeSurface(new WebGPUNativeTarget(
+        return new WebGPUNativeSurface(
             deviceHandle,
             queueHandle,
             targetTextureHandle,
             targetTextureViewHandle,
             targetFormat,
             width,
-            height));
-    }
-
-    /// <inheritdoc />
-    public override TNativeTarget GetNativeTarget<TNativeTarget>()
-        where TNativeTarget : class
-    {
-        if (this.target is TNativeTarget typed)
-        {
-            return typed;
-        }
-
-        throw new NotSupportedException($"The native surface does not expose a native target of type '{typeof(TNativeTarget).Name}'.");
+            height);
     }
 }

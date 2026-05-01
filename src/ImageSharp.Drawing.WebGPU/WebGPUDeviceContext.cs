@@ -252,7 +252,7 @@ internal sealed class WebGPUDeviceContext : IDisposable
         int height)
     {
         Rectangle bounds = new(0, 0, width, height);
-        NativeSurface surface = this.CreateSurface(textureHandle, textureViewHandle, format, width, height);
+        WebGPUNativeSurface surface = this.CreateSurface(textureHandle, textureViewHandle, format, width, height);
 
         return WebGPUCanvasFactory.CreateCanvas(this.Configuration, options, this.Backend, bounds, surface, format);
     }
@@ -260,7 +260,7 @@ internal sealed class WebGPUDeviceContext : IDisposable
     /// <summary>
     /// Creates the wrapped native surface over the supplied texture handles.
     /// </summary>
-    private NativeSurface CreateSurface(
+    private WebGPUNativeSurface CreateSurface(
         WebGPUTextureHandle textureHandle,
         WebGPUTextureViewHandle textureViewHandle,
         WebGPUTextureFormat format,

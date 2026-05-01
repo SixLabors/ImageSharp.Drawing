@@ -902,15 +902,26 @@ internal static class WebGPUSceneDispatch
     /// <summary>
     /// Executes the staged scene pipeline against the current flush target.
     /// </summary>
+    /// <param name="stagedScene">The staged scene to render.</param>
+    /// <param name="schedulingArena">The reusable scheduling arena slot for this render.</param>
+    /// <param name="initialChunkTileHeightHint">The advisory chunk height to try first when this scene requires chunking.</param>
+    /// <param name="requiresGrowth">Receives whether the caller should retry with larger scratch capacities.</param>
+    /// <param name="grownBumpSizes">Receives the scratch capacities reported by the render attempt.</param>
+    /// <param name="successfulChunkTileHeight">Receives the largest chunk height that rendered successfully.</param>
+    /// <param name="error">Receives the failure reason when the staged scene cannot be rendered.</param>
+    /// <returns><see langword="true"/> when the staged scene rendered successfully; otherwise, <see langword="false"/>.</returns>
     public static unsafe bool TryRenderStagedScene(
         ref WebGPUStagedScene stagedScene,
         ref WebGPUSceneSchedulingArena? schedulingArena,
+        uint initialChunkTileHeightHint,
         out bool requiresGrowth,
         out WebGPUSceneBumpSizes grownBumpSizes,
+        out uint successfulChunkTileHeight,
         out string? error)
     {
         requiresGrowth = false;
         grownBumpSizes = stagedScene.Config.BumpSizes;
+        successfulChunkTileHeight = 0;
         error = null;
 
         WebGPUEncodedScene encodedScene = stagedScene.EncodedScene;
@@ -923,7 +934,14 @@ internal static class WebGPUSceneDispatch
         // The chunked path ensures its own arena per chunk with chunk-local sizes.
         if (IsChunkableBindingFailure(stagedScene.BindingLimitFailure.Buffer))
         {
-            return TryRenderSegmentChunkedStagedScene(ref stagedScene, ref schedulingArena, out requiresGrowth, out grownBumpSizes, out error);
+            return TryRenderSegmentChunkedStagedScene(
+                ref stagedScene,
+                ref schedulingArena,
+                initialChunkTileHeightHint,
+                out requiresGrowth,
+                out grownBumpSizes,
+                out successfulChunkTileHeight,
+                out error);
         }
 
         // Normal path: ensure arena with full-scene sizes.
@@ -1032,19 +1050,24 @@ internal static class WebGPUSceneDispatch
     /// </remarks>
     /// <param name="stagedScene">The flush-scoped scene whose full-scene segments buffer exceeded the device binding limit.</param>
     /// <param name="schedulingArena">The flush-local reusable scheduling scratch and readback arena.</param>
+    /// <param name="initialChunkTileHeightHint">The advisory chunk height to try before estimating from the full-scene overflow.</param>
     /// <param name="requiresGrowth">Receives whether the chunked path needs the caller to retry with larger global scratch capacities.</param>
     /// <param name="grownBumpSizes">Receives the enlarged scratch capacities when <paramref name="requiresGrowth"/> is <see langword="true"/>.</param>
+    /// <param name="successfulChunkTileHeight">Receives the largest chunk height that rendered successfully.</param>
     /// <param name="error">Receives the chunked-render failure reason when the oversized scene cannot be completed.</param>
     /// <returns><see langword="true"/> when every chunk rendered successfully; otherwise, <see langword="false"/>.</returns>
     private static unsafe bool TryRenderSegmentChunkedStagedScene(
         ref WebGPUStagedScene stagedScene,
         ref WebGPUSceneSchedulingArena? schedulingArena,
+        uint initialChunkTileHeightHint,
         out bool requiresGrowth,
         out WebGPUSceneBumpSizes grownBumpSizes,
+        out uint successfulChunkTileHeight,
         out string? error)
     {
         requiresGrowth = false;
         grownBumpSizes = stagedScene.Config.BumpSizes;
+        successfulChunkTileHeight = 0;
         error = null;
 
         WebGPUEncodedScene encodedScene = stagedScene.EncodedScene;
@@ -1084,9 +1107,11 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        uint nextChunkTileHeight = GetInitialChunkTileHeight(encodedScene, stagedScene.BindingLimitFailure);
         uint tileYStart = 0U;
         uint totalTileHeight = checked((uint)encodedScene.TileCountY);
+        uint nextChunkTileHeight = initialChunkTileHeightHint == 0
+            ? GetInitialChunkTileHeight(encodedScene, stagedScene.BindingLimitFailure)
+            : Math.Min(initialChunkTileHeightHint, totalTileHeight);
 
         // Readback buffer holds one BumpAllocators per chunk so we can batch-read after all chunks.
         nuint readbackByteLength = checked(Math.Max(totalTileHeight, 1U) * (uint)sizeof(GpuSceneBumpAllocators));
@@ -1106,14 +1131,13 @@ internal static class WebGPUSceneDispatch
             uint remainingTileHeight = totalTileHeight - tileYStart;
             uint requestedTileHeight = Math.Min(nextChunkTileHeight, remainingTileHeight);
 
-            // Scale the full-scene bump sizes down proportionally for this chunk's tile height.
-            WebGPUSceneBumpSizes chunkBumpSize = ScaleChunkBumpSizes(stagedScene.Config.BumpSizes, encodedScene, requestedTileHeight);
-
             // Inner loop: shrink the chunk if its buffers still exceed the device binding limit.
             while (true)
             {
                 WebGPUSceneChunkWindow chunkWindow = CreateChunkWindow(tileYStart, requestedTileHeight, remainingTileHeight);
+                WebGPUSceneBumpSizes chunkBumpSize = ScaleChunkBumpSizes(stagedScene.Config.BumpSizes, encodedScene, chunkWindow.TileHeight);
                 WebGPUSceneConfig chunkConfig = WebGPUSceneConfig.Create(encodedScene, chunkBumpSize, chunkWindow);
+
                 if (!TryValidateBindingSizes(encodedScene, chunkConfig, maxStorageBufferBindingSize, out BindingLimitFailure bindingLimitFailure, out error))
                 {
                     if (IsChunkableBindingFailure(bindingLimitFailure.Buffer))
@@ -1125,7 +1149,6 @@ internal static class WebGPUSceneDispatch
                         }
 
                         requestedTileHeight = smallerTileHeight;
-                        chunkBumpSize = ScaleChunkBumpSizes(stagedScene.Config.BumpSizes, encodedScene, requestedTileHeight);
                         continue;
                     }
 
@@ -1173,12 +1196,14 @@ internal static class WebGPUSceneDispatch
                         useSharedSchedulingState,
                         resetChunkLocalBumpAllocators: false,
                         out error);
+
                 if (recordedChunk)
                 {
                     chunkAttemptBumpSizes[chunkReadbackCount++] = chunkConfig.BumpSizes;
                     chunkAttemptTileHeights[chunkReadbackCount - 1] = chunkWindow.TileHeight;
                     tileYStart += chunkWindow.TileHeight;
                     nextChunkTileHeight = requestedTileHeight;
+                    successfulChunkTileHeight = Math.Max(successfulChunkTileHeight, chunkWindow.TileHeight);
                     break;
                 }
             }
@@ -1436,7 +1461,7 @@ internal static class WebGPUSceneDispatch
             return fullTileHeight;
         }
 
-        ulong usableBytes = Math.Max(bindingLimitFailure.LimitBytes - (bindingLimitFailure.LimitBytes / 8UL), 1UL);
+        ulong usableBytes = Math.Max(bindingLimitFailure.LimitBytes - (bindingLimitFailure.LimitBytes / 16UL), 1UL);
         uint estimatedTileHeight = checked((uint)Math.Max(1UL, (usableBytes * fullTileHeight) / bindingLimitFailure.RequiredBytes));
         return AlignChunkTileHeight(Math.Min(estimatedTileHeight, fullTileHeight), fullTileHeight);
     }
@@ -1455,7 +1480,7 @@ internal static class WebGPUSceneDispatch
             return currentTileHeight;
         }
 
-        ulong usableBytes = Math.Max(bindingLimitFailure.LimitBytes - (bindingLimitFailure.LimitBytes / 8UL), 1UL);
+        ulong usableBytes = Math.Max(bindingLimitFailure.LimitBytes - (bindingLimitFailure.LimitBytes / 16UL), 1UL);
         uint estimatedTileHeight = checked((uint)Math.Max(1UL, (usableBytes * currentTileHeight) / bindingLimitFailure.RequiredBytes));
         uint alignedTileHeight = AlignChunkTileHeight(Math.Min(estimatedTileHeight, remainingTileHeight), remainingTileHeight);
         if (alignedTileHeight < currentTileHeight)
@@ -1463,14 +1488,16 @@ internal static class WebGPUSceneDispatch
             return alignedTileHeight;
         }
 
-        // Chunk starts must remain 16-row aligned because coarse indexes the full-scene
-        // bin grid from chunk_tile_y_start / N_TILE_Y. A sub-bin start would read the
-        // wrong bin headers for that chunk and drop coverage.
-        return currentTileHeight > 16U ? (currentTileHeight - 1U) & ~15U : currentTileHeight;
+        if (currentTileHeight > 16U)
+        {
+            return (currentTileHeight - 1U) & ~15U;
+        }
+
+        return currentTileHeight > 1U ? currentTileHeight - 1U : currentTileHeight;
     }
 
     /// <summary>
-    /// Creates one tile-row chunk window, keeping the scratch tile buffers bin-aligned while the fine pass renders only the real rows.
+    /// Creates one tile-row chunk window, keeping scratch buffers bin-sized while the fine pass renders only the real rows.
     /// </summary>
     /// <param name="tileYStart">The first global tile row covered by the chunk.</param>
     /// <param name="requestedTileHeight">The preferred number of tile rows to render in this chunk.</param>
@@ -1479,8 +1506,48 @@ internal static class WebGPUSceneDispatch
     private static WebGPUSceneChunkWindow CreateChunkWindow(uint tileYStart, uint requestedTileHeight, uint remainingTileHeight)
     {
         uint tileHeight = Math.Min(requestedTileHeight, remainingTileHeight);
+
+        // Coarse reads bin headers using floor(chunk_tile_y_start / 16). A chunk that starts
+        // inside a bin may render only the remaining rows of that same bin; crossing the next
+        // bin boundary would pair those rows with the wrong bin header.
+        uint tileOffsetInBin = tileYStart & 15U;
+        if (tileOffsetInBin != 0U)
+        {
+            tileHeight = Math.Min(tileHeight, 16U - tileOffsetInBin);
+        }
+
         uint tileBufferHeight = AlignUp(tileHeight, 16U);
         return new WebGPUSceneChunkWindow(tileYStart, tileHeight, tileBufferHeight);
+    }
+
+    /// <summary>
+    /// Aligns large chunk heights to coarse-bin rows while allowing dense bins to fall back to sub-bin chunks.
+    /// </summary>
+    /// <param name="tileHeight">The candidate real chunk height, in tile rows.</param>
+    /// <param name="maximumTileHeight">The maximum tile height allowed for this chunk.</param>
+    /// <returns>The aligned chunk height.</returns>
+    /// <remarks>
+    /// Coarse rasterization groups tiles in 16-row bins and looks up bin headers from
+    /// <c>chunk_tile_y_start / N_TILE_Y</c>. Large chunks therefore stay 16-row aligned
+    /// so the next chunk also starts on a bin boundary and the fast path keeps the
+    /// minimum practical chunk count.
+    ///
+    /// Dense scenes can still overflow the storage-buffer binding limit for a single
+    /// 16-row bin. In that case this method leaves sub-bin candidates unchanged; the
+    /// caller pairs that with <see cref="CreateChunkWindow"/> so any chunk that starts
+    /// inside a bin is capped to the remaining rows of that same bin and never crosses
+    /// into the next bin with the wrong header.
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint AlignChunkTileHeight(uint tileHeight, uint maximumTileHeight)
+    {
+        if (tileHeight >= maximumTileHeight || tileHeight < 16U)
+        {
+            return Math.Min(tileHeight, maximumTileHeight);
+        }
+
+        uint alignedTileHeight = AlignUp(tileHeight, 16U);
+        return alignedTileHeight >= maximumTileHeight ? maximumTileHeight : alignedTileHeight;
     }
 
     /// <summary>
@@ -1545,38 +1612,6 @@ internal static class WebGPUSceneDispatch
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint ScaleCount(uint value, uint numerator, uint denominator)
         => Math.Max(1U, checked((uint)Math.Max(1UL, ((ulong)Math.Max(value, 1U) * numerator) / Math.Max(denominator, 1U))));
-
-    /// <summary>
-    /// Aligns a chunk height to one coarse bin (16 tile rows) so the next chunk's tile-y start stays bin-aligned.
-    /// </summary>
-    /// <param name="tileHeight">The candidate real chunk height, in tile rows.</param>
-    /// <param name="maximumTileHeight">The maximum tile height allowed for this chunk.</param>
-    /// <returns>The aligned chunk height, preserving short tail chunks only when there are no further rows to render.</returns>
-    /// <remarks>
-    /// <para>
-    /// Coarse rasterization reads the global binning grid using <c>chunk_tile_y_start / N_TILE_Y</c> and lays its
-    /// per-bin tiles out starting at <c>chunk_tile_y_start</c>. If a chunk's height is not a multiple of
-    /// <c>N_TILE_Y</c> (16), the next chunk's <c>chunk_tile_y_start</c> ends up bin-misaligned and the coarse
-    /// dispatch reads the wrong bin's content for the misaligned rows, dropping coverage in those rows.
-    /// </para>
-    /// <para>
-    /// This method therefore rounds non-final chunks up to the next multiple of 16 (the smallest legal chunk size
-    /// that preserves bin alignment) and only permits a sub-bin tail when <paramref name="maximumTileHeight"/>
-    /// itself is a sub-bin remainder; this is the final chunk and there are no further rows to render.
-    /// </para>
-    /// </remarks>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint AlignChunkTileHeight(uint tileHeight, uint maximumTileHeight)
-    {
-        if (tileHeight >= maximumTileHeight)
-        {
-            return maximumTileHeight;
-        }
-
-        // Round up to a full bin row so the next chunk starts on a bin boundary.
-        uint alignedTileHeight = AlignUp(Math.Max(tileHeight, 1U), 16U);
-        return alignedTileHeight >= maximumTileHeight ? maximumTileHeight : alignedTileHeight;
-    }
 
     /// <summary>
     /// Adds the same sizing slack used elsewhere in staged-scene planning so chunk-local floors do not sit on the edge.

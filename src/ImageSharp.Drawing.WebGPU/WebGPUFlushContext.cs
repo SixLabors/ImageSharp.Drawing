@@ -170,10 +170,10 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         MemoryAllocator memoryAllocator)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        // The native-frame overload is used after WebGPU target selection has already
-        // succeeded, so this unwraps the known native surface instead of probing support.
+        // The native-frame overload is used after WebGPU target selection has already succeeded,
+        // so this casts once at the backend boundary and keeps the concrete target data together.
         _ = frame.TryGetNativeSurface(out NativeSurface? nativeSurface);
-        WebGPUNativeTarget nativeTarget = nativeSurface!.GetNativeTarget<WebGPUNativeTarget>();
+        WebGPUNativeSurface nativeTarget = (WebGPUNativeSurface)nativeSurface!;
         WebGPU api = WebGPURuntime.GetApi();
         TextureFormat textureFormat = WebGPUTextureFormatMapper.ToNative(nativeTarget.TargetFormat);
         Rectangle bounds = frame.Bounds;

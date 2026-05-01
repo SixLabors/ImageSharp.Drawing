@@ -33,15 +33,12 @@ public sealed unsafe partial class WebGPUDrawingBackend
         Guard.NotNull(destination.Buffer, nameof(destination));
 
         // Readback is only available for native WebGPU targets with valid interop handles.
-        if (!target.TryGetNativeSurface(out NativeSurface? nativeSurface))
+        if (!target.TryGetNativeSurface(out NativeSurface? nativeSurface) || nativeSurface is not WebGPUNativeSurface nativeTarget)
         {
             throw new NotSupportedException("The target does not expose a native surface for readback.");
         }
 
-        WebGPUNativeTarget nativeTarget = nativeSurface.GetNativeTarget<WebGPUNativeTarget>();
-        if (nativeTarget.DeviceHandle.IsInvalid ||
-            nativeTarget.QueueHandle.IsInvalid ||
-            nativeTarget.TargetTextureHandle.IsInvalid)
+        if (nativeTarget.DeviceHandle.IsInvalid || nativeTarget.QueueHandle.IsInvalid || nativeTarget.TargetTextureHandle.IsInvalid)
         {
             throw new NotSupportedException("The target does not expose valid WebGPU device, queue, and texture handles for readback.");
         }

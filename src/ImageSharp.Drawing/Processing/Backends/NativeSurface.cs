@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Represents a backend-specific native drawing target.
+/// Base type for backend-specific native drawing targets.
 /// </summary>
 public abstract class NativeSurface
 {
@@ -14,12 +14,4 @@ public abstract class NativeSurface
     protected NativeSurface()
     {
     }
-
-    /// <summary>
-    /// Gets a backend-specific native target by type.
-    /// </summary>
-    /// <typeparam name="TNativeTarget">Native target type.</typeparam>
-    /// <returns>The native target.</returns>
-    public abstract TNativeTarget GetNativeTarget<TNativeTarget>()
-        where TNativeTarget : class;
 }

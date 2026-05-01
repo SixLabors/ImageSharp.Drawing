@@ -42,6 +42,14 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     private WebGPUSceneSchedulingArena? cachedSchedulingArena;
     private WebGPUSceneResourceArena? cachedResourceArena;
 
+    // Advisory first-guess state for repeated oversized eager scenes. Parallel renders may
+    // race to update it; every hinted chunk is still validated before dispatch, so a stale
+    // or cross-scene value can only affect the first shrink attempt, not correctness.
+    private int chunkHintBinding;
+    private int chunkHintTargetWidth;
+    private int chunkHintTargetHeight;
+    private int chunkHintTileHeight;
+
     private WebGPUSceneDispatch.BindingLimitBuffer lastChunkingBindingFailure;
     private bool isDisposed;
 
@@ -117,10 +125,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             throw new NotSupportedException($"The WebGPU backend does not support pixel format '{typeof(TPixel).Name}'.");
         }
 
-        // RenderScene only accepts native frames on the WebGPU path; unwrap the surface once
-        // so staging does not repeat the generic frame capability checks.
+        // RenderScene only accepts WebGPU native frames on this path, so cast once at the backend
+        // boundary and keep staging focused on dispatch data.
         _ = nativeTarget.TryGetNativeSurface(out NativeSurface? nativeSurface);
-        WebGPUNativeTarget webGPUTarget = nativeSurface!.GetNativeTarget<WebGPUNativeTarget>();
+        WebGPUNativeSurface webGPUTarget = (WebGPUNativeSurface)nativeSurface!;
         TextureFormat textureFormat = WebGPUTextureFormatMapper.ToNative(webGPUTarget.TargetFormat);
 
         if (webGPUTarget.TargetFormat != formatId)
@@ -178,13 +186,24 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                         bool renderSucceeded = WebGPUSceneDispatch.TryRenderStagedScene(
                             ref stagedScene,
                             ref schedulingArena,
+                            this.GetChunkTileHeightHint(stagedScene.BindingLimitFailure.Buffer, encodedScene.TargetSize),
                             out bool requiresGrowth,
                             out WebGPUSceneBumpSizes grownBumpSizes,
+                            out uint successfulChunkTileHeight,
                             out string? error);
 
                         if (renderSucceeded)
                         {
                             currentBumpSizes = MaxBumpSizes(currentBumpSizes, grownBumpSizes);
+
+                            if (successfulChunkTileHeight != 0)
+                            {
+                                this.UpdateChunkTileHeightHint(
+                                    stagedScene.BindingLimitFailure.Buffer,
+                                    encodedScene.TargetSize,
+                                    successfulChunkTileHeight);
+                            }
+
                             renderCompleted = true;
                             break;
                         }
@@ -236,6 +255,50 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             Math.Max(left.Segments, right.Segments),
             Math.Max(left.BlendSpill, right.BlendSpill),
             Math.Max(left.Ptcl, right.Ptcl));
+
+    /// <summary>
+    /// Gets the last successful chunk height for a matching oversized render.
+    /// </summary>
+    /// <param name="binding">The binding category that selected chunked rendering.</param>
+    /// <param name="targetSize">The target size being rendered.</param>
+    /// <returns>The advisory chunk height, or <c>0</c> when no matching hint exists.</returns>
+    private uint GetChunkTileHeightHint(WebGPUSceneDispatch.BindingLimitBuffer binding, Size targetSize)
+    {
+        int tileHeight = Volatile.Read(ref this.chunkHintTileHeight);
+        if (tileHeight <= 0)
+        {
+            return 0;
+        }
+
+        if (Volatile.Read(ref this.chunkHintBinding) != (int)binding ||
+            Volatile.Read(ref this.chunkHintTargetWidth) != targetSize.Width ||
+            Volatile.Read(ref this.chunkHintTargetHeight) != targetSize.Height)
+        {
+            return 0;
+        }
+
+        return unchecked((uint)tileHeight);
+    }
+
+    /// <summary>
+    /// Stores the last successful chunk height for later eager renders on this backend.
+    /// </summary>
+    /// <param name="binding">The binding category that selected chunked rendering.</param>
+    /// <param name="targetSize">The target size being rendered.</param>
+    /// <param name="tileHeight">The successful chunk height.</param>
+    private void UpdateChunkTileHeightHint(
+        WebGPUSceneDispatch.BindingLimitBuffer binding,
+        Size targetSize,
+        uint tileHeight)
+    {
+        Volatile.Write(ref this.chunkHintBinding, (int)binding);
+        Volatile.Write(ref this.chunkHintTargetWidth, targetSize.Width);
+        Volatile.Write(ref this.chunkHintTargetHeight, targetSize.Height);
+
+        // Publish the height last so readers never observe a new non-zero hint before
+        // its binding and target-size key have been written.
+        Volatile.Write(ref this.chunkHintTileHeight, unchecked((int)tileHeight));
+    }
 
     /// <summary>
     /// Rents the cached scene resource arena for a render, leaving the backend cache empty.
