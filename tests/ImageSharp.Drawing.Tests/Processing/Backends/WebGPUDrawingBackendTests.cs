@@ -12,6 +12,9 @@ using SixLabors.ImageSharp.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Processing.Backends;
 
+// WebGPU image tolerances are intentionally set from cross-hardware runs with
+// visual verification, allowing minor GPU floating-point differences without
+// hiding visible rendering regressions.
 [GroupOutput("Drawing")]
 public partial class WebGPUDrawingBackendTests
 {
@@ -60,7 +63,7 @@ public partial class WebGPUDrawingBackendTests
 
         DebugSaveBackendPair(provider, "FillPath", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.05F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, "FillPath", defaultImage, nativeSurfaceImage, 0.0012F);
     }
 
     [WebGPUTheory]
@@ -373,7 +376,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, "DrawText", defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0122F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.013F);
         Rectangle textRegion = Rectangle.Intersect(
             new Rectangle(0, 0, defaultImage.Width, defaultImage.Height),
             new Rectangle(8, 12, defaultImage.Width - 16, Math.Min(220, defaultImage.Height - 12)));
@@ -415,7 +418,7 @@ public partial class WebGPUDrawingBackendTests
 
         DebugSaveBackendPair(provider, "FillPath_NativeSurfaceParity", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_NativeSurfaceParity", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, "FillPath_NativeSurfaceParity", defaultImage, nativeSurfaceImage, 0.0012F);
     }
 
     [WebGPUTheory]
@@ -454,7 +457,7 @@ public partial class WebGPUDrawingBackendTests
 
         DebugSaveBackendPair(provider, "FillPath_NativeSurfaceSubregionParity", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_NativeSurfaceSubregionParity", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, "FillPath_NativeSurfaceSubregionParity", defaultImage, nativeSurfaceImage, 0.0013F);
     }
 
     /// <summary>
@@ -555,7 +558,7 @@ public partial class WebGPUDrawingBackendTests
 
         DebugSaveBackendPair(provider, "Process", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0516F);
-        AssertBackendPairReferenceOutputs(provider, "Process", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, "Process", defaultImage, nativeSurfaceImage, 0.0006F);
     }
 
     [WebGPUTheory]
@@ -946,9 +949,11 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
+        float referenceTolerance = lineCap == LineCap.Square ? 0.0016F : 0.0003F;
+
         DebugSaveBackendPair(provider, $"DrawPath_PointStroke_LineCap_{lineCap}", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.03F);
-        AssertBackendPairReferenceOutputs(provider, $"DrawPath_PointStroke_LineCap_{lineCap}", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, $"DrawPath_PointStroke_LineCap_{lineCap}", defaultImage, nativeSurfaceImage, referenceTolerance);
     }
 
     public static TheoryData<LineJoin> LineJoinValues { get; } = new()
@@ -2275,7 +2280,7 @@ the evil Galactic Empire.";
         // This test has a lot of text and gradients which can be a bit more variable across
         // platforms, so using a higher tolerance here to avoid noise.
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0474F);
-        AssertBackendPairReferenceOutputs(provider, "StarWarsCrawl", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, "StarWarsCrawl", defaultImage, nativeSurfaceImage, 0.0006F);
     }
 
     [WebGPUTheory]
@@ -2345,7 +2350,7 @@ the evil Galactic Empire.";
 
         DebugSaveBackendPair(provider, "SaveLayer_HalfOpacity", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "SaveLayer_HalfOpacity", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, "SaveLayer_HalfOpacity", defaultImage, nativeSurfaceImage, 0.0767F);
     }
 
     [WebGPUTheory]
@@ -2588,6 +2593,6 @@ the evil Galactic Empire.";
 
         DebugSaveBackendPair(provider, "CreateRegion_NestedRegionsAndStateIsolation", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "CreateRegion_NestedRegionsAndStateIsolation", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, "CreateRegion_NestedRegionsAndStateIsolation", defaultImage, nativeSurfaceImage, 0.0005F);
     }
 }
