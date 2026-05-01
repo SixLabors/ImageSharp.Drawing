@@ -85,7 +85,7 @@ public sealed class WebGPURenderTarget : IDisposable
             deviceContext.ThrowIfDisposed();
 
             WebGPU api = WebGPURuntime.GetApi();
-            NativeSurface surface = WebGPURenderTargetAllocation.CreateRenderTarget(
+            NativeSurface surface = WebGPUNativeSurface.Create(
                 api,
                 deviceContext.DeviceHandle,
                 deviceContext.QueueHandle,
