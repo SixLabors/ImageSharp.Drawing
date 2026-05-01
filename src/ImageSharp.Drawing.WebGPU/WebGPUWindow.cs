@@ -533,11 +533,41 @@ public sealed class WebGPUWindow : IDisposable
 
     private static Point ToPoint(Vector2D<int> value) => new(value.X, value.Y);
 
-    private static NativeWindowState ToNative(WebGPUWindowState state) => (NativeWindowState)(int)state;
+    private static NativeWindowState ToNative(WebGPUWindowState state)
+        => state switch
+        {
+            WebGPUWindowState.Normal => NativeWindowState.Normal,
+            WebGPUWindowState.Minimized => NativeWindowState.Minimized,
+            WebGPUWindowState.Maximized => NativeWindowState.Maximized,
+            WebGPUWindowState.Fullscreen => NativeWindowState.Fullscreen,
+            _ => throw new InvalidOperationException("The WebGPU window state mapping is incomplete.")
+        };
 
-    private static WebGPUWindowState FromNative(NativeWindowState state) => (WebGPUWindowState)(int)state;
+    private static WebGPUWindowState FromNative(NativeWindowState state)
+        => state switch
+        {
+            NativeWindowState.Normal => WebGPUWindowState.Normal,
+            NativeWindowState.Minimized => WebGPUWindowState.Minimized,
+            NativeWindowState.Maximized => WebGPUWindowState.Maximized,
+            NativeWindowState.Fullscreen => WebGPUWindowState.Fullscreen,
+            _ => throw new InvalidOperationException("The native window state mapping is incomplete.")
+        };
 
-    private static NativeWindowBorder ToNative(WebGPUWindowBorder border) => (NativeWindowBorder)(int)border;
+    private static NativeWindowBorder ToNative(WebGPUWindowBorder border)
+        => border switch
+        {
+            WebGPUWindowBorder.Resizable => NativeWindowBorder.Resizable,
+            WebGPUWindowBorder.Fixed => NativeWindowBorder.Fixed,
+            WebGPUWindowBorder.Hidden => NativeWindowBorder.Hidden,
+            _ => throw new InvalidOperationException("The WebGPU window border mapping is incomplete.")
+        };
 
-    private static WebGPUWindowBorder FromNative(NativeWindowBorder border) => (WebGPUWindowBorder)(int)border;
+    private static WebGPUWindowBorder FromNative(NativeWindowBorder border)
+        => border switch
+        {
+            NativeWindowBorder.Resizable => WebGPUWindowBorder.Resizable,
+            NativeWindowBorder.Fixed => WebGPUWindowBorder.Fixed,
+            NativeWindowBorder.Hidden => WebGPUWindowBorder.Hidden,
+            _ => throw new InvalidOperationException("The native window border mapping is incomplete.")
+        };
 }

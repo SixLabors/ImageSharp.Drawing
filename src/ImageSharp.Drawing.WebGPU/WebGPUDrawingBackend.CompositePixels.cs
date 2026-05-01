@@ -62,7 +62,7 @@ public sealed partial class WebGPUDrawingBackend
             return false;
         }
 
-        formatId = WebGPUTextureFormatMapper.FromSilk(r.TextureFormat);
+        formatId = WebGPUTextureFormatMapper.FromNative(r.TextureFormat);
         requiredFeature = r.RequiredFeature;
         return true;
     }
@@ -79,7 +79,7 @@ public sealed partial class WebGPUDrawingBackend
         out TextureFormat textureFormat,
         out FeatureName requiredFeature)
     {
-        textureFormat = WebGPUTextureFormatMapper.ToSilk(format);
+        textureFormat = WebGPUTextureFormatMapper.ToNative(format);
         requiredFeature = Find(textureFormat).RequiredFeature;
     }
 

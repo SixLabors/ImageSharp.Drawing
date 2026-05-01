@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing.Backends;
 public class WebGPUTextureFormatMapperTests
 {
     [Fact]
-    public void Mapper_UsesExactSilkEnumValues_ForAllSupportedFormats()
+    public void Mapper_UsesExplicitMappings_ForAllSupportedFormats()
     {
         (WebGPUTextureFormat Drawing, TextureFormat Silk)[] mappings =
         [
@@ -23,9 +23,8 @@ public class WebGPUTextureFormatMapperTests
 
         foreach ((WebGPUTextureFormat drawing, TextureFormat silk) in mappings)
         {
-            Assert.Equal((int)silk, (int)drawing);
-            Assert.Equal(silk, WebGPUTextureFormatMapper.ToSilk(drawing));
-            Assert.Equal(drawing, WebGPUTextureFormatMapper.FromSilk(silk));
+            Assert.Equal(silk, WebGPUTextureFormatMapper.ToNative(drawing));
+            Assert.Equal(drawing, WebGPUTextureFormatMapper.FromNative(silk));
         }
     }
 }

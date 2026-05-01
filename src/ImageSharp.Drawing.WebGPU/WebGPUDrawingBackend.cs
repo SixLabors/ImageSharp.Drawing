@@ -121,7 +121,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         // so staging does not repeat the generic frame capability checks.
         _ = nativeTarget.TryGetNativeSurface(out NativeSurface? nativeSurface);
         WebGPUNativeTarget webGPUTarget = nativeSurface!.GetNativeTarget<WebGPUNativeTarget>();
-        TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(webGPUTarget.TargetFormat);
+        TextureFormat textureFormat = WebGPUTextureFormatMapper.ToNative(webGPUTarget.TargetFormat);
 
         if (webGPUTarget.TargetFormat != formatId)
         {

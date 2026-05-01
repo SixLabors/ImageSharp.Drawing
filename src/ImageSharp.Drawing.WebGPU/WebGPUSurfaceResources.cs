@@ -236,8 +236,8 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         SurfaceConfiguration surfaceConfiguration = new()
         {
             Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst | TextureUsage.TextureBinding,
-            Format = WebGPUTextureFormatMapper.ToSilk(this.Format),
-            PresentMode = (SilkPresentMode)(int)presentMode,
+            Format = WebGPUTextureFormatMapper.ToNative(this.Format),
+            PresentMode = ToNative(presentMode),
             Width = (uint)framebufferSize.Width,
             Height = (uint)framebufferSize.Height,
         };
@@ -247,6 +247,15 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         surfaceConfiguration.Device = (Device*)deviceReference.Handle;
         this.Api.SurfaceConfigure((Surface*)surfaceReference.Handle, ref surfaceConfiguration);
     }
+
+    private static SilkPresentMode ToNative(WebGPUPresentMode presentMode)
+        => presentMode switch
+        {
+            WebGPUPresentMode.Fifo => SilkPresentMode.Fifo,
+            WebGPUPresentMode.Immediate => SilkPresentMode.Immediate,
+            WebGPUPresentMode.Mailbox => SilkPresentMode.Mailbox,
+            _ => throw new InvalidOperationException("The WebGPU present mode mapping is incomplete.")
+        };
 
     /// <summary>
     /// Acquires the next presentable frame from <see cref="SurfaceHandle"/> and wraps it as a

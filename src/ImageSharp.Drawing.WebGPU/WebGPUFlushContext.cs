@@ -175,7 +175,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         _ = frame.TryGetNativeSurface(out NativeSurface? nativeSurface);
         WebGPUNativeTarget nativeTarget = nativeSurface!.GetNativeTarget<WebGPUNativeTarget>();
         WebGPU api = WebGPURuntime.GetApi();
-        TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeTarget.TargetFormat);
+        TextureFormat textureFormat = WebGPUTextureFormatMapper.ToNative(nativeTarget.TargetFormat);
         Rectangle bounds = frame.Bounds;
         Rectangle nativeBounds = new(0, 0, nativeTarget.Width, nativeTarget.Height);
         WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(api, nativeTarget.DeviceHandle);
