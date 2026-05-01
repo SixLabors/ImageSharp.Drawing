@@ -533,9 +533,17 @@ internal static unsafe partial class WebGPURuntime
         }
 
         using PfnRequestAdapterCallback callbackPtr = PfnRequestAdapterCallback.From(Callback);
+        WebGPUEnvironmentOptions environmentOptions = WebGPUEnvironment.Options;
+
         RequestAdapterOptions options = new()
         {
-            PowerPreference = PowerPreference.HighPerformance
+            PowerPreference = environmentOptions.PowerPreference switch
+            {
+                WebGPUPowerPreference.Default => PowerPreference.Undefined,
+                WebGPUPowerPreference.LowPower => PowerPreference.LowPower,
+                WebGPUPowerPreference.HighPerformance => PowerPreference.HighPerformance,
+                _ => throw new InvalidOperationException("The WebGPU power preference mapping is incomplete.")
+            }
         };
 
         api.InstanceRequestAdapter(instance, in options, callbackPtr, null);

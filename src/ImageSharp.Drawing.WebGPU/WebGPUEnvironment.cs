@@ -10,6 +10,15 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 public static class WebGPUEnvironment
 {
     /// <summary>
+    /// Gets or sets the options used when the library-managed WebGPU environment is initialized.
+    /// </summary>
+    /// <remarks>
+    /// Assign this before constructing WebGPU objects or calling support probes. The shared WebGPU runtime reads the
+    /// current options during first initialization; changing them later does not reconfigure an existing device.
+    /// </remarks>
+    public static WebGPUEnvironmentOptions Options { get; set; } = WebGPUEnvironmentOptions.Default;
+
+    /// <summary>
     /// Gets or sets the callback invoked when the native WebGPU runtime reports an uncaptured device error.
     /// </summary>
     /// <remarks>

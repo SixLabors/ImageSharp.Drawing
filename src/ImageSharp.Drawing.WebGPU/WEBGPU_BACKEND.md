@@ -27,6 +27,10 @@ The public WebGPU surface area around this backend is small and target-first.
 
 `WebGPUDeviceContext` is internal infrastructure used by targets and surfaces. It is not part of the public WebGPU entry-point model.
 
+`WebGPUEnvironment.Options` configures the library-managed WebGPU environment before first use. Set it before
+constructing WebGPU objects or calling support probes; the shared runtime reads the current options during first
+initialization and does not reconfigure an existing device after that point.
+
 Those types all exist to get a `DrawingCanvas` over a native WebGPU target. Once the canvas flushes, `WebGPUDrawingBackend` becomes the execution boundary.
 
 The support probes also live outside the backend:
