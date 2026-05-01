@@ -1458,7 +1458,15 @@ internal static class WebGPUSceneDispatch
         ulong usableBytes = Math.Max(bindingLimitFailure.LimitBytes - (bindingLimitFailure.LimitBytes / 8UL), 1UL);
         uint estimatedTileHeight = checked((uint)Math.Max(1UL, (usableBytes * currentTileHeight) / bindingLimitFailure.RequiredBytes));
         uint alignedTileHeight = AlignChunkTileHeight(Math.Min(estimatedTileHeight, remainingTileHeight), remainingTileHeight);
-        return alignedTileHeight < currentTileHeight ? alignedTileHeight : Math.Max(1U, currentTileHeight / 2U);
+        if (alignedTileHeight < currentTileHeight)
+        {
+            return alignedTileHeight;
+        }
+
+        // Chunk starts must remain 16-row aligned because coarse indexes the full-scene
+        // bin grid from chunk_tile_y_start / N_TILE_Y. A sub-bin start would read the
+        // wrong bin headers for that chunk and drop coverage.
+        return currentTileHeight > 16U ? (currentTileHeight - 1U) & ~15U : currentTileHeight;
     }
 
     /// <summary>

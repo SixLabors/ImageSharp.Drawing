@@ -37,8 +37,9 @@ internal sealed class SkiaSharpBenchmarkBackend : IBenchmarkBackend
         using SKPaint paint = new()
         {
             IsAntialias = true,
-            Style = SKPaintStyle.Fill,
-            StrokeCap = SKStrokeCap.Square,
+            Style = SKPaintStyle.Stroke,
+            StrokeCap = SKStrokeCap.Butt,
+            StrokeJoin = SKStrokeJoin.Miter,
         };
 
         Stopwatch stopwatch = Stopwatch.StartNew();
