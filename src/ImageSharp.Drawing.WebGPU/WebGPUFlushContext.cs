@@ -154,8 +154,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
     /// <summary>
     /// Creates a flush context for a native WebGPU surface.
-    /// Returns <see langword="null"/> when the frame does not expose a native surface
-    /// or the device lacks the required feature.
     /// </summary>
     /// <param name="frame">The target frame.</param>
     /// <param name="expectedTextureFormat">The expected GPU texture format.</param>
@@ -164,20 +162,18 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <see cref="FeatureName.Undefined"/> when no special feature is needed.
     /// </param>
     /// <param name="memoryAllocator">The memory allocator for staging buffers.</param>
-    /// <returns>The flush context, or <see langword="null"/> when GPU execution is unavailable.</returns>
-    public static WebGPUFlushContext? Create<TPixel>(
-        ICanvasFrame<TPixel> frame,
+    /// <returns>The flush context.</returns>
+    public static WebGPUFlushContext Create<TPixel>(
+        NativeCanvasFrame<TPixel> frame,
         TextureFormat expectedTextureFormat,
         FeatureName requiredFeature,
         MemoryAllocator memoryAllocator)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        if (!frame.TryGetNativeSurface(out NativeSurface? nativeSurface))
-        {
-            return null;
-        }
-
-        WebGPUNativeTarget nativeTarget = nativeSurface.GetNativeTarget<WebGPUNativeTarget>();
+        // The native-frame overload is used after WebGPU target selection has already
+        // succeeded, so this unwraps the known native surface instead of probing support.
+        _ = frame.TryGetNativeSurface(out NativeSurface? nativeSurface);
+        WebGPUNativeTarget nativeTarget = nativeSurface!.GetNativeTarget<WebGPUNativeTarget>();
         WebGPU api = WebGPURuntime.GetApi();
         TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeTarget.TargetFormat);
         Rectangle bounds = frame.Bounds;
@@ -189,12 +185,12 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             nativeTarget.TargetTextureViewHandle.IsInvalid ||
             textureFormat != expectedTextureFormat)
         {
-            return null;
+            throw new InvalidOperationException("The native WebGPU target does not match the flush context requirements.");
         }
 
         if (requiredFeature != FeatureName.Undefined && !deviceState.HasFeature(requiredFeature))
         {
-            return null;
+            throw new NotSupportedException($"The WebGPU device does not support required feature '{requiredFeature}'.");
         }
 
         // Region frames expose bounds relative to their parent target. The flush context must preserve
@@ -202,7 +198,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         // the correct sub-rectangle of the native surface instead of silently expanding back to full-frame.
         if (!nativeBounds.Contains(bounds))
         {
-            return null;
+            throw new InvalidOperationException("The native WebGPU target bounds do not contain the flush bounds.");
         }
 
         return new WebGPUFlushContext(

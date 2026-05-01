@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
-using System.Threading;
 using Silk.NET.WebGPU;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -106,6 +105,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     {
         this.ThrowIfDisposed();
 
+        NativeCanvasFrame<TPixel> nativeTarget = (NativeCanvasFrame<TPixel>)target;
+
         if (scene is not WebGPUDrawingBackendScene webGPUScene)
         {
             throw new InvalidOperationException("The retained scene is not a WebGPU drawing backend scene.");
@@ -116,17 +117,18 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             throw new NotSupportedException($"The WebGPU backend does not support pixel format '{typeof(TPixel).Name}'.");
         }
 
-        if (!TryGetSceneTarget(
-                target,
-                formatId,
-                requiredFeature,
-                out TextureFormat textureFormat,
-                out Rectangle targetBounds))
+        // RenderScene only accepts native frames on the WebGPU path; unwrap the surface once
+        // so staging does not repeat the generic frame capability checks.
+        _ = nativeTarget.TryGetNativeSurface(out NativeSurface? nativeSurface);
+        WebGPUNativeTarget webGPUTarget = nativeSurface!.GetNativeTarget<WebGPUNativeTarget>();
+        TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(webGPUTarget.TargetFormat);
+
+        if (webGPUTarget.TargetFormat != formatId)
         {
-            throw new NotSupportedException("The target cannot create a WebGPU flush context.");
+            throw new InvalidOperationException("The target texture format does not match the retained WebGPU scene pixel format.");
         }
 
-        if (targetBounds != webGPUScene.Bounds)
+        if (nativeTarget.Bounds != webGPUScene.Bounds)
         {
             throw new InvalidOperationException("The target bounds do not match the retained WebGPU scene bounds.");
         }
@@ -137,7 +139,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         WebGPUSceneBumpSizes currentBumpSizes = webGPUScene.BumpSizes;
         WebGPUSceneResourceArena? resourceArena = null;
         WebGPUSceneSchedulingArena? schedulingArena = null;
-        string? error;
 
         try
         {
@@ -157,24 +158,14 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 // rediscovering the same growth.
                 for (int attempt = 0; attempt < MaxDynamicGrowthAttempts; attempt++)
                 {
-                    if (!WebGPUSceneDispatch.TryCreateStagedScene(
-                            configuration,
-                            target,
-                            encodedScene,
-                            textureFormat,
-                            requiredFeature,
-                            currentBumpSizes,
-                            ref resourceArena,
-                            out bool exceedsBindingLimit,
-                            out _,
-                            out WebGPUStagedScene stagedScene,
-                            out error))
-                    {
-                        throw new InvalidOperationException(
-                            exceedsBindingLimit
-                                ? error ?? "The staged WebGPU scene exceeded the current binding limits."
-                                : error ?? "Failed to create the staged WebGPU scene.");
-                    }
+                    WebGPUStagedScene stagedScene = WebGPUSceneDispatch.CreateStagedScene(
+                        configuration,
+                        nativeTarget,
+                        encodedScene,
+                        textureFormat,
+                        requiredFeature,
+                        currentBumpSizes,
+                        ref resourceArena);
 
                     try
                     {
@@ -189,7 +180,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                             ref schedulingArena,
                             out bool requiresGrowth,
                             out WebGPUSceneBumpSizes grownBumpSizes,
-                            out error);
+                            out string? error);
 
                         if (renderSucceeded)
                         {
@@ -225,59 +216,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         {
             webGPUScene.ReturnArenas(resourceArena, schedulingArena, this);
         }
-    }
-
-    /// <summary>
-    /// Validates the target information needed to render a retained WebGPU scene.
-    /// </summary>
-    /// <typeparam name="TPixel">The pixel format.</typeparam>
-    /// <param name="target">The target frame.</param>
-    /// <param name="expectedFormat">The expected WebGPU texture format.</param>
-    /// <param name="requiredFeature">The optional feature required by the texture format.</param>
-    /// <param name="textureFormat">Receives the native WebGPU texture format.</param>
-    /// <param name="targetBounds">Receives the target bounds.</param>
-    /// <returns><see langword="true"/> when the target can accept a WebGPU scene.</returns>
-    private static bool TryGetSceneTarget<TPixel>(
-        ICanvasFrame<TPixel> target,
-        WebGPUTextureFormat expectedFormat,
-        FeatureName requiredFeature,
-        out TextureFormat textureFormat,
-        out Rectangle targetBounds)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        textureFormat = default;
-        targetBounds = default;
-
-        if (!target.TryGetNativeSurface(out NativeSurface? nativeSurface))
-        {
-            return false;
-        }
-
-        WebGPUNativeTarget nativeTarget = nativeSurface.GetNativeTarget<WebGPUNativeTarget>();
-        if (nativeTarget.DeviceHandle.IsInvalid ||
-            nativeTarget.QueueHandle.IsInvalid ||
-            nativeTarget.TargetTextureViewHandle.IsInvalid ||
-            nativeTarget.TargetFormat != expectedFormat)
-        {
-            return false;
-        }
-
-        targetBounds = target.Bounds;
-        Rectangle nativeBounds = new(0, 0, nativeTarget.Width, nativeTarget.Height);
-        if (!nativeBounds.Contains(targetBounds))
-        {
-            return false;
-        }
-
-        WebGPU api = WebGPURuntime.GetApi();
-        WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(api, nativeTarget.DeviceHandle);
-        if (requiredFeature != FeatureName.Undefined && !deviceState.HasFeature(requiredFeature))
-        {
-            return false;
-        }
-
-        textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeTarget.TargetFormat);
-        return true;
     }
 
     /// <summary>

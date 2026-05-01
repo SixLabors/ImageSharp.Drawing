@@ -134,173 +134,23 @@ internal static class WebGPUSceneDispatch
     }
 
     /// <summary>
-    /// Builds the flush-scoped encoded scene and uploads its GPU resources.
-    /// </summary>
-    /// <param name="configuration">The drawing configuration that owns allocators and backend settings.</param>
-    /// <param name="target">The flush target that exposes the native WebGPU surface.</param>
-    /// <param name="scene">The prepared composition scene to stage.</param>
-    /// <param name="bumpSizes">The current dynamic scratch capacities to use for this attempt.</param>
-    /// <param name="resourceArena">Cross-flush cached scene resource buffers.</param>
-    /// <param name="stagedScene">Receives the flush-scoped staged scene on success.</param>
-    /// <param name="error">Receives the staging failure reason when creation fails.</param>
-    /// <typeparam name="TPixel">The pixel type of the target surface.</typeparam>
-    /// <returns><see langword="true"/> when the staged scene was created successfully; otherwise, <see langword="false"/>.</returns>
-    public static bool TryCreateStagedScene<TPixel>(
-        Configuration configuration,
-        ICanvasFrame<TPixel> target,
-        DrawingCommandBatch scene,
-        WebGPUSceneBumpSizes bumpSizes,
-        ref WebGPUSceneResourceArena? resourceArena,
-        out WebGPUStagedScene stagedScene,
-        out string? error)
-        where TPixel : unmanaged, IPixel<TPixel>
-        => TryCreateStagedScene(configuration, target, scene, bumpSizes, ref resourceArena, out _, out _, out stagedScene, out error);
-
-    /// <summary>
-    /// Builds the flush-scoped encoded scene and uploads its GPU resources.
-    /// </summary>
-    /// <param name="configuration">The drawing configuration that owns allocators and backend settings.</param>
-    /// <param name="target">The flush target that exposes the native WebGPU surface.</param>
-    /// <param name="scene">The prepared composition scene for this flush.</param>
-    /// <param name="bumpSizes">The current dynamic scratch capacities to use for this attempt.</param>
-    /// <param name="resourceArena">Cross-flush cached scene resource buffers.</param>
-    /// <param name="exceedsBindingLimit">Receives whether creation failed because a single WebGPU binding would be too large.</param>
-    /// <param name="bindingLimitFailure">Receives the exact binding-limit failure when <paramref name="exceedsBindingLimit"/> is <see langword="true"/>.</param>
-    /// <param name="stagedScene">Receives the flush-scoped staged scene on success.</param>
-    /// <param name="error">Receives the staging failure reason when creation fails.</param>
-    /// <typeparam name="TPixel">The pixel type of the target surface.</typeparam>
-    /// <returns><see langword="true"/> when the staged scene was created successfully; otherwise, <see langword="false"/>.</returns>
-    public static bool TryCreateStagedScene<TPixel>(
-        Configuration configuration,
-        ICanvasFrame<TPixel> target,
-        DrawingCommandBatch scene,
-        WebGPUSceneBumpSizes bumpSizes,
-        ref WebGPUSceneResourceArena? resourceArena,
-        out bool exceedsBindingLimit,
-        out BindingLimitFailure bindingLimitFailure,
-        out WebGPUStagedScene stagedScene,
-        out string? error)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        stagedScene = default;
-        exceedsBindingLimit = false;
-        bindingLimitFailure = BindingLimitFailure.None;
-        WebGPUEncodedScene? encodedScene = null;
-
-        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormat formatId, out FeatureName requiredFeature))
-        {
-            error = $"The staged WebGPU scene pipeline does not support pixel format '{typeof(TPixel).Name}'.";
-            return false;
-        }
-
-        TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(formatId);
-
-        WebGPUFlushContext? flushContext = WebGPUFlushContext.Create(
-            target,
-            textureFormat,
-            requiredFeature,
-            configuration.MemoryAllocator);
-
-        if (flushContext is null)
-        {
-            error = "Failed to create a WebGPU flush context for the staged scene pipeline.";
-            return false;
-        }
-
-        try
-        {
-            if (!WebGPUSceneEncoder.TryEncode(
-                    scene,
-                    flushContext.TargetBounds,
-                    flushContext.MemoryAllocator,
-                    configuration.MaxDegreeOfParallelism,
-                    out WebGPUEncodedScene createdScene,
-                    out error))
-            {
-                flushContext.Dispose();
-                stagedScene = default;
-                return false;
-            }
-
-            encodedScene = createdScene;
-            WebGPUSceneBumpSizes seededBumpSizes = SeedSceneBumpSizes(bumpSizes, encodedScene);
-            WebGPUSceneConfig config = WebGPUSceneConfig.Create(encodedScene, seededBumpSizes);
-            uint baseColor = 0U;
-            bool chunkingRequired = false;
-            if (!TryValidateBindingSizes(encodedScene, config, flushContext.DeviceState.MaxStorageBufferBindingSize, out bindingLimitFailure, out error))
-            {
-                if (!IsChunkableBindingFailure(bindingLimitFailure.Buffer))
-                {
-                    exceedsBindingLimit = true;
-                    encodedScene.Dispose();
-                    flushContext.Dispose();
-                    stagedScene = default;
-                    return false;
-                }
-
-                chunkingRequired = true;
-            }
-
-            if (encodedScene.FillCount == 0)
-            {
-                stagedScene = new WebGPUStagedScene(flushContext, encodedScene, config, default, chunkingRequired ? bindingLimitFailure : BindingLimitFailure.None);
-                error = null;
-                return true;
-            }
-
-            if (!WebGPUSceneResources.TryCreate<TPixel>(flushContext, encodedScene, config, baseColor, ref resourceArena, out WebGPUSceneResourceSet resources, out error))
-            {
-                encodedScene.Dispose();
-                flushContext.Dispose();
-                stagedScene = default;
-                return false;
-            }
-
-            stagedScene = new WebGPUStagedScene(flushContext, encodedScene, config, resources, chunkingRequired ? bindingLimitFailure : BindingLimitFailure.None);
-            error = null;
-            return true;
-        }
-        catch
-        {
-            encodedScene?.Dispose();
-            flushContext.Dispose();
-            stagedScene = default;
-            throw;
-        }
-    }
-
-    /// <summary>
     /// Builds flush-scoped GPU resources for a retained encoded scene.
     /// </summary>
-    public static bool TryCreateStagedScene<TPixel>(
+    public static WebGPUStagedScene CreateStagedScene<TPixel>(
         Configuration configuration,
-        ICanvasFrame<TPixel> target,
+        NativeCanvasFrame<TPixel> target,
         WebGPUEncodedScene encodedScene,
         TextureFormat textureFormat,
         FeatureName requiredFeature,
         WebGPUSceneBumpSizes bumpSizes,
-        ref WebGPUSceneResourceArena? resourceArena,
-        out bool exceedsBindingLimit,
-        out BindingLimitFailure bindingLimitFailure,
-        out WebGPUStagedScene stagedScene,
-        out string? error)
+        ref WebGPUSceneResourceArena? resourceArena)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        stagedScene = default;
-        exceedsBindingLimit = false;
-        bindingLimitFailure = BindingLimitFailure.None;
-
-        WebGPUFlushContext? flushContext = WebGPUFlushContext.Create(
+        WebGPUFlushContext flushContext = WebGPUFlushContext.Create(
             target,
             textureFormat,
             requiredFeature,
             configuration.MemoryAllocator);
-
-        if (flushContext is null)
-        {
-            error = "Failed to create a WebGPU flush context for the retained scene pipeline.";
-            return false;
-        }
 
         try
         {
@@ -309,14 +159,11 @@ internal static class WebGPUSceneDispatch
             uint baseColor = 0U;
             bool chunkingRequired = false;
 
-            if (!TryValidateBindingSizes(encodedScene, config, flushContext.DeviceState.MaxStorageBufferBindingSize, out bindingLimitFailure, out error))
+            if (!TryValidateBindingSizes(encodedScene, config, flushContext.DeviceState.MaxStorageBufferBindingSize, out BindingLimitFailure bindingLimitFailure, out string? error))
             {
                 if (!IsChunkableBindingFailure(bindingLimitFailure.Buffer))
                 {
-                    exceedsBindingLimit = true;
-                    flushContext.Dispose();
-                    stagedScene = default;
-                    return false;
+                    throw new InvalidOperationException(error ?? "The staged WebGPU scene exceeded the current binding limits.");
                 }
 
                 chunkingRequired = true;
@@ -324,40 +171,31 @@ internal static class WebGPUSceneDispatch
 
             if (encodedScene.FillCount == 0)
             {
-                stagedScene = new WebGPUStagedScene(
+                return new WebGPUStagedScene(
                     flushContext,
                     encodedScene,
                     config,
                     default,
                     chunkingRequired ? bindingLimitFailure : BindingLimitFailure.None,
                     ownsEncodedScene: false);
-
-                error = null;
-                return true;
             }
 
             if (!WebGPUSceneResources.TryCreate<TPixel>(flushContext, encodedScene, config, baseColor, ref resourceArena, out WebGPUSceneResourceSet resources, out error))
             {
-                flushContext.Dispose();
-                stagedScene = default;
-                return false;
+                throw new InvalidOperationException(error ?? "Failed to create WebGPU scene resources.");
             }
 
-            stagedScene = new WebGPUStagedScene(
+            return new WebGPUStagedScene(
                 flushContext,
                 encodedScene,
                 config,
                 resources,
                 chunkingRequired ? bindingLimitFailure : BindingLimitFailure.None,
                 ownsEncodedScene: false);
-
-            error = null;
-            return true;
         }
         catch
         {
             flushContext.Dispose();
-            stagedScene = default;
             throw;
         }
     }

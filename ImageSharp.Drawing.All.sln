@@ -336,15 +336,14 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImageSharp.Drawing.ManualBenchmarks", "tests\ImageSharp.Drawing.ManualBenchmarks\ImageSharp.Drawing.ManualBenchmarks.csproj", "{70193989-E587-451A-AF34-4C74FEE5DA5A}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{CC2DDE4D-58D9-4333-BBEE-B4F36E0A4070}"
-	ProjectSection(SolutionItems) = preProject
-		samples\DrawingBackendBenchmark\DrawingBackendBenchmark.csproj = samples\DrawingBackendBenchmark\DrawingBackendBenchmark.csproj
-	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebGPUWindowDemo", "samples\WebGPUWindowDemo\WebGPUWindowDemo.csproj", "{999D90DE-6940-4693-9F80-701F2D5DB77A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DrawShapesWithImageSharp", "samples\DrawShapesWithImageSharp\DrawShapesWithImageSharp.csproj", "{43A3CA46-2675-4AD4-88FC-DDC2E657F0B7}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebGPUExternalSurfaceDemo", "samples\WebGPUExternalSurfaceDemo\WebGPUExternalSurfaceDemo.csproj", "{F0AAE591-A44E-48A5-8C74-395BDF98F646}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DrawingBackendBenchmark", "samples\DrawingBackendBenchmark\DrawingBackendBenchmark.csproj", "{B5CF5531-624F-9F49-46BD-937FF4062F54}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -464,6 +463,18 @@ Global
 		{F0AAE591-A44E-48A5-8C74-395BDF98F646}.Release|x64.Build.0 = Release|Any CPU
 		{F0AAE591-A44E-48A5-8C74-395BDF98F646}.Release|x86.ActiveCfg = Release|Any CPU
 		{F0AAE591-A44E-48A5-8C74-395BDF98F646}.Release|x86.Build.0 = Release|Any CPU
+		{B5CF5531-624F-9F49-46BD-937FF4062F54}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B5CF5531-624F-9F49-46BD-937FF4062F54}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B5CF5531-624F-9F49-46BD-937FF4062F54}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B5CF5531-624F-9F49-46BD-937FF4062F54}.Debug|x64.Build.0 = Debug|Any CPU
+		{B5CF5531-624F-9F49-46BD-937FF4062F54}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B5CF5531-624F-9F49-46BD-937FF4062F54}.Debug|x86.Build.0 = Debug|Any CPU
+		{B5CF5531-624F-9F49-46BD-937FF4062F54}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B5CF5531-624F-9F49-46BD-937FF4062F54}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B5CF5531-624F-9F49-46BD-937FF4062F54}.Release|x64.ActiveCfg = Release|Any CPU
+		{B5CF5531-624F-9F49-46BD-937FF4062F54}.Release|x64.Build.0 = Release|Any CPU
+		{B5CF5531-624F-9F49-46BD-937FF4062F54}.Release|x86.ActiveCfg = Release|Any CPU
+		{B5CF5531-624F-9F49-46BD-937FF4062F54}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -496,6 +507,7 @@ Global
 		{999D90DE-6940-4693-9F80-701F2D5DB77A} = {CC2DDE4D-58D9-4333-BBEE-B4F36E0A4070}
 		{43A3CA46-2675-4AD4-88FC-DDC2E657F0B7} = {CC2DDE4D-58D9-4333-BBEE-B4F36E0A4070}
 		{F0AAE591-A44E-48A5-8C74-395BDF98F646} = {CC2DDE4D-58D9-4333-BBEE-B4F36E0A4070}
+		{B5CF5531-624F-9F49-46BD-937FF4062F54} = {CC2DDE4D-58D9-4333-BBEE-B4F36E0A4070}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {5F8B9D1F-CD8B-4CC5-8216-D531E25BD795}
