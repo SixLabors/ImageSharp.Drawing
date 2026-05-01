@@ -713,13 +713,11 @@ internal static unsafe class WebGPUSceneResources
     private static uint PackImageSampleInfo(TextureFormat textureFormat, uint xExtendMode, uint yExtendMode)
     {
         const uint alpha = 0xFFU;
-        const uint qualityLow = 0U;
         const uint alphaTypeStraight = 0U;
         uint format = textureFormat == TextureFormat.Bgra8Unorm ? 1U : 0U;
         return alpha
             | (yExtendMode << 8)
             | (xExtendMode << 10)
-            | (qualityLow << 12)
             | (alphaTypeStraight << 14)
             | (format << 15);
     }

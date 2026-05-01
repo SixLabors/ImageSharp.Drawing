@@ -106,7 +106,6 @@ struct CmdImage {
     format: u32,
     x_extend_mode: u32,
     y_extend_mode: u32,
-    quality: u32,
     alpha: f32,
     alpha_type: u32,
 }

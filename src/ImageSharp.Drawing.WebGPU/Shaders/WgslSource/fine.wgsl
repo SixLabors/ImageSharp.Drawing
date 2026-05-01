@@ -23,10 +23,6 @@ var<storage> segments: array<Segment>;
 
 const GRADIENT_WIDTH = 512;
 
-const IMAGE_QUALITY_LOW = 0u;
-const IMAGE_QUALITY_MEDIUM = 1u;
-const IMAGE_QUALITY_HIGH = 2u;
-
 const LUMINANCE_MASK_LAYER = 0x10000u;
 
 @group(0) @binding(2)
@@ -153,7 +149,6 @@ fn read_image(cmd_ix: u32) -> CmdImage {
     let alpha = f32(sample_alpha & 0xFFu) / 255.0;
     let format = sample_alpha >> 15u;
     let alpha_type = (sample_alpha >> 14u) & 0x1u;
-    let quality = (sample_alpha >> 12u) & 0x3u;
     let x_extend = (sample_alpha >> 10u) & 0x3u;
     let y_extend = (sample_alpha >> 8u) & 0x3u;
     // The following are not intended to be bitcasts
@@ -161,7 +156,7 @@ fn read_image(cmd_ix: u32) -> CmdImage {
     let y = f32(xy & 0xffffu);
     let width = f32(width_height >> 16u);
     let height = f32(width_height & 0xffffu);
-    return CmdImage(matrx, xlat, vec2(x, y), vec2(width, height), format, x_extend, y_extend, quality, alpha, alpha_type);
+    return CmdImage(matrx, xlat, vec2(x, y), vec2(width, height), format, x_extend, y_extend, alpha, alpha_type);
 }
 
 fn read_end_clip(cmd_ix: u32) -> CmdEndClip {
@@ -338,33 +333,20 @@ fn extend_mode(t: f32, mode: u32, max: f32) -> f32 {
     }
 }
 
-fn image_extend_mode_normalized(t: f32, mode: u32) -> f32 {
-    switch mode {
-        case EXTEND_PAD: {
-            return clamp(t, 0.0, 1.0);
-        }
-        case EXTEND_REPEAT: {
-            return fract(t);
-        }
-        case EXTEND_REFLECT, default: {
-            let reflected = fract(0.5 * t) * 2.0;
-            return 1.0 - abs(reflected - 1.0);
-        }
-    }
+fn image_repeat_mode_i32(t: f32, max: i32) -> i32 {
+    let value = i32(t);
+    let magnitude = select(value, -value, value < 0);
+    let remainder = magnitude % max;
+    let signed_remainder = select(remainder, -remainder, value < 0);
+
+    // Match the CPU ImageBrush index calculation: ((value % max) + max) % max.
+    return (signed_remainder + max) % max;
 }
 
-fn image_extend_mode(t: f32, mode: u32, max: f32) -> f32 {
-    switch mode {
-        case EXTEND_PAD: {
-            return clamp(t, 0.0, max);
-        }
-        case EXTEND_REPEAT: {
-            return image_extend_mode_normalized(t / max, mode) * max;
-        }
-        case EXTEND_REFLECT, default: {
-            return image_extend_mode_normalized(t / max, mode) * max;
-        }
-    }
+fn image_reflect_mode_i32(t: f32, max: i32) -> i32 {
+    let reflected = fract(0.5 * t) * 2.0;
+    let wrapped = (1.0 - abs(reflected - 1.0)) * f32(max);
+    return i32(clamp(wrapped, 0.0, f32(max - 1)));
 }
 
 fn image_extend_mode_i32(t: f32, mode: u32, max: i32) -> i32 {
@@ -373,12 +355,10 @@ fn image_extend_mode_i32(t: f32, mode: u32, max: i32) -> i32 {
             return clamp(i32(t), 0, max - 1);
         }
         case EXTEND_REPEAT: {
-            let wrapped = i32(t) % max;
-            return select(wrapped + max, wrapped, wrapped >= 0);
+            return image_repeat_mode_i32(t, max);
         }
         case EXTEND_REFLECT, default: {
-            let reflected = clamp(image_extend_mode(t, mode, f32(max)), 0.0, f32(max - 1));
-            return i32(reflected);
+            return image_reflect_mode_i32(t, max);
         }
     }
 }
@@ -842,50 +822,17 @@ fn main(
             case CMD_IMAGE: {
                 let image = read_image(cmd_ix);
                 let draw_flags = info[ptcl[cmd_ix + 1u] - 1u];
-                let atlas_max = image.atlas_offset + image.extents - vec2(1.0);
-                switch image.quality {
-                    case IMAGE_QUALITY_LOW: {
-                        for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                            // We only need to load from the textures if the value will be used.
-                            if area[i] != 0.0 {
-                                let my_xy = vec2(xy.x + f32(i), xy.y);
-                                var atlas_uv = image.matrx.xy * my_xy.x + image.matrx.zw * my_xy.y + image.xlat;
-                                let atlas_ix = image_extend_mode_i32(atlas_uv.x, image.x_extend_mode, i32(image.extents.x));
-                                let atlas_iy = image_extend_mode_i32(atlas_uv.y, image.y_extend_mode, i32(image.extents.y));
-                                let atlas_uv_clamped = vec2<i32>(i32(image.atlas_offset.x) + atlas_ix, i32(image.atlas_offset.y) + atlas_iy);
-                                // Nearest neighbor sampling
-                                let fg_rgba = maybe_premul_alpha(textureLoad(image_atlas, atlas_uv_clamped, 0), image.alpha_type);
-                                let fg_i = pixel_format(fg_rgba * area[i] * image.alpha, image.format);
-                                rgba[i] = compose_draw(rgba[i], fg_i, draw_flags);
-                            }
-                        }
-                    }
-                    case IMAGE_QUALITY_MEDIUM, default: {
-                        // We don't have an implementation for `IMAGE_QUALITY_HIGH` yet, just use the same as medium
-                        for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                            // We only need to load from the textures if the value will be used.
-                            if area[i] != 0.0 {
-                                let my_xy = vec2(xy.x + f32(i), xy.y);
-                                var atlas_uv = image.matrx.xy * my_xy.x + image.matrx.zw * my_xy.y + image.xlat;
-                                atlas_uv.x = image_extend_mode(atlas_uv.x, image.x_extend_mode, image.extents.x);
-                                atlas_uv.y = image_extend_mode(atlas_uv.y, image.y_extend_mode, image.extents.y);
-                                atlas_uv = atlas_uv + image.atlas_offset - vec2(0.5);
-                                // TODO: If the image couldn't be added to the atlas (i.e. was too big), this isn't robust
-                                let atlas_uv_clamped = clamp(atlas_uv, image.atlas_offset, atlas_max);
-                                // We know that the floor and ceil are within the atlas area because atlas_max and
-                                // atlas_offset are integers
-                                let uv_quad = vec4(floor(atlas_uv_clamped), ceil(atlas_uv_clamped));
-                                let uv_frac = fract(atlas_uv);
-                                let a = maybe_premul_alpha(textureLoad(image_atlas, vec2<i32>(uv_quad.xy), 0), image.alpha_type);
-                                let b = maybe_premul_alpha(textureLoad(image_atlas, vec2<i32>(uv_quad.xw), 0), image.alpha_type);
-                                let c = maybe_premul_alpha(textureLoad(image_atlas, vec2<i32>(uv_quad.zy), 0), image.alpha_type);
-                                let d = maybe_premul_alpha(textureLoad(image_atlas, vec2<i32>(uv_quad.zw), 0), image.alpha_type);
-                                // Bilinear sampling
-                                let fg_rgba = mix(mix(a, b, uv_frac.y), mix(c, d, uv_frac.y), uv_frac.x);
-                                let fg_i = pixel_format(fg_rgba * area[i] * image.alpha, image.format);
-                                rgba[i] = compose_draw(rgba[i], fg_i, draw_flags);
-                            }
-                        }
+                for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+                    // We only need to load from the textures if the value will be used.
+                    if area[i] != 0.0 {
+                        let my_xy = vec2(xy.x + f32(i), xy.y);
+                        var atlas_uv = image.matrx.xy * my_xy.x + image.matrx.zw * my_xy.y + image.xlat;
+                        let atlas_ix = image_extend_mode_i32(atlas_uv.x, image.x_extend_mode, i32(image.extents.x));
+                        let atlas_iy = image_extend_mode_i32(atlas_uv.y, image.y_extend_mode, i32(image.extents.y));
+                        let atlas_uv_clamped = vec2<i32>(i32(image.atlas_offset.x) + atlas_ix, i32(image.atlas_offset.y) + atlas_iy);
+                        let fg_rgba = maybe_premul_alpha(textureLoad(image_atlas, atlas_uv_clamped, 0), image.alpha_type);
+                        let fg_i = pixel_format(fg_rgba * area[i] * image.alpha, image.format);
+                        rgba[i] = compose_draw(rgba[i], fg_i, draw_flags);
                     }
                 }
                 cmd_ix += 2u;
@@ -903,7 +850,7 @@ fn main(
             let rgba_sep = vec4(fg.rgb * a_inv, fg.a);
             textureStore(output, vec2<i32>(coords), rgba_sep);
         }
-    } 
+    }
 }
 
 fn premul_alpha(rgba: vec4<f32>) -> vec4<f32> {
