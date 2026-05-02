@@ -61,9 +61,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.05F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath", defaultImage, nativeSurfaceImage, 0.0012F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0012F);
     }
 
     [WebGPUTheory]
@@ -103,9 +103,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_UncontainedGeometry", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.3F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_UncontainedGeometry", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -136,9 +136,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_AliasedThreshold", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_AliasedThreshold", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -173,9 +173,9 @@ public partial class WebGPUDrawingBackendTests
             drawingOptions,
             DrawAction);
 
-        DebugSaveBackendPair(provider, "FillPath_ImageBrush", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_ImageBrush", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -232,12 +232,12 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_NonZeroNestedContours", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
 
         // Non-zero winding semantics must still match on an interior point.
         Assert.Equal(defaultImage[128, 128], nativeSurfaceImage[128, 128]);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_NonZeroNestedContours", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -279,13 +279,13 @@ public partial class WebGPUDrawingBackendTests
 
         DebugSaveBackendPair(
             provider,
-            $"FillPath_GraphicsOptions_SolidBrush_{colorMode}_{alphaMode}",
+            $"{colorMode}_{alphaMode}",
             defaultImage,
             nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.1F);
         AssertBackendPairReferenceOutputs(
             provider,
-            $"FillPath_GraphicsOptions_SolidBrush_{colorMode}_{alphaMode}",
+            $"{colorMode}_{alphaMode}",
             defaultImage,
             nativeSurfaceImage);
     }
@@ -330,13 +330,13 @@ public partial class WebGPUDrawingBackendTests
 
         DebugSaveBackendPair(
             provider,
-            $"FillPath_GraphicsOptions_ImageBrush_{colorMode}_{alphaMode}",
+            $"{colorMode}_{alphaMode}",
             defaultImage,
             nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.1F);
         AssertBackendPairReferenceOutputs(
             provider,
-            $"FillPath_GraphicsOptions_ImageBrush_{colorMode}_{alphaMode}",
+            $"{colorMode}_{alphaMode}",
             defaultImage,
             nativeSurfaceImage);
     }
@@ -375,13 +375,13 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "DrawText", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.013F);
         Rectangle textRegion = Rectangle.Intersect(
             new Rectangle(0, 0, defaultImage.Width, defaultImage.Height),
             new Rectangle(8, 12, defaultImage.Width - 16, Math.Min(220, defaultImage.Height - 12)));
         AssertBackendPairSimilarityInRegion(defaultImage, nativeSurfaceImage, textRegion, 0.0157F);
-        AssertBackendPairReferenceOutputs(provider, "DrawText", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -416,9 +416,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_NativeSurfaceParity", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_NativeSurfaceParity", defaultImage, nativeSurfaceImage, 0.0012F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0012F);
     }
 
     [WebGPUTheory]
@@ -455,9 +455,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_NativeSurfaceSubregionParity", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_NativeSurfaceSubregionParity", defaultImage, nativeSurfaceImage, 0.0013F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0013F);
     }
 
     /// <summary>
@@ -526,7 +526,7 @@ public partial class WebGPUDrawingBackendTests
         }
 
         using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
-        DebugSaveBackendPair(provider, "Fill_RepeatedFrames", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
     }
 
@@ -556,9 +556,9 @@ public partial class WebGPUDrawingBackendTests
             drawingOptions,
             DrawAction);
 
-        DebugSaveBackendPair(provider, "Process", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0516F);
-        AssertBackendPairReferenceOutputs(provider, "Process", defaultImage, nativeSurfaceImage, 0.0006F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
     }
 
     [WebGPUTheory]
@@ -595,9 +595,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "RepeatedGlyphs", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 2F);
-        AssertBackendPairReferenceOutputs(provider, "RepeatedGlyphs", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -661,9 +661,9 @@ public partial class WebGPUDrawingBackendTests
         }
 
         using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
-        DebugSaveBackendPair(provider, "RepeatedGlyphs_AfterClear", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 2F);
-        AssertBackendPairReferenceOutputs(provider, "RepeatedGlyphs_AfterClear", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     private static void RenderWithDefaultBackend<TPixel>(Image<TPixel> image, DrawingOptions options, CanvasAction drawAction)
@@ -819,15 +819,18 @@ public partial class WebGPUDrawingBackendTests
         Image<TPixel> nativeSurfaceImage)
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        string defaultDetails = CreateBackendPairDetails(testName, "Default");
+        string nativeSurfaceDetails = CreateBackendPairDetails(testName, "WebGPU_NativeSurface");
+
         defaultImage.DebugSave(
             provider,
-            $"{testName}_Default",
+            defaultDetails,
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
 
         nativeSurfaceImage.DebugSave(
             provider,
-            $"{testName}_WebGPU_NativeSurface",
+            nativeSurfaceDetails,
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
     }
@@ -850,21 +853,27 @@ public partial class WebGPUDrawingBackendTests
         float tolerantPercentage = 0.0003F)
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        string defaultDetails = CreateBackendPairDetails(testName, "Default");
+        string nativeSurfaceDetails = CreateBackendPairDetails(testName, "WebGPU_NativeSurface");
+
         ImageComparer tolerantComparer = ImageComparer.TolerantPercentage(tolerantPercentage);
         defaultImage.CompareToReferenceOutput(
             tolerantComparer,
             provider,
-            $"{testName}_Default",
+            defaultDetails,
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
 
         nativeSurfaceImage.CompareToReferenceOutput(
             tolerantComparer,
             provider,
-            $"{testName}_WebGPU_NativeSurface",
+            nativeSurfaceDetails,
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
     }
+
+    private static string CreateBackendPairDetails(string testName, string role)
+        => string.IsNullOrWhiteSpace(testName) ? role : $"{testName}_{role}";
 
     private static void AssertBackendPairSimilarityInRegion<TPixel>(
         Image<TPixel> defaultImage,
@@ -909,9 +918,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "DrawPath_Stroke", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
-        AssertBackendPairReferenceOutputs(provider, "DrawPath_Stroke", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -951,9 +960,9 @@ public partial class WebGPUDrawingBackendTests
 
         float referenceTolerance = lineCap == LineCap.Square ? 0.0016F : 0.0003F;
 
-        DebugSaveBackendPair(provider, $"DrawPath_PointStroke_LineCap_{lineCap}", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, $"{lineCap}", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.03F);
-        AssertBackendPairReferenceOutputs(provider, $"DrawPath_PointStroke_LineCap_{lineCap}", defaultImage, nativeSurfaceImage, referenceTolerance);
+        AssertBackendPairReferenceOutputs(provider, $"{lineCap}", defaultImage, nativeSurfaceImage, referenceTolerance);
     }
 
     public static TheoryData<LineJoin> LineJoinValues { get; } = new()
@@ -1017,14 +1026,14 @@ public partial class WebGPUDrawingBackendTests
 
         DebugSaveBackendPair(
             provider,
-            $"DrawPath_Stroke_LineJoin_{lineJoin}",
+            $"{lineJoin}",
             defaultComparisonImage,
             nativeSurfaceComparisonImage);
 
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
         AssertBackendPairReferenceOutputs(
             provider,
-            $"DrawPath_Stroke_LineJoin_{lineJoin}",
+            $"{lineJoin}",
             defaultComparisonImage,
             nativeSurfaceComparisonImage);
 
@@ -1086,14 +1095,14 @@ public partial class WebGPUDrawingBackendTests
 
         DebugSaveBackendPair(
             provider,
-            $"DrawPath_Stroke_LineCap_{lineCap}",
+            $"{lineCap}",
             defaultComparisonImage,
             nativeSurfaceComparisonImage);
 
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0103F);
         AssertBackendPairReferenceOutputs(
             provider,
-            $"DrawPath_Stroke_LineCap_{lineCap}",
+            $"{lineCap}",
             defaultComparisonImage,
             nativeSurfaceComparisonImage);
 
@@ -1141,9 +1150,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_MultipleSeparate", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_MultipleSeparate", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -1199,12 +1208,12 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_EvenOdd", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
 
         // EvenOdd with same winding inner contour should create a hole at center.
         Assert.Equal(defaultImage[128, 128], nativeSurfaceImage[128, 128]);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_EvenOdd", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -1235,9 +1244,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_LargeTileCount", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_LargeTileCount", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -1267,9 +1276,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_LargeScene", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_LargeScene", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -1307,9 +1316,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "SaveLayer_ClipReduce", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "SaveLayer_ClipReduce", defaultImage, nativeSurfaceImage, 0.0006F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
     }
 
     [WebGPUTheory]
@@ -1354,9 +1363,9 @@ public partial class WebGPUDrawingBackendTests
         }
 
         using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
-        DebugSaveBackendPair(provider, "MultipleFlushes", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "MultipleFlushes", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -1441,9 +1450,9 @@ public partial class WebGPUDrawingBackendTests
         }
 
         using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
-        DebugSaveBackendPair(provider, "RetainedScene_MixedWithApplyBarriers", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "RetainedScene_MixedWithApplyBarriers", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -1523,9 +1532,9 @@ public partial class WebGPUDrawingBackendTests
         }
 
         using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
-        DebugSaveBackendPair(provider, "RetainedScene_WithLayerCommands", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "RetainedScene_WithLayerCommands", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -1563,11 +1572,11 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         // MacOS on CI has some outliers with this test, so using a slightly higher tolerance here to avoid noise.
-        DebugSaveBackendPair(provider, "FillPath_LinearGradient", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.03F);
         AssertBackendPairReferenceOutputs(
             provider,
-            "FillPath_LinearGradient",
+            null,
             defaultImage,
             nativeSurfaceImage,
             tolerantPercentage: 0.0007F);
@@ -1606,9 +1615,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_LinearGradient_Repeat", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.02F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_LinearGradient_Repeat", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -1644,9 +1653,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_RadialGradient_Single", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.02F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_RadialGradient_Single", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -1684,9 +1693,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_RadialGradient_TwoCircle", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0171F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_RadialGradient_TwoCircle", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -1723,9 +1732,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_EllipticGradient", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.035F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_EllipticGradient", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -1764,9 +1773,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_SweepGradient", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0304F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_SweepGradient", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -1806,13 +1815,13 @@ public partial class WebGPUDrawingBackendTests
         // MacOS on CI has some outliers with this test, so using a slightly higher tolerance here to avoid noise.
         DebugSaveBackendPair(
             provider,
-            "FillPath_SweepGradient_PartialArc",
+            null,
             defaultImage,
             nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0280F);
         AssertBackendPairReferenceOutputs(
             provider,
-            "FillPath_SweepGradient_PartialArc",
+            null,
             defaultImage,
             nativeSurfaceImage,
             tolerantPercentage: 0.0280F);
@@ -1871,7 +1880,7 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_PathGradient", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
     }
 
@@ -1903,9 +1912,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_PatternBrush_Horizontal", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, "Horizontal", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.045F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_PatternBrush_Horizontal", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, "Horizontal", defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -1936,9 +1945,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_PatternBrush_Diagonal", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_PatternBrush_Diagonal", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -1969,9 +1978,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_RecolorBrush", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_RecolorBrush", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -2008,9 +2017,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_LinearGradient_ThreePoint", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0065F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_LinearGradient_ThreePoint", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -2048,9 +2057,9 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "FillPath_EllipticGradient_Reflect", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0398F);
-        AssertBackendPairReferenceOutputs(provider, "FillPath_EllipticGradient_Reflect", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -2275,12 +2284,12 @@ the evil Galactic Empire.";
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "StarWarsCrawl", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
 
         // This test has a lot of text and gradients which can be a bit more variable across
         // platforms, so using a higher tolerance here to avoid noise.
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0474F);
-        AssertBackendPairReferenceOutputs(provider, "StarWarsCrawl", defaultImage, nativeSurfaceImage, 0.0006F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
     }
 
     [WebGPUTheory]
@@ -2313,9 +2322,9 @@ the evil Galactic Empire.";
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "SaveLayer_FullOpacity", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "SaveLayer_FullOpacity", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -2348,9 +2357,9 @@ the evil Galactic Empire.";
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "SaveLayer_HalfOpacity", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "SaveLayer_HalfOpacity", defaultImage, nativeSurfaceImage, 0.0767F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0767F);
     }
 
     [WebGPUTheory]
@@ -2389,9 +2398,9 @@ the evil Galactic Empire.";
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "SaveLayer_NestedLayers", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "SaveLayer_NestedLayers", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -2430,9 +2439,9 @@ the evil Galactic Empire.";
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "SaveLayer_WithBlendMode", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "SaveLayer_WithBlendMode", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -2465,9 +2474,9 @@ the evil Galactic Empire.";
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "SaveLayer_WithBounds", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "SaveLayer_WithBounds", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -2504,9 +2513,9 @@ the evil Galactic Empire.";
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "SaveLayer_MixedSaveAndSaveLayer", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "SaveLayer_MixedSaveAndSaveLayer", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -2591,8 +2600,8 @@ the evil Galactic Empire.";
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, "CreateRegion_NestedRegionsAndStateIsolation", defaultImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "CreateRegion_NestedRegionsAndStateIsolation", defaultImage, nativeSurfaceImage, 0.0005F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0005F);
     }
 }
