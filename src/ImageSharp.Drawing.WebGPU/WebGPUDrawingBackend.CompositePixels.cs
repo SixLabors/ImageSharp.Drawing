@@ -32,10 +32,7 @@ public sealed partial class WebGPUDrawingBackend
     internal enum CompositeTextureEncodingKind
     {
         Float,
-        Snorm,
-        Uint8,
-        Uint16,
-        Sint16
+        Snorm
     }
 
     /// <summary>

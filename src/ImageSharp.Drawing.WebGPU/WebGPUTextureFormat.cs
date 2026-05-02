@@ -16,20 +16,20 @@ public enum WebGPUTextureFormat
     /// <summary>
     /// Four-channel 8-bit normalized unsigned RGBA format, mapped to <see cref="Rgba32"/>.
     /// </summary>
-    Rgba8Unorm = 0x12,
+    Rgba8Unorm,
 
     /// <summary>
     /// Four-channel 8-bit normalized signed RGBA format, mapped to <see cref="NormalizedByte4"/>.
     /// </summary>
-    Rgba8Snorm = 0x14,
+    Rgba8Snorm,
 
     /// <summary>
     /// Four-channel 8-bit normalized unsigned BGRA format, mapped to <see cref="Bgra32"/>.
     /// </summary>
-    Bgra8Unorm = 0x17,
+    Bgra8Unorm,
 
     /// <summary>
     /// Four-channel 16-bit floating-point RGBA format, mapped to <see cref="HalfVector4"/>.
     /// </summary>
-    Rgba16Float = 0x22
+    Rgba16Float
 }

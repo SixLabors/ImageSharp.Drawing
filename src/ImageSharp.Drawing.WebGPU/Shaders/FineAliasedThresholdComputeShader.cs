@@ -87,10 +87,7 @@ internal static class FineAliasedThresholdComputeShader
         return compositeTraits.EncodingKind switch
         {
             WebGPUDrawingBackend.CompositeTextureEncodingKind.Float => CreateFloatTraits(compositeTraits.OutputFormat),
-            WebGPUDrawingBackend.CompositeTextureEncodingKind.Snorm => CreateSnormTraits(compositeTraits.OutputFormat),
-            WebGPUDrawingBackend.CompositeTextureEncodingKind.Uint8 => CreateUintTraits(compositeTraits.OutputFormat, 255F),
-            WebGPUDrawingBackend.CompositeTextureEncodingKind.Uint16 => CreateUintTraits(compositeTraits.OutputFormat, 65535F),
-            WebGPUDrawingBackend.CompositeTextureEncodingKind.Sint16 => CreateSintTraits(compositeTraits.OutputFormat, -32768F, 32767F)
+            WebGPUDrawingBackend.CompositeTextureEncodingKind.Snorm => CreateSnormTraits(compositeTraits.OutputFormat)
         };
 #pragma warning restore CS8524
     }
@@ -117,45 +114,6 @@ internal static class FineAliasedThresholdComputeShader
             fn encode_output(color: vec4<f32>) -> vec4<f32> {
                 let clamped = clamp(color, vec4<f32>(0.0), vec4<f32>(1.0));
                 return (clamped * 2.0) - vec4<f32>(1.0);
-            }
-            """;
-
-        return new ShaderTraits(
-            outputFormat,
-            encodeOutput,
-            "textureStore(output, vec2<i32>(coords), encode_output(rgba_sep));");
-    }
-
-    private static ShaderTraits CreateUintTraits(string outputFormat, float maxValue)
-    {
-        string maxVector = $"vec4<f32>({maxValue:F1}, {maxValue:F1}, {maxValue:F1}, {maxValue:F1})";
-        const string encodeOutput =
-            """
-            const UINT_TEXEL_MAX: vec4<f32> = __UINT_TEXEL_MAX__;
-            fn encode_output(color: vec4<f32>) -> vec4<u32> {
-                let clamped = clamp(color, vec4<f32>(0.0), vec4<f32>(1.0));
-                return vec4<u32>(round(clamped * UINT_TEXEL_MAX));
-            }
-            """;
-
-        return new ShaderTraits(
-            outputFormat,
-            encodeOutput.Replace("__UINT_TEXEL_MAX__", maxVector, StringComparison.Ordinal),
-            "textureStore(output, vec2<i32>(coords), encode_output(rgba_sep));");
-    }
-
-    private static ShaderTraits CreateSintTraits(string outputFormat, float minValue, float maxValue)
-    {
-        string minVector = $"vec4<f32>({minValue:F1}, {minValue:F1}, {minValue:F1}, {minValue:F1})";
-        string maxVector = $"vec4<f32>({maxValue:F1}, {maxValue:F1}, {maxValue:F1}, {maxValue:F1})";
-        string encodeOutput =
-            $$"""
-            const SINT_TEXEL_MIN: vec4<f32> = {{minVector}};
-            const SINT_TEXEL_MAX: vec4<f32> = {{maxVector}};
-            const SINT_TEXEL_RANGE: vec4<f32> = SINT_TEXEL_MAX - SINT_TEXEL_MIN;
-            fn encode_output(color: vec4<f32>) -> vec4<i32> {
-                let clamped = clamp(color, vec4<f32>(0.0), vec4<f32>(1.0));
-                return vec4<i32>(round((clamped * SINT_TEXEL_RANGE) + SINT_TEXEL_MIN));
             }
             """;
 

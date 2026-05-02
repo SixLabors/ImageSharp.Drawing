@@ -66,7 +66,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// <remarks>
     /// This value describes only the most recent flush on this backend instance. It is overwritten by the next flush.
     /// </remarks>
-    public bool DiagnosticLastFlushUsedChunking { get; private set; }
+    internal bool DiagnosticLastFlushUsedChunking { get; private set; }
 
     /// <summary>
     /// Gets the binding category that selected chunked rendering for the last WebGPU flush.
@@ -75,7 +75,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// This value describes only the most recent flush on this backend instance. When the most recent flush did not use
     /// chunked rendering, this property returns <c>None</c>.
     /// </remarks>
-    public string DiagnosticLastChunkingBindingFailure => this.lastChunkingBindingFailure.ToString();
+    internal string DiagnosticLastChunkingBindingFailure => this.lastChunkingBindingFailure.ToString();
 
     /// <inheritdoc />
     public DrawingBackendScene CreateScene(
