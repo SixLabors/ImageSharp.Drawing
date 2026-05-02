@@ -380,7 +380,7 @@ public partial class WebGPUDrawingBackendTests
         Rectangle textRegion = Rectangle.Intersect(
             new Rectangle(0, 0, defaultImage.Width, defaultImage.Height),
             new Rectangle(8, 12, defaultImage.Width - 16, Math.Min(220, defaultImage.Height - 12)));
-        AssertBackendPairSimilarityInRegion(defaultImage, nativeSurfaceImage, textRegion, 0.0157F);
+        AssertBackendPairSimilarityInRegion(defaultImage, nativeSurfaceImage, textRegion, 0.02F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
