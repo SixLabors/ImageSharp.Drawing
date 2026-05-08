@@ -99,18 +99,6 @@ public class RichTextOptionsTests
     }
 
     [Fact]
-    public void CopyConstructor_CopiesPath()
-    {
-        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 12);
-        IPath path = new Polygon(new PointF[] { new(0, 0), new(100, 0), new(100, 100), new(0, 100) });
-
-        RichTextOptions original = new(font) { Path = path };
-        RichTextOptions copy = new(original);
-
-        Assert.Same(path, copy.Path);
-    }
-
-    [Fact]
     public void CopyConstructor_EmptyTextRuns_ProducesEmptyList()
     {
         Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 12);

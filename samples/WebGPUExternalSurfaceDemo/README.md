@@ -23,11 +23,13 @@ Requirements:
 - a WebGPU-capable desktop backend such as D3D12 or Vulkan
 - adapter support for the storage-capable BGRA format selected by the sample
 
-When the sample starts you should see a WinForms window with three tabs:
+When the sample starts you should see a WinForms window with five tabs:
 
 - `Clock`: a continuously-rendered animated clock scene
 - `Tiger`: an interactive SVG tiger viewer with pan and zoom
 - `Apply`: a reactive external-surface readback scene using `DrawingCanvas.Apply(...)`; move the mouse to move the edge-detect and blur regions, and use the mouse wheel to resize them
+- `Manual Text Flow`: prepared text is laid out one line at a time around a circular obstacle that follows mouse movement
+- `Rich Text Editor`: a small editor surface that exercises text selection, caret movement, hit testing, font changes, and inline styling
 
 ## Why This Sample Matters
 
@@ -114,6 +116,8 @@ The scenes are deliberately ordinary canvas code:
 - [ClockScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/ClockScene.cs): animated vector clock
 - [TigerViewerScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/TigerViewerScene.cs): pan and zoom SVG tiger viewer
 - [ApplyReadbackScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/ApplyReadbackScene.cs): `Apply(...)` scene that reads the external surface back into CPU processing
+- [ManualTextFlowScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/ManualTextFlowScene.cs): interactive manual text flow using prepared line layout enumeration
+- [RichTextEditorScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/RichTextEditorScene.cs): custom rich text editor built from Fonts hit testing, caret, selection, and run APIs
 
 Each scene receives:
 
@@ -127,4 +131,6 @@ Each scene receives:
 - [ClockScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/ClockScene.cs): clock scene
 - [TigerViewerScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/TigerViewerScene.cs): tiger viewer scene
 - [ApplyReadbackScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/ApplyReadbackScene.cs): apply readback scene
+- [ManualTextFlowScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/ManualTextFlowScene.cs): manual text-flow scene
+- [RichTextEditorScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/RichTextEditorScene.cs): rich text editor scene
 - [WebGPUExternalSurfaceDemo.csproj](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/WebGPUExternalSurfaceDemo.csproj): sample project file

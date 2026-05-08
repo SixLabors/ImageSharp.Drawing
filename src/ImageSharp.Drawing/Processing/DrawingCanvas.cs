@@ -165,6 +165,77 @@ public abstract partial class DrawingCanvas : IDisposable
         Pen? pen);
 
     /// <summary>
+    /// Draws text along a path onto this canvas.
+    /// </summary>
+    /// <param name="textOptions">The text rendering options.</param>
+    /// <param name="text">The text to draw.</param>
+    /// <param name="path">The path to draw the text along.</param>
+    /// <param name="brush">Optional brush used to fill glyphs.</param>
+    /// <param name="pen">Optional pen used to outline glyphs.</param>
+    public abstract void DrawText(
+        RichTextOptions textOptions,
+        ReadOnlySpan<char> text,
+        IPath path,
+        Brush? brush,
+        Pen? pen);
+
+    /// <summary>
+    /// Draws a prepared text block onto this canvas.
+    /// </summary>
+    /// <param name="textBlock">The prepared text block to draw.</param>
+    /// <param name="location">The drawing location in local canvas coordinates.</param>
+    /// <param name="wrappingLength">The wrapping length in pixels. Use <c>-1</c> to disable wrapping.</param>
+    /// <param name="brush">Optional brush used to fill glyphs.</param>
+    /// <param name="pen">Optional pen used to outline glyphs.</param>
+    public abstract void DrawText(
+        TextBlock textBlock,
+        PointF location,
+        float wrappingLength,
+        Brush? brush,
+        Pen? pen);
+
+    /// <summary>
+    /// Draws a prepared text block along a path onto this canvas.
+    /// </summary>
+    /// <param name="textBlock">The prepared text block to draw.</param>
+    /// <param name="path">The path to draw the text along.</param>
+    /// <param name="wrappingLength">The wrapping length in pixels. Use <c>-1</c> to disable wrapping.</param>
+    /// <param name="brush">Optional brush used to fill glyphs.</param>
+    /// <param name="pen">Optional pen used to outline glyphs.</param>
+    public abstract void DrawText(
+        TextBlock textBlock,
+        IPath path,
+        float wrappingLength,
+        Brush? brush,
+        Pen? pen);
+
+    /// <summary>
+    /// Draws one prepared line layout onto this canvas.
+    /// </summary>
+    /// <param name="lineLayout">The prepared line layout to draw.</param>
+    /// <param name="location">The drawing location in local canvas coordinates.</param>
+    /// <param name="brush">Optional brush used to fill glyphs.</param>
+    /// <param name="pen">Optional pen used to outline glyphs.</param>
+    public abstract void DrawText(
+        LineLayout lineLayout,
+        PointF location,
+        Brush? brush,
+        Pen? pen);
+
+    /// <summary>
+    /// Draws one prepared line layout along a path onto this canvas.
+    /// </summary>
+    /// <param name="lineLayout">The prepared line layout to draw.</param>
+    /// <param name="path">The path to draw the text along.</param>
+    /// <param name="brush">Optional brush used to fill glyphs.</param>
+    /// <param name="pen">Optional pen used to outline glyphs.</param>
+    public abstract void DrawText(
+        LineLayout lineLayout,
+        IPath path,
+        Brush? brush,
+        Pen? pen);
+
+    /// <summary>
     /// Draws layered glyph geometry.
     /// </summary>
     /// <param name="brush">Brush used to fill glyph layers.</param>

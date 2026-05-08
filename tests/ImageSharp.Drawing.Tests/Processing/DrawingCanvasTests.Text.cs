@@ -82,13 +82,13 @@ public partial class DrawingCanvasTests
             canvas.Fill(Brushes.Solid(Color.LightSteelBlue.WithAlpha(0.25F)), new Rectangle(0, 0, 712, 276));
             canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null);
 
-            IReadOnlyList<LineMetrics> lineMetrics = canvas.MeasureText(textOptions, text).Lines;
+            ReadOnlySpan<LineMetrics> lineMetrics = canvas.MeasureText(textOptions, text).LineMetrics;
             float lineOriginY = textOptions.Origin.Y;
-            for (int i = 0; i < lineMetrics.Count; i++)
+            for (int i = 0; i < lineMetrics.Length; i++)
             {
                 LineMetrics metrics = lineMetrics[i];
-                float startX = metrics.Start;
-                float endX = metrics.Start + metrics.Extent;
+                float startX = metrics.Start.X;
+                float endX = metrics.Start.X + metrics.Extent.X;
                 float topY = lineOriginY;
                 float ascenderY = lineOriginY + metrics.Ascender;
                 float baselineY = lineOriginY + metrics.Baseline;
@@ -180,7 +180,6 @@ public partial class DrawingCanvasTests
         Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 21);
         RichTextOptions textOptions = new(font)
         {
-            Path = textPath,
             Origin = new PointF(16, -10),
             WrappingLength = textPath.ComputeLength(),
             HorizontalAlignment = HorizontalAlignment.Left,
@@ -194,8 +193,110 @@ public partial class DrawingCanvasTests
             canvas.DrawText(
                 textOptions,
                 "Sphinx of black quartz, judge my vow.",
+                textPath,
                 Brushes.Solid(Color.DarkRed.WithAlpha(0.9F)),
                 pen: null);
+        }
+
+        target.DebugSave(provider, appendSourceFileOrDescription: false);
+        target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithBlankImage(620, 260, PixelTypes.Rgba32)]
+    public void DrawText_TextBlockAlongPath_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> target = provider.GetImage();
+        IPath textPath = new Path(new CubicBezierLineSegment(
+            new PointF(82, 166),
+            new PointF(190, 46),
+            new PointF(420, 248),
+            new PointF(556, 106)));
+
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 26);
+        RichTextOptions textOptions = new(font)
+        {
+            WrappingLength = textPath.ComputeLength(),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Bottom
+        };
+
+        TextBlock textBlock = new("Prepared text blocks can ride along an explicit curve.", textOptions);
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.Draw(Pens.Solid(Color.LightSlateGray, 2), textPath);
+
+            // The prepared block keeps shaping and runs, while the explicit path
+            // controls glyph placement at draw time.
+            canvas.DrawText(
+                textBlock,
+                textPath,
+                textOptions.WrappingLength,
+                Brushes.Solid(Color.MidnightBlue.WithAlpha(0.9F)),
+                Pens.Solid(Color.Goldenrod.WithAlpha(0.55F), 1.2F));
+        }
+
+        target.DebugSave(provider, appendSourceFileOrDescription: false);
+        target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithBlankImage(640, 340, PixelTypes.Rgba32)]
+    public void DrawText_LineLayoutsAlongDifferentPaths_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> target = provider.GetImage();
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 24);
+        RichTextOptions textOptions = new(font)
+        {
+            WrappingLength = -1,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Bottom
+        };
+
+        const string text = "First prepared line\nSecond prepared line\nThird prepared line";
+        TextBlock textBlock = new(text, textOptions);
+        LineLayoutEnumerator enumerator = textBlock.EnumerateLineLayouts();
+        IPath[] paths =
+        [
+            new Path(new CubicBezierLineSegment(
+                new PointF(38, 108),
+                new PointF(170, 46),
+                new PointF(388, 156),
+                new PointF(602, 90))),
+            new Path(new CubicBezierLineSegment(
+                new PointF(38, 188),
+                new PointF(176, 256),
+                new PointF(392, 120),
+                new PointF(602, 198))),
+            new Path(new CubicBezierLineSegment(
+                new PointF(38, 272),
+                new PointF(192, 204),
+                new PointF(390, 340),
+                new PointF(602, 264)))
+        ];
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+
+            for (int i = 0; i < paths.Length; i++)
+            {
+                enumerator.MoveNext(-1);
+
+                canvas.Draw(Pens.Solid(Color.LightSlateGray, 1.5F), paths[i]);
+
+                // Each prepared line is rendered independently against its own
+                // path, which is the scenario manual flow callers need.
+                canvas.DrawText(
+                    enumerator.Current,
+                    paths[i],
+                    Brushes.Solid(Color.DarkGreen.WithAlpha(0.9F)),
+                    Pens.Solid(Color.DarkOrange.WithAlpha(0.55F), 1F));
+            }
         }
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);

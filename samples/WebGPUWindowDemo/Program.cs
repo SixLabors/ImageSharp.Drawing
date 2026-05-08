@@ -113,8 +113,9 @@ public static class Program
             };
 
             this.scrollPaths = TextBuilder.GeneratePaths(ScrollText, textOptions);
-            FontRectangle bounds = TextMeasurer.MeasureSize(ScrollText, textOptions);
-            this.scrollTextHeight = bounds.Height;
+            FontRectangle bounds = TextMeasurer.MeasureBounds(ScrollText, textOptions);
+            FontRectangle size = new(0, 0, bounds.Width, bounds.Height);
+            this.scrollTextHeight = size.Height;
 
             Ball[] balls = new Ball[BallCount];
             for (int i = 0; i < balls.Length; i++)
@@ -287,7 +288,7 @@ public static class Program
         /// remains cached across frames without allocating a new shape each render.
         /// </remarks>
         /// <param name="canvas">The destination canvas for the current frame.</param>
-        public void Draw(DrawingCanvas canvas)
+        public readonly void Draw(DrawingCanvas canvas)
         {
             this.drawingOptions.Transform = Matrix4x4.CreateTranslation(this.X, this.Y, 0);
 

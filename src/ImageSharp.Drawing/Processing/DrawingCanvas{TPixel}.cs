@@ -423,6 +423,26 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         ReadOnlySpan<char> text,
         Brush? brush,
         Pen? pen)
+        => this.DrawTextCore(textOptions, text, path: null, brush, pen);
+
+    /// <inheritdoc />
+    public override void DrawText(
+        RichTextOptions textOptions,
+        ReadOnlySpan<char> text,
+        IPath path,
+        Brush? brush,
+        Pen? pen)
+    {
+        Guard.NotNull(path, nameof(path));
+        this.DrawTextCore(textOptions, text, path, brush, pen);
+    }
+
+    private void DrawTextCore(
+        RichTextOptions textOptions,
+        ReadOnlySpan<char> text,
+        IPath? path,
+        Brush? brush,
+        Pen? pen)
     {
         this.EnsureNotDisposed();
 
@@ -434,15 +454,112 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        if (brush is null && pen is null)
-        {
-            throw new ArgumentException($"Expected a {nameof(brush)} or {nameof(pen)}. Both were null");
-        }
+        EnsureTextPaint(brush, pen);
 
-        RichTextOptions configuredOptions = ConfigureTextOptions(textOptions);
-        using RichTextGlyphRenderer glyphRenderer = new(configuredOptions, effectiveOptions, pen, brush);
+        RichTextOptions configuredOptions = ConfigureTextOptions(textOptions, path, out IPath? configuredPath);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, configuredPath, pen, brush);
         TextRenderer renderer = new(glyphRenderer);
         renderer.RenderText(text, configuredOptions);
+
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipPaths);
+    }
+
+    /// <inheritdoc />
+    public override void DrawText(
+        TextBlock textBlock,
+        PointF location,
+        float wrappingLength,
+        Brush? brush,
+        Pen? pen)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(textBlock, nameof(textBlock));
+        EnsureTextPaint(brush, pen);
+
+        DrawingCanvasState state = this.ResolveState();
+        DrawingOptions effectiveOptions = state.Options;
+
+        // Prepared text already owns shaping and layout options. The caller-supplied
+        // location is therefore applied as canvas placement before the active canvas
+        // transform, instead of mutating text options or rebuilding the block.
+        DrawingOptions placedOptions = new(
+            effectiveOptions.GraphicsOptions,
+            effectiveOptions.ShapeOptions,
+            Matrix4x4.CreateTranslation(location.X, location.Y, 0) * effectiveOptions.Transform);
+
+        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush);
+        textBlock.RenderTo(glyphRenderer, wrappingLength);
+
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions, state.ClipPaths);
+    }
+
+    /// <inheritdoc />
+    public override void DrawText(
+        TextBlock textBlock,
+        IPath path,
+        float wrappingLength,
+        Brush? brush,
+        Pen? pen)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(textBlock, nameof(textBlock));
+        Guard.NotNull(path, nameof(path));
+        EnsureTextPaint(brush, pen);
+
+        DrawingCanvasState state = this.ResolveState();
+        DrawingOptions effectiveOptions = state.Options;
+
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush);
+        textBlock.RenderTo(glyphRenderer, wrappingLength);
+
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipPaths);
+    }
+
+    /// <inheritdoc />
+    public override void DrawText(
+        LineLayout lineLayout,
+        PointF location,
+        Brush? brush,
+        Pen? pen)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(lineLayout, nameof(lineLayout));
+        EnsureTextPaint(brush, pen);
+
+        DrawingCanvasState state = this.ResolveState();
+        DrawingOptions effectiveOptions = state.Options;
+
+        // LineLayout represents a single already-broken line. Placement belongs
+        // to the drawing host, so the line can be reused in arbitrary slots
+        // without changing the prepared text object.
+        DrawingOptions placedOptions = new(
+            effectiveOptions.GraphicsOptions,
+            effectiveOptions.ShapeOptions,
+            Matrix4x4.CreateTranslation(location.X, location.Y, 0) * effectiveOptions.Transform);
+
+        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush);
+        lineLayout.RenderTo(glyphRenderer);
+
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions, state.ClipPaths);
+    }
+
+    /// <inheritdoc />
+    public override void DrawText(
+        LineLayout lineLayout,
+        IPath path,
+        Brush? brush,
+        Pen? pen)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(lineLayout, nameof(lineLayout));
+        Guard.NotNull(path, nameof(path));
+        EnsureTextPaint(brush, pen);
+
+        DrawingCanvasState state = this.ResolveState();
+        DrawingOptions effectiveOptions = state.Options;
+
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush);
+        lineLayout.RenderTo(glyphRenderer);
 
         this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipPaths);
     }
@@ -963,6 +1080,19 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     private DrawingCanvasState ResolveState() => this.savedStates.Peek();
 
     /// <summary>
+    /// Ensures text drawing has at least one paint source.
+    /// </summary>
+    /// <param name="brush">Optional fill brush.</param>
+    /// <param name="pen">Optional outline pen.</param>
+    private static void EnsureTextPaint(Brush? brush, Pen? pen)
+    {
+        if (brush is null && pen is null)
+        {
+            throw new ArgumentException($"Expected a {nameof(brush)} or {nameof(pen)}. Both were null");
+        }
+    }
+
+    /// <summary>
     /// Executes an action with a temporary scoped state, restoring the previous scoped state afterwards.
     /// </summary>
     /// <param name="options">Temporary drawing options.</param>
@@ -1134,17 +1264,21 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// Normalizes text options to avoid applying origin translation twice when path-based text is used.
     /// </summary>
     /// <param name="options">Input text options.</param>
+    /// <param name="path">Optional path to draw the text along.</param>
+    /// <param name="configuredPath">The path translated into text layout space when needed.</param>
     /// <returns>Normalized text options for rendering.</returns>
-    private static RichTextOptions ConfigureTextOptions(RichTextOptions options)
+    private static RichTextOptions ConfigureTextOptions(RichTextOptions options, IPath? path, out IPath? configuredPath)
     {
-        if (options.Path is not null && options.Origin != Vector2.Zero)
+        configuredPath = path;
+
+        if (path is not null && options.Origin != Vector2.Zero)
         {
             // Path-based text uses the path itself as positioning source; fold origin into the path
             // to avoid applying both path layout and origin translation.
+            configuredPath = path.Translate(options.Origin);
             return new RichTextOptions(options)
             {
-                Origin = Vector2.Zero,
-                Path = options.Path.Translate(options.Origin)
+                Origin = Vector2.Zero
             };
         }
 

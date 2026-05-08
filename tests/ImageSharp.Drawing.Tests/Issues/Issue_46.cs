@@ -27,7 +27,8 @@ public class Issue_46
 
         string iconText = char.ConvertFromUtf32(int.Parse("e926", NumberStyles.HexNumber, CultureInfo.InvariantCulture));
 
-        FontRectangle rect = TextMeasurer.MeasureSize(iconText, options);
+        FontRectangle bounds = TextMeasurer.MeasureBounds(iconText, options);
+        FontRectangle rect = new(0, 0, bounds.Width, bounds.Height);
 
         float textX = ((imageSize - rect.Width) * 0.5F) + rect.Left;
         float textY = ((imageSize - rect.Height) * 0.5F) + (rect.Top * 0.25F);

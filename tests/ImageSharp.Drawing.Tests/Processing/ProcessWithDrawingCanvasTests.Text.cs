@@ -97,7 +97,8 @@ public partial class ProcessWithDrawingCanvasTests
         using Image<TPixel> img = provider.GetImage();
 
         // Measure the text size
-        FontRectangle size = TextMeasurer.MeasureSize(text, new RichTextOptions(font));
+        FontRectangle bounds = TextMeasurer.MeasureBounds(text, new RichTextOptions(font));
+        FontRectangle size = new(0, 0, bounds.Width, bounds.Height);
 
         // Find out how much we need to scale the text to fill the space (up or down)
         float scalingFactor = Math.Min(img.Width / size.Width, img.Height / size.Height);
@@ -455,11 +456,11 @@ public partial class ProcessWithDrawingCanvasTests
         Font font = CreateFont(TestFonts.WendyOne, 72);
         const string text = "Hello\0World";
         RichTextOptions textOptions = new(font);
-        FontRectangle textSize = TextMeasurer.MeasureSize(text, textOptions);
+        FontRectangle bounds = TextMeasurer.MeasureBounds(text, textOptions);
+        FontRectangle size = new(0, 0, bounds.Width, bounds.Height);
+        Assert.NotEqual(FontRectangle.Empty, size);
 
-        Assert.NotEqual(FontRectangle.Empty, textSize);
-
-        using Image<Rgba32> image = new(Configuration.Default, (int)textSize.Width + 20, (int)textSize.Height + 20);
+        using Image<Rgba32> image = new(Configuration.Default, (int)size.Width + 20, (int)size.Height + 20);
         image.Mutate(x => x.Paint(canvas => canvas.DrawText(
             CreateTextOptionsAt(font, Vector2.Zero),
             text,
@@ -704,12 +705,11 @@ public partial class ProcessWithDrawingCanvasTests
             WrappingLength = path.ComputeLength(),
             VerticalAlignment = VerticalAlignment.Bottom,
             HorizontalAlignment = HorizontalAlignment.Left,
-            Path = path,
             TextRuns = [run]
         };
 
         provider.RunValidatingProcessorTest(
-            x => x.Paint(canvas => canvas.DrawText(textOptions, text, Brushes.Solid(Color.White), pen: null)),
+            x => x.Paint(canvas => canvas.DrawText(textOptions, text, path, Brushes.Solid(Color.White), pen: null)),
             $"RichText-Path-({exampleImageKey})",
             TextDrawingComparer,
             appendPixelTypeToFileName: false,

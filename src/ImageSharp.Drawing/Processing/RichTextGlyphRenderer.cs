@@ -103,13 +103,13 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// <summary>
     /// Initializes a new instance of the <see cref="RichTextGlyphRenderer"/> class.
     /// </summary>
-    /// <param name="textOptions">Rich text options that may include a layout path and text runs.</param>
-    /// <param name="drawingOptions">Drawing options (transform, graphics options) for the text block.</param>
+    /// <param name="drawingOptions">Drawing options (transform, graphics options) for the text.</param>
+    /// <param name="path">Optional path to draw the text along.</param>
     /// <param name="pen">Default pen for outlined text, or <see langword="null"/> for fill-only.</param>
     /// <param name="brush">Default brush for filled text, or <see langword="null"/> for outline-only.</param>
     public RichTextGlyphRenderer(
-        RichTextOptions textOptions,
         DrawingOptions drawingOptions,
+        IPath? path,
         Pen? pen,
         Brush? brush)
         : base(drawingOptions.Transform)
@@ -121,10 +121,9 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         this.currentCompositionMode = drawingOptions.GraphicsOptions.AlphaCompositionMode;
         this.currentBlendingMode = drawingOptions.GraphicsOptions.ColorBlendingMode;
 
-        IPath? path = textOptions.Path;
         if (path is not null)
         {
-            // Path-based text: each glyph gets a unique per-position transform,
+            // Path-based text gives each glyph a unique per-position transform,
             // so cache hits are vanishingly rare; disable caching entirely.
             this.rasterizationRequired = true;
             this.noCache = true;

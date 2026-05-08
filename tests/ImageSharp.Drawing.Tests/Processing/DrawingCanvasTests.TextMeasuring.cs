@@ -33,7 +33,7 @@ public partial class DrawingCanvasTests
             TextMetrics metrics = canvas.MeasureText(textOptions, text);
 
             // Line metrics: colored bands with ascender/baseline/descender guides.
-            Assert.Equal(metrics.LineCount, metrics.Lines.Count);
+            Assert.Equal(metrics.LineCount, metrics.LineMetrics.Length);
 
             float lineOriginY = origin.Y;
             Color[] bandColors =
@@ -43,11 +43,11 @@ public partial class DrawingCanvasTests
                 Color.LightGreen.WithAlpha(0.4F),
             ];
 
-            for (int i = 0; i < metrics.Lines.Count; i++)
+            for (int i = 0; i < metrics.LineMetrics.Length; i++)
             {
-                LineMetrics line = metrics.Lines[i];
-                float startX = origin.X + line.Start;
-                float endX = startX + line.Extent;
+                LineMetrics line = metrics.LineMetrics[i];
+                float startX = line.Start.X;
+                float endX = startX + line.Extent.X;
 
                 canvas.Fill(
                     Brushes.Solid(bandColors[i % bandColors.Length]),
@@ -71,10 +71,10 @@ public partial class DrawingCanvasTests
                 lineOriginY += line.LineHeight;
             }
 
-            // Character renderable bounds: outlined rectangles positioned at each glyph.
-            for (int i = 0; i < metrics.CharacterRenderableBounds.Count; i++)
+            // Character renderable bounds: outlined rectangles positioned at each grapheme.
+            for (int i = 0; i < metrics.GraphemeMetrics.Length; i++)
             {
-                FontRectangle rb = metrics.CharacterRenderableBounds[i].Bounds;
+                FontRectangle rb = metrics.GraphemeMetrics[i].RenderableBounds;
                 canvas.Draw(
                     Pens.Solid(Color.Black, 1),
                     new RectangularPolygon(rb.X, rb.Y, rb.Width, rb.Height));
@@ -87,9 +87,9 @@ public partial class DrawingCanvasTests
                 Color.MediumPurple.WithAlpha(0.5F),
             ];
 
-            for (int i = 0; i < metrics.CharacterBounds.Count; i++)
+            for (int i = 0; i < metrics.GraphemeMetrics.Length; i++)
             {
-                FontRectangle b = metrics.CharacterBounds[i].Bounds;
+                FontRectangle b = metrics.GraphemeMetrics[i].Bounds;
                 canvas.Fill(
                     Brushes.Solid(charColors[i % charColors.Length]),
                     new RectangularPolygon(b.X, b.Y, b.Width, b.Height));
@@ -197,8 +197,13 @@ public partial class DrawingCanvasTests
 
         TextMetrics metrics = canvas.MeasureText(textOptions, "Hello");
 
-        Assert.True(metrics.Size.Width > 0, "Width should be positive.");
-        Assert.True(metrics.Size.Height > 0, "Height should be positive.");
+        Assert.True(metrics.Bounds.Width > 0, "Width should be positive.");
+        Assert.True(metrics.Bounds.Height > 0, "Height should be positive.");
+        Assert.True(metrics.Advance.Width > 0, "Width should be positive.");
+        Assert.True(metrics.Advance.Height > 0, "Height should be positive.");
+        Assert.True(metrics.RenderableBounds.Width > 0, "Width should be positive.");
+        Assert.True(metrics.RenderableBounds.Height > 0, "Height should be positive.");
+        Assert.True(metrics.LineCount > 0, "Line count should be at least 1.");
     }
 
     [Fact]
@@ -211,12 +216,15 @@ public partial class DrawingCanvasTests
         Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 24);
         RichTextOptions textOptions = new(font) { Origin = new PointF(0, 0) };
 
-        TextMetrics metrics = canvas.MeasureText(textOptions, ReadOnlySpan<char>.Empty);
+        TextMetrics metrics = canvas.MeasureText(textOptions, []);
 
-        Assert.Equal(FontRectangle.Empty, metrics.Size);
+        Assert.Equal(FontRectangle.Empty, metrics.Bounds);
+        Assert.Equal(FontRectangle.Empty, metrics.Advance);
+        Assert.Equal(FontRectangle.Empty, metrics.RenderableBounds);
         Assert.Equal(0, metrics.LineCount);
-        Assert.Empty(metrics.CharacterAdvances);
-        Assert.Empty(metrics.Lines);
+        Assert.Equal(0, metrics.GraphemeMetrics.Length);
+        Assert.Equal(0, metrics.LineMetrics.Length);
+        Assert.Equal(0, metrics.GetGlyphMetrics().Length);
     }
 
     [Fact]
@@ -232,7 +240,7 @@ public partial class DrawingCanvasTests
         TextMetrics shortMetrics = canvas.MeasureText(textOptions, "Hi");
         TextMetrics longMetrics = canvas.MeasureText(textOptions, "Hello World");
 
-        Assert.True(longMetrics.Size.Width > shortMetrics.Size.Width, "Longer text should produce a wider measurement.");
+        Assert.True(longMetrics.Advance.Width > shortMetrics.Advance.Width, "Longer text should produce a wider measurement.");
     }
 
     [Fact]
@@ -248,10 +256,10 @@ public partial class DrawingCanvasTests
         const string text = "ABC";
         TextMetrics metrics = canvas.MeasureText(textOptions, text);
 
-        Assert.Equal(text.Length, metrics.CharacterAdvances.Count);
-        for (int i = 0; i < metrics.CharacterAdvances.Count; i++)
+        Assert.Equal(text.Length, metrics.GraphemeMetrics.Length);
+        for (int i = 0; i < metrics.GraphemeMetrics.Length; i++)
         {
-            Assert.True(metrics.CharacterAdvances[i].Bounds.Width > 0, $"Advance width for character {i} should be positive.");
+            Assert.True(metrics.GraphemeMetrics[i].Advance.Width > 0, $"Advance width for character {i} should be positive.");
         }
     }
 }

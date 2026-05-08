@@ -789,7 +789,6 @@ public static class Program
             const string pathText = "Path text follows the curve while runs vary colour, weight, and decoration.";
             RichTextOptions pathOptions = new(pathFont)
             {
-                Path = textPath,
                 WrappingLength = textPath.ComputeLength(),
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Bottom,
@@ -832,7 +831,7 @@ public static class Program
                 ]
             };
 
-            // Setting RichTextOptions.Path tells the layout to advance each glyph along the curve
+            // Passing a path to DrawText tells the renderer to advance each glyph along the curve
             // rather than along a straight baseline. WrappingLength = textPath.ComputeLength()
             // matches the wrap budget to the curve's arc length, so the text fills the path
             // without overflowing past its end. The guide path can be drawn as well as used as
@@ -840,7 +839,7 @@ public static class Program
             // decorative trail under the glyphs all work, and so does omitting the stroke and
             // rendering only the text. The two operations are independent.
             canvas.Draw(Pens.Solid(ruleColor, 1.5F), textPath);
-            canvas.DrawText(pathOptions, pathText, inkBrush, null);
+            canvas.DrawText(pathOptions, pathText, textPath, inkBrush, null);
         });
 
         static void DrawPanel(
