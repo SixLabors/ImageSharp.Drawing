@@ -26,6 +26,7 @@ internal sealed class MainForm : Form
     private readonly ManualTextFlowScene manualTextFlowScene;
     private readonly RichTextEditorScene richTextScene;
     private readonly Label tigerStatusLabel;
+    private readonly ComboBox manualTextShapeComboBox;
     private readonly CheckBox boldButton;
     private readonly CheckBox italicButton;
     private readonly CheckBox underlineButton;
@@ -93,6 +94,50 @@ internal sealed class MainForm : Form
             Text = string.Empty,
         };
         this.tigerControl.Controls.Add(this.tigerStatusLabel);
+
+        // The manual flow scene is intentionally controlled from ordinary WinForms
+        // widgets. Changing this dropdown swaps the obstacle path, while the scene
+        // keeps using the same retained TextBlock and per-line layout enumerator.
+        this.manualTextShapeComboBox = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 140,
+            Margin = new Padding(0, 0, 8, 0),
+        };
+
+        foreach (ManualTextFlowObstacleShape shape in Enum.GetValues<ManualTextFlowObstacleShape>())
+        {
+            this.manualTextShapeComboBox.Items.Add(shape);
+        }
+
+        this.manualTextShapeComboBox.SelectedItem = this.manualTextFlowScene.ObstacleShape;
+        this.manualTextShapeComboBox.SelectedIndexChanged += (_, _) =>
+        {
+            if (this.manualTextShapeComboBox.SelectedItem is ManualTextFlowObstacleShape shape)
+            {
+                this.manualTextFlowScene.ObstacleShape = shape;
+                this.manualTextFlowControl.Invalidate();
+            }
+        };
+
+        FlowLayoutPanel manualTextFlowToolbar = new()
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            Padding = new Padding(8),
+        };
+
+        manualTextFlowToolbar.Controls.Add(new Label
+        {
+            AutoSize = true,
+            Margin = new Padding(0, 5, 8, 0),
+            Text = "Shape",
+        });
+        manualTextFlowToolbar.Controls.Add(this.manualTextShapeComboBox);
+
+        Panel manualTextFlowPanel = new() { Dock = DockStyle.Fill };
+        manualTextFlowPanel.Controls.Add(this.manualTextFlowControl);
+        manualTextFlowPanel.Controls.Add(manualTextFlowToolbar);
 
         this.boldButton = this.CreateEditorToggleButton("B", () => this.richTextScene.ToggleBold());
         this.italicButton = this.CreateEditorToggleButton("I", () => this.richTextScene.ToggleItalic());
@@ -249,7 +294,7 @@ internal sealed class MainForm : Form
         tabs.TabPages.Add(applyTab);
 
         TabPage manualTextFlowTab = new(this.manualTextFlowScene.DisplayName);
-        manualTextFlowTab.Controls.Add(this.manualTextFlowControl);
+        manualTextFlowTab.Controls.Add(manualTextFlowPanel);
         tabs.TabPages.Add(manualTextFlowTab);
 
         TabPage richTextTab = new(this.richTextScene.DisplayName);
