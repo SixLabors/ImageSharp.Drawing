@@ -56,7 +56,7 @@ public class PathBuilderTests
         builder.AddPie(10, 20, 30, 40, 15, 120, 210);
 
         Polygon actual = Assert.IsType<Polygon>(builder.Build());
-        Pie expected = new(10, 20, 30, 40, 15, 120, 210);
+        PiePolygon expected = new(10, 20, 30, 40, 15, 120, 210);
 
         AssertEquivalentPaths(actual, expected);
     }
@@ -68,19 +68,43 @@ public class PathBuilderTests
         builder.AddPie(new PointF(10, 20), new SizeF(30, 40), 15, 120);
 
         Polygon actual = Assert.IsType<Polygon>(builder.Build());
-        Pie expected = new(new PointF(10, 20), new SizeF(30, 40), 15, 120);
+        PiePolygon expected = new(new PointF(10, 20), new SizeF(30, 40), 15, 120);
 
         AssertEquivalentPaths(actual, expected);
     }
 
     [Fact]
-    public void AddRectangleMatchesRectangularPolygon()
+    public void AddRectangleMatchesRectanglePolygon()
     {
         PathBuilder builder = new();
         builder.AddRectangle(new RectangleF(10, 20, 30, 40));
 
         Polygon actual = Assert.IsType<Polygon>(builder.Build());
-        RectangularPolygon expected = new(10, 20, 30, 40);
+        RectanglePolygon expected = new(10, 20, 30, 40);
+
+        AssertEquivalentPaths(actual, expected);
+    }
+
+    [Fact]
+    public void AddRoundedRectangleMatchesRoundedRectanglePolygon()
+    {
+        PathBuilder builder = new();
+        builder.AddRoundedRectangle(new RectangleF(10, 20, 30, 40), new SizeF(5, 8));
+
+        Polygon actual = Assert.IsType<Polygon>(builder.Build());
+        RoundedRectanglePolygon expected = new(10, 20, 30, 40, new SizeF(5, 8));
+
+        AssertEquivalentPaths(actual, expected);
+    }
+
+    [Fact]
+    public void AddRoundedRectangleRadiusOverloadMatchesRoundedRectanglePolygon()
+    {
+        PathBuilder builder = new();
+        builder.AddRoundedRectangle(10, 20, 30, 40, 6);
+
+        Polygon actual = Assert.IsType<Polygon>(builder.Build());
+        RoundedRectanglePolygon expected = new(10, 20, 30, 40, 6);
 
         AssertEquivalentPaths(actual, expected);
     }
@@ -123,7 +147,7 @@ public class PathBuilderTests
         builder.AddStar(new PointF(10, 20), 5, 15, 30, 45);
 
         Polygon actual = Assert.IsType<Polygon>(builder.Build());
-        Star expected = new(new PointF(10, 20), 5, 15, 30, 45);
+        StarPolygon expected = new(new PointF(10, 20), 5, 15, 30, 45);
 
         AssertEquivalentPaths(actual, expected);
     }

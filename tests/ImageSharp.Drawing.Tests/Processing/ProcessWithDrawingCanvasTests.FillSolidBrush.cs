@@ -160,7 +160,7 @@ public partial class ProcessWithDrawingCanvasTests
 
         if (triggerFillRegion)
         {
-            RectangularPolygon path = new(0, 0, 16, 16);
+            RectanglePolygon path = new(0, 0, 16, 16);
             image.Mutate(c => c.Paint(options, canvas => canvas.Fill(Brushes.Solid(fillColor), path)));
         }
         else

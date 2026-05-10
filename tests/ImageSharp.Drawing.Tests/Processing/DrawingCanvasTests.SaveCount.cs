@@ -43,7 +43,7 @@ public partial class DrawingCanvasTests
         using Image<Rgba32> target = new(64, 64);
         using DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, target, new DrawingOptions());
 
-        int count = canvas.Save(new DrawingOptions(), new RectangularPolygon(0, 0, 32, 32));
+        int count = canvas.Save(new DrawingOptions(), new RectanglePolygon(0, 0, 32, 32));
         Assert.Equal(2, count);
         Assert.Equal(2, canvas.SaveCount);
     }

@@ -117,8 +117,8 @@ public class PathTests
     [Fact]
     public void PathCollection_EnumerableConstructor_PreservesPaths()
     {
-        IPath first = new RectangularPolygon(1, 2, 3, 4);
-        IPath second = new RectangularPolygon(10, 20, 5, 6);
+        IPath first = new RectanglePolygon(1, 2, 3, 4);
+        IPath second = new RectanglePolygon(10, 20, 5, 6);
 
         PathCollection collection = new(new[] { first, second }.AsEnumerable());
 
@@ -132,8 +132,8 @@ public class PathTests
     public void PathCollection_Bounds_AggregatesPathBounds()
     {
         PathCollection collection = new(
-            new RectangularPolygon(1, 2, 3, 4),
-            new RectangularPolygon(10, 20, 5, 6));
+            new RectanglePolygon(1, 2, 3, 4),
+            new RectanglePolygon(10, 20, 5, 6));
 
         Assert.Equal(new RectangleF(1, 2, 14, 24), collection.Bounds);
     }
@@ -150,8 +150,8 @@ public class PathTests
     public void PathCollection_Transform_TransformsEachPath()
     {
         PathCollection collection = new(
-            new RectangularPolygon(1, 2, 3, 4),
-            new RectangularPolygon(10, 20, 5, 6));
+            new RectanglePolygon(1, 2, 3, 4),
+            new RectanglePolygon(10, 20, 5, 6));
         Matrix4x4 matrix = Matrix4x4.CreateTranslation(7, 11, 0);
 
         IPathCollection transformed = collection.Transform(matrix);

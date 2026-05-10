@@ -209,10 +209,10 @@ internal sealed class RichTextEditorScene : RenderScene
         }
 
         canvas.Fill(BackgroundBrush, canvas.Bounds);
-        canvas.Fill(EditorBrush, new RectangularPolygon(editorBounds));
-        canvas.Draw(BorderPen, new RectangularPolygon(editorBounds));
+        canvas.Fill(EditorBrush, new RectanglePolygon(editorBounds));
+        canvas.Draw(BorderPen, new RectanglePolygon(editorBounds));
 
-        IPath editorClip = new RectangularPolygon(editorBounds);
+        IPath editorClip = new RectanglePolygon(editorBounds);
 
         // Selection is painted before glyphs, matching normal editor behavior.
         // The clipping scope applies only to text so the editor chrome remains crisp.
@@ -549,11 +549,11 @@ internal sealed class RichTextEditorScene : RenderScene
             // That keeps mixed-bidi ranges visually split instead of filling across reordered gaps.
             canvas.Fill(
                 SelectionBrush,
-                new RectangularPolygon(rectangle.X, rectangle.Y, width, height));
+                new RectanglePolygon(rectangle.X, rectangle.Y, width, height));
 
             canvas.Draw(
                 SelectionBorderPen,
-                new RectangularPolygon(rectangle.X, rectangle.Y, width, height));
+                new RectanglePolygon(rectangle.X, rectangle.Y, width, height));
         }
     }
 

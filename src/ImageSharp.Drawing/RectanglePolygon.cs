@@ -6,10 +6,9 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
-/// A polygon tha allows the optimized drawing of rectangles.
+/// A closed rectangular path defined by four straight edges.
 /// </summary>
-/// <seealso cref="IPath" />
-public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
+public sealed class RectanglePolygon : IPath, ISimplePath, IPathInternals
 {
     private readonly Vector2 topLeft;
     private readonly Vector2 bottomRight;
@@ -19,27 +18,27 @@ public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
     private LinearGeometryCache geometryCache;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="RectangularPolygon" /> class.
+    /// Initializes a new instance of the <see cref="RectanglePolygon" /> class.
     /// </summary>
     /// <param name="x">The horizontal position of the rectangle.</param>
     /// <param name="y">The vertical position of the rectangle.</param>
     /// <param name="width">The width of the rectangle.</param>
     /// <param name="height">The height of the rectangle.</param>
-    public RectangularPolygon(float x, float y, float width, float height)
+    public RectanglePolygon(float x, float y, float width, float height)
         : this(new PointF(x, y), new SizeF(width, height))
     {
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="RectangularPolygon" /> class.
+    /// Initializes a new instance of the <see cref="RectanglePolygon" /> class.
     /// </summary>
     /// <param name="topLeft">
-    /// The <see cref="PointF"/> which specifies the rectangles top/left point in a two-dimensional plane.
+    /// The <see cref="PointF"/> which specifies the rectangle's top-left point in a two-dimensional plane.
     /// </param>
     /// <param name="bottomRight">
-    /// The <see cref="PointF"/> which specifies the rectangles bottom/right point in a two-dimensional plane.
+    /// The <see cref="PointF"/> which specifies the rectangle's bottom-right point in a two-dimensional plane.
     /// </param>
-    public RectangularPolygon(PointF topLeft, PointF bottomRight)
+    public RectanglePolygon(PointF topLeft, PointF bottomRight)
     {
         this.Location = topLeft;
         this.topLeft = topLeft;
@@ -60,24 +59,24 @@ public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="RectangularPolygon"/> class.
+    /// Initializes a new instance of the <see cref="RectanglePolygon"/> class.
     /// </summary>
     /// <param name="point">
-    /// The <see cref="PointF"/> which specifies the rectangles point in a two-dimensional plane.
+    /// The <see cref="PointF"/> which specifies the rectangle's point in a two-dimensional plane.
     /// </param>
     /// <param name="size">
-    /// The <see cref="SizeF"/> which specifies the rectangles height and width.
+    /// The <see cref="SizeF"/> which specifies the rectangle's height and width.
     /// </param>
-    public RectangularPolygon(PointF point, SizeF size)
+    public RectanglePolygon(PointF point, SizeF size)
         : this(point, point + size)
     {
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="RectangularPolygon"/> class.
+    /// Initializes a new instance of the <see cref="RectanglePolygon"/> class.
     /// </summary>
     /// <param name="rectangle">The rectangle.</param>
-    public RectangularPolygon(RectangleF rectangle)
+    public RectanglePolygon(RectangleF rectangle)
         : this(rectangle.Location, rectangle.Location + rectangle.Size)
     {
     }
@@ -150,10 +149,10 @@ public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
     public PointF Center => (this.topLeft + this.bottomRight) / 2;
 
     /// <summary>
-    /// Converts the polygon to a rectangular polygon from its bounds.
+    /// Converts a polygon to a rectangle polygon from its bounds.
     /// </summary>
     /// <param name="polygon">The polygon to convert.</param>
-    public static explicit operator RectangularPolygon(Polygon polygon)
+    public static explicit operator RectanglePolygon(Polygon polygon)
         => new(polygon.Bounds.X, polygon.Bounds.Y, polygon.Bounds.Width, polygon.Bounds.Height);
 
     /// <inheritdoc/>

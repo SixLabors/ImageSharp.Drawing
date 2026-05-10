@@ -193,6 +193,43 @@ public partial class DrawingCanvasTests
     }
 
     [Theory]
+    [WithBlankImage(360, 220, PixelTypes.Rgba32)]
+    public void RoundedRectanglePolygon_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> target = provider.GetImage();
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+
+            // Filled shape proves the rounded rectangle contributes a closed fill region.
+            canvas.Fill(
+                Brushes.Solid(Color.CornflowerBlue.WithAlpha(0.75F)),
+                new RoundedRectanglePolygon(18, 18, 138, 76, 18));
+
+            // Dashed stroke covers the original issue request: rounded corners must remain a normal strokable path.
+            canvas.Draw(
+                Pens.Dash(Color.DarkSlateBlue, 5F),
+                new RoundedRectanglePolygon(190, 18, 132, 76, 24));
+
+            // Elliptical radii exercise independent x/y corner curvature.
+            canvas.Fill(
+                Brushes.Solid(Color.MediumSeaGreen.WithAlpha(0.78F)),
+                new RoundedRectanglePolygon(26, 124, 118, 58, new SizeF(28, 12)));
+
+            // Oversized radii should scale down to a capsule-like shape within the supplied bounds.
+            canvas.Draw(
+                Pens.Solid(Color.OrangeRed, 6F),
+                new RoundedRectanglePolygon(188, 122, 138, 62, 90));
+
+            canvas.Draw(Pens.Solid(Color.Black.WithAlpha(0.5F), 2F), new Rectangle(8, 8, 344, 204));
+        }
+
+        target.DebugSave(provider, appendSourceFileOrDescription: false);
+        target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
     [WithBlankImage(240, 160, PixelTypes.Rgba32)]
     public void DrawPieHelpers_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>

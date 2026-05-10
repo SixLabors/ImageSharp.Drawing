@@ -31,7 +31,7 @@ public abstract partial class DrawingCanvas
     {
         Rectangle bounds = this.Bounds;
 
-        this.Fill(brush, new RectangularPolygon(bounds));
+        this.Fill(brush, new RectanglePolygon(bounds));
     }
 
     /// <summary>
@@ -40,7 +40,7 @@ public abstract partial class DrawingCanvas
     /// <param name="brush">Brush used to shade destination pixels.</param>
     /// <param name="region">Region to fill in local coordinates.</param>
     public void Fill(Brush brush, Rectangle region)
-        => this.Fill(brush, new RectangularPolygon(region));
+        => this.Fill(brush, new RectanglePolygon(region));
 
     /// <summary>
     /// Clears the whole canvas using the given brush and clear-style composition options.
@@ -50,7 +50,7 @@ public abstract partial class DrawingCanvas
     {
         Rectangle bounds = this.Bounds;
 
-        this.Clear(brush, new RectangularPolygon(bounds));
+        this.Clear(brush, new RectanglePolygon(bounds));
     }
 
     /// <summary>
@@ -59,7 +59,7 @@ public abstract partial class DrawingCanvas
     /// <param name="brush">Brush used to shade destination pixels during clear.</param>
     /// <param name="region">Region to clear in local coordinates.</param>
     public void Clear(Brush brush, Rectangle region)
-        => this.Clear(brush, new RectangularPolygon(region));
+        => this.Clear(brush, new RectanglePolygon(region));
 
     /// <summary>
     /// Fills all paths in a collection using the given brush.
@@ -113,24 +113,24 @@ public abstract partial class DrawingCanvas
     /// Fills a pie sector using the provided brush.
     /// </summary>
     /// <param name="brush">Brush used to shade covered pixels.</param>
-    /// <param name="center">Pie center point in local coordinates.</param>
-    /// <param name="radius">Pie radii in local coordinates.</param>
+    /// <param name="center">The center point of the pie sector in local coordinates.</param>
+    /// <param name="radius">The x and y radii of the pie sector in local coordinates.</param>
     /// <param name="rotation">Ellipse rotation in degrees.</param>
-    /// <param name="startAngle">Pie start angle in degrees.</param>
-    /// <param name="sweepAngle">Pie sweep angle in degrees.</param>
+    /// <param name="startAngle">The start angle of the pie sector in degrees.</param>
+    /// <param name="sweepAngle">The sweep angle of the pie sector in degrees.</param>
     public void FillPie(Brush brush, PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)
-        => this.Fill(brush, new Pie(center, radius, rotation, startAngle, sweepAngle));
+        => this.Fill(brush, new PiePolygon(center, radius, rotation, startAngle, sweepAngle));
 
     /// <summary>
     /// Fills a pie sector using the provided brush.
     /// </summary>
     /// <param name="brush">Brush used to shade covered pixels.</param>
-    /// <param name="center">Pie center point in local coordinates.</param>
-    /// <param name="radius">Pie radii in local coordinates.</param>
-    /// <param name="startAngle">Pie start angle in degrees.</param>
-    /// <param name="sweepAngle">Pie sweep angle in degrees.</param>
+    /// <param name="center">The center point of the pie sector in local coordinates.</param>
+    /// <param name="radius">The x and y radii of the pie sector in local coordinates.</param>
+    /// <param name="startAngle">The start angle of the pie sector in degrees.</param>
+    /// <param name="sweepAngle">The sweep angle of the pie sector in degrees.</param>
     public void FillPie(Brush brush, PointF center, SizeF radius, float startAngle, float sweepAngle)
-        => this.Fill(brush, new Pie(center, radius, startAngle, sweepAngle));
+        => this.Fill(brush, new PiePolygon(center, radius, startAngle, sweepAngle));
 
     /// <summary>
     /// Draws an arc outline using the provided pen.
@@ -169,24 +169,24 @@ public abstract partial class DrawingCanvas
     /// Draws a pie sector outline using the provided pen.
     /// </summary>
     /// <param name="pen">Pen used to generate the pie outline.</param>
-    /// <param name="center">Pie center point in local coordinates.</param>
-    /// <param name="radius">Pie radii in local coordinates.</param>
+    /// <param name="center">The center point of the pie sector in local coordinates.</param>
+    /// <param name="radius">The x and y radii of the pie sector in local coordinates.</param>
     /// <param name="rotation">Ellipse rotation in degrees.</param>
-    /// <param name="startAngle">Pie start angle in degrees.</param>
-    /// <param name="sweepAngle">Pie sweep angle in degrees.</param>
+    /// <param name="startAngle">The start angle of the pie sector in degrees.</param>
+    /// <param name="sweepAngle">The sweep angle of the pie sector in degrees.</param>
     public void DrawPie(Pen pen, PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)
-        => this.Draw(pen, new Pie(center, radius, rotation, startAngle, sweepAngle));
+        => this.Draw(pen, new PiePolygon(center, radius, rotation, startAngle, sweepAngle));
 
     /// <summary>
     /// Draws a pie sector outline using the provided pen.
     /// </summary>
     /// <param name="pen">Pen used to generate the pie outline.</param>
-    /// <param name="center">Pie center point in local coordinates.</param>
-    /// <param name="radius">Pie radii in local coordinates.</param>
-    /// <param name="startAngle">Pie start angle in degrees.</param>
-    /// <param name="sweepAngle">Pie sweep angle in degrees.</param>
+    /// <param name="center">The center point of the pie sector in local coordinates.</param>
+    /// <param name="radius">The x and y radii of the pie sector in local coordinates.</param>
+    /// <param name="startAngle">The start angle of the pie sector in degrees.</param>
+    /// <param name="sweepAngle">The sweep angle of the pie sector in degrees.</param>
     public void DrawPie(Pen pen, PointF center, SizeF radius, float startAngle, float sweepAngle)
-        => this.Draw(pen, new Pie(center, radius, startAngle, sweepAngle));
+        => this.Draw(pen, new PiePolygon(center, radius, startAngle, sweepAngle));
 
     /// <summary>
     /// Draws a rectangular outline using the provided pen.
@@ -194,7 +194,7 @@ public abstract partial class DrawingCanvas
     /// <param name="pen">Pen used to generate the rectangle outline.</param>
     /// <param name="region">Rectangle region to stroke.</param>
     public void Draw(Pen pen, Rectangle region)
-        => this.Draw(pen, new RectangularPolygon(region));
+        => this.Draw(pen, new RectanglePolygon(region));
 
     /// <summary>
     /// Draws all paths in a collection using the provided pen.

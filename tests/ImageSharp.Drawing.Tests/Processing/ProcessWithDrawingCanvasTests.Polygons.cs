@@ -104,10 +104,10 @@ public partial class ProcessWithDrawingCanvasTests
 
     [Theory]
     [WithBasicTestPatternImages(100, 100, PixelTypes.Rgba32)]
-    public void FillPolygon_RectangularPolygon_Solid_Transformed<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillPolygon_RectanglePolygon_Solid_Transformed<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        RectangularPolygon polygon = new(25, 25, 50, 50);
+        RectanglePolygon polygon = new(25, 25, 50, 50);
         DrawingOptions options = new()
         {
             Transform = new Matrix4x4(Matrix3x2.CreateRotation((float)Math.PI / 4, new PointF(50, 50)))
@@ -119,10 +119,10 @@ public partial class ProcessWithDrawingCanvasTests
 
     [Theory]
     [WithBasicTestPatternImages(100, 100, PixelTypes.Rgba32)]
-    public void FillPolygon_RectangularPolygon_Solid_TransformedUsingConfiguration<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillPolygon_RectanglePolygon_Solid_TransformedUsingConfiguration<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        RectangularPolygon polygon = new(25, 25, 50, 50);
+        RectanglePolygon polygon = new(25, 25, 50, 50);
         DrawingOptions options = new()
         {
             Transform = new Matrix4x4(Matrix3x2.CreateRotation((float)Math.PI / 4, new PointF(50, 50)))
@@ -199,7 +199,7 @@ public partial class ProcessWithDrawingCanvasTests
     public void FillPolygon_StarCircle(TestImageProvider<Rgba32> provider)
     {
         EllipsePolygon circle = new(32, 32, 30);
-        Star star = new(32, 32, 7, 10, 27);
+        StarPolygon star = new(32, 32, 7, 10, 27);
         IPath shape = circle.Clip(star);
 
         provider.RunValidatingProcessorTest(
@@ -217,7 +217,7 @@ public partial class ProcessWithDrawingCanvasTests
     public void FillPolygon_StarCircle_AllOperations(TestImageProvider<Rgba32> provider, BooleanOperation operation)
     {
         IPath circle = new EllipsePolygon(36, 36, 36).Translate(28, 28);
-        Star star = new(64, 64, 5, 24, 64);
+        StarPolygon star = new(64, 64, 5, 24, 64);
 
         // See http://www.angusj.com/clipper2/Docs/Units/Clipper/Types/ClipType.htm for reference.
         ShapeOptions shapeOptions = new() { BooleanOperation = operation };
@@ -304,10 +304,10 @@ public partial class ProcessWithDrawingCanvasTests
 
     [Theory]
     [WithBasicTestPatternImages(250, 250, PixelTypes.Rgba32)]
-    public void FillPolygon_RectangularPolygon<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillPolygon_RectanglePolygon<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        RectangularPolygon polygon = new(10, 10, 190, 140);
+        RectanglePolygon polygon = new(10, 10, 190, 140);
         Color color = Color.White;
 
         provider.RunValidatingProcessorTest(

@@ -37,7 +37,7 @@ Image-compositing scene demonstrating four ways a photograph (`tests/Images/Inpu
 
 - **Before / after wipe** — `canvas.Apply(rightHalfRect, ctx => ctx.OilPaint(15, 5))` scopes an `OilPaint` processor to the right half of the photograph.
 - **Privacy redaction** — `canvas.Apply(ellipse, ctx => ctx.Pixelate(10))` pixelates an elliptical face-shaped region and leaves the rest untouched.
-- **Image as a brush** — `new ImageBrush<Rgba32>(source, source.Bounds, brushOffset)` wraps the photograph as a `Brush` so a `Star` path can be filled with it as a texture; the brush offset aligns the mountain in the photograph with the star's centre.
+- **Image as a brush** — `new ImageBrush<Rgba32>(source, source.Bounds, brushOffset)` wraps the photograph as a `Brush` so a `StarPolygon` path can be filled with it as a texture; the brush offset aligns the mountain in the photograph with the star's centre.
 - **Photo in text** — `TextBuilder.GeneratePaths("MASK", ...)` produces one `IPath` per glyph; `canvas.Save(intersectionOptions, glyphPaths)` uses them as a compound clip so `DrawImage` only renders inside the letterforms.
 
 ## Running

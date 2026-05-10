@@ -283,7 +283,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
     /// <inheritdoc />
     public override void Apply(Rectangle region, Action<IImageProcessingContext> operation)
-        => this.Apply(new RectangularPolygon(region), operation);
+        => this.Apply(new RectanglePolygon(region), operation);
 
     /// <inheritdoc />
     public override void Apply(PathBuilder pathBuilder, Action<IImageProcessingContext> operation)
@@ -813,7 +813,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             }
 
             ImageBrush<TPixel> brush = new(brushImage, brushImageRegion);
-            IPath destinationPath = new RectangularPolygon(
+            IPath destinationPath = new RectanglePolygon(
                 renderDestinationRect.X,
                 renderDestinationRect.Y,
                 renderDestinationRect.Width,

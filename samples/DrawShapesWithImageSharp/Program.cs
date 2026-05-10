@@ -121,7 +121,7 @@ public static class Program
 
             // The lake is a plain rectangle filled with a vertical LinearGradientBrush. Building it
             // with PathBuilder keeps the construction style identical to the surrounding shapes
-            // even though a RectangularPolygon would also work for an axis-aligned rectangle.
+            // even though a RectanglePolygon would also work for an axis-aligned rectangle.
             PathBuilder lakeShape = new();
             lakeShape.AddLines(
                 new PointF(0, 432),
@@ -175,7 +175,7 @@ public static class Program
             // Save pushes a clipping state; Restore pops it. Anything drawn between the two is
             // confined to lakeHighlight even though the brush spans its full bounding rectangle.
             canvas.Save(lakeHighlightClipOptions, lakeHighlight);
-            canvas.Fill(Brushes.ForwardDiagonal(Color.White.WithAlpha(.36F), Color.Transparent), new RectangularPolygon(lakeHighlightBounds));
+            canvas.Fill(Brushes.ForwardDiagonal(Color.White.WithAlpha(.36F), Color.Transparent), new RectanglePolygon(lakeHighlightBounds));
             canvas.Restore();
 
             // Title panel: pushing posterPanelOptions onto the canvas with Save activates a
@@ -249,7 +249,7 @@ public static class Program
 
             canvas.Save(posterPanelOptions);
             canvas.SaveLayer(new GraphicsOptions { BlendPercentage = .94F }, posterPanelLayerBounds);
-            canvas.Fill(Brushes.Solid(Color.White.WithAlpha(.86F)), new RectangularPolygon(posterPanelBounds));
+            canvas.Fill(Brushes.Solid(Color.White.WithAlpha(.86F)), new RectanglePolygon(posterPanelBounds));
             canvas.DrawText(posterTextOptions, posterText, Brushes.Solid(Color.DarkSlateGray), pen: null);
             canvas.Restore();
             canvas.Restore();
@@ -296,8 +296,8 @@ public static class Program
                 pen: null);
 
             // Legend panel: reuse the route pens so the key is drawn with the same stroke options as the map.
-            canvas.Fill(Brushes.Solid(Color.White.WithAlpha(.9F)), new RectangularPolygon(680, 46, 220, 126));
-            canvas.Draw(Pens.Solid(Color.LightSlateGray, 2), new RectangularPolygon(680, 46, 220, 126));
+            canvas.Fill(Brushes.Solid(Color.White.WithAlpha(.9F)), new RectanglePolygon(680, 46, 220, 126));
+            canvas.Draw(Pens.Solid(Color.LightSlateGray, 2), new RectanglePolygon(680, 46, 220, 126));
             canvas.DrawLine(harborLinePen, new PointF(708, 78), new PointF(768, 78));
             canvas.DrawLine(gardenLoopPen, new PointF(708, 112), new PointF(768, 112));
             canvas.DrawLine(airportLinePen, new PointF(708, 146), new PointF(768, 146));
@@ -627,7 +627,7 @@ public static class Program
             // options the draw call uses, otherwise WrappingLength, LineSpacing, or font fallback
             // can change where the lines break and the box drifts off the text.
             FontRectangle measuredBox = TextMeasurer.MeasureRenderableBounds(measuredText, measuredOptions);
-            RectangularPolygon measuredBackground = new(
+            RectanglePolygon measuredBackground = new(
                 measuredBox.X - 10,
                 measuredBox.Y - 8,
                 measuredBox.Width + 20,
@@ -852,9 +852,9 @@ public static class Program
             Brush titleBrush,
             Pen rulePen)
         {
-            RectangularPolygon panel = new(origin.X, origin.Y, width, height);
+            RectanglePolygon panel = new(origin.X, origin.Y, width, height);
 
-            // RectangularPolygon implements IPath. The same shape can be both filled (with a
+            // RectanglePolygon implements IPath. The same shape can be both filled (with a
             // semi-transparent brush) and stroked (with a pen), which keeps the panel framing
             // consistent across the sheet without re-allocating geometry.
             canvas.Fill(Brushes.Solid(Color.White.WithAlpha(.54F)), panel);
@@ -947,7 +947,7 @@ public static class Program
             // involved. A simple right-half rectangle is the entire mask, so OilPaint runs only
             // on those pixels and the left half stays as the original photograph.
             float midX = imageArea.X + (imageArea.Width / 2F);
-            RectangularPolygon afterRegion = new(
+            RectanglePolygon afterRegion = new(
                 midX,
                 imageArea.Y,
                 imageArea.Width / 2F,
@@ -1019,7 +1019,7 @@ public static class Program
                 imageArea.Y + (imageArea.Height / 2F));
             float outerRadius = (MathF.Min(imageArea.Width, imageArea.Height) / 2F) - 6F;
             float innerRadius = outerRadius * 0.5F;
-            Star star = new(starCenter.X, starCenter.Y, 5, innerRadius, outerRadius);
+            StarPolygon star = new(starCenter.X, starCenter.Y, 5, innerRadius, outerRadius);
 
             // ImageBrush samples the source image in world coordinates: a destination pixel at
             // (x, y) reads source pixel (x - offset.X, y - offset.Y) inside SourceRegion. The
@@ -1080,7 +1080,7 @@ public static class Program
                 ShapeOptions = new ShapeOptions { BooleanOperation = BooleanOperation.Intersection },
             };
 
-            canvas.Fill(Brushes.Solid(Color.ParseHex("#E2DCC2")), new RectangularPolygon(imageArea));
+            canvas.Fill(Brushes.Solid(Color.ParseHex("#E2DCC2")), new RectanglePolygon(imageArea));
             canvas.Save(clipToGlyphs, glyphClips);
             canvas.DrawImage(source, source.Bounds, imageArea, null);
             canvas.Restore();
@@ -1109,7 +1109,7 @@ public static class Program
             Color titleColor,
             Color captionColor)
         {
-            RectangularPolygon panelShape = new(panel);
+            RectanglePolygon panelShape = new(panel);
             canvas.Fill(Brushes.Solid(Color.White), panelShape);
             canvas.Draw(Pens.Solid(Color.ParseHex("#D7D2C0"), 1), panelShape);
 
