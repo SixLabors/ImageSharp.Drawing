@@ -1,0 +1,376 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+#pragma warning disable xUnit1004 // Test methods should not be skipped
+using System.Numerics;
+using System.Runtime.InteropServices;
+using GeoJSON.Net.Feature;
+using Newtonsoft.Json;
+using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
+using SkiaSharp;
+
+namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
+
+public partial class ProcessWithDrawingCanvasTests
+{
+    [Theory(Skip = "For local testing")]
+    [WithSolidFilledImages(32, 32, "Black", PixelTypes.Rgba32)]
+    public void CompareToSkiaResults_SmallCircle(TestImageProvider<Rgba32> provider)
+    {
+        EllipsePolygon circle = new(16, 16, 10);
+
+        CompareToSkiaResultsImpl(provider, circle);
+    }
+
+    [Theory(Skip = "For local testing")]
+    [WithSolidFilledImages(64, 64, "Black", PixelTypes.Rgba32)]
+    public void CompareToSkiaResults_StarCircle(TestImageProvider<Rgba32> provider)
+    {
+        EllipsePolygon circle = new(32, 32, 30);
+        Star star = new(32, 32, 7, 10, 27);
+        IPath shape = circle.Clip(star);
+
+        CompareToSkiaResultsImpl(provider, shape);
+    }
+
+    private static void CompareToSkiaResultsImpl(TestImageProvider<Rgba32> provider, IPath shape)
+    {
+        using Image<Rgba32> image = provider.GetImage();
+        image.Mutate(c => c.Paint(canvas => canvas.Fill(Brushes.Solid(Color.White), shape)));
+        image.DebugSave(provider, "ImageSharp", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+
+        using SKBitmap bitmap = new(new SKImageInfo(image.Width, image.Height));
+
+        using SKPath skPath = new();
+
+        foreach (ISimplePath loop in shape.Flatten())
+        {
+            ReadOnlySpan<SKPoint> points = MemoryMarshal.Cast<PointF, SKPoint>(loop.Points.Span);
+            skPath.AddPoly(points.ToArray());
+        }
+
+        using SKPaint paint = new()
+        {
+            Style = SKPaintStyle.Fill,
+            Color = SKColors.White,
+            IsAntialias = true,
+        };
+
+        using SKCanvas canvas = new(bitmap);
+        canvas.Clear(new SKColor(0, 0, 0));
+        canvas.DrawPath(skPath, paint);
+
+        using Image<Rgba32> skResultImage =
+            Image.LoadPixelData<Rgba32>(bitmap.GetPixelSpan(), image.Width, image.Height);
+        skResultImage.DebugSave(
+            provider,
+            "SkiaSharp",
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+
+        ImageSimilarityReport<Rgba32, Rgba32> result = ImageComparer.Exact.CompareImagesOrFrames(image, skResultImage);
+        throw new ImagesSimilarityException(result.DifferencePercentageString);
+    }
+
+    [Theory(Skip = "For local testing")]
+    [WithSolidFilledImages(3600, 2400, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 30, 30)]
+    public void LargeGeoJson_Lines(TestImageProvider<Rgba32> provider, string geoJsonFile, int aa, float sx, float sy)
+    {
+        string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(geoJsonFile));
+
+        PointF[][] points = PolygonFactory.GetGeoJsonPoints(jsonContent, Matrix4x4.CreateScale(sx, sy, 1));
+
+        using Image<Rgba32> image = provider.GetImage();
+        DrawingOptions options = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = aa > 0 },
+        };
+
+        image.Mutate(c => c.Paint(options, canvas =>
+        {
+            Pen pen = Pens.Solid(Color.White, 1.0F);
+            foreach (PointF[] loop in points)
+            {
+                canvas.DrawLine(pen, loop);
+            }
+        }));
+
+        string details = $"_{System.IO.Path.GetFileName(geoJsonFile)}_{sx}x{sy}_aa{aa}";
+
+        image.DebugSave(
+            provider,
+            details,
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(7200, 3300, "Black", PixelTypes.Rgba32)]
+    public void LargeGeoJson_States_Fill(TestImageProvider<Rgba32> provider)
+    {
+        using Image<Rgba32> image = FillGeoJsonPolygons(provider, TestImages.GeoJson.States, true, new Vector2(60), new Vector2(0, -1000));
+        ImageComparer comparer = ImageComparer.TolerantPercentage(0.001f);
+
+        image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+        image.CompareToReferenceOutput(comparer, provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+    }
+
+    private static Image<Rgba32> FillGeoJsonPolygons(TestImageProvider<Rgba32> provider, string geoJsonFile, bool aa, Vector2 scale, Vector2 pixelOffset)
+    {
+        string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(geoJsonFile));
+
+        PointF[][] points = PolygonFactory.GetGeoJsonPoints(jsonContent, Matrix4x4.CreateScale(scale.X, scale.Y, 1) * Matrix4x4.CreateTranslation(pixelOffset.X, pixelOffset.Y, 0));
+
+        Image<Rgba32> image = provider.GetImage();
+        DrawingOptions options = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = aa },
+        };
+        Random rnd = new(42);
+        byte[] rgb = new byte[3];
+
+        image.Mutate(c => c.Paint(options, canvas =>
+        {
+            foreach (PointF[] loop in points)
+            {
+                rnd.NextBytes(rgb);
+
+                Color color = Color.FromPixel(new Rgb24(rgb[0], rgb[1], rgb[2]));
+                canvas.Fill(Brushes.Solid(color), new Polygon(new LinearLineSegment(loop)));
+            }
+        }));
+
+        return image;
+    }
+
+    [Theory]
+    [WithSolidFilledImages(400, 400, "Black", PixelTypes.Rgba32, 0)]
+    [WithSolidFilledImages(6000, 6000, "Black", PixelTypes.Rgba32, 5500)]
+    public void LargeGeoJson_Mississippi_Lines(TestImageProvider<Rgba32> provider, int pixelOffset)
+    {
+        string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(TestImages.GeoJson.States));
+
+        FeatureCollection features = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
+
+        Feature missisipiGeom = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
+
+        Matrix4x4 transform = Matrix4x4.CreateTranslation(-87, -54, 0)
+                        * Matrix4x4.CreateScale(60, 60, 1)
+                        * Matrix4x4.CreateTranslation(pixelOffset, pixelOffset, 0);
+        IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
+
+        using Image<Rgba32> image = provider.GetImage();
+        image.Mutate(c => c.Paint(canvas =>
+        {
+            Pen pen = Pens.Solid(Color.White, 1.0F);
+            foreach (PointF[] loop in points)
+            {
+                canvas.DrawLine(pen, loop);
+            }
+        }));
+
+        // Strict comparer, because the image is sparse:
+        ImageComparer comparer = ImageComparer.TolerantPercentage(0.0001F);
+
+        string details = $"PixelOffset({pixelOffset})";
+        image.DebugSave(provider, details, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+        image.CompareToReferenceOutput(comparer, provider, testOutputDetails: details, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(400 * 3, 400 * 3, "Black", PixelTypes.Rgba32, 3)]
+    [WithSolidFilledImages(400 * 5, 400 * 5, "Black", PixelTypes.Rgba32, 5)]
+    [WithSolidFilledImages(400 * 10, 400 * 10, "Black", PixelTypes.Rgba32, 10)]
+    public void LargeGeoJson_Mississippi_LinesScaled(TestImageProvider<Rgba32> provider, int scale)
+    {
+        string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(TestImages.GeoJson.States));
+
+        FeatureCollection features = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
+
+        Feature missisipiGeom = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
+
+        Matrix4x4 transform = Matrix4x4.CreateTranslation(-87, -54, 0)
+                        * Matrix4x4.CreateScale(60, 60, 1);
+        IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
+
+        using Image<Rgba32> image = provider.GetImage();
+        SolidPen pen = new(new SolidBrush(Color.White), scale);
+
+        image.Mutate(c => c.Paint(canvas =>
+        {
+            foreach (PointF[] loop in points)
+            {
+                IPath transformed = new Path(loop).Transform(
+                    Matrix4x4.CreateTranslation(0.5F, 0.5F, 0) *
+                    Matrix4x4.CreateScale(scale, scale, 1));
+                canvas.Draw(pen, transformed);
+            }
+        }));
+
+        // Strict comparer, because the image is sparse:
+        ImageComparer comparer = ImageComparer.TolerantPercentage(0.0001F);
+
+        string details = $"Scale({scale})";
+        image.DebugSave(provider, details, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+        image.CompareToReferenceOutput(comparer, provider, testOutputDetails: details, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+    }
+
+    [Theory(Skip = "For local experiments only")]
+    [InlineData(0)]
+    [InlineData(5000)]
+    [InlineData(9000)]
+    public void Missisippi_Skia(int offset)
+    {
+        string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(TestImages.GeoJson.States));
+
+        FeatureCollection features = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
+
+        Feature missisipiGeom = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
+
+        Matrix4x4 transform = Matrix4x4.CreateTranslation(-87, -54, 0)
+                        * Matrix4x4.CreateScale(60, 60, 1)
+                        * Matrix4x4.CreateTranslation(offset, offset, 0);
+        IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
+
+        SKPath path = new();
+
+        foreach (PointF[] pts in points.Where(p => p.Length > 2))
+        {
+            path.MoveTo(pts[0].X, pts[0].Y);
+
+            for (int i = 0; i < pts.Length; i++)
+            {
+                path.LineTo(pts[i].X, pts[i].Y);
+            }
+
+            path.LineTo(pts[0].X, pts[0].Y);
+        }
+
+        SKImageInfo imageInfo = new(10000, 10000);
+
+        using SKPaint paint = new()
+        {
+            Style = SKPaintStyle.Stroke,
+            Color = SKColors.White,
+            StrokeWidth = 1f,
+            IsAntialias = true,
+        };
+
+        using SKSurface surface = SKSurface.Create(imageInfo);
+        SKCanvas canvas = surface.Canvas;
+        canvas.Clear(new SKColor(0, 0, 0));
+        canvas.DrawPath(path, paint);
+
+        string outDir = TestEnvironment.CreateOutputDirectory("Skia");
+        string fn = System.IO.Path.Combine(outDir, $"Missisippi_Skia_{offset}.png");
+
+        using SKImage image = surface.Snapshot();
+        using SKData data = image.Encode(SKEncodedImageFormat.Png, 100);
+
+        using FileStream fs = File.Create(fn);
+        data.SaveTo(fs);
+    }
+
+    [Theory(Skip = "For local experiments only")]
+    [WithSolidFilledImages(1000, 1000, "Black", PixelTypes.Rgba32, 10)]
+    public void LargeGeoJson_States_Separate_Benchmark(TestImageProvider<Rgba32> provider, int thickness)
+    {
+        string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(TestImages.GeoJson.States));
+
+        FeatureCollection features = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
+
+        Feature missisipiGeom = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
+
+        Matrix4x4 transform = Matrix4x4.CreateTranslation(-87, -54, 0) * Matrix4x4.CreateScale(60, 60, 1);
+        IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
+
+        using Image<Rgba32> image = provider.GetImage();
+
+        image.Mutate(c => c.Paint(canvas =>
+        {
+            Pen pen = Pens.Solid(Color.White, thickness);
+            foreach (PointF[] loop in points)
+            {
+                canvas.Draw(pen, new Polygon(new LinearLineSegment(loop)));
+            }
+        }));
+
+        image.DebugSave(provider, $"Benchmark_{thickness}", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+    }
+
+    [Theory(Skip = "For local experiments only")]
+    [WithSolidFilledImages(1000, 1000, "Black", PixelTypes.Rgba32, 10)]
+    public void LargeGeoJson_States_All_Benchmark(TestImageProvider<Rgba32> provider, int thickness)
+    {
+        string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(TestImages.GeoJson.States));
+
+        FeatureCollection features = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
+
+        Feature missisipiGeom = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
+
+        Matrix4x4 transform = Matrix4x4.CreateTranslation(-87, -54, 0) * Matrix4x4.CreateScale(60, 60, 1);
+        IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
+
+        PathBuilder pb = new();
+        foreach (PointF[] loop in points)
+        {
+            pb.StartFigure();
+            pb.AddLines(loop);
+            pb.CloseFigure();
+        }
+
+        IPath path = pb.Build();
+
+        using Image<Rgba32> image = provider.GetImage();
+
+        image.Mutate(c => c.Paint(canvas => canvas.Draw(Pens.Solid(Color.White, thickness), path)));
+
+        image.DebugSave(provider, $"Benchmark_{thickness}", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+    }
+
+    [Theory(Skip = "For local experiments only")]
+    [WithSolidFilledImages(1000, 1000, "Black", PixelTypes.Rgba32, 10)]
+    public void LargeStar_Benchmark(TestImageProvider<Rgba32> provider, int thickness)
+    {
+        List<PointF[]> points = CreateStarPolygon(1001, 100F);
+        Matrix4x4 transform = Matrix4x4.CreateTranslation(250, 250, 0);
+        DrawingOptions options = new() { Transform = transform };
+
+        using Image<Rgba32> image = provider.GetImage();
+
+        image.Mutate(c => c.Paint(options, canvas =>
+        {
+            Pen pen = Pens.Solid(Color.White, thickness);
+            foreach (PointF[] loop in points)
+            {
+                canvas.Draw(pen, new Polygon(new LinearLineSegment(loop)));
+            }
+        }));
+
+        image.DebugSave(provider, $"Benchmark_{thickness}", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+    }
+
+    private static List<PointF[]> CreateStarPolygon(int vertexCount, float radius)
+    {
+        if (vertexCount < 5 || (vertexCount & 1) == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(vertexCount), "Vertex count must be an odd number >= 5.");
+        }
+
+        int step = (vertexCount - 1) / 2;
+        List<PointF> contour = new(vertexCount + 1);
+        for (int i = 0; i < vertexCount; i++)
+        {
+            int index = (i * step) % vertexCount;
+            float angle = (index * MathF.PI * 2) / vertexCount;
+            contour.Add(new PointF(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius));
+        }
+
+        contour.Add(contour[0]);
+        return [[.. contour]];
+    }
+}
+#pragma warning restore xUnit1004 // Test methods should not be skipped

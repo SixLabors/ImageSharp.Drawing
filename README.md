@@ -11,15 +11,21 @@ SixLabors.ImageSharp.Drawing
 [![Build Status](https://img.shields.io/github/actions/workflow/status/SixLabors/ImageSharp.Drawing/build-and-test.yml?branch=main)](https://github.com/SixLabors/ImageSharp.Drawing/actions)
 [![Code coverage](https://codecov.io/gh/SixLabors/ImageSharp.Drawing/branch/main/graph/badge.svg)](https://codecov.io/gh/SixLabors/ImageSharp.Drawing)
 [![License: Six Labors Split](https://img.shields.io/badge/license-Six%20Labors%20Split-%23e30183)](https://github.com/SixLabors/ImageSharp.Drawing/blob/main/LICENSE)
-[![Twitter](https://img.shields.io/twitter/url/http/shields.io.svg?style=flat&logo=twitter)](https://twitter.com/intent/tweet?hashtags=imagesharp,dotnet,oss&text=ImageSharp.+A+new+cross-platform+2D+graphics+API+in+C%23&url=https%3a%2f%2fgithub.com%2fSixLabors%2fImageSharp&via=sixlabors)
 
 </div>
 
-### **ImageSharp.Drawing** provides extensions to ImageSharp containing powerful, cross-platform 2D polygon manipulation and drawing APIs.
+**ImageSharp.Drawing** is a cross-platform 2D drawing library built on top of [ImageSharp](https://github.com/SixLabors/ImageSharp). It provides path construction, polygon manipulation, fills, strokes, gradient brushes, pattern brushes, and text rendering. Built against [.NET 8](https://docs.microsoft.com/en-us/dotnet/standard/net-standard).
 
-Designed to democratize image processing, ImageSharp.Drawing brings you an incredibly powerful yet beautifully simple API.
+## Quick Start
 
-Built against [.NET 6](https://docs.microsoft.com/en-us/dotnet/standard/net-standard), ImageSharp.Drawing can be used in device, cloud, and embedded/IoT scenarios. 
+```csharp
+image.Mutate(ctx => ctx.Paint(canvas =>
+{
+    canvas.Fill(Brushes.Solid(Color.White));
+    canvas.Fill(Brushes.Solid(Color.Red), new EllipsePolygon(200, 200, 100));
+    canvas.Draw(Pens.Solid(Color.Blue, 3F), new RectangularPolygon(50, 50, 200, 100));
+}));
+```
   
 ## License
   
@@ -61,12 +67,12 @@ If you prefer, you can compile ImageSharp.Drawing yourself (please do and help!)
 
 - Using [Visual Studio 2022](https://visualstudio.microsoft.com/vs/)
   - Make sure you have the latest version installed
-  - Make sure you have [the .NET 7 SDK](https://www.microsoft.com/net/core#windows) installed
+  - Make sure you have [the .NET 8 SDK](https://www.microsoft.com/net/core#windows) installed
 
 Alternatively, you can work from command line and/or with a lightweight editor on **both Linux/Unix and Windows**:
 
 - [Visual Studio Code](https://code.visualstudio.com/) with [C# Extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode.csharp)
-- [the .NET 7 SDK](https://www.microsoft.com/net/core#linuxubuntu)
+- [the .NET 8 SDK](https://www.microsoft.com/net/core#linuxubuntu)
 
 To clone ImageSharp.Drawing locally, click the "Clone in [YOUR_OS]" button above or run the following git commands:
 

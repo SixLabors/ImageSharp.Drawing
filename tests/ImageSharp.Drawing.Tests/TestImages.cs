@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-
 // ReSharper disable InconsistentNaming
 // ReSharper disable MemberHidesStaticFromOuterClass
 namespace SixLabors.ImageSharp.Drawing.Tests;
@@ -221,7 +220,7 @@ public static class TestImages
             }
         }
 
-        public static readonly string[] All = Baseline.All.Concat(Progressive.All).ToArray();
+        public static readonly string[] All = [.. Baseline.All, .. Progressive.All];
 
         public static class BenchmarkSuite
         {
@@ -393,5 +392,11 @@ public static class TestImages
     public static class GeoJson
     {
         public const string States = "GeoJson/States.json";
+    }
+
+    public static class Svg
+    {
+        public const string GhostscriptTiger = "Svg/Ghostscript_Tiger.svg";
+        public const string Paris30k = "Svg/paris-30k.svg";
     }
 }

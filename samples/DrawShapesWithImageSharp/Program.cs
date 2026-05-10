@@ -1,9 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Globalization;
 using System.Numerics;
 using SixLabors.Fonts;
+using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
@@ -12,283 +12,1200 @@ using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using IODirectory = System.IO.Directory;
 using IOPath = System.IO.Path;
+using Path = SixLabors.ImageSharp.Drawing.Path;
 
 namespace SixLabors.Shapes.DrawShapesWithImageSharp;
 
+/// <summary>
+/// Generates composed ImageSharp.Drawing samples.
+/// </summary>
 public static class Program
 {
-    public static void Main(string[] args)
-    {
-        OutputClippedRectangle();
-        OutputStars();
+    private const string OutputDirectory = "Output";
+    private const string FontsDirectory = "Fonts";
+    private const string ArabicFontFile = "me_quran_volt_newmet.ttf";
+    private const string CjkFontFile = "NotoSansKR-Regular.otf";
+    private const string TextFontFile = "OpenSans-Regular.ttf";
+    private const string DisplayFontFile = "WendyOne-Regular.ttf";
 
-        ImageSharpLogo.SaveLogo(300, "ImageSharp.png");
+    private static readonly Size SampleSize = new(960, 640);
+    private static readonly FontCollection SampleFonts = new();
+    private static readonly FontFamily ArabicFontFamily = LoadFontFamily(ArabicFontFile);
+    private static readonly FontFamily CjkFontFamily = LoadFontFamily(CjkFontFile);
+    private static readonly FontFamily TextFontFamily = LoadFontFamily(TextFontFile);
+    private static readonly FontFamily DisplayFontFamily = LoadFontFamily(DisplayFontFile);
+
+    /// <summary>
+    /// Runs every sample and writes the generated PNG files under the sample's artifacts output directory.
+    /// </summary>
+    public static void Main()
+    {
+        DrawPosterComposition();
+        DrawTransitMap();
+        DrawTypographySheet();
+        DrawImageProcessingMask();
     }
 
-    private static void OutputStars()
+    /// <summary>
+    /// Draws a poster-style composition using gradients, path building, clipping, layers, and text.
+    /// </summary>
+    private static void DrawPosterComposition()
     {
-        OutputStarOutline(5, 150, 250, width: 20, jointStyle: LineJoin.Miter);
-        OutputStarOutline(5, 150, 250, width: 20, jointStyle: LineJoin.Round);
-        OutputStarOutline(5, 150, 250, width: 20, jointStyle: LineJoin.Bevel);
+        Font titleFont = DisplayFontFamily.CreateFont(54);
+        Font bodyFont = TextFontFamily.CreateFont(22);
+        Brush skyBrush = new LinearGradientBrush(
+            new PointF(0, 0),
+            new PointF(0, SampleSize.Height),
+            GradientRepetitionMode.None,
+            new ColorStop(0, Color.CornflowerBlue),
+            new ColorStop(.58F, Color.SkyBlue),
+            new ColorStop(1, Color.LightCyan));
 
-        OutputStarOutlineDashed(5, 150, 250, width: 20, jointStyle: LineJoin.Bevel, cap: LineCap.Butt);
-        OutputStarOutlineDashed(5, 150, 250, width: 20, jointStyle: LineJoin.Round, cap: LineCap.Round);
-        OutputStarOutlineDashed(5, 150, 250, width: 20, jointStyle: LineJoin.Bevel, cap: LineCap.Square);
+        Brush sunBrush = new RadialGradientBrush(
+            new PointF(760, 150),
+            170,
+            GradientRepetitionMode.None,
+            new ColorStop(0, Color.White),
+            new ColorStop(.42F, Color.Gold),
+            new ColorStop(1, Color.OrangeRed.WithAlpha(.12F)));
 
-        OutputStar(3, 5);
-        OutputStar(4);
-        OutputStar(5);
-        OutputStar(6);
-        OutputStar(20, 100, 200);
+        Brush lakeBrush = new LinearGradientBrush(
+            new PointF(0, 405),
+            new PointF(0, SampleSize.Height),
+            GradientRepetitionMode.None,
+            new ColorStop(0, Color.SkyBlue.WithAlpha(.82F)),
+            new ColorStop(1, Color.RoyalBlue));
 
-        OutputDrawnShape();
-        OutputDrawnShapeHourGlass();
-
-        DrawOval();
-        DrawArc();
-        DrawSerializedOPenSansLetterShape_a();
-        DrawSerializedOPenSansLetterShape_o();
-
-        DrawFatL();
-
-        DrawText("Hello World");
-
-        DrawText(
-            "Hello World Hello World Hello World Hello World Hello World Hello World Hello World",
-            new EllipsePolygon(PointF.Empty, 100));
-    }
-
-    private static void DrawText(string text)
-    {
-        FontFamily fam = SystemFonts.Get("Arial");
-        Font font = new(fam, 30);
-        TextOptions textOptions = new(font);
-        IPathCollection glyphs = TextBuilder.GeneratePaths(text, textOptions);
-
-        glyphs.SaveImage("Text", text + ".png");
-    }
-
-    private static void DrawText(string text, IPath path)
-    {
-        FontFamily family = SystemFonts.Get("Arial");
-        Font font = new(family, 30);
-        TextOptions textOptions = new(font)
+        SaveSample("01-poster-composition.png", SampleSize, canvas =>
         {
-            WrappingLength = path.ComputeLength(),
-            VerticalAlignment = VerticalAlignment.Top,
-            HorizontalAlignment = HorizontalAlignment.Left,
+            // Background fill: passing a brush to Fill with no shape paints the entire canvas.
+            // The sun is then composited on top using a radial gradient brush clipped to an ellipse.
+            canvas.Fill(skyBrush);
+            canvas.Fill(sunBrush, new EllipsePolygon(760, 150, 170, 170));
 
-            // Enable this to test vertical layout mode.
-            // LayoutMode = LayoutMode.VerticalLeftRight
+            // Distant mountain range: PathBuilder creates a closed filled polygon from explicit points.
+            PathBuilder farMountains = new();
+            farMountains.AddLines(
+                new PointF(0, 415),
+                new PointF(120, 300),
+                new PointF(230, 375),
+                new PointF(345, 245),
+                new PointF(500, 420),
+                new PointF(660, 270),
+                new PointF(790, 405),
+                new PointF(960, 310),
+                new PointF(960, 640),
+                new PointF(0, 640));
+
+            farMountains.CloseFigure();
+
+            canvas.Fill(Brushes.Solid(Color.SlateBlue.WithAlpha(.78F)), farMountains);
+
+            // Foreground mountain range: the same path is filled and then stroked to demonstrate path reuse.
+            PathBuilder nearMountains = new();
+            nearMountains.AddLines(
+                new PointF(0, 455),
+                new PointF(165, 250),
+                new PointF(310, 390),
+                new PointF(470, 220),
+                new PointF(665, 430),
+                new PointF(820, 300),
+                new PointF(960, 420),
+                new PointF(960, 640),
+                new PointF(0, 640));
+
+            nearMountains.CloseFigure();
+
+            canvas.Fill(Brushes.Solid(Color.DarkSlateBlue), nearMountains);
+            canvas.Draw(Pens.Solid(Color.LightSteelBlue.WithAlpha(.55F), 4), nearMountains);
+
+            // The lake is a plain rectangle filled with a vertical LinearGradientBrush. Building it
+            // with PathBuilder keeps the construction style identical to the surrounding shapes
+            // even though a RectangularPolygon would also work for an axis-aligned rectangle.
+            PathBuilder lakeShape = new();
+            lakeShape.AddLines(
+                new PointF(0, 432),
+                new PointF(960, 432),
+                new PointF(960, 640),
+                new PointF(0, 640));
+
+            lakeShape.CloseFigure();
+
+            canvas.Fill(lakeBrush, lakeShape);
+
+            // Shoreline strip: a single closed figure with two scalloped edges. PathBuilder.AddLines
+            // appends connected straight segments, and CloseFigure links the last point back to the
+            // first so the polygon can be filled as one contiguous shape.
+            PathBuilder shorelineShape = new();
+            shorelineShape.AddLines(
+                new PointF(0, 418),
+                new PointF(150, 420),
+                new PointF(300, 426),
+                new PointF(470, 418),
+                new PointF(640, 428),
+                new PointF(820, 420),
+                new PointF(960, 426),
+                new PointF(960, 448),
+                new PointF(810, 440),
+                new PointF(640, 446),
+                new PointF(470, 438),
+                new PointF(300, 444),
+                new PointF(150, 436),
+                new PointF(0, 442));
+
+            shorelineShape.CloseFigure();
+
+            canvas.Fill(Brushes.Solid(Color.SeaGreen), shorelineShape);
+
+            // Clipping demo: canvas.Save accepts a clip path plus DrawingOptions whose
+            // BooleanOperation controls how the new clip combines with the existing one. Using
+            // Intersection means subsequent draws are masked to the oval highlight shape, so a
+            // rectangular gradient fill can be reused without re-shaping it as an ellipse.
+            EllipsePolygon lakeHighlight = new(725, 512, 285, 86);
+            DrawingOptions lakeHighlightClipOptions = new()
+            {
+                ShapeOptions = new ShapeOptions
+                {
+                    BooleanOperation = BooleanOperation.Intersection
+                }
+            };
+
+            RectangleF lakeHighlightBounds = lakeHighlight.Bounds;
+
+            // Save pushes a clipping state; Restore pops it. Anything drawn between the two is
+            // confined to lakeHighlight even though the brush spans its full bounding rectangle.
+            canvas.Save(lakeHighlightClipOptions, lakeHighlight);
+            canvas.Fill(Brushes.ForwardDiagonal(Color.White.WithAlpha(.36F), Color.Transparent), new RectangularPolygon(lakeHighlightBounds));
+            canvas.Restore();
+
+            // Title panel: pushing posterPanelOptions onto the canvas with Save activates a
+            // small Z rotation around (360, 150) for everything drawn until Restore. SaveLayer
+            // is then opened inside that rotation: it saves the current state and begins an
+            // isolated compositing layer bounded to the supplied subregion. Subsequent draw
+            // commands (the panel background and the text) are recorded into that layer. The
+            // matching Restore closes the layer in the deferred scene; the actual composition
+            // against the parent canvas runs on the next Flush / Dispose using the supplied
+            // GraphicsOptions, so BlendPercentage 0.94 fades the panel and text as a single
+            // semi-transparent block rather than fading each draw individually.
+            DrawingOptions posterPanelOptions = new()
+            {
+                Transform = Matrix4x4.CreateRotationZ(-.055F, new Vector3(360, 150, 0))
+            };
+
+            const string posterTitle = "Alpine Lake";
+            const string posterBody = "Transformed layer\nClipped lake highlight, gradient paths";
+            string posterText = $"{posterTitle}\n{posterBody}";
+            SizeF posterPanelPadding = new(18, 12);
+            RichTextOptions posterTextOptions = new(bodyFont)
+            {
+                Origin = new PointF(114, 38),
+                LineSpacing = 1.1F,
+                TextRuns =
+                [
+                    new RichTextRun
+                    {
+                        Start = 0,
+                        End = posterTitle.Length,
+                        Font = titleFont,
+                        Brush = Brushes.Solid(Color.MidnightBlue),
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = posterTitle.Length + 1,
+                        End = posterText.Length,
+                        Font = bodyFont,
+                        Brush = Brushes.Solid(Color.DarkSlateGray),
+                    }
+                ]
+            };
+
+            // Sizing a container around laid-out text needs MeasureRenderableBounds: it returns
+            // the union of the logical advance rectangle and the ink bounds, so trailing
+            // whitespace and side-bearing overhang stay inside the panel. MeasureBounds returns
+            // ink only and would clip; MeasureAdvance returns advance only and would leave ink
+            // hanging out. The padding values are then added equally on every side.
+            FontRectangle measuredPosterText = TextMeasurer.MeasureRenderableBounds(posterText, posterTextOptions);
+            RectangleF posterPanelBounds = new(
+                measuredPosterText.X,
+                measuredPosterText.Y,
+                measuredPosterText.Width + (posterPanelPadding.Width * 2),
+                measuredPosterText.Height + (posterPanelPadding.Height * 2));
+
+            // SaveLayer's bounds argument is in local (pre-transform) canvas coordinates. The
+            // active drawing transform on the saved state is applied to them when the layer
+            // opens, so the rotated panel is allocated at the correct screen-space position
+            // without doing the rotation math here. Bounds limit allocation and compositing
+            // only; the coordinate system used by commands inside the layer is unchanged.
+            Rectangle posterPanelLayerBounds = Rectangle.FromLTRB(
+                (int)MathF.Floor(posterPanelBounds.X),
+                (int)MathF.Floor(posterPanelBounds.Y),
+                (int)MathF.Ceiling(posterPanelBounds.X + posterPanelBounds.Width),
+                (int)MathF.Ceiling(posterPanelBounds.Y + posterPanelBounds.Height));
+
+            posterTextOptions.Origin = new PointF(
+                posterTextOptions.Origin.X + posterPanelPadding.Width,
+                posterTextOptions.Origin.Y + posterPanelPadding.Height);
+
+            canvas.Save(posterPanelOptions);
+            canvas.SaveLayer(new GraphicsOptions { BlendPercentage = .94F }, posterPanelLayerBounds);
+            canvas.Fill(Brushes.Solid(Color.White.WithAlpha(.86F)), new RectangularPolygon(posterPanelBounds));
+            canvas.DrawText(posterTextOptions, posterText, Brushes.Solid(Color.DarkSlateGray), pen: null);
+            canvas.Restore();
+            canvas.Restore();
+        });
+    }
+
+    /// <summary>
+    /// Draws a transit-map style scene using thick strokes, round joins, dashed paths, labels, and stations.
+    /// </summary>
+    private static void DrawTransitMap()
+    {
+        Font titleFont = DisplayFontFamily.CreateFont(34);
+        Font labelFont = TextFontFamily.CreateFont(18);
+        Font keyFont = TextFontFamily.CreateFont(15);
+        Pen harborLinePen = CreateRoutePen(Color.RoyalBlue, 18);
+        Pen gardenLoopPen = CreateRoutePen(Color.SeaGreen, 18);
+        Pen airportLinePen = CreateRoutePen(Color.OrangeRed, 18);
+        Pen walkingTransferPen = Pens.Dash(Color.DimGray, 4);
+
+        SaveSample("02-transit-map.png", SampleSize, canvas =>
+        {
+            canvas.Fill(Brushes.Solid(Color.AliceBlue));
+
+            // Faint reference grid drawn line-by-line. DrawLine takes a pen plus two end points;
+            // this loop reuses the same translucent pen instance for every grid line so the
+            // alpha and stroke width stay consistent across the whole background.
+            for (int x = 80; x <= 880; x += 80)
+            {
+                canvas.DrawLine(Pens.Solid(Color.LightSteelBlue.WithAlpha(.55F), 1), new PointF(x, 64), new PointF(x, 576));
+            }
+
+            for (int y = 96; y <= 560; y += 80)
+            {
+                canvas.DrawLine(Pens.Solid(Color.LightSteelBlue.WithAlpha(.55F), 1), new PointF(64, y), new PointF(896, y));
+            }
+
+            // RichTextOptions.Origin is the anchor for the laid-out text. DrawText takes a brush
+            // for the glyph fill and an optional pen for the glyph outline; passing pen: null is
+            // the common case where the text is filled but not stroked.
+            canvas.DrawText(
+                new RichTextOptions(titleFont) { Origin = new PointF(72, 50) },
+                "City Loop Transit",
+                Brushes.Solid(Color.MidnightBlue),
+                pen: null);
+
+            // Legend panel: reuse the route pens so the key is drawn with the same stroke options as the map.
+            canvas.Fill(Brushes.Solid(Color.White.WithAlpha(.9F)), new RectangularPolygon(680, 46, 220, 126));
+            canvas.Draw(Pens.Solid(Color.LightSlateGray, 2), new RectangularPolygon(680, 46, 220, 126));
+            canvas.DrawLine(harborLinePen, new PointF(708, 78), new PointF(768, 78));
+            canvas.DrawLine(gardenLoopPen, new PointF(708, 112), new PointF(768, 112));
+            canvas.DrawLine(airportLinePen, new PointF(708, 146), new PointF(768, 146));
+            canvas.DrawText(new RichTextOptions(keyFont) { Origin = new PointF(785, 66) }, "Harbor Line", Brushes.Solid(Color.Black), pen: null);
+            canvas.DrawText(new RichTextOptions(keyFont) { Origin = new PointF(785, 100) }, "Garden Loop", Brushes.Solid(Color.Black), pen: null);
+            canvas.DrawText(new RichTextOptions(keyFont) { Origin = new PointF(785, 134) }, "Airport Line", Brushes.Solid(Color.Black), pen: null);
+
+            // Harbor Line: route pens carry StrokeOptions, so round caps and joins apply to every segment.
+            canvas.DrawLine(
+                harborLinePen,
+                new PointF(105, 398),
+                new PointF(235, 398),
+                new PointF(365, 398),
+                new PointF(505, 398),
+                new PointF(650, 398),
+                new PointF(815, 398));
+
+            // Garden Loop: the same rounded route pen handles vertical and diagonal segments.
+            canvas.DrawLine(
+                gardenLoopPen,
+                new PointF(505, 148),
+                new PointF(505, 260),
+                new PointF(505, 398),
+                new PointF(650, 520),
+                new PointF(815, 520));
+
+            // Airport Line: this route shares transfer points with the other lines.
+            canvas.DrawLine(
+                airportLinePen,
+                new PointF(145, 220),
+                new PointF(285, 220),
+                new PointF(365, 300),
+                new PointF(505, 398),
+                new PointF(650, 398),
+                new PointF(835, 250));
+
+            // Walking transfer: Pens.Dash uses the same DrawLine API while changing only the pen definition.
+            canvas.DrawLine(walkingTransferPen, new PointF(650, 398), new PointF(650, 520));
+
+            // Stations are filled and stroked ellipses layered over the route strokes.
+            DrawStation(canvas, new PointF(105, 398), Color.RoyalBlue);
+            DrawStation(canvas, new PointF(235, 398), Color.RoyalBlue);
+            DrawStation(canvas, new PointF(365, 398), Color.RoyalBlue);
+            DrawStation(canvas, new PointF(505, 398), Color.Black);
+            DrawStation(canvas, new PointF(650, 398), Color.Black);
+            DrawStation(canvas, new PointF(815, 398), Color.RoyalBlue);
+            DrawStation(canvas, new PointF(505, 148), Color.SeaGreen);
+            DrawStation(canvas, new PointF(505, 260), Color.SeaGreen);
+            DrawStation(canvas, new PointF(650, 520), Color.Black);
+            DrawStation(canvas, new PointF(815, 520), Color.SeaGreen);
+            DrawStation(canvas, new PointF(145, 220), Color.OrangeRed);
+            DrawStation(canvas, new PointF(285, 220), Color.OrangeRed);
+            DrawStation(canvas, new PointF(365, 300), Color.OrangeRed);
+            DrawStation(canvas, new PointF(835, 250), Color.OrangeRed);
+
+            // Station labels: each call positions a single piece of text at an explicit Origin.
+            // For one-off labels with no rich runs this is simpler than building a full layout;
+            // when a label needs alignment relative to another point, set HorizontalAlignment
+            // and VerticalAlignment on the RichTextOptions instead of computing offsets by hand.
+            canvas.DrawText(
+                new RichTextOptions(labelFont) { Origin = new PointF(457, 418) },
+                "Central",
+                Brushes.Solid(Color.Black),
+                pen: null);
+
+            canvas.DrawText(
+                new RichTextOptions(labelFont) { Origin = new PointF(610, 358) },
+                "Market",
+                Brushes.Solid(Color.Black),
+                pen: null);
+
+            canvas.DrawText(
+                new RichTextOptions(labelFont) { Origin = new PointF(788, 214) },
+                "Airport",
+                Brushes.Solid(Color.Black),
+                pen: null);
+
+            // Smaller terminus labels reuse keyFont so they match the legend rather than the
+            // major-station labels, giving the route ends a deliberately quieter visual weight.
+            canvas.DrawText(
+                new RichTextOptions(keyFont) { Origin = new PointF(96, 430) },
+                "Harbor",
+                Brushes.Solid(Color.Black),
+                pen: null);
+
+            canvas.DrawText(
+                new RichTextOptions(keyFont) { Origin = new PointF(470, 112) },
+                "Park",
+                Brushes.Solid(Color.Black),
+                pen: null);
+
+            canvas.DrawText(
+                new RichTextOptions(keyFont) { Origin = new PointF(772, 552) },
+                "Gardens",
+                Brushes.Solid(Color.Black),
+                pen: null);
+        });
+    }
+
+    /// <summary>
+    /// Draws a typography sheet that demonstrates rich text runs, wrapping, bidi, decorations, vertical text, and path text.
+    /// </summary>
+    private static void DrawTypographySheet()
+    {
+        Font headlineFont = DisplayFontFamily.CreateFont(48);
+        Font sectionFont = TextFontFamily.CreateFont(18);
+        Font runFont = TextFontFamily.CreateFont(38);
+        Font bodyFont = TextFontFamily.CreateFont(17);
+        Font smallFont = TextFontFamily.CreateFont(13);
+        Font verticalFont = CjkFontFamily.CreateFont(24);
+        Font pathFont = TextFontFamily.CreateFont(24);
+
+        Size typographySize = new(1120, 860);
+
+        SaveSample("03-typography.png", typographySize, canvas =>
+        {
+            Color paperColor = Color.ParseHex("#F7F7F2");
+            Color inkColor = Color.ParseHex("#17202A");
+            Color secondaryTextColor = Color.ParseHex("#53616C");
+            Color ruleColor = Color.ParseHex("#CCD3D8");
+            Color primaryAccentColor = Color.ParseHex("#147D83");
+            Color warmAccentColor = Color.ParseHex("#D95D39");
+            Color coolAccentColor = Color.ParseHex("#6E4B7E");
+            Color highlightAccentColor = Color.ParseHex("#B88917");
+
+            Brush inkBrush = Brushes.Solid(inkColor);
+            Brush secondaryTextBrush = Brushes.Solid(secondaryTextColor);
+            Brush primaryAccentBrush = Brushes.Solid(primaryAccentColor);
+            Brush warmAccentBrush = Brushes.Solid(warmAccentColor);
+            Pen rulePen = Pens.Solid(ruleColor, 1);
+
+            canvas.Fill(Brushes.Solid(paperColor));
+
+            const string headerText = "Typography\nA single paragraph can mix fonts, brushes, decorations, and scripts; the layout engine handles wrapping, bidi, and vertical flow on top.";
+
+            // The headline and subtitle share a single layout instead of two DrawText calls.
+            // The newline character starts a new line of the same paragraph, and per-run fonts
+            // (headlineFont on the title, bodyFont on the subtitle) let the layout engine pick a
+            // line height that fits the largest font on each line. LineSpacing is a multiplier
+            // applied to that natural line height: 1.0 leaves it untouched, values above 1.0 add
+            // breathing room, values below it tighten the lines together.
+            RichTextOptions headerOptions = new(headlineFont)
+            {
+                Origin = new PointF(58, 72),
+                WrappingLength = 1000,
+                LineSpacing = 1.02F,
+                TextRuns =
+                [
+                    new RichTextRun
+                    {
+                        Start = 0,
+                        End = 10,
+                        Font = headlineFont,
+                        Brush = primaryAccentBrush,
+                        Pen = Pens.Solid(inkColor, 1.2F)
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = 11,
+                        End = headerText.Length,
+                        Font = bodyFont,
+                        Brush = secondaryTextBrush
+                    }
+                ]
+            };
+
+            canvas.DrawText(headerOptions, headerText, inkBrush, null);
+
+            DrawPanel(canvas, "RICH RUNS", new PointF(62, 166), 382, 168, sectionFont, secondaryTextBrush, rulePen);
+
+            // RichTextRun.Start and End are GRAPHEME indices (inclusive Start, exclusive End),
+            // not char or code-point indices. For pure ASCII text every char is one grapheme so
+            // the numbers happen to match string indices, but for emoji, combining marks, or
+            // surrogate pairs the two diverge. SixLabors.Fonts exposes GetGraphemeCount() for
+            // exactly this; locating run boundaries dynamically (instead of hard-coding offsets)
+            // also keeps the runs correct when the surrounding copy changes. Graphemes outside
+            // any run inherit the defaults on the parent RichTextOptions (runFont here, so the
+            // line-1 spaces stay heading-sized). Runs may not overlap and should be ordered by
+            // Start. Line one contrasts a filled glyph (brush + thin pen) with a hollow glyph
+            // (paper-colored fill + bold pen). Line two does the same for decorations: each
+            // decoration word is rendered with its own decoration pen, and short body-font runs
+            // cover the connector words so line two stays at the body text size.
+            const string runText = "Filled Outlined\nUse underline, overline, or strikeout.";
+
+            int filledStart = runText.AsSpan(0, runText.IndexOf("Filled", StringComparison.Ordinal)).GetGraphemeCount();
+            int filledEnd = filledStart + "Filled".GetGraphemeCount();
+            int outlinedStart = runText.AsSpan(0, runText.IndexOf("Outlined", StringComparison.Ordinal)).GetGraphemeCount();
+            int outlinedEnd = outlinedStart + "Outlined".GetGraphemeCount();
+            int useStart = runText.AsSpan(0, runText.IndexOf("Use ", StringComparison.Ordinal)).GetGraphemeCount();
+            int underlineStart = runText.AsSpan(0, runText.IndexOf("underline", StringComparison.Ordinal)).GetGraphemeCount();
+            int underlineEnd = underlineStart + "underline".GetGraphemeCount();
+            int overlineStart = runText.AsSpan(0, runText.IndexOf("overline", StringComparison.Ordinal)).GetGraphemeCount();
+            int overlineEnd = overlineStart + "overline".GetGraphemeCount();
+            int strikeoutStart = runText.AsSpan(0, runText.IndexOf("strikeout", StringComparison.Ordinal)).GetGraphemeCount();
+            int strikeoutEnd = strikeoutStart + "strikeout".GetGraphemeCount();
+            int runTotal = runText.GetGraphemeCount();
+
+            RichTextOptions runOptions = new(runFont)
+            {
+                Origin = new PointF(82, 230),
+                LineSpacing = 1.4F,
+                TextRuns =
+                [
+                    new RichTextRun
+                    {
+                        Start = filledStart,
+                        End = filledEnd,
+                        Font = runFont,
+                        Brush = warmAccentBrush,
+                        Pen = Pens.Solid(inkColor, 1.8F)
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = outlinedStart,
+                        End = outlinedEnd,
+                        Font = runFont,
+                        Brush = Brushes.Solid(paperColor),
+                        Pen = Pens.Solid(primaryAccentColor, 2.2F)
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = useStart,
+                        End = underlineStart,
+                        Font = bodyFont,
+                        Brush = inkBrush
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = underlineStart,
+                        End = underlineEnd,
+                        Font = bodyFont,
+                        Brush = inkBrush,
+                        TextDecorations = TextDecorations.Underline,
+                        UnderlinePen = Pens.Solid(warmAccentColor, 2)
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = underlineEnd,
+                        End = overlineStart,
+                        Font = bodyFont,
+                        Brush = inkBrush
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = overlineStart,
+                        End = overlineEnd,
+                        Font = bodyFont,
+                        Brush = inkBrush,
+                        TextDecorations = TextDecorations.Overline,
+                        OverlinePen = Pens.Solid(coolAccentColor, 2)
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = overlineEnd,
+                        End = strikeoutStart,
+                        Font = bodyFont,
+                        Brush = inkBrush
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = strikeoutStart,
+                        End = strikeoutEnd,
+                        Font = bodyFont,
+                        Brush = inkBrush,
+                        TextDecorations = TextDecorations.Strikeout,
+                        StrikeoutPen = Pens.Solid(highlightAccentColor, 2)
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = strikeoutEnd,
+                        End = runTotal,
+                        Font = bodyFont,
+                        Brush = inkBrush
+                    }
+                ]
+            };
+
+            canvas.DrawText(runOptions, runText, inkBrush, null);
+
+            DrawPanel(canvas, "WRAPPING AND MEASUREMENT", new PointF(500, 166), 560, 158, sectionFont, secondaryTextBrush, rulePen);
+
+            // Two text-shaping concerns meet here. WrappingLength caps each line's advance, so
+            // the layout engine inserts soft line breaks when a line would otherwise overflow.
+            // TextMeasurer then reports back the size that the laid-out text actually occupies,
+            // which lets the caller draw a panel or callout that fits the wrapped paragraph
+            // exactly, no matter how the breaks fell.
+            const string measuredText = "Wrapping length caps each line's advance, and the layout engine inserts a soft break whenever the next word would push the line past that limit.";
+            RichTextOptions measuredOptions = new(bodyFont)
+            {
+                Origin = new PointF(520, 222),
+                WrappingLength = 500,
+                LineSpacing = 1.22F,
+                TextRuns =
+                [
+                    new RichTextRun
+                    {
+                        Start = 0,
+                        End = 15,
+                        Font = bodyFont,
+                        Brush = inkBrush,
+                        TextDecorations = TextDecorations.Underline,
+                        UnderlinePen = Pens.Solid(primaryAccentColor, 2)
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = 15,
+                        End = measuredText.Length,
+                        Font = bodyFont,
+                        Brush = inkBrush
+                    }
+                ]
+            };
+
+            // MeasureRenderableBounds returns the union of the logical advance rectangle and the
+            // ink bounds, so a panel sized from it contains every glyph (including trailing
+            // whitespace, italic overhang, and any side bearings) without clipping. Pass the same
+            // options the draw call uses, otherwise WrappingLength, LineSpacing, or font fallback
+            // can change where the lines break and the box drifts off the text.
+            FontRectangle measuredBox = TextMeasurer.MeasureRenderableBounds(measuredText, measuredOptions);
+            RectangularPolygon measuredBackground = new(
+                measuredBox.X - 10,
+                measuredBox.Y - 8,
+                measuredBox.Width + 20,
+                measuredBox.Height + 16);
+
+            canvas.Fill(Brushes.Solid(Color.White.WithAlpha(.8F)), measuredBackground);
+            canvas.Draw(Pens.Solid(ruleColor, 1), measuredBackground);
+            canvas.DrawText(measuredOptions, measuredText, inkBrush, null);
+
+            DrawPanel(canvas, "BIDI AND FALLBACK", new PointF(62, 352), 382, 300, sectionFont, secondaryTextBrush, rulePen);
+
+            const string bidiBody = "Mixed-script paragraphs stay readable because the Unicode Bidirectional Algorithm resolves direction per visual line. الكلمات العربية تتدفق من اليمين إلى اليسار. הטקסט בעברית זורם גם מימין לשמאל. Embedded numbers like 2026 keep their left-to-right order even inside a right-to-left run.";
+            const string bidiCaption = "RichTextRun indices target the logical (typed) order; layout flips them visually.";
+            string bidiText = $"{bidiBody}\n{bidiCaption}";
+
+            // RichTextRun.Start and End count graphemes, not chars and not code points. For text
+            // containing only basic Arabic, Hebrew, and Latin letters one grapheme equals one
+            // code point, so a code-point count would coincide here, but content with combining
+            // marks, emoji ZWJ sequences, or surrogate pairs would diverge. SixLabors.Fonts
+            // exposes GetGraphemeCount() on string and ReadOnlySpan<char> for exactly this.
+            int bidiArabicStart = bidiText.AsSpan(0, bidiText.IndexOf("الكلمات", StringComparison.Ordinal)).GetGraphemeCount();
+            int bidiHebrewStart = bidiText.AsSpan(0, bidiText.IndexOf("הטקסט", StringComparison.Ordinal)).GetGraphemeCount();
+            int bidiNumbersStart = bidiText.AsSpan(0, bidiText.IndexOf("Embedded", StringComparison.Ordinal)).GetGraphemeCount();
+            int bidiBodyLength = bidiBody.GetGraphemeCount();
+            int bidiTotalLength = bidiText.GetGraphemeCount();
+
+            RichTextOptions bidiOptions = new(bodyFont)
+            {
+                Origin = new PointF(82, 422),
+                FallbackFontFamilies = [ArabicFontFamily],
+                WrappingLength = 322,
+                LineSpacing = 1.25F,
+                TextRuns =
+                [
+                    new RichTextRun
+                    {
+                        Start = 0,
+                        End = bidiArabicStart,
+                        Font = bodyFont,
+                        Brush = inkBrush
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = bidiArabicStart,
+                        End = bidiHebrewStart,
+                        Font = bodyFont,
+                        Brush = primaryAccentBrush
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = bidiHebrewStart,
+                        End = bidiNumbersStart,
+                        Font = bodyFont,
+                        Brush = warmAccentBrush
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = bidiNumbersStart,
+                        End = bidiBodyLength,
+                        Font = bodyFont,
+                        Brush = inkBrush
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = bidiBodyLength + 1,
+                        End = bidiTotalLength,
+                        Font = smallFont,
+                        Brush = secondaryTextBrush
+                    }
+                ]
+            };
+
+            // The string is held in LOGICAL order, the order a person types or reads it. At
+            // shape time the Unicode Bidirectional Algorithm assigns each run of characters a
+            // visual direction, so the Arabic and Hebrew sentences render right-to-left while
+            // surrounding Latin text and embedded numbers keep their own left-to-right order.
+            // FallbackFontFamilies works per-glyph: when bodyFont has no glyph for an Arabic or
+            // Hebrew codepoint, ArabicFontFamily supplies it without splitting the parent run.
+            canvas.DrawText(bidiOptions, bidiText, inkBrush, null);
+
+            DrawPanel(canvas, "VERTICAL MIXED LAYOUT", new PointF(500, 352), 560, 300, sectionFont, secondaryTextBrush, rulePen);
+
+            const string verticalText = "한국어 세로쓰기는 위에서 아래로 흐릅니다.\nImageSharp Drawing은 영문 단어를 옆으로 회전시켜 함께 배치합니다.\n숫자 2026과 같은 아라비아 숫자는 가로 방향을 그대로 유지합니다.\nRichTextRun을 사용하면 단어마다 색과 장식을 다르게 줄 수 있습니다.\n한국어와 English가 한 단락 안에서 자연스럽게 어우러집니다.";
+            int verticalEnglishStart = verticalText.AsSpan(0, verticalText.IndexOf("ImageSharp", StringComparison.Ordinal)).GetGraphemeCount();
+            int verticalNumberStart = verticalText.AsSpan(0, verticalText.IndexOf("숫자", StringComparison.Ordinal)).GetGraphemeCount();
+            int verticalRunStart = verticalText.AsSpan(0, verticalText.IndexOf("RichTextRun", StringComparison.Ordinal)).GetGraphemeCount();
+            int verticalLength = verticalText.GetGraphemeCount();
+
+            RichTextOptions verticalOptions = new(verticalFont)
+            {
+                Origin = new PointF(520, 410),
+                LayoutMode = LayoutMode.VerticalMixedRightLeft,
+                WrappingLength = 205,
+                LineSpacing = 1.1F,
+                FallbackFontFamilies = [TextFontFamily],
+                TextRuns =
+                [
+                    new RichTextRun
+                    {
+                        Start = 0,
+                        End = verticalEnglishStart,
+                        Font = verticalFont,
+                        Brush = inkBrush
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = verticalEnglishStart,
+                        End = verticalNumberStart,
+                        Font = verticalFont,
+                        Brush = primaryAccentBrush,
+                        TextDecorations = TextDecorations.Underline,
+                        UnderlinePen = Pens.Solid(primaryAccentColor, 2)
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = verticalNumberStart,
+                        End = verticalRunStart,
+                        Font = verticalFont,
+                        Brush = warmAccentBrush,
+                        TextDecorations = TextDecorations.Overline,
+                        OverlinePen = Pens.Solid(warmAccentColor, 2)
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = verticalRunStart,
+                        End = verticalLength,
+                        Font = verticalFont,
+                        Brush = inkBrush
+                    }
+                ]
+            };
+
+            // LayoutMode.VerticalMixedRightLeft stacks each line top-to-bottom and advances new
+            // lines from right to left, the conventional layout for traditional Korean and
+            // Japanese vertical typography (the first line sits on the right, later lines fall
+            // progressively to its left). RichTextOptions.Origin is the alignment anchor of the
+            // laid-out box, not always its top-left: with the default HorizontalAlignment.Left
+            // and VerticalAlignment.Top it coincides with the top-left, but Right anchors the
+            // box's right edge to Origin and Center pivots the box around it, and the same is
+            // true vertically. CJK glyphs render upright; Latin words and digits are rotated
+            // sideways so they remain legible inside the vertical flow. WrappingLength is the
+            // per-line budget along the vertical axis; generous values keep each line whole and
+            // let the explicit \n characters control where breaks fall.
+            canvas.DrawText(verticalOptions, verticalText, inkBrush, null);
+
+            Path textPath = new(new CubicBezierLineSegment(
+                new PointF(70, 805),
+                new PointF(265, 735),
+                new PointF(710, 845),
+                new PointF(1050, 760)));
+
+            const string pathText = "Path text follows the curve while runs vary colour, weight, and decoration.";
+            RichTextOptions pathOptions = new(pathFont)
+            {
+                WrappingLength = textPath.ComputeLength(),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                TextRuns =
+                [
+                    new RichTextRun
+                    {
+                        Start = 0,
+                        End = 4,
+                        Font = pathFont,
+                        Brush = warmAccentBrush,
+                        Pen = Pens.Solid(inkColor, 1.1F)
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = 4,
+                        End = 22,
+                        Font = pathFont,
+                        Brush = inkBrush
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = 22,
+                        End = 27,
+                        Font = pathFont,
+                        Brush = primaryAccentBrush,
+                        TextDecorations = TextDecorations.Underline,
+                        UnderlinePen = Pens.Solid(primaryAccentColor, 2)
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = 27,
+                        End = pathText.Length,
+                        Font = pathFont,
+                        Brush = inkBrush
+                    }
+                ]
+            };
+
+            // Passing a path to DrawText tells the renderer to advance each glyph along the curve
+            // rather than along a straight baseline. WrappingLength = textPath.ComputeLength()
+            // matches the wrap budget to the curve's arc length, so the text fills the path
+            // without overflowing past its end. The guide path can be drawn as well as used as
+            // a baseline — that is a design choice. Strokes, ribbons, dashed leaders, or a
+            // decorative trail under the glyphs all work, and so does omitting the stroke and
+            // rendering only the text. The two operations are independent.
+            canvas.Draw(Pens.Solid(ruleColor, 1.5F), textPath);
+            canvas.DrawText(pathOptions, pathText, textPath, inkBrush, null);
+        });
+
+        static void DrawPanel(
+            DrawingCanvas canvas,
+            string title,
+            PointF origin,
+            float width,
+            float height,
+            Font font,
+            Brush titleBrush,
+            Pen rulePen)
+        {
+            RectangularPolygon panel = new(origin.X, origin.Y, width, height);
+
+            // RectangularPolygon implements IPath. The same shape can be both filled (with a
+            // semi-transparent brush) and stroked (with a pen), which keeps the panel framing
+            // consistent across the sheet without re-allocating geometry.
+            canvas.Fill(Brushes.Solid(Color.White.WithAlpha(.54F)), panel);
+            canvas.Draw(rulePen, panel);
+            RichTextOptions titleOptions = new(font)
+            {
+                Origin = new PointF(origin.X + 18, origin.Y + 30),
+                TextRuns =
+                [
+                    new RichTextRun
+                    {
+                        Start = 0,
+                        End = title.Length,
+                        Font = font,
+                        Brush = titleBrush
+                    }
+                ]
+            };
+
+            canvas.DrawText(titleOptions, title, titleBrush, null);
+        }
+    }
+
+    /// <summary>
+    /// Demonstrates how a photograph and an IPath combine through the drawing API: a
+    /// before/after Apply wipe, an Apply pixelate redaction, an ImageBrush filling a
+    /// star, and a TextBuilder glyph clip masking DrawImage to letterforms.
+    /// </summary>
+    private static void DrawImageProcessingMask()
+    {
+        using Image<Rgba32> source = CreateSourceImage();
+        Font headerFont = DisplayFontFamily.CreateFont(34);
+        Font subtitleFont = TextFontFamily.CreateFont(14);
+        Font panelTitleFont = TextFontFamily.CreateFont(18);
+        Font panelCaptionFont = TextFontFamily.CreateFont(12);
+        Font glyphMaskFont = DisplayFontFamily.CreateFont(118);
+
+        Color paperColor = Color.ParseHex("#F4F4EE");
+        Color inkColor = Color.ParseHex("#15202A");
+        Color secondaryColor = Color.ParseHex("#5A6470");
+        Color accentColor = Color.ParseHex("#147D83");
+        Color warmColor = Color.ParseHex("#D9551A");
+
+        SaveSample("04-image-processing-mask.png", SampleSize, canvas =>
+        {
+            canvas.Fill(Brushes.Solid(paperColor));
+
+            canvas.DrawText(
+                new RichTextOptions(headerFont) { Origin = new PointF(40, 30) },
+                "Image compositing",
+                Brushes.Solid(inkColor),
+                pen: null);
+
+            canvas.DrawText(
+                new RichTextOptions(subtitleFont) { Origin = new PointF(40, 66) },
+                "Apply() runs a processor inside an IPath, ImageBrush fills one with a photo, and Save() clips drawing to one.",
+                Brushes.Solid(secondaryColor),
+                pen: null);
+
+            // Four panels in a 2x2 grid. Each demonstrates one technique against the same
+            // photograph (Lake.jpg, linked from the test fixtures via the csproj), so the
+            // visual difference between panels is the API call, not the input.
+            Rectangle panelTopLeft = new(40, 90, 430, 250);
+            Rectangle panelTopRight = new(490, 90, 430, 250);
+            Rectangle panelBottomLeft = new(40, 360, 430, 250);
+            Rectangle panelBottomRight = new(490, 360, 430, 250);
+
+            DrawBeforeAfterWipePanel(canvas, panelTopLeft, source, panelTitleFont, panelCaptionFont, inkColor, secondaryColor, accentColor);
+            DrawRedactionPanel(canvas, panelTopRight, source, panelTitleFont, panelCaptionFont, inkColor, secondaryColor, warmColor);
+            DrawImageBrushPanel(canvas, panelBottomLeft, source, panelTitleFont, panelCaptionFont, inkColor, secondaryColor, accentColor);
+            DrawPhotoInTextPanel(canvas, panelBottomRight, source, glyphMaskFont, panelTitleFont, panelCaptionFont, inkColor, secondaryColor);
+        });
+
+        static void DrawBeforeAfterWipePanel(
+            DrawingCanvas canvas,
+            Rectangle panel,
+            Image<Rgba32> source,
+            Font titleFont,
+            Font captionFont,
+            Color titleColor,
+            Color captionColor,
+            Color dividerColor)
+        {
+            float imageTop = DrawPanelChrome(canvas, panel, "Before / after wipe", "Apply() takes its own IPath, so a half-width rectangle is enough to scope OilPaint to the right of the divider.", titleFont, captionFont, titleColor, captionColor);
+
+            RectangleF imageArea = ImageAreaBelow(panel, imageTop);
+            canvas.DrawImage(source, source.Bounds, imageArea, null);
+
+            // Apply masks the processor to its IPath argument; the saved canvas state is not
+            // involved. A simple right-half rectangle is the entire mask, so OilPaint runs only
+            // on those pixels and the left half stays as the original photograph.
+            float midX = imageArea.X + (imageArea.Width / 2F);
+            RectangularPolygon afterRegion = new(
+                midX,
+                imageArea.Y,
+                imageArea.Width / 2F,
+                imageArea.Height);
+
+            // Saturate(amount > 1) boosts colour intensity before OilPaint smears the pixels
+            // into painterly strokes; the saturated input gives the strokes more visible
+            // contrast. OilPaint defaults are (levels: 10, brushSize: 15); the smaller
+            // brushSize and slightly higher levels here produce tighter strokes.
+            canvas.Apply(afterRegion, ctx => ctx.Saturate(1.6F).OilPaint(levels: 15, brushSize: 5));
+
+            // Divider line so the eye can lock onto the wipe boundary even on flat regions of
+            // the photograph (sky, water) where the colour change alone would be subtle.
+            canvas.DrawLine(
+                Pens.Solid(dividerColor, 2),
+                new PointF(midX, imageArea.Y),
+                new PointF(midX, imageArea.Y + imageArea.Height));
+        }
+
+        static void DrawRedactionPanel(
+            DrawingCanvas canvas,
+            Rectangle panel,
+            Image<Rgba32> source,
+            Font titleFont,
+            Font captionFont,
+            Color titleColor,
+            Color captionColor,
+            Color markerColor)
+        {
+            float imageTop = DrawPanelChrome(canvas, panel, "Privacy redaction", "Apply() runs an ImageSharp processor inside any IPath. An ellipse pixelates a face-shaped region and leaves the rest alone.", titleFont, captionFont, titleColor, captionColor);
+
+            RectangleF imageArea = ImageAreaBelow(panel, imageTop);
+            canvas.DrawImage(source, source.Bounds, imageArea, null);
+
+            // Any IPath works as a redaction region; Pixelate is just one IImageProcessingContext
+            // extension. Brightness, GaussianBlur, Hue, Invert, BoxBlur, and friends plug in
+            // identically. Pixels outside the path keep their original values, and using an
+            // ellipse (as you would for a face) feathers the redaction at the corners so the
+            // surrounding pixels do not square off the censored area.
+            EllipsePolygon redaction = new(
+                imageArea.X + (imageArea.Width * 0.5F),
+                imageArea.Y + (imageArea.Height * 0.55F),
+                imageArea.Width * 0.32F,
+                imageArea.Height * 0.28F);
+
+            canvas.Apply(redaction, ctx => ctx.Pixelate(10));
+            canvas.Draw(Pens.Solid(markerColor, 2), redaction);
+        }
+
+        static void DrawImageBrushPanel(
+            DrawingCanvas canvas,
+            Rectangle panel,
+            Image<Rgba32> source,
+            Font titleFont,
+            Font captionFont,
+            Color titleColor,
+            Color captionColor,
+            Color outlineColor)
+        {
+            float imageTop = DrawPanelChrome(canvas, panel, "Image as a brush", "ImageBrush wraps a photograph as a Brush, so any IPath can be filled with it as a texture instead of a solid colour.", titleFont, captionFont, titleColor, captionColor);
+
+            RectangleF imageArea = ImageAreaBelow(panel, imageTop);
+
+            // A 5-pointed star sized to fill the available image area and centred inside it.
+            // The brush below carries the photograph; this path determines which pixels of it
+            // appear on screen.
+            PointF starCenter = new(
+                imageArea.X + (imageArea.Width / 2F),
+                imageArea.Y + (imageArea.Height / 2F));
+            float outerRadius = (MathF.Min(imageArea.Width, imageArea.Height) / 2F) - 6F;
+            float innerRadius = outerRadius * 0.5F;
+            Star star = new(starCenter.X, starCenter.Y, 5, innerRadius, outerRadius);
+
+            // ImageBrush samples the source image in world coordinates: a destination pixel at
+            // (x, y) reads source pixel (x - offset.X, y - offset.Y) inside SourceRegion. The
+            // offset here aligns Lake.jpg's mountain (≈ image (640, 200)) with the star centre
+            // so the texture inside the star is recognisable rather than an arbitrary crop.
+            // No DrawImage call and no clip — the brush itself carries the photograph and the
+            // star path defines exactly which pixels of it appear on screen.
+            Point brushOffset = new(
+                (int)starCenter.X - 640,
+                (int)starCenter.Y - 200);
+
+            ImageBrush<Rgba32> photoBrush = new(source, source.Bounds, brushOffset);
+
+            canvas.Fill(photoBrush, star);
+            canvas.Draw(Pens.Solid(outlineColor, 2), star);
+        }
+
+        static void DrawPhotoInTextPanel(
+            DrawingCanvas canvas,
+            Rectangle panel,
+            Image<Rgba32> source,
+            Font glyphFont,
+            Font titleFont,
+            Font captionFont,
+            Color titleColor,
+            Color captionColor)
+        {
+            float imageTop = DrawPanelChrome(canvas, panel, "Photo in text", "TextBuilder.GeneratePaths returns one IPath per glyph; pass them as a clip and the photo only shows through the letters.", titleFont, captionFont, titleColor, captionColor);
+
+            RectangleF imageArea = ImageAreaBelow(panel, imageTop);
+
+            // Pick a glyph size that fills most of the image area, then centre the laid-out text
+            // inside imageArea. Measuring with Origin = (0,0) gives ink-relative bounds; the
+            // final Origin is adjusted by both the centring offset and the negative ink offset
+            // so the rendered glyphs land in the middle of imageArea.
+            float glyphHeight = imageArea.Height * 0.85F;
+            Font sizedGlyphFont = new(glyphFont, glyphHeight);
+
+            TextOptions probe = new(sizedGlyphFont) { Origin = PointF.Empty };
+            FontRectangle textBounds = TextMeasurer.MeasureRenderableBounds("MASK", probe);
+
+            TextOptions glyphOptions = new(sizedGlyphFont)
+            {
+                Origin = new PointF(
+                    imageArea.X + ((imageArea.Width - textBounds.Width) / 2F) - textBounds.X,
+                    imageArea.Y + ((imageArea.Height - textBounds.Height) / 2F) - textBounds.Y),
+            };
+
+            // GeneratePaths returns one IPath per glyph. canvas.Save accepts params IPath[] so
+            // the whole collection becomes a compound clip, but ShapeOptions.BooleanOperation
+            // must be set to Intersection: the default Difference would cut the glyph shapes
+            // OUT of the photograph, the opposite of "image inside text".
+            IPathCollection letters = TextBuilder.GeneratePaths("MASK", glyphOptions);
+            IPath[] glyphClips = [.. letters];
+
+            DrawingOptions clipToGlyphs = new()
+            {
+                ShapeOptions = new ShapeOptions { BooleanOperation = BooleanOperation.Intersection },
+            };
+
+            canvas.Fill(Brushes.Solid(Color.ParseHex("#E2DCC2")), new RectangularPolygon(imageArea));
+            canvas.Save(clipToGlyphs, glyphClips);
+            canvas.DrawImage(source, source.Bounds, imageArea, null);
+            canvas.Restore();
+
+            canvas.Draw(Pens.Solid(titleColor, 1), letters);
+        }
+
+        static RectangleF ImageAreaBelow(Rectangle panel, float top)
+        {
+            const float horizontalPadding = 15F;
+            const float bottomPadding = 12F;
+            return new RectangleF(
+                panel.X + horizontalPadding,
+                top,
+                panel.Width - (horizontalPadding * 2F),
+                panel.Bottom - bottomPadding - top);
+        }
+
+        static float DrawPanelChrome(
+            DrawingCanvas canvas,
+            Rectangle panel,
+            string title,
+            string caption,
+            Font titleFont,
+            Font captionFont,
+            Color titleColor,
+            Color captionColor)
+        {
+            RectangularPolygon panelShape = new(panel);
+            canvas.Fill(Brushes.Solid(Color.White), panelShape);
+            canvas.Draw(Pens.Solid(Color.ParseHex("#D7D2C0"), 1), panelShape);
+
+            RichTextOptions titleOptions = new(titleFont) { Origin = new PointF(panel.X + 15, panel.Y + 24) };
+            canvas.DrawText(titleOptions, title, Brushes.Solid(titleColor), pen: null);
+
+            RichTextOptions captionOptions = new(captionFont)
+            {
+                Origin = new PointF(panel.X + 15, panel.Y + 46),
+                WrappingLength = panel.Width - 30,
+                LineSpacing = 1.15F,
+            };
+            canvas.DrawText(captionOptions, caption, Brushes.Solid(captionColor), pen: null);
+
+            // Measure the laid-out caption (post-wrap) so the image area starts under it.
+            // MeasureRenderableBounds covers advance and ink, so multi-line captions don't clip
+            // the image and short captions don't waste vertical space.
+            FontRectangle captionBounds = TextMeasurer.MeasureRenderableBounds(caption, captionOptions);
+            return captionBounds.Y + captionBounds.Height + 10;
+        }
+    }
+
+    /// <summary>
+    /// Creates a route pen with round joins and caps.
+    /// </summary>
+    /// <param name="color">The route color.</param>
+    /// <param name="width">The route stroke width.</param>
+    /// <returns>The configured route pen.</returns>
+    private static SolidPen CreateRoutePen(Color color, float width)
+    {
+        PenOptions options = new(Brushes.Solid(color), width, null)
+        {
+            StrokeOptions = new StrokeOptions
+            {
+                LineCap = LineCap.Round,
+                LineJoin = LineJoin.Round
+            }
         };
 
-        IPathCollection glyphs = TextBuilder.GeneratePaths(text, path, textOptions);
-
-        glyphs.SaveImageWithPath(path, "Text-Path", text + ".png");
+        return new SolidPen(options);
     }
 
-    private static void DrawFatL()
+    /// <summary>
+    /// Draws a transit station marker.
+    /// </summary>
+    /// <param name="canvas">The destination canvas.</param>
+    /// <param name="location">The station center.</param>
+    /// <param name="color">The station outline color.</param>
+    private static void DrawStation(DrawingCanvas canvas, PointF location, Color color)
     {
-        Polygon shape = new(new LinearLineSegment(
-            new Vector2(8, 8),
-            new Vector2(64, 8),
-            new Vector2(64, 64),
-            new Vector2(120, 64),
-            new Vector2(120, 120),
-            new Vector2(8, 120)));
-        shape.SaveImage("Issues", "ClippedCorner.png");
+        canvas.Fill(Brushes.Solid(Color.White), new EllipsePolygon(location, 13));
+        canvas.Draw(Pens.Solid(color, 5), new EllipsePolygon(location, 13));
     }
 
-    private static void DrawSerializedOPenSansLetterShape_a()
+    /// <summary>
+    /// Loads the photographic source used by the masking sample. The image is one of the JPEGs
+    /// that already ship with the test fixtures and is wired into this project's csproj as a
+    /// linked content file, so no extra asset has to be added to the repository.
+    /// </summary>
+    private static Image<Rgba32> CreateSourceImage()
     {
-        const string path = @"36.57813x49.16406 35.41797x43.67969 35.41797x43.67969 35.13672x43.67969 35.13672x43.67969 34.41629x44.54843 33.69641x45.34412 32.97708x46.06674 32.2583x46.71631 31.54007x47.29282 30.82239x47.79626 30.10526x48.22665 29.38867x48.58398 29.38867x48.58398 28.65012x48.88474 27.86707x49.14539 27.03952x49.36594 26.16748x49.54639 25.25095x49.68674 24.28992x49.78699 23.28439x49.84714 22.23438x49.86719 22.23438x49.86719 21.52775x49.85564 20.84048x49.82104 20.17258x49.76337 19.52405x49.68262 18.28506x49.4519 17.12354x49.12891 16.03946x48.71362 15.03284x48.20605 14.10367x47.6062 13.25195x46.91406 13.25195x46.91406 12.48978x46.13678 11.82922x45.28149 11.27029x44.34821 10.81299x43.33691 10.45731x42.24762 10.20325x41.08032 10.05081x39.83502 10.0127x39.18312 10x38.51172 10x38.51172 10.01823x37.79307 10.07292x37.09613 10.16407x36.42088 10.29169x35.76733 10.6563x34.52533 11.16675x33.37012 11.82304x32.3017 12.62518x31.32007 13.57317x30.42523 14.10185x30.01036 14.66699x29.61719 15.2686x29.24571 15.90666x28.89594 16.58119x28.56786 17.29218x28.26147 18.03962x27.97679 18.82353x27.71381 19.6439x27.47252 20.50073x27.25293 22.32378x26.87885 24.29266x26.59155 26.40739x26.39105 28.66797x26.27734 28.66797x26.27734 35.20703x26.06641 35.20703x26.06641 35.20703x23.67578 35.20703x23.67578 35.17654x22.57907 35.08508x21.55652 34.93265x20.60812 34.71924x19.73389 34.44485x18.93381 34.1095x18.20789 33.71317x17.55612 33.25586x16.97852 33.25586x16.97852 32.73154x16.47177 32.13416x16.03259 31.46371x15.66098 30.72021x15.35693 29.90366x15.12045 29.01404x14.95154 28.05136x14.85019 27.01563x14.81641 27.01563x14.81641 25.79175x14.86255 24.52832x15.00098 23.88177x15.1048 23.22534x15.23169 21.88281x15.55469 20.50073x15.96997 19.0791x16.47754 17.61792x17.07739 16.11719x17.76953 16.11719x17.76953 14.32422x13.30469 14.32422x13.30469 15.04465x12.92841 15.7821x12.573 17.30811x11.9248 18.90222x11.36011 20.56445x10.87891 20.56445x10.87891 22.26184x10.49438 23.96143x10.21973 24.81204x10.1236 25.66321x10.05493 26.51492x10.01373 27.36719x10 27.36719x10 29.03409x10.04779 29.82572x10.10753 30.58948x10.19116 31.32536x10.29869 32.03336x10.43011 32.71348x10.58543 33.36572x10.76465 34.58658x11.19476 35.69592x11.72046 36.69376x12.34174 37.58008x13.05859 37.58008x13.05859 38.35873x13.88092 39.03357x14.8186 39.60458x15.87164 40.07178x17.04004 40.26644x17.6675 40.43515x18.32379 40.5779x19.00893 40.6947x19.7229 40.78555x20.46571 40.85043x21.23737 40.88937x22.03786 40.90234x22.86719 40.90234x22.86719 40.90234x49.16406
-23.39453x45.05078 24.06655x45.03911 24.72031x45.00409 25.97302x44.86401 27.15268x44.63055 28.25928x44.30371 29.29282x43.88348 30.2533x43.36987 31.14072x42.76288 31.95508x42.0625 31.95508x42.0625 32.6843x41.27808 33.31628x40.41895 33.85104x39.48511 34.28857x38.47656 34.62888x37.39331 34.87195x36.23535 35.01779x35.00269 35.06641x33.69531 35.06641x33.69531 35.06641x30.21484 35.06641x30.21484 29.23047x30.46094 29.23047x30.46094 27.55093x30.54855 25.9928x30.68835 24.55606x30.88034 23.24072x31.12451 22.04678x31.42087 20.97424x31.76941 20.0231x32.17014 19.19336x32.62305 19.19336x32.62305 18.47238x33.13528 17.84753x33.71399 17.31882x34.35916 16.88623x35.0708 16.54977x35.84891 16.30945x36.69348 16.16525x37.60452 16.11719x38.58203 16.11719x38.58203 16.14713x39.34943 16.23694x40.06958 16.38663x40.74249 16.59619x41.36816 17.19495x42.47778 18.0332x43.39844 18.0332x43.39844 19.08679x44.12134 19.68527x44.40533 20.33154x44.6377 21.0256x44.81842 21.76746x44.94751 22.5571x45.02496 23.39453x45.05078";
-        string[] paths = path.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries);
-        Polygon[] polys = [.. paths.Select(line =>
-        {
-            string[] pl = line.Split([' '], StringSplitOptions.RemoveEmptyEntries);
-
-            PointF[] points = [.. pl.Select(p => p.Split('x')).Select(p => new PointF(float.Parse(p[0], CultureInfo.InvariantCulture), float.Parse(p[1], CultureInfo.InvariantCulture)))];
-            return new Polygon(points);
-        })];
-
-        ComplexPolygon complex = new(polys);
-        complex.SaveImage("letter", "a.png");
+        string fullPath = IOPath.Combine(AppContext.BaseDirectory, "Images", "Lake.jpg");
+        return Image.Load<Rgba32>(fullPath);
     }
 
-    private static void DrawSerializedOPenSansLetterShape_o()
+    /// <summary>
+    /// Creates an image, draws a sample into a canvas, and saves the PNG output.
+    /// </summary>
+    /// <param name="fileName">The output file name.</param>
+    /// <param name="size">The output image size.</param>
+    /// <param name="draw">The drawing callback that records canvas commands.</param>
+    private static void SaveSample(string fileName, Size size, CanvasAction draw)
     {
-        const string path = @"45.40234x29.93359 45.3838x31.09519 45.32819x32.22452 45.23549x33.32157 45.10571x34.38635 44.93886x35.41886 44.73492x36.4191 44.49391x37.38706 44.21582x38.32275 43.90065x39.22617 43.5484x40.09732 43.15907x40.9362 42.73267x41.7428 42.26918x42.51713 41.76862x43.25919 41.23097x43.96897 40.65625x44.64648 40.65625x44.64648 40.04884x45.28719 39.41315x45.88657 38.74916x46.4446 38.05688x46.9613 37.33632x47.43667 36.58746x47.8707 35.81032x48.26339 35.00488x48.61475 34.17116x48.92477 33.30914x49.19345 32.41884x49.4208 31.50024x49.60681 30.55336x49.75149 29.57819x49.85483 28.57472x49.91683 27.54297x49.9375 27.54297x49.9375 26.2691x49.8996 25.03149x49.78589 23.83014x49.59637 22.66504x49.33105 21.53619x48.98993 20.4436x48.573 19.38727x48.08026 18.36719x47.51172 18.36719x47.51172 17.3938x46.87231 16.47754x46.16699 15.61841x45.39575 14.81641x44.55859 14.07153x43.65552 13.38379x42.68652 12.75317x41.65161 12.17969x40.55078 12.17969x40.55078 11.66882x39.39282 11.22607x38.18652 10.85144x36.93188 10.54492x35.62891 10.30652x34.27759 10.13623x32.87793 10.03406x31.42993 10x29.93359 10x29.93359 10.0184x28.77213 10.07361x27.64322 10.16562x26.54685 10.29443x25.48303 10.46005x24.45176 10.66248x23.45303 10.9017x22.48685 11.17773x21.55322 11.49057x20.65214 11.84021x19.7836 12.22665x18.94761 12.6499x18.14417 13.10995x17.37327 13.60681x16.63492 14.14047x15.92912 14.71094x15.25586 14.71094x15.25586 15.31409x14.61941 15.9458x14.02402 16.60608x13.46969 17.29492x12.95642 18.01233x12.48421 18.7583x12.05307 19.53284x11.66299 20.33594x11.31396 21.1676x11.006 22.02783x10.73911 22.91663x10.51327 23.83398x10.32849 24.77991x10.18478 25.75439x10.08212 26.75745x10.02053 27.78906x10 27.78906x10 28.78683x10.02101 29.75864x10.08405 30.70449x10.1891 31.62439x10.33618 32.51833x10.52528 33.38632x10.75641 34.22836x11.02956 35.04443x11.34473 35.83456x11.70192 36.59872x12.10114 37.33694x12.54237 38.04919x13.02563 38.7355x13.55092 39.39584x14.11823 40.03024x14.72755 40.63867x15.37891 40.63867x15.37891 41.21552x16.0661 41.75516x16.78296 42.25757x17.52948 42.72278x18.30566 43.15077x19.11151 43.54153x19.94702 43.89509x20.81219 44.21143x21.70703 44.49055x22.63153 44.73245x23.58569 44.93714x24.56952 45.10461x25.58301 45.23487x26.62616 45.32791x27.69897 45.38374x28.80145 45.40234x29.93359
-16.04688x29.93359 16.09302x31.72437 16.23145x33.40527 16.33527x34.20453 16.46216x34.97632 16.61212x35.72064 16.78516x36.4375 16.98126x37.12689 17.20044x37.78882 17.44269x38.42328 17.70801x39.03027 18.30786x40.16187 19x41.18359 19x41.18359 19.78168x42.08997 20.65015x42.87549 21.60541x43.54016 22.64746x44.08398 23.77631x44.50696 24.99194x44.80908 26.29437x44.99036 26.97813x45.03568 27.68359x45.05078 27.68359x45.05078 28.38912x45.03575 29.07309x44.99063 30.37634x44.81018 31.59335x44.50943 32.72412x44.08838 33.76865x43.54703 34.72693x42.88538 35.59897x42.10342 36.38477x41.20117 36.38477x41.20117 37.08102x40.18301 37.68445x39.05334 37.95135x38.44669 38.19504x37.81216 38.41552x37.14976 38.61279x36.45947 38.78686x35.74131 38.93771x34.99527 39.06536x34.22135 39.1698x33.41956 39.30905x31.73233 39.35547x29.93359 39.35547x29.93359 39.30905x28.15189 39.1698x26.48059 39.06536x25.68635 38.93771x24.91971 38.78686x24.18067 38.61279x23.46924 38.41552x22.78541 38.19504x22.12918 37.95135x21.50056 37.68445x20.89954 37.08102x19.7803 36.38477x18.77148 36.38477x18.77148 35.59787x17.87747 34.72253x17.10266 33.75876x16.44705 32.70654x15.91064 31.56589x15.49344 30.33679x15.19543 29.68908x15.09113 29.01926x15.01663 28.32732x14.97193 27.61328x14.95703 27.61328x14.95703 26.90796x14.97173 26.22461x15.01581 24.92383x15.19214 23.71094x15.48602 22.58594x15.89746 21.54883x16.42645 20.59961x17.073 19.73828x17.8371 18.96484x18.71875 18.96484x18.71875 18.28094x19.71686 17.68823x20.83032 17.42607x21.43031 17.18671x22.05914 16.97014x22.71681 16.77637x23.40332 16.60539x24.11867 16.45721x24.86285 16.33183x25.63588 16.22925x26.43774 16.09247x28.12799 16.04688x29.93359 ";
-        string[] paths = path.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries);
-        Polygon[] polys = [.. paths.Select(line =>
-        {
-            string[] pl = line.Split([' '], StringSplitOptions.RemoveEmptyEntries);
+        using Image<Rgba32> image = new(size.Width, size.Height);
+        image.Mutate(ctx => ctx.Paint(draw));
 
-            PointF[] points = [.. pl.Select(p => p.Split('x')).Select(p => new PointF(float.Parse(p[0], CultureInfo.InvariantCulture), float.Parse(p[1], CultureInfo.InvariantCulture)))];
-
-            return new Polygon(points);
-        })];
-
-        ComplexPolygon complex = new(polys);
-        complex.SaveImage("letter", "o.png");
+        SaveImage(image, fileName);
     }
 
-    private static void DrawOval()
-        => new EllipsePolygon(0, 0, 10, 20).Scale(5).SaveImage("Curves", "Ellipse.png");
-
-    private static void DrawArc() => new Polygon(new CubicBezierLineSegment(
-    [
-        new(10, 400),
-                new(30, 10),
-                new(240, 30),
-                new(300, 400)
-    ])).SaveImage(500, 500, "Curves", "Arc.png");
-
-    private static void OutputDrawnShape()
+    /// <summary>
+    /// Saves an image into the sample output directory.
+    /// </summary>
+    /// <param name="image">The image to save.</param>
+    /// <param name="fileName">The output file name.</param>
+    private static void SaveImage(Image image, string fileName)
     {
-        // center the shape outerRadii + 10 px away from edges
-        PathBuilder sb = new();
-
-        // draw a 'V'
-        sb.AddLines(new Vector2(10, 10), new Vector2(20, 20), new Vector2(30, 10));
-        sb.StartFigure();
-
-        // overlay rectangle
-        sb.AddLine(new Vector2(15, 0), new Vector2(25, 0));
-        sb.AddLine(new Vector2(25, 30), new Vector2(15, 30));
-        sb.CloseFigure();
-
-        sb.Build().Translate(0, 10).Scale(10).SaveImage("drawing", $"paths.png");
-    }
-
-    private static void OutputDrawnShapeHourGlass()
-    {
-        // center the shape outerRadii + 10 px away from edges
-        PathBuilder sb = new();
-
-        // draw a 'V'
-        sb.AddLines(new Vector2(10, 10), new Vector2(20, 20), new Vector2(30, 10));
-        sb.StartFigure();
-
-        // overlay rectangle
-        sb.AddLine(new Vector2(15, 0), new Vector2(25, 0));
-        sb.AddLine(new Vector2(15, 30), new Vector2(25, 30));
-        sb.CloseFigure();
-
-        sb.Build().Translate(0, 10).Scale(10).SaveImage("drawing", $"HourGlass.png");
-    }
-
-    private static void OutputStarOutline(int points, float inner = 10, float outer = 20, float width = 5, LineJoin jointStyle = LineJoin.Miter)
-    {
-        // center the shape outerRadii + 10 px away from edges
-        float offset = outer + 10;
-
-        Star star = new(offset, offset, points, inner, outer);
-        StrokeOptions options = new()
-        {
-            LineJoin = jointStyle,
-            LineCap = LineCap.Butt
-        };
-        IPath outline = star.GenerateOutline(width, options);
-        outline.SaveImage("Stars", $"StarOutline_{points}_{jointStyle}.png");
-    }
-
-    private static void OutputStarOutlineDashed(int points, float inner = 10, float outer = 20, float width = 5, LineJoin jointStyle = LineJoin.Miter, LineCap cap = LineCap.Butt)
-    {
-        // center the shape outerRadii + 10 px away from edges
-        float offset = outer + 10;
-
-        Star star = new(offset, offset, points, inner, outer);
-        StrokeOptions options = new()
-        {
-            LineCap = cap,
-            LineJoin = jointStyle
-        };
-        IPath outline = star.GenerateOutline(width, [3, 3], options);
-        outline.SaveImage("Stars", $"StarOutlineDashed_{points}_{jointStyle}_{cap}.png");
-    }
-
-    private static void OutputStar(int points, float inner = 10, float outer = 20)
-    {
-        // center the shape outerRadii + 10 px away from edges
-        float offset = outer + 10;
-
-        Star star = new(offset, offset, points, inner, outer);
-        star.SaveImage("Stars", $"Star_{points}.png");
-    }
-
-    private static void OutputClippedRectangle()
-    {
-        RectangularPolygon rect1 = new(10, 10, 40, 40);
-        RectangularPolygon rect2 = new(20, 0, 20, 20);
-        IPath paths = rect1.Clip(rect2);
-
-        paths.SaveImage("Clipping", "RectangleWithTopClipped.png");
-    }
-
-    public static void SaveImage(this IPath shape, params string[] path) => new PathCollection(shape).SaveImage(path);
-
-    public static void SaveImage(this IPathCollection collection, params string[] path)
-    {
-        // Offset the path collection to ensure our resultant image is
-        // large enough to contain the rendered output.
-        collection = collection.Translate(-collection.Bounds.Location);
-
-        int width = (int)(collection.Bounds.Left + collection.Bounds.Right);
-        int height = (int)(collection.Bounds.Top + collection.Bounds.Bottom);
-        using Image<Rgba32> img = new(width, height);
-
-        // Fill the canvas background and draw our shape
-        img.Mutate(i => i.Fill(Color.DarkBlue));
-
-        // Draw our path collection.
-        img.Mutate(i => i.Fill(Color.HotPink, collection));
-
-        // Ensure directory exists
-        string fullPath = IOPath.GetFullPath(IOPath.Combine("Output", IOPath.Combine(path)));
+        string fullPath = IOPath.Combine(AppContext.BaseDirectory, OutputDirectory, fileName);
         IODirectory.CreateDirectory(IOPath.GetDirectoryName(fullPath));
-        img.Save(fullPath);
+        image.Save(fullPath);
     }
 
-    public static void SaveImageWithPath(this IPathCollection collection, IPath shape, params string[] path)
-    {
-        // Offset the shape and path collection to ensure our resultant image is
-        // large enough to contain the rendered output.
-        shape = shape.Translate(-collection.Bounds.Location);
-        collection = collection.Translate(-collection.Bounds.Location);
-
-        RectangleF bounds = RectangleF.Union(shape.Bounds, collection.Bounds);
-        int width = (int)(bounds.Left + bounds.Right);
-        int height = (int)(bounds.Top + bounds.Bottom);
-
-        using Image<Rgba32> img = new(width, height);
-
-        // Fill the canvas background and draw our shape
-        img.Mutate(i => i.Fill(Color.DarkBlue).Fill(Color.White.WithAlpha(.25F), shape));
-
-        // Draw our path collection.
-        img.Mutate(i => i.Fill(Color.HotPink, collection));
-
-        // Ensure directory exists
-        string fullPath = IOPath.GetFullPath(IOPath.Combine("Output", IOPath.Combine(path)));
-        IODirectory.CreateDirectory(IOPath.GetDirectoryName(fullPath));
-        img.Save(fullPath);
-    }
-
-    public static void SaveImage(this IPath shape, int width, int height, params string[] path)
-        => new PathCollection(shape).SaveImage(width, height, path);
-
-    public static void SaveImage(this IPathCollection shape, int width, int height, params string[] path)
-    {
-        using Image<Rgba32> img = new(width, height);
-        img.Mutate(i => i.Fill(Color.DarkBlue));
-        img.Mutate(i => i.Fill(Color.HotPink, shape));
-
-        // Ensure directory exists
-        string fullPath = IOPath.GetFullPath(IOPath.Combine("Output", IOPath.Combine(path)));
-        IODirectory.CreateDirectory(IOPath.GetDirectoryName(fullPath));
-
-        img.Save(fullPath);
-    }
+    /// <summary>
+    /// Loads a sample font family from the copied font assets.
+    /// </summary>
+    /// <param name="fileName">The font file name.</param>
+    /// <returns>The loaded font family.</returns>
+    private static FontFamily LoadFontFamily(string fileName)
+        => SampleFonts.Add(IOPath.Combine(AppContext.BaseDirectory, FontsDirectory, fileName));
 }

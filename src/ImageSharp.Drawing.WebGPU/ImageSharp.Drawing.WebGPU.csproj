@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>SixLabors.ImageSharp.Drawing.WebGPU</AssemblyName>
+    <AssemblyTitle>SixLabors.ImageSharp.Drawing.WebGPU</AssemblyTitle>
+    <RootNamespace>SixLabors.ImageSharp.Drawing.Processing.Backends</RootNamespace>
+    <PackageId>SixLabors.ImageSharp.Drawing.WebGPU</PackageId>
+    <PackageIcon>sixlabors.imagesharp.drawing.128.png</PackageIcon>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <RepositoryUrl Condition="'$(RepositoryUrl)' == ''">https://github.com/SixLabors/ImageSharp.Drawing/</RepositoryUrl>
+    <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
+    <PackageTags>ImageSharp Drawing WebGPU GPU Graphics Shapes Paths Text Raster Compute</PackageTags>
+    <Description>A WebGPU backend for ImageSharp.Drawing with GPU-accelerated rendering for windows and render targets.</Description>
+    <Configurations>Debug;Release</Configurations>
+    <!--
+      OutputType=Exe is required so that runtimeconfig.json and deps.json are generated.
+      The internal RemoteExecutor uses 'dotnet exec' to spawn a child process that probes
+      compute pipeline support. This avoids unrecoverable AccessViolationException crashes
+      in the parent process. The assembly is still usable as a library via ProjectReference.
+    -->
+    <OutputType>Exe</OutputType>
+    <IsTrimmable>true</IsTrimmable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!--
+      This project is strong-name signed by the shared SixLabors build settings.
+      Silk.NET WebGPU packages are currently unsigned, which triggers CS8002.
+      Keep CS8002 visible as a warning, but do not fail the build for it.
+    -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);8002;NU1900</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <!--  This enables the nullable analysis and treats all nullable warnings as error-->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <WarningsAsErrors>Nullable</WarningsAsErrors>
+  </PropertyGroup>
+
+  <Choose>
+    <When Condition="$(SIXLABORS_TESTING_PREVIEW) == true">
+      <PropertyGroup>
+        <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+      </PropertyGroup>
+    </When>
+    <Otherwise>
+      <PropertyGroup>
+        <TargetFrameworks>net8.0</TargetFrameworks>
+      </PropertyGroup>
+    </Otherwise>
+  </Choose>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
+    <None Include="..\..\shared-infrastructure\branding\icons\imagesharp.drawing\sixlabors.imagesharp.drawing.128.png" Pack="true" PackagePath="" />
+    <None Include="buildTransitive\$(PackageId).targets" Pack="true" PackagePath="buildTransitive\$(PackageId).targets" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Silk.NET packages are listed as NuGet dependencies so the native wgpu binaries
+      and managed interop are restored for consumers. Compile assets are marked private
+      so that ProjectReference consumers within this solution do not see Silk types
+      or CS8002 warnings; however, NuGet package consumers will receive the full
+      Silk packages as transitive dependencies.
+    -->
+    <PackageReference Include="Silk.NET.WebGPU" Version="2.23.0" PrivateAssets="compile;build;analyzers;contentfiles;buildtransitive" />
+    <PackageReference Include="Silk.NET.WebGPU.Extensions.WGPU" Version="2.23.0" PrivateAssets="compile;build;analyzers;contentfiles;buildtransitive" />
+    <PackageReference Include="Silk.NET.WebGPU.Native.WGPU" Version="2.23.0" PrivateAssets="compile;build;analyzers;contentfiles;buildtransitive" />
+    <PackageReference Include="Silk.NET.Windowing.Glfw" Version="2.23.0" PrivateAssets="compile;build;analyzers;contentfiles;buildtransitive" />
+  </ItemGroup>
+
+  <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
+
+  <ItemGroup>
+    <ProjectReference Include="..\ImageSharp.Drawing\ImageSharp.Drawing.csproj" />
+    <ProjectReference Include="..\ImageSharp.Drawing.WebGPU.ShaderGen\ImageSharp.Drawing.WebGPU.ShaderGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="Shaders\WgslSource\*.wgsl" />
+    <AdditionalFiles Include="Shaders\WgslSource\Shared\*.wgsl" />
+  </ItemGroup>
+</Project>
