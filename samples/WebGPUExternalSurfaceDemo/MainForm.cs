@@ -50,7 +50,7 @@ internal sealed class MainForm : Form
 
         // Each tab gets its own render control and external surface. This mirrors real UI applications where
         // separate controls or panels own their own native drawable areas.
-        this.clockControl = new WebGPURenderControl { Dock = DockStyle.Fill };
+        this.clockControl = new WebGPURenderControl { Dock = DockStyle.Fill, RenderMode = WebGPURenderMode.Continuous };
         this.clockControl.PaintFrame += this.OnPaintClock;
 
         this.tigerControl = new WebGPURenderControl { Dock = DockStyle.Fill };

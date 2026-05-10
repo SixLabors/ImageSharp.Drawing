@@ -103,7 +103,7 @@ Disposing the frame renders pending canvas work, presents the surface texture, a
 
 ### Rendering Loop
 
-The sample uses `Application.Idle` for continuous rendering. While the WinForms message queue is empty, the control renders frames. When input, resize, or other window messages arrive, the loop exits so WinForms can process them.
+`WebGPURenderControl` supports on-demand and continuous rendering. On-demand controls render from normal WinForms invalidation, which keeps static scenes idle until input, resize, or another event asks them to repaint. Continuous controls hook `Application.Idle` and render while the WinForms message queue is empty; the clock scene uses this mode because it animates without input.
 
 Frame pacing is delegated to the present mode. With the default `WebGPUPresentMode.Fifo`, frame acquisition naturally waits for display presentation instead of using a separate software timer.
 

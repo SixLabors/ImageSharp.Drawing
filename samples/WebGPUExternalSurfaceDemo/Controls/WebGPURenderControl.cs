@@ -10,8 +10,7 @@ using ImageSharpSize = SixLabors.ImageSharp.Size;
 namespace WebGPUExternalSurfaceDemo.Controls;
 
 /// <summary>
-/// A reusable WinForms control that embeds a <see cref="WebGPUExternalSurface"/> and drives a continuous
-/// render loop via <see cref="Application.Idle"/>. Callers hook <see cref="PaintFrame"/> with their scene logic;
+/// A reusable WinForms control that embeds a <see cref="WebGPUExternalSurface"/>. Callers hook <see cref="PaintFrame"/> with their scene logic;
 /// the control handles construction, resize, acquire/present, and teardown.
 /// </summary>
 public sealed partial class WebGPURenderControl : Control
@@ -23,6 +22,7 @@ public sealed partial class WebGPURenderControl : Control
     private Size framebufferSize;
     private bool idleHooked;
     private long lastTicks;
+    private WebGPURenderMode renderMode;
     private System.Windows.Forms.Timer? titleBarMoveTimer;
     private TitleBarListener? titleBarListener;
 
@@ -46,6 +46,27 @@ public sealed partial class WebGPURenderControl : Control
     /// Raised each frame once the external surface has acquired a drawable frame.
     /// </summary>
     public event Action<DrawingCanvas, TimeSpan>? PaintFrame;
+
+    /// <summary>
+    /// Gets or sets how this control schedules rendering.
+    /// </summary>
+    public WebGPURenderMode RenderMode
+    {
+        get => this.renderMode;
+        set
+        {
+            if (this.renderMode == value)
+            {
+                return;
+            }
+
+            // Changing mode changes who is responsible for the next frame: WinForms paint
+            // messages for on-demand scenes, or Application.Idle for animated scenes.
+            this.renderMode = value;
+            this.UpdateIdleHook();
+            this.Invalidate();
+        }
+    }
 
     /// <inheritdoc />
     protected override void OnHandleCreated(EventArgs e)
@@ -73,8 +94,7 @@ public sealed partial class WebGPURenderControl : Control
             });
 
         this.lastTicks = Stopwatch.GetTimestamp();
-        Application.Idle += this.OnApplicationIdle;
-        this.idleHooked = true;
+        this.UpdateIdleHook();
 
         // Application.Idle stops firing during a title-bar drag (modal move loop).
         // Attach a NativeWindow to the parent form's handle so we can see WM_MOVING
@@ -93,11 +113,7 @@ public sealed partial class WebGPURenderControl : Control
     /// <inheritdoc />
     protected override void OnHandleDestroyed(EventArgs e)
     {
-        if (this.idleHooked)
-        {
-            Application.Idle -= this.OnApplicationIdle;
-            this.idleHooked = false;
-        }
+        this.UnhookApplicationIdle();
 
         this.titleBarListener?.ReleaseHandle();
         this.titleBarListener = null;
@@ -125,6 +141,37 @@ public sealed partial class WebGPURenderControl : Control
             // WinForms ClientSize is the HWND client rectangle size; pass it through as the drawable framebuffer size.
             this.framebufferSize = this.ClientSize;
             this.surface.Resize(new ImageSharpSize(this.framebufferSize.Width, this.framebufferSize.Height));
+            this.Invalidate();
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        base.OnVisibleChanged(e);
+
+        // Application.Idle is process-wide. Keep it hooked only while this particular
+        // surface can be seen, otherwise an inactive tab can keep rendering in the background.
+        this.UpdateIdleHook();
+
+        if (this.Visible)
+        {
+            this.Invalidate();
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnParentVisibleChanged(EventArgs e)
+    {
+        base.OnParentVisibleChanged(e);
+
+        // TabControl usually changes the tab page visibility, not the child control's own
+        // Visible property. Re-evaluate here so hidden tab pages stop continuous rendering too.
+        this.UpdateIdleHook();
+
+        if (this.Visible)
+        {
+            this.Invalidate();
         }
     }
 
@@ -135,26 +182,77 @@ public sealed partial class WebGPURenderControl : Control
     }
 
     /// <inheritdoc />
-    protected override void OnPaint(PaintEventArgs e) => this.RenderOnce();
+    protected override void OnPaint(PaintEventArgs e) => _ = this.RenderOnce();
 
-    // Application.Idle fires once when the WinForms message queue drains. Rendering only once
-    // would leave the scene frozen between user input events, so we loop here, re-rendering as
-    // long as the queue stays empty, and exit the moment a message arrives so WinForms can
-    // process it. Frame pacing is delegated to the swap-chain present mode: with Fifo (v-sync)
-    // TryAcquireFrame blocks until the display is ready, so this loop naturally runs at the
-    // display's refresh rate without a software timer capping it.
+    // Continuous scenes opt into Application.Idle. Rendering only once would leave animation
+    // frozen between user input events, so continuous mode loops while the queue stays empty
+    // and while the control remains visible. On-demand scenes skip this hook and render from
+    // normal WinForms invalidation instead.
     private void OnApplicationIdle(object? sender, EventArgs e)
     {
-        while (IsApplicationIdle())
+        while (this.renderMode == WebGPURenderMode.Continuous && this.Visible && IsApplicationIdle())
         {
-            this.RenderOnce();
+            if (!this.RenderOnce())
+            {
+                break;
+            }
         }
     }
 
-    private void OnTitleBarMoveTick(object? sender, EventArgs e) => this.RenderOnce();
+    private void OnTitleBarMoveTick(object? sender, EventArgs e)
+    {
+        // WinForms enters a modal move loop for title-bar dragging, so Application.Idle is
+        // paused. The temporary timer keeps animated visible scenes alive during that loop.
+        if (this.renderMode == WebGPURenderMode.Continuous && this.Visible)
+        {
+            _ = this.RenderOnce();
+        }
+    }
+
+    private void UpdateIdleHook()
+    {
+        // Application.Idle is a global app event, so the control must actively subscribe and
+        // unsubscribe as its scheduling mode and visibility change. Leaving hidden controls
+        // hooked is enough to burn a steady core percentage while another tab is selected.
+        if (!this.IsHandleCreated)
+        {
+            return;
+        }
+
+        if (this.renderMode == WebGPURenderMode.Continuous && this.Visible)
+        {
+            this.HookApplicationIdle();
+            return;
+        }
+
+        this.UnhookApplicationIdle();
+    }
+
+    private void HookApplicationIdle()
+    {
+        if (this.idleHooked)
+        {
+            return;
+        }
+
+        Application.Idle += this.OnApplicationIdle;
+        this.idleHooked = true;
+    }
+
+    private void UnhookApplicationIdle()
+    {
+        if (!this.idleHooked)
+        {
+            return;
+        }
+
+        Application.Idle -= this.OnApplicationIdle;
+        this.idleHooked = false;
+    }
 
     // Hooks the parent form's handle so the control can observe WM_MOVING / WM_EXITSIZEMOVE
-    // without requiring the form to know this control exists.
+    // without requiring the form to know this control exists. The listener only starts the
+    // timer for visible continuous scenes; hidden tabs should not render during a window drag.
     private sealed class TitleBarListener(WebGPURenderControl owner) : NativeWindow
     {
         protected override void WndProc(ref Message m)
@@ -162,7 +260,11 @@ public sealed partial class WebGPURenderControl : Control
             switch (m.Msg)
             {
                 case WM_MOVING:
-                    owner.titleBarMoveTimer?.Start();
+                    if (owner.renderMode == WebGPURenderMode.Continuous && owner.Visible)
+                    {
+                        owner.titleBarMoveTimer?.Start();
+                    }
+
                     break;
                 case WM_EXITSIZEMOVE:
                     owner.titleBarMoveTimer?.Stop();
@@ -173,18 +275,19 @@ public sealed partial class WebGPURenderControl : Control
         }
     }
 
-    private void RenderOnce()
+    private bool RenderOnce()
     {
-        if (this.surface is null || this.framebufferSize.Width <= 0 || this.framebufferSize.Height <= 0)
+        if (!this.Visible || this.surface is null || this.framebufferSize.Width <= 0 || this.framebufferSize.Height <= 0)
         {
-            return;
+            return false;
         }
 
         // Frame acquisition can fail transiently while the surface is unavailable, for example during resize
-        // or device recovery. Skipping the frame keeps the UI message loop responsive.
+        // or device recovery. Returning false lets continuous mode leave the idle loop instead of busy-spinning
+        // on a surface that cannot currently produce a drawable frame.
         if (!this.surface.TryAcquireFrame(out WebGPUSurfaceFrame? frame))
         {
-            return;
+            return false;
         }
 
         long now = Stopwatch.GetTimestamp();
@@ -197,6 +300,8 @@ public sealed partial class WebGPURenderControl : Control
             // renders that work, presents the texture, and releases the per-frame native handles.
             this.PaintFrame?.Invoke(frame.Canvas, delta);
         }
+
+        return true;
     }
 
     // PeekMessage with wRemoveMsg = 0 (PM_NOREMOVE) asks the OS "is there a message waiting?" without
