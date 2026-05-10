@@ -20,7 +20,7 @@ public class DrawingCanvasBatcherTests
         configuration.SetDrawingBackend(backend);
         using Image<Rgba32> image = new(configuration, 40, 40);
 
-        IPath path = new RectangularPolygon(4, 6, 18, 12);
+        IPath path = new RectanglePolygon(4, 6, 18, 12);
         DrawingOptions options = new();
         Brush brushA = Brushes.Solid(Color.Red);
         Brush brushB = Brushes.Solid(Color.Blue);
@@ -47,7 +47,7 @@ public class DrawingCanvasBatcherTests
         configuration.SetDrawingBackend(backend);
         using Image<Rgba32> image = new(configuration, 40, 40);
 
-        IPath path = new RectangularPolygon(4, 6, 18, 12);
+        IPath path = new RectanglePolygon(4, 6, 18, 12);
         DrawingOptions options = new();
 
         using (DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, options))
@@ -73,7 +73,7 @@ public class DrawingCanvasBatcherTests
         configuration.SetDrawingBackend(backend);
         using Image<Rgba32> image = new(configuration, 100, 100);
 
-        IPath path = new RectangularPolygon(10, 10, 40, 40);
+        IPath path = new RectanglePolygon(10, 10, 40, 40);
         DrawingOptions options = new();
 
         using (DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, options))

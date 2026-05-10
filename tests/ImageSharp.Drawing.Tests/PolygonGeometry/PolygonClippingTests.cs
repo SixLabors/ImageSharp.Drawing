@@ -10,11 +10,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.PolygonGeometry;
 
 public class PolygonClippingTests
 {
-    private readonly RectangularPolygon bigSquare = new(10, 10, 40, 40);
-    private readonly RectangularPolygon hole = new(20, 20, 10, 10);
-    private readonly RectangularPolygon topLeft = new(0, 0, 20, 20);
-    private readonly RectangularPolygon topRight = new(30, 0, 20, 20);
-    private readonly RectangularPolygon topMiddle = new(20, 0, 10, 20);
+    private readonly RectanglePolygon bigSquare = new(10, 10, 40, 40);
+    private readonly RectanglePolygon hole = new(20, 20, 10, 10);
+    private readonly RectanglePolygon topLeft = new(0, 0, 20, 20);
+    private readonly RectanglePolygon topRight = new(30, 0, 20, 20);
+    private readonly RectanglePolygon topMiddle = new(20, 0, 10, 20);
 
     private readonly Polygon bigTriangle = new(new LinearLineSegment(
                      new Vector2(10, 10),
@@ -58,19 +58,19 @@ public class PolygonClippingTests
         Assert.Equal(7, path.Length);
         foreach (Vector2 p in this.bigTriangle.Flatten().First().Points.ToArray())
         {
-            Assert.Contains(p, path, new ApproximateFloatComparer(RectangularPolygonValueComparer.DefaultTolerance));
+            Assert.Contains(p, path, new ApproximateFloatComparer(RectanglePolygonValueComparer.DefaultTolerance));
         }
     }
 
     [Fact]
     public void NonOverlapping()
     {
-        IEnumerable<RectangularPolygon> shapes = Clip(this.topLeft, this.topRight).Paths
-            .OfType<Polygon>().Select(x => (RectangularPolygon)x);
+        IEnumerable<RectanglePolygon> shapes = Clip(this.topLeft, this.topRight).Paths
+            .OfType<Polygon>().Select(x => (RectanglePolygon)x);
 
         Assert.Single(shapes);
         Assert.Contains(
-            shapes, x => RectangularPolygonValueComparer.Equals(this.topLeft, x));
+            shapes, x => RectanglePolygonValueComparer.Equals(this.topLeft, x));
 
         Assert.DoesNotContain(this.topRight, shapes);
     }
@@ -81,20 +81,20 @@ public class PolygonClippingTests
         ComplexPolygon shapes = Clip(this.bigSquare, this.topLeft);
 
         Assert.Single(shapes.Paths);
-        Assert.DoesNotContain(shapes.Paths, x => RectangularPolygonValueComparer.Equals(this.bigSquare, x));
-        Assert.DoesNotContain(shapes.Paths, x => RectangularPolygonValueComparer.Equals(this.topLeft, x));
+        Assert.DoesNotContain(shapes.Paths, x => RectanglePolygonValueComparer.Equals(this.bigSquare, x));
+        Assert.DoesNotContain(shapes.Paths, x => RectanglePolygonValueComparer.Equals(this.topLeft, x));
     }
 
     [Fact]
     public void OverlappingButNotCrossingReturnsOrigionalShapes()
     {
-        IEnumerable<RectangularPolygon> shapes = Clip(this.bigSquare, this.hole).Paths
-            .OfType<Polygon>().Select(x => (RectangularPolygon)x);
+        IEnumerable<RectanglePolygon> shapes = Clip(this.bigSquare, this.hole).Paths
+            .OfType<Polygon>().Select(x => (RectanglePolygon)x);
 
         Assert.Equal(2, shapes.Count());
 
-        Assert.Contains(shapes, x => RectangularPolygonValueComparer.Equals(this.bigSquare, x));
-        Assert.Contains(shapes, x => RectangularPolygonValueComparer.Equals(this.hole, x));
+        Assert.Contains(shapes, x => RectanglePolygonValueComparer.Equals(this.bigSquare, x));
+        Assert.Contains(shapes, x => RectanglePolygonValueComparer.Equals(this.hole, x));
     }
 
     [Fact]
@@ -102,15 +102,15 @@ public class PolygonClippingTests
     {
         ComplexPolygon shapes = Clip(this.topMiddle, this.topLeft);
         Assert.Single(shapes.Paths);
-        Assert.DoesNotContain(shapes.Paths, x => RectangularPolygonValueComparer.Equals(this.topMiddle, x));
-        Assert.DoesNotContain(shapes.Paths, x => RectangularPolygonValueComparer.Equals(this.topLeft, x));
+        Assert.DoesNotContain(shapes.Paths, x => RectanglePolygonValueComparer.Equals(this.topMiddle, x));
+        Assert.DoesNotContain(shapes.Paths, x => RectanglePolygonValueComparer.Equals(this.topLeft, x));
     }
 
     [Fact]
     public void ClippingRectanglesCreateCorrectNumberOfPoints()
     {
-        IEnumerable<ISimplePath> paths = new RectangularPolygon(10, 10, 40, 40)
-            .Clip(new RectangularPolygon(20, 0, 20, 20))
+        IEnumerable<ISimplePath> paths = new RectanglePolygon(10, 10, 40, 40)
+            .Clip(new RectanglePolygon(20, 0, 20, 20))
             .Flatten();
 
         Assert.Single(paths);

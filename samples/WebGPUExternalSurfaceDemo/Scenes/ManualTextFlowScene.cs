@@ -185,8 +185,8 @@ internal sealed class ManualTextFlowScene : RenderScene
             this.cachedObstacleShape = this.obstacleShape;
         }
 
-        canvas.Fill(PageBrush, new RectangularPolygon(pageLeft, pageTop, pageRight - pageLeft, pageBottom - pageTop));
-        canvas.Draw(PageOutlinePen, new RectangularPolygon(pageLeft, pageTop, pageRight - pageLeft, pageBottom - pageTop));
+        canvas.Fill(PageBrush, new RectanglePolygon(pageLeft, pageTop, pageRight - pageLeft, pageBottom - pageTop));
+        canvas.Draw(PageOutlinePen, new RectanglePolygon(pageLeft, pageTop, pageRight - pageLeft, pageBottom - pageTop));
         canvas.Fill(ObstacleBrush, obstaclePath);
         canvas.Draw(ObstacleOutlinePen, obstaclePath);
 
@@ -238,7 +238,7 @@ internal sealed class ManualTextFlowScene : RenderScene
                 // The translucent slot fill is a visual aid for the sample. It
                 // makes the row splitting visible so readers can compare the
                 // available rectangles with the selected obstacle shape.
-                canvas.Fill(SlotBrush, new RectangularPolygon(slot.Left, y, slotWidth, lineHeight));
+                canvas.Fill(SlotBrush, new RectanglePolygon(slot.Left, y, slotWidth, lineHeight));
                 canvas.DrawText(line, new PointF(slot.Left, y), TextBrush, pen: null);
 
                 rowHeight = MathF.Max(rowHeight, lineHeight);
@@ -274,14 +274,14 @@ internal sealed class ManualTextFlowScene : RenderScene
         // circle or rectangle math.
         return this.ObstacleShape switch
         {
-            ManualTextFlowObstacleShape.Rectangle => new RectangularPolygon(
+            ManualTextFlowObstacleShape.Rectangle => new RectanglePolygon(
                 center.X - radius,
                 center.Y - radius,
                 size,
                 size),
             ManualTextFlowObstacleShape.Triangle => new RegularPolygon(center, 3, radius, 180F),
             ManualTextFlowObstacleShape.Diamond => new RegularPolygon(center, 4, radius, 0F),
-            ManualTextFlowObstacleShape.Star => new Star(center, 5, radius * .45F, radius, -18F),
+            ManualTextFlowObstacleShape.Star => new StarPolygon(center, 5, radius * .45F, radius, -18F),
             _ => new EllipsePolygon(center, new SizeF(size, size))
         };
     }
@@ -583,7 +583,7 @@ internal enum ManualTextFlowObstacleShape
     Circle,
 
     /// <summary>
-    /// A rectangular obstacle backed by <see cref="RectangularPolygon"/>.
+    /// A rectangular obstacle backed by <see cref="RectanglePolygon"/>.
     /// </summary>
     Rectangle,
 
@@ -598,7 +598,7 @@ internal enum ManualTextFlowObstacleShape
     Diamond,
 
     /// <summary>
-    /// A concave star obstacle backed by <see cref="Star"/>.
+    /// A concave star obstacle backed by <see cref="StarPolygon"/>.
     /// </summary>
     Star
 }

@@ -73,8 +73,8 @@ public class TextBuilderTests
     [Fact]
     public void GlyphPathCollection_PreservesLayerMetadataAndFiltersPaths()
     {
-        RectangularPolygon glyphPath = new(0, 0, 10, 12);
-        RectangularPolygon paintedPath = new(20, 4, 6, 8);
+        RectanglePolygon glyphPath = new(0, 0, 10, 12);
+        RectanglePolygon paintedPath = new(20, 4, 6, 8);
         SolidPaint paint = new() { CompositeMode = CompositeMode.Multiply };
 
         GlyphPathCollection.Builder builder = new();
@@ -118,7 +118,7 @@ public class TextBuilderTests
     [Fact]
     public void GlyphPathCollection_Transform_TransformsPathsAndLayerBounds()
     {
-        RectangularPolygon path = new(2, 3, 10, 5);
+        RectanglePolygon path = new(2, 3, 10, 5);
 
         GlyphPathCollection.Builder builder = new();
         builder.AddPath(path);
@@ -142,7 +142,7 @@ public class TextBuilderTests
     public void GlyphPathCollection_BuilderRejectsOutOfRangeLayerSpan()
     {
         GlyphPathCollection.Builder builder = new();
-        builder.AddPath(new RectangularPolygon(0, 0, 10, 10));
+        builder.AddPath(new RectanglePolygon(0, 0, 10, 10));
 
         ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(
             () => builder.AddLayer(1, 1, null, FillRule.NonZero, RectangleF.Empty));

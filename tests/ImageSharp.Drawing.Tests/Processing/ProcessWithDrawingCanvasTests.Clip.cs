@@ -25,7 +25,7 @@ public partial class ProcessWithDrawingCanvasTests
             {
                 Rectangle bounds = canvas.Bounds;
                 int outerRadii = (int)(Math.Min(bounds.Width, bounds.Height) * sizeMult);
-                Star star = new(new PointF(bounds.Width / 2F, bounds.Height / 2F), 5, outerRadii / 2F, outerRadii);
+                StarPolygon star = new(new PointF(bounds.Width / 2F, bounds.Height / 2F), 5, outerRadii / 2F, outerRadii);
                 Matrix4x4 builder = Matrix4x4.CreateTranslation(dx, dy, 0);
                 canvas.Apply(star.Transform(builder), ctx => ctx.DetectEdges());
             }),
@@ -43,7 +43,7 @@ public partial class ProcessWithDrawingCanvasTests
             {
                 Rectangle bounds = canvas.Bounds;
                 RectangleF rect = new(0, 0, bounds.Width / 2F, bounds.Height / 2F);
-                RectangularPolygon clipRect = new(rect);
+                RectanglePolygon clipRect = new(rect);
                 canvas.Apply(clipRect, ctx => ctx.Flip(FlipMode.Vertical));
             }),
             appendPixelTypeToFileName: false,
@@ -52,7 +52,7 @@ public partial class ProcessWithDrawingCanvasTests
     [Fact]
     public void ClipIssue250VerticalHorizontalCountShouldMatch()
     {
-        PathCollection clip = new(new RectangularPolygon(new PointF(24, 16), new PointF(777, 385)));
+        PathCollection clip = new(new RectanglePolygon(new PointF(24, 16), new PointF(777, 385)));
 
         Path vertical = new(new LinearLineSegment(new PointF(26, 384), new PointF(26, 163)));
         Path horizontal = new(new LinearLineSegment(new PointF(26, 163), new PointF(176, 163)));

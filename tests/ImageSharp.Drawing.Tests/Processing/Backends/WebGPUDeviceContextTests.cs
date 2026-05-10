@@ -51,7 +51,7 @@ public class WebGPUDeviceContextTests
                    32,
                    24))
         {
-            canvas.Fill(Brushes.Solid(Color.Red), new RectangularPolygon(0, 0, 32, 24));
+            canvas.Fill(Brushes.Solid(Color.Red), new RectanglePolygon(0, 0, 32, 24));
         }
 
         using Image<Rgba32> readback = target.ReadbackImage<Rgba32>();
@@ -65,7 +65,7 @@ public class WebGPUDeviceContextTests
         using WebGPURenderTarget target = drawing.CreateRenderTarget(18, 14);
         using (DrawingCanvas canvas = target.CreateCanvas())
         {
-            canvas.Fill(Brushes.Solid(Color.Green), new RectangularPolygon(0, 0, 18, 14));
+            canvas.Fill(Brushes.Solid(Color.Green), new RectanglePolygon(0, 0, 18, 14));
         }
 
         using Image<Rgba32> readback = target.ReadbackImage<Rgba32>();
@@ -78,7 +78,7 @@ public class WebGPUDeviceContextTests
         using WebGPURenderTarget target = new(WebGPUTextureFormat.Bgra8Unorm, 8, 6);
         using (DrawingCanvas canvas = target.CreateCanvas())
         {
-            canvas.Fill(Brushes.Solid(Color.Red), new RectangularPolygon(0, 0, 8, 6));
+            canvas.Fill(Brushes.Solid(Color.Red), new RectanglePolygon(0, 0, 8, 6));
         }
 
         using Image readback = target.ReadbackImage();
@@ -94,7 +94,7 @@ public class WebGPUDeviceContextTests
         using WebGPURenderTarget target = new(6, 4);
         using (DrawingCanvas canvas = target.CreateCanvas())
         {
-            canvas.Fill(Brushes.Solid(Color.Red), new RectangularPolygon(-1, -1, target.Width + 2, target.Height + 2));
+            canvas.Fill(Brushes.Solid(Color.Red), new RectanglePolygon(-1, -1, target.Width + 2, target.Height + 2));
         }
 
         using Image<Rgba32> destination = new(10, 8, Color.Blue.ToPixel<Rgba32>());

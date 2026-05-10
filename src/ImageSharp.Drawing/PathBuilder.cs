@@ -390,7 +390,7 @@ public class PathBuilder
     /// <summary>
     /// Adds a pie sector to the current path as a closed figure.
     /// </summary>
-    /// <param name="center">The center point of the pie.</param>
+    /// <param name="center">The center point of the pie sector.</param>
     /// <param name="radius">The x and y radii of the pie ellipse.</param>
     /// <param name="rotation">The ellipse rotation in degrees.</param>
     /// <param name="startAngle">The pie start angle in degrees.</param>
@@ -400,7 +400,7 @@ public class PathBuilder
     {
         _ = this.StartFigure();
 
-        foreach (ILineSegment segment in new Pie(center, radius, rotation, startAngle, sweepAngle).LineSegments)
+        foreach (ILineSegment segment in new PiePolygon(center, radius, rotation, startAngle, sweepAngle).LineSegments)
         {
             _ = this.AddSegment(segment);
         }
@@ -411,7 +411,7 @@ public class PathBuilder
     /// <summary>
     /// Adds a pie sector to the current path as a closed figure.
     /// </summary>
-    /// <param name="center">The center point of the pie.</param>
+    /// <param name="center">The center point of the pie sector.</param>
     /// <param name="radius">The x and y radii of the pie ellipse.</param>
     /// <param name="startAngle">The pie start angle in degrees.</param>
     /// <param name="sweepAngle">The pie sweep angle in degrees.</param>
@@ -648,7 +648,7 @@ public class PathBuilder
     {
         _ = this.StartFigure();
 
-        foreach (ILineSegment segment in new Star(center, prongs, innerRadii, outerRadii, angle).LineSegments)
+        foreach (ILineSegment segment in new StarPolygon(center, prongs, innerRadii, outerRadii, angle).LineSegments)
         {
             _ = this.AddSegment(segment);
         }

@@ -6,7 +6,7 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
-/// A rounded rectangle shape defined by rectangle bounds and corner radii.
+/// A closed rectangular path with rounded corners.
 /// </summary>
 public sealed class RoundedRectanglePolygon : Polygon
 {

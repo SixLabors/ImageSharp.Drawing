@@ -6,37 +6,37 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
-/// A pie sector shape defined by a center point, radii, rotation, and arc sweep.
+/// A pie sector polygon defined by a center point, radii, rotation, and arc sweep.
 /// </summary>
-public sealed class Pie : Polygon
+public sealed class PiePolygon : Polygon
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="Pie"/> class.
+    /// Initializes a new instance of the <see cref="PiePolygon"/> class.
     /// </summary>
-    /// <param name="center">The center point of the pie.</param>
+    /// <param name="center">The center point of the pie sector.</param>
     /// <param name="radius">The x and y radii of the pie ellipse.</param>
     /// <param name="rotation">The ellipse rotation in degrees.</param>
     /// <param name="startAngle">The pie start angle in degrees.</param>
     /// <param name="sweepAngle">The pie sweep angle in degrees.</param>
-    public Pie(PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)
+    public PiePolygon(PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)
         : base(CreateSegments(center, radius, rotation, startAngle, sweepAngle))
     {
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="Pie"/> class.
+    /// Initializes a new instance of the <see cref="PiePolygon"/> class.
     /// </summary>
-    /// <param name="center">The center point of the pie.</param>
+    /// <param name="center">The center point of the pie sector.</param>
     /// <param name="radius">The x and y radii of the pie ellipse.</param>
     /// <param name="startAngle">The pie start angle in degrees.</param>
     /// <param name="sweepAngle">The pie sweep angle in degrees.</param>
-    public Pie(PointF center, SizeF radius, float startAngle, float sweepAngle)
+    public PiePolygon(PointF center, SizeF radius, float startAngle, float sweepAngle)
         : this(center, radius, 0F, startAngle, sweepAngle)
     {
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="Pie"/> class.
+    /// Initializes a new instance of the <see cref="PiePolygon"/> class.
     /// </summary>
     /// <param name="x">The x-coordinate of the pie center.</param>
     /// <param name="y">The y-coordinate of the pie center.</param>
@@ -45,13 +45,13 @@ public sealed class Pie : Polygon
     /// <param name="rotation">The ellipse rotation in degrees.</param>
     /// <param name="startAngle">The pie start angle in degrees.</param>
     /// <param name="sweepAngle">The pie sweep angle in degrees.</param>
-    public Pie(float x, float y, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle)
+    public PiePolygon(float x, float y, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle)
         : this(new PointF(x, y), new SizeF(radiusX, radiusY), rotation, startAngle, sweepAngle)
     {
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="Pie"/> class.
+    /// Initializes a new instance of the <see cref="PiePolygon"/> class.
     /// </summary>
     /// <param name="x">The x-coordinate of the pie center.</param>
     /// <param name="y">The y-coordinate of the pie center.</param>
@@ -59,12 +59,12 @@ public sealed class Pie : Polygon
     /// <param name="radiusY">The y-radius of the pie ellipse.</param>
     /// <param name="startAngle">The pie start angle in degrees.</param>
     /// <param name="sweepAngle">The pie sweep angle in degrees.</param>
-    public Pie(float x, float y, float radiusX, float radiusY, float startAngle, float sweepAngle)
+    public PiePolygon(float x, float y, float radiusX, float radiusY, float startAngle, float sweepAngle)
         : this(x, y, radiusX, radiusY, 0F, startAngle, sweepAngle)
     {
     }
 
-    private Pie(ILineSegment[] segments)
+    private PiePolygon(ILineSegment[] segments)
         : base(segments, true)
     {
     }
@@ -84,7 +84,7 @@ public sealed class Pie : Polygon
             segments[i] = this.LineSegments[i].Transform(matrix);
         }
 
-        return new Pie(segments);
+        return new PiePolygon(segments);
     }
 
     private static ILineSegment[] CreateSegments(PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)

@@ -43,7 +43,7 @@ public partial class WebGPUDrawingBackendTests
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
 
-        RectangularPolygon polygon = new(48.25F, 63.5F, 401.25F, 302.75F);
+        RectanglePolygon polygon = new(48.25F, 63.5F, 401.25F, 302.75F);
         Brush brush = Brushes.Solid(Color.Black);
 
         void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, polygon);
@@ -151,7 +151,7 @@ public partial class WebGPUDrawingBackendTests
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
 
-        RectangularPolygon polygon = new(36.5F, 26.25F, 312.5F, 188.5F);
+        RectanglePolygon polygon = new(36.5F, 26.25F, 312.5F, 188.5F);
         Brush clearBrush = Brushes.Solid(Color.White);
 
         using Image<TPixel> foreground = provider.GetImage();
@@ -248,7 +248,7 @@ public partial class WebGPUDrawingBackendTests
         PixelAlphaCompositionMode alphaMode)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        RectangularPolygon polygon = new(26.5F, 18.25F, 324.5F, 208.75F);
+        RectanglePolygon polygon = new(26.5F, 18.25F, 324.5F, 208.75F);
         Brush brush = Brushes.Solid(Color.OrangeRed.WithAlpha(0.78F));
 
         DrawingOptions drawingOptions = new()
@@ -298,7 +298,7 @@ public partial class WebGPUDrawingBackendTests
         PixelAlphaCompositionMode alphaMode)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        RectangularPolygon polygon = new(26.5F, 18.25F, 324.5F, 208.75F);
+        RectanglePolygon polygon = new(26.5F, 18.25F, 324.5F, 208.75F);
 
         DrawingOptions drawingOptions = new()
         {
@@ -394,7 +394,7 @@ public partial class WebGPUDrawingBackendTests
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
 
-        RectangularPolygon polygon = new(48.25F, 63.5F, 401.25F, 302.75F);
+        RectanglePolygon polygon = new(48.25F, 63.5F, 401.25F, 302.75F);
         Brush brush = Brushes.Solid(Color.Black);
         Brush clearBrush = Brushes.Solid(Color.White);
         void DrawAction(DrawingCanvas canvas)
@@ -431,7 +431,7 @@ public partial class WebGPUDrawingBackendTests
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
         Rectangle region = new(72, 64, 320, 240);
-        RectangularPolygon localPolygon = new(16.25F, 24.5F, 250.5F, 160.75F);
+        RectanglePolygon localPolygon = new(16.25F, 24.5F, 250.5F, 160.75F);
         Brush brush = Brushes.Solid(Color.Black);
         Brush clearBrush = Brushes.Solid(Color.White);
         void DrawAction(DrawingCanvas canvas)
@@ -477,8 +477,8 @@ public partial class WebGPUDrawingBackendTests
         Brush firstFill = Brushes.Solid(Color.OrangeRed);
         Brush secondBackground = Brushes.Solid(Color.MidnightBlue);
         Brush secondFill = Brushes.Solid(Color.LimeGreen);
-        RectangularPolygon firstRect = new(18, 26, 176, 92);
-        RectangularPolygon secondRect = new(96, 54, 42, 38);
+        RectanglePolygon firstRect = new(18, 26, 176, 92);
+        RectanglePolygon secondRect = new(96, 54, 42, 38);
 
         void DrawFirstFrame(DrawingCanvas canvas)
         {
@@ -713,7 +713,7 @@ public partial class WebGPUDrawingBackendTests
         int innerHeight = Math.Max(4, layerBounds.Height - insetY - heightTrim);
 
         return (layerIndex & 1) == 0
-            ? new RectangularPolygon(insetX, insetY, innerWidth, innerHeight)
+            ? new RectanglePolygon(insetX, insetY, innerWidth, innerHeight)
             : new EllipsePolygon(
                 insetX + (innerWidth / 2F),
                 insetY + (innerHeight / 2F),
@@ -1133,7 +1133,7 @@ public partial class WebGPUDrawingBackendTests
             {
                 float x = 20 + (i * 24);
                 float y = 20 + (i * 22);
-                canvas.Fill(brush, new RectangularPolygon(x, y, 80, 60));
+                canvas.Fill(brush, new RectanglePolygon(x, y, 80, 60));
             }
         }
 
@@ -1333,8 +1333,8 @@ public partial class WebGPUDrawingBackendTests
 
         Brush redBrush = Brushes.Solid(Color.Red);
         Brush blueBrush = Brushes.Solid(Color.Blue);
-        RectangularPolygon rect1 = new(20, 20, 120, 80);
-        RectangularPolygon rect2 = new(160, 100, 120, 80);
+        RectanglePolygon rect1 = new(20, 20, 120, 80);
+        RectanglePolygon rect2 = new(160, 100, 120, 80);
         void DrawAction(DrawingCanvas canvas)
         {
             canvas.Clear(Brushes.Solid(Color.White));
@@ -1592,7 +1592,7 @@ public partial class WebGPUDrawingBackendTests
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
 
-        RectangularPolygon rect = new(16, 16, 224, 224);
+        RectanglePolygon rect = new(16, 16, 224, 224);
         Brush brush = new LinearGradientBrush(
             new PointF(64, 64),
             new PointF(128, 128),
@@ -1630,7 +1630,7 @@ public partial class WebGPUDrawingBackendTests
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
 
-        RectangularPolygon rect = new(16, 16, 224, 224);
+        RectanglePolygon rect = new(16, 16, 224, 224);
         Brush brush = new RadialGradientBrush(
             new PointF(128, 128),
             100F,
@@ -1668,7 +1668,7 @@ public partial class WebGPUDrawingBackendTests
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
 
-        RectangularPolygon rect = new(16, 16, 224, 224);
+        RectanglePolygon rect = new(16, 16, 224, 224);
         Brush brush = new RadialGradientBrush(
             new PointF(100, 100),
             20F,
@@ -1708,7 +1708,7 @@ public partial class WebGPUDrawingBackendTests
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
 
-        RectangularPolygon rect = new(16, 16, 224, 224);
+        RectanglePolygon rect = new(16, 16, 224, 224);
         Brush brush = new EllipticGradientBrush(
             new PointF(128, 128),
             new PointF(228, 128),
@@ -1788,7 +1788,7 @@ public partial class WebGPUDrawingBackendTests
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
 
-        RectangularPolygon rect = new(16, 16, 224, 224);
+        RectanglePolygon rect = new(16, 16, 224, 224);
         Brush brush = new SweepGradientBrush(
             new PointF(128, 128),
             45F,
@@ -1838,7 +1838,7 @@ public partial class WebGPUDrawingBackendTests
         };
 
         Rectangle region = new(72, 40, 240, 176);
-        RectangularPolygon localPolygon = new(12, 10, 216, 156);
+        RectanglePolygon localPolygon = new(12, 10, 216, 156);
         EllipsePolygon persistedShape = new(new PointF(176, 128), new SizeF(320, 176));
         Brush persistedBrush = Brushes.Solid(Color.DarkSlateBlue);
         Brush brush = new PathGradientBrush(
@@ -1894,7 +1894,7 @@ public partial class WebGPUDrawingBackendTests
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
 
-        RectangularPolygon rect = new(16, 16, 224, 224);
+        RectanglePolygon rect = new(16, 16, 224, 224);
         Brush brush = Brushes.Horizontal(Color.Black, Color.White);
 
         void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, rect);
@@ -1960,7 +1960,7 @@ public partial class WebGPUDrawingBackendTests
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
 
-        RectangularPolygon rect = new(16, 16, 224, 224);
+        RectanglePolygon rect = new(16, 16, 224, 224);
         Brush brush = new RecolorBrush(Color.Red, Color.Blue, 0.5F);
 
         void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, rect);
@@ -1993,7 +1993,7 @@ public partial class WebGPUDrawingBackendTests
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
 
-        RectangularPolygon rect = new(16, 16, 224, 224);
+        RectanglePolygon rect = new(16, 16, 224, 224);
         Brush brush = new LinearGradientBrush(
             new PointF(64, 128),
             new PointF(192, 128),
@@ -2032,7 +2032,7 @@ public partial class WebGPUDrawingBackendTests
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
 
-        RectangularPolygon rect = new(8, 8, 240, 240);
+        RectanglePolygon rect = new(8, 8, 240, 240);
         Brush brush = new EllipticGradientBrush(
             new PointF(128, 128),
             new PointF(180, 160),
@@ -2107,7 +2107,7 @@ the evil Galactic Empire.";
             new(0, 0), new(300, 0), new(300, 80), new(0, 80),
         ];
 
-        RectangularPolygon sternHighlightRect = new(4, 4, 292, 72);
+        RectanglePolygon sternHighlightRect = new(4, 4, 292, 72);
 
         EllipsePolygon thrusterLeft = new(50, 40, 42, 42);
         EllipsePolygon thrusterCenter = new(150, 40, 48, 48);
@@ -2299,7 +2299,7 @@ the evil Galactic Empire.";
     {
         DrawingOptions drawingOptions = new();
         Brush brush = Brushes.Solid(Color.Red);
-        RectangularPolygon polygon = new(10, 10, 80, 80);
+        RectanglePolygon polygon = new(10, 10, 80, 80);
 
         void DrawAction(DrawingCanvas canvas)
         {
@@ -2334,7 +2334,7 @@ the evil Galactic Empire.";
     {
         DrawingOptions drawingOptions = new();
         Brush brush = Brushes.Solid(Color.Red);
-        RectangularPolygon polygon = new(10, 10, 80, 80);
+        RectanglePolygon polygon = new(10, 10, 80, 80);
 
         void DrawAction(DrawingCanvas canvas)
         {
@@ -2375,11 +2375,11 @@ the evil Galactic Empire.";
 
             // Outer layer: red fill.
             canvas.SaveLayer();
-            canvas.Fill(Brushes.Solid(Color.Red), new RectangularPolygon(0, 0, 128, 128));
+            canvas.Fill(Brushes.Solid(Color.Red), new RectanglePolygon(0, 0, 128, 128));
 
             // Inner layer: blue fill over center.
             canvas.SaveLayer();
-            canvas.Fill(Brushes.Solid(Color.Blue), new RectangularPolygon(32, 32, 64, 64));
+            canvas.Fill(Brushes.Solid(Color.Blue), new RectanglePolygon(32, 32, 64, 64));
             canvas.Restore(); // Composites blue onto red.
 
             canvas.Restore(); // Composites red+blue onto white.
@@ -2413,7 +2413,7 @@ the evil Galactic Empire.";
         static void DrawAction(DrawingCanvas canvas)
         {
             canvas.Fill(Brushes.Solid(Color.White));
-            canvas.Fill(Brushes.Solid(Color.Red), new RectangularPolygon(20, 20, 88, 88));
+            canvas.Fill(Brushes.Solid(Color.Red), new RectanglePolygon(20, 20, 88, 88));
 
             canvas.SaveLayer(new GraphicsOptions
             {
@@ -2422,7 +2422,7 @@ the evil Galactic Empire.";
                 BlendPercentage = 1f
             });
 
-            canvas.Fill(Brushes.Solid(Color.Blue), new RectangularPolygon(40, 40, 88, 88));
+            canvas.Fill(Brushes.Solid(Color.Blue), new RectanglePolygon(40, 40, 88, 88));
             canvas.Restore();
         }
 
@@ -2457,7 +2457,7 @@ the evil Galactic Empire.";
 
             // Layer bounds restrict compositing without shifting canvas coordinates.
             canvas.SaveLayer(new GraphicsOptions(), new Rectangle(16, 16, 96, 96));
-            canvas.Fill(Brushes.Solid(Color.Green), new RectangularPolygon(0, 0, 96, 96));
+            canvas.Fill(Brushes.Solid(Color.Green), new RectanglePolygon(0, 0, 96, 96));
             canvas.Restore();
         }
 
@@ -2495,7 +2495,7 @@ the evil Galactic Empire.";
             canvas.SaveLayer();         // layer
             canvas.Save();              // plain save
 
-            canvas.Fill(Brushes.Solid(Color.Green), new RectangularPolygon(0, 0, 128, 128));
+            canvas.Fill(Brushes.Solid(Color.Green), new RectanglePolygon(0, 0, 128, 128));
 
             canvas.RestoreTo(before);
         }
@@ -2548,7 +2548,7 @@ the evil Galactic Empire.";
                     Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.18F, new Vector2(120, 78)))
                 };
 
-                _ = outerRegion.Save(outerOptions, new RectangularPolygon(18, 14, 204, 128));
+                _ = outerRegion.Save(outerOptions, new RectanglePolygon(18, 14, 204, 128));
 
                 outerRegion.Fill(Brushes.Solid(Color.MediumPurple.WithAlpha(0.35F)), new Rectangle(16, 16, 208, 124));
 

@@ -84,7 +84,7 @@ public partial class DrawingCanvasTests
         {
             canvas.Clear(Brushes.Solid(Color.White));
 
-            int firstSaveCount = canvas.Save(firstOptions, new RectangularPolygon(20, 20, 144, 104));
+            int firstSaveCount = canvas.Save(firstOptions, new RectanglePolygon(20, 20, 144, 104));
             canvas.Fill(Brushes.Solid(Color.SkyBlue.WithAlpha(0.8F)), new Rectangle(0, 0, 120, 84));
 
             _ = canvas.Save(secondOptions, new EllipsePolygon(new PointF(112, 80), new SizeF(130, 90)));
@@ -136,7 +136,7 @@ public partial class DrawingCanvasTests
                     Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.18F, new Vector2(120, 78)))
                 };
 
-                _ = outerRegion.Save(outerOptions, new RectangularPolygon(18, 14, 204, 128));
+                _ = outerRegion.Save(outerOptions, new RectanglePolygon(18, 14, 204, 128));
 
                 outerRegion.Fill(Brushes.Solid(Color.MediumPurple.WithAlpha(0.35F)), new Rectangle(16, 16, 208, 124));
 

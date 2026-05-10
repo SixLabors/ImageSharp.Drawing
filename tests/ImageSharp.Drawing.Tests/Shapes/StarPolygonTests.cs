@@ -5,7 +5,7 @@ using System.Numerics;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Shapes;
 
-public class StarTests
+public class StarPolygonTests
 {
     [Theory]
     [InlineData(0, true)]
@@ -17,13 +17,13 @@ public class StarTests
     {
         if (throws)
         {
-            ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() => new Star(Vector2.Zero, points, 10f, 20f, 0));
+            ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() => new StarPolygon(Vector2.Zero, points, 10f, 20f, 0));
 
             Assert.Equal("prongs", ex.ParamName);
         }
         else
         {
-            Star p = new(Vector2.Zero, points, 10f, 20f, 0);
+            StarPolygon p = new(Vector2.Zero, points, 10f, 20f, 0);
             Assert.NotNull(p);
         }
     }
@@ -37,15 +37,15 @@ public class StarTests
     {
         if (throws)
         {
-            ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() => new Star(Vector2.Zero, 3, radius, 20f, 0));
-            ArgumentOutOfRangeException ex2 = Assert.Throws<ArgumentOutOfRangeException>(() => new Star(Vector2.Zero, 3, 20f, radius, 0));
+            ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() => new StarPolygon(Vector2.Zero, 3, radius, 20f, 0));
+            ArgumentOutOfRangeException ex2 = Assert.Throws<ArgumentOutOfRangeException>(() => new StarPolygon(Vector2.Zero, 3, 20f, radius, 0));
 
             Assert.Equal("innerRadii", ex.ParamName);
             Assert.Equal("outerRadii", ex2.ParamName);
         }
         else
         {
-            Star p = new(Vector2.Zero, 3, radius, radius, 0);
+            StarPolygon p = new(Vector2.Zero, 3, radius, radius, 0);
             Assert.NotNull(p);
         }
     }
@@ -57,7 +57,7 @@ public class StarTests
         const float radius2 = 30;
         int pointsCount = new Random().Next(3, 20);
 
-        Star poly = new(Vector2.Zero, pointsCount, radius, radius2, 0);
+        StarPolygon poly = new(Vector2.Zero, pointsCount, radius, radius2, 0);
 
         PointF[] points = poly.Flatten().ToArray()[0].Points.ToArray();
 
@@ -100,7 +100,7 @@ public class StarTests
             expectedAngleDegrees -= 360D;
         }
 
-        Star poly = new(Vector2.Zero, 3, radius, radius2, (float)anAngleDegrees);
+        StarPolygon poly = new(Vector2.Zero, 3, radius, radius2, (float)anAngleDegrees);
         ISimplePath[] points = [.. poly.Flatten()];
 
         IEnumerable<double> allAngles = points[0].Points.ToArray()

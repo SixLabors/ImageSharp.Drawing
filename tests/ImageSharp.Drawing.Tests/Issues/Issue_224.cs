@@ -11,7 +11,7 @@ public class Issue_224
     [Fact]
     public async Task OutliningWithZeroWidth_MultiplePatterns()
     {
-        RectangularPolygon shape = new(10, 10, 10, 10);
+        RectanglePolygon shape = new(10, 10, 10, 10);
 
         await CompletesIn(TimeSpan.FromSeconds(1), () => _ = shape.GenerateOutline(0, [1, 2]));
     }
@@ -19,7 +19,7 @@ public class Issue_224
     [Fact]
     public async Task OutliningWithZeroWidth_SinglePAttern()
     {
-        RectangularPolygon shape = new(10, 10, 10, 10);
+        RectanglePolygon shape = new(10, 10, 10, 10);
 
         await CompletesIn(TimeSpan.FromSeconds(1), () => _ = shape.GenerateOutline(0, [1]));
     }
@@ -27,7 +27,7 @@ public class Issue_224
     [Fact]
     public async Task OutliningWithZeroWidth_NoPattern()
     {
-        RectangularPolygon shape = new(10, 10, 10, 10);
+        RectanglePolygon shape = new(10, 10, 10, 10);
 
         await CompletesIn(TimeSpan.FromSeconds(1), () => _ = shape.GenerateOutline(0));
     }
@@ -35,7 +35,7 @@ public class Issue_224
     [Fact]
     public async Task OutliningWithLessThanZeroWidth_MultiplePatterns()
     {
-        RectangularPolygon shape = new(10, 10, 10, 10);
+        RectanglePolygon shape = new(10, 10, 10, 10);
 
         await CompletesIn(TimeSpan.FromSeconds(1), () => _ = shape.GenerateOutline(-10, [1, 2]));
     }
@@ -43,7 +43,7 @@ public class Issue_224
     [Fact]
     public async Task OutliningWithLessThanZeroWidth_SinglePAttern()
     {
-        RectangularPolygon shape = new(10, 10, 10, 10);
+        RectanglePolygon shape = new(10, 10, 10, 10);
 
         await CompletesIn(TimeSpan.FromSeconds(1), () => _ = shape.GenerateOutline(-10, [1]));
     }
@@ -51,7 +51,7 @@ public class Issue_224
     [Fact]
     public async Task OutliningWithLessThanZeroWidth_NoPattern()
     {
-        RectangularPolygon shape = new(10, 10, 10, 10);
+        RectanglePolygon shape = new(10, 10, 10, 10);
 
         await CompletesIn(TimeSpan.FromSeconds(1), () => _ = shape.GenerateOutline(-10));
     }

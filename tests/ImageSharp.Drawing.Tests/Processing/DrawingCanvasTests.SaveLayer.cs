@@ -58,7 +58,7 @@ public partial class DrawingCanvasTests
             canvas.Fill(new SolidBrush(Color.White));
 
             canvas.SaveLayer(new GraphicsOptions(), new Rectangle(10, 10, 32, 32));
-            canvas.Fill(new SolidBrush(Color.Red), new RectangularPolygon(10, 10, 10, 10));
+            canvas.Fill(new SolidBrush(Color.Red), new RectanglePolygon(10, 10, 10, 10));
             canvas.Restore();
         }
 
@@ -82,7 +82,7 @@ public partial class DrawingCanvasTests
 
             canvas.Save(translatedOptions);
             canvas.SaveLayer(new GraphicsOptions(), new Rectangle(10, 10, 10, 10));
-            canvas.Fill(new SolidBrush(Color.Red), new RectangularPolygon(10, 10, 10, 10));
+            canvas.Fill(new SolidBrush(Color.Red), new RectanglePolygon(10, 10, 10, 10));
             canvas.Restore();
             canvas.Restore();
         }
@@ -133,7 +133,7 @@ public partial class DrawingCanvasTests
 
             // SaveLayer with full opacity, draw red rectangle, then restore.
             canvas.SaveLayer();
-            canvas.Fill(new SolidBrush(Color.Red), new RectangularPolygon(10, 10, 20, 20));
+            canvas.Fill(new SolidBrush(Color.Red), new RectanglePolygon(10, 10, 20, 20));
             canvas.Restore();
         }
 
@@ -158,7 +158,7 @@ public partial class DrawingCanvasTests
 
             // SaveLayer with 50% opacity, draw red rectangle, then restore.
             canvas.SaveLayer(new GraphicsOptions { BlendPercentage = 0.5f });
-            canvas.Fill(new SolidBrush(Color.Red), new RectangularPolygon(10, 10, 20, 20));
+            canvas.Fill(new SolidBrush(Color.Red), new RectanglePolygon(10, 10, 20, 20));
             canvas.Restore();
         }
 
@@ -180,7 +180,7 @@ public partial class DrawingCanvasTests
         {
             canvas.Fill(new SolidBrush(Color.White));
             canvas.SaveLayer();
-            canvas.Fill(new SolidBrush(Color.Blue), new RectangularPolygon(0, 0, 32, 32));
+            canvas.Fill(new SolidBrush(Color.Blue), new RectanglePolygon(0, 0, 32, 32));
 
             // Dispose should composite the layer.
         }
@@ -201,7 +201,7 @@ public partial class DrawingCanvasTests
         {
             canvas.Fill(new SolidBrush(Color.White));
             canvas.SaveLayer(new GraphicsOptions { BlendPercentage = 0.5f });
-            canvas.Fill(new SolidBrush(Color.Blue), new RectangularPolygon(0, 0, 32, 32));
+            canvas.Fill(new SolidBrush(Color.Blue), new RectanglePolygon(0, 0, 32, 32));
             canvas.Restore();
         }
 
@@ -209,7 +209,7 @@ public partial class DrawingCanvasTests
         {
             canvas.Fill(new SolidBrush(Color.White));
             canvas.SaveLayer(new GraphicsOptions { BlendPercentage = 0.5f });
-            canvas.Fill(new SolidBrush(Color.Blue), new RectangularPolygon(0, 0, 32, 32));
+            canvas.Fill(new SolidBrush(Color.Blue), new RectanglePolygon(0, 0, 32, 32));
         }
 
         ImageComparer.Exact.VerifySimilarity(restoredTarget, disposedTarget);
@@ -226,11 +226,11 @@ public partial class DrawingCanvasTests
 
             // Outer layer.
             canvas.SaveLayer();
-            canvas.Fill(new SolidBrush(Color.Red), new RectangularPolygon(0, 0, 64, 64));
+            canvas.Fill(new SolidBrush(Color.Red), new RectanglePolygon(0, 0, 64, 64));
 
             // Inner layer.
             canvas.SaveLayer();
-            canvas.Fill(new SolidBrush(Color.Blue), new RectangularPolygon(16, 16, 32, 32));
+            canvas.Fill(new SolidBrush(Color.Blue), new RectanglePolygon(16, 16, 32, 32));
             canvas.Restore(); // Closes blue onto red.
 
             canvas.Restore(); // Closes red+blue onto white.
@@ -259,7 +259,7 @@ public partial class DrawingCanvasTests
             canvas.Save();              // SaveCount = 4 (plain save)
             Assert.Equal(4, canvas.SaveCount);
 
-            canvas.Fill(new SolidBrush(Color.Green), new RectangularPolygon(0, 0, 64, 64));
+            canvas.Fill(new SolidBrush(Color.Green), new RectanglePolygon(0, 0, 64, 64));
 
             // RestoreTo(1) should pop all states including the layer.
             canvas.RestoreTo(1);

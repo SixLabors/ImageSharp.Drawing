@@ -30,7 +30,7 @@ public partial class ProcessWithDrawingCanvasTests
     public void CompareToSkiaResults_StarCircle(TestImageProvider<Rgba32> provider)
     {
         EllipsePolygon circle = new(32, 32, 30);
-        Star star = new(32, 32, 7, 10, 27);
+        StarPolygon star = new(32, 32, 7, 10, 27);
         IPath shape = circle.Clip(star);
 
         CompareToSkiaResultsImpl(provider, shape);

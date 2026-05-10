@@ -185,7 +185,7 @@ public partial class ProcessWithDrawingCanvasTests
             new TolerantImageComparer(0.2f),
             image =>
             {
-                Star star = new(50, 50, 5, 20, 45);
+                StarPolygon star = new(50, 50, 5, 20, 45);
                 PointF[] points = star.Points.ToArray();
                 Color[] colors =
                 [

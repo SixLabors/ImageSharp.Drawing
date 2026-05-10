@@ -455,7 +455,7 @@ public partial class ProcessWithDrawingCanvasTests
     public void DrawPolygonRectangular_Transformed<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        RectangularPolygon polygon = new(25, 25, 50, 50);
+        RectanglePolygon polygon = new(25, 25, 50, 50);
         DrawingOptions options = new()
         {
             Transform = new Matrix4x4(Matrix3x2.CreateRotation((float)Math.PI / 4, new PointF(50, 50)))

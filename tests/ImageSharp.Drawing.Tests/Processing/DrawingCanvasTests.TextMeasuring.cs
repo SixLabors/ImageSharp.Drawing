@@ -51,7 +51,7 @@ public partial class DrawingCanvasTests
 
                 canvas.Fill(
                     Brushes.Solid(bandColors[i % bandColors.Length]),
-                    new RectangularPolygon(startX, lineOriginY, endX - startX, line.LineHeight));
+                    new RectanglePolygon(startX, lineOriginY, endX - startX, line.LineHeight));
 
                 canvas.DrawLine(
                     Pens.Solid(Color.Teal.WithAlpha(0.9F), 1.5F),
@@ -77,7 +77,7 @@ public partial class DrawingCanvasTests
                 FontRectangle rb = metrics.GraphemeMetrics[i].RenderableBounds;
                 canvas.Draw(
                     Pens.Solid(Color.Black, 1),
-                    new RectangularPolygon(rb.X, rb.Y, rb.Width, rb.Height));
+                    new RectanglePolygon(rb.X, rb.Y, rb.Width, rb.Height));
             }
 
             // Character bounds: alternating filled rectangles behind the glyphs.
@@ -92,7 +92,7 @@ public partial class DrawingCanvasTests
                 FontRectangle b = metrics.GraphemeMetrics[i].Bounds;
                 canvas.Fill(
                     Brushes.Solid(charColors[i % charColors.Length]),
-                    new RectangularPolygon(b.X, b.Y, b.Width, b.Height));
+                    new RectanglePolygon(b.X, b.Y, b.Width, b.Height));
             }
 
             // Render the text.
@@ -102,19 +102,19 @@ public partial class DrawingCanvasTests
             FontRectangle advance = metrics.Advance;
             canvas.Draw(
                 Pens.Solid(Color.SeaGreen, 2),
-                new RectangularPolygon(origin.X + advance.X, origin.Y + advance.Y, advance.Width, advance.Height));
+                new RectanglePolygon(origin.X + advance.X, origin.Y + advance.Y, advance.Width, advance.Height));
 
             // Bounds rectangle (dodger blue outline).
             FontRectangle bounds = metrics.Bounds;
             canvas.Draw(
                 Pens.Solid(Color.DodgerBlue, 2),
-                new RectangularPolygon(bounds.X, bounds.Y, bounds.Width, bounds.Height));
+                new RectanglePolygon(bounds.X, bounds.Y, bounds.Width, bounds.Height));
 
             // Renderable bounds rectangle (black outline).
             FontRectangle renderableBounds = metrics.RenderableBounds;
             canvas.Draw(
                 Pens.Solid(Color.Black, 2),
-                new RectangularPolygon(renderableBounds.X, renderableBounds.Y, renderableBounds.Width, renderableBounds.Height));
+                new RectanglePolygon(renderableBounds.X, renderableBounds.Y, renderableBounds.Width, renderableBounds.Height));
 
             // Origin crosshair.
             canvas.DrawLine(Pens.Solid(Color.Gray, 1), new PointF(origin.X - 12, origin.Y), new PointF(origin.X + 12, origin.Y));
@@ -157,23 +157,23 @@ public partial class DrawingCanvasTests
                     {
                         canvas.Fill(
                             Brushes.Solid(keyEntries[i].Color1),
-                            new RectangularPolygon(x, y, halfW, swatchH));
+                            new RectanglePolygon(x, y, halfW, swatchH));
                         canvas.Fill(
                             Brushes.Solid(c2),
-                            new RectangularPolygon(x + halfW, y, halfW, swatchH));
+                            new RectanglePolygon(x + halfW, y, halfW, swatchH));
                     }
                     else
                     {
                         canvas.Fill(
                             Brushes.Solid(keyEntries[i].Color1),
-                            new RectangularPolygon(x, y, swatchW, swatchH));
+                            new RectanglePolygon(x, y, swatchW, swatchH));
                     }
                 }
                 else
                 {
                     canvas.Draw(
                         Pens.Solid(keyEntries[i].Color1, 2),
-                        new RectangularPolygon(x, y, swatchW, swatchH));
+                        new RectanglePolygon(x, y, swatchW, swatchH));
                 }
 
                 RichTextOptions keyTextOptions = new(keyFont) { Origin = new PointF(x + labelOffset, y - 1) };

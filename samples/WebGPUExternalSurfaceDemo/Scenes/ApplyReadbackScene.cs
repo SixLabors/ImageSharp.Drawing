@@ -60,7 +60,7 @@ internal sealed class ApplyReadbackScene : RenderScene
         canvas.Apply(edgeRegion, ctx => ctx.DetectEdges());
         canvas.Apply(blurRegion, ctx => ctx.GaussianBlur(Math.Max(3F, Math.Min(viewportSize.Width, viewportSize.Height) / 120F)));
 
-        canvas.Draw(Pens.Solid(OutlineColor, 3), new RectangularPolygon(edgeRegion));
+        canvas.Draw(Pens.Solid(OutlineColor, 3), new RectanglePolygon(edgeRegion));
         canvas.Draw(Pens.Solid(OutlineColor, 3), blurRegion);
     }
 

@@ -23,7 +23,7 @@ image.Mutate(ctx => ctx.Paint(canvas =>
 {
     canvas.Fill(Brushes.Solid(Color.White));
     canvas.Fill(Brushes.Solid(Color.Red), new EllipsePolygon(200, 200, 100));
-    canvas.Draw(Pens.Solid(Color.Blue, 3F), new RectangularPolygon(50, 50, 200, 100));
+    canvas.Draw(Pens.Solid(Color.Blue, 3F), new RectanglePolygon(50, 50, 200, 100));
 }));
 ```
   

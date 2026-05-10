@@ -6,7 +6,7 @@ using SixLabors.ImageSharp.Drawing.Tests;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Shapes;
 
-public class PieTests
+public class PiePolygonTests
 {
     [Theory]
     [InlineData(-1, true)]
@@ -17,12 +17,12 @@ public class PieTests
     {
         if (throws)
         {
-            ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() => new Pie(0, 0, radiusX, 99, 0, 90));
+            ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() => new PiePolygon(0, 0, radiusX, 99, 0, 90));
             Assert.Equal("radiusX", ex.ParamName);
         }
         else
         {
-            Pie p = new(0, 0, radiusX, 99, 0, 90);
+            PiePolygon p = new(0, 0, radiusX, 99, 0, 90);
             Assert.NotNull(p);
         }
     }
@@ -36,12 +36,12 @@ public class PieTests
     {
         if (throws)
         {
-            ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() => new Pie(0, 0, 99, radiusY, 0, 90));
+            ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() => new PiePolygon(0, 0, 99, radiusY, 0, 90));
             Assert.Equal("radiusY", ex.ParamName);
         }
         else
         {
-            Pie p = new(0, 0, 99, radiusY, 0, 90);
+            PiePolygon p = new(0, 0, 99, radiusY, 0, 90);
             Assert.NotNull(p);
         }
     }
@@ -49,8 +49,8 @@ public class PieTests
     [Fact]
     public void NoRotationOverloadMatchesZeroRotation()
     {
-        Pie withRotation = new(new PointF(10, 20), new SizeF(30, 40), 0, 15, 120);
-        Pie withoutRotation = new(new PointF(10, 20), new SizeF(30, 40), 15, 120);
+        PiePolygon withRotation = new(new PointF(10, 20), new SizeF(30, 40), 0, 15, 120);
+        PiePolygon withoutRotation = new(new PointF(10, 20), new SizeF(30, 40), 15, 120);
 
         PointF[] withRotationPoints = withRotation.Flatten().Single().Points.ToArray();
         PointF[] withoutRotationPoints = withoutRotation.Flatten().Single().Points.ToArray();
@@ -67,7 +67,7 @@ public class PieTests
     [Fact]
     public void BoundsIncludeCenterAndArcExtents()
     {
-        Pie pie = new(new PointF(10, 20), new SizeF(30, 40), 0, 0, 90);
+        PiePolygon pie = new(new PointF(10, 20), new SizeF(30, 40), 0, 0, 90);
 
         Assert.Equal(10, pie.Bounds.Left, 4F);
         Assert.Equal(40, pie.Bounds.Right, 4F);
@@ -78,7 +78,7 @@ public class PieTests
     [Fact]
     public void ShapePaths()
     {
-        Pie shape = new(new PointF(10, 20), new SizeF(30, 40), 0, 90);
+        PiePolygon shape = new(new PointF(10, 20), new SizeF(30, 40), 0, 90);
 
         Assert.Equal(shape, shape.AsClosedPath());
     }
@@ -86,7 +86,7 @@ public class PieTests
     [Fact]
     public void TransformIdentityReturnsShapeObject()
     {
-        Pie shape = new(new PointF(10, 20), new SizeF(30, 40), 20, 140);
+        PiePolygon shape = new(new PointF(10, 20), new SizeF(30, 40), 20, 140);
         IPath transformedShape = shape.Transform(Matrix4x4.Identity);
 
         Assert.Same(shape, transformedShape);
@@ -95,7 +95,7 @@ public class PieTests
     [Fact]
     public void Transform()
     {
-        Pie shape = new(new PointF(10, 20), new SizeF(30, 40), 0, 0, 90);
+        PiePolygon shape = new(new PointF(10, 20), new SizeF(30, 40), 0, 0, 90);
 
         IPath newShape = shape.Transform(new Matrix4x4(new Matrix3x2(0, 1, 1, 0, 20, 2)));
 
