@@ -478,6 +478,75 @@ public class PathBuilder
             new PointF(x, y + height));
 
     /// <summary>
+    /// Adds a rounded rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="rectangle">The rectangle bounds.</param>
+    /// <param name="radius">The x and y radius of each corner.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRoundedRectangle(RectangleF rectangle, float radius)
+        => this.AddRoundedRectangle(rectangle, new SizeF(radius, radius));
+
+    /// <summary>
+    /// Adds a rounded rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="rectangle">The rectangle bounds.</param>
+    /// <param name="radius">The x and y radii of each corner.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRoundedRectangle(RectangleF rectangle, SizeF radius)
+    {
+        _ = this.StartFigure();
+
+        foreach (ILineSegment segment in new RoundedRectanglePolygon(rectangle, radius).LineSegments)
+        {
+            _ = this.AddSegment(segment);
+        }
+
+        return this.CloseFigure();
+    }
+
+    /// <summary>
+    /// Adds a rounded rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="rectangle">The rectangle bounds.</param>
+    /// <param name="radius">The x and y radius of each corner.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRoundedRectangle(Rectangle rectangle, float radius)
+        => this.AddRoundedRectangle((RectangleF)rectangle, radius);
+
+    /// <summary>
+    /// Adds a rounded rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="rectangle">The rectangle bounds.</param>
+    /// <param name="radius">The x and y radii of each corner.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRoundedRectangle(Rectangle rectangle, SizeF radius)
+        => this.AddRoundedRectangle((RectangleF)rectangle, radius);
+
+    /// <summary>
+    /// Adds a rounded rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the rectangle.</param>
+    /// <param name="y">The y-coordinate of the rectangle.</param>
+    /// <param name="width">The rectangle width.</param>
+    /// <param name="height">The rectangle height.</param>
+    /// <param name="radius">The x and y radius of each corner.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRoundedRectangle(float x, float y, float width, float height, float radius)
+        => this.AddRoundedRectangle(new RectangleF(x, y, width, height), radius);
+
+    /// <summary>
+    /// Adds a rounded rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the rectangle.</param>
+    /// <param name="y">The y-coordinate of the rectangle.</param>
+    /// <param name="width">The rectangle width.</param>
+    /// <param name="height">The rectangle height.</param>
+    /// <param name="radius">The x and y radii of each corner.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRoundedRectangle(float x, float y, float width, float height, SizeF radius)
+        => this.AddRoundedRectangle(new RectangleF(x, y, width, height), radius);
+
+    /// <summary>
     /// Adds a polygon to the current path as a closed figure.
     /// </summary>
     /// <param name="points">The polygon vertices.</param>

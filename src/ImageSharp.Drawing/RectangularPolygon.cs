@@ -6,9 +6,8 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
-/// A polygon tha allows the optimized drawing of rectangles.
+/// A closed rectangular path defined by four straight edges.
 /// </summary>
-/// <seealso cref="IPath" />
 public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
 {
     private readonly Vector2 topLeft;

@@ -86,6 +86,30 @@ public class PathBuilderTests
     }
 
     [Fact]
+    public void AddRoundedRectangleMatchesRoundedRectangleShape()
+    {
+        PathBuilder builder = new();
+        builder.AddRoundedRectangle(new RectangleF(10, 20, 30, 40), new SizeF(5, 8));
+
+        Polygon actual = Assert.IsType<Polygon>(builder.Build());
+        RoundedRectanglePolygon expected = new(10, 20, 30, 40, new SizeF(5, 8));
+
+        AssertEquivalentPaths(actual, expected);
+    }
+
+    [Fact]
+    public void AddRoundedRectangleRadiusOverloadMatchesRoundedRectangleShape()
+    {
+        PathBuilder builder = new();
+        builder.AddRoundedRectangle(10, 20, 30, 40, 6);
+
+        Polygon actual = Assert.IsType<Polygon>(builder.Build());
+        RoundedRectanglePolygon expected = new(10, 20, 30, 40, 6);
+
+        AssertEquivalentPaths(actual, expected);
+    }
+
+    [Fact]
     public void AddPolygonEnumerableMatchesPolygonShape()
     {
         PathBuilder builder = new();
