@@ -6,6 +6,7 @@ using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.PixelFormats;
 using IOPath = System.IO.Path;
 
+#pragma warning disable IDE0032
 namespace SixLabors.ImageSharp.Drawing.Tests;
 
 /// <summary>
@@ -13,20 +14,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests;
 /// </summary>
 public sealed class TestFile
 {
-    /// <summary>
-    /// The test file cache.
-    /// </summary>
     private static readonly ConcurrentDictionary<string, TestFile> Cache = new();
-
-    /// <summary>
-    /// The "Formats" directory, as lazy value
-    /// </summary>
-    // ReSharper disable once InconsistentNaming
     private static readonly Lazy<string> InputImagesDirectoryValue = new(() => TestEnvironment.InputImagesDirectoryFullPath);
-
-    /// <summary>
-    /// The image bytes
-    /// </summary>
     private byte[] bytes;
 
     /// <summary>
@@ -80,7 +69,7 @@ public sealed class TestFile
     /// The <see cref="TestFile"/>.
     /// </returns>
     public static TestFile Create(string file)
-        => Cache.GetOrAdd(file, (string fileName) => new TestFile(GetInputFileFullPath(fileName)));
+        => Cache.GetOrAdd(file, fileName => new TestFile(GetInputFileFullPath(fileName)));
 
     /// <summary>
     /// Gets the file name.

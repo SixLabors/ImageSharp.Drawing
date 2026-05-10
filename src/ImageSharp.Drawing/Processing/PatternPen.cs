@@ -35,7 +35,7 @@ public class PatternPen : Pen
     /// Initializes a new instance of the <see cref="PatternPen"/> class.
     /// </summary>
     /// <param name="color">The color.</param>
-    /// <param name="strokeWidth">The stroke width in px units.</param>
+    /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
     /// <param name="strokePattern">The stroke pattern.</param>
     public PatternPen(Color color, float strokeWidth, float[] strokePattern)
         : base(new SolidBrush(color), strokeWidth, strokePattern)
@@ -46,7 +46,7 @@ public class PatternPen : Pen
     /// Initializes a new instance of the <see cref="PatternPen"/> class.
     /// </summary>
     /// <param name="strokeFill">The brush used to fill the stroke outline.</param>
-    /// <param name="strokeWidth">The stroke width in px units.</param>
+    /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
     /// <param name="strokePattern">The stroke pattern.</param>
     public PatternPen(Brush strokeFill, float strokeWidth, float[] strokePattern)
         : base(strokeFill, strokeWidth, strokePattern)
@@ -75,5 +75,5 @@ public class PatternPen : Pen
 
     /// <inheritdoc />
     public override IPath GeneratePath(IPath path, float strokeWidth)
-        => path.GenerateOutline(strokeWidth, this.StrokePattern, this.StrokeOptions);
+        => path.GenerateOutline(strokeWidth, this.StrokePattern.Span, this.StrokeOptions);
 }

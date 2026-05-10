@@ -92,12 +92,12 @@ jobs:
             framework: net8.0
             sdk: 8.0.x
             runtime: -x64
-            codecov: true
+            codecov: false
           - os: macos-26
             framework: net8.0
             sdk: 8.0.x
             runtime: -x64
-            codecov: false
+            codecov: true
           - os: windows-latest
             framework: net8.0
             sdk: 8.0.x
@@ -209,7 +209,7 @@ jobs:
           XUNIT_PATH: .\tests\ImageSharp.Drawing.Tests # Required for xunit
 
       - name: Export Failed Output
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: actual_output_${{ runner.os }}_${{ matrix.options.framework }}${{ matrix.options.runtime }}.zip

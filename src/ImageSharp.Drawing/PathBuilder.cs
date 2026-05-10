@@ -1,0 +1,785 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
+
+namespace SixLabors.ImageSharp.Drawing;
+
+/// <summary>
+/// Allow you to derivatively build shapes and paths.
+/// </summary>
+public class PathBuilder
+{
+    private readonly List<Figure> figures = [];
+    private readonly Matrix4x4 defaultTransform;
+    private Figure currentFigure;
+    private Matrix4x4 currentTransform;
+    private Matrix4x4 setTransform;
+    private Vector2 currentPoint;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PathBuilder" /> class.
+    /// </summary>
+    public PathBuilder()
+        : this(Matrix4x4.Identity)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PathBuilder"/> class.
+    /// </summary>
+    /// <param name="defaultTransform">The default transform.</param>
+    public PathBuilder(Matrix4x4 defaultTransform)
+    {
+        this.defaultTransform = defaultTransform;
+        this.Clear();
+        _ = this.ResetTransform();
+    }
+
+    /// <summary>
+    /// Gets the current transformation matrix.
+    /// </summary>
+    /// <remarks>
+    /// Returns a copy of the matrix. Because <see cref="Matrix4x4"/> is a value type,
+    /// modifications to the returned value do not affect the internal state. To change the transform,
+    /// call <see cref="SetTransform(Matrix4x4)"/>.
+    /// </remarks>
+    /// <value>The current transformation matrix.</value>
+    public Matrix4x4 Transform => this.currentTransform;
+
+    /// <summary>
+    /// Sets the translation to be applied to all items to follow being applied to the <see cref="PathBuilder"/>.
+    /// </summary>
+    /// <param name="transform">The transform.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder SetTransform(Matrix4x4 transform)
+    {
+        this.setTransform = transform;
+        this.currentTransform = this.setTransform * this.defaultTransform;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the origin all subsequent point should be relative to.
+    /// </summary>
+    /// <param name="origin">The origin.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder SetOrigin(PointF origin)
+    {
+        // The new origin should be transformed based on the default transform
+        this.setTransform.Translation = new Vector3(origin.X, origin.Y, 0);
+        this.currentTransform = this.setTransform * this.defaultTransform;
+
+        return this;
+    }
+
+    /// <summary>
+    /// Resets the transform to the default.
+    /// </summary>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder ResetTransform()
+    {
+        this.setTransform = Matrix4x4.Identity;
+        this.currentTransform = this.setTransform * this.defaultTransform;
+
+        return this;
+    }
+
+    /// <summary>
+    /// Resets the origin to the default.
+    /// </summary>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder ResetOrigin()
+    {
+        this.setTransform.Translation = Vector3.Zero;
+        this.currentTransform = this.setTransform * this.defaultTransform;
+
+        return this;
+    }
+
+    /// <summary>
+    /// Moves to current point to the supplied vector.
+    /// </summary>
+    /// <param name="point">The point.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder MoveTo(PointF point)
+    {
+        _ = this.StartFigure();
+        this.currentPoint = PointF.Transform(point, this.currentTransform);
+        return this;
+    }
+
+    /// <summary>
+    /// Moves to current point to the supplied vector.
+    /// </summary>
+    /// <param name="x">The x-coordinate.</param>
+    /// <param name="y">The y-coordinate.</param>
+    /// <returns>The <see cref="PathBuilder"/></returns>
+    public PathBuilder MoveTo(float x, float y)
+        => this.MoveTo(new PointF(x, y));
+
+    /// <summary>
+    /// Draws the line connecting the current the current point to the new point.
+    /// </summary>
+    /// <param name="point">The point.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder LineTo(PointF point)
+        => this.AddLine(this.currentPoint, point);
+
+    /// <summary>
+    /// Draws the line connecting the current the current point to the new point.
+    /// </summary>
+    /// <param name="x">The x.</param>
+    /// <param name="y">The y.</param>
+    /// <returns>The <see cref="PathBuilder"/></returns>
+    public PathBuilder LineTo(float x, float y)
+        => this.LineTo(new PointF(x, y));
+
+    /// <summary>
+    /// Adds the line connecting the current point to the new point.
+    /// </summary>
+    /// <param name="start">The start.</param>
+    /// <param name="end">The end.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddLine(PointF start, PointF end)
+        => this.AddSegment(new LinearLineSegment(start, end));
+
+    /// <summary>
+    /// Adds the line connecting the current point to the new point.
+    /// </summary>
+    /// <param name="x1">The x1.</param>
+    /// <param name="y1">The y1.</param>
+    /// <param name="x2">The x2.</param>
+    /// <param name="y2">The y2.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddLine(float x1, float y1, float x2, float y2)
+        => this.AddLine(new PointF(x1, y1), new PointF(x2, y2));
+
+    /// <summary>
+    /// Adds a series of line segments connecting the current point to the new points.
+    /// </summary>
+    /// <param name="points">The points.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddLines(IEnumerable<PointF> points)
+    {
+        Guard.NotNull(points, nameof(points));
+        return this.AddLines([.. points]);
+    }
+
+    /// <summary>
+    /// Adds a series of line segments connecting the current point to the new points.
+    /// </summary>
+    /// <param name="points">The points.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddLines(params PointF[] points)
+    {
+        Guard.NotNull(points, nameof(points));
+        return this.AddSegment(new LinearLineSegment(points));
+    }
+
+    /// <summary>
+    /// Adds the segment.
+    /// </summary>
+    /// <param name="segment">The segment.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddSegment(ILineSegment segment)
+    {
+        Guard.NotNull(segment, nameof(segment));
+
+        segment = segment.Transform(this.currentTransform);
+        this.currentFigure.AddSegment(segment);
+        this.currentPoint = segment.EndPoint;
+        return this;
+    }
+
+    /// <summary>
+    /// Draws a quadratic bezier from the current point to the <paramref name="point"/>
+    /// </summary>
+    /// <param name="secondControlPoint">The second control point.</param>
+    /// <param name="point">The point.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder QuadraticBezierTo(Vector2 secondControlPoint, Vector2 point)
+        => this.AddQuadraticBezier(this.currentPoint, secondControlPoint, point);
+
+    /// <summary>
+    /// Draws a quadratic bezier from the current point to the <paramref name="point"/>
+    /// </summary>
+    /// <param name="secondControlPoint">The second control point.</param>
+    /// <param name="thirdControlPoint">The third control point.</param>
+    /// <param name="point">The point.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder CubicBezierTo(Vector2 secondControlPoint, Vector2 thirdControlPoint, Vector2 point)
+        => this.AddCubicBezier(this.currentPoint, secondControlPoint, thirdControlPoint, point);
+
+    /// <summary>
+    /// Adds a quadratic bezier curve to the current figure joining the <paramref name="startPoint"/> point to the <paramref name="endPoint"/>.
+    /// </summary>
+    /// <param name="startPoint">The start point.</param>
+    /// <param name="controlPoint">The control point1.</param>
+    /// <param name="endPoint">The end point.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddQuadraticBezier(PointF startPoint, PointF controlPoint, PointF endPoint)
+    {
+        Vector2 startPointVector = startPoint;
+        Vector2 controlPointVector = controlPoint;
+        Vector2 endPointVector = endPoint;
+
+        Vector2 c1 = ((controlPointVector - startPointVector) * 2 / 3) + startPointVector;
+        Vector2 c2 = ((controlPointVector - endPointVector) * 2 / 3) + endPointVector;
+
+        return this.AddCubicBezier(startPointVector, c1, c2, endPoint);
+    }
+
+    /// <summary>
+    /// Adds a cubic bezier curve to the current figure joining the <paramref name="startPoint"/> point to the <paramref name="endPoint"/>.
+    /// </summary>
+    /// <param name="startPoint">The start point.</param>
+    /// <param name="controlPoint1">The control point1.</param>
+    /// <param name="controlPoint2">The control point2.</param>
+    /// <param name="endPoint">The end point.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddCubicBezier(PointF startPoint, PointF controlPoint1, PointF controlPoint2, PointF endPoint)
+        => this.AddSegment(new CubicBezierLineSegment(startPoint, controlPoint1, controlPoint2, endPoint));
+
+    /// <summary>
+    /// <para>
+    /// Adds an elliptical arc to the current figure. The arc curves from the last point to <paramref name="point"/>,
+    /// choosing one of four possible routes: clockwise or counterclockwise, and smaller or larger.
+    /// </para>
+    /// <para>
+    /// The arc sweep is always less than 360 degrees. The method appends a line
+    /// to the last point if either radii are zero, or if last point is equal to <paramref name="point"/>.
+    /// In addition the method scales the radii to fit last point and <paramref name="point"/> if both
+    /// are greater than zero but too small to describe an arc.
+    /// </para>
+    /// </summary>
+    /// <param name="radiusX">The x-radius of the ellipsis.</param>
+    /// <param name="radiusY">The y-radius of the ellipsis.</param>
+    /// <param name="rotation">The rotation along the X-axis; measured in degrees clockwise.</param>
+    /// <param name="largeArc">
+    /// The large arc flag, and is <see langword="false"/> if an arc spanning less than or equal to 180 degrees
+    /// is chosen, or <see langword="true"/> if an arc spanning greater than 180 degrees is chosen.
+    /// </param>
+    /// <param name="sweep">
+    /// The sweep flag, and is <see langword="false"/> if the line joining center to arc sweeps through decreasing
+    /// angles, or <see langword="true"/> if it sweeps through increasing angles.
+    /// </param>
+    /// <param name="point">The end point of the arc.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder ArcTo(float radiusX, float radiusY, float rotation, bool largeArc, bool sweep, PointF point)
+        => this.AddArc(this.currentPoint, radiusX, radiusY, rotation, largeArc, sweep, point);
+
+    /// <summary>
+    /// <para>
+    /// Adds an elliptical arc to the current figure. The arc curves from the <paramref name="startPoint"/> to <paramref name="endPoint"/>,
+    /// choosing one of four possible routes: clockwise or counterclockwise, and smaller or larger.
+    /// </para>
+    /// <para>
+    /// The arc sweep is always less than 360 degrees. The method appends a line
+    /// to the last point if either radii are zero, or if last point is equal to <paramref name="endPoint"/>.
+    /// In addition the method scales the radii to fit last point and <paramref name="endPoint"/> if both
+    /// are greater than zero but too small to describe an arc.
+    /// </para>
+    /// </summary>
+    /// <param name="startPoint">The start point of the arc.</param>
+    /// <param name="radiusX">The x-radius of the ellipsis.</param>
+    /// <param name="radiusY">The y-radius of the ellipsis.</param>
+    /// <param name="rotation">The rotation along the X-axis; measured in degrees clockwise.</param>
+    /// <param name="largeArc">
+    /// The large arc flag, and is <see langword="false"/> if an arc spanning less than or equal to 180 degrees
+    /// is chosen, or <see langword="true"/> if an arc spanning greater than 180 degrees is chosen.
+    /// </param>
+    /// <param name="sweep">
+    /// The sweep flag, and is <see langword="false"/> if the line joining center to arc sweeps through decreasing
+    /// angles, or <see langword="true"/> if it sweeps through increasing angles.
+    /// </param>
+    /// <param name="endPoint">The end point of the arc.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddArc(PointF startPoint, float radiusX, float radiusY, float rotation, bool largeArc, bool sweep, PointF endPoint)
+        => this.AddSegment(new ArcLineSegment(startPoint, endPoint, new SizeF(radiusX, radiusY), rotation, largeArc, sweep));
+
+    /// <summary>
+    /// Adds an elliptical arc to the current figure.
+    /// </summary>
+    /// <param name="rectangle">A <see cref="RectangleF"/> that represents the rectangular bounds of the ellipse from which the arc is taken.</param>
+    /// <param name="rotation">The angle, in degrees, from the x-axis of the current coordinate system to the x-axis of the ellipse.</param>
+    /// <param name="startAngle">
+    /// The start angle of the elliptical arc prior to the stretch and rotate operations. (0 is at the 3 o'clock position of the arc's circle).
+    /// </param>
+    /// <param name="sweepAngle">The angle between <paramref name="startAngle"/> and the end of the arc.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddArc(RectangleF rectangle, float rotation, float startAngle, float sweepAngle)
+        => this.AddArc((rectangle.Right + rectangle.Left) / 2, (rectangle.Bottom + rectangle.Top) / 2, rectangle.Width / 2, rectangle.Height / 2, rotation, startAngle, sweepAngle);
+
+    /// <summary>
+    /// Adds an elliptical arc to the current figure.
+    /// </summary>
+    /// <param name="rectangle">A <see cref="Rectangle"/> that represents the rectangular bounds of the ellipse from which the arc is taken.</param>
+    /// <param name="rotation">The angle, in degrees, from the x-axis of the current coordinate system to the x-axis of the ellipse.</param>
+    /// <param name="startAngle">
+    /// The start angle of the elliptical arc prior to the stretch and rotate operations. (0 is at the 3 o'clock position of the arc's circle).
+    /// </param>
+    /// <param name="sweepAngle">The angle between <paramref name="startAngle"/> and the end of the arc.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddArc(Rectangle rectangle, int rotation, int startAngle, int sweepAngle)
+        => this.AddArc((RectangleF)rectangle, rotation, startAngle, sweepAngle);
+
+    /// <summary>
+    /// Adds an elliptical arc to the current figure.
+    /// </summary>
+    /// <param name="center">The center <see cref="PointF"/> of the ellipse from which the arc is taken.</param>
+    /// <param name="radiusX">The x-radius of the ellipsis.</param>
+    /// <param name="radiusY">The y-radius of the ellipsis.</param>
+    /// <param name="rotation">The angle, in degrees, from the x-axis of the current coordinate system to the x-axis of the ellipse.</param>
+    /// <param name="startAngle">
+    /// The start angle of the elliptical arc prior to the stretch and rotate operations. (0 is at the 3 o'clock position of the arc's circle).
+    /// </param>
+    /// <param name="sweepAngle">The angle between <paramref name="startAngle"/> and the end of the arc.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddArc(PointF center, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle)
+        => this.AddArc(center.X, center.Y, radiusX, radiusY, rotation, startAngle, sweepAngle);
+
+    /// <summary>
+    /// Adds an elliptical arc to the current figure.
+    /// </summary>
+    /// <param name="center">The center <see cref="Point"/> of the ellipse from which the arc is taken.</param>
+    /// <param name="radiusX">The x-radius of the ellipsis.</param>
+    /// <param name="radiusY">The y-radius of the ellipsis.</param>
+    /// <param name="rotation">The angle, in degrees, from the x-axis of the current coordinate system to the x-axis of the ellipse.</param>
+    /// <param name="startAngle">
+    /// The start angle of the elliptical arc prior to the stretch and rotate operations. (0 is at the 3 o'clock position of the arc's circle).
+    /// </param>
+    /// <param name="sweepAngle">The angle between <paramref name="startAngle"/> and the end of the arc.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddArc(Point center, int radiusX, int radiusY, int rotation, int startAngle, int sweepAngle)
+        => this.AddArc((PointF)center, radiusX, radiusY, rotation, startAngle, sweepAngle);
+
+    /// <summary>
+    /// Adds an elliptical arc to the current figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the center point of the ellipse from which the arc is taken.</param>
+    /// <param name="y">The y-coordinate of the center point of the ellipse from which the arc is taken.</param>
+    /// <param name="radiusX">The x-radius of the ellipsis.</param>
+    /// <param name="radiusY">The y-radius of the ellipsis.</param>
+    /// <param name="rotation">The angle, in degrees, from the x-axis of the current coordinate system to the x-axis of the ellipse.</param>
+    /// <param name="startAngle">
+    /// The start angle of the elliptical arc prior to the stretch and rotate operations. (0 is at the 3 o'clock position of the arc's circle).
+    /// </param>
+    /// <param name="sweepAngle">The angle between <paramref name="startAngle"/> and the end of the arc.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddArc(int x, int y, int radiusX, int radiusY, int rotation, int startAngle, int sweepAngle)
+        => this.AddSegment(new ArcLineSegment(new PointF(x, y), new SizeF(radiusX, radiusY), rotation, startAngle, sweepAngle));
+
+    /// <summary>
+    /// Adds an elliptical arc to the current figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the center point of the ellipse from which the arc is taken.</param>
+    /// <param name="y">The y-coordinate of the center point of the ellipse from which the arc is taken.</param>
+    /// <param name="radiusX">The x-radius of the ellipsis.</param>
+    /// <param name="radiusY">The y-radius of the ellipsis.</param>
+    /// <param name="rotation">The angle, in degrees, from the x-axis of the current coordinate system to the x-axis of the ellipse.</param>
+    /// <param name="startAngle">
+    /// The start angle of the elliptical arc prior to the stretch and rotate operations. (0 is at the 3 o'clock position of the arc's circle).
+    /// </param>
+    /// <param name="sweepAngle">The angle between <paramref name="startAngle"/> and the end of the arc.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddArc(float x, float y, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle)
+        => this.AddSegment(new ArcLineSegment(new PointF(x, y), new SizeF(radiusX, radiusY), rotation, startAngle, sweepAngle));
+
+    /// <summary>
+    /// Adds a pie sector to the current path as a closed figure.
+    /// </summary>
+    /// <param name="center">The center point of the pie sector.</param>
+    /// <param name="radius">The x and y radii of the pie ellipse.</param>
+    /// <param name="rotation">The ellipse rotation in degrees.</param>
+    /// <param name="startAngle">The pie start angle in degrees.</param>
+    /// <param name="sweepAngle">The pie sweep angle in degrees.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddPie(PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)
+    {
+        _ = this.StartFigure();
+
+        foreach (ILineSegment segment in new PiePolygon(center, radius, rotation, startAngle, sweepAngle).LineSegments)
+        {
+            _ = this.AddSegment(segment);
+        }
+
+        return this.CloseFigure();
+    }
+
+    /// <summary>
+    /// Adds a pie sector to the current path as a closed figure.
+    /// </summary>
+    /// <param name="center">The center point of the pie sector.</param>
+    /// <param name="radius">The x and y radii of the pie ellipse.</param>
+    /// <param name="startAngle">The pie start angle in degrees.</param>
+    /// <param name="sweepAngle">The pie sweep angle in degrees.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddPie(PointF center, SizeF radius, float startAngle, float sweepAngle)
+        => this.AddPie(center, radius, 0F, startAngle, sweepAngle);
+
+    /// <summary>
+    /// Adds a pie sector to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the pie center.</param>
+    /// <param name="y">The y-coordinate of the pie center.</param>
+    /// <param name="radiusX">The x-radius of the pie ellipse.</param>
+    /// <param name="radiusY">The y-radius of the pie ellipse.</param>
+    /// <param name="rotation">The ellipse rotation in degrees.</param>
+    /// <param name="startAngle">The pie start angle in degrees.</param>
+    /// <param name="sweepAngle">The pie sweep angle in degrees.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddPie(float x, float y, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle)
+        => this.AddPie(new PointF(x, y), new SizeF(radiusX, radiusY), rotation, startAngle, sweepAngle);
+
+    /// <summary>
+    /// Adds a pie sector to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the pie center.</param>
+    /// <param name="y">The y-coordinate of the pie center.</param>
+    /// <param name="radiusX">The x-radius of the pie ellipse.</param>
+    /// <param name="radiusY">The y-radius of the pie ellipse.</param>
+    /// <param name="startAngle">The pie start angle in degrees.</param>
+    /// <param name="sweepAngle">The pie sweep angle in degrees.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddPie(float x, float y, float radiusX, float radiusY, float startAngle, float sweepAngle)
+        => this.AddPie(x, y, radiusX, radiusY, 0F, startAngle, sweepAngle);
+
+    /// <summary>
+    /// Adds a rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="rectangle">The rectangle bounds.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRectangle(RectangleF rectangle)
+        => this.AddRectangle(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height);
+
+    /// <summary>
+    /// Adds a rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="rectangle">The rectangle bounds.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRectangle(Rectangle rectangle)
+        => this.AddRectangle((RectangleF)rectangle);
+
+    /// <summary>
+    /// Adds a rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the rectangle.</param>
+    /// <param name="y">The y-coordinate of the rectangle.</param>
+    /// <param name="width">The rectangle width.</param>
+    /// <param name="height">The rectangle height.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRectangle(float x, float y, float width, float height)
+        => this.AddPolygon(
+            new PointF(x, y),
+            new PointF(x + width, y),
+            new PointF(x + width, y + height),
+            new PointF(x, y + height));
+
+    /// <summary>
+    /// Adds a rounded rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="rectangle">The rectangle bounds.</param>
+    /// <param name="radius">The x and y radius of each corner.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRoundedRectangle(RectangleF rectangle, float radius)
+        => this.AddRoundedRectangle(rectangle, new SizeF(radius, radius));
+
+    /// <summary>
+    /// Adds a rounded rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="rectangle">The rectangle bounds.</param>
+    /// <param name="radius">The x and y radii of each corner.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRoundedRectangle(RectangleF rectangle, SizeF radius)
+    {
+        _ = this.StartFigure();
+
+        foreach (ILineSegment segment in new RoundedRectanglePolygon(rectangle, radius).LineSegments)
+        {
+            _ = this.AddSegment(segment);
+        }
+
+        return this.CloseFigure();
+    }
+
+    /// <summary>
+    /// Adds a rounded rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="rectangle">The rectangle bounds.</param>
+    /// <param name="radius">The x and y radius of each corner.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRoundedRectangle(Rectangle rectangle, float radius)
+        => this.AddRoundedRectangle((RectangleF)rectangle, radius);
+
+    /// <summary>
+    /// Adds a rounded rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="rectangle">The rectangle bounds.</param>
+    /// <param name="radius">The x and y radii of each corner.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRoundedRectangle(Rectangle rectangle, SizeF radius)
+        => this.AddRoundedRectangle((RectangleF)rectangle, radius);
+
+    /// <summary>
+    /// Adds a rounded rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the rectangle.</param>
+    /// <param name="y">The y-coordinate of the rectangle.</param>
+    /// <param name="width">The rectangle width.</param>
+    /// <param name="height">The rectangle height.</param>
+    /// <param name="radius">The x and y radius of each corner.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRoundedRectangle(float x, float y, float width, float height, float radius)
+        => this.AddRoundedRectangle(new RectangleF(x, y, width, height), radius);
+
+    /// <summary>
+    /// Adds a rounded rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the rectangle.</param>
+    /// <param name="y">The y-coordinate of the rectangle.</param>
+    /// <param name="width">The rectangle width.</param>
+    /// <param name="height">The rectangle height.</param>
+    /// <param name="radius">The x and y radii of each corner.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRoundedRectangle(float x, float y, float width, float height, SizeF radius)
+        => this.AddRoundedRectangle(new RectangleF(x, y, width, height), radius);
+
+    /// <summary>
+    /// Adds a polygon to the current path as a closed figure.
+    /// </summary>
+    /// <param name="points">The polygon vertices.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddPolygon(IEnumerable<PointF> points)
+    {
+        Guard.NotNull(points, nameof(points));
+        return this.AddPolygon([.. points]);
+    }
+
+    /// <summary>
+    /// Adds a polygon to the current path as a closed figure.
+    /// </summary>
+    /// <param name="points">The polygon vertices.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddPolygon(params PointF[] points)
+    {
+        Guard.NotNull(points, nameof(points));
+
+        _ = this.StartFigure();
+        _ = this.AddSegment(new LinearLineSegment(points));
+        return this.CloseFigure();
+    }
+
+    /// <summary>
+    /// Adds a regular polygon to the current path as a closed figure.
+    /// </summary>
+    /// <param name="center">The center point of the polygon.</param>
+    /// <param name="vertices">The number of polygon vertices.</param>
+    /// <param name="radius">The polygon radius.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRegularPolygon(PointF center, int vertices, float radius)
+        => this.AddRegularPolygon(center, vertices, radius, 0F);
+
+    /// <summary>
+    /// Adds a regular polygon to the current path as a closed figure.
+    /// </summary>
+    /// <param name="center">The center point of the polygon.</param>
+    /// <param name="vertices">The number of polygon vertices.</param>
+    /// <param name="radius">The polygon radius.</param>
+    /// <param name="angle">The polygon rotation angle in degrees.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRegularPolygon(PointF center, int vertices, float radius, float angle)
+    {
+        _ = this.StartFigure();
+
+        foreach (ILineSegment segment in new RegularPolygon(center, vertices, radius, angle).LineSegments)
+        {
+            _ = this.AddSegment(segment);
+        }
+
+        return this.CloseFigure();
+    }
+
+    /// <summary>
+    /// Adds a regular polygon to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the polygon center.</param>
+    /// <param name="y">The y-coordinate of the polygon center.</param>
+    /// <param name="vertices">The number of polygon vertices.</param>
+    /// <param name="radius">The polygon radius.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRegularPolygon(float x, float y, int vertices, float radius)
+        => this.AddRegularPolygon(new PointF(x, y), vertices, radius);
+
+    /// <summary>
+    /// Adds a regular polygon to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the polygon center.</param>
+    /// <param name="y">The y-coordinate of the polygon center.</param>
+    /// <param name="vertices">The number of polygon vertices.</param>
+    /// <param name="radius">The polygon radius.</param>
+    /// <param name="angle">The polygon rotation angle in degrees.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRegularPolygon(float x, float y, int vertices, float radius, float angle)
+        => this.AddRegularPolygon(new PointF(x, y), vertices, radius, angle);
+
+    /// <summary>
+    /// Adds a star to the current path as a closed figure.
+    /// </summary>
+    /// <param name="center">The center point of the star.</param>
+    /// <param name="prongs">The number of star prongs.</param>
+    /// <param name="innerRadii">The inner star radius.</param>
+    /// <param name="outerRadii">The outer star radius.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddStar(PointF center, int prongs, float innerRadii, float outerRadii)
+        => this.AddStar(center, prongs, innerRadii, outerRadii, 0F);
+
+    /// <summary>
+    /// Adds a star to the current path as a closed figure.
+    /// </summary>
+    /// <param name="center">The center point of the star.</param>
+    /// <param name="prongs">The number of star prongs.</param>
+    /// <param name="innerRadii">The inner star radius.</param>
+    /// <param name="outerRadii">The outer star radius.</param>
+    /// <param name="angle">The star rotation angle in degrees.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddStar(PointF center, int prongs, float innerRadii, float outerRadii, float angle)
+    {
+        _ = this.StartFigure();
+
+        foreach (ILineSegment segment in new StarPolygon(center, prongs, innerRadii, outerRadii, angle).LineSegments)
+        {
+            _ = this.AddSegment(segment);
+        }
+
+        return this.CloseFigure();
+    }
+
+    /// <summary>
+    /// Adds a star to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the star center.</param>
+    /// <param name="y">The y-coordinate of the star center.</param>
+    /// <param name="prongs">The number of star prongs.</param>
+    /// <param name="innerRadii">The inner star radius.</param>
+    /// <param name="outerRadii">The outer star radius.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddStar(float x, float y, int prongs, float innerRadii, float outerRadii)
+        => this.AddStar(new PointF(x, y), prongs, innerRadii, outerRadii);
+
+    /// <summary>
+    /// Adds a star to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the star center.</param>
+    /// <param name="y">The y-coordinate of the star center.</param>
+    /// <param name="prongs">The number of star prongs.</param>
+    /// <param name="innerRadii">The inner star radius.</param>
+    /// <param name="outerRadii">The outer star radius.</param>
+    /// <param name="angle">The star rotation angle in degrees.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddStar(float x, float y, int prongs, float innerRadii, float outerRadii, float angle)
+        => this.AddStar(new PointF(x, y), prongs, innerRadii, outerRadii, angle);
+
+    /// <summary>
+    /// Starts a new figure but leaves the previous one open.
+    /// </summary>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder StartFigure()
+    {
+        if (!this.currentFigure.IsEmpty)
+        {
+            this.currentFigure = new Figure();
+            this.figures.Add(this.currentFigure);
+        }
+        else
+        {
+            this.currentFigure.IsClosed = false;
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Closes the current figure.
+    /// </summary>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder CloseFigure()
+    {
+        this.currentFigure.IsClosed = true;
+        _ = this.StartFigure();
+
+        return this;
+    }
+
+    /// <summary>
+    /// Closes the current figure.
+    /// </summary>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder CloseAllFigures()
+    {
+        foreach (Figure f in this.figures)
+        {
+            f.IsClosed = true;
+        }
+
+        _ = this.CloseFigure();
+
+        return this;
+    }
+
+    /// <summary>
+    /// Builds a complex polygon from the current working set of working operations.
+    /// </summary>
+    /// <returns>The current set of operations as a complex polygon</returns>
+    public IPath Build()
+    {
+        IPath[] paths = [.. this.figures.Where(x => !x.IsEmpty).Select(x => x.Build())];
+        if (paths.Length == 1)
+        {
+            return paths[0];
+        }
+
+        return new ComplexPolygon(paths);
+    }
+
+    /// <summary>
+    /// Resets this instance, clearing any drawn paths and resetting any transforms.
+    /// </summary>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder Reset()
+    {
+        this.Clear();
+        _ = this.ResetTransform();
+        this.currentPoint = default;
+
+        return this;
+    }
+
+    /// <summary>
+    /// Clears all drawn paths, Leaving any applied transforms.
+    /// </summary>
+    [MemberNotNull(nameof(currentFigure))]
+    public void Clear()
+    {
+        this.currentFigure = new Figure();
+        this.figures.Clear();
+        this.figures.Add(this.currentFigure);
+    }
+
+    private class Figure
+    {
+        private readonly List<ILineSegment> segments = [];
+
+        public bool IsClosed { get; set; }
+
+        public bool IsEmpty => this.segments.Count == 0;
+
+        public void AddSegment(ILineSegment segment) => this.segments.Add(segment);
+
+        public IPath Build()
+            => this.IsClosed
+            ? new Polygon([.. this.segments], true)
+            : new Path(this.segments.ToArray());
+    }
+}

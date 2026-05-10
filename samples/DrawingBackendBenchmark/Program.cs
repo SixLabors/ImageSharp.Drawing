@@ -1,0 +1,56 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+namespace DrawingBackendBenchmark;
+
+/// <summary>
+/// Entry point for the line-drawing backend benchmark sample.
+/// </summary>
+internal static class Program
+{
+    /// <summary>
+    /// Starts the Windows Forms benchmark host.
+    /// </summary>
+    [STAThread]
+    private static void Main()
+    {
+        ApplicationConfiguration.Initialize();
+        Application.Run(new BenchmarkForm());
+    }
+}
+
+/// <summary>
+/// Running statistics for the render-time samples collected during one benchmark run.
+/// </summary>
+internal readonly struct BenchmarkStatistics
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BenchmarkStatistics"/> struct.
+    /// </summary>
+    public BenchmarkStatistics(double meanMilliseconds, double stdDevMilliseconds)
+    {
+        this.MeanMilliseconds = meanMilliseconds;
+        this.StdDevMilliseconds = stdDevMilliseconds;
+    }
+
+    /// <summary>
+    /// Gets the mean render time in milliseconds.
+    /// </summary>
+    public double MeanMilliseconds { get; }
+
+    /// <summary>
+    /// Gets the render-time standard deviation in milliseconds.
+    /// </summary>
+    public double StdDevMilliseconds { get; }
+
+    /// <summary>
+    /// Computes the mean and standard deviation for the current sample window.
+    /// </summary>
+    public static BenchmarkStatistics FromSamples(IReadOnlyList<double> samples)
+    {
+        double mean = samples.Average();
+        double variance = samples.Sum(x => Math.Pow(x - mean, 2)) / samples.Count;
+        double stdDev = Math.Sqrt(variance);
+        return new BenchmarkStatistics(mean, stdDev);
+    }
+}

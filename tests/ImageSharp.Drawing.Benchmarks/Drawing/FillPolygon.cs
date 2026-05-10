@@ -36,9 +36,7 @@ public abstract class FillPolygon
     protected abstract int Height { get; }
 
     protected virtual PointF[][] GetPoints(FeatureCollection features)
-        => features.Features
-        .SelectMany(f => PolygonFactory.GetGeoJsonPoints(f, Matrix3x2.CreateScale(60, 60)))
-        .ToArray();
+        => [.. features.Features.SelectMany(f => PolygonFactory.GetGeoJsonPoints(f, Matrix4x4.CreateScale(60, 60, 1)))];
 
     [GlobalSetup]
     public void Setup()
@@ -48,9 +46,9 @@ public abstract class FillPolygon
         FeatureCollection featureCollection = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
 
         this.points = this.GetPoints(featureCollection);
-        this.polygons = this.points.Select(pts => new Polygon(new LinearLineSegment(pts))).ToArray();
+        this.polygons = [.. this.points.Select(pts => new Polygon(new LinearLineSegment(pts)))];
 
-        this.sdPoints = this.points.Select(pts => pts.Select(p => new SDPointF(p.X, p.Y)).ToArray()).ToArray();
+        this.sdPoints = [.. this.points.Select(pts => pts.Select(p => new SDPointF(p.X, p.Y)).ToArray())];
 
         this.skPaths = [];
         foreach (PointF[] ptArr in this.points.Where(pts => pts.Length > 2))
@@ -102,13 +100,27 @@ public abstract class FillPolygon
 
     [Benchmark]
     public void ImageSharp()
-        => this.image.Mutate(c =>
+        => this.image.Mutate(c => c.Paint(canvas =>
         {
             foreach (Polygon polygon in this.polygons)
             {
-                c.Fill(Color.White, polygon);
+                canvas.Fill(Processing.Brushes.Solid(Color.White), polygon);
             }
-        });
+        }));
+
+    [Benchmark]
+    public void ImageSharp_SingleThreaded()
+    {
+        Configuration configuration = this.image.Configuration.Clone();
+        configuration.MaxDegreeOfParallelism = 1;
+        this.image.Mutate(configuration, c => c.Paint(canvas =>
+        {
+            foreach (Polygon polygon in this.polygons)
+            {
+                canvas.Fill(Processing.Brushes.Solid(Color.White), polygon);
+            }
+        }));
+    }
 
     [Benchmark(Baseline = true)]
     public void SkiaSharp()
@@ -144,9 +156,9 @@ public class FillPolygonMedium : FillPolygon
     {
         Feature state = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
 
-        Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54)
-                              * Matrix3x2.CreateScale(60, 60);
-        return PolygonFactory.GetGeoJsonPoints(state, transform).ToArray();
+        Matrix4x4 transform = Matrix4x4.CreateTranslation(-87, -54, 0)
+                              * Matrix4x4.CreateScale(60, 60, 1);
+        return [.. PolygonFactory.GetGeoJsonPoints(state, transform)];
     }
 
     // ** 11/13/2020 @ Anton's PC ***
@@ -174,8 +186,8 @@ public class FillPolygonSmall : FillPolygon
     {
         Feature state = features.Features.Single(f => (string)f.Properties["NAME"] == "Utah");
 
-        Matrix3x2 transform = Matrix3x2.CreateTranslation(-60, -40)
-                              * Matrix3x2.CreateScale(60, 60);
-        return PolygonFactory.GetGeoJsonPoints(state, transform).ToArray();
+        Matrix4x4 transform = Matrix4x4.CreateTranslation(-60, -40, 0)
+                              * Matrix4x4.CreateScale(60, 60, 1);
+        return [.. PolygonFactory.GetGeoJsonPoints(state, transform)];
     }
 }
