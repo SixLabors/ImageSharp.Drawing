@@ -11,7 +11,8 @@ public class BezierLineSegmentTests
     public void SingleSegmentConstructor()
     {
         CubicBezierLineSegment segment = new(new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 0), new Vector2(20, 0));
-        IReadOnlyList<PointF> points = segment.Flatten().ToArray();
+        PointF[] points = new PointF[segment.LinearVertexCount(Vector2.One)];
+        segment.CopyTo(points, skipFirstPoint: false, Vector2.One);
         Assert.Contains(new Vector2(0, 0), points);
         Assert.Contains(new Vector2(10, 0), points);
         Assert.Contains(new Vector2(20, 0), points);

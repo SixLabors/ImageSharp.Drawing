@@ -228,3 +228,6 @@ artifacts/
 /tests/CodeCoverage/OpenCover.*
 SixLabors.Shapes.Coverage.xml
 /tests/SixLabors.Shapes.Benchmarks/BenchmarkDotNet.Artifacts/results/
+.dotnet
+.codex-*
+.claude

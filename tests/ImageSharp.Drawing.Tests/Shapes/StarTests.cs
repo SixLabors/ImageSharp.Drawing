@@ -53,11 +53,11 @@ public class StarTests
     [Fact]
     public void GeneratesCorrectPath()
     {
-        const float Radius = 5;
-        const float Radius2 = 30;
+        const float radius = 5;
+        const float radius2 = 30;
         int pointsCount = new Random().Next(3, 20);
 
-        Star poly = new(Vector2.Zero, pointsCount, Radius, Radius2, 0);
+        Star poly = new(Vector2.Zero, pointsCount, radius, radius2, 0);
 
         PointF[] points = poly.Flatten().ToArray()[0].Points.ToArray();
 
@@ -78,11 +78,11 @@ public class StarTests
             Assert.Equal(baseline, actual, 3F);
             if (i % 2 == 1)
             {
-                Assert.Equal(Radius, Vector2.Distance(Vector2.Zero, points[i]), 3F);
+                Assert.Equal(radius, Vector2.Distance(Vector2.Zero, points[i]), 3F);
             }
             else
             {
-                Assert.Equal(Radius2, Vector2.Distance(Vector2.Zero, points[i]), 3F);
+                Assert.Equal(radius2, Vector2.Distance(Vector2.Zero, points[i]), 3F);
             }
         }
     }
@@ -90,17 +90,23 @@ public class StarTests
     [Fact]
     public void AngleChangesOnePointToStartAtThatPosition()
     {
-        const double TwoPI = 2 * Math.PI;
-        const float Radius = 10;
-        const float Radius2 = 20;
-        double anAngle = new Random().NextDouble() * TwoPI;
+        const float radius = 10;
+        const float radius2 = 20;
+        const double tolerance = 1e-3D;
+        double anAngleDegrees = new Random().NextDouble() * 360D;
+        double expectedAngleDegrees = anAngleDegrees + 90D;
+        if (expectedAngleDegrees >= 360D)
+        {
+            expectedAngleDegrees -= 360D;
+        }
 
-        Star poly = new(Vector2.Zero, 3, Radius, Radius2, (float)anAngle);
-        ISimplePath[] points = poly.Flatten().ToArray();
+        Star poly = new(Vector2.Zero, 3, radius, radius2, (float)anAngleDegrees);
+        ISimplePath[] points = [.. poly.Flatten()];
 
-        IEnumerable<double> allAngles = points[0].Points.ToArray().Select(b => Math.Atan2(b.Y, b.X))
-            .Select(x => x < 0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI
+        IEnumerable<double> allAngles = points[0].Points.ToArray()
+            .Select(b => GeometryUtilities.RadianToDegree((float)Math.Atan2(b.Y, b.X)))
+            .Select(x => x < 0 ? x + 360D : x); // normalise it from +/- 180 to 0 to 360
 
-        Assert.Contains(allAngles, a => Math.Abs(a - anAngle) > 0.000001);
+        Assert.Contains(allAngles, a => Math.Abs(a - expectedAngleDegrees) < tolerance);
     }
 }

@@ -40,6 +40,95 @@ public class PathBuilderTests
     }
 
     [Fact]
+    public void AddPieBuildsClosedFigure()
+    {
+        PathBuilder builder = new();
+
+        builder.AddPie(new PointF(10, 20), new SizeF(30, 40), 0, 90);
+
+        Assert.IsType<Polygon>(builder.Build());
+    }
+
+    [Fact]
+    public void AddPieRotationOverloadMatchesPieShape()
+    {
+        PathBuilder builder = new();
+        builder.AddPie(10, 20, 30, 40, 15, 120, 210);
+
+        Polygon actual = Assert.IsType<Polygon>(builder.Build());
+        Pie expected = new(10, 20, 30, 40, 15, 120, 210);
+
+        AssertEquivalentPaths(actual, expected);
+    }
+
+    [Fact]
+    public void AddPieNoRotationOverloadMatchesPieShape()
+    {
+        PathBuilder builder = new();
+        builder.AddPie(new PointF(10, 20), new SizeF(30, 40), 15, 120);
+
+        Polygon actual = Assert.IsType<Polygon>(builder.Build());
+        Pie expected = new(new PointF(10, 20), new SizeF(30, 40), 15, 120);
+
+        AssertEquivalentPaths(actual, expected);
+    }
+
+    [Fact]
+    public void AddRectangleMatchesRectangularPolygon()
+    {
+        PathBuilder builder = new();
+        builder.AddRectangle(new RectangleF(10, 20, 30, 40));
+
+        Polygon actual = Assert.IsType<Polygon>(builder.Build());
+        RectangularPolygon expected = new(10, 20, 30, 40);
+
+        AssertEquivalentPaths(actual, expected);
+    }
+
+    [Fact]
+    public void AddPolygonEnumerableMatchesPolygonShape()
+    {
+        PathBuilder builder = new();
+        PointF[] points =
+        [
+            new PointF(10, 20),
+            new PointF(30, 40),
+            new PointF(15, 45)
+        ];
+
+        builder.AddPolygon(new List<PointF>(points));
+
+        Polygon actual = Assert.IsType<Polygon>(builder.Build());
+        Polygon expected = new(points);
+
+        AssertEquivalentPaths(actual, expected);
+    }
+
+    [Fact]
+    public void AddRegularPolygonMatchesRegularPolygonShape()
+    {
+        PathBuilder builder = new();
+        builder.AddRegularPolygon(new PointF(10, 20), 5, 30, 45);
+
+        Polygon actual = Assert.IsType<Polygon>(builder.Build());
+        RegularPolygon expected = new(new PointF(10, 20), 5, 30, 45);
+
+        AssertEquivalentPaths(actual, expected);
+    }
+
+    [Fact]
+    public void AddStarMatchesStarShape()
+    {
+        PathBuilder builder = new();
+        builder.AddStar(new PointF(10, 20), 5, 15, 30, 45);
+
+        Polygon actual = Assert.IsType<Polygon>(builder.Build());
+        Star expected = new(new PointF(10, 20), 5, 15, 30, 45);
+
+        AssertEquivalentPaths(actual, expected);
+    }
+
+    [Fact]
     public void DrawLinesOpenFigure()
     {
         PathBuilder builder = new();
@@ -61,7 +150,7 @@ public class PathBuilderTests
         builder.AddLine(10, 90, 50, 50);
 
         ComplexPolygon shape = Assert.IsType<ComplexPolygon>(builder.Build());
-        IPath[] p = shape.Paths.ToArray();
+        IPath[] p = [.. shape.Paths];
         Assert.Equal(2, p.Length);
         Assert.IsType<Path>(p[0]);
         Assert.IsType<Path>(p[1]);
@@ -79,7 +168,7 @@ public class PathBuilderTests
         builder.AddLine(10, 90, 50, 50);
         builder.CloseFigure();
         ComplexPolygon shape = Assert.IsType<ComplexPolygon>(builder.Build());
-        IPath[] p = shape.Paths.ToArray();
+        IPath[] p = [.. shape.Paths];
 
         Assert.Equal(2, p.Length);
         Assert.IsType<Path>(p[0]);
@@ -98,7 +187,7 @@ public class PathBuilderTests
         builder.AddLine(10, 90, 50, 50);
         ComplexPolygon shape = Assert.IsType<ComplexPolygon>(builder.Build());
 
-        IPath[] p = shape.Paths.ToArray();
+        IPath[] p = [.. shape.Paths];
         Assert.Equal(2, p.Length);
         Assert.IsType<Polygon>(p[0]);
         Assert.IsType<Path>(p[1]);
@@ -116,7 +205,7 @@ public class PathBuilderTests
         builder.AddLine(10, 90, 50, 50);
         ComplexPolygon shape = Assert.IsType<ComplexPolygon>(builder.Build());
 
-        IPath[] p = shape.Paths.ToArray();
+        IPath[] p = [.. shape.Paths];
         Assert.Equal(2, p.Length);
         Assert.IsType<Path>(p[0]);
         Assert.IsType<Path>(p[1]);
@@ -124,7 +213,7 @@ public class PathBuilderTests
         builder.CloseAllFigures();
         shape = Assert.IsType<ComplexPolygon>(builder.Build());
 
-        p = shape.Paths.ToArray();
+        p = [.. shape.Paths];
         Assert.Equal(2, p.Length);
         Assert.IsType<Polygon>(p[0]);
         Assert.IsType<Polygon>(p[1]);
@@ -164,7 +253,7 @@ public class PathBuilderTests
         Vector2 point1 = new(10, 10);
         Vector2 point2 = new(10, 90);
         Vector2 point3 = new(50, 50);
-        Matrix3x2 matrix = Matrix3x2.CreateTranslation(new Vector2(5, 5));
+        Matrix4x4 matrix = Matrix4x4.CreateTranslation(5, 5, 0);
         PathBuilder builder = new(matrix);
 
         builder.AddLines(point1, point2, point3);
@@ -178,7 +267,7 @@ public class PathBuilderTests
         Vector2 point1 = new(10, 10);
         Vector2 point2 = new(10, 90);
         Vector2 point3 = new(50, 50);
-        Matrix3x2 matrix = Matrix3x2.CreateTranslation(new Vector2(100, 100));
+        Matrix4x4 matrix = Matrix4x4.CreateTranslation(100, 100, 0);
         PathBuilder builder = new();
 
         builder.AddLines(point1, point2, point3);
@@ -189,7 +278,7 @@ public class PathBuilderTests
         builder.ResetOrigin();
         builder.AddLines(point1, point2, point3);
 
-        IPath[] shape = Assert.IsType<ComplexPolygon>(builder.Build()).Paths.ToArray();
+        IPath[] shape = [.. Assert.IsType<ComplexPolygon>(builder.Build()).Paths];
         Assert.Equal(10, shape[0].Bounds.Left);
         Assert.Equal(110, shape[1].Bounds.Left);
         Assert.Equal(10, shape[0].Bounds.Left);
@@ -202,15 +291,29 @@ public class PathBuilderTests
         Vector2 point2 = new(10, 90);
         Vector2 point3 = new(50, 50);
         Vector2 origin = new(-50, -100);
-        PathBuilder builder = new(Matrix3x2.CreateScale(10));
+        PathBuilder builder = new(Matrix4x4.CreateScale(10));
 
         builder.AddLines(point1, point2, point3);
 
         builder.SetOrigin(origin); // new origin is scaled by default transform
         builder.StartFigure();
         builder.AddLines(point1, point2, point3);
-        IPath[] shape = Assert.IsType<ComplexPolygon>(builder.Build()).Paths.ToArray();
+        IPath[] shape = [.. Assert.IsType<ComplexPolygon>(builder.Build()).Paths];
         Assert.Equal(100, shape[0].Bounds.Left);
         Assert.Equal(-400, shape[1].Bounds.Left);
+    }
+
+    private static void AssertEquivalentPaths(Polygon actual, IPath expected)
+    {
+        PointF[] actualPoints = actual.Flatten().Single().Points.ToArray();
+        PointF[] expectedPoints = expected.Flatten().Single().Points.ToArray();
+
+        Assert.Equal(expectedPoints.Length, actualPoints.Length);
+
+        ApproximateFloatComparer comparer = new(1e-4F);
+        for (int i = 0; i < expectedPoints.Length; i++)
+        {
+            Assert.Equal(expectedPoints[i], actualPoints[i], comparer);
+        }
     }
 }

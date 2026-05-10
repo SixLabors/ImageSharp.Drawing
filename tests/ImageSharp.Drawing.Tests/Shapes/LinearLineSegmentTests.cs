@@ -11,8 +11,9 @@ public class LinearLineSegmentTests
     public void SingleSegmentConstructor()
     {
         LinearLineSegment segment = new(new Vector2(0, 0), new Vector2(10, 10));
-        IReadOnlyList<PointF> flatPath = segment.Flatten().ToArray();
-        Assert.Equal(2, flatPath.Count);
+        PointF[] flatPath = new PointF[segment.LinearVertexCount(Vector2.One)];
+        segment.CopyTo(flatPath, skipFirstPoint: false, Vector2.One);
+        Assert.Equal(2, flatPath.Length);
         Assert.Equal(new PointF(0, 0), flatPath[0]);
         Assert.Equal(new PointF(10, 10), flatPath[1]);
     }
