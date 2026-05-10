@@ -5,11 +5,13 @@ using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
+using Brush = SixLabors.ImageSharp.Drawing.Processing.Brush;
 using Brushes = SixLabors.ImageSharp.Drawing.Processing.Brushes;
 using Color = SixLabors.ImageSharp.Color;
 using Font = SixLabors.Fonts.Font;
 using FontFamily = SixLabors.Fonts.FontFamily;
 using FontStyle = SixLabors.Fonts.FontStyle;
+using Pen = SixLabors.ImageSharp.Drawing.Processing.Pen;
 using Pens = SixLabors.ImageSharp.Drawing.Processing.Pens;
 using PointF = SixLabors.ImageSharp.PointF;
 using Size = SixLabors.ImageSharp.Size;
@@ -67,10 +69,28 @@ internal sealed class ManualTextFlowScene : RenderScene
     private static readonly Color SlotColor = Color.SteelBlue.WithAlpha(.24F);
     private static readonly Color CircleColor = Color.SteelBlue.WithAlpha(.18F);
     private static readonly Color TextColor = Color.ParseHex("#111827");
+    private static readonly Brush BackgroundBrush = Brushes.Solid(BackgroundColor);
+    private static readonly Brush PageBrush = Brushes.Solid(PageColor);
+    private static readonly Brush SlotBrush = Brushes.Solid(SlotColor);
+    private static readonly Brush ObstacleBrush = Brushes.Solid(CircleColor);
+    private static readonly Brush TextBrush = Brushes.Solid(TextColor);
+    private static readonly Pen PageOutlinePen = Pens.Solid(PageOutlineColor, 1.5F);
+    private static readonly Pen ObstacleOutlinePen = Pens.Solid(Color.SteelBlue, 2F);
 
     private readonly Font bodyFont;
     private readonly TextBlock textBlock;
+    private readonly List<BandInterval> scanBlockedIntervals = new(16);
+    private readonly List<BandInterval> blockedIntervals = new(16);
+    private readonly List<BandInterval> slots = new(8);
+    private readonly List<float> scanYs = new(8);
+    private readonly List<float> intersections = new(16);
     private PointF obstacleCenter;
+    private ManualTextFlowObstacleShape obstacleShape = ManualTextFlowObstacleShape.Circle;
+    private IPath? cachedObstaclePath;
+    private LinearGeometry? cachedObstacleGeometry;
+    private PointF cachedObstacleCenter;
+    private float cachedObstacleSize;
+    private ManualTextFlowObstacleShape cachedObstacleShape;
     private bool hasPointer;
 
     public ManualTextFlowScene()
@@ -98,12 +118,26 @@ internal sealed class ManualTextFlowScene : RenderScene
     /// <summary>
     /// Gets or sets the closed shape used as the flow obstacle.
     /// </summary>
-    public ManualTextFlowObstacleShape ObstacleShape { get; set; } = ManualTextFlowObstacleShape.Circle;
+    public ManualTextFlowObstacleShape ObstacleShape
+    {
+        get => this.obstacleShape;
+        set
+        {
+            if (this.obstacleShape == value)
+            {
+                return;
+            }
+
+            this.obstacleShape = value;
+            this.cachedObstaclePath = null;
+            this.cachedObstacleGeometry = null;
+        }
+    }
 
     public override void Paint(DrawingCanvas canvas, TimeSpan deltaTime)
     {
         Size viewportSize = canvas.Bounds.Size;
-        canvas.Fill(Brushes.Solid(BackgroundColor), canvas.Bounds);
+        canvas.Fill(BackgroundBrush, canvas.Bounds);
 
         // The page rectangle is the region we subtract obstacle coverage from.
         // Text slots are always produced within these left/right limits.
@@ -132,23 +166,33 @@ internal sealed class ManualTextFlowScene : RenderScene
         // The visible obstacle is deliberately just an IPath. The text-flow code
         // below never needs to know whether this came from a circle, star, rectangle,
         // or any other closed shape that can be linearized by ImageSharp.Drawing.
-        IPath obstaclePath = this.CreateObstaclePath(obstacleCenter, obstacleSize);
-        LinearGeometry obstacleGeometry = obstaclePath.ToLinearGeometry(Vector2.One);
+        // Linearization is the expensive part, so reuse it until the obstacle input
+        // changes through pointer movement, resizing, or the shape selector.
+        IPath? obstaclePath = this.cachedObstaclePath;
+        LinearGeometry? obstacleGeometry = this.cachedObstacleGeometry;
+        if (obstaclePath is null
+            || obstacleGeometry is null
+            || !this.cachedObstacleCenter.Equals(obstacleCenter)
+            || this.cachedObstacleSize != obstacleSize
+            || this.cachedObstacleShape != this.obstacleShape)
+        {
+            obstaclePath = this.CreateObstaclePath(obstacleCenter, obstacleSize);
+            obstacleGeometry = obstaclePath.ToLinearGeometry(Vector2.One);
+            this.cachedObstaclePath = obstaclePath;
+            this.cachedObstacleGeometry = obstacleGeometry;
+            this.cachedObstacleCenter = obstacleCenter;
+            this.cachedObstacleSize = obstacleSize;
+            this.cachedObstacleShape = this.obstacleShape;
+        }
 
-        canvas.Fill(Brushes.Solid(PageColor), new RectangularPolygon(pageLeft, pageTop, pageRight - pageLeft, pageBottom - pageTop));
-        canvas.Draw(Pens.Solid(PageOutlineColor, 1.5F), new RectangularPolygon(pageLeft, pageTop, pageRight - pageLeft, pageBottom - pageTop));
-        canvas.Fill(Brushes.Solid(CircleColor), obstaclePath);
-        canvas.Draw(Pens.Solid(Color.SteelBlue, 2F), obstaclePath);
+        canvas.Fill(PageBrush, new RectangularPolygon(pageLeft, pageTop, pageRight - pageLeft, pageBottom - pageTop));
+        canvas.Draw(PageOutlinePen, new RectangularPolygon(pageLeft, pageTop, pageRight - pageLeft, pageBottom - pageTop));
+        canvas.Fill(ObstacleBrush, obstaclePath);
+        canvas.Draw(ObstacleOutlinePen, obstaclePath);
 
         // Rows can be split into several usable slots by an arbitrary closed path.
-        // Keep the working buffers outside the row loop so pointer movement does
-        // not introduce avoidable per-line allocations.
-        List<BandInterval> scanBlockedIntervals = new(16);
-        List<BandInterval> blockedIntervals = new(16);
-        List<BandInterval> slots = new(8);
-        List<float> scanYs = new(8);
-        List<float> intersections = new(16);
-
+        // The scene owns the temporary buffers so continuous repainting does not
+        // allocate fresh lists for every row of every frame.
         while (hasMoreText && y < pageBottom)
         {
             float rowProbeHeight = this.bodyFont.Size * 1.45F;
@@ -167,16 +211,16 @@ internal sealed class ManualTextFlowScene : RenderScene
                 pageRight,
                 obstaclePadding,
                 minSlotWidth,
-                scanBlockedIntervals,
-                blockedIntervals,
-                slots,
-                scanYs,
-                intersections);
+                this.scanBlockedIntervals,
+                this.blockedIntervals,
+                this.slots,
+                this.scanYs,
+                this.intersections);
 
             float rowHeight = rowProbeHeight;
-            for (int i = 0; i < slots.Count && hasMoreText; i++)
+            for (int i = 0; i < this.slots.Count && hasMoreText; i++)
             {
-                BandInterval slot = slots[i];
+                BandInterval slot = this.slots[i];
                 float slotWidth = slot.Width;
 
                 // Each MoveNext call consumes just enough prepared text for the
@@ -194,8 +238,8 @@ internal sealed class ManualTextFlowScene : RenderScene
                 // The translucent slot fill is a visual aid for the sample. It
                 // makes the row splitting visible so readers can compare the
                 // available rectangles with the selected obstacle shape.
-                canvas.Fill(Brushes.Solid(SlotColor), new RectangularPolygon(slot.Left, y, slotWidth, lineHeight));
-                canvas.DrawText(line, new PointF(slot.Left, y), Brushes.Solid(TextColor), pen: null);
+                canvas.Fill(SlotBrush, new RectangularPolygon(slot.Left, y, slotWidth, lineHeight));
+                canvas.DrawText(line, new PointF(slot.Left, y), TextBrush, pen: null);
 
                 rowHeight = MathF.Max(rowHeight, lineHeight);
             }

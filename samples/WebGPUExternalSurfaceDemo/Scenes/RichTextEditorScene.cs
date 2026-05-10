@@ -6,11 +6,13 @@ using SixLabors.Fonts;
 using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
+using Brush = SixLabors.ImageSharp.Drawing.Processing.Brush;
 using Brushes = SixLabors.ImageSharp.Drawing.Processing.Brushes;
 using Color = SixLabors.ImageSharp.Color;
 using Font = SixLabors.Fonts.Font;
 using FontFamily = SixLabors.Fonts.FontFamily;
 using FontStyle = SixLabors.Fonts.FontStyle;
+using Pen = SixLabors.ImageSharp.Drawing.Processing.Pen;
 using Pens = SixLabors.ImageSharp.Drawing.Processing.Pens;
 using PointF = SixLabors.ImageSharp.PointF;
 using RectangleF = SixLabors.ImageSharp.RectangleF;
@@ -44,6 +46,15 @@ internal sealed class RichTextEditorScene : RenderScene
     private static readonly Color CaretColor = Color.ParseHex("#FF5A1F");
     private static readonly Color GuideColor = Color.ParseHex("#D6DEE6");
     private static readonly EditorStyle DefaultStyle = new(FontStyle.Regular, TextDecorations.None, Color.ParseHex("#17212B"), 30F);
+    private static readonly Brush BackgroundBrush = Brushes.Solid(BackgroundColor);
+    private static readonly Brush EditorBrush = Brushes.Solid(EditorColor);
+    private static readonly Brush SelectionBrush = Brushes.Solid(SelectionColor);
+    private static readonly Brush DefaultTextBrush = Brushes.Solid(DefaultStyle.Fill);
+    private static readonly Pen BorderPen = Pens.Solid(BorderColor, 1.5F);
+    private static readonly Pen SelectionBorderPen = Pens.Solid(SelectionBorderColor, 1.5F);
+    private static readonly Pen CaretPen = Pens.Solid(CaretColor, 3F);
+    private static readonly Pen SecondaryCaretPen = Pens.Solid(CaretColor, 1.5F);
+    private static readonly Pen GuidePen = Pens.Solid(GuideColor, 1F);
 
     private readonly Dictionary<FontKey, Font> fontCache = [];
 
@@ -51,6 +62,7 @@ internal sealed class RichTextEditorScene : RenderScene
     // expose grapheme indices for interaction, so the editor can apply formatting
     // without splitting surrogate pairs, combining sequences, or emoji clusters.
     private readonly List<StyleRun> runs = [];
+    private readonly List<RichTextRun> richTextRuns = [];
 
     private FontFamily fontFamily;
 
@@ -65,9 +77,12 @@ internal sealed class RichTextEditorScene : RenderScene
     private TextMetrics? lastMetrics;
     private RectangleF lastEditorBounds;
     private PointF lastTextOrigin;
+    private RichTextOptions? cachedTextOptions;
     private CaretPosition caret;
     private CaretPosition selectionAnchor;
     private bool hasLayout;
+    private bool metricsDirty = true;
+    private bool textOptionsDirty = true;
     private bool caretGeometryDirty = true;
 
     /// <summary>
@@ -154,13 +169,17 @@ internal sealed class RichTextEditorScene : RenderScene
     {
         Size viewportSize = canvas.Bounds.Size;
         RectangleF editorBounds = CreateEditorBounds(viewportSize);
-        RichTextOptions textOptions = this.CreateTextOptions(editorBounds);
-        bool layoutChanged = !this.hasLayout || !this.lastEditorBounds.Equals(editorBounds);
+        bool boundsChanged = !this.hasLayout || !this.lastEditorBounds.Equals(editorBounds);
+        RichTextOptions textOptions = this.CreateTextOptions(editorBounds, boundsChanged);
+        bool layoutChanged = boundsChanged || this.metricsDirty || this.lastMetrics is null;
 
         // Measurement is the authoritative editor layout. The same metrics object
         // drives drawing, hit testing, caret navigation, and selection geometry so
-        // the sample never has to reproduce layout decisions itself.
-        TextMetrics metrics = canvas.MeasureText(textOptions, this.text);
+        // the sample never has to reproduce layout decisions itself. Reuse the
+        // cached metrics while only the caret or selection changes.
+        TextMetrics metrics = layoutChanged
+            ? canvas.MeasureText(textOptions, this.text)
+            : this.lastMetrics!;
 
         // Input events arrive between frames. Cache the most recent layout so mouse
         // hit testing and keyboard navigation can use the exact geometry that was
@@ -169,6 +188,7 @@ internal sealed class RichTextEditorScene : RenderScene
         this.lastEditorBounds = editorBounds;
         this.lastTextOrigin = textOptions.Origin;
         this.hasLayout = true;
+        this.metricsDirty = false;
 
         if (this.text.Length == 0)
         {
@@ -188,9 +208,9 @@ internal sealed class RichTextEditorScene : RenderScene
             }
         }
 
-        canvas.Fill(Brushes.Solid(BackgroundColor), canvas.Bounds);
-        canvas.Fill(Brushes.Solid(EditorColor), new RectangularPolygon(editorBounds));
-        canvas.Draw(Pens.Solid(BorderColor, 1.5F), new RectangularPolygon(editorBounds));
+        canvas.Fill(BackgroundBrush, canvas.Bounds);
+        canvas.Fill(EditorBrush, new RectangularPolygon(editorBounds));
+        canvas.Draw(BorderPen, new RectangularPolygon(editorBounds));
 
         IPath editorClip = new RectangularPolygon(editorBounds);
 
@@ -198,12 +218,12 @@ internal sealed class RichTextEditorScene : RenderScene
         // The clipping scope applies only to text so the editor chrome remains crisp.
         this.DrawSelection(canvas, metrics);
         canvas.Save(new DrawingOptions(), editorClip);
-        canvas.DrawText(textOptions, this.text, Brushes.Solid(DefaultStyle.Fill), pen: null);
+        canvas.DrawText(textOptions, this.text, DefaultTextBrush, pen: null);
         canvas.Restore();
         this.DrawCaret(canvas);
 
         canvas.DrawLine(
-            Pens.Solid(GuideColor, 1F),
+            GuidePen,
             new PointF(editorBounds.Left + EditorPadding, editorBounds.Top + EditorPadding - 8F),
             new PointF(editorBounds.Right - EditorPadding, editorBounds.Top + EditorPadding - 8F));
     }
@@ -414,6 +434,8 @@ internal sealed class RichTextEditorScene : RenderScene
 
         this.fontFamily = family;
         this.fontCache.Clear();
+        this.metricsDirty = true;
+        this.textOptionsDirty = true;
         this.caretGeometryDirty = true;
     }
 
@@ -444,8 +466,16 @@ internal sealed class RichTextEditorScene : RenderScene
         return false;
     }
 
-    private RichTextOptions CreateTextOptions(RectangleF editorBounds)
+    private RichTextOptions CreateTextOptions(RectangleF editorBounds, bool boundsChanged)
     {
+        // RichTextOptions owns the drawing runs, fonts, and paint objects used by
+        // both measurement and drawing. Reuse it while only caret/selection state
+        // changes; rebuild it when text styling or the editor rectangle changes.
+        if (!this.textOptionsDirty && !boundsChanged && this.cachedTextOptions is not null)
+        {
+            return this.cachedTextOptions;
+        }
+
         float wrappingLength = Math.Max(1F, editorBounds.Width - (EditorPadding * 2F));
         PointF origin = new(editorBounds.Left + EditorPadding, editorBounds.Top + EditorPadding);
 
@@ -453,7 +483,7 @@ internal sealed class RichTextEditorScene : RenderScene
         // typing at the end of a wrapped line behaves like a real text editor.
         // Paragraph layout can trim that whitespace, but editor layout needs it
         // available for caret movement, selection, and subsequent insertion.
-        return new RichTextOptions(this.GetFont(DefaultStyle))
+        this.cachedTextOptions = new RichTextOptions(this.GetFont(DefaultStyle))
         {
             Origin = origin,
             WrappingLength = wrappingLength,
@@ -462,18 +492,23 @@ internal sealed class RichTextEditorScene : RenderScene
             TextInteractionMode = TextInteractionMode.Editor,
             TextRuns = this.BuildTextRuns(),
         };
+
+        this.textOptionsDirty = false;
+
+        return this.cachedTextOptions;
     }
 
     private List<RichTextRun> BuildTextRuns()
     {
+        this.richTextRuns.Clear();
+
         if (this.text.Length == 0)
         {
             // Text runs describe spans in existing text. Empty editor content is
             // represented by the insertion caret alone, not by a synthetic run.
-            return [];
+            return this.richTextRuns;
         }
 
-        List<RichTextRun> textRuns = new(this.runs.Count);
         foreach (StyleRun run in this.runs)
         {
             if (run.End <= run.Start)
@@ -484,7 +519,7 @@ internal sealed class RichTextEditorScene : RenderScene
             // Each RichTextRun maps one editor style span to the drawing pipeline.
             // The run range remains in grapheme units; the Fonts layer performs the
             // necessary mapping back to shaped glyphs and UTF-16 source positions.
-            textRuns.Add(new RichTextRun
+            this.richTextRuns.Add(new RichTextRun
             {
                 Start = run.Start,
                 End = run.End,
@@ -494,7 +529,7 @@ internal sealed class RichTextEditorScene : RenderScene
             });
         }
 
-        return textRuns;
+        return this.richTextRuns;
     }
 
     private void DrawSelection(DrawingCanvas canvas, TextMetrics metrics)
@@ -513,11 +548,11 @@ internal sealed class RichTextEditorScene : RenderScene
             // Selection rectangles come from the same interaction API as hit testing and caret movement.
             // That keeps mixed-bidi ranges visually split instead of filling across reordered gaps.
             canvas.Fill(
-                Brushes.Solid(SelectionColor),
+                SelectionBrush,
                 new RectangularPolygon(rectangle.X, rectangle.Y, width, height));
 
             canvas.Draw(
-                Pens.Solid(SelectionBorderColor, 1.5F),
+                SelectionBorderPen,
                 new RectangularPolygon(rectangle.X, rectangle.Y, width, height));
         }
     }
@@ -536,7 +571,7 @@ internal sealed class RichTextEditorScene : RenderScene
             // Empty text has no layout metrics, but the editor still needs an insertion
             // caret at the same origin where the first typed grapheme will be measured.
             canvas.DrawLine(
-                Pens.Solid(CaretColor, 3F),
+                CaretPen,
                 this.lastTextOrigin,
                 new PointF(this.lastTextOrigin.X, this.lastTextOrigin.Y + caretHeight));
 
@@ -544,14 +579,14 @@ internal sealed class RichTextEditorScene : RenderScene
         }
 
         canvas.DrawLine(
-            Pens.Solid(CaretColor, 3F),
+            CaretPen,
             new PointF(this.caret.Start.X, this.caret.Start.Y),
             new PointF(this.caret.End.X, this.caret.End.Y));
 
         if (this.caret.HasSecondary)
         {
             canvas.DrawLine(
-                Pens.Solid(CaretColor, 1.5F),
+                SecondaryCaretPen,
                 new PointF(this.caret.SecondaryStart.X, this.caret.SecondaryStart.Y),
                 new PointF(this.caret.SecondaryEnd.X, this.caret.SecondaryEnd.Y));
         }
@@ -856,8 +891,8 @@ internal sealed class RichTextEditorScene : RenderScene
             }
         }
 
-        // Keep the run table compact. This matters for the sample because every
-        // paint converts style runs into RichTextRun entries for layout.
+        // Keep the source run table compact so invalidating the cached layout has
+        // less work to do when the next paint rebuilds RichTextRun entries.
         for (int i = 1; i < this.runs.Count; i++)
         {
             StyleRun previous = this.runs[i - 1];
@@ -869,6 +904,9 @@ internal sealed class RichTextEditorScene : RenderScene
                 i--;
             }
         }
+
+        this.metricsDirty = true;
+        this.textOptionsDirty = true;
     }
 
     private EditorStyle GetStyleAt(int graphemeIndex)

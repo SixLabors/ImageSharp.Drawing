@@ -223,7 +223,6 @@ public abstract class GradientBrush : Brush
             ColorStop localGradientFrom = this.colorStops[0];
             ColorStop localGradientTo = default;
 
-            // TODO: ensure colorStops has at least 2 items (technically 1 would be okay, but that's no gradient)
             foreach (ColorStop colorStop in this.colorStops)
             {
                 localGradientTo = colorStop;

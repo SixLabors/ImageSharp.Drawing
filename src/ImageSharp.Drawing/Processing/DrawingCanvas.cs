@@ -165,11 +165,11 @@ public abstract partial class DrawingCanvas : IDisposable
         Pen? pen);
 
     /// <summary>
-    /// Draws text along a path onto this canvas.
+    /// Draws text along a path baseline onto this canvas.
     /// </summary>
     /// <param name="textOptions">The text rendering options.</param>
     /// <param name="text">The text to draw.</param>
-    /// <param name="path">The path to draw the text along.</param>
+    /// <param name="path">The path used as the text baseline in local canvas coordinates.</param>
     /// <param name="brush">Optional brush used to fill glyphs.</param>
     /// <param name="pen">Optional pen used to outline glyphs.</param>
     public abstract void DrawText(
@@ -195,10 +195,10 @@ public abstract partial class DrawingCanvas : IDisposable
         Pen? pen);
 
     /// <summary>
-    /// Draws a prepared text block along a path onto this canvas.
+    /// Draws a prepared text block along a path baseline onto this canvas.
     /// </summary>
     /// <param name="textBlock">The prepared text block to draw.</param>
-    /// <param name="path">The path to draw the text along.</param>
+    /// <param name="path">The path used as the text baseline in local canvas coordinates.</param>
     /// <param name="wrappingLength">The wrapping length in pixels. Use <c>-1</c> to disable wrapping.</param>
     /// <param name="brush">Optional brush used to fill glyphs.</param>
     /// <param name="pen">Optional pen used to outline glyphs.</param>
@@ -223,10 +223,10 @@ public abstract partial class DrawingCanvas : IDisposable
         Pen? pen);
 
     /// <summary>
-    /// Draws one prepared line layout along a path onto this canvas.
+    /// Draws one prepared line layout along a path baseline onto this canvas.
     /// </summary>
     /// <param name="lineLayout">The prepared line layout to draw.</param>
-    /// <param name="path">The path to draw the text along.</param>
+    /// <param name="path">The path used as the text baseline in local canvas coordinates.</param>
     /// <param name="brush">Optional brush used to fill glyphs.</param>
     /// <param name="pen">Optional pen used to outline glyphs.</param>
     public abstract void DrawText(
@@ -247,25 +247,11 @@ public abstract partial class DrawingCanvas : IDisposable
         IEnumerable<GlyphPathCollection> glyphs);
 
     /// <summary>
-    /// Measures the full set of layout metrics for the supplied text in a single pass.
+    /// Measures the full set of layout metrics for the supplied text.
     /// </summary>
     /// <param name="textOptions">The text shaping and layout options.</param>
     /// <param name="text">The text to measure.</param>
-    /// <returns>A <see cref="TextMetrics"/> value containing every measurement for the laid-out text.</returns>
-    /// <remarks>
-    /// <para>
-    /// The returned <see cref="TextMetrics"/> exposes logical advance, rendered bounds, normalized size,
-    /// combined renderable bounds, per-character entries, and per-line metrics. The text is shaped and
-    /// laid out once, so this is the cheapest option when more than one measurement is required.
-    /// </para>
-    /// <para>
-    /// When only one or two values are required, call the granular overloads on
-    /// <see cref="TextMeasurer"/> (for example <see cref="TextMeasurer.MeasureAdvance(ReadOnlySpan{char}, TextOptions)"/>,
-    /// <see cref="TextMeasurer.MeasureBounds(ReadOnlySpan{char}, TextOptions)"/>, or
-    /// <see cref="TextMeasurer.CountLines(ReadOnlySpan{char}, TextOptions)"/>) directly.
-    /// Those overloads skip the per-character and per-line array materialization performed here.
-    /// </para>
-    /// </remarks>
+    /// <returns>A <see cref="TextMetrics"/> value containing the metrics for the laid-out text.</returns>
     public abstract TextMetrics MeasureText(RichTextOptions textOptions, ReadOnlySpan<char> text);
 
     /// <summary>

@@ -30,7 +30,7 @@ Typography sheet covering the rich-text surface:
 - A "Wrapping and measurement" panel that wraps text with `WrappingLength` and uses `TextMeasurer.MeasureRenderableBounds` (advance ∪ ink) to size a callout that never clips.
 - A "Bidi and fallback" panel mixing Latin, Arabic, and Hebrew with `FallbackFontFamilies = [ArabicFontFamily]`.
 - A "Vertical mixed layout" panel using `LayoutMode.VerticalMixedRightLeft` for traditional Korean vertical typography with sideways Latin and digit runs.
-- Curve text driven by `RichTextOptions.Path = bezier` and `WrappingLength = bezier.ComputeLength()`.
+- Curve text drawn with the explicit `canvas.DrawText(options, text, bezier, brush, pen)` path overload and `WrappingLength = bezier.ComputeLength()`.
 
 ### `04-image-processing-mask.png`
 Image-compositing scene demonstrating four ways a photograph (`tests/Images/Input/Jpg/baseline/Lake.jpg`, linked into this project via `Content Include`) interacts with an `IPath`:
