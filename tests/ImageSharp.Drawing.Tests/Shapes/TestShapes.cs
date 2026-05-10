@@ -20,7 +20,7 @@ public static class TestShapes
                 new Vector2(78.26f, 97.0461f))).Translate(center - segmentRotationCenter);
 
         float angle = rotationPos * ((float)Math.PI / 3);
-        return segment.Transform(Matrix3x2.CreateRotation(angle, center));
+        return segment.Transform(new Matrix4x4(Matrix3x2.CreateRotation(angle, center)));
     }
 
     public static IPath IrisSegment(float size, int rotationPos)
@@ -39,9 +39,9 @@ public static class TestShapes
 
         float angle = rotationPos * ((float)Math.PI / 3);
 
-        IPath rotated = segment.Transform(Matrix3x2.CreateRotation(angle, center));
+        IPath rotated = segment.Transform(new Matrix4x4(Matrix3x2.CreateRotation(angle, center)));
 
-        Matrix3x2 scaler = Matrix3x2.CreateScale(scalingFactor, Vector2.Zero);
+        Matrix4x4 scaler = Matrix4x4.CreateScale(scalingFactor);
         IPath scaled = rotated.Transform(scaler);
 
         return scaled;

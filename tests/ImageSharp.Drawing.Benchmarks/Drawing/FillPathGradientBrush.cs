@@ -21,7 +21,7 @@ public class FillPathGradientBrush
     [Benchmark]
     public void FillGradientBrush_ImageSharp()
     {
-        Star star = new(50, 50, 5, 20, 45);
+        StarPolygon star = new(50, 50, 5, 20, 45);
         PointF[] points = star.Points.ToArray();
         Color[] colors =
         [
@@ -31,6 +31,6 @@ public class FillPathGradientBrush
 
         PathGradientBrush brush = new(points, colors, Color.White);
 
-        this.image.Mutate(x => x.Fill(brush));
+        this.image.Mutate(x => x.Paint(canvas => canvas.Fill(brush)));
     }
 }

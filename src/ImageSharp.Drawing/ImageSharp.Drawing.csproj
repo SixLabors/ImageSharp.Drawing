@@ -9,15 +9,11 @@
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <RepositoryUrl Condition="'$(RepositoryUrl)' == ''">https://github.com/SixLabors/ImageSharp.Drawing/</RepositoryUrl>
     <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
-    <PackageTags>Image Draw Shape Path Font</PackageTags>
-    <Description>An extension to ImageSharp that allows the drawing of images, paths, and text.</Description>
+    <PackageTags>ImageSharp Drawing Graphics Shapes Paths Text Fonts Vector Raster</PackageTags>
+    <Description>Drawing extensions for ImageSharp with support for shapes, paths, text, and image rendering.</Description>
     <Configurations>Debug;Release</Configurations>
     <IsTrimmable>true</IsTrimmable>
-  </PropertyGroup>
 
-  <PropertyGroup>
-    <!--Bump to V3 prior to tagged release.-->
-    <MinVerMinimumMajorMinor>3.0</MinVerMinimumMajorMinor>
   </PropertyGroup>
 
   <!--  This enables the nullable analysis and treats all nullable warnings as error-->
@@ -25,7 +21,7 @@
     <Nullable>enable</Nullable>
     <WarningsAsErrors>Nullable</WarningsAsErrors>
   </PropertyGroup>
-  
+
   <Choose>
     <When Condition="$(SIXLABORS_TESTING_PREVIEW) == true">
       <PropertyGroup>
@@ -38,15 +34,17 @@
       </PropertyGroup>
     </Otherwise>
   </Choose>
-  
+
   <ItemGroup>
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
     <None Include="..\..\shared-infrastructure\branding\icons\imagesharp.drawing\sixlabors.imagesharp.drawing.128.png" Pack="true" PackagePath="" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="SixLabors.Fonts" Version="3.0.0-alpha.0.16" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="4.0.0-alpha.0.70" />
-    <PackageReference Include="SixLabors.PolygonClipper" Version="1.0.0-alpha.0.49" />
+    <PackageReference Include="SixLabors.Fonts" Version="3.0.0-alpha.0.45" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="4.0.0-alpha.0.103" />
+    <PackageReference Include="SixLabors.PolygonClipper" Version="1.0.0-alpha.0.55" />
   </ItemGroup>
+  
   <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
+
 </Project>

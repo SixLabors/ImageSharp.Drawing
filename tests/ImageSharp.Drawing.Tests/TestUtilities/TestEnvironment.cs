@@ -23,7 +23,7 @@ public static partial class TestEnvironment
 
     private static readonly Lazy<string> NetCoreVersionLazy = new(GetNetCoreVersion);
 
-    internal static bool IsFramework => RuntimeInformation.FrameworkDescription.StartsWith(".NET Framework");
+    internal static bool IsFramework => RuntimeInformation.FrameworkDescription.StartsWith(".NET Framework", StringComparison.InvariantCulture);
 
     /// <summary>
     /// Gets the .NET Core version, if running on .NET Core, otherwise returns an empty string.

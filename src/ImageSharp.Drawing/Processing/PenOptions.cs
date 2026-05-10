@@ -11,7 +11,7 @@ public struct PenOptions
     /// <summary>
     /// Initializes a new instance of the <see cref="PenOptions"/> struct.
     /// </summary>
-    /// <param name="strokeWidth">The stroke width in px units.</param>
+    /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
     public PenOptions(float strokeWidth)
         : this(Color.Black, strokeWidth)
     {
@@ -21,7 +21,7 @@ public struct PenOptions
     /// Initializes a new instance of the <see cref="PenOptions"/> struct.
     /// </summary>
     /// <param name="color">The color.</param>
-    /// <param name="strokeWidth">The stroke width in px units.</param>
+    /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
     public PenOptions(Color color, float strokeWidth)
         : this(color, strokeWidth, null)
     {
@@ -31,7 +31,7 @@ public struct PenOptions
     /// Initializes a new instance of the <see cref="PenOptions"/> struct.
     /// </summary>
     /// <param name="color">The color.</param>
-    /// <param name="strokeWidth">The stroke width in px units.</param>
+    /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
     /// <param name="strokePattern">The stroke pattern.</param>
     public PenOptions(Color color, float strokeWidth, float[]? strokePattern)
         : this(new SolidBrush(color), strokeWidth, strokePattern)
@@ -42,7 +42,7 @@ public struct PenOptions
     /// Initializes a new instance of the <see cref="PenOptions"/> struct.
     /// </summary>
     /// <param name="strokeFill">The brush used to fill the stroke outline.</param>
-    /// <param name="strokeWidth">The stroke width in px units.</param>
+    /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
     /// <param name="strokePattern">The stroke pattern.</param>
     public PenOptions(Brush strokeFill, float strokeWidth, float[]? strokePattern)
     {
@@ -60,7 +60,7 @@ public struct PenOptions
     public Brush StrokeFill { get; }
 
     /// <summary>
-    /// Gets the stroke width in px units. Defaults to 1px.
+    /// Gets the stroke width in the path's local coordinate space before any drawing transform is applied. Defaults to 1.
     /// </summary>
     public float StrokeWidth { get; }
 

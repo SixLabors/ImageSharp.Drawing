@@ -16,6 +16,7 @@ public class GraphicsOptionsComparer : IEqualityComparer<GraphicsOptions>
 
         return x.AlphaCompositionMode == y.AlphaCompositionMode
             && x.Antialias == y.Antialias
+            && x.AntialiasThreshold == y.AntialiasThreshold
             && x.BlendPercentage == y.BlendPercentage
             && x.ColorBlendingMode == y.ColorBlendingMode;
     }

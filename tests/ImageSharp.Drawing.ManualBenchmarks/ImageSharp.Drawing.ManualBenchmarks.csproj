@@ -1,0 +1,57 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>SixLabors.ImageSharp.Drawing.ManualBenchmarks</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+
+  <Choose>
+    <When Condition="$(SIXLABORS_TESTING_PREVIEW) == true">
+      <PropertyGroup>
+        <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+      </PropertyGroup>
+    </When>
+    <Otherwise>
+      <PropertyGroup>
+        <TargetFrameworks>net8.0</TargetFrameworks>
+      </PropertyGroup>
+    </Otherwise>
+  </Choose>
+
+  <ItemGroup>
+    <PackageReference Include="GeoJSON.Net" />
+    <PackageReference Include="System.Drawing.Common" />
+    <PackageReference Include="runtime.osx.10.10-x64.CoreCompat.System.Drawing" Condition="'$(IsOSX)'=='true'" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Condition="'$(IsLinux)'=='true'"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ImageSharp.Drawing\ImageSharp.Drawing.csproj" />
+    <ProjectReference Include="..\..\src\ImageSharp.Drawing.WebGPU\ImageSharp.Drawing.WebGPU.csproj" />
+    <PackageReference Include="CommandLineParser" Version="2.9.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\ImageSharp.Drawing.Tests\TestFile.cs">
+      <Link>TestFile.cs</Link>
+    </Compile>
+    <Compile Include="..\ImageSharp.Drawing.Tests\TestImages.cs">
+      <Link>TestImages.cs</Link>
+    </Compile>
+    <Compile Include="..\ImageSharp.Drawing.Tests\TestUtilities\PolygonFactory.cs">
+      <Link>PolygonFactory.cs</Link>
+    </Compile>
+    <Compile Include="..\ImageSharp.Drawing.Tests\TestUtilities\TestEnvironment.cs">
+      <Link>TestEnvironment.cs</Link>
+    </Compile>
+    <Compile Include="..\ImageSharp.Drawing.Tests\TestUtilities\SvgBenchmarkHelper.cs">
+      <Link>SvgBenchmarkHelper.cs</Link>
+    </Compile>
+  </ItemGroup>
+
+</Project>

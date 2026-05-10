@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
+
 namespace SixLabors.ImageSharp.Drawing.Tests.Shapes;
 
 public class PolygonTests
@@ -60,8 +62,8 @@ public class PolygonTests
     public void AsSimpleLinearPath()
     {
         Polygon poly = new(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(5, 5)));
-        IReadOnlyList<PointF> paths = poly.Flatten().First().Points.ToArray();
-        Assert.Equal(3, paths.Count);
+        PointF[] paths = poly.Flatten().First().Points.ToArray();
+        Assert.Equal(3, paths.Length);
         Assert.Equal(new PointF(0, 0), paths[0]);
         Assert.Equal(new PointF(0, 10), paths[1]);
         Assert.Equal(new PointF(5, 5), paths[2]);
@@ -71,7 +73,7 @@ public class PolygonTests
     public void ReturnsWrapperOfSelfASOwnPath_SingleSegment()
     {
         Polygon poly = new(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(5, 5)));
-        ISimplePath[] paths = poly.Flatten().ToArray();
+        ISimplePath[] paths = [.. poly.Flatten()];
         Assert.Single(paths);
         Assert.Equal(poly, paths[0]);
     }
@@ -80,7 +82,7 @@ public class PolygonTests
     public void ReturnsWrapperOfSelfASOwnPath_MultiSegment()
     {
         Polygon poly = new(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10)), new LinearLineSegment(new PointF(2, 5), new PointF(5, 5)));
-        ISimplePath[] paths = poly.Flatten().ToArray();
+        ISimplePath[] paths = [.. poly.Flatten()];
         Assert.Single(paths);
         Assert.Equal(poly, paths[0]);
     }
