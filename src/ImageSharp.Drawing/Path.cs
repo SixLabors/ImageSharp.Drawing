@@ -575,6 +575,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
 
         // https://www.w3.org/TR/SVG11/paths.html#PathDataBNF
         // flag: "0" | "1"
+        // Adjacent flags are valid, so this consumes exactly one character.
         if (str.Length == 0 || (str[0] is not '0' and not '1'))
         {
             value = default;

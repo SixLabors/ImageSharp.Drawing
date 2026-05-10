@@ -86,6 +86,34 @@ public class PathTests
         Assert.False(segments.MoveNext());
     }
 
+    [Theory]
+    [InlineData("M")]
+    [InlineData("M 5")]
+    [InlineData("V")]
+    [InlineData("H")]
+    [InlineData("C 1 2")]
+    [InlineData("S 6 7")]
+    [InlineData("Q 3 4 5")]
+    [InlineData("T")]
+    [InlineData("A 1 2 3 4 5 6")]
+    [InlineData("~ 7 6 5")]
+    public void TryParseSvgPath_ReturnsFalseForMalformedPathData(string svgPath)
+        => Assert.False(Path.TryParseSvgPath(svgPath, out _));
+
+    [Theory]
+    [InlineData("M 10 10 L 1e999 20")]
+    [InlineData("M 10 10 L NaN 20")]
+    [InlineData("M 10 10 L Infinity 20")]
+    [InlineData("M 10 10 h 1e999")]
+    [InlineData("M 10 10 v 1e999")]
+    [InlineData("M 10 10 A 25 25 0 2 0 50 50")]
+    [InlineData("M 10 10 A 25 25 0 0 2 50 50")]
+    [InlineData("M 10 10 L")]
+    [InlineData("M 10 10 Q 20 20")]
+    [InlineData("M 10 10 C 20 20 30 30")]
+    public void TryParseSvgPath_ReturnsFalseForInvalidPathDataBoundaries(string svgPath)
+        => Assert.False(Path.TryParseSvgPath(svgPath, out _));
+
     [Fact]
     public void PathCollection_EnumerableConstructor_PreservesPaths()
     {
