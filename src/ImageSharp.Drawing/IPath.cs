@@ -1,0 +1,49 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+using System.Numerics;
+
+namespace SixLabors.ImageSharp.Drawing;
+
+/// <summary>
+/// Represents a logic path that can be drawn.
+/// </summary>
+public interface IPath
+{
+    /// <summary>
+    /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
+    /// </summary>
+    public PathTypes PathType { get; }
+
+    /// <summary>
+    /// Gets the bounds enclosing the path.
+    /// </summary>
+    public RectangleF Bounds { get; }
+
+    /// <summary>
+    /// Converts the <see cref="IPath" /> into a simple linear path.
+    /// </summary>
+    /// <returns>Returns the current <see cref="IPath" /> as simple linear path.</returns>
+    public IEnumerable<ISimplePath> Flatten();
+
+    /// <summary>
+    /// Converts this path into a retained <see cref="LinearGeometry"/>, flattening curves at the precision of
+    /// the supplied device-space <paramref name="scale"/>.
+    /// </summary>
+    /// <param name="scale">The X/Y scale at which curves are flattened.</param>
+    /// <returns>The retained linear geometry.</returns>
+    public LinearGeometry ToLinearGeometry(Vector2 scale);
+
+    /// <summary>
+    /// Transforms the path using the specified matrix.
+    /// </summary>
+    /// <param name="matrix">The matrix.</param>
+    /// <returns>A new path with the matrix applied to it.</returns>
+    public IPath Transform(Matrix4x4 matrix);
+
+    /// <summary>
+    /// Returns this path with all figures closed.
+    /// </summary>
+    /// <returns>A new close <see cref="IPath"/>.</returns>
+    public IPath AsClosedPath();
+}

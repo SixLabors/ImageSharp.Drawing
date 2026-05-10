@@ -36,7 +36,7 @@ public abstract class Pen : IEquatable<Pen>
     /// Initializes a new instance of the <see cref="Pen"/> class.
     /// </summary>
     /// <param name="strokeFill">The brush used to fill the stroke outline.</param>
-    /// <param name="strokeWidth">The stroke width in px units.</param>
+    /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
     protected Pen(Brush strokeFill, float strokeWidth)
         : this(strokeFill, strokeWidth, Pens.EmptyPattern)
     {
@@ -46,7 +46,7 @@ public abstract class Pen : IEquatable<Pen>
     /// Initializes a new instance of the <see cref="Pen"/> class.
     /// </summary>
     /// <param name="strokeFill">The brush used to fill the stroke outline.</param>
-    /// <param name="strokeWidth">The stroke width in px units.</param>
+    /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
     /// <param name="strokePattern">The stroke pattern.</param>
     protected Pen(Brush strokeFill, float strokeWidth, float[] strokePattern)
     {
@@ -80,7 +80,7 @@ public abstract class Pen : IEquatable<Pen>
     public float StrokeWidth { get; }
 
     /// <inheritdoc cref="PenOptions.StrokePattern"/>
-    public ReadOnlySpan<float> StrokePattern => this.pattern;
+    public ReadOnlyMemory<float> StrokePattern => this.pattern;
 
     /// <inheritdoc cref="PenOptions.StrokeOptions"/>
     public StrokeOptions StrokeOptions { get; }
@@ -97,7 +97,7 @@ public abstract class Pen : IEquatable<Pen>
     /// Applies the styling from the pen to a path and generate a new path with the final vector.
     /// </summary>
     /// <param name="path">The source path</param>
-    /// <param name="strokeWidth">The stroke width in px units.</param>
+    /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
     /// <returns>The <see cref="IPath"/> with the pen styling applied.</returns>
     public abstract IPath GeneratePath(IPath path, float strokeWidth);
 
@@ -107,7 +107,7 @@ public abstract class Pen : IEquatable<Pen>
         && this.StrokeWidth == other.StrokeWidth
         && this.StrokeFill.Equals(other.StrokeFill)
         && this.StrokeOptions.Equals(other.StrokeOptions)
-        && this.StrokePattern.SequenceEqual(other.StrokePattern);
+        && this.StrokePattern.Span.SequenceEqual(other.StrokePattern.Span);
 
     /// <inheritdoc/>
     public override bool Equals(object? obj) => this.Equals(obj as Pen);

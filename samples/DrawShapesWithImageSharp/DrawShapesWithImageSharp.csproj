@@ -22,4 +22,12 @@
     <ProjectReference Include="..\..\src\ImageSharp.Drawing\ImageSharp.Drawing.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\..\tests\ImageSharp.Drawing.Tests\TestFonts\me_quran_volt_newmet.ttf" Link="Fonts\me_quran_volt_newmet.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\tests\ImageSharp.Drawing.Tests\TestFonts\NotoSansKR-Regular.otf" Link="Fonts\NotoSansKR-Regular.otf" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\tests\ImageSharp.Drawing.Tests\TestFonts\OpenSans-Regular.ttf" Link="Fonts\OpenSans-Regular.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\tests\ImageSharp.Drawing.Tests\TestFonts\WendyOne-Regular.ttf" Link="Fonts\WendyOne-Regular.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\tests\Images\Input\Jpg\baseline\Lake.jpg" Link="Images\Lake.jpg" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

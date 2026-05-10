@@ -25,7 +25,28 @@ public class RichTextOptions : TextOptions
     /// <param name="options">The options whose properties are copied into this instance.</param>
     public RichTextOptions(RichTextOptions options)
         : base(options)
-        => this.Path = options.Path;
+    {
+        List<RichTextRun> runs = new(options.TextRuns.Count);
+        foreach (RichTextRun run in options.TextRuns)
+        {
+            runs.Add(new RichTextRun()
+            {
+                Brush = run.Brush,
+                Pen = run.Pen,
+                StrikeoutPen = run.StrikeoutPen,
+                UnderlinePen = run.UnderlinePen,
+                OverlinePen = run.OverlinePen,
+                Start = run.Start,
+                End = run.End,
+                Font = run.Font,
+                TextAttributes = run.TextAttributes,
+                TextDecorations = run.TextDecorations,
+                Placeholder = run.Placeholder
+            });
+        }
+
+        this.TextRuns = runs;
+    }
 
     /// <summary>
     /// Gets or sets an optional collection of text runs to apply to the body of text.
@@ -35,13 +56,4 @@ public class RichTextOptions : TextOptions
         get => (IReadOnlyList<RichTextRun>)base.TextRuns;
         set => base.TextRuns = value;
     }
-
-    /// <summary>
-    /// Gets or sets an optional path to draw the text along.
-    /// </summary>
-    /// <remarks>
-    /// When this property is not <see langword="null"/> the <see cref="TextOptions.Origin"/>
-    /// property is automatically applied as a translation to a copy of the path for processing.
-    /// </remarks>
-    public IPath? Path { get; set; }
 }

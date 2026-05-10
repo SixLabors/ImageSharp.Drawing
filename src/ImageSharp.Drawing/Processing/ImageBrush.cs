@@ -1,36 +1,71 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Buffers;
-using SixLabors.ImageSharp.Memory;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
 /// Provides an implementation of an image brush for painting images within areas.
 /// </summary>
-public class ImageBrush : Brush
+/// <typeparam name="TPixel">The pixel format of the source image.</typeparam>
+public sealed class ImageBrush<TPixel> : ImageBrush
+    where TPixel : unmanaged, IPixel<TPixel>
 {
     /// <summary>
-    /// The image to paint.
+    /// Initializes a new instance of the <see cref="ImageBrush{TPixel}"/> class.
     /// </summary>
-    private readonly Image image;
+    /// <param name="image">The source image to draw.</param>
+    public ImageBrush(Image<TPixel> image)
+        : base(image)
+        => this.SourceImage = image;
 
     /// <summary>
-    /// The region of the source image we will be using to paint.
+    /// Initializes a new instance of the <see cref="ImageBrush{TPixel}"/> class.
     /// </summary>
-    private readonly RectangleF region;
+    /// <param name="image">The source image to draw.</param>
+    /// <param name="offset">An offset to apply to the image while drawing the texture.</param>
+    public ImageBrush(Image<TPixel> image, Point offset)
+        : base(image, offset)
+        => this.SourceImage = image;
 
     /// <summary>
-    /// The offet to apply to the source image while applying the imagebrush
+    /// Initializes a new instance of the <see cref="ImageBrush{TPixel}"/> class.
     /// </summary>
-    private readonly Point offset;
+    /// <param name="image">The source image to draw.</param>
+    /// <param name="region">The region of interest within the source image.</param>
+    public ImageBrush(Image<TPixel> image, RectangleF region)
+        : base(image, region)
+        => this.SourceImage = image;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImageBrush{TPixel}"/> class.
+    /// </summary>
+    /// <param name="image">The source image to draw.</param>
+    /// <param name="region">The region of interest within the source image.</param>
+    /// <param name="offset">An offset to apply to the image while drawing the texture.</param>
+    public ImageBrush(Image<TPixel> image, RectangleF region, Point offset)
+        : base(image, region, offset)
+        => this.SourceImage = image;
+
+    /// <summary>
+    /// Gets the typed source image used by this brush.
+    /// </summary>
+    public Image<TPixel> SourceImage { get; }
+}
+
+/// <summary>
+/// The untyped base class for image brushes, used to support non-generic brush references in drawing contexts.
+/// </summary>
+public abstract class ImageBrush : Brush
+{
     /// <summary>
     /// Initializes a new instance of the <see cref="ImageBrush"/> class.
     /// </summary>
     /// <param name="image">The source image to draw.</param>
-    public ImageBrush(Image image)
+    protected ImageBrush(Image image)
         : this(image, image.Bounds)
     {
     }
@@ -42,7 +77,7 @@ public class ImageBrush : Brush
     /// <param name="offset">
     /// An offset to apply the to image image while drawing apply the texture.
     /// </param>
-    public ImageBrush(Image image, Point offset)
+    protected ImageBrush(Image image, Point offset)
         : this(image, image.Bounds, offset)
     {
     }
@@ -55,7 +90,7 @@ public class ImageBrush : Brush
     /// The region of interest.
     /// This overrides any region used to initialize the brush applicator.
     /// </param>
-    public ImageBrush(Image image, RectangleF region)
+    protected ImageBrush(Image image, RectangleF region)
         : this(image, region, Point.Empty)
     {
     }
@@ -71,53 +106,73 @@ public class ImageBrush : Brush
     /// <param name="offset">
     /// An offset to apply the to image image while drawing apply the texture.
     /// </param>
-    public ImageBrush(Image image, RectangleF region, Point offset)
+    protected ImageBrush(Image image, RectangleF region, Point offset)
     {
-        this.image = image;
-        this.region = RectangleF.Intersect(image.Bounds, region);
-        this.offset = offset;
+        this.UntypedImage = image;
+        this.SourceRegion = RectangleF.Intersect(image.Bounds, region);
+        this.Offset = offset;
     }
+
+    /// <summary>
+    /// Gets the source image used by this brush.
+    /// </summary>
+    public Image UntypedImage { get; }
+
+    /// <summary>
+    /// Gets the source region within the image.
+    /// </summary>
+    public RectangleF SourceRegion { get; }
+
+    /// <summary>
+    /// Gets the offset applied to the brush origin.
+    /// </summary>
+    public Point Offset { get; }
 
     /// <inheritdoc />
     public override bool Equals(Brush? other)
     {
         if (other is ImageBrush ib)
         {
-            return ib.image == this.image && ib.region == this.region;
+            return ib.UntypedImage == this.UntypedImage && ib.SourceRegion == this.SourceRegion;
         }
 
         return false;
     }
 
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(this.image, this.region);
+    public override int GetHashCode() => HashCode.Combine(this.UntypedImage, this.SourceRegion);
 
     /// <inheritdoc />
-    public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
+    public override BrushRenderer<TPixel> CreateRenderer<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        ImageFrame<TPixel> source,
+        int canvasWidth,
         RectangleF region)
     {
-        if (this.image is Image<TPixel> specificImage)
+        if (this.UntypedImage is Image<TPixel> image)
         {
-            return new ImageBrushApplicator<TPixel>(configuration, options, source, specificImage, region, this.region, this.offset, false);
+            return new ImageBrushRenderer<TPixel>(configuration, options, canvasWidth, image, region, this.SourceRegion, this.Offset);
         }
 
-        specificImage = this.image.CloneAs<TPixel>();
-        return new ImageBrushApplicator<TPixel>(configuration, options, source, specificImage, region, this.region, this.offset, true);
+        // This will never be hit as the brush is always normalized by the drawing canvas
+        // but we do it to satisfy the type system.
+        ThrowIfInvalidImagePixelFormat();
+        return null;
     }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowIfInvalidImagePixelFormat()
+        => throw new UnreachableException("The pixel format of the image is not supported by this brush renderer");
 
     /// <summary>
     /// The image brush applicator.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private class ImageBrushApplicator<TPixel> : BrushApplicator<TPixel>
+    private sealed class ImageBrushRenderer<TPixel> : BrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         private readonly ImageFrame<TPixel> sourceFrame;
-        private readonly Image<TPixel> sourceImage;
-        private readonly bool shouldDisposeImage;
 
         /// <summary>
         /// The region of the source image we will be using to draw from.
@@ -133,34 +188,28 @@ public class ImageBrush : Brush
         /// The X offset.
         /// </summary>
         private readonly int offsetX;
-        private bool isDisposed;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="ImageBrushApplicator{TPixel}"/> class.
+        /// Initializes a new instance of the <see cref="ImageBrushRenderer{TPixel}"/> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="target">The target image.</param>
+        /// <param name="canvasWidth">The canvas width for the current render pass.</param>
         /// <param name="image">The image.</param>
         /// <param name="targetRegion">The region of the target image we will be drawing to.</param>
         /// <param name="sourceRegion">The region of the source image we will be using to source pixels to draw from.</param>
         /// <param name="offset">An offset to apply to the texture while drawing.</param>
-        /// <param name="shouldDisposeImage">Whether to dispose the image on disposal of the applicator.</param>
-        public ImageBrushApplicator(
+        public ImageBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
-            ImageFrame<TPixel> target,
+            int canvasWidth,
             Image<TPixel> image,
             RectangleF targetRegion,
             RectangleF sourceRegion,
-            Point offset,
-            bool shouldDisposeImage)
-            : base(configuration, options, target)
+            Point offset)
+            : base(configuration, options, canvasWidth)
         {
-            this.sourceImage = image;
             this.sourceFrame = image.Frames.RootFrame;
-            this.shouldDisposeImage = shouldDisposeImage;
-
             this.sourceRegion = Rectangle.Intersect(image.Bounds, (Rectangle)sourceRegion);
 
             this.offsetY = (int)MathF.Floor(targetRegion.Top) + offset.Y;
@@ -178,31 +227,15 @@ public class ImageBrush : Brush
         }
 
         /// <inheritdoc />
-        protected override void Dispose(bool disposing)
+        public override void Apply(
+            Span<TPixel> destinationRow,
+            ReadOnlySpan<float> scanline,
+            int x,
+            int y,
+            BrushWorkspace<TPixel> workspace)
         {
-            if (this.isDisposed)
-            {
-                return;
-            }
-
-            if (disposing && this.shouldDisposeImage)
-            {
-                this.sourceImage?.Dispose();
-            }
-
-            this.isDisposed = true;
-            base.Dispose(disposing);
-        }
-
-        /// <inheritdoc />
-        public override void Apply(Span<float> scanline, int x, int y)
-        {
-            // Create a span for colors
-            MemoryAllocator allocator = this.Configuration.MemoryAllocator;
-            using IMemoryOwner<float> amountBuffer = allocator.Allocate<float>(scanline.Length);
-            using IMemoryOwner<TPixel> overlay = allocator.Allocate<TPixel>(scanline.Length);
-            Span<float> amountSpan = amountBuffer.Memory.Span;
-            Span<TPixel> overlaySpan = overlay.Memory.Span;
+            Span<float> amountSpan = workspace.GetAmounts(scanline.Length);
+            Span<TPixel> overlaySpan = workspace.GetOverlays(scanline.Length);
 
             int offsetX = x - this.offsetX;
             int sourceY = ((((y - this.offsetY) % this.sourceRegion.Height) // clamp the number between -height and +height
@@ -221,13 +254,13 @@ public class ImageBrush : Brush
                 overlaySpan[i] = sourceRow[sourceX];
             }
 
-            Span<TPixel> destinationRow = this.Target.PixelBuffer.DangerousGetRowSpan(y).Slice(x, scanline.Length);
             this.Blender.Blend(
                 this.Configuration,
                 destinationRow,
                 destinationRow,
                 overlaySpan,
-                amountSpan);
+                amountSpan,
+                workspace.GetBlendScratch(scanline.Length, 3));
         }
     }
 }

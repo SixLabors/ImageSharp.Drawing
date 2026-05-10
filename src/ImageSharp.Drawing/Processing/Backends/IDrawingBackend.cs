@@ -1,62 +1,54 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Internal drawing backend abstraction used by processors.
+/// Defines the contract for creating and rendering retained drawing scenes for canvas targets.
 /// </summary>
-/// <remarks>
-/// This boundary allows processor logic to stay stable while the implementation evolves
-/// (for example: alternate CPU rasterizers or eventual non-CPU backends).
-/// </remarks>
-internal interface IDrawingBackend
+public interface IDrawingBackend
 {
     /// <summary>
-    /// Fills a path into the destination image using the given brush and drawing options.
+    /// Creates a retained backend scene from a prepared command batch.
     /// </summary>
-    /// <remarks>
-    /// This operation-level API keeps processors independent from scanline rasterization details,
-    /// allowing alternate backend implementations (for example GPU backends) to consume brush
-    /// and path data directly.
-    /// </remarks>
-    /// <typeparam name="TPixel">The pixel format.</typeparam>
-    /// <param name="configuration">Active processing configuration.</param>
-    /// <param name="source">Destination image frame.</param>
-    /// <param name="path">The path to rasterize.</param>
-    /// <param name="brush">Brush used to shade covered pixels.</param>
-    /// <param name="graphicsOptions">Graphics blending/composition options.</param>
-    /// <param name="rasterizerOptions">Rasterizer options.</param>
-    /// <param name="brushBounds">Brush bounds used when creating the applicator.</param>
-    /// <param name="allocator">Allocator for temporary data.</param>
-    public void FillPath<TPixel>(
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="targetBounds">The target bounds used for target-dependent scene data.</param>
+    /// <param name="commandBatch">The scene commands in submission order.</param>
+    /// <param name="ownedResources">The resources that must stay alive for the returned scene.</param>
+    /// <returns>A retained backend scene.</returns>
+    public DrawingBackendScene CreateScene(
         Configuration configuration,
-        ImageFrame<TPixel> source,
-        IPath path,
-        Brush brush,
-        in GraphicsOptions graphicsOptions,
-        in RasterizerOptions rasterizerOptions,
-        Rectangle brushBounds,
-        MemoryAllocator allocator)
+        Rectangle targetBounds,
+        DrawingCommandBatch commandBatch,
+        IReadOnlyList<IDisposable>? ownedResources = null);
+
+    /// <summary>
+    /// Renders a retained backend scene into the target.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="target">The target frame.</param>
+    /// <param name="scene">The retained backend scene to render.</param>
+    public void RenderScene<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> target,
+        DrawingBackendScene scene)
         where TPixel : unmanaged, IPixel<TPixel>;
 
     /// <summary>
-    /// Rasterizes path coverage into a floating-point destination map.
+    /// Reads source pixels from the target into the destination region.
     /// </summary>
-    /// <remarks>
-    /// Coverage values are written in local destination coordinates where <c>(0,0)</c> maps to
-    /// the top-left of <paramref name="destination"/>.
-    /// </remarks>
-    /// <param name="path">The path to rasterize.</param>
-    /// <param name="rasterizerOptions">Rasterizer options.</param>
-    /// <param name="allocator">Allocator for temporary data.</param>
-    /// <param name="destination">Destination coverage map.</param>
-    public void RasterizeCoverage(
-        IPath path,
-        in RasterizerOptions rasterizerOptions,
-        MemoryAllocator allocator,
-        Buffer2D<float> destination);
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="target">The target frame.</param>
+    /// <param name="sourceRectangle">The source rectangle in target-local coordinates.</param>
+    /// <param name="destination">The destination region that receives the copied pixels.</param>
+    public void ReadRegion<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> target,
+        Rectangle sourceRectangle,
+        Buffer2DRegion<TPixel> destination)
+        where TPixel : unmanaged, IPixel<TPixel>;
 }

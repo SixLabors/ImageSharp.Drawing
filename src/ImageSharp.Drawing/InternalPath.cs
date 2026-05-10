@@ -1,0 +1,395 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+
+namespace SixLabors.ImageSharp.Drawing;
+
+/// <summary>
+/// Internal logic for integrating linear paths.
+/// </summary>
+internal class InternalPath
+{
+    /// <summary>
+    /// The epsilon for float comparison
+    /// </summary>
+    private const float Epsilon = 0.003f;
+    private const float Epsilon2 = 0.2f;
+
+    /// <summary>
+    /// The points.
+    /// </summary>
+    private readonly PointData[] points;
+
+    /// <summary>
+    /// Materialized points projected from <see cref="points"/>.
+    /// </summary>
+    private PointF[]? materializedPoints;
+
+    /// <summary>
+    /// The closed path.
+    /// </summary>
+    private readonly bool closedPath;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InternalPath"/> class.
+    /// </summary>
+    /// <param name="segments">The segments.</param>
+    /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
+    /// <param name="removeCloseAndCollinear">Whether to remove close and collinear vertices</param>
+    internal InternalPath(IReadOnlyList<ILineSegment> segments, bool isClosedPath, bool removeCloseAndCollinear = true)
+        : this(Simplify(segments, isClosedPath, removeCloseAndCollinear), isClosedPath)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InternalPath" /> class.
+    /// </summary>
+    /// <param name="points">The points.</param>
+    /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
+    internal InternalPath(ReadOnlyMemory<PointF> points, bool isClosedPath)
+        : this(Simplify(points.Span, isClosedPath, true), isClosedPath)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InternalPath" /> class.
+    /// </summary>
+    /// <param name="points">The points.</param>
+    /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
+    private InternalPath(PointData[] points, bool isClosedPath)
+    {
+        this.points = points;
+        this.closedPath = isClosedPath;
+
+        if (this.points.Length > 0)
+        {
+            float minX, minY, maxX, maxY, length;
+            length = 0;
+            minX = minY = float.MaxValue;
+            maxX = maxY = float.MinValue;
+
+            foreach (PointData point in this.points)
+            {
+                length += point.Length;
+                minX = Math.Min(point.Point.X, minX);
+                minY = Math.Min(point.Point.Y, minY);
+                maxX = Math.Max(point.Point.X, maxX);
+                maxY = Math.Max(point.Point.Y, maxY);
+            }
+
+            this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
+            this.Length = length;
+        }
+        else
+        {
+            this.Bounds = RectangleF.Empty;
+            this.Length = 0;
+        }
+    }
+
+    /// <summary>
+    /// Gets the bounds.
+    /// </summary>
+    /// <value>
+    /// The bounds.
+    /// </value>
+    public RectangleF Bounds { get; }
+
+    /// <summary>
+    /// Gets the length.
+    /// </summary>
+    /// <value>
+    /// The length.
+    /// </value>
+    public float Length { get; }
+
+    /// <summary>
+    /// Gets the length.
+    /// </summary>
+    public int PointCount => this.points.Length;
+
+    /// <summary>
+    /// Gets the points.
+    /// </summary>
+    /// <returns>The <see cref="IReadOnlyCollection{PointF}"/></returns>
+    internal ReadOnlyMemory<PointF> Points() => this.materializedPoints ??= this.CreatePoints();
+
+    /// <summary>
+    /// Calculates the point a certain distance a path.
+    /// </summary>
+    /// <param name="distanceAlongPath">The distance along the path to find details of.</param>
+    /// <returns>
+    /// Returns details about a point along a path.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">Thrown if no points found.</exception>
+    internal SegmentInfo PointAlongPath(float distanceAlongPath)
+    {
+        int pointCount = this.PointCount;
+        if (this.closedPath)
+        {
+            // Move the distance back to the beginning since this is a closed polygon.
+            distanceAlongPath %= this.Length;
+            pointCount--;
+        }
+
+        for (int i = 0; i < pointCount; i++)
+        {
+            int next = WrapArrayIndex(i + 1, this.PointCount);
+            if (distanceAlongPath < this.points[next].Length)
+            {
+                float t = distanceAlongPath / this.points[next].Length;
+                Vector2 point = Vector2.Lerp(this.points[i].Point, this.points[next].Point, t);
+                Vector2 diff = this.points[i].Point - this.points[next].Point;
+
+                return new SegmentInfo
+                {
+                    Point = point,
+                    Angle = (float)(Math.Atan2(diff.Y, diff.X) % (Math.PI * 2))
+                };
+            }
+
+            distanceAlongPath -= this.points[next].Length;
+        }
+
+        // Closed paths will never reach this point.
+        // For open paths we're going to create a new virtual point that extends past the path.
+        // The position and angle for that point are calculated based upon the last two points.
+        PointF a = this.points[Math.Max(this.points.Length - 2, 0)].Point;
+        PointF b = this.points[^1].Point;
+        Vector2 delta = a - b;
+        float angle = (float)(Math.Atan2(delta.Y, delta.X) % (Math.PI * 2));
+
+        Matrix4x4 transform = Matrix4x4.CreateRotationZ(angle - MathF.PI) * Matrix4x4.CreateTranslation(b.X, b.Y, 0);
+
+        return new SegmentInfo
+        {
+            Point = PointF.Transform(new PointF(distanceAlongPath, 0), transform),
+            Angle = angle
+        };
+    }
+
+    // Modulo is a very slow operation.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int WrapArrayIndex(int i, int arrayLength) => i < arrayLength ? i : i - arrayLength;
+
+    private PointF[] CreatePoints()
+    {
+        PointF[] result = new PointF[this.points.Length];
+        for (int i = 0; i < result.Length; i++)
+        {
+            result[i] = this.points[i].Point;
+        }
+
+        return result;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static PointOrientation CalculateOrientation(Vector2 p, Vector2 q, Vector2 r)
+    {
+        // See http://www.geeksforgeeks.org/orientation-3-ordered-points/
+        // for details of below formula.
+        Vector2 qp = q - p;
+        Vector2 rq = r - q;
+        float val = (qp.Y * rq.X) - (qp.X * rq.Y);
+
+        if (val is > -Epsilon and < Epsilon)
+        {
+            return PointOrientation.Collinear;  // colinear
+        }
+
+        return (val > 0) ? PointOrientation.Clockwise : PointOrientation.Counterclockwise; // clock or counterclock wise
+    }
+
+    /// <summary>
+    /// Simplifies the collection of segments.
+    /// </summary>
+    /// <param name="segments">The segments.</param>
+    /// <param name="isClosed">Weather the path is closed or open.</param>
+    /// <param name="removeCloseAndCollinear">Whether to remove close and collinear vertices</param>
+    /// <returns>
+    /// The <see cref="T:PointData[]"/>.
+    /// </returns>
+    private static PointData[] Simplify(IReadOnlyList<ILineSegment> segments, bool isClosed, bool removeCloseAndCollinear)
+    {
+        // Pre-compute capacity from identity-transform vertex counts to avoid List resizing.
+        int totalPoints = 0;
+        for (int s = 0; s < segments.Count; s++)
+        {
+            totalPoints += segments[s].LinearVertexCount(Vector2.One);
+        }
+
+        List<PointF> simplified = new(totalPoints);
+
+        // Track indices where collinear direction reversals represent user-intended
+        // geometry: interior points of multi-point linear segments, and junction
+        // points between two linear segments (e.g. PathBuilder LineTo → LineTo).
+        // Reversals at all other indices (flattened curves, curve junctions) are
+        // artifacts and should be removed normally.
+        HashSet<int>? linearReversalIndices = null;
+        ILineSegment? prevSeg = null;
+
+        foreach (ILineSegment seg in segments)
+        {
+            int start = simplified.Count;
+            int segmentCount = seg.LinearVertexCount(Vector2.One);
+            CollectionsMarshal.SetCount(simplified, start + segmentCount);
+            Span<PointF> destination = CollectionsMarshal.AsSpan(simplified).Slice(start, segmentCount);
+            seg.CopyTo(destination, skipFirstPoint: false, Vector2.One);
+
+            if (seg is LinearLineSegment)
+            {
+                // Interior points of a multi-point linear segment (e.g. DrawLine with 3+ points).
+                if (segmentCount > 2)
+                {
+                    linearReversalIndices ??= [];
+                    for (int i = start + 1; i < start + segmentCount - 1; i++)
+                    {
+                        _ = linearReversalIndices.Add(i);
+                    }
+                }
+
+                // Junction between two linear segments (e.g. PathBuilder LineTo → LineTo).
+                if (prevSeg is LinearLineSegment && start > 0)
+                {
+                    linearReversalIndices ??= [];
+                    _ = linearReversalIndices.Add(start);
+                }
+            }
+
+            prevSeg = seg;
+        }
+
+        return Simplify(CollectionsMarshal.AsSpan(simplified), isClosed, removeCloseAndCollinear, linearReversalIndices);
+    }
+
+    private static PointData[] Simplify(ReadOnlySpan<PointF> points, bool isClosed, bool removeCloseAndCollinear, HashSet<int>? linearReversalIndices = null)
+    {
+        int polyCorners = points.Length;
+        if (polyCorners == 0)
+        {
+            return [];
+        }
+
+        List<PointData> results = new(polyCorners);
+        Vector2 lastPoint = points[0];
+
+        if (!isClosed)
+        {
+            results.Add(new PointData
+            {
+                Point = points[0],
+                Orientation = PointOrientation.Collinear,
+                Length = 0
+            });
+        }
+        else
+        {
+            int prev = polyCorners;
+            do
+            {
+                prev--;
+                if (prev == 0)
+                {
+                    // All points are common, shouldn't match anything
+                    results.Add(
+                        new PointData
+                        {
+                            Point = points[0],
+                            Orientation = PointOrientation.Collinear,
+                            Length = 0,
+                        });
+
+                    return [.. results];
+                }
+            }
+            while (removeCloseAndCollinear && Equivalent(points[0], points[prev], Epsilon2)); // skip points too close together
+
+            polyCorners = prev + 1;
+            lastPoint = points[prev];
+
+            results.Add(
+                new PointData
+                {
+                    Point = points[0],
+                    Orientation = CalculateOrientation(lastPoint, points[0], points[1]),
+                    Length = Vector2.Distance(lastPoint, points[0]),
+                });
+
+            lastPoint = points[0];
+        }
+
+        for (int i = 1; i < polyCorners; i++)
+        {
+            int next = WrapArrayIndex(i + 1, polyCorners);
+            PointOrientation or = CalculateOrientation(lastPoint, points[i], points[next]);
+            if (removeCloseAndCollinear && or == PointOrientation.Collinear && next != 0)
+            {
+                // Preserve collinear points that represent a direction reversal (U-turn)
+                // within a single segment. E.g. (10,10)→(90,10)→(20,10): the middle point
+                // is collinear but the stroker needs to see the reversal.
+                // Don't preserve reversals at segment boundaries — these arise from joining
+                // different path segments (e.g. arc-to-arc) and are not user-intended.
+                bool preserve = false;
+                if (linearReversalIndices == null || linearReversalIndices.Contains(i))
+                {
+                    Vector2 incoming = (Vector2)points[i] - lastPoint;
+                    Vector2 outgoing = (Vector2)points[next] - (Vector2)points[i];
+                    float inLen = incoming.Length();
+                    float outLen = outgoing.Length();
+                    preserve = inLen > Epsilon && outLen > Epsilon && Vector2.Dot(incoming, outgoing) < 0;
+                }
+
+                if (!preserve)
+                {
+                    continue;
+                }
+            }
+
+            results.Add(
+                new PointData
+                {
+                    Point = points[i],
+                    Orientation = or,
+                    Length = Vector2.Distance(lastPoint, points[i]),
+                });
+            lastPoint = points[i];
+        }
+
+        if (isClosed && removeCloseAndCollinear)
+        {
+            // walk back removing collinear points
+            while (results.Count > 2 && results[^1].Orientation == PointOrientation.Collinear)
+            {
+                results.RemoveAt(results.Count - 1);
+            }
+        }
+
+        return [.. results];
+    }
+
+    /// <summary>
+    /// Determines whether two points are within the specified coordinate threshold of one another.
+    /// </summary>
+    /// <param name="source1">The first point.</param>
+    /// <param name="source2">The second point.</param>
+    /// <param name="threshold">The per-axis distance threshold.</param>
+    /// <returns>
+    /// <see langword="true"/> when both coordinates are within <paramref name="threshold"/>; otherwise, <see langword="false"/>.
+    /// </returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool Equivalent(PointF source1, PointF source2, float threshold)
+    {
+        Vector2 abs = Vector2.Abs(source1 - source2);
+        return abs.X < threshold && abs.Y < threshold;
+    }
+
+    private struct PointData
+    {
+        public PointF Point;
+        public PointOrientation Orientation;
+        public float Length;
+    }
+}

@@ -1,6 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Helpers;
+
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
@@ -11,11 +14,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// </summary>
 public sealed class RadialGradientBrush : GradientBrush
 {
-    private readonly PointF center0;
-    private readonly float radius0;
-    private readonly PointF? center1; // null means single-circle form
-    private readonly float? radius1;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="RadialGradientBrush"/> class using a single circle.
     /// </summary>
@@ -30,10 +28,10 @@ public sealed class RadialGradientBrush : GradientBrush
         params ColorStop[] colorStops)
         : base(repetitionMode, colorStops)
     {
-        this.center0 = center;
-        this.radius0 = radius;
-        this.center1 = null;
-        this.radius1 = null;
+        this.Center0 = center;
+        this.Radius0 = radius;
+        this.Center1 = null;
+        this.Radius1 = null;
     }
 
     /// <summary>
@@ -54,10 +52,49 @@ public sealed class RadialGradientBrush : GradientBrush
         params ColorStop[] colorStops)
         : base(repetitionMode, colorStops)
     {
-        this.center0 = startCenter;
-        this.radius0 = startRadius;
-        this.center1 = endCenter;
-        this.radius1 = endRadius;
+        this.Center0 = startCenter;
+        this.Radius0 = startRadius;
+        this.Center1 = endCenter;
+        this.Radius1 = endRadius;
+    }
+
+    /// <summary>
+    /// Gets the center of the starting circle.
+    /// </summary>
+    public PointF Center0 { get; }
+
+    /// <summary>
+    /// Gets the radius of the starting circle.
+    /// </summary>
+    public float Radius0 { get; }
+
+    /// <summary>
+    /// Gets the center of the ending circle, or <see langword="null"/> for single-circle form.
+    /// </summary>
+    public PointF? Center1 { get; }
+
+    /// <summary>
+    /// Gets the radius of the ending circle, or <see langword="null"/> for single-circle form.
+    /// </summary>
+    public float? Radius1 { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this is a two-circle radial gradient.
+    /// </summary>
+    public bool IsTwoCircle => this.Center1.HasValue && this.Radius1.HasValue;
+
+    /// <inheritdoc/>
+    public override Brush Transform(Matrix4x4 matrix)
+    {
+        PointF tc0 = PointF.Transform(this.Center0, matrix);
+        float scale = MatrixUtilities.GetAverageScale(in matrix);
+        if (this.IsTwoCircle)
+        {
+            PointF tc1 = PointF.Transform(this.Center1!.Value, matrix);
+            return new RadialGradientBrush(tc0, this.Radius0 * scale, tc1, this.Radius1!.Value * scale, this.RepetitionMode, this.ColorStopsArray);
+        }
+
+        return new RadialGradientBrush(tc0, this.Radius0 * scale, this.RepetitionMode, this.ColorStopsArray);
     }
 
     /// <inheritdoc/>
@@ -66,10 +103,10 @@ public sealed class RadialGradientBrush : GradientBrush
         if (other is RadialGradientBrush b)
         {
             return base.Equals(other)
-                && this.center0.Equals(b.center0)
-                && this.radius0.Equals(b.radius0)
-                && Nullable.Equals(this.center1, b.center1)
-                && Nullable.Equals(this.radius1, b.radius1);
+                && this.Center0.Equals(b.Center0)
+                && this.Radius0.Equals(b.Radius0)
+                && Nullable.Equals(this.Center1, b.Center1)
+                && Nullable.Equals(this.Radius1, b.Radius1);
         }
 
         return false;
@@ -77,72 +114,73 @@ public sealed class RadialGradientBrush : GradientBrush
 
     /// <inheritdoc/>
     public override int GetHashCode()
-        => HashCode.Combine(base.GetHashCode(), this.center0, this.radius0, this.center1, this.radius1);
+        => HashCode.Combine(base.GetHashCode(), this.Center0, this.Radius0, this.Center1, this.Radius1);
 
     /// <inheritdoc />
-    public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
+    public override BrushRenderer<TPixel> CreateRenderer<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        ImageFrame<TPixel> source,
+        int canvasWidth,
         RectangleF region)
-        => new RadialGradientBrushApplicator<TPixel>(
+        => new RadialGradientBrushRenderer<TPixel>(
             configuration,
             options,
-            source,
-            this.center0,
-            this.radius0,
-            this.center1,
-            this.radius1,
-            this.ColorStops,
+            canvasWidth,
+            this.Center0,
+            this.Radius0,
+            this.Center1,
+            this.Radius1,
+            this.ColorStopsArray,
             this.RepetitionMode);
 
     /// <summary>
     /// The radial gradient brush applicator.
     /// </summary>
-    private sealed class RadialGradientBrushApplicator<TPixel> : GradientBrushApplicator<TPixel>
+    private sealed class RadialGradientBrushRenderer<TPixel> : GradientBrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        private const float GradientEpsilon = 1F / (1 << 12);
+
         // Single-circle fields
         private readonly bool isTwoCircle;
         private readonly float c0x;
         private readonly float c0y;
         private readonly float r0;
 
-        // Two-circle fields
-        private readonly float c1x;
-        private readonly float c1y;
-        private readonly float r1;
-
-        // Precomputed for two-circle solve
-        private readonly float dx;
-        private readonly float dy;
-        private readonly float dd;   // d·d
-        private readonly float dr;   // r1 - r0
-        private readonly float denom;    // dd - dr^2
+        // Two-circle gradient fields.
+        // The transform changes coordinates so the gradient can be evaluated
+        // with simple formulas around a canonical line/circle configuration.
+        private readonly Matrix3x2 radialTransform;
+        private readonly float focalX;
+        private readonly float radius;
+        private readonly bool isStrip;
+        private readonly bool isCircular;
+        private readonly bool isFocalOnCircle;
+        private readonly bool isSwapped;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="RadialGradientBrushApplicator{TPixel}" /> class.
+        /// Initializes a new instance of the <see cref="RadialGradientBrushRenderer{TPixel}" /> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="target">The target image.</param>
+        /// <param name="canvasWidth">The canvas width for the current render pass.</param>
         /// <param name="center0">Center of the starting circle.</param>
         /// <param name="radius0">Radius of the starting circle.</param>
         /// <param name="center1">Center of the ending circle, or null to use single-circle form.</param>
         /// <param name="radius1">Radius of the ending circle, or null to use single-circle form.</param>
         /// <param name="colorStops">Definition of colors.</param>
         /// <param name="repetitionMode">How the colors are repeated beyond the first gradient.</param>
-        public RadialGradientBrushApplicator(
+        public RadialGradientBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
-            ImageFrame<TPixel> target,
+            int canvasWidth,
             PointF center0,
             float radius0,
             PointF? center1,
             float? radius1,
             ColorStop[] colorStops,
             GradientRepetitionMode repetitionMode)
-            : base(configuration, options, target, colorStops, repetitionMode)
+            : base(configuration, options, canvasWidth, colorStops, repetitionMode)
         {
             this.c0x = center0.X;
             this.c0y = center0.Y;
@@ -152,28 +190,29 @@ public sealed class RadialGradientBrush : GradientBrush
 
             if (this.isTwoCircle)
             {
-                this.c1x = center1!.Value.X;
-                this.c1y = center1.Value.Y;
-                this.r1 = radius1!.Value;
+                ConicalGradientParameters parameters = CreateConicalGradientParameters(
+                    center0,
+                    radius0,
+                    center1!.Value,
+                    radius1!.Value);
 
-                this.dx = this.c1x - this.c0x;
-                this.dy = this.c1y - this.c0y;
-                this.dd = (this.dx * this.dx) + (this.dy * this.dy);
-                this.dr = this.r1 - this.r0;
-
-                // A = |d|^2 - dr^2
-                this.denom = this.dd - (this.dr * this.dr);
+                this.radialTransform = parameters.Transform;
+                this.focalX = parameters.FocalX;
+                this.radius = parameters.Radius;
+                this.isStrip = parameters.IsStrip;
+                this.isCircular = parameters.IsCircular;
+                this.isFocalOnCircle = parameters.IsFocalOnCircle;
+                this.isSwapped = parameters.IsSwapped;
             }
             else
             {
-                this.c1x = 0F;
-                this.c1y = 0F;
-                this.r1 = 0F;
-                this.dx = 0F;
-                this.dy = 0F;
-                this.dd = 0F;
-                this.dr = 0F;
-                this.denom = 0F;
+                this.radialTransform = Matrix3x2.Identity;
+                this.focalX = 0F;
+                this.radius = 0F;
+                this.isStrip = false;
+                this.isCircular = false;
+                this.isFocalOnCircle = false;
+                this.isSwapped = false;
             }
         }
 
@@ -186,29 +225,229 @@ public sealed class RadialGradientBrush : GradientBrush
                 return MathF.Sqrt((ux * ux) + (uy * uy)) / this.r0;
             }
 
-            float qx = x - this.c0x, qy = y - this.c0y;
+            // Move the sample into the canonical coordinate system where the
+            // end circle lies on the x-axis and the conic can be solved using
+            // closed-form expressions.
+            Vector2 local = Vector2.Transform(new Vector2(x, y), this.radialTransform);
+            float localX = local.X;
+            float localY = local.Y;
+            float xx = localX * localX;
+            float yy = localY * localY;
+            float t;
 
-            // Concentric case: centers equal -> dd == 0
-            if (this.dd == 0f)
+            if (this.isStrip)
             {
-                // t = (|p-c0| - r0) / (r1 - r0)
-                float dist = MathF.Sqrt((qx * qx) + (qy * qy));
-                float invDr = 1f / MathF.Max(MathF.Abs(this.dr), 1e-20f);
-                return (dist - this.r0) * invDr;
+                // Strip gradients are bounded by a band around the axis.
+                // radius stores the squared half-width in normalized space,
+                // so points outside the band are invalid.
+                float a = this.radius - yy;
+                if (a < 0F)
+                {
+                    return float.NaN;
+                }
+
+                // Once inside the band, the parameter advances along the axis.
+                t = MathF.Sqrt(a) + localX;
+            }
+            else if (this.isFocalOnCircle)
+            {
+                // This degenerate case reduces to a rational expression where
+                // the focal point sits exactly on the limiting circle.
+                if (localX == 0F)
+                {
+                    return float.NaN;
+                }
+
+                t = (xx + yy) / localX;
+                if (t < 0F)
+                {
+                    return float.NaN;
+                }
+            }
+            else if (this.radius > 1F)
+            {
+                // Wide cones use a circular norm. The x term shifts the root
+                // back into the original gradient parameterization.
+                float radiusReciprocal = this.isCircular ? 0F : 1F / this.radius;
+                t = MathF.Sqrt(xx + yy) - (localX * radiusReciprocal);
+            }
+            else
+            {
+                // Narrow cones use a hyperbolic form. Points with x^2 < y^2
+                // lie outside the valid branch and must not contribute.
+                float a = xx - yy;
+                if (a < 0F)
+                {
+                    return float.NaN;
+                }
+
+                // lessScale picks the correct branch of the hyperbola after
+                // swaps and orientation changes.
+                float lessScale = (this.isSwapped || (1F - this.focalX) < 0F) ? -1F : 1F;
+                t = (lessScale * MathF.Sqrt(a)) - (localX / this.radius);
+                if (t < 0F)
+                {
+                    return float.NaN;
+                }
             }
 
-            // General two-circle fast form:
-            // t = ((q·d) - r0*dr) / (|d|^2 - dr^2)
-            if (this.denom == 0f)
+            // Convert back from the normalized local solution into the brush's
+            // gradient parameter, then undo the earlier swap if required.
+            t = this.focalX + (MathF.Sign(1F - this.focalX) * t);
+            return this.isSwapped ? 1F - t : t;
+        }
+
+        private static ConicalGradientParameters CreateConicalGradientParameters(
+            PointF center0,
+            float radius0,
+            PointF center1,
+            float radius1)
+        {
+            PointF p0 = center0;
+            PointF p1 = center1;
+            float r0 = radius0;
+            float r1 = radius1;
+
+            if (MathF.Abs(r0 - r1) <= GradientEpsilon)
             {
-                // Near-singular; fall back to concentric-like ratio
-                float dist = MathF.Sqrt((qx * qx) + (qy * qy));
-                float invDr = 1f / MathF.Max(MathF.Abs(this.dr), 1e-20f);
-                return (dist - this.r0) * invDr;
+                // When both circles have the same radius, the locus becomes a
+                // strip: solve along the axis between the centers, with the
+                // radius contributing only a perpendicular cutoff.
+                float scaled = r0 / Distance(p0, p1);
+                return new ConicalGradientParameters(
+                    TwoPointToUnitLine(p0, p1),
+                    0F,
+                    scaled * scaled,
+                    isStrip: true,
+                    isCircular: false,
+                    isFocalOnCircle: false,
+                    isSwapped: false);
             }
 
-            float num = (qx * this.dx) + (qy * this.dy) - (this.r0 * this.dr);
-            return num / this.denom;
+            bool isCircular = false;
+            if (p0 == p1)
+            {
+                isCircular = true;
+
+                // Equal centers make the conic circular. Nudge slightly so the
+                // line construction below stays invertible.
+                p0 = new PointF(p0.X + GradientEpsilon, p0.Y + GradientEpsilon);
+            }
+
+            bool isSwapped = false;
+            if (r1 == 0F)
+            {
+                isSwapped = true;
+
+                // Put the zero-radius focus on the start side so the later
+                // formulas keep one orientation.
+                (p0, p1) = (p1, p0);
+                (r0, r1) = (r1, r0);
+            }
+
+            // focalX describes where the focal point lies along the line from
+            // the start circle to the end circle. Values outside [0, 1] are
+            // valid and correspond to cones whose focus lies beyond an endpoint.
+            float focalX = r0 / (r0 - r1);
+            PointF cf = new(
+                ((1F - focalX) * p0.X) + (focalX * p1.X),
+                ((1F - focalX) * p0.Y) + (focalX * p1.Y));
+
+            // radius is the end-circle radius expressed in the normalized frame
+            // built from the focal point and the end center.
+            float radius = r1 / Distance(cf, p1);
+            Matrix3x2 userToUnitLine = TwoPointToUnitLine(cf, p1);
+            Matrix3x2 transform;
+            bool isFocalOnCircle = false;
+
+            if (MathF.Abs(radius - 1F) <= GradientEpsilon)
+            {
+                isFocalOnCircle = true;
+
+                // When the focal point lies on the circle, the quadratic terms
+                // collapse to a simpler rational form.
+                float scale = 0.5F * MathF.Abs(1F - focalX);
+                transform = userToUnitLine * Matrix3x2.CreateScale(scale);
+            }
+            else
+            {
+                // Otherwise scale the unit-line frame so the gradient can be
+                // tested with either x^2 + y^2 or x^2 - y^2, depending on
+                // whether the cone opens wider or narrower than the unit case.
+                float a = (radius * radius) - 1F;
+                float scaleRatio = MathF.Abs(1F - focalX) / a;
+                float scaleX = radius * scaleRatio;
+                float scaleY = MathF.Sqrt(MathF.Abs(a)) * scaleRatio;
+                transform = userToUnitLine * Matrix3x2.CreateScale(scaleX, scaleY);
+            }
+
+            return new ConicalGradientParameters(
+                transform,
+                focalX,
+                radius,
+                isStrip: false,
+                isCircular: isCircular,
+                isFocalOnCircle: isFocalOnCircle,
+                isSwapped: isSwapped);
+        }
+
+        private static float Distance(Vector2 p0, Vector2 p1) => Vector2.Distance(p0, p1);
+
+        private static Matrix3x2 TwoPointToUnitLine(PointF p0, PointF p1)
+        {
+            // Build a change-of-basis that sends the segment p0->p1 to the
+            // unit line. That lets the gradient math work in one fixed frame
+            // instead of re-deriving equations for every brush.
+            Matrix3x2 source = FromPoly2(p0, p1);
+            Matrix3x2.Invert(source, out Matrix3x2 inverse);
+            return inverse * FromPoly2(new PointF(0F, 0F), new PointF(1F, 0F));
+        }
+
+        private static Matrix3x2 FromPoly2(PointF p0, PointF p1)
+
+            // This affine frame uses p0 as the origin and p0->p1 as one axis.
+            // Its inverse is the basis change we need for normalization.
+            => new(
+                p1.Y - p0.Y,
+                p0.X - p1.X,
+                p1.X - p0.X,
+                p1.Y - p0.Y,
+                p0.X,
+                p0.Y);
+
+        private readonly struct ConicalGradientParameters
+        {
+            public ConicalGradientParameters(
+                Matrix3x2 transform,
+                float focalX,
+                float radius,
+                bool isStrip,
+                bool isCircular,
+                bool isFocalOnCircle,
+                bool isSwapped)
+            {
+                this.Transform = transform;
+                this.FocalX = focalX;
+                this.Radius = radius;
+                this.IsStrip = isStrip;
+                this.IsCircular = isCircular;
+                this.IsFocalOnCircle = isFocalOnCircle;
+                this.IsSwapped = isSwapped;
+            }
+
+            public Matrix3x2 Transform { get; }
+
+            public float FocalX { get; }
+
+            public float Radius { get; }
+
+            public bool IsStrip { get; }
+
+            public bool IsCircular { get; }
+
+            public bool IsFocalOnCircle { get; }
+
+            public bool IsSwapped { get; }
         }
     }
 }
