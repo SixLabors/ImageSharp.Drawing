@@ -370,8 +370,9 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
             char ch = svgPath[0];
             if (char.IsDigit(ch) || ch == '-' || ch == '+' || ch == '.')
             {
-                // Are we are the end of the string or we are at the end of the path?
-                if (svgPath.Length == 0 || op == 'Z')
+                // SVG allows repeated operand groups to reuse the previous command.
+                // A leading number is only valid once a drawable command is active.
+                if (op is '\0' or 'Z')
                 {
                     return false;
                 }
@@ -393,107 +394,164 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
                 svgPath = TrimSeparator(svgPath[1..]);
             }
 
+            // Read every operand for the command before appending geometry. That keeps
+            // malformed or truncated data from leaking a partially parsed segment into the path.
             switch (op)
             {
                 case 'M':
-                    svgPath = FindPoint(svgPath, relative, c, out point1);
-                    builder.MoveTo(point1);
+                    if (!TryFindPoint(ref svgPath, relative, c, out point1))
+                    {
+                        return false;
+                    }
+
+                    _ = builder.MoveTo(point1);
                     previousOp = '\0';
+
+                    // Extra coordinate pairs after a move command are implicit line commands.
                     op = 'L';
                     c = point1;
                     break;
                 case 'L':
-                    svgPath = FindPoint(svgPath, relative, c, out point1);
-                    builder.LineTo(point1);
+                    if (!TryFindPoint(ref svgPath, relative, c, out point1))
+                    {
+                        return false;
+                    }
+
+                    _ = builder.LineTo(point1);
                     c = point1;
                     break;
                 case 'H':
-                    svgPath = FindScaler(svgPath, out float x);
+                    if (!TryFindScaler(ref svgPath, out float x))
+                    {
+                        return false;
+                    }
+
                     if (relative)
                     {
                         x += c.X;
                     }
 
-                    builder.LineTo(x, c.Y);
+                    if (!float.IsFinite(x))
+                    {
+                        return false;
+                    }
+
+                    _ = builder.LineTo(x, c.Y);
                     c.X = x;
                     break;
                 case 'V':
-                    svgPath = FindScaler(svgPath, out float y);
+                    if (!TryFindScaler(ref svgPath, out float y))
+                    {
+                        return false;
+                    }
+
                     if (relative)
                     {
                         y += c.Y;
                     }
 
-                    builder.LineTo(c.X, y);
+                    if (!float.IsFinite(y))
+                    {
+                        return false;
+                    }
+
+                    _ = builder.LineTo(c.X, y);
                     c.Y = y;
                     break;
                 case 'C':
-                    svgPath = FindPoint(svgPath, relative, c, out point1);
-                    svgPath = FindPoint(svgPath, relative, c, out point2);
-                    svgPath = FindPoint(svgPath, relative, c, out point3);
-                    builder.CubicBezierTo(point1, point2, point3);
+                    if (!TryFindPoint(ref svgPath, relative, c, out point1)
+                        || !TryFindPoint(ref svgPath, relative, c, out point2)
+                        || !TryFindPoint(ref svgPath, relative, c, out point3))
+                    {
+                        return false;
+                    }
+
+                    _ = builder.CubicBezierTo(point1, point2, point3);
                     lastc = point2;
                     c = point3;
                     break;
                 case 'S':
-                    svgPath = FindPoint(svgPath, relative, c, out point2);
-                    svgPath = FindPoint(svgPath, relative, c, out point3);
+                    if (!TryFindPoint(ref svgPath, relative, c, out point2)
+                        || !TryFindPoint(ref svgPath, relative, c, out point3))
+                    {
+                        return false;
+                    }
+
                     point1 = c;
                     if (previousOp is 'C' or 'S')
                     {
+                        // Smooth cubic curves mirror the previous cubic control point.
+                        // Without a preceding cubic command, the current point is the control point.
                         point1.X -= lastc.X - c.X;
                         point1.Y -= lastc.Y - c.Y;
                     }
 
-                    builder.CubicBezierTo(point1, point2, point3);
+                    _ = builder.CubicBezierTo(point1, point2, point3);
                     lastc = point2;
                     c = point3;
                     break;
                 case 'Q': // Quadratic Bezier Curve
-                    svgPath = FindPoint(svgPath, relative, c, out point1);
-                    svgPath = FindPoint(svgPath, relative, c, out point2);
-                    builder.QuadraticBezierTo(point1, point2);
+                    if (!TryFindPoint(ref svgPath, relative, c, out point1)
+                        || !TryFindPoint(ref svgPath, relative, c, out point2))
+                    {
+                        return false;
+                    }
+
+                    _ = builder.QuadraticBezierTo(point1, point2);
                     lastc = point1;
                     c = point2;
                     break;
                 case 'T':
-                    svgPath = FindPoint(svgPath, relative, c, out point2);
+                    if (!TryFindPoint(ref svgPath, relative, c, out point2))
+                    {
+                        return false;
+                    }
+
                     point1 = c;
                     if (previousOp is 'Q' or 'T')
                     {
+                        // Smooth quadratic curves mirror the previous quadratic control point.
+                        // Without a preceding quadratic command, the current point is the control point.
                         point1.X -= lastc.X - c.X;
                         point1.Y -= lastc.Y - c.Y;
                     }
 
-                    builder.QuadraticBezierTo(point1, point2);
+                    _ = builder.QuadraticBezierTo(point1, point2);
                     lastc = point1;
                     c = point2;
                     break;
                 case 'A':
-                    if (TryFindScaler(ref svgPath, out float radiiX)
-                        && TryTrimSeparator(ref svgPath)
-                        && TryFindScaler(ref svgPath, out float radiiY)
-                        && TryTrimSeparator(ref svgPath)
-                        && TryFindScaler(ref svgPath, out float angle)
-                        && TryTrimSeparator(ref svgPath)
-                        && TryFindScaler(ref svgPath, out float largeArc)
-                        && TryTrimSeparator(ref svgPath)
-                        && TryFindScaler(ref svgPath, out float sweep)
-                        && TryFindPoint(ref svgPath, relative, c, out PointF point))
+                    // Arc flags are single SVG grammar tokens, not numbers. Reading them as
+                    // scalars would accept malformed flag/end-point boundaries such as "04445".
+                    if (!TryFindScaler(ref svgPath, out float radiiX)
+                        || !TryTrimSeparator(ref svgPath)
+                        || !TryFindScaler(ref svgPath, out float radiiY)
+                        || !TryTrimSeparator(ref svgPath)
+                        || !TryFindScaler(ref svgPath, out float angle)
+                        || !TryTrimSeparator(ref svgPath)
+                        || !TryFindFlag(ref svgPath, out bool largeArc)
+                        || !TryTrimSeparator(ref svgPath)
+                        || !TryFindFlag(ref svgPath, out bool sweep)
+                        || !TryFindPoint(ref svgPath, relative, c, out PointF point))
                     {
-                        builder.ArcTo(radiiX, radiiY, angle, largeArc == 1, sweep == 1, point);
-                        c = point;
+                        return false;
                     }
 
+                    _ = builder.ArcTo(radiiX, radiiY, angle, largeArc, sweep, point);
+                    c = point;
                     break;
                 case 'Z':
-                    builder.CloseFigure();
+                    _ = builder.CloseFigure();
                     c = first;
                     break;
                 case '~':
-                    svgPath = FindPoint(svgPath, relative, c, out point1);
-                    svgPath = FindPoint(svgPath, relative, c, out point2);
-                    builder.MoveTo(point1).LineTo(point2);
+                    if (!TryFindPoint(ref svgPath, relative, c, out point1)
+                        || !TryFindPoint(ref svgPath, relative, c, out point2))
+                    {
+                        return false;
+                    }
+
+                    _ = builder.MoveTo(point1).LineTo(point2);
                     break;
                 default:
                     return false;
@@ -511,8 +569,28 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
         return true;
     }
 
+    private static bool TryFindFlag(ref ReadOnlySpan<char> str, out bool value)
+    {
+        str = TrimSeparator(str);
+
+        // https://www.w3.org/TR/SVG11/paths.html#PathDataBNF
+        // flag: "0" | "1"
+        // Adjacent flags are valid, so this consumes exactly one character.
+        if (str.Length == 0 || (str[0] is not '0' and not '1'))
+        {
+            value = default;
+            return false;
+        }
+
+        value = str[0] == '1';
+        str = str[1..];
+        return true;
+    }
+
     private static bool TryTrimSeparator(ref ReadOnlySpan<char> str)
     {
+        // SVG separators are optional in places where the next token can be
+        // recognized unambiguously. Keep this chainable with the operand readers.
         ReadOnlySpan<char> result = TrimSeparator(str);
         if (str[^result.Length..].StartsWith(result))
         {
@@ -525,11 +603,10 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
 
     private static bool TryFindScaler(ref ReadOnlySpan<char> str, out float value)
     {
-        ReadOnlySpan<char> result = FindScaler(str, out float valueInner);
-        if (str[^result.Length..].StartsWith(result))
+        ReadOnlySpan<char> source = TrimSeparator(str);
+        if (TryReadScalar(source, out value, out int length))
         {
-            value = valueInner;
-            str = result;
+            str = source[length..];
             return true;
         }
 
@@ -539,11 +616,23 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
 
     private static bool TryFindPoint(ref ReadOnlySpan<char> str, bool relative, PointF current, out PointF value)
     {
-        ReadOnlySpan<char> result = FindPoint(str, relative, current, out PointF valueInner);
-        if (str[^result.Length..].StartsWith(result))
+        if (TryFindScaler(ref str, out float x) && TryFindScaler(ref str, out float y))
         {
-            value = valueInner;
-            str = result;
+            // Relative operands can overflow after adding the current point even when
+            // each parsed scalar is finite, so validate the absolute result as well.
+            if (relative)
+            {
+                x += current.X;
+                y += current.Y;
+            }
+
+            if (!float.IsFinite(x) || !float.IsFinite(y))
+            {
+                value = default;
+                return false;
+            }
+
+            value = new PointF(x, y);
             return true;
         }
 
@@ -551,25 +640,10 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
         return false;
     }
 
-    private static ReadOnlySpan<char> FindPoint(ReadOnlySpan<char> str, bool isRelative, PointF relative, out PointF value)
+    private static bool TryReadScalar(ReadOnlySpan<char> str, out float scaler, out int length)
     {
-        str = FindScaler(str, out float x);
-        str = FindScaler(str, out float y);
-        if (isRelative)
-        {
-            x += relative.X;
-            y += relative.Y;
-        }
-
-        value = new PointF(x, y);
-        return str;
-    }
-
-    private static ReadOnlySpan<char> FindScaler(ReadOnlySpan<char> str, out float scaler)
-    {
-        str = TrimSeparator(str);
-        scaler = 0;
-
+        // SVG path numbers can be tightly packed: "10-20" is two numbers, as is
+        // "0.5.6". Stop at the first character that belongs to the next token.
         bool hasDot = false;
         for (int i = 0; i < str.Length; i++)
         {
@@ -577,8 +651,8 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
 
             if (IsSeparator(ch))
             {
-                scaler = ParseFloat(str[..i]);
-                return str[i..];
+                length = i;
+                return TryParseFloat(str[..length], out scaler);
             }
 
             if (ch == '.')
@@ -586,8 +660,8 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
                 if (hasDot)
                 {
                     // Second decimal point starts a new number.
-                    scaler = ParseFloat(str[..i]);
-                    return str[i..];
+                    length = i;
+                    return TryParseFloat(str[..length], out scaler);
                 }
 
                 hasDot = true;
@@ -599,24 +673,20 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
                 char prev = str[i - 1];
                 if (prev is not 'e' and not 'E')
                 {
-                    scaler = ParseFloat(str[..i]);
-                    return str[i..];
+                    length = i;
+                    return TryParseFloat(str[..length], out scaler);
                 }
             }
             else if (char.IsLetter(ch))
             {
                 // Hit a command letter; end this number.
-                scaler = ParseFloat(str[..i]);
-                return str[i..];
+                length = i;
+                return TryParseFloat(str[..length], out scaler);
             }
         }
 
-        if (str.Length > 0)
-        {
-            scaler = ParseFloat(str);
-        }
-
-        return [];
+        length = str.Length;
+        return TryParseFloat(str, out scaler);
     }
 
     private static bool IsSeparator(char ch)
@@ -641,6 +711,6 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
         return data[idx..];
     }
 
-    private static float ParseFloat(ReadOnlySpan<char> str)
-        => float.Parse(str, provider: CultureInfo.InvariantCulture);
+    private static bool TryParseFloat(ReadOnlySpan<char> str, out float value)
+        => float.TryParse(str, CultureInfo.InvariantCulture, out value) && float.IsFinite(value);
 }
