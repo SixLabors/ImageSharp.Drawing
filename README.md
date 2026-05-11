@@ -14,27 +14,74 @@ SixLabors.ImageSharp.Drawing
 
 </div>
 
-**ImageSharp.Drawing** is a cross-platform 2D drawing library built on top of [ImageSharp](https://github.com/SixLabors/ImageSharp). It provides path construction, polygon manipulation, fills, strokes, gradient brushes, pattern brushes, and text rendering. Built against [.NET 8](https://docs.microsoft.com/en-us/dotnet/standard/net-standard).
+**ImageSharp.Drawing** is a cross-platform 2D drawing library built on top of [ImageSharp](https://github.com/SixLabors/ImageSharp). It adds a rich vector drawing model for composing raster images, rendering text, shaping paths, masking image-processing operations, and targeting CPU or WebGPU-backed drawing surfaces from the same `DrawingCanvas` API.
+
+The core package targets .NET 8 and provides the default CPU backend. The optional `SixLabors.ImageSharp.Drawing.WebGPU` package adds GPU-backed rendering for native windows, external surfaces, and offscreen render targets.
+
+## Capabilities
+
+- Draw and fill paths, lines, arcs, ellipses, pies, rectangles, rounded rectangles, regular polygons, stars, and arbitrary `PathBuilder` geometry.
+- Use solid, pattern, image, recolor, linear gradient, radial gradient, elliptic gradient, sweep gradient, and path gradient brushes.
+- Stroke paths and polylines with configurable width, caps, joins, dash patterns, and stroke options.
+- Render text with `SixLabors.Fonts`, including rich text runs, fallback fonts, bidirectional text, vertical layout, glyph paths, text measurement, wrapped text, and text-on-path scenarios.
+- Compose with transforms, clipping, save/restore state, isolated layers, blend options, opacity, and region canvases.
+- Use paths as masks for ImageSharp processors with `canvas.Apply(...)`, or fill paths with images via `ImageBrush`.
+- Create retained drawing scenes and render them repeatedly to compatible targets.
+- Render into `Image<TPixel>` memory with the CPU backend, or into WebGPU windows, external host surfaces, and offscreen render targets with the WebGPU backend.
 
 ## Quick Start
+
+Draw into an `Image<TPixel>` with the CPU backend:
 
 ```csharp
 image.Mutate(ctx => ctx.Paint(canvas =>
 {
+    // A fill without geometry paints the entire canvas.
     canvas.Fill(Brushes.Solid(Color.White));
-    canvas.Fill(Brushes.Solid(Color.Red), new EllipsePolygon(200, 200, 100));
-    canvas.Draw(Pens.Solid(Color.Blue, 3F), new RectanglePolygon(50, 50, 200, 100));
+
+    // Brushes can be reused across paths or used directly for full-canvas fills.
+    canvas.Fill(new LinearGradientBrush(
+        new PointF(0, 0),
+        new PointF(400, 300),
+        GradientRepetitionMode.None,
+        new ColorStop(0F, Color.CornflowerBlue),
+        new ColorStop(1F, Color.MediumSeaGreen)));
+
+    // Built-in polygon types are regular IPath instances accepted by Fill and Draw.
+    canvas.Fill(Brushes.Solid(Color.HotPink), new EllipsePolygon(200, 200, 100));
+    canvas.Draw(Pens.Solid(Color.Navy, 3F), new RoundedRectanglePolygon(50, 50, 200, 100, 16));
 }));
 ```
-  
+
+Draw into a native WebGPU window with the same canvas-facing API:
+
+```csharp
+using WebGPUWindow window = new(new WebGPUWindowOptions
+{
+    Title = "ImageSharp.Drawing",
+    Size = new Size(800, 600),
+    Format = WebGPUTextureFormat.Bgra8Unorm,
+    PresentMode = WebGPUPresentMode.Fifo,
+});
+
+window.Run(frame =>
+{
+    DrawingCanvas canvas = frame.Canvas;
+
+    // WebGPU frames expose the same DrawingCanvas API as CPU image processing.
+    canvas.Fill(Brushes.Solid(Color.Black));
+    canvas.Fill(Brushes.Solid(Color.CornflowerBlue), new EllipsePolygon(400, 300, 120));
+});
+```
+
 ## License
-  
-- ImageSharp.Drawing is licensed under the [Six Labors Split License, Version 1.0](https://github.com/SixLabors/ImageSharp.Drawing/blob/main/LICENSE)  
+
+- ImageSharp.Drawing is licensed under the [Six Labors Split License, Version 1.0](https://github.com/SixLabors/ImageSharp.Drawing/blob/main/LICENSE)
 
 
 ## Support Six Labors
 
-Support the efforts of the development of the Six Labors projects. 
+Support the efforts of the development of the Six Labors projects.
  - [Purchase a Commercial License :heart:](https://sixlabors.com/pricing/)
  - [Become a sponsor via GitHub Sponsors :heart:]( https://github.com/sponsors/SixLabors)
  - [Become a sponsor via Open Collective :heart:](https://opencollective.com/sixlabors)
@@ -49,7 +96,7 @@ Support the efforts of the development of the Six Labors projects.
 - Do you have questions? We are happy to help! Please [join our Discussions Forum](https://github.com/SixLabors/ImageSharp.Drawing/discussions/category_choices), or ask them on [stackoverflow](https://stackoverflow.com) using the `ImageSharp` tag. **Do not** open issues for questions!
 - Please read our [Contribution Guide](https://github.com/SixLabors/ImageSharp.Drawing/blob/main/.github/CONTRIBUTING.md) before opening issues or pull requests!
 
-## Code of Conduct  
+## Code of Conduct
 This project has adopted the code of conduct defined by the [Contributor Covenant](https://contributor-covenant.org/) to clarify expected behavior in our community.
 For more information, see the [.NET Foundation Code of Conduct](https://dotnetfoundation.org/code-of-conduct).
 
@@ -57,9 +104,10 @@ For more information, see the [.NET Foundation Code of Conduct](https://dotnetfo
 
 Install stable releases via NuGet; development releases are available via MyGet.
 
-| Package Name                   | Release (NuGet) | Nightly (MyGet) |
-|--------------------------------|-----------------|-----------------|
-| `SixLabors.ImageSharp.Drawing` | [![NuGet](https://img.shields.io/nuget/v/SixLabors.ImageSharp.Drawing.svg)](https://www.nuget.org/packages/SixLabors.ImageSharp.Drawing/) | [![feedz.io](https://img.shields.io/badge/endpoint.svg?url=https%3A%2F%2Ff.feedz.io%2Fsixlabors%2Fsixlabors%2Fshield%2FSixLabors.ImageSharp.Drawing%2Flatest)](https://f.feedz.io/sixlabors/sixlabors/nuget/index.json) |
+| Package Name                          | Release (NuGet) | Nightly (MyGet) |
+|---------------------------------------|-----------------|-----------------|
+| `SixLabors.ImageSharp.Drawing`        | [![NuGet](https://img.shields.io/nuget/v/SixLabors.ImageSharp.Drawing.svg)](https://www.nuget.org/packages/SixLabors.ImageSharp.Drawing/) | [![feedz.io](https://img.shields.io/badge/endpoint.svg?url=https%3A%2F%2Ff.feedz.io%2Fsixlabors%2Fsixlabors%2Fshield%2FSixLabors.ImageSharp.Drawing%2Flatest)](https://f.feedz.io/sixlabors/sixlabors/nuget/index.json) |
+| `SixLabors.ImageSharp.Drawing.WebGPU` | [![NuGet](https://img.shields.io/nuget/v/SixLabors.ImageSharp.Drawing.WebGPU.svg)](https://www.nuget.org/packages/SixLabors.ImageSharp.Drawing.WebGPU/) | [![feedz.io](https://img.shields.io/badge/endpoint.svg?url=https%3A%2F%2Ff.feedz.io%2Fsixlabors%2Fsixlabors%2Fshield%2FSixLabors.ImageSharp.Drawing.WebGPU%2Flatest)](https://f.feedz.io/sixlabors/sixlabors/nuget/index.json) |
 
 ## Manual build
 
