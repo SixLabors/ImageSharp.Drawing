@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project>
 
+  <!-- NuGet selects this buildTransitive target for WebGPU consumers, so chain to the generated build target containing license validation. -->
+  <Import Project="$(MSBuildThisFileDirectory)..\build\SixLabors.ImageSharp.Drawing.WebGPU.targets"
+          Condition="Exists('$(MSBuildThisFileDirectory)..\build\SixLabors.ImageSharp.Drawing.WebGPU.targets')" />
+
   <!--
     Work around Silk.NET native runtime assets not always landing in the final output directory.
     See https://github.com/dotnet/Silk.NET/issues/2465
