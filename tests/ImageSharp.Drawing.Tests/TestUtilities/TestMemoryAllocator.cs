@@ -28,7 +28,7 @@ internal class TestMemoryAllocator : MemoryAllocator
 
     protected internal override int GetBufferCapacityInBytes() => this.BufferCapacityInBytes;
 
-    public override IMemoryOwner<T> Allocate<T>(int length, AllocationOptions options = AllocationOptions.None)
+    protected override AllocationTrackedMemoryManager<T> AllocateCore<T>(int length, AllocationOptions options = AllocationOptions.None)
     {
         T[] array = this.AllocateArray<T>(length, options);
         return new BasicArrayBuffer<T>(array, length, this);
@@ -95,7 +95,7 @@ internal class TestMemoryAllocator : MemoryAllocator
     /// <summary>
     /// Wraps an array as an <see cref="IManagedByteBuffer"/> instance.
     /// </summary>
-    private class BasicArrayBuffer<T> : MemoryManager<T>
+    private class BasicArrayBuffer<T> : AllocationTrackedMemoryManager<T>
         where T : struct
     {
         private readonly TestMemoryAllocator allocator;
@@ -140,7 +140,7 @@ internal class TestMemoryAllocator : MemoryAllocator
         public override void Unpin() => throw new NotImplementedException();
 
         /// <inheritdoc />
-        protected override void Dispose(bool disposing)
+        protected override void DisposeCore(bool disposing)
         {
             if (disposing)
             {
