@@ -1362,6 +1362,21 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             ? drawingOptions
             : new DrawingOptions(graphicsOptions, shapeOptions, Matrix4x4.Identity);
 
+        IReadOnlyList<IPath>? operationClipPaths = clipPaths;
+        if (clipPaths != null && clipPaths.Count > 0 && (operation.RenderLocation.X != 0 || operation.RenderLocation.Y != 0))
+        {
+            IPath[] translatedClipPaths = new IPath[clipPaths.Count];
+
+            // Text glyph paths are queued in glyph-local coordinates and placed with RenderLocation,
+            // so canvas-space clip paths must be moved into that same local space before clipping.
+            for (int i = 0; i < clipPaths.Count; i++)
+            {
+                translatedClipPaths[i] = clipPaths[i].Translate(-operation.RenderLocation);
+            }
+
+            operationClipPaths = translatedClipPaths;
+        }
+
         if (pen is null)
         {
             return new PathCompositionSceneCommand(
@@ -1372,7 +1387,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                     in rasterizerOptions,
                     state.TargetBounds,
                     destinationOffset,
-                    clipPaths,
+                    operationClipPaths,
                     state.IsLayer));
         }
 
@@ -1385,7 +1400,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 state.TargetBounds,
                 destinationOffset,
                 pen,
-                clipPaths,
+                operationClipPaths,
                 state.IsLayer));
     }
 
