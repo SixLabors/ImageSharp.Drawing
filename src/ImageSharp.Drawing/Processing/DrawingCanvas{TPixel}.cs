@@ -59,6 +59,12 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// </summary>
     private readonly Stack<DrawingCanvasState> savedStates = new();
 
+    // Per-canvas glyph-outline cache: hoists RichTextGlyphRenderer's per-glyph outline cache from
+    // per-DrawText-call scope up to the whole canvas, so a glyph outline built once is reused by
+    // every DrawText call on this canvas (across a frame's many text runs) instead of being
+    // rebuilt for every run on a text-heavy page.
+    private readonly Dictionary<RichTextGlyphRenderer.CacheKey, List<RichTextGlyphRenderer.GlyphRenderData>> glyphCache = [];
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class.
     /// </summary>
@@ -457,7 +463,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         EnsureTextPaint(brush, pen);
 
         RichTextOptions configuredOptions = ConfigureTextOptions(textOptions, path, out IPath? configuredPath);
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, configuredPath, pen, brush);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, configuredPath, pen, brush, this.glyphCache);
         TextRenderer renderer = new(glyphRenderer);
         renderer.RenderText(text, configuredOptions);
 
@@ -487,7 +493,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             effectiveOptions.ShapeOptions,
             Matrix4x4.CreateTranslation(location.X, location.Y, 0) * effectiveOptions.Transform);
 
-        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush);
+        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.glyphCache);
         textBlock.RenderTo(glyphRenderer, wrappingLength);
 
         this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions, state.ClipPaths);
@@ -509,7 +515,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.glyphCache);
         textBlock.RenderTo(glyphRenderer, wrappingLength);
 
         this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipPaths);
@@ -537,7 +543,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             effectiveOptions.ShapeOptions,
             Matrix4x4.CreateTranslation(location.X, location.Y, 0) * effectiveOptions.Transform);
 
-        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush);
+        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.glyphCache);
         lineLayout.RenderTo(glyphRenderer);
 
         this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions, state.ClipPaths);
@@ -558,7 +564,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.glyphCache);
         lineLayout.RenderTo(glyphRenderer);
 
         this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipPaths);
@@ -1143,6 +1149,9 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             {
                 this.DisposePendingImageResources();
             }
+
+            // Release the per-canvas glyph-outline cache.
+            this.glyphCache.Clear();
 
             this.isDisposed = true;
         }

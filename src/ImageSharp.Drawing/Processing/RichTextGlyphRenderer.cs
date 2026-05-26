@@ -72,8 +72,10 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     // Benchmarked to give <0.2% image difference vs. uncached, with >60% cache hit ratio.
     private const float AccuracyMultiple = 8;
 
-    /// <summary>Maps cache keys to their list of <see cref="GlyphRenderData"/> entries (one per layer).</summary>
-    private readonly Dictionary<CacheKey, List<GlyphRenderData>> glyphCache = [];
+    /// <summary>Maps cache keys to their list of <see cref="GlyphRenderData"/> entries (one per layer).
+    /// Owned by the enclosing <see cref="DrawingCanvas{TPixel}"/> and shared across every DrawText
+    /// call on that canvas, so glyph outlines persist beyond a single text draw.</summary>
+    private readonly Dictionary<CacheKey, List<GlyphRenderData>> glyphCache;
 
     /// <summary>Read cursor into the cached layer list for layered cache hits.</summary>
     private int cacheReadIndex;
@@ -107,16 +109,20 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// <param name="path">Optional path to draw the text along.</param>
     /// <param name="pen">Default pen for outlined text, or <see langword="null"/> for fill-only.</param>
     /// <param name="brush">Default brush for filled text, or <see langword="null"/> for outline-only.</param>
+    /// <param name="glyphCache">Caller-owned per-canvas glyph cache shared across renderer
+    /// instances so glyph outlines persist beyond a single text draw.</param>
     public RichTextGlyphRenderer(
         DrawingOptions drawingOptions,
         IPath? path,
         Pen? pen,
-        Brush? brush)
+        Brush? brush,
+        Dictionary<CacheKey, List<GlyphRenderData>> glyphCache)
         : base(drawingOptions.Transform)
     {
         this.drawingOptions = drawingOptions;
         this.defaultPen = pen;
         this.defaultBrush = brush;
+        this.glyphCache = glyphCache;
         this.DrawingOperations = [];
         this.currentCompositionMode = drawingOptions.GraphicsOptions.AlphaCompositionMode;
         this.currentBlendingMode = drawingOptions.GraphicsOptions.ColorBlendingMode;
@@ -782,7 +788,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         {
             if (disposing)
             {
-                this.glyphCache.Clear();
+                // The glyph cache is owned by the canvas and outlives this renderer.
                 this.DrawingOperations.Clear();
             }
 
@@ -795,7 +801,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// path and the sub-pixel deltas needed to reposition the path at a different
     /// screen location on a cache hit.
     /// </summary>
-    private struct GlyphRenderData
+    internal struct GlyphRenderData
     {
         /// <summary>
         /// The fractional-pixel offset between the path's bounding-box origin
@@ -834,7 +840,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// sub-pixel position (quantized to <see cref="AccuracyMultiple"/>), and the pen reference
     /// (since stroke width affects the outline path).
     /// </summary>
-    private readonly struct CacheKey : IEquatable<CacheKey>
+    internal readonly struct CacheKey : IEquatable<CacheKey>
     {
         /// <summary>Gets the font family name.</summary>
         public string Font { get; init; }
