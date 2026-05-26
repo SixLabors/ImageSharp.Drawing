@@ -59,17 +59,11 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// </summary>
     private readonly Stack<DrawingCanvasState> savedStates = new();
 
-    // Per-canvas glyph-outline cache: when enabled, hoists RichTextGlyphRenderer's per-glyph
-    // outline cache from per-DrawText-call scope up to the whole canvas, so a glyph outline
-    // built once is reused by every DrawText call on this canvas (across a frame's many text
-    // runs) instead of being rebuilt for every run on a text-heavy page. Lazily created and only
-    // used when sharing is opted in via Configuration.SetSharedGlyphCache; see shareGlyphCache.
-    private Dictionary<RichTextGlyphRenderer.CacheKey, List<RichTextGlyphRenderer.GlyphRenderData>>? sharedGlyphCacheStore;
-
-    // Whether this canvas shares its glyph-outline cache across DrawText calls. Resolved once at
-    // construction from the configuration (Configuration.SetSharedGlyphCache); defaults to false,
-    // in which case each DrawText uses RichTextGlyphRenderer's private per-call cache.
-    private readonly bool shareGlyphCache;
+    // Per-canvas glyph-outline cache: hoists RichTextGlyphRenderer's per-glyph outline cache from
+    // per-DrawText-call scope up to the whole canvas, so a glyph outline built once is reused by
+    // every DrawText call on this canvas (across a frame's many text runs) instead of being
+    // rebuilt for every run on a text-heavy page. Lazily created on first text draw.
+    private Dictionary<RichTextGlyphRenderer.CacheKey, List<RichTextGlyphRenderer.GlyphRenderData>>? glyphCache;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class.
@@ -161,7 +155,6 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         this.targetFrame = targetFrame;
         this.batcher = batcher;
         this.ownsBatcher = ownsBatcher;
-        this.shareGlyphCache = configuration.GetSharedGlyphCache();
 
         // Canvas coordinates are local to the current frame; origin stays at (0,0).
         this.Bounds = new Rectangle(0, 0, targetFrame.Bounds.Width, targetFrame.Bounds.Height);
@@ -450,10 +443,9 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         this.DrawTextCore(textOptions, text, path, brush, pen);
     }
 
-    // Returns the per-canvas shared glyph-outline cache (lazily created) when sharing is enabled,
-    // or null so the renderer falls back to its private per-call cache (the historical default).
-    private Dictionary<RichTextGlyphRenderer.CacheKey, List<RichTextGlyphRenderer.GlyphRenderData>>? ResolveGlyphCache()
-        => this.shareGlyphCache ? this.sharedGlyphCacheStore ??= [] : null;
+    // Returns the per-canvas glyph-outline cache, lazily creating it on first use.
+    private Dictionary<RichTextGlyphRenderer.CacheKey, List<RichTextGlyphRenderer.GlyphRenderData>> ResolveGlyphCache()
+        => this.glyphCache ??= [];
 
     private void DrawTextCore(
         RichTextOptions textOptions,
@@ -1162,8 +1154,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 this.DisposePendingImageResources();
             }
 
-            // Release the per-canvas shared glyph-outline cache.
-            this.sharedGlyphCacheStore = null;
+            // Release the per-canvas glyph-outline cache.
+            this.glyphCache = null;
 
             this.isDisposed = true;
         }

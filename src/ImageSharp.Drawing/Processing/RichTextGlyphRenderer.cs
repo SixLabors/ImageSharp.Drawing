@@ -73,13 +73,9 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     private const float AccuracyMultiple = 8;
 
     /// <summary>Maps cache keys to their list of <see cref="GlyphRenderData"/> entries (one per layer).
-    /// May be a per-canvas shared cache injected via the constructor so glyph outlines persist across
-    /// every DrawText call in a frame; otherwise a private per-renderer cache (the historical behavior).</summary>
+    /// Owned by the enclosing <see cref="DrawingCanvas{TPixel}"/> and shared across every DrawText
+    /// call on that canvas, so glyph outlines persist beyond a single text draw.</summary>
     private readonly Dictionary<CacheKey, List<GlyphRenderData>> glyphCache;
-
-    /// <summary><see langword="true"/> when <see cref="glyphCache"/> is owned by this renderer and
-    /// cleared on dispose; <see langword="false"/> for an injected shared (per-canvas) cache.</summary>
-    private readonly bool ownsCache;
 
     /// <summary>Read cursor into the cached layer list for layered cache hits.</summary>
     private int cacheReadIndex;
@@ -113,22 +109,20 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// <param name="path">Optional path to draw the text along.</param>
     /// <param name="pen">Default pen for outlined text, or <see langword="null"/> for fill-only.</param>
     /// <param name="brush">Default brush for filled text, or <see langword="null"/> for outline-only.</param>
-    /// <param name="sharedGlyphCache">Optional caller-owned glyph cache shared across renderer
-    /// instances (e.g. per-canvas) so glyph outlines persist beyond a single text draw; when
-    /// <see langword="null"/> the renderer uses a private cache cleared on dispose.</param>
+    /// <param name="glyphCache">Caller-owned per-canvas glyph cache shared across renderer
+    /// instances so glyph outlines persist beyond a single text draw.</param>
     public RichTextGlyphRenderer(
         DrawingOptions drawingOptions,
         IPath? path,
         Pen? pen,
         Brush? brush,
-        Dictionary<CacheKey, List<GlyphRenderData>>? sharedGlyphCache = null)
+        Dictionary<CacheKey, List<GlyphRenderData>> glyphCache)
         : base(drawingOptions.Transform)
     {
         this.drawingOptions = drawingOptions;
         this.defaultPen = pen;
         this.defaultBrush = brush;
-        this.glyphCache = sharedGlyphCache ?? [];
-        this.ownsCache = sharedGlyphCache is null;
+        this.glyphCache = glyphCache;
         this.DrawingOperations = [];
         this.currentCompositionMode = drawingOptions.GraphicsOptions.AlphaCompositionMode;
         this.currentBlendingMode = drawingOptions.GraphicsOptions.ColorBlendingMode;
@@ -794,12 +788,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         {
             if (disposing)
             {
-                // A shared (per-canvas) cache outlives this renderer; only clear a private one.
-                if (this.ownsCache)
-                {
-                    this.glyphCache.Clear();
-                }
-
+                // The glyph cache is owned by the canvas and outlives this renderer.
                 this.DrawingOperations.Clear();
             }
 
