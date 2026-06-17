@@ -169,22 +169,21 @@ public class RectangleTests
         Assert.Equal(new PointF(150, 80), shape.Center);
     }
 
-    private const float HalfPi = (float)(Math.PI / 2);
-    private const float Pi = (float)Math.PI;
-
     [Theory]
-    [InlineData(0, 50, 50, Pi)]
-    [InlineData(100, 150, 50, Pi)]
-    [InlineData(200, 250, 50, -HalfPi)]
-    [InlineData(259, 250, 109, -HalfPi)]
-    [InlineData(261, 249, 110, 0)]
-    [InlineData(620, 150, 50, Pi)] // wrap about end of path
-    public void PointOnPath(float distance, float expectedX, float expectedY, float expectedAngle)
+    [InlineData(0, 50, 50, 0, 1, 0)]
+    [InlineData(100, 150, 50, 0, 1, 0)]
+    [InlineData(200, 250, 50, 90F, 0, 1)]
+    [InlineData(259, 250, 109, 90F, 0, 1)]
+    [InlineData(261, 249, 110, 180F, -1, 0)]
+    [InlineData(620, 150, 50, 0, 1, 0)] // wrap about end of path
+    public void PointOnPath(float distance, float expectedX, float expectedY, float expectedAngle, float expectedTangentX, float expectedTangentY)
     {
         RectanglePolygon shape = new(50, 50, 200, 60);
-        SegmentInfo point = ((IPathInternals)shape).PointAlongPath(distance);
+        PathPoint point = shape.GetPathPointAtDistance(distance);
         Assert.Equal(expectedX, point.Point.X);
         Assert.Equal(expectedY, point.Point.Y);
+        Assert.Equal(expectedTangentX, point.Tangent.X);
+        Assert.Equal(expectedTangentY, point.Tangent.Y);
         Assert.Equal(expectedAngle, point.Angle);
     }
 }

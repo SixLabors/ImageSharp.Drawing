@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing;
 /// where overlaps causes holes.
 /// </summary>
 /// <seealso cref="IPath" />
-public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
+public sealed class ComplexPolygon : IPath, IInternalPathOwner
 {
     private readonly IPath[] paths;
     private List<InternalPath>? internalPaths;
@@ -110,8 +110,6 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
         int pointCount = 0;
         int contourCount = 0;
         int segmentCount = 0;
-        int nonHorizontalSegmentCountPixelBoundary = 0;
-        int nonHorizontalSegmentCountPixelCenter = 0;
 
         bool hasBounds = false;
         float minX = float.MaxValue;
@@ -138,8 +136,6 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
             pointCount += geometry.Info.PointCount;
             contourCount += geometry.Info.ContourCount;
             segmentCount += geometry.Info.SegmentCount;
-            nonHorizontalSegmentCountPixelBoundary += geometry.Info.NonHorizontalSegmentCountPixelBoundary;
-            nonHorizontalSegmentCountPixelCenter += geometry.Info.NonHorizontalSegmentCountPixelCenter;
         }
 
         PointF[] points = new PointF[pointCount];
@@ -187,9 +183,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
                 Bounds = bounds,
                 ContourCount = contours.Length,
                 PointCount = points.Length,
-                SegmentCount = segmentCount,
-                NonHorizontalSegmentCountPixelBoundary = nonHorizontalSegmentCountPixelBoundary,
-                NonHorizontalSegmentCountPixelCenter = nonHorizontalSegmentCountPixelCenter
+                SegmentCount = segmentCount
             },
             contours,
             points);
@@ -219,7 +213,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     }
 
     /// <inheritdoc/>
-    SegmentInfo IPathInternals.PointAlongPath(float distance)
+    public PathPoint GetPathPointAtDistance(float distance)
     {
         this.EnsureInternalPaths();
 
@@ -228,7 +222,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
         {
             if (p.Length >= distance)
             {
-                return p.PointAlongPath(distance);
+                return p.GetPathPointAtDistance(distance);
             }
 
             // Reduce it before trying the next path

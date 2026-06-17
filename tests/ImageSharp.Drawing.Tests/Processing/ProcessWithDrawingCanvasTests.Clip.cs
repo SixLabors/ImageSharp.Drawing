@@ -57,11 +57,13 @@ public partial class ProcessWithDrawingCanvasTests
         Path vertical = new(new LinearLineSegment(new PointF(26, 384), new PointF(26, 163)));
         Path horizontal = new(new LinearLineSegment(new PointF(26, 163), new PointF(176, 163)));
 
-        IPath reverse = vertical.Clip(clip);
-        int verticalCount = vertical.Clip(reverse).Flatten().Select(x => x.Points).Count();
+        ShapeOptions difference = new() { BooleanOperation = BooleanOperation.Difference };
 
-        reverse = horizontal.Clip(clip);
-        int horizontalCount = horizontal.Clip(reverse).Flatten().Select(x => x.Points).Count();
+        IPath reverse = vertical.Clip(difference, clip);
+        int verticalCount = vertical.Clip(difference, reverse).Flatten().Select(x => x.Points).Count();
+
+        reverse = horizontal.Clip(difference, clip);
+        int horizontalCount = horizontal.Clip(difference, reverse).Flatten().Select(x => x.Points).Count();
 
         Assert.Equal(verticalCount, horizontalCount);
     }

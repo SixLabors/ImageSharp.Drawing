@@ -27,9 +27,11 @@ public class ShapeOptions : IDeepCloneable<ShapeOptions>
     /// Determines how the clip shape interacts with the target region
     /// (e.g. <see cref="BooleanOperation.Difference"/> subtracts the clip shape).
     /// <para/>
-    /// Defaults to <see cref="BooleanOperation.Difference"/>.
+    /// Defaults to <see cref="BooleanOperation.Intersection"/>, matching the zero value of
+    /// <see cref="BooleanOperation"/> and <c>PolygonClipper.BooleanOperation</c> so that a
+    /// clip restricts the region rather than subtracting it.
     /// </summary>
-    public BooleanOperation BooleanOperation { get; set; } = BooleanOperation.Difference;
+    public BooleanOperation BooleanOperation { get; set; } = BooleanOperation.Intersection;
 
     /// <summary>
     /// Gets or sets the fill rule that determines how overlapping or nested contours affect coverage.

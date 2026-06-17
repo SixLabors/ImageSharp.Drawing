@@ -19,6 +19,7 @@ public readonly struct DrawingCommandBatch
     {
         this.Commands = commands;
         this.HasLayers = hasLayers;
+        this.HasApply = false;
     }
 
     /// <summary>
@@ -27,12 +28,16 @@ public readonly struct DrawingCommandBatch
     /// <param name="commands">The backing command buffer.</param>
     /// <param name="commandCount">The number of commands in the prepared batch.</param>
     /// <param name="hasLayers">Indicates whether the command stream contains layer boundaries.</param>
+    /// <param name="hasApply">Indicates whether the command stream contains apply barriers.</param>
     internal DrawingCommandBatch(
         CompositionSceneCommand[] commands,
         int commandCount,
-        bool hasLayers)
-        : this(new ArraySegment<CompositionSceneCommand>(commands, 0, commandCount), hasLayers)
+        bool hasLayers,
+        bool hasApply)
     {
+        this.Commands = new ArraySegment<CompositionSceneCommand>(commands, 0, commandCount);
+        this.HasLayers = hasLayers;
+        this.HasApply = hasApply;
     }
 
     /// <summary>
@@ -42,13 +47,17 @@ public readonly struct DrawingCommandBatch
     /// <param name="startIndex">The first command index.</param>
     /// <param name="commandCount">The number of commands in the prepared batch.</param>
     /// <param name="hasLayers">Indicates whether the command stream contains layer boundaries.</param>
+    /// <param name="hasApply">Indicates whether the command stream contains apply barriers.</param>
     internal DrawingCommandBatch(
         CompositionSceneCommand[] commands,
         int startIndex,
         int commandCount,
-        bool hasLayers)
-        : this(new ArraySegment<CompositionSceneCommand>(commands, startIndex, commandCount), hasLayers)
+        bool hasLayers,
+        bool hasApply)
     {
+        this.Commands = new ArraySegment<CompositionSceneCommand>(commands, startIndex, commandCount);
+        this.HasLayers = hasLayers;
+        this.HasApply = hasApply;
     }
 
     /// <summary>
@@ -65,4 +74,9 @@ public readonly struct DrawingCommandBatch
     /// Gets a value indicating whether this scene contains inline layer commands.
     /// </summary>
     public bool HasLayers { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this scene contains apply barriers.
+    /// </summary>
+    public bool HasApply { get; }
 }

@@ -200,7 +200,7 @@ public partial class ProcessWithDrawingCanvasTests
     {
         EllipsePolygon circle = new(32, 32, 30);
         StarPolygon star = new(32, 32, 7, 10, 27);
-        IPath shape = circle.Clip(star);
+        IPath shape = circle.Clip(new ShapeOptions { BooleanOperation = BooleanOperation.Difference }, star);
 
         provider.RunValidatingProcessorTest(
             c => c.Paint(canvas => canvas.Fill(Brushes.Solid(Color.White), shape)),

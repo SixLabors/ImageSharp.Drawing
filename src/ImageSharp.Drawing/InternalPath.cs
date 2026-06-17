@@ -125,7 +125,7 @@ internal class InternalPath
     /// Returns details about a point along a path.
     /// </returns>
     /// <exception cref="InvalidOperationException">Thrown if no points found.</exception>
-    internal SegmentInfo PointAlongPath(float distanceAlongPath)
+    internal PathPoint GetPathPointAtDistance(float distanceAlongPath)
     {
         int pointCount = this.PointCount;
         if (this.closedPath)
@@ -142,12 +142,14 @@ internal class InternalPath
             {
                 float t = distanceAlongPath / this.points[next].Length;
                 Vector2 point = Vector2.Lerp(this.points[i].Point, this.points[next].Point, t);
-                Vector2 diff = this.points[i].Point - this.points[next].Point;
+                Vector2 segmentTangent = Vector2.Normalize(this.points[next].Point - this.points[i].Point);
+                float segmentAngle = (float)(Math.Atan2(segmentTangent.Y, segmentTangent.X) % (Math.PI * 2));
 
-                return new SegmentInfo
+                return new PathPoint
                 {
                     Point = point,
-                    Angle = (float)(Math.Atan2(diff.Y, diff.X) % (Math.PI * 2))
+                    Tangent = segmentTangent,
+                    Angle = GeometryUtilities.RadianToDegree(segmentAngle)
                 };
             }
 
@@ -159,15 +161,16 @@ internal class InternalPath
         // The position and angle for that point are calculated based upon the last two points.
         PointF a = this.points[Math.Max(this.points.Length - 2, 0)].Point;
         PointF b = this.points[^1].Point;
-        Vector2 delta = a - b;
-        float angle = (float)(Math.Atan2(delta.Y, delta.X) % (Math.PI * 2));
+        Vector2 endTangent = Vector2.Normalize((Vector2)b - (Vector2)a);
+        float angle = (float)(Math.Atan2(endTangent.Y, endTangent.X) % (Math.PI * 2));
 
-        Matrix4x4 transform = Matrix4x4.CreateRotationZ(angle - MathF.PI) * Matrix4x4.CreateTranslation(b.X, b.Y, 0);
+        Matrix4x4 transform = Matrix4x4.CreateRotationZ(angle) * Matrix4x4.CreateTranslation(b.X, b.Y, 0);
 
-        return new SegmentInfo
+        return new PathPoint
         {
             Point = PointF.Transform(new PointF(distanceAlongPath, 0), transform),
-            Angle = angle
+            Tangent = endTangent,
+            Angle = GeometryUtilities.RadianToDegree(angle)
         };
     }
 

@@ -231,3 +231,5 @@ SixLabors.Shapes.Coverage.xml
 .dotnet
 .codex-*
 .claude
+
+samples/Avalonia**

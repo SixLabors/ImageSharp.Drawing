@@ -35,8 +35,6 @@ internal static partial class DefaultRasterizer
         /// <param name="height">The visible destination height in pixels.</param>
         /// <param name="firstBandIndex">The first retained row-band index.</param>
         /// <param name="rowBandCount">The retained row-band count.</param>
-        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
-        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
         /// <param name="allocator">The allocator used for retained start-cover storage.</param>
         protected StrokeLinearizer(
             LinearGeometry geometry,
@@ -50,10 +48,8 @@ internal static partial class DefaultRasterizer
             int height,
             int firstBandIndex,
             int rowBandCount,
-            float samplingOffsetX,
-            float samplingOffsetY,
             MemoryAllocator allocator)
-            : base(geometry, residual, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, allocator)
+            : base(geometry, residual, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, allocator)
             => this.stroke = stroke;
 
         private enum ContourInterest
@@ -104,7 +100,7 @@ internal static partial class DefaultRasterizer
         private ContourInterest GetContourInterest(ReadOnlySpan<PointF> contourPoints)
         {
             RectangleF translatedBounds = InflateStrokeBounds(this.GetPointBounds(contourPoints), this.stroke);
-            translatedBounds.Offset(this.TranslateX + this.SamplingOffsetX - this.MinX, this.TranslateY + this.SamplingOffsetY - this.MinY);
+            translatedBounds.Offset(this.TranslateX - this.MinX, this.TranslateY - this.MinY);
 
             if (translatedBounds.Right <= 0F ||
                 translatedBounds.Bottom <= 0F ||
@@ -930,18 +926,18 @@ internal static partial class DefaultRasterizer
             if (contained)
             {
                 this.AddContainedLineF24Dot8(
-                    FloatToFixed24Dot8(((start.X + this.TranslateX) - this.MinX) + this.SamplingOffsetX),
-                    FloatToFixed24Dot8(((start.Y + this.TranslateY) - this.MinY) + this.SamplingOffsetY),
-                    FloatToFixed24Dot8(((end.X + this.TranslateX) - this.MinX) + this.SamplingOffsetX),
-                    FloatToFixed24Dot8(((end.Y + this.TranslateY) - this.MinY) + this.SamplingOffsetY));
+                    FloatToFixed24Dot8((start.X + this.TranslateX) - this.MinX),
+                    FloatToFixed24Dot8((start.Y + this.TranslateY) - this.MinY),
+                    FloatToFixed24Dot8((end.X + this.TranslateX) - this.MinX),
+                    FloatToFixed24Dot8((end.Y + this.TranslateY) - this.MinY));
                 return;
             }
 
             this.AddUncontainedLine(
-                ((start.X + this.TranslateX) - this.MinX) + this.SamplingOffsetX,
-                ((start.Y + this.TranslateY) - this.MinY) + this.SamplingOffsetY,
-                ((end.X + this.TranslateX) - this.MinX) + this.SamplingOffsetX,
-                ((end.Y + this.TranslateY) - this.MinY) + this.SamplingOffsetY);
+                (start.X + this.TranslateX) - this.MinX,
+                (start.Y + this.TranslateY) - this.MinY,
+                (end.X + this.TranslateX) - this.MinX,
+                (end.Y + this.TranslateY) - this.MinY);
         }
 
         /// <summary>
@@ -1000,8 +996,6 @@ internal static partial class DefaultRasterizer
         /// <param name="height">The visible destination height in pixels.</param>
         /// <param name="firstBandIndex">The first retained row-band index.</param>
         /// <param name="rowBandCount">The retained row-band count.</param>
-        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
-        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
         /// <param name="allocator">The allocator used for retained start-cover storage.</param>
         public StrokeLinearizerX32Y16(
             LinearGeometry geometry,
@@ -1015,10 +1009,8 @@ internal static partial class DefaultRasterizer
             int height,
             int firstBandIndex,
             int rowBandCount,
-            float samplingOffsetX,
-            float samplingOffsetY,
             MemoryAllocator allocator)
-            : base(geometry, residual, stroke, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, allocator)
+            : base(geometry, residual, stroke, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, allocator)
             => this.FinalLines = new LineArrayX32Y16Block?[rowBandCount];
 
         /// <summary>
@@ -1087,8 +1079,6 @@ internal static partial class DefaultRasterizer
         /// <param name="height">The visible destination height in pixels.</param>
         /// <param name="firstBandIndex">The first retained row-band index.</param>
         /// <param name="rowBandCount">The retained row-band count.</param>
-        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
-        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
         /// <param name="allocator">The allocator used for retained start-cover storage.</param>
         public StrokeLinearizerX16Y16(
             LinearGeometry geometry,
@@ -1102,10 +1092,8 @@ internal static partial class DefaultRasterizer
             int height,
             int firstBandIndex,
             int rowBandCount,
-            float samplingOffsetX,
-            float samplingOffsetY,
             MemoryAllocator allocator)
-            : base(geometry, residual, stroke, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, allocator)
+            : base(geometry, residual, stroke, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, allocator)
             => this.FinalLines = new LineArrayX16Y16Block?[rowBandCount];
 
         /// <summary>

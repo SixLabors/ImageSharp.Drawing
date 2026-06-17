@@ -12,6 +12,7 @@ public readonly struct StrokePolylineCommand
 {
     private readonly PointF[] sourcePoints;
     private readonly DrawingOptions drawingOptions;
+    private readonly DrawingCanvasLayer? ownerLayer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StrokePolylineCommand"/> struct.
@@ -33,6 +34,41 @@ public readonly struct StrokePolylineCommand
         Point destinationOffset,
         Pen pen,
         bool isInsideLayer)
+        : this(
+            sourcePoints,
+            brush,
+            drawingOptions,
+            in rasterizerOptions,
+            targetBounds,
+            destinationOffset,
+            pen,
+            isInsideLayer,
+            null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StrokePolylineCommand"/> struct with the owning layer state recorded by the canvas.
+    /// </summary>
+    /// <param name="sourcePoints">The source polyline points.</param>
+    /// <param name="brush">The brush used to shade the stroke.</param>
+    /// <param name="drawingOptions">The drawing options (graphics, shape, transform) used during composition.</param>
+    /// <param name="rasterizerOptions">The rasterizer options used to generate coverage.</param>
+    /// <param name="targetBounds">The absolute bounds of the logical target.</param>
+    /// <param name="destinationOffset">The absolute destination offset of the command.</param>
+    /// <param name="pen">The stroke metadata.</param>
+    /// <param name="isInsideLayer">True if the command was recorded inside a layer.</param>
+    /// <param name="ownerLayer">The layer that owned this command when it was recorded.</param>
+    internal StrokePolylineCommand(
+        PointF[] sourcePoints,
+        Brush brush,
+        DrawingOptions drawingOptions,
+        in RasterizerOptions rasterizerOptions,
+        Rectangle targetBounds,
+        Point destinationOffset,
+        Pen pen,
+        bool isInsideLayer,
+        DrawingCanvasLayer? ownerLayer)
     {
         ArgumentNullException.ThrowIfNull(sourcePoints);
         if (sourcePoints.Length < 2)
@@ -42,6 +78,7 @@ public readonly struct StrokePolylineCommand
 
         this.sourcePoints = sourcePoints;
         this.drawingOptions = drawingOptions;
+        this.ownerLayer = ownerLayer;
         this.Brush = brush;
         this.RasterizerOptions = rasterizerOptions;
         this.TargetBounds = targetBounds;
@@ -99,6 +136,11 @@ public readonly struct StrokePolylineCommand
     /// Gets a value indicating whether the command was recorded inside a layer.
     /// </summary>
     public bool IsInsideLayer { get; }
+
+    /// <summary>
+    /// Gets the layer state for the layer that owned this command when it was recorded.
+    /// </summary>
+    internal DrawingCanvasLayer? OwnerLayer => this.ownerLayer;
 
     /// <summary>
     /// Computes the conservative stroked bounds of one open polyline.

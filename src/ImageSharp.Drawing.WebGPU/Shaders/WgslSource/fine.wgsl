@@ -300,6 +300,7 @@ fn maybe_premul_alpha(pixel: vec4f, alpha_type: u32) -> vec4f {
 const EXTEND_PAD: u32 = 0u;
 const EXTEND_REPEAT: u32 = 1u;
 const EXTEND_REFLECT: u32 = 2u;
+const EXTEND_DECAL: u32 = 3u;
 fn extend_mode_normalized(t: f32, mode: u32) -> f32 {
     switch mode {
         case EXTEND_PAD: {
@@ -344,9 +345,18 @@ fn image_repeat_mode_i32(t: f32, max: i32) -> i32 {
 }
 
 fn image_reflect_mode_i32(t: f32, max: i32) -> i32 {
-    let reflected = fract(0.5 * t) * 2.0;
-    let wrapped = (1.0 - abs(reflected - 1.0)) * f32(max);
-    return i32(clamp(wrapped, 0.0, f32(max - 1)));
+    // Reflect in pixel space with period 2*max, mirroring once per tile.
+    // Matches the CPU ImageBrush: wrap into [0, 2*max) then fold the back half.
+    let period = max * 2;
+    let value = i32(t);
+    let magnitude = select(value, -value, value < 0);
+    let remainder = magnitude % period;
+    let signed_remainder = select(remainder, -remainder, value < 0);
+    var m = (signed_remainder + period) % period;
+    if (m >= max) {
+        m = period - 1 - m;
+    }
+    return m;
 }
 
 fn image_extend_mode_i32(t: f32, mode: u32, max: i32) -> i32 {
@@ -356,6 +366,13 @@ fn image_extend_mode_i32(t: f32, mode: u32, max: i32) -> i32 {
         }
         case EXTEND_REPEAT: {
             return image_repeat_mode_i32(t, max);
+        }
+        case EXTEND_DECAL: {
+            // Outside the source region samples as transparent; signalled with a negative index.
+            if (t < 0.0 || t >= f32(max)) {
+                return -1;
+            }
+            return i32(t);
         }
         case EXTEND_REFLECT, default: {
             return image_reflect_mode_i32(t, max);
@@ -829,10 +846,14 @@ fn main(
                         var atlas_uv = image.matrx.xy * my_xy.x + image.matrx.zw * my_xy.y + image.xlat;
                         let atlas_ix = image_extend_mode_i32(atlas_uv.x, image.x_extend_mode, i32(image.extents.x));
                         let atlas_iy = image_extend_mode_i32(atlas_uv.y, image.y_extend_mode, i32(image.extents.y));
-                        let atlas_uv_clamped = vec2<i32>(i32(image.atlas_offset.x) + atlas_ix, i32(image.atlas_offset.y) + atlas_iy);
-                        let fg_rgba = maybe_premul_alpha(textureLoad(image_atlas, atlas_uv_clamped, 0), image.alpha_type);
-                        let fg_i = pixel_format(fg_rgba * area[i] * image.alpha, image.format);
-                        rgba[i] = compose_draw(rgba[i], fg_i, draw_flags);
+                        // A negative index means the decal (None) wrap mode fell outside the source
+                        // region; that pixel contributes nothing.
+                        if (atlas_ix >= 0 && atlas_iy >= 0) {
+                            let atlas_uv_clamped = vec2<i32>(i32(image.atlas_offset.x) + atlas_ix, i32(image.atlas_offset.y) + atlas_iy);
+                            let fg_rgba = maybe_premul_alpha(textureLoad(image_atlas, atlas_uv_clamped, 0), image.alpha_type);
+                            let fg_i = pixel_format(fg_rgba * area[i] * image.alpha, image.format);
+                            rgba[i] = compose_draw(rgba[i], fg_i, draw_flags);
+                        }
                     }
                 }
                 cmd_ix += 2u;

@@ -49,7 +49,7 @@ public sealed class WebGPUDrawingBackendScene : DrawingBackendScene
     /// <summary>
     /// Gets the retained encoded scene when this is a leaf scene.
     /// </summary>
-    internal WebGPUEncodedScene? EncodedScene { get; }
+    internal WebGPUEncodedScene EncodedScene { get; }
 
     /// <summary>
     /// Gets the scratch capacities for the scene.
@@ -164,8 +164,7 @@ public sealed class WebGPUDrawingBackendScene : DrawingBackendScene
     /// <inheritdoc />
     protected override void DisposeCore()
     {
-        if (this.EncodedScene is not null &&
-            !ReferenceEquals(this.EncodedScene, WebGPUEncodedScene.Empty))
+        if (!ReferenceEquals(this.EncodedScene, WebGPUEncodedScene.Empty))
         {
             this.EncodedScene.Dispose();
         }

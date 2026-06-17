@@ -34,12 +34,17 @@ internal sealed partial class FlushScene
         /// <summary>
         /// Ends the most recently opened layer.
         /// </summary>
-        EndLayer = 3
+        EndLayer = 3,
+
+        /// <summary>
+        /// Applies an image processor to the current target.
+        /// </summary>
+        Apply = 4,
     }
 
     /// <summary>
-     /// Holds one retained row operation.
-     /// </summary>
+    /// Holds one retained row operation.
+    /// </summary>
     internal readonly struct SceneOperation
     {
         /// <summary>
@@ -89,6 +94,61 @@ internal sealed partial class FlushScene
         /// Gets the retained row-local layer bounds for layer operations.
         /// </summary>
         public Rectangle LayerBounds { get; }
+    }
+
+    /// <summary>
+    /// Holds one retained command-indexed layer or apply operation.
+    /// </summary>
+    internal readonly struct SceneControlItem
+    {
+        private readonly ApplySceneItem? applyItem;
+        private readonly DrawingCanvasLayer? layer;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SceneControlItem"/> struct for a layer control operation.
+        /// </summary>
+        /// <param name="kind">The layer operation kind.</param>
+        /// <param name="layerBounds">The retained layer bounds.</param>
+        /// <param name="layer">The retained layer state.</param>
+        public SceneControlItem(CompositionCommandKind kind, Rectangle layerBounds, DrawingCanvasLayer layer)
+        {
+            this.Kind = kind == CompositionCommandKind.BeginLayer ? SceneOperationKind.BeginLayer : SceneOperationKind.EndLayer;
+            this.LayerBounds = layerBounds;
+            this.layer = layer;
+            this.applyItem = null;
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SceneControlItem"/> struct for an apply operation.
+        /// </summary>
+        /// <param name="applyItem">The retained apply operation.</param>
+        public SceneControlItem(ApplySceneItem applyItem)
+        {
+            this.Kind = SceneOperationKind.Apply;
+            this.LayerBounds = default;
+            this.layer = null;
+            this.applyItem = applyItem;
+        }
+
+        /// <summary>
+        /// Gets the operation kind.
+        /// </summary>
+        public SceneOperationKind Kind { get; }
+
+        /// <summary>
+        /// Gets the retained layer bounds for layer operations.
+        /// </summary>
+        public Rectangle LayerBounds { get; }
+
+        /// <summary>
+        /// Gets the layer state for layer operations.
+        /// </summary>
+        public DrawingCanvasLayer Layer => this.layer ?? throw new InvalidOperationException("Only layer steps carry layer state.");
+
+        /// <summary>
+        /// Gets the retained apply operation.
+        /// </summary>
+        public ApplySceneItem ApplyItem => this.applyItem ?? throw new InvalidOperationException("Only apply steps carry apply state.");
     }
 
     /// <summary>
@@ -322,6 +382,197 @@ internal sealed partial class FlushScene
     }
 
     /// <summary>
+    /// Holds retained row work followed by an optional target-wide control operation.
+    /// </summary>
+    internal sealed class SceneSegment : IDisposable
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SceneSegment"/> class.
+        /// </summary>
+        /// <param name="rows">The retained rows in this segment.</param>
+        /// <param name="rowItemCount">The number of retained row operations in this segment.</param>
+        /// <param name="applyItem">The apply operation executed after the rows.</param>
+        /// <param name="layerItem">The scoped layer executed after the rows.</param>
+        public SceneSegment(
+            SceneRow[] rows,
+            int rowItemCount,
+            ApplySceneItem? applyItem,
+            ScopedLayerSceneItem? layerItem)
+        {
+            this.Rows = rows;
+            this.RowItemCount = rowItemCount;
+            this.ApplyItem = applyItem;
+            this.LayerItem = layerItem;
+        }
+
+        /// <summary>
+        /// Gets the retained rows in this segment.
+        /// </summary>
+        public SceneRow[] Rows { get; }
+
+        /// <summary>
+        /// Gets the number of retained row operations in this segment.
+        /// </summary>
+        public int RowItemCount { get; }
+
+        /// <summary>
+        /// Gets the apply operation executed after the rows.
+        /// </summary>
+        public ApplySceneItem? ApplyItem { get; }
+
+        /// <summary>
+        /// Gets the scoped layer executed after the rows.
+        /// </summary>
+        public ScopedLayerSceneItem? LayerItem { get; }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            for (int i = 0; i < this.Rows.Length; i++)
+            {
+                this.Rows[i].Dispose();
+            }
+
+            this.ApplyItem?.Dispose();
+            this.LayerItem?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Holds a scoped layer whose contents must be rendered into one full target before compositing.
+    /// </summary>
+    internal sealed class ScopedLayerSceneItem : IDisposable
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ScopedLayerSceneItem"/> class.
+        /// </summary>
+        /// <param name="layer">The retained layer state.</param>
+        /// <param name="bounds">The absolute layer target bounds.</param>
+        /// <param name="segments">The retained layer contents.</param>
+        /// <param name="rowCount">The retained row count inside the layer.</param>
+        /// <param name="rowItemCount">The retained row operation count inside the layer.</param>
+        public ScopedLayerSceneItem(
+            DrawingCanvasLayer layer,
+            Rectangle bounds,
+            SceneSegment[] segments,
+            int rowCount,
+            int rowItemCount)
+        {
+            this.Layer = layer;
+            this.Bounds = bounds;
+            this.Segments = segments;
+            this.RowCount = rowCount;
+            this.RowItemCount = rowItemCount;
+        }
+
+        /// <summary>
+        /// Gets the retained layer state.
+        /// </summary>
+        public DrawingCanvasLayer Layer { get; }
+
+        /// <summary>
+        /// Gets the absolute layer target bounds.
+        /// </summary>
+        public Rectangle Bounds { get; }
+
+        /// <summary>
+        /// Gets the retained layer contents.
+        /// </summary>
+        public SceneSegment[] Segments { get; }
+
+        /// <summary>
+        /// Gets the retained row count inside the layer.
+        /// </summary>
+        public int RowCount { get; }
+
+        /// <summary>
+        /// Gets the retained row operation count inside the layer.
+        /// </summary>
+        public int RowItemCount { get; }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            for (int i = 0; i < this.Segments.Length; i++)
+            {
+                this.Segments[i].Dispose();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Holds one retained apply scene operation.
+    /// </summary>
+    internal sealed class ApplySceneItem : IDisposable
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ApplySceneItem"/> class.
+        /// </summary>
+        /// <param name="operation">The image processing operation.</param>
+        /// <param name="sourceRect">The canvas-local source rectangle copied from the current target.</param>
+        /// <param name="brushOffset">The offset used by the runtime image brush.</param>
+        /// <param name="graphicsOptions">The graphics options used by the apply item.</param>
+        /// <param name="brushBounds">The brush bounds used for applicator creation.</param>
+        /// <param name="rasterizable">The retained rasterizable geometry.</param>
+        /// <param name="ownerLayer">The layer that owned this item when it was recorded.</param>
+        public ApplySceneItem(
+            Action<IImageProcessingContext> operation,
+            Rectangle sourceRect,
+            Point brushOffset,
+            GraphicsOptions graphicsOptions,
+            Rectangle brushBounds,
+            DefaultRasterizer.RasterizableGeometry rasterizable,
+            DrawingCanvasLayer? ownerLayer)
+        {
+            this.Operation = operation;
+            this.SourceRect = sourceRect;
+            this.BrushOffset = brushOffset;
+            this.GraphicsOptions = graphicsOptions;
+            this.BrushBounds = brushBounds;
+            this.Rasterizable = rasterizable;
+            this.OwnerLayer = ownerLayer;
+        }
+
+        /// <summary>
+        /// Gets the image processing operation.
+        /// </summary>
+        public Action<IImageProcessingContext> Operation { get; }
+
+        /// <summary>
+        /// Gets the canvas-local source rectangle copied from the current target.
+        /// </summary>
+        public Rectangle SourceRect { get; }
+
+        /// <summary>
+        /// Gets the offset used by the runtime image brush.
+        /// </summary>
+        public Point BrushOffset { get; }
+
+        /// <summary>
+        /// Gets the graphics options used by the apply item.
+        /// </summary>
+        public GraphicsOptions GraphicsOptions { get; }
+
+        /// <summary>
+        /// Gets the brush bounds used for applicator creation.
+        /// </summary>
+        public Rectangle BrushBounds { get; }
+
+        /// <summary>
+        /// Gets the retained rasterizable geometry.
+        /// </summary>
+        public DefaultRasterizer.RasterizableGeometry Rasterizable { get; }
+
+        /// <summary>
+        /// Gets the layer that owned this item when it was recorded.
+        /// </summary>
+        public DrawingCanvasLayer? OwnerLayer { get; }
+
+        /// <inheritdoc />
+        public void Dispose() => this.Rasterizable.Dispose();
+    }
+
+    /// <summary>
     /// Holds one retained fill scene item.
     /// </summary>
     internal sealed class FillSceneItem : IDisposable
@@ -335,16 +586,19 @@ internal sealed partial class FlushScene
         /// <param name="graphicsOptions">The graphics options used by the fill item.</param>
         /// <param name="brushBounds">The brush bounds used for applicator creation.</param>
         /// <param name="rasterizable">The retained rasterizable geometry.</param>
+        /// <param name="ownerLayer">The layer that owned this item when it was recorded.</param>
         public FillSceneItem(
             Brush brush,
             GraphicsOptions graphicsOptions,
             Rectangle brushBounds,
-            DefaultRasterizer.RasterizableGeometry rasterizable)
+            DefaultRasterizer.RasterizableGeometry rasterizable,
+            DrawingCanvasLayer? ownerLayer)
         {
             this.Brush = brush;
             this.GraphicsOptions = graphicsOptions;
             this.BrushBounds = brushBounds;
             this.Rasterizable = rasterizable;
+            this.OwnerLayer = ownerLayer;
         }
 
         /// <summary>
@@ -366,6 +620,11 @@ internal sealed partial class FlushScene
         /// Gets the retained rasterizable geometry.
         /// </summary>
         public DefaultRasterizer.RasterizableGeometry Rasterizable { get; }
+
+        /// <summary>
+        /// Gets the layer that owned this item when it was recorded.
+        /// </summary>
+        public DrawingCanvasLayer? OwnerLayer { get; }
 
         /// <summary>
         /// Gets the memoized renderer for this scene item, creating it on first use.
@@ -410,16 +669,19 @@ internal sealed partial class FlushScene
         /// <param name="graphicsOptions">The graphics options for the stroke item.</param>
         /// <param name="brushBounds">The prepared brush bounds.</param>
         /// <param name="rasterizable">The retained stroke rasterizable geometry.</param>
+        /// <param name="ownerLayer">The layer that owned this item when it was recorded.</param>
         public StrokeSceneItem(
             Brush brush,
             GraphicsOptions graphicsOptions,
             Rectangle brushBounds,
-            DefaultRasterizer.StrokeRasterizableGeometry rasterizable)
+            DefaultRasterizer.StrokeRasterizableGeometry rasterizable,
+            DrawingCanvasLayer? ownerLayer)
         {
             this.Brush = brush;
             this.GraphicsOptions = graphicsOptions;
             this.BrushBounds = brushBounds;
             this.Rasterizable = rasterizable;
+            this.OwnerLayer = ownerLayer;
         }
 
         /// <summary>
@@ -441,6 +703,11 @@ internal sealed partial class FlushScene
         /// Gets the retained stroke rasterizable geometry.
         /// </summary>
         public DefaultRasterizer.StrokeRasterizableGeometry Rasterizable { get; }
+
+        /// <summary>
+        /// Gets the layer that owned this item when it was recorded.
+        /// </summary>
+        public DrawingCanvasLayer? OwnerLayer { get; }
 
         /// <summary>
         /// Gets the memoized renderer for this scene item, creating it on first use.

@@ -3,7 +3,9 @@
 
 using System.Runtime.CompilerServices;
 using Silk.NET.WebGPU;
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -86,13 +88,25 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     {
         this.ThrowIfDisposed();
 
-        if (!WebGPUSceneEncoder.TryEncode(
+        WebGPUEncodedScene encodedScene;
+        string? error;
+        bool encoded = commandBatch.HasApply
+            ? WebGPUSceneEncoder.TryEncodeOrdered(
                 commandBatch,
                 targetBounds,
                 configuration.MemoryAllocator,
                 configuration.MaxDegreeOfParallelism,
-                out WebGPUEncodedScene encodedScene,
-                out string? error))
+                out encodedScene,
+                out error)
+            : WebGPUSceneEncoder.TryEncode(
+                commandBatch,
+                targetBounds,
+                configuration.MemoryAllocator,
+                configuration.MaxDegreeOfParallelism,
+                out encodedScene,
+                out error);
+
+        if (!encoded)
         {
             throw new InvalidOperationException(error);
         }
@@ -150,9 +164,43 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         try
         {
-            WebGPUEncodedScene? encodedScene = webGPUScene.EncodedScene;
+            WebGPUEncodedScene encodedScene = webGPUScene.EncodedScene;
+            if (encodedScene.HasOperations)
+            {
+                using WebGPUFlushContext flushContext = WebGPUFlushContext.Create(
+                    nativeTarget,
+                    textureFormat,
+                    requiredFeature,
+                    configuration.MemoryAllocator);
 
-            if (encodedScene is not null && encodedScene.FillCount != 0)
+                using WebGPUHandle.HandleReference targetTextureReference = webGPUTarget.TargetTextureHandle.AcquireReference();
+                using WebGPUHandle.HandleReference targetTextureViewReference = webGPUTarget.TargetTextureViewHandle.AcquireReference();
+
+                WebGPUSceneTarget rootTarget = new(
+                    (Texture*)targetTextureReference.Handle,
+                    (TextureView*)targetTextureViewReference.Handle,
+                    nativeTarget.Bounds,
+                    webGPUTarget.TextureCoordinateOffset);
+
+                this.RenderOperations<TPixel>(
+                    configuration,
+                    flushContext,
+                    rootTarget,
+                    encodedScene,
+                    encodedScene.Operations,
+                    0,
+                    encodedScene.Operations.Count,
+                    requiredFeature,
+                    ref currentBumpSizes,
+                    ref resourceArena,
+                    ref schedulingArena);
+
+                webGPUScene.UpdateBumpSizes(currentBumpSizes);
+                this.bumpSizes = currentBumpSizes;
+                return;
+            }
+
+            if (encodedScene.FillCount != 0)
             {
                 // Scene arenas are rented once for the render. If a concurrent render
                 // owns them, the backend cache supplies independent scratch buffers.
@@ -235,6 +283,270 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         {
             webGPUScene.ReturnArenas(resourceArena, schedulingArena, this);
         }
+    }
+
+    private void RenderOperations<TPixel>(
+        Configuration configuration,
+        WebGPUFlushContext flushContext,
+        WebGPUSceneTarget target,
+        WebGPUEncodedScene encodedScene,
+        IReadOnlyList<WebGPUSceneOperation> operations,
+        int operationStart,
+        int operationEnd,
+        FeatureName requiredFeature,
+        ref WebGPUSceneBumpSizes currentBumpSizes,
+        ref WebGPUSceneResourceArena? resourceArena,
+        ref WebGPUSceneSchedulingArena? schedulingArena)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        for (int i = operationStart; i < operationEnd; i++)
+        {
+            WebGPUSceneOperation operation = operations[i];
+            switch (operation.Kind)
+            {
+                case WebGPUSceneOperationKind.RenderRange:
+                    this.RenderEncodedRange<TPixel>(
+                        configuration,
+                        flushContext,
+                        target,
+                        encodedScene,
+                        operation.Range,
+                        requiredFeature,
+                        dynamicImageTextureView: null,
+                        ref currentBumpSizes,
+                        ref resourceArena,
+                        ref schedulingArena);
+                    break;
+
+                case WebGPUSceneOperationKind.Apply:
+                    this.ExecuteApplyOperation<TPixel>(
+                        configuration,
+                        flushContext,
+                        target,
+                        encodedScene,
+                        operation.Apply!,
+                        requiredFeature,
+                        ref currentBumpSizes,
+                        ref resourceArena,
+                        ref schedulingArena);
+                    break;
+
+                case WebGPUSceneOperationKind.ScopedLayer:
+                    int childOperationStart = i + 1;
+
+                    this.ExecuteScopedLayerOperation<TPixel>(
+                        configuration,
+                        flushContext,
+                        target,
+                        encodedScene,
+                        operations,
+                        childOperationStart,
+                        operation.Layer!,
+                        requiredFeature,
+                        ref currentBumpSizes,
+                        ref resourceArena,
+                        ref schedulingArena);
+
+                    i += operation.Layer!.OperationCount;
+                    break;
+            }
+        }
+    }
+
+    private void ExecuteScopedLayerOperation<TPixel>(
+        Configuration configuration,
+        WebGPUFlushContext flushContext,
+        WebGPUSceneTarget parentTarget,
+        WebGPUEncodedScene encodedScene,
+        IReadOnlyList<WebGPUSceneOperation> operations,
+        int childOperationStart,
+        WebGPUScopedLayerSceneItem layer,
+        FeatureName requiredFeature,
+        ref WebGPUSceneBumpSizes currentBumpSizes,
+        ref WebGPUSceneResourceArena? resourceArena,
+        ref WebGPUSceneSchedulingArena? schedulingArena)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (!TryCreateCompositionTexture(flushContext, layer.Bounds.Width, layer.Bounds.Height, renderAttachment: true, out Texture* layerTexture, out TextureView* layerTextureView, out string? error))
+        {
+            throw new InvalidOperationException(error);
+        }
+
+        ClearTarget(flushContext, layerTextureView);
+
+        WebGPUSceneTarget layerTarget = new(
+            layerTexture,
+            layerTextureView,
+            layer.Bounds,
+            new Point(-layer.Bounds.X, -layer.Bounds.Y));
+
+        this.RenderOperations<TPixel>(
+            configuration,
+            flushContext,
+            layerTarget,
+            encodedScene,
+            operations,
+            childOperationStart,
+            childOperationStart + layer.OperationCount,
+            requiredFeature,
+            ref currentBumpSizes,
+            ref resourceArena,
+            ref schedulingArena);
+
+        this.RenderEncodedRange<TPixel>(
+            configuration,
+            flushContext,
+            parentTarget,
+            encodedScene,
+            layer.CompositeRange,
+            requiredFeature,
+            layerTextureView,
+            ref currentBumpSizes,
+            ref resourceArena,
+            ref schedulingArena);
+    }
+
+    private void ExecuteApplyOperation<TPixel>(
+        Configuration configuration,
+        WebGPUFlushContext flushContext,
+        WebGPUSceneTarget target,
+        WebGPUEncodedScene encodedScene,
+        WebGPUApplySceneItem apply,
+        FeatureName requiredFeature,
+        ref WebGPUSceneBumpSizes currentBumpSizes,
+        ref WebGPUSceneResourceArena? resourceArena,
+        ref WebGPUSceneSchedulingArena? schedulingArena)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (!TrySubmit(flushContext))
+        {
+            throw new InvalidOperationException("Failed to submit WebGPU work before Apply readback.");
+        }
+
+        using Image<TPixel> sourceImage = new(configuration, apply.SourceRect.Width, apply.SourceRect.Height);
+        ReadTextureRegion(flushContext, target, apply.SourceRect, sourceImage.Frames.RootFrame.PixelBuffer.GetRegion());
+        sourceImage.Mutate(apply.Operation);
+
+        if (!TryCreateCompositionTexture(flushContext, apply.SourceRect.Width, apply.SourceRect.Height, out Texture* texture, out TextureView* textureView, out string? error))
+        {
+            throw new InvalidOperationException(error);
+        }
+
+        using (WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference())
+        {
+            WebGPUFlushContext.UploadTextureFromRegion(
+                flushContext.Api,
+                (Queue*)queueReference.Handle,
+                texture,
+                sourceImage.Frames.RootFrame.PixelBuffer.GetRegion(),
+                configuration.MemoryAllocator);
+        }
+
+        this.RenderEncodedRange<TPixel>(
+            configuration,
+            flushContext,
+            target,
+            encodedScene,
+            apply.DrawRange,
+            requiredFeature,
+            textureView,
+            ref currentBumpSizes,
+            ref resourceArena,
+            ref schedulingArena);
+    }
+
+    private void RenderEncodedRange<TPixel>(
+        Configuration configuration,
+        WebGPUFlushContext flushContext,
+        WebGPUSceneTarget target,
+        WebGPUEncodedScene encodedScene,
+        WebGPUSceneRange range,
+        FeatureName requiredFeature,
+        TextureView* dynamicImageTextureView,
+        ref WebGPUSceneBumpSizes currentBumpSizes,
+        ref WebGPUSceneResourceArena? resourceArena,
+        ref WebGPUSceneSchedulingArena? schedulingArena)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (range.DrawTagCount == 0)
+        {
+            return;
+        }
+
+        bool renderCompleted = false;
+        for (int attempt = 0; attempt < MaxDynamicGrowthAttempts; attempt++)
+        {
+            WebGPUStagedScene stagedScene = WebGPUSceneDispatch.CreateStagedScene<TPixel>(
+                flushContext,
+                encodedScene,
+                range,
+                requiredFeature,
+                currentBumpSizes,
+                dynamicImageTextureView,
+                ref resourceArena);
+
+            try
+            {
+                if (stagedScene.BindingLimitFailure.Buffer != WebGPUSceneDispatch.BindingLimitBuffer.None)
+                {
+                    this.DiagnosticLastFlushUsedChunking = true;
+                    this.lastChunkingBindingFailure = stagedScene.BindingLimitFailure.Buffer;
+                }
+
+                bool renderSucceeded = WebGPUSceneDispatch.TryRenderStagedScene(
+                    ref stagedScene,
+                    target,
+                    ref schedulingArena,
+                    this.GetChunkTileHeightHint(stagedScene.BindingLimitFailure.Buffer, target.Bounds.Size),
+                    out bool requiresGrowth,
+                    out WebGPUSceneBumpSizes grownBumpSizes,
+                    out uint successfulChunkTileHeight,
+                    out string? error);
+
+                if (renderSucceeded)
+                {
+                    currentBumpSizes = MaxBumpSizes(currentBumpSizes, grownBumpSizes);
+
+                    if (successfulChunkTileHeight != 0)
+                    {
+                        this.UpdateChunkTileHeightHint(
+                            stagedScene.BindingLimitFailure.Buffer,
+                            encodedScene.TargetSize,
+                            successfulChunkTileHeight);
+                    }
+
+                    renderCompleted = true;
+                    break;
+                }
+
+                if (requiresGrowth)
+                {
+                    currentBumpSizes = MaxBumpSizes(currentBumpSizes, grownBumpSizes);
+                    continue;
+                }
+
+                throw new InvalidOperationException(error ?? "The staged WebGPU scene dispatch failed.");
+            }
+            finally
+            {
+                stagedScene.Dispose();
+            }
+        }
+
+        if (!renderCompleted)
+        {
+            throw new InvalidOperationException("The staged WebGPU scene exceeded the current dynamic growth retry budget.");
+        }
+    }
+
+    private static void ClearTarget(WebGPUFlushContext flushContext, TextureView* targetView)
+    {
+        if (!flushContext.EnsureCommandEncoder() || !flushContext.BeginRenderPass(targetView, loadExisting: false))
+        {
+            throw new InvalidOperationException("Failed to clear the WebGPU layer target.");
+        }
+
+        flushContext.EndRenderPassIfOpen();
     }
 
     /// <summary>
@@ -353,12 +665,31 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         out Texture* texture,
         out TextureView* textureView,
         out string? error)
+        => TryCreateCompositionTexture(flushContext, width, height, renderAttachment: false, out texture, out textureView, out error);
+
+    /// <summary>
+    /// Creates one transient composition texture that can be rendered to, sampled from, and copied.
+    /// </summary>
+    private static bool TryCreateCompositionTexture(
+        WebGPUFlushContext flushContext,
+        int width,
+        int height,
+        bool renderAttachment,
+        out Texture* texture,
+        out TextureView* textureView,
+        out string? error)
     {
         textureView = null;
+        TextureUsage usage = TextureUsage.TextureBinding | TextureUsage.StorageBinding | TextureUsage.CopySrc | TextureUsage.CopyDst;
+
+        if (renderAttachment)
+        {
+            usage |= TextureUsage.RenderAttachment;
+        }
 
         TextureDescriptor textureDescriptor = new()
         {
-            Usage = TextureUsage.TextureBinding | TextureUsage.StorageBinding | TextureUsage.CopySrc | TextureUsage.CopyDst,
+            Usage = usage,
             Dimension = TextureDimension.Dimension2D,
             Size = new Extent3D((uint)width, (uint)height, 1),
             Format = flushContext.TextureFormat,

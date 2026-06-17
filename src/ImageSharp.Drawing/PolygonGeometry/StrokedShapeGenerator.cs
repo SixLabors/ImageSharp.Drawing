@@ -63,16 +63,7 @@ internal static class StrokedShapeGenerator
         int index = 0;
         for (int i = 0; i < result.Count; i++)
         {
-            Contour contour = result[i];
-            PointF[] points = new PointF[contour.Count];
-
-            for (int j = 0; j < contour.Count; j++)
-            {
-                Vertex vertex = contour[j];
-                points[j] = new PointF((float)vertex.X, (float)vertex.Y);
-            }
-
-            shapes[index++] = new Polygon(points);
+            shapes[index++] = new Polygon(ClippedShapeGenerator.CreateContourPoints(result, i));
         }
 
         return new(shapes);

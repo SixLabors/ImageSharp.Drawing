@@ -179,6 +179,57 @@ public partial class WebGPUDrawingBackendTests
     }
 
     [WebGPUTheory]
+    [WithFile(TestImages.Png.Rainbow, PixelTypes.Rgba32, WrapMode.None, WrapMode.None)]
+    [WithFile(TestImages.Png.Rainbow, PixelTypes.Rgba32, WrapMode.Repeat, WrapMode.Repeat)]
+    [WithFile(TestImages.Png.Rainbow, PixelTypes.Rgba32, WrapMode.Mirror, WrapMode.Repeat)]
+    [WithFile(TestImages.Png.Rainbow, PixelTypes.Rgba32, WrapMode.Repeat, WrapMode.Mirror)]
+    [WithFile(TestImages.Png.Rainbow, PixelTypes.Rgba32, WrapMode.Mirror, WrapMode.Mirror)]
+    [WithFile(TestImages.Png.Rainbow, PixelTypes.Rgba32, WrapMode.Clamp, WrapMode.Clamp)]
+    [WithFile(TestImages.Png.Rainbow, PixelTypes.Rgba32, WrapMode.Clamp, WrapMode.Repeat)]
+    [WithFile(TestImages.Png.Rainbow, PixelTypes.Rgba32, WrapMode.Mirror, WrapMode.Clamp)]
+    public void FillPath_WithImageBrushWrapModes_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider, WrapMode wrapX, WrapMode wrapY)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        RectanglePolygon polygon = new(8F, 8F, 492F, 492F);
+        Brush clearBrush = Brushes.Solid(Color.White);
+
+        // The rainbow is an opaque diagonal gradient (colour varies along both axes), so every mode is
+        // visibly distinct: Repeat tiles, Mirror reflects on each axis, Clamp stretches the edge colours,
+        // and None leaves transparency. A uniform, symmetric, or transparent-bordered source would make
+        // several modes indistinguishable. The region is inset 1px (sampling the interior) and is smaller
+        // than the target, so it repeats several times across the fill.
+        using Image<TPixel> foreground = provider.GetImage();
+        Brush brush = new ImageBrush<TPixel>(foreground, new RectangleF(1, 1, foreground.Width - 2, foreground.Height - 2), new Point(20, 16), wrapX, wrapY);
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Clear(clearBrush);
+            canvas.Fill(brush, polygon);
+        }
+
+        using Image<TPixel> defaultImage = new(500, 500);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction);
+
+        // The GPU backend must match the CPU backend for every wrap mode on both axes, and both must
+        // match their committed reference outputs.
+        DebugSaveBackendPair(provider, $"{wrapX}-{wrapY}", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairReferenceOutputs(provider, $"{wrapX}-{wrapY}", defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_WithNonZeroNestedContours_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -2480,6 +2531,148 @@ the evil Galactic Empire.";
     }
 
     [WebGPUTheory]
+    [WithBlankImage(120, 120, PixelTypes.Rgba32)]
+    public void SaveLayer_Apply_ProcessesLayerTarget_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+
+        static void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+
+            // Expected output: an inverted cyan layer rectangle with an inverted yellow center square.
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(20, 20, 80, 80));
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(20, 20, 80, 80));
+            canvas.Fill(Brushes.Solid(Color.Blue), new Rectangle(42, 42, 24, 24));
+            canvas.Apply(new Rectangle(20, 20, 80, 80), x => x.Invert());
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithBlankImage(120, 120, PixelTypes.Rgba32)]
+    public void SaveLayer_Apply_RespectsLayerBounds_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+
+        static void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+
+            // Expected output: only the bounded layer area is inverted; the oversized fill and Apply rects do not affect the white background.
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(30, 30, 50, 50));
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(0, 0, 120, 120));
+            canvas.Apply(new Rectangle(0, 0, 120, 120), x => x.Invert());
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithBlankImage(120, 120, PixelTypes.Rgba32)]
+    public void SaveLayer_Apply_ProcessesNestedLayer_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+
+        static void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+
+            // Expected output: a red outer layer with the bounded nested layer inverted from blue to yellow.
+            canvas.SaveLayer();
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(0, 0, 120, 120));
+
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(30, 30, 50, 50));
+            canvas.Fill(Brushes.Solid(Color.Blue), new Rectangle(30, 30, 50, 50));
+            canvas.Apply(new Rectangle(30, 30, 50, 50), x => x.Invert());
+            canvas.Restore();
+
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithBlankImage(120, 120, PixelTypes.Rgba32)]
+    public void SaveLayer_Apply_CompositesLayerOpacityAfterProcessing_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+
+        static void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+
+            // Expected output: the red layer is inverted to cyan, then composited over white as a 50% opacity pale cyan rectangle.
+            canvas.SaveLayer(new GraphicsOptions { BlendPercentage = 0.5F }, new Rectangle(20, 20, 80, 80));
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(20, 20, 80, 80));
+            canvas.Apply(new Rectangle(20, 20, 80, 80), x => x.Invert());
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
     [WithSolidFilledImages(128, 128, "White", PixelTypes.Rgba32)]
     public void SaveLayer_MixedSaveAndSaveLayer_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -2532,7 +2725,8 @@ the evil Galactic Empire.";
 
             DrawingOptions rootOptions = new()
             {
-                Transform = Matrix4x4.CreateTranslation(6F, 4F, 0)
+                Transform = Matrix4x4.CreateTranslation(6F, 4F, 0),
+                ShapeOptions = new ShapeOptions { BooleanOperation = BooleanOperation.Difference }
             };
 
             IPath rootClip = new EllipsePolygon(new PointF(160, 110), new SizeF(252, 164));
@@ -2545,7 +2739,8 @@ the evil Galactic Empire.";
 
                 DrawingOptions outerOptions = new()
                 {
-                    Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.18F, new Vector2(120, 78)))
+                    Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.18F, new Vector2(120, 78))),
+                    ShapeOptions = new ShapeOptions { BooleanOperation = BooleanOperation.Difference }
                 };
 
                 _ = outerRegion.Save(outerOptions, new RectanglePolygon(18, 14, 204, 128));
@@ -2558,7 +2753,8 @@ the evil Galactic Empire.";
 
                     DrawingOptions innerOptions = new()
                     {
-                        Transform = new Matrix4x4(Matrix3x2.CreateSkew(0.18F, 0F))
+                        Transform = new Matrix4x4(Matrix3x2.CreateSkew(0.18F, 0F)),
+                        ShapeOptions = new ShapeOptions { BooleanOperation = BooleanOperation.Difference }
                     };
 
                     _ = innerRegion.Save(innerOptions, new EllipsePolygon(new PointF(66, 41), new SizeF(102, 58)));

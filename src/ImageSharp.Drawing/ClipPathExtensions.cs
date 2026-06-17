@@ -33,7 +33,7 @@ public static class ClipPathExtensions
         this IPath subjectPath,
         ShapeOptions options,
         params IPath[] clipPaths)
-        => ClippedShapeGenerator.GenerateClippedShapes(options.BooleanOperation, subjectPath, clipPaths);
+        => ClippedShapeGenerator.GenerateClippedShapes(options, subjectPath, clipPaths);
 
     /// <summary>
     /// Clips the specified subject path with the provided clipping paths.
@@ -55,5 +55,5 @@ public static class ClipPathExtensions
         this IPath subjectPath,
         ShapeOptions options,
         IEnumerable<IPath> clipPaths)
-        => ClippedShapeGenerator.GenerateClippedShapes(options.BooleanOperation, subjectPath, clipPaths);
+        => ClippedShapeGenerator.GenerateClippedShapes(options, subjectPath, clipPaths);
 }

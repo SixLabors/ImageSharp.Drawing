@@ -1,8 +1,10 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -23,8 +25,11 @@ internal sealed partial class FlushScene : IDisposable
         maxLayerDepth: 0,
         fillItems: [],
         strokeItems: [],
-        layerOptions: [],
-        rows: []);
+        layers: [],
+        controlItems: [],
+        hasApply: false,
+        rows: [],
+        segments: []);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FlushScene"/> class.
@@ -40,8 +45,11 @@ internal sealed partial class FlushScene : IDisposable
         int maxLayerDepth,
         FillSceneItem?[] fillItems,
         StrokeSceneItem?[] strokeItems,
-        GraphicsOptions?[] layerOptions,
-        SceneRow[] rows)
+        DrawingCanvasLayer?[] layers,
+        SceneControlItem?[] controlItems,
+        bool hasApply,
+        SceneRow[] rows,
+        SceneSegment[] segments)
     {
         this.FillItemCount = fillItemCount;
         this.StrokeItemCount = strokeItemCount;
@@ -53,8 +61,11 @@ internal sealed partial class FlushScene : IDisposable
         this.MaxLayerDepth = maxLayerDepth;
         this.FillItems = fillItems;
         this.StrokeItems = strokeItems;
-        this.LayerOptions = layerOptions;
+        this.Layers = layers;
+        this.ControlItems = controlItems;
+        this.HasApply = hasApply;
         this.Rows = rows;
+        this.Segments = segments;
     }
 
     /// <summary>
@@ -83,9 +94,19 @@ internal sealed partial class FlushScene : IDisposable
     internal StrokeSceneItem?[] StrokeItems { get; }
 
     /// <summary>
-    /// Gets the retained layer options indexed by begin-layer command index.
+    /// Gets the retained layer state indexed by begin-layer command index.
     /// </summary>
-    internal GraphicsOptions?[] LayerOptions { get; }
+    internal DrawingCanvasLayer?[] Layers { get; }
+
+    /// <summary>
+    /// Gets layer and apply control operations indexed by original command index.
+    /// </summary>
+    internal SceneControlItem?[] ControlItems { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the scene contains apply barriers.
+    /// </summary>
+    public bool HasApply { get; }
 
     /// <summary>
     /// Gets the number of scene rows containing executable work.
@@ -96,6 +117,11 @@ internal sealed partial class FlushScene : IDisposable
     /// Gets the retained row lists.
     /// </summary>
     internal SceneRow[] Rows { get; }
+
+    /// <summary>
+    /// Gets retained target-wide execution segments for scenes containing apply barriers.
+    /// </summary>
+    internal SceneSegment[] Segments { get; }
 
     /// <summary>
     /// Gets the total number of row items retained by the scene.
@@ -140,13 +166,11 @@ internal sealed partial class FlushScene : IDisposable
         int maxDegreeOfParallelism)
     {
         int commandCount = scene.CommandCount;
-
         if (commandCount == 0)
         {
             return Empty();
         }
 
-        IReadOnlyList<CompositionSceneCommand> commands = scene.Commands;
         int firstTargetRowBandIndex = targetBounds.Top / DefaultRasterizer.DefaultTileHeight;
         int lastTargetRowBandIndex = (targetBounds.Bottom - 1) / DefaultRasterizer.DefaultTileHeight;
         int targetRowCount = (lastTargetRowBandIndex - firstTargetRowBandIndex) + 1;
@@ -159,7 +183,8 @@ internal sealed partial class FlushScene : IDisposable
 
         FillSceneItem?[] fillItems = new FillSceneItem?[commandCount];
         StrokeSceneItem?[] strokeItems = new StrokeSceneItem?[commandCount];
-        GraphicsOptions?[] layerOptions = new GraphicsOptions?[commandCount];
+        DrawingCanvasLayer?[] layers = new DrawingCanvasLayer?[commandCount];
+        SceneControlItem?[] controlItems = scene.HasApply ? new SceneControlItem?[commandCount] : [];
         int partitionCount = ParallelExecutionHelper.GetPartitionCount(maxDegreeOfParallelism, commandCount, targetRowCount);
         PartitionState[] partitions = new PartitionState[partitionCount];
 
@@ -171,20 +196,21 @@ internal sealed partial class FlushScene : IDisposable
             {
                 // Integer division splits the commands into contiguous half-open ranges,
                 // keeping the partitions balanced while assigning each command exactly once.
-                int commandStart = (partitionIndex * commandCount) / partitionCount;
-                int commandEnd = ((partitionIndex + 1) * commandCount) / partitionCount;
+                int partitionCommandStart = (partitionIndex * commandCount) / partitionCount;
+                int partitionCommandEnd = ((partitionIndex + 1) * commandCount) / partitionCount;
 
                 partitions[partitionIndex] = ProcessPartition(
-                    commands,
-                    commandStart,
-                    commandEnd,
+                    scene.Commands,
+                    partitionCommandStart,
+                    partitionCommandEnd,
                     targetRectangle,
                     firstTargetRowBandIndex,
                     targetRowCount,
                     allocator,
                     fillItems,
                     strokeItems,
-                    layerOptions);
+                    layers,
+                    controlItems);
             });
 
         RowBuilder[] rowBuilders = new RowBuilder[targetRowCount];
@@ -226,13 +252,38 @@ internal sealed partial class FlushScene : IDisposable
             rowItemCount += rowBuilders[i].Count;
         }
 
-        if ((fillItemCount + strokeItemCount) == 0 || rowItemCount == 0)
+        if (((fillItemCount + strokeItemCount) == 0 || rowItemCount == 0) && !scene.HasApply)
         {
             DisposeRows(rowBuilders);
             return Empty();
         }
 
-        SceneRow[] sceneRows = FinalizeRows(rowBuilders, firstTargetRowBandIndex, rowCount);
+        SceneRow[] sceneRows = rowCount == 0
+            ? []
+            : FinalizeRows(rowBuilders, firstTargetRowBandIndex, rowCount);
+        SceneSegment[] segments = [];
+
+        if (scene.HasApply)
+        {
+            segments = CreateApplySegments(
+                commandCount,
+                sceneRows,
+                controlItems,
+                allocator,
+                firstTargetRowBandIndex,
+                targetRowCount,
+                out rowCount,
+                out rowItemCount);
+
+            for (int i = 0; i < sceneRows.Length; i++)
+            {
+                sceneRows[i].Dispose();
+            }
+
+            sceneRows = [];
+            controlItems = [];
+        }
+
         return new FlushScene(
             fillItemCount,
             strokeItemCount,
@@ -244,8 +295,11 @@ internal sealed partial class FlushScene : IDisposable
             maxLayerDepth,
             fillItems,
             strokeItems,
-            layerOptions,
-            sceneRows);
+            layers,
+            controlItems,
+            scene.HasApply,
+            sceneRows,
+            segments);
     }
 
     /// <summary>
@@ -258,6 +312,11 @@ internal sealed partial class FlushScene : IDisposable
             this.Rows[i].Dispose();
         }
 
+        for (int i = 0; i < this.Segments.Length; i++)
+        {
+            this.Segments[i].Dispose();
+        }
+
         for (int i = 0; i < this.FillItems.Length; i++)
         {
             this.FillItems[i]?.Dispose();
@@ -266,6 +325,15 @@ internal sealed partial class FlushScene : IDisposable
         for (int i = 0; i < this.StrokeItems.Length; i++)
         {
             this.StrokeItems[i]?.Dispose();
+        }
+
+        for (int i = 0; i < this.ControlItems.Length; i++)
+        {
+            if (this.ControlItems[i] is SceneControlItem controlItem &&
+                controlItem.Kind == SceneOperationKind.Apply)
+            {
+                controlItem.ApplyItem.Dispose();
+            }
         }
     }
 
@@ -516,6 +584,89 @@ internal sealed partial class FlushScene : IDisposable
         }
     }
 
+    /// <summary>
+    /// Builds target-wide execution segments for a scene containing apply barriers.
+    /// </summary>
+    private static SceneSegment[] CreateApplySegments(
+        int commandCount,
+        SceneRow[] rows,
+        SceneControlItem?[] controlItems,
+        MemoryAllocator allocator,
+        int firstTargetRowBandIndex,
+        int targetRowCount,
+        out int rowCount,
+        out int rowItemCount)
+    {
+        SceneSequenceBuilder root = new(allocator, firstTargetRowBandIndex, targetRowCount);
+        SceneSegmentBuilder?[] commandSegments = new SceneSegmentBuilder?[commandCount];
+        List<ScopedLayerBuildFrame> scopedLayers = [];
+        SceneSequenceBuilder current = root;
+
+        for (int commandIndex = 0; commandIndex < commandCount; commandIndex++)
+        {
+            if (controlItems[commandIndex] is not SceneControlItem controlItem)
+            {
+                commandSegments[commandIndex] = current.CurrentSegment;
+                continue;
+            }
+
+            switch (controlItem.Kind)
+            {
+                case SceneOperationKind.BeginLayer:
+                    if (controlItem.Layer.RequiresScopedApply)
+                    {
+                        SceneSequenceBuilder child = new(allocator, firstTargetRowBandIndex, targetRowCount);
+                        scopedLayers.Add(new ScopedLayerBuildFrame(current, controlItem.Layer, controlItem.LayerBounds, child));
+                        current = child;
+                    }
+                    else
+                    {
+                        commandSegments[commandIndex] = current.CurrentSegment;
+                    }
+
+                    break;
+
+                case SceneOperationKind.EndLayer:
+                    if (scopedLayers.Count != 0 &&
+                        ReferenceEquals(scopedLayers[scopedLayers.Count - 1].Layer, controlItem.Layer))
+                    {
+                        ScopedLayerBuildFrame frame = scopedLayers[scopedLayers.Count - 1];
+                        scopedLayers.RemoveAt(scopedLayers.Count - 1);
+                        current = frame.Parent;
+                        current.AddLayer(new ScopedLayerSceneBuilder(frame.Layer, frame.Bounds, frame.Content));
+                    }
+                    else
+                    {
+                        commandSegments[commandIndex] = current.CurrentSegment;
+                    }
+
+                    break;
+
+                case SceneOperationKind.Apply:
+                    current.AddApply(controlItem.ApplyItem);
+                    break;
+            }
+        }
+
+        // Apply barriers are whole-target operations. Split retained rows once here so render
+        // can replay each segment directly instead of filtering every row by command index.
+        for (int rowIndex = 0; rowIndex < rows.Length; rowIndex++)
+        {
+            SceneRow row = rows[rowIndex];
+            int rowSlot = row.RowBandIndex - firstTargetRowBandIndex;
+
+            for (SceneOperationBlock? block = row.FirstBlock; block is not null; block = block.Next)
+            {
+                foreach (SceneOperation operation in block.Items)
+                {
+                    commandSegments[operation.ItemIndex]?.Append(rowSlot, operation);
+                }
+            }
+        }
+
+        return root.FinalizeSegments(out rowCount, out rowItemCount);
+    }
+
     private static PartitionState ProcessPartition(
         IReadOnlyList<CompositionSceneCommand> commands,
         int commandStart,
@@ -526,7 +677,8 @@ internal sealed partial class FlushScene : IDisposable
         MemoryAllocator allocator,
         FillSceneItem?[] fillItems,
         StrokeSceneItem?[] strokeItems,
-        GraphicsOptions?[] layerOptions)
+        DrawingCanvasLayer?[] layers,
+        SceneControlItem?[] controlItems)
     {
         RowBuilder[] rowBuilders = new RowBuilder[targetRowCount];
         int fillItemCount = 0;
@@ -551,7 +703,8 @@ internal sealed partial class FlushScene : IDisposable
                     allocator,
                     fillItems,
                     strokeItems,
-                    layerOptions,
+                    layers,
+                    controlItems,
                     ref fillItemCount,
                     ref strokeItemCount,
                     ref totalEdgeCount,
@@ -590,10 +743,10 @@ internal sealed partial class FlushScene : IDisposable
                     ref singleBandItemCount,
                     ref smallEdgeItemCount);
             }
-            else
+            else if (command is PolylineCompositionSceneCommand polylineCommand)
             {
                 ProcessPolylineCommand(
-                    ((PolylineCompositionSceneCommand)command).Command,
+                    polylineCommand.Command,
                     commandIndex,
                     targetRowCount,
                     firstTargetRowBandIndex,
@@ -627,7 +780,8 @@ internal sealed partial class FlushScene : IDisposable
         MemoryAllocator allocator,
         FillSceneItem?[] fillItems,
         StrokeSceneItem?[] strokeItems,
-        GraphicsOptions?[] layerOptions,
+        DrawingCanvasLayer?[] layers,
+        SceneControlItem?[] controlItems,
         ref int fillItemCount,
         ref int strokeItemCount,
         ref long totalEdgeCount,
@@ -636,6 +790,44 @@ internal sealed partial class FlushScene : IDisposable
         ref int currentLayerDepth,
         ref int maxLayerDepth)
     {
+        if (command.Kind == CompositionCommandKind.Apply)
+        {
+            RectangleF rawBounds = RectangleF.Transform(command.SourcePath.Bounds, command.DrawingOptions.Transform);
+            Rectangle sourceRect = Rectangle.Intersect(command.ApplyBarrier.CanvasBounds, ToConservativeBounds(rawBounds));
+            if (sourceRect.Width <= 0 || sourceRect.Height <= 0)
+            {
+                return;
+            }
+
+            if (!TryPrepareFillPath(
+                    command.SourcePath,
+                    Brushes.Solid(Color.White),
+                    command.DrawingOptions,
+                    command.RasterizerOptions,
+                    command.TargetBounds,
+                    command.DestinationOffset,
+                    allocator,
+                    out PreparedFillItem preparedApply))
+            {
+                return;
+            }
+
+            Point brushOffset = new(
+                sourceRect.X - (int)MathF.Floor(rawBounds.Left),
+                sourceRect.Y - (int)MathF.Floor(rawBounds.Top));
+
+            controlItems[commandIndex] = new SceneControlItem(
+                new ApplySceneItem(
+                    command.ApplyBarrier.Operation,
+                    sourceRect,
+                    brushOffset,
+                    preparedApply.GraphicsOptions,
+                    preparedApply.BrushBounds,
+                    preparedApply.Rasterizable,
+                    command.OwnerLayer));
+            return;
+        }
+
         if (TryGetLayerOperation(
             command,
             targetBounds,
@@ -655,13 +847,17 @@ internal sealed partial class FlushScene : IDisposable
                 currentLayerDepth--;
             }
 
-            int layerOptionsIndex = -1;
+            int layerOptionsIndex = commandIndex;
             if (operationKind == CompositionCommandKind.BeginLayer)
             {
-                // BeginLayer carries the compositing options used later by the matching EndLayer.
-                // Store them at the command index so row operations can keep a compact integer reference.
-                layerOptions[commandIndex] = command.GraphicsOptions;
-                layerOptionsIndex = commandIndex;
+                // BeginLayer carries the shared layer state used later by the matching EndLayer.
+                // Store it at the command index so row operations can keep a compact integer reference.
+                layers[commandIndex] = command.Layer;
+            }
+
+            if (controlItems.Length != 0)
+            {
+                controlItems[commandIndex] = new SceneControlItem(operationKind, layerBounds, command.Layer);
             }
 
             AppendLayerOperations(rowBuilders, firstRowSlot, lastRowSlot, layerBounds, operationKind, layerOptionsIndex, targetBounds, allocator);
@@ -679,7 +875,7 @@ internal sealed partial class FlushScene : IDisposable
             return;
         }
 
-        fillItems[commandIndex] = new FillSceneItem(preparedFill.Brush, preparedFill.GraphicsOptions, preparedFill.BrushBounds, preparedFill.Rasterizable);
+        fillItems[commandIndex] = new FillSceneItem(preparedFill.Brush, preparedFill.GraphicsOptions, preparedFill.BrushBounds, preparedFill.Rasterizable, command.OwnerLayer);
         fillItemCount++;
         AccumulateFillItemStats(preparedFill.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
         GetEffectiveRowSlotRange(command.TargetBounds, firstTargetRowBandIndex, rowBuilders.Length, command.IsInsideLayer, out int rowStart, out int rowEnd);
@@ -705,7 +901,7 @@ internal sealed partial class FlushScene : IDisposable
             return;
         }
 
-        strokeItems[commandIndex] = new StrokeSceneItem(preparedStroke.Brush, preparedStroke.GraphicsOptions, preparedStroke.BrushBounds, preparedStroke.Rasterizable);
+        strokeItems[commandIndex] = new StrokeSceneItem(preparedStroke.Brush, preparedStroke.GraphicsOptions, preparedStroke.BrushBounds, preparedStroke.Rasterizable, command.OwnerLayer);
         strokeItemCount++;
         AccumulateStrokeItemStats(preparedStroke.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
         GetEffectiveRowSlotRange(command.TargetBounds, firstTargetRowBandIndex, targetRowCount, command.IsInsideLayer, out int rowStart, out int rowEnd);
@@ -731,7 +927,7 @@ internal sealed partial class FlushScene : IDisposable
             return;
         }
 
-        strokeItems[commandIndex] = new StrokeSceneItem(preparedStroke.Brush, preparedStroke.GraphicsOptions, preparedStroke.BrushBounds, preparedStroke.Rasterizable);
+        strokeItems[commandIndex] = new StrokeSceneItem(preparedStroke.Brush, preparedStroke.GraphicsOptions, preparedStroke.BrushBounds, preparedStroke.Rasterizable, command.OwnerLayer);
         strokeItemCount++;
         AccumulateStrokeItemStats(preparedStroke.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
         GetEffectiveRowSlotRange(command.TargetBounds, firstTargetRowBandIndex, targetRowCount, command.IsInsideLayer, out int rowStart, out int rowEnd);
@@ -757,7 +953,7 @@ internal sealed partial class FlushScene : IDisposable
             return;
         }
 
-        strokeItems[commandIndex] = new StrokeSceneItem(preparedStroke.Brush, preparedStroke.GraphicsOptions, preparedStroke.BrushBounds, preparedStroke.Rasterizable);
+        strokeItems[commandIndex] = new StrokeSceneItem(preparedStroke.Brush, preparedStroke.GraphicsOptions, preparedStroke.BrushBounds, preparedStroke.Rasterizable, command.OwnerLayer);
         strokeItemCount++;
         AccumulateStrokeItemStats(preparedStroke.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
         GetEffectiveRowSlotRange(command.TargetBounds, firstTargetRowBandIndex, targetRowCount, command.IsInsideLayer, out int rowStart, out int rowEnd);
@@ -793,22 +989,40 @@ internal sealed partial class FlushScene : IDisposable
         in CompositionCommand command,
         MemoryAllocator allocator,
         out PreparedFillItem prepared)
+        => TryPrepareFillPath(
+            command.SourcePath,
+            command.Brush,
+            command.DrawingOptions,
+            command.RasterizerOptions,
+            command.TargetBounds,
+            command.DestinationOffset,
+            allocator,
+            out prepared);
+
+    internal static bool TryPrepareFillPath(
+        IPath path,
+        Brush sourceBrush,
+        DrawingOptions drawingOptions,
+        in RasterizerOptions sourceRasterizerOptions,
+        Rectangle targetBounds,
+        Point destinationOffset,
+        MemoryAllocator allocator,
+        out PreparedFillItem prepared)
     {
-        IPath path = command.SourcePath;
-        Matrix4x4 transform = command.Transform;
+        Matrix4x4 transform = drawingOptions.Transform;
         bool hasTransform = !transform.IsIdentity;
         Vector2 scale = ExtractScale(transform);
         Matrix4x4 residual = ComputeResidual(scale, transform);
         LinearGeometry geometry = path.ToLinearGeometry(scale);
-        Brush sourceBrush = hasTransform ? command.Brush.Transform(transform) : command.Brush;
+        sourceBrush = hasTransform ? sourceBrush.Transform(transform) : sourceBrush;
         RectangleF geometryBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
 
         if (!TryResolveRasterization(
                 sourceBrush,
                 geometryBounds,
-                command.RasterizerOptions,
-                command.DestinationOffset,
-                command.TargetBounds,
+                sourceRasterizerOptions,
+                destinationOffset,
+                targetBounds,
                 out Brush brush,
                 out RasterizerOptions rasterizerOptions,
                 out Rectangle brushBounds))
@@ -820,8 +1034,8 @@ internal sealed partial class FlushScene : IDisposable
         DefaultRasterizer.RasterizableGeometry? rasterizable = DefaultRasterizer.CreateRasterizableGeometry(
             geometry,
             residual,
-            command.DestinationOffset.X,
-            command.DestinationOffset.Y,
+            destinationOffset.X,
+            destinationOffset.Y,
             rasterizerOptions,
             allocator);
 
@@ -831,7 +1045,7 @@ internal sealed partial class FlushScene : IDisposable
             return false;
         }
 
-        prepared = new PreparedFillItem(brush, command.GraphicsOptions, brushBounds, rasterizable);
+        prepared = new PreparedFillItem(brush, drawingOptions.GraphicsOptions, brushBounds, rasterizable);
         return true;
     }
 
@@ -997,11 +1211,6 @@ internal sealed partial class FlushScene : IDisposable
     {
         resolvedBrush = brush;
 
-        if (options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter)
-        {
-            bounds = new RectangleF(bounds.X + 0.5F, bounds.Y + 0.5F, bounds.Width, bounds.Height);
-        }
-
         Rectangle localInterest = Rectangle.FromLTRB(
             (int)MathF.Floor(bounds.Left),
             (int)MathF.Floor(bounds.Top),
@@ -1026,12 +1235,18 @@ internal sealed partial class FlushScene : IDisposable
             absoluteInterest,
             options.IntersectionRule,
             options.RasterizationMode,
-            options.SamplingOrigin,
             options.AntialiasThreshold);
 
         brushBounds = absoluteInterest;
         return true;
     }
+
+    private static Rectangle ToConservativeBounds(RectangleF bounds)
+        => Rectangle.FromLTRB(
+            (int)MathF.Floor(bounds.Left),
+            (int)MathF.Floor(bounds.Top),
+            (int)MathF.Ceiling(bounds.Right),
+            (int)MathF.Ceiling(bounds.Bottom));
 
     private static RectangleF GetStrokeBounds(RectangleF bounds, Pen pen, float widthScale)
     {
@@ -1078,7 +1293,7 @@ internal sealed partial class FlushScene : IDisposable
     private static Matrix4x4 ComputeResidual(Vector2 scale, Matrix4x4 matrix)
         => Matrix4x4.CreateScale(1F / scale.X, 1F / scale.Y, 1F) * matrix;
 
-    private readonly struct PreparedFillItem
+    internal readonly struct PreparedFillItem
     {
         public PreparedFillItem(
             Brush brush,
@@ -1161,5 +1376,277 @@ internal sealed partial class FlushScene : IDisposable
         public int MaxLayerDepth { get; }
 
         public RowBuilder[] RowBuilders { get; }
+    }
+
+    /// <summary>
+    /// Holds one open scoped layer while command ownership is assigned.
+    /// </summary>
+    private readonly struct ScopedLayerBuildFrame
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ScopedLayerBuildFrame"/> struct.
+        /// </summary>
+        /// <param name="parent">The parent sequence receiving the finalized layer.</param>
+        /// <param name="layer">The retained layer state.</param>
+        /// <param name="bounds">The absolute layer target bounds.</param>
+        /// <param name="content">The child sequence receiving layer contents.</param>
+        public ScopedLayerBuildFrame(
+            SceneSequenceBuilder parent,
+            DrawingCanvasLayer layer,
+            Rectangle bounds,
+            SceneSequenceBuilder content)
+        {
+            this.Parent = parent;
+            this.Layer = layer;
+            this.Bounds = bounds;
+            this.Content = content;
+        }
+
+        /// <summary>
+        /// Gets the parent sequence receiving the finalized layer.
+        /// </summary>
+        public SceneSequenceBuilder Parent { get; }
+
+        /// <summary>
+        /// Gets the retained layer state.
+        /// </summary>
+        public DrawingCanvasLayer Layer { get; }
+
+        /// <summary>
+        /// Gets the absolute layer target bounds.
+        /// </summary>
+        public Rectangle Bounds { get; }
+
+        /// <summary>
+        /// Gets the child sequence receiving layer contents.
+        /// </summary>
+        public SceneSequenceBuilder Content { get; }
+    }
+
+    /// <summary>
+    /// Builds an ordered sequence of retained row segments.
+    /// </summary>
+    private sealed class SceneSequenceBuilder
+    {
+        private readonly MemoryAllocator allocator;
+        private readonly int firstTargetRowBandIndex;
+        private readonly int targetRowCount;
+        private readonly List<SceneSegmentBuilder> segments = [];
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SceneSequenceBuilder"/> class.
+        /// </summary>
+        /// <param name="allocator">The allocator used for retained row storage.</param>
+        /// <param name="firstTargetRowBandIndex">The first target row-band index.</param>
+        /// <param name="targetRowCount">The target row-band count.</param>
+        public SceneSequenceBuilder(
+            MemoryAllocator allocator,
+            int firstTargetRowBandIndex,
+            int targetRowCount)
+        {
+            this.allocator = allocator;
+            this.firstTargetRowBandIndex = firstTargetRowBandIndex;
+            this.targetRowCount = targetRowCount;
+            this.CurrentSegment = this.CreateSegment();
+        }
+
+        /// <summary>
+        /// Gets the segment currently receiving retained row operations.
+        /// </summary>
+        public SceneSegmentBuilder CurrentSegment { get; private set; }
+
+        /// <summary>
+        /// Appends an apply operation after the current row segment.
+        /// </summary>
+        /// <param name="applyItem">The retained apply operation.</param>
+        public void AddApply(ApplySceneItem applyItem)
+        {
+            this.CurrentSegment.SetApply(applyItem);
+            this.CurrentSegment = this.CreateSegment();
+        }
+
+        /// <summary>
+        /// Appends a scoped layer after the current row segment.
+        /// </summary>
+        /// <param name="layerBuilder">The retained scoped layer builder.</param>
+        public void AddLayer(ScopedLayerSceneBuilder layerBuilder)
+        {
+            this.CurrentSegment.SetLayer(layerBuilder);
+            this.CurrentSegment = this.CreateSegment();
+        }
+
+        /// <summary>
+        /// Finalizes all retained segments in this sequence.
+        /// </summary>
+        /// <param name="rowCount">The total retained row count.</param>
+        /// <param name="rowItemCount">The total retained row operation count.</param>
+        /// <returns>The finalized retained segments.</returns>
+        public SceneSegment[] FinalizeSegments(out int rowCount, out int rowItemCount)
+        {
+            List<SceneSegment> finalized = [];
+            rowCount = 0;
+            rowItemCount = 0;
+
+            for (int i = 0; i < this.segments.Count; i++)
+            {
+                if (this.segments[i].FinalizeSegment(
+                    this.firstTargetRowBandIndex,
+                    out SceneSegment? segment,
+                    out int segmentRowCount,
+                    out int segmentRowItemCount))
+                {
+                    finalized.Add(segment!);
+                    rowCount += segmentRowCount;
+                    rowItemCount += segmentRowItemCount;
+                }
+            }
+
+            return finalized.Count == 0 ? [] : finalized.ToArray();
+        }
+
+        private SceneSegmentBuilder CreateSegment()
+        {
+            SceneSegmentBuilder segment = new(this.allocator, this.targetRowCount);
+            this.segments.Add(segment);
+            return segment;
+        }
+    }
+
+    /// <summary>
+    /// Builds one retained row segment and its optional trailing operation.
+    /// </summary>
+    private sealed class SceneSegmentBuilder
+    {
+        private readonly MemoryAllocator allocator;
+        private readonly int targetRowCount;
+        private RowBuilder[]? rowBuilders;
+        private ApplySceneItem? applyItem;
+        private ScopedLayerSceneBuilder? layerBuilder;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SceneSegmentBuilder"/> class.
+        /// </summary>
+        /// <param name="allocator">The allocator used for retained row storage.</param>
+        /// <param name="targetRowCount">The target row-band count.</param>
+        public SceneSegmentBuilder(MemoryAllocator allocator, int targetRowCount)
+        {
+            this.allocator = allocator;
+            this.targetRowCount = targetRowCount;
+        }
+
+        /// <summary>
+        /// Appends one retained row operation to this segment.
+        /// </summary>
+        /// <param name="rowSlot">The target row slot.</param>
+        /// <param name="operation">The retained row operation.</param>
+        public void Append(int rowSlot, SceneOperation operation)
+        {
+            this.rowBuilders ??= new RowBuilder[this.targetRowCount];
+            ref RowBuilder builder = ref this.rowBuilders[rowSlot];
+            if (!builder.IsInitialized)
+            {
+                builder = new RowBuilder(this.allocator);
+            }
+
+            builder.Append(operation);
+        }
+
+        /// <summary>
+        /// Sets the apply operation executed after this segment's rows.
+        /// </summary>
+        /// <param name="item">The retained apply operation.</param>
+        public void SetApply(ApplySceneItem item) => this.applyItem = item;
+
+        /// <summary>
+        /// Sets the scoped layer executed after this segment's rows.
+        /// </summary>
+        /// <param name="builder">The retained scoped layer builder.</param>
+        public void SetLayer(ScopedLayerSceneBuilder builder) => this.layerBuilder = builder;
+
+        /// <summary>
+        /// Finalizes this builder into retained segment storage.
+        /// </summary>
+        /// <param name="firstTargetRowBandIndex">The first target row-band index.</param>
+        /// <param name="segment">The finalized retained segment.</param>
+        /// <param name="rowCount">The retained row count in the segment and any child layer.</param>
+        /// <param name="rowItemCount">The retained row operation count in the segment and any child layer.</param>
+        /// <returns>True when the segment has retained work.</returns>
+        public bool FinalizeSegment(
+            int firstTargetRowBandIndex,
+            out SceneSegment? segment,
+            out int rowCount,
+            out int rowItemCount)
+        {
+            int segmentRowCount = 0;
+            int segmentRowItemCount = 0;
+            SceneRow[] rows = [];
+
+            if (this.rowBuilders is not null)
+            {
+                for (int i = 0; i < this.rowBuilders.Length; i++)
+                {
+                    if (!this.rowBuilders[i].IsInitialized)
+                    {
+                        continue;
+                    }
+
+                    segmentRowCount++;
+                    segmentRowItemCount += this.rowBuilders[i].Count;
+                }
+
+                rows = segmentRowCount == 0
+                    ? []
+                    : FinalizeRows(this.rowBuilders, firstTargetRowBandIndex, segmentRowCount);
+            }
+
+            ScopedLayerSceneItem? layerItem = this.layerBuilder?.FinalizeSceneItem();
+            rowCount = segmentRowCount + (layerItem?.RowCount ?? 0);
+            rowItemCount = segmentRowItemCount + (layerItem?.RowItemCount ?? 0);
+
+            if (segmentRowCount == 0 && this.applyItem is null && layerItem is null)
+            {
+                segment = null;
+                return false;
+            }
+
+            segment = new SceneSegment(rows, segmentRowItemCount, this.applyItem, layerItem);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Builds a retained scoped layer from child segments.
+    /// </summary>
+    private sealed class ScopedLayerSceneBuilder
+    {
+        private readonly DrawingCanvasLayer layer;
+        private readonly Rectangle bounds;
+        private readonly SceneSequenceBuilder content;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ScopedLayerSceneBuilder"/> class.
+        /// </summary>
+        /// <param name="layer">The retained layer state.</param>
+        /// <param name="bounds">The absolute layer target bounds.</param>
+        /// <param name="content">The retained layer content builder.</param>
+        public ScopedLayerSceneBuilder(
+            DrawingCanvasLayer layer,
+            Rectangle bounds,
+            SceneSequenceBuilder content)
+        {
+            this.layer = layer;
+            this.bounds = bounds;
+            this.content = content;
+        }
+
+        /// <summary>
+        /// Finalizes this builder into retained scoped layer storage.
+        /// </summary>
+        /// <returns>The finalized retained scoped layer.</returns>
+        public ScopedLayerSceneItem FinalizeSceneItem()
+        {
+            SceneSegment[] segments = this.content.FinalizeSegments(out int rowCount, out int rowItemCount);
+            return new ScopedLayerSceneItem(this.layer, this.bounds, segments, rowCount, rowItemCount);
+        }
     }
 }

@@ -55,8 +55,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
         // Convert canvas-local source coordinates to absolute native-surface coordinates.
         Rectangle absoluteSource = new(
-            target.Bounds.X + sourceRectangle.X,
-            target.Bounds.Y + sourceRectangle.Y,
+            target.Bounds.X + nativeTarget.TextureCoordinateOffset.X + sourceRectangle.X,
+            target.Bounds.Y + nativeTarget.TextureCoordinateOffset.Y + sourceRectangle.Y,
             sourceRectangle.Width,
             sourceRectangle.Height);
 
@@ -184,6 +184,153 @@ public sealed unsafe partial class WebGPUDrawingBackend
                     readback
                         .Slice(y * readbackRowBytes, packedRowBytes)
                         .CopyTo(MemoryMarshal.AsBytes(destination.DangerousGetRowSpan(y)));
+                }
+
+                return;
+            }
+            finally
+            {
+                api.BufferUnmap(readbackBuffer);
+            }
+        }
+        finally
+        {
+            if (commandBuffer is not null)
+            {
+                api.CommandBufferRelease(commandBuffer);
+            }
+
+            if (commandEncoder is not null)
+            {
+                api.CommandEncoderRelease(commandEncoder);
+            }
+
+            if (readbackBuffer is not null)
+            {
+                api.BufferRelease(readbackBuffer);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reads a render-time scene target region into an ImageSharp pixel buffer.
+    /// </summary>
+    internal static void ReadTextureRegion<TPixel>(
+        WebGPUFlushContext flushContext,
+        WebGPUSceneTarget target,
+        Rectangle sourceRectangle,
+        Buffer2DRegion<TPixel> destination)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Rectangle source = Rectangle.Intersect(target.Bounds, sourceRectangle);
+
+        int pixelSizeInBytes = Unsafe.SizeOf<TPixel>();
+        int packedRowBytes = checked(source.Width * pixelSizeInBytes);
+
+        // WebGPU copy-to-buffer requires bytes-per-row alignment to 256 bytes.
+        int readbackRowBytes = Align(packedRowBytes, 256);
+        ulong readbackByteCount = checked((ulong)readbackRowBytes * (ulong)source.Height);
+
+        WebGPU api = flushContext.Api;
+        Wgpu wgpuExtension = WebGPURuntime.GetWgpuExtension();
+        using WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference();
+        using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
+
+        Device* device = (Device*)deviceReference.Handle;
+        Queue* queue = (Queue*)queueReference.Handle;
+
+        WgpuBuffer* readbackBuffer = null;
+        CommandEncoder* commandEncoder = null;
+        CommandBuffer* commandBuffer = null;
+        try
+        {
+            BufferDescriptor bufferDescriptor = new()
+            {
+                Usage = BufferUsage.CopyDst | BufferUsage.MapRead,
+                Size = readbackByteCount,
+                MappedAtCreation = false
+            };
+
+            readbackBuffer = api.DeviceCreateBuffer(device, in bufferDescriptor);
+            CommandEncoderDescriptor encoderDescriptor = default;
+            commandEncoder = api.DeviceCreateCommandEncoder(device, in encoderDescriptor);
+            if (commandEncoder is null)
+            {
+                throw new InvalidOperationException("The WebGPU device could not create a command encoder for readback.");
+            }
+
+            ImageCopyTexture sourceCopy = new()
+            {
+                Texture = target.Texture,
+                MipLevel = 0,
+                Origin = new Origin3D(
+                    (uint)(source.X + target.TextureOffset.X),
+                    (uint)(source.Y + target.TextureOffset.Y),
+                    0),
+                Aspect = TextureAspect.All
+            };
+
+            ImageCopyBuffer destinationCopy = new()
+            {
+                Buffer = readbackBuffer,
+                Layout = new TextureDataLayout
+                {
+                    Offset = 0,
+                    BytesPerRow = (uint)readbackRowBytes,
+                    RowsPerImage = (uint)source.Height
+                }
+            };
+
+            Extent3D copySize = new((uint)source.Width, (uint)source.Height, 1);
+            api.CommandEncoderCopyTextureToBuffer(commandEncoder, in sourceCopy, in destinationCopy, in copySize);
+
+            CommandBufferDescriptor commandBufferDescriptor = default;
+            commandBuffer = api.CommandEncoderFinish(commandEncoder, in commandBufferDescriptor);
+            if (commandBuffer is null)
+            {
+                throw new InvalidOperationException("The WebGPU device could not finalize the readback command buffer.");
+            }
+
+            api.QueueSubmit(queue, 1, ref commandBuffer);
+            api.CommandBufferRelease(commandBuffer);
+            commandBuffer = null;
+            api.CommandEncoderRelease(commandEncoder);
+            commandEncoder = null;
+
+            BufferMapAsyncStatus mapStatus = BufferMapAsyncStatus.Unknown;
+            using ManualResetEventSlim mapReady = new(false);
+            void Callback(BufferMapAsyncStatus status, void* userData)
+            {
+                _ = userData;
+                mapStatus = status;
+                mapReady.Set();
+            }
+
+            using PfnBufferMapCallback callback = PfnBufferMapCallback.From(Callback);
+            api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, (nuint)readbackByteCount, callback, null);
+            if (!WaitForMapSignal(wgpuExtension, device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
+            {
+                throw new InvalidOperationException($"The WebGPU device could not map the readback buffer. Status: '{mapStatus}'.");
+            }
+
+            void* mapped = api.BufferGetConstMappedRange(readbackBuffer, 0, (nuint)readbackByteCount);
+            if (mapped is null)
+            {
+                api.BufferUnmap(readbackBuffer);
+                throw new InvalidOperationException("The WebGPU device mapped the readback buffer but returned no readable data.");
+            }
+
+            try
+            {
+                ReadOnlySpan<byte> readback = new(mapped, checked((int)readbackByteCount));
+                int destinationX = source.X - sourceRectangle.X;
+                int destinationY = source.Y - sourceRectangle.Y;
+
+                for (int y = 0; y < source.Height; y++)
+                {
+                    readback
+                        .Slice(y * readbackRowBytes, packedRowBytes)
+                        .CopyTo(MemoryMarshal.AsBytes(destination.DangerousGetRowSpan(destinationY + y).Slice(destinationX, source.Width)));
                 }
 
                 return;

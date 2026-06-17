@@ -16,28 +16,15 @@ namespace SixLabors.ImageSharp.Drawing.Text;
 internal sealed class PathGlyphBuilder : GlyphBuilder
 {
     /// <summary>
-    /// The path that glyphs are laid out along. Exposed as <see cref="IPathInternals"/>
-    /// to access the <see cref="IPathInternals.PointAlongPath"/> method for efficient
-    /// position + tangent queries.
+    /// The path that glyphs are laid out along.
     /// </summary>
-    private readonly IPathInternals path;
+    private readonly IPath path;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PathGlyphBuilder"/> class.
     /// </summary>
     /// <param name="path">The path to render the glyphs along.</param>
-    public PathGlyphBuilder(IPath path)
-    {
-        if (path is IPathInternals internals)
-        {
-            this.path = internals;
-        }
-        else
-        {
-            // Wrap in ComplexPolygon to gain IPathInternals.
-            this.path = new ComplexPolygon(path);
-        }
-    }
+    public PathGlyphBuilder(IPath path) => this.path = path;
 
     /// <inheritdoc/>
     protected override bool BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
@@ -59,12 +46,13 @@ internal sealed class PathGlyphBuilder : GlyphBuilder
     {
         // Query the path at the glyph's horizontal center.
         Vector2 half = new(bounds.Width * .5F, 0);
-        SegmentInfo pathPoint = this.path.PointAlongPath(bounds.Left + half.X);
+        PathPoint pathPoint = this.path.GetPathPointAtDistance(bounds.Left + half.X);
+        float angle = GeometryUtilities.DegreeToRadian(pathPoint.Angle);
 
         // Translate so the glyph's top-left aligns with the path point,
         // then rotate around the path point to follow the tangent.
         Vector2 translation = (Vector2)pathPoint.Point - bounds.Location - half + new Vector2(0, bounds.Top);
-        Matrix4x4 matrix = Matrix4x4.CreateTranslation(translation.X, translation.Y, 0) * new Matrix4x4(Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, (Vector2)pathPoint.Point));
+        Matrix4x4 matrix = Matrix4x4.CreateTranslation(translation.X, translation.Y, 0) * new Matrix4x4(Matrix3x2.CreateRotation(angle, (Vector2)pathPoint.Point));
 
         this.Builder.SetTransform(matrix);
     }

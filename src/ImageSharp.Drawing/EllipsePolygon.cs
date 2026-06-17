@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing;
 /// <summary>
 /// An elliptical shape made up of a single path made up of one of more <see cref="ILineSegment"/>s.
 /// </summary>
-public sealed class EllipsePolygon : Polygon, IPathInternals
+public sealed class EllipsePolygon : Polygon
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="EllipsePolygon" /> class.
@@ -78,8 +78,8 @@ public sealed class EllipsePolygon : Polygon, IPathInternals
 
     /// <inheritdoc />
     // TODO switch this out to a calculated algorithm
-    SegmentInfo IPathInternals.PointAlongPath(float distance)
-        => this.InnerPath.PointAlongPath(distance);
+    public override PathPoint GetPathPointAtDistance(float distance)
+        => this.InnerPath.GetPathPointAtDistance(distance);
 
     private static CubicBezierLineSegment CreateSegment(Vector2 location, SizeF size)
     {

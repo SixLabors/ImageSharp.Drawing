@@ -212,7 +212,6 @@ public class DrawingCanvasBatcherTests
                 Rectangle.Empty,
                 IntersectionRule.NonZero,
                 RasterizationMode.Aliased,
-                RasterizerSamplingOrigin.PixelBoundary,
                 0.5f),
             default,
             []);
@@ -316,7 +315,6 @@ public class DrawingCanvasBatcherTests
             private readonly Rectangle interest;
             private readonly IntersectionRule intersectionRule;
             private readonly RasterizationMode rasterizationMode;
-            private readonly RasterizerSamplingOrigin samplingOrigin;
             private readonly int antialiasThresholdBits;
 
             public CoverageDefinitionKey(CompositionCommand command)
@@ -325,7 +323,6 @@ public class DrawingCanvasBatcherTests
                 this.interest = command.RasterizerOptions.Interest;
                 this.intersectionRule = command.RasterizerOptions.IntersectionRule;
                 this.rasterizationMode = command.RasterizerOptions.RasterizationMode;
-                this.samplingOrigin = command.RasterizerOptions.SamplingOrigin;
                 this.antialiasThresholdBits = BitConverter.SingleToInt32Bits(command.RasterizerOptions.AntialiasThreshold);
             }
 
@@ -334,7 +331,6 @@ public class DrawingCanvasBatcherTests
                    this.interest.Equals(other.interest) &&
                    this.intersectionRule == other.intersectionRule &&
                    this.rasterizationMode == other.rasterizationMode &&
-                   this.samplingOrigin == other.samplingOrigin &&
                    this.antialiasThresholdBits == other.antialiasThresholdBits;
 
             public override bool Equals(object obj)
@@ -346,7 +342,6 @@ public class DrawingCanvasBatcherTests
                     this.interest,
                     (int)this.intersectionRule,
                     (int)this.rasterizationMode,
-                    (int)this.samplingOrigin,
                     this.antialiasThresholdBits);
         }
 

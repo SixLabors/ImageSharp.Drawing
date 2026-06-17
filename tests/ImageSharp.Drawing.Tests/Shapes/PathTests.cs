@@ -76,8 +76,6 @@ public class PathTests
         Assert.Equal(0, identity.Info.ContourCount);
         Assert.Equal(0, identity.Info.PointCount);
         Assert.Equal(0, identity.Info.SegmentCount);
-        Assert.Equal(0, identity.Info.NonHorizontalSegmentCountPixelBoundary);
-        Assert.Equal(0, identity.Info.NonHorizontalSegmentCountPixelCenter);
         Assert.Empty(identity.Contours);
         Assert.Empty(identity.Points);
 

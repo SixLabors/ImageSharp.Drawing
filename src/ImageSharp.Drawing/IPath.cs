@@ -35,6 +35,13 @@ public interface IPath
     public LinearGeometry ToLinearGeometry(Vector2 scale);
 
     /// <summary>
+    /// Returns segment information at the specified distance along the path.
+    /// </summary>
+    /// <param name="distance">The distance along the path.</param>
+    /// <returns>The segment information at <paramref name="distance"/>.</returns>
+    public PathPoint GetPathPointAtDistance(float distance);
+
+    /// <summary>
     /// Transforms the path using the specified matrix.
     /// </summary>
     /// <param name="matrix">The matrix.</param>

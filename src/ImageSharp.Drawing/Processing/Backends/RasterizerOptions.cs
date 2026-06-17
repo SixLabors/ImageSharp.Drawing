@@ -20,22 +20,6 @@ public enum RasterizationMode
 }
 
 /// <summary>
-/// Describes where sample coverage is aligned relative to destination pixels.
-/// </summary>
-public enum RasterizerSamplingOrigin
-{
-    /// <summary>
-    /// Samples are aligned to pixel boundaries.
-    /// </summary>
-    PixelBoundary = 0,
-
-    /// <summary>
-    /// Samples are aligned to pixel centers.
-    /// </summary>
-    PixelCenter = 1
-}
-
-/// <summary>
 /// Immutable options used by rasterizers when scan-converting vector geometry.
 /// </summary>
 public readonly struct RasterizerOptions
@@ -46,19 +30,16 @@ public readonly struct RasterizerOptions
     /// <param name="interest">Destination bounds to rasterize into.</param>
     /// <param name="intersectionRule">Polygon intersection rule.</param>
     /// <param name="rasterizationMode">Rasterization coverage mode.</param>
-    /// <param name="samplingOrigin">Sampling origin alignment.</param>
     /// <param name="antialiasThreshold">Coverage threshold for aliased mode (0 to 1).</param>
     public RasterizerOptions(
         Rectangle interest,
         IntersectionRule intersectionRule,
         RasterizationMode rasterizationMode,
-        RasterizerSamplingOrigin samplingOrigin,
         float antialiasThreshold)
     {
         this.Interest = interest;
         this.IntersectionRule = intersectionRule;
         this.RasterizationMode = rasterizationMode;
-        this.SamplingOrigin = samplingOrigin;
         this.AntialiasThreshold = antialiasThreshold;
     }
 
@@ -78,11 +59,6 @@ public readonly struct RasterizerOptions
     public RasterizationMode RasterizationMode { get; }
 
     /// <summary>
-    /// Gets the sampling origin alignment.
-    /// </summary>
-    public RasterizerSamplingOrigin SamplingOrigin { get; }
-
-    /// <summary>
     /// Gets the coverage threshold used when <see cref="RasterizationMode"/> is <see cref="RasterizationMode.Aliased"/>.
     /// Pixels with coverage above this value are rendered as fully opaque; pixels below are discarded.
     /// </summary>
@@ -94,5 +70,5 @@ public readonly struct RasterizerOptions
     /// <param name="interest">The replacement interest rectangle.</param>
     /// <returns>A new <see cref="RasterizerOptions"/> value.</returns>
     public RasterizerOptions WithInterest(Rectangle interest)
-        => new(interest, this.IntersectionRule, this.RasterizationMode, this.SamplingOrigin, this.AntialiasThreshold);
+        => new(interest, this.IntersectionRule, this.RasterizationMode, this.AntialiasThreshold);
 }

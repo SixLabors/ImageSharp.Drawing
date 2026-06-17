@@ -51,6 +51,50 @@ public sealed class ImageBrush<TPixel> : ImageBrush
         => this.SourceImage = image;
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="ImageBrush{TPixel}"/> class.
+    /// </summary>
+    /// <param name="image">The source image to draw.</param>
+    /// <param name="wrapX">The wrap mode used when sampling horizontally beyond the source region.</param>
+    /// <param name="wrapY">The wrap mode used when sampling vertically beyond the source region.</param>
+    public ImageBrush(Image<TPixel> image, WrapMode wrapX, WrapMode wrapY)
+        : base(image, wrapX, wrapY)
+        => this.SourceImage = image;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImageBrush{TPixel}"/> class.
+    /// </summary>
+    /// <param name="image">The source image to draw.</param>
+    /// <param name="offset">An offset to apply to the image while drawing the texture.</param>
+    /// <param name="wrapX">The wrap mode used when sampling horizontally beyond the source region.</param>
+    /// <param name="wrapY">The wrap mode used when sampling vertically beyond the source region.</param>
+    public ImageBrush(Image<TPixel> image, Point offset, WrapMode wrapX, WrapMode wrapY)
+        : base(image, offset, wrapX, wrapY)
+        => this.SourceImage = image;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImageBrush{TPixel}"/> class.
+    /// </summary>
+    /// <param name="image">The source image to draw.</param>
+    /// <param name="region">The region of interest within the source image.</param>
+    /// <param name="wrapX">The wrap mode used when sampling horizontally beyond the source region.</param>
+    /// <param name="wrapY">The wrap mode used when sampling vertically beyond the source region.</param>
+    public ImageBrush(Image<TPixel> image, RectangleF region, WrapMode wrapX, WrapMode wrapY)
+        : base(image, region, wrapX, wrapY)
+        => this.SourceImage = image;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImageBrush{TPixel}"/> class.
+    /// </summary>
+    /// <param name="image">The source image to draw.</param>
+    /// <param name="region">The region of interest within the source image.</param>
+    /// <param name="offset">An offset to apply to the image while drawing the texture.</param>
+    /// <param name="wrapX">The wrap mode used when sampling horizontally beyond the source region.</param>
+    /// <param name="wrapY">The wrap mode used when sampling vertically beyond the source region.</param>
+    public ImageBrush(Image<TPixel> image, RectangleF region, Point offset, WrapMode wrapX, WrapMode wrapY)
+        : base(image, region, offset, wrapX, wrapY)
+        => this.SourceImage = image;
+
+    /// <summary>
     /// Gets the typed source image used by this brush.
     /// </summary>
     public Image<TPixel> SourceImage { get; }
@@ -107,10 +151,68 @@ public abstract class ImageBrush : Brush
     /// An offset to apply the to image image while drawing apply the texture.
     /// </param>
     protected ImageBrush(Image image, RectangleF region, Point offset)
+        : this(image, region, offset, WrapMode.Repeat, WrapMode.Repeat)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImageBrush"/> class.
+    /// </summary>
+    /// <param name="image">The image.</param>
+    /// <param name="wrapX">The wrap mode used when sampling horizontally beyond the source region.</param>
+    /// <param name="wrapY">The wrap mode used when sampling vertically beyond the source region.</param>
+    protected ImageBrush(Image image, WrapMode wrapX, WrapMode wrapY)
+        : this(image, image.Bounds, Point.Empty, wrapX, wrapY)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImageBrush"/> class.
+    /// </summary>
+    /// <param name="image">The image.</param>
+    /// <param name="offset">An offset to apply to the image while drawing the texture.</param>
+    /// <param name="wrapX">The wrap mode used when sampling horizontally beyond the source region.</param>
+    /// <param name="wrapY">The wrap mode used when sampling vertically beyond the source region.</param>
+    protected ImageBrush(Image image, Point offset, WrapMode wrapX, WrapMode wrapY)
+        : this(image, image.Bounds, offset, wrapX, wrapY)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImageBrush"/> class.
+    /// </summary>
+    /// <param name="image">The image.</param>
+    /// <param name="region">
+    /// The region of interest.
+    /// This overrides any region used to initialize the brush applicator.
+    /// </param>
+    /// <param name="wrapX">The wrap mode used when sampling horizontally beyond the source region.</param>
+    /// <param name="wrapY">The wrap mode used when sampling vertically beyond the source region.</param>
+    protected ImageBrush(Image image, RectangleF region, WrapMode wrapX, WrapMode wrapY)
+        : this(image, region, Point.Empty, wrapX, wrapY)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImageBrush"/> class.
+    /// </summary>
+    /// <param name="image">The image.</param>
+    /// <param name="region">
+    /// The region of interest.
+    /// This overrides any region used to initialize the brush applicator.
+    /// </param>
+    /// <param name="offset">
+    /// An offset to apply the to image image while drawing apply the texture.
+    /// </param>
+    /// <param name="wrapX">The wrap mode used when sampling horizontally beyond the source region.</param>
+    /// <param name="wrapY">The wrap mode used when sampling vertically beyond the source region.</param>
+    protected ImageBrush(Image image, RectangleF region, Point offset, WrapMode wrapX, WrapMode wrapY)
     {
         this.UntypedImage = image;
         this.SourceRegion = RectangleF.Intersect(image.Bounds, region);
         this.Offset = offset;
+        this.WrapX = wrapX;
+        this.WrapY = wrapY;
     }
 
     /// <summary>
@@ -128,19 +230,32 @@ public abstract class ImageBrush : Brush
     /// </summary>
     public Point Offset { get; }
 
+    /// <summary>
+    /// Gets the wrap mode used when sampling horizontally beyond the <see cref="SourceRegion"/>.
+    /// </summary>
+    public WrapMode WrapX { get; }
+
+    /// <summary>
+    /// Gets the wrap mode used when sampling vertically beyond the <see cref="SourceRegion"/>.
+    /// </summary>
+    public WrapMode WrapY { get; }
+
     /// <inheritdoc />
     public override bool Equals(Brush? other)
     {
         if (other is ImageBrush ib)
         {
-            return ib.UntypedImage == this.UntypedImage && ib.SourceRegion == this.SourceRegion;
+            return ib.UntypedImage == this.UntypedImage
+                && ib.SourceRegion == this.SourceRegion
+                && ib.WrapX == this.WrapX
+                && ib.WrapY == this.WrapY;
         }
 
         return false;
     }
 
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(this.UntypedImage, this.SourceRegion);
+    public override int GetHashCode() => HashCode.Combine(this.UntypedImage, this.SourceRegion, this.WrapX, this.WrapY);
 
     /// <inheritdoc />
     public override BrushRenderer<TPixel> CreateRenderer<TPixel>(
@@ -151,7 +266,7 @@ public abstract class ImageBrush : Brush
     {
         if (this.UntypedImage is Image<TPixel> image)
         {
-            return new ImageBrushRenderer<TPixel>(configuration, options, canvasWidth, image, region, this.SourceRegion, this.Offset);
+            return new ImageBrushRenderer<TPixel>(configuration, options, canvasWidth, image, region, this.SourceRegion, this.Offset, this.WrapX, this.WrapY);
         }
 
         // This will never be hit as the brush is always normalized by the drawing canvas
@@ -180,6 +295,12 @@ public abstract class ImageBrush : Brush
         private readonly Rectangle sourceRegion;
 
         /// <summary>
+        /// The wrap mode applied along each axis when sampling beyond the source region.
+        /// </summary>
+        private readonly WrapMode wrapX;
+        private readonly WrapMode wrapY;
+
+        /// <summary>
         /// The Y offset.
         /// </summary>
         private readonly int offsetY;
@@ -199,6 +320,8 @@ public abstract class ImageBrush : Brush
         /// <param name="targetRegion">The region of the target image we will be drawing to.</param>
         /// <param name="sourceRegion">The region of the source image we will be using to source pixels to draw from.</param>
         /// <param name="offset">An offset to apply to the texture while drawing.</param>
+        /// <param name="wrapX">The horizontal wrap mode.</param>
+        /// <param name="wrapY">The vertical wrap mode.</param>
         public ImageBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
@@ -206,11 +329,15 @@ public abstract class ImageBrush : Brush
             Image<TPixel> image,
             RectangleF targetRegion,
             RectangleF sourceRegion,
-            Point offset)
+            Point offset,
+            WrapMode wrapX,
+            WrapMode wrapY)
             : base(configuration, options, canvasWidth)
         {
             this.sourceFrame = image.Frames.RootFrame;
             this.sourceRegion = Rectangle.Intersect(image.Bounds, (Rectangle)sourceRegion);
+            this.wrapX = wrapX;
+            this.wrapY = wrapY;
 
             this.offsetY = (int)MathF.Floor(targetRegion.Top) + offset.Y;
             this.offsetX = (int)MathF.Floor(targetRegion.Left) + offset.X;
@@ -220,9 +347,14 @@ public abstract class ImageBrush : Brush
         {
             get
             {
-                int srcX = ((x - this.offsetX) % this.sourceRegion.Width) + this.sourceRegion.X;
-                int srcY = ((y - this.offsetY) % this.sourceRegion.Height) + this.sourceRegion.Y;
-                return this.sourceFrame[srcX, srcY];
+                if (TryWrap(x - this.offsetX, this.sourceRegion.Width, this.sourceRegion.X, this.wrapX, out int srcX)
+                    && TryWrap(y - this.offsetY, this.sourceRegion.Height, this.sourceRegion.Y, this.wrapY, out int srcY))
+                {
+                    return this.sourceFrame[srcX, srcY];
+                }
+
+                // None wrap mode outside the source region samples as transparent.
+                return default;
             }
         }
 
@@ -237,21 +369,25 @@ public abstract class ImageBrush : Brush
             Span<float> amountSpan = workspace.GetAmounts(scanline.Length);
             Span<TPixel> overlaySpan = workspace.GetOverlays(scanline.Length);
 
-            int offsetX = x - this.offsetX;
-            int sourceY = ((((y - this.offsetY) % this.sourceRegion.Height) // clamp the number between -height and +height
-                        + this.sourceRegion.Height) % this.sourceRegion.Height) // clamp the number between 0  and +height
-                        + this.sourceRegion.Y;
-            Span<TPixel> sourceRow = this.sourceFrame.PixelBuffer.DangerousGetRowSpan(sourceY);
+            int baseX = x - this.offsetX;
+            bool rowInRange = TryWrap(y - this.offsetY, this.sourceRegion.Height, this.sourceRegion.Y, this.wrapY, out int sourceY);
+            Span<TPixel> sourceRow = rowInRange
+                ? this.sourceFrame.PixelBuffer.DangerousGetRowSpan(sourceY)
+                : default;
 
             for (int i = 0; i < scanline.Length; i++)
             {
-                amountSpan[i] = scanline[i] * this.Options.BlendPercentage;
-
-                int sourceX = ((((i + offsetX) % this.sourceRegion.Width) // clamp the number between -width and +width
-                        + this.sourceRegion.Width) % this.sourceRegion.Width) // clamp the number between 0  and +width
-                        + this.sourceRegion.X;
-
-                overlaySpan[i] = sourceRow[sourceX];
+                if (rowInRange && TryWrap(baseX + i, this.sourceRegion.Width, this.sourceRegion.X, this.wrapX, out int sourceX))
+                {
+                    amountSpan[i] = scanline[i] * this.Options.BlendPercentage;
+                    overlaySpan[i] = sourceRow[sourceX];
+                }
+                else
+                {
+                    // None wrap mode outside the source region: contribute nothing.
+                    amountSpan[i] = 0;
+                    overlaySpan[i] = default;
+                }
             }
 
             this.Blender.Blend(
@@ -261,6 +397,52 @@ public abstract class ImageBrush : Brush
                 overlaySpan,
                 amountSpan,
                 workspace.GetBlendScratch(scanline.Length, 3));
+        }
+
+        /// <summary>
+        /// Maps a target coordinate (relative to the brush origin) to a source coordinate within the
+        /// region, applying the per-axis wrap mode. Returns <see langword="false"/> for
+        /// <see cref="WrapMode.None"/> when the coordinate falls outside the region.
+        /// </summary>
+        private static bool TryWrap(int coordinate, int size, int regionStart, WrapMode mode, out int source)
+        {
+            if (size <= 0)
+            {
+                source = regionStart;
+                return false;
+            }
+
+            switch (mode)
+            {
+                case WrapMode.None:
+                    if (coordinate < 0 || coordinate >= size)
+                    {
+                        source = regionStart;
+                        return false;
+                    }
+
+                    source = coordinate + regionStart;
+                    return true;
+
+                case WrapMode.Mirror:
+                    int period = size * 2;
+                    int mirrored = ((coordinate % period) + period) % period;
+                    if (mirrored >= size)
+                    {
+                        mirrored = period - 1 - mirrored;
+                    }
+
+                    source = mirrored + regionStart;
+                    return true;
+
+                case WrapMode.Clamp:
+                    source = Math.Clamp(coordinate, 0, size - 1) + regionStart;
+                    return true;
+
+                default: // Repeat
+                    source = (((coordinate % size) + size) % size) + regionStart;
+                    return true;
+            }
         }
     }
 }

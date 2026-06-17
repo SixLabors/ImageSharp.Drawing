@@ -20,6 +20,7 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     /// <param name="targetFormat">The target texture format.</param>
     /// <param name="width">The surface width in pixels.</param>
     /// <param name="height">The surface height in pixels.</param>
+    /// <param name="textureCoordinateOffset">The offset applied when mapping logical target coordinates to texture coordinates.</param>
     public WebGPUNativeSurface(
         WebGPUDeviceHandle deviceHandle,
         WebGPUQueueHandle queueHandle,
@@ -27,7 +28,8 @@ internal sealed class WebGPUNativeSurface : NativeSurface
         WebGPUTextureViewHandle targetTextureViewHandle,
         WebGPUTextureFormat targetFormat,
         int width,
-        int height)
+        int height,
+        Point textureCoordinateOffset = default)
     {
         Guard.NotNull(deviceHandle, nameof(deviceHandle));
         Guard.NotNull(queueHandle, nameof(queueHandle));
@@ -41,6 +43,7 @@ internal sealed class WebGPUNativeSurface : NativeSurface
         this.TargetFormat = targetFormat;
         this.Width = width;
         this.Height = height;
+        this.TextureCoordinateOffset = textureCoordinateOffset;
     }
 
     /// <summary>
@@ -79,6 +82,11 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     public int Height { get; }
 
     /// <summary>
+    /// Gets the offset applied when mapping logical target coordinates to texture coordinates.
+    /// </summary>
+    public Point TextureCoordinateOffset { get; }
+
+    /// <summary>
     /// Allocates a WebGPU render target and creates a native surface over the owned texture handles.
     /// </summary>
     /// <param name="api">The WebGPU API instance used to allocate native resources.</param>
@@ -89,6 +97,7 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     /// <param name="height">The texture height in pixels.</param>
     /// <param name="textureHandle">Receives the allocated wrapped <c>WGPUTexture*</c> handle.</param>
     /// <param name="textureViewHandle">Receives the allocated wrapped <c>WGPUTextureView*</c> handle.</param>
+    /// <param name="textureCoordinateOffset">The offset applied when mapping logical target coordinates to texture coordinates.</param>
     /// <returns>The native surface wrapping the allocated texture.</returns>
     internal static unsafe WebGPUNativeSurface Create(
         WebGPU api,
@@ -98,7 +107,8 @@ internal sealed class WebGPUNativeSurface : NativeSurface
         int width,
         int height,
         out WebGPUTextureHandle textureHandle,
-        out WebGPUTextureViewHandle textureViewHandle)
+        out WebGPUTextureViewHandle textureViewHandle,
+        Point textureCoordinateOffset = default)
     {
         if (deviceHandle.IsInvalid)
         {
@@ -171,7 +181,8 @@ internal sealed class WebGPUNativeSurface : NativeSurface
                 createdTextureViewHandle,
                 format,
                 width,
-                height);
+                height,
+                textureCoordinateOffset);
 
             textureHandle = createdTextureHandle;
             textureViewHandle = createdTextureViewHandle;
@@ -206,7 +217,8 @@ internal sealed class WebGPUNativeSurface : NativeSurface
         WebGPUTextureViewHandle targetTextureViewHandle,
         WebGPUTextureFormat targetFormat,
         int width,
-        int height)
+        int height,
+        Point textureCoordinateOffset = default)
     {
         Guard.NotNull(deviceHandle, nameof(deviceHandle));
         Guard.NotNull(queueHandle, nameof(queueHandle));
@@ -223,6 +235,7 @@ internal sealed class WebGPUNativeSurface : NativeSurface
             targetTextureViewHandle,
             targetFormat,
             width,
-            height);
+            height,
+            textureCoordinateOffset);
     }
 }

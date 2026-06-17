@@ -13,16 +13,19 @@ internal sealed class DrawingCanvasState
     /// </summary>
     /// <param name="options">Drawing options for this state.</param>
     /// <param name="clipPaths">Clip paths for this state.</param>
+    /// <param name="clipIntersectionRule">The fill rule used to interpret the clip paths.</param>
     /// <param name="targetBounds">Absolute target bounds used for commands recorded in this state.</param>
     /// <param name="destinationOffset">Absolute destination offset for paths recorded in local canvas coordinates.</param>
     public DrawingCanvasState(
         DrawingOptions options,
         IReadOnlyList<IPath> clipPaths,
+        IntersectionRule clipIntersectionRule,
         Rectangle targetBounds,
         Point destinationOffset)
     {
         this.Options = options;
         this.ClipPaths = clipPaths;
+        this.ClipIntersectionRule = clipIntersectionRule;
         this.TargetBounds = targetBounds;
         this.DestinationOffset = destinationOffset;
     }
@@ -42,6 +45,15 @@ internal sealed class DrawingCanvasState
     public IReadOnlyList<IPath> ClipPaths { get; }
 
     /// <summary>
+    /// Gets the fill rule used to interpret the clip paths.
+    /// </summary>
+    /// <remarks>
+    /// Clip paths keep their own fill rule because a later draw may use a different rule for its subject
+    /// geometry. Text, for example, remains non-zero even when it is clipped by an even-odd path.
+    /// </remarks>
+    public IntersectionRule ClipIntersectionRule { get; }
+
+    /// <summary>
     /// Gets the absolute target bounds used for commands recorded in this state.
     /// </summary>
     public Rectangle TargetBounds { get; }
@@ -57,7 +69,32 @@ internal sealed class DrawingCanvasState
     public bool IsLayer { get; init; }
 
     /// <summary>
-    /// Gets the layer compositing options when this state represents a compositing layer.
+    /// Gets the layer currently receiving commands for this state.
     /// </summary>
-    public GraphicsOptions? LayerOptions { get; init; }
+    public DrawingCanvasLayer? Layer { get; init; }
+}
+
+/// <summary>
+/// Mutable layer state shared by the layer's begin and end commands.
+/// </summary>
+internal sealed class DrawingCanvasLayer
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingCanvasLayer"/> class.
+    /// </summary>
+    /// <param name="options">The compositing options used when the layer closes.</param>
+    public DrawingCanvasLayer(GraphicsOptions options)
+    {
+        this.Options = options;
+    }
+
+    /// <summary>
+    /// Gets the compositing options used when the layer closes.
+    /// </summary>
+    public GraphicsOptions Options { get; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether this layer contains a target-wide apply barrier.
+    /// </summary>
+    public bool RequiresScopedApply { get; set; }
 }

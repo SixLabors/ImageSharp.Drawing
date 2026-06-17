@@ -103,22 +103,6 @@ public sealed class LinearGeometry
 
         RectangleF bounds = GetPointBounds(retained);
         int segmentCount = retained.Length - 1;
-        int nonHorizontalBoundary = 0;
-        int nonHorizontalCenter = 0;
-        for (int i = 0; i < segmentCount; i++)
-        {
-            PointF start = retained[i];
-            PointF end = retained[i + 1];
-            if ((int)MathF.Floor(start.Y) != (int)MathF.Floor(end.Y))
-            {
-                nonHorizontalBoundary++;
-            }
-
-            if ((int)MathF.Floor(start.Y + 0.5F) != (int)MathF.Floor(end.Y + 0.5F))
-            {
-                nonHorizontalCenter++;
-            }
-        }
 
         return new LinearGeometry(
             new LinearGeometryInfo
@@ -126,9 +110,7 @@ public sealed class LinearGeometry
                 Bounds = bounds,
                 ContourCount = 1,
                 PointCount = retained.Length,
-                SegmentCount = segmentCount,
-                NonHorizontalSegmentCountPixelBoundary = nonHorizontalBoundary,
-                NonHorizontalSegmentCountPixelCenter = nonHorizontalCenter
+                SegmentCount = segmentCount
             },
             [new LinearContour
             {

@@ -68,6 +68,31 @@ internal readonly struct WebGPUSceneConfig
             WebGPUSceneBufferSizes.Create(scene, bumpSizes, chunkWindow),
             bumpSizes,
             chunkWindow);
+
+    /// <summary>
+    /// Creates the dispatch and buffer plan for one encoded scene range.
+    /// </summary>
+    /// <param name="scene">The encoded scene whose shared buffers are being rendered.</param>
+    /// <param name="range">The range inside <paramref name="scene"/> to render.</param>
+    /// <param name="bumpSizes">The current dynamic scratch capacities for the staged pipeline.</param>
+    /// <returns>A flush-scoped configuration describing dispatch sizes, buffer sizes, and scratch capacities.</returns>
+    public static WebGPUSceneConfig Create(WebGPUEncodedScene scene, WebGPUSceneRange range, WebGPUSceneBumpSizes bumpSizes)
+        => Create(scene, range, bumpSizes, WebGPUSceneChunkWindow.FullScene(range));
+
+    /// <summary>
+    /// Creates the dispatch and buffer plan for one encoded scene range and one tile-row render window.
+    /// </summary>
+    /// <param name="scene">The encoded scene whose shared buffers are being rendered.</param>
+    /// <param name="range">The range inside <paramref name="scene"/> to render.</param>
+    /// <param name="bumpSizes">The current dynamic scratch capacities for the staged pipeline.</param>
+    /// <param name="chunkWindow">The tile-row window rendered by this staged-scene attempt.</param>
+    /// <returns>A flush-scoped configuration describing dispatch sizes, buffer sizes, and scratch capacities.</returns>
+    public static WebGPUSceneConfig Create(WebGPUEncodedScene scene, WebGPUSceneRange range, WebGPUSceneBumpSizes bumpSizes, WebGPUSceneChunkWindow chunkWindow)
+        => new(
+            WebGPUSceneWorkgroupCounts.Create(range, chunkWindow),
+            WebGPUSceneBufferSizes.Create(scene, range, bumpSizes, chunkWindow),
+            bumpSizes,
+            chunkWindow);
 }
 
 /// <summary>
@@ -113,6 +138,21 @@ internal readonly struct WebGPUSceneChunkWindow
         uint tileHeight = checked((uint)scene.TileCountY);
         return new WebGPUSceneChunkWindow(0U, tileHeight, tileHeight);
     }
+
+    /// <summary>
+    /// Creates the full-range render window.
+    /// </summary>
+    /// <param name="range">The encoded range whose full tile height is being rendered.</param>
+    /// <returns>The tile window spanning the entire encoded range.</returns>
+    public static WebGPUSceneChunkWindow FullScene(WebGPUSceneRange range)
+    {
+        uint tileHeight = DivideRoundUp(checked((uint)range.TargetBounds.Height), 16U);
+        return new WebGPUSceneChunkWindow(0U, tileHeight, tileHeight);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint DivideRoundUp(uint value, uint divisor)
+        => (value + divisor - 1U) / divisor;
 }
 
 /// <summary>
@@ -482,6 +522,64 @@ internal readonly struct WebGPUSceneWorkgroupCounts
     }
 
     /// <summary>
+    /// Computes the workgroup counts required to run the staged-scene pipeline for one encoded range.
+    /// </summary>
+    /// <param name="range">The encoded range whose dispatch sizes are being planned.</param>
+    /// <param name="chunkWindow">The tile-row window rendered by this staged-scene attempt.</param>
+    /// <returns>The per-pass workgroup counts for this encoded range and chunk window.</returns>
+    public static WebGPUSceneWorkgroupCounts Create(WebGPUSceneRange range, WebGPUSceneChunkWindow chunkWindow)
+    {
+        uint drawObjectCount = checked((uint)range.DrawTagCount);
+        uint pathCount = checked((uint)range.PathCount);
+        uint lineCount = checked((uint)range.LineCount);
+        uint clipCount = checked((uint)range.ClipCount);
+        uint pathTagCount = checked((uint)range.PathTagByteCount);
+        uint pathTagPadded = AlignUp(pathTagCount, 4U * 256U);
+        uint pathTagWgs = pathTagPadded / (4U * 256U);
+        bool useLargePathScan = pathTagWgs > 256U;
+        uint reducedSize = useLargePathScan ? AlignUp(pathTagWgs, 256U) : pathTagWgs;
+        uint drawObjectWgs = DivideRoundUp(drawObjectCount, 256U);
+        uint drawMonoidWgs = Math.Min(drawObjectWgs, 256U);
+        uint flattenWgs = DivideRoundUp(pathTagCount, 256U);
+        uint clipReduceWgs = clipCount == 0U ? 0U : (clipCount - 1U) / 256U;
+        uint clipWgs = DivideRoundUp(clipCount, 256U);
+        uint pathWgs = DivideRoundUp(pathCount, 256U);
+        uint tileCountX = checked((uint)((range.TargetBounds.Width + 15) / 16));
+        uint tileCountY = DivideRoundUp(checked((uint)range.TargetBounds.Height), 16U);
+        uint widthInBins = DivideRoundUp(tileCountX, 16U);
+        uint heightInBins = DivideRoundUp(chunkWindow.TileBufferHeight, 16U);
+        uint fullHeightInBins = DivideRoundUp(tileCountY, 16U);
+        uint totalBins = checked(widthInBins * fullHeightInBins);
+        uint binChunks = DivideRoundUp(totalBins, 256U);
+
+        return new WebGPUSceneWorkgroupCounts(
+            useLargePathScan,
+            pathTagWgs,
+            256U,
+            reducedSize / 256U,
+            pathTagWgs,
+            drawObjectWgs,
+            flattenWgs,
+            drawMonoidWgs,
+            drawMonoidWgs,
+            clipReduceWgs,
+            clipWgs,
+            BinningComputeShader.GetDispatchX(drawObjectCount),
+            binChunks,
+            PathRowAllocComputeShader.GetDispatchX(pathCount),
+            TileAllocComputeShader.GetDispatchX(pathCount),
+            PathCountSetupComputeShader.GetDispatchX(),
+            PathCountComputeShader.GetDispatchX(lineCount),
+            BackdropComputeShader.GetDispatchX(pathCount),
+            widthInBins,
+            heightInBins,
+            PathTilingSetupComputeShader.GetDispatchX(),
+            1,
+            tileCountX,
+            chunkWindow.TileHeight);
+    }
+
+    /// <summary>
     /// Rounds up integer division for dispatch sizing.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -730,6 +828,55 @@ internal readonly struct WebGPUSceneBufferSizes
             WebGPUSceneBufferSize<GpuBic>.Create(clipBicCount),
             WebGPUSceneBufferSize<Vector4>.Create(clipBboxCount),
             WebGPUSceneBufferSize<GpuDrawBbox>.Create(drawBboxCount),
+            WebGPUSceneBufferSize<GpuSceneBumpAllocators>.Create(1),
+            WebGPUSceneBufferSize<GpuScenePath>.Create(pathCount),
+            WebGPUSceneBufferSize<GpuSceneLine>.Create(bumpSizes.Lines),
+            WebGPUSceneBufferSize<GpuSceneBinHeader>.Create(binHeaderCount),
+            WebGPUSceneBufferSize<uint>.Create(bumpSizes.Binning),
+            WebGPUSceneBufferSize<GpuSceneIndirectCount>.Create(1),
+            WebGPUSceneBufferSize<GpuPathRow>.Create(bumpSizes.PathRows),
+            WebGPUSceneBufferSize<GpuPathTile>.Create(bumpSizes.PathTiles),
+            WebGPUSceneBufferSize<GpuSegmentCount>.Create(bumpSizes.SegCounts),
+            WebGPUSceneBufferSize<GpuPathSegment>.Create(bumpSizes.Segments),
+            WebGPUSceneBufferSize<uint>.Create(bumpSizes.BlendSpill),
+            WebGPUSceneBufferSize<uint>.Create(ptclCount));
+    }
+
+    /// <summary>
+    /// Computes the GPU buffer sizes required by the current staged-scene pipeline for one encoded range.
+    /// </summary>
+    /// <param name="scene">The encoded scene whose shared buffers are being rendered.</param>
+    /// <param name="range">The range inside <paramref name="scene"/> to render.</param>
+    /// <param name="bumpSizes">The current dynamic scratch capacities for the staged pipeline.</param>
+    /// <param name="chunkWindow">The tile-row window rendered by this staged-scene attempt.</param>
+    /// <returns>The planned GPU buffer sizes for this encoded range and chunk window.</returns>
+    public static WebGPUSceneBufferSizes Create(WebGPUEncodedScene scene, WebGPUSceneRange range, WebGPUSceneBumpSizes bumpSizes, WebGPUSceneChunkWindow chunkWindow)
+    {
+        WebGPUSceneWorkgroupCounts workgroupCounts = WebGPUSceneWorkgroupCounts.Create(range, chunkWindow);
+        uint pathTagWgs = workgroupCounts.PathReduceX;
+        uint reducedSize = workgroupCounts.UseLargePathScan ? AlignUp(pathTagWgs, 256U) : pathTagWgs;
+        uint drawObjectCount = checked((uint)range.DrawTagCount);
+        uint drawObjectPartitions = BinningComputeShader.GetDispatchX(drawObjectCount);
+        uint binHeaderCount = checked(drawObjectPartitions * workgroupCounts.BinningY * 256U);
+        uint pathCount = AlignUp(checked((uint)range.PathCount), 256U);
+        uint tileCountX = checked((uint)((range.TargetBounds.Width + 15) / 16));
+        uint ptclBootstrapCount = checked(tileCountX * chunkWindow.TileBufferHeight * WebGPUSceneDispatch.PtclInitialAlloc);
+        uint ptclCount = checked(bumpSizes.Ptcl + ptclBootstrapCount);
+
+        return new WebGPUSceneBufferSizes(
+            WebGPUSceneBufferSize<GpuTagMonoid>.Create(reducedSize),
+            WebGPUSceneBufferSize<GpuTagMonoid>.Create(256U),
+            WebGPUSceneBufferSize<GpuTagMonoid>.Create(reducedSize),
+            WebGPUSceneBufferSize<GpuTagMonoid>.Create(pathTagWgs * 256U),
+            WebGPUSceneBufferSize<GpuPathBbox>.Create(checked((uint)range.PathCount)),
+            WebGPUSceneBufferSize<GpuSceneDrawMonoid>.Create(workgroupCounts.DrawReduceX),
+            WebGPUSceneBufferSize<GpuSceneDrawMonoid>.Create(drawObjectCount),
+            WebGPUSceneBufferSize<uint>.Create(checked((uint)(range.InfoWordCount + scene.PathGradientDataWordCount))),
+            WebGPUSceneBufferSize<GpuClipInp>.Create(checked((uint)range.ClipCount)),
+            WebGPUSceneBufferSize<GpuClipElement>.Create(checked((uint)range.ClipCount)),
+            WebGPUSceneBufferSize<GpuBic>.Create(checked((uint)range.ClipCount) / 256U),
+            WebGPUSceneBufferSize<Vector4>.Create(checked((uint)range.ClipCount)),
+            WebGPUSceneBufferSize<GpuDrawBbox>.Create(drawObjectCount),
             WebGPUSceneBufferSize<GpuSceneBumpAllocators>.Create(1),
             WebGPUSceneBufferSize<GpuScenePath>.Create(pathCount),
             WebGPUSceneBufferSize<GpuSceneLine>.Create(bumpSizes.Lines),

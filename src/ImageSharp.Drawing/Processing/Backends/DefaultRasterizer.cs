@@ -151,11 +151,8 @@ internal static partial class DefaultRasterizer
         in RasterizerOptions options,
         MemoryAllocator allocator)
     {
-        float samplingOffsetX = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
-        float samplingOffsetY = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
-
         RectangleF translatedBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
-        translatedBounds.Offset(translateX + samplingOffsetX, translateY + samplingOffsetY);
+        translatedBounds.Offset(translateX, translateY);
 
         // The retained clipper ignores segments at the maximum X edge,
         // so extend the right bound by one pixel to keep closing vertical edges available.
@@ -197,8 +194,6 @@ internal static partial class DefaultRasterizer
                 height,
                 firstRowBandIndex,
                 rowBandCount,
-                samplingOffsetX,
-                samplingOffsetY,
                 allocator);
 
             if (!linearizer.TryProcess(out LinearizedRasterData<LineArrayX16Y16Block> result))
@@ -252,8 +247,6 @@ internal static partial class DefaultRasterizer
                 height,
                 firstRowBandIndex,
                 rowBandCount,
-                samplingOffsetX,
-                samplingOffsetY,
                 allocator);
 
             if (!linearizer.TryProcess(out LinearizedRasterData<LineArrayX32Y16Block> result))

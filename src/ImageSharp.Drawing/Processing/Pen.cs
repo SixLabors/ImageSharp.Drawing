@@ -58,6 +58,7 @@ public abstract class Pen : IEquatable<Pen>
         this.StrokeFill = strokeFill;
         this.StrokeWidth = strokeWidth;
         this.pattern = strokePattern;
+        this.StrokePatternOffset = 0;
         this.StrokeOptions = new StrokeOptions();
     }
 
@@ -70,6 +71,7 @@ public abstract class Pen : IEquatable<Pen>
         this.StrokeFill = options.StrokeFill;
         this.StrokeWidth = options.StrokeWidth;
         this.pattern = options.StrokePattern;
+        this.StrokePatternOffset = options.StrokePatternOffset;
         this.StrokeOptions = options.StrokeOptions ?? new StrokeOptions();
     }
 
@@ -81,6 +83,9 @@ public abstract class Pen : IEquatable<Pen>
 
     /// <inheritdoc cref="PenOptions.StrokePattern"/>
     public ReadOnlyMemory<float> StrokePattern => this.pattern;
+
+    /// <inheritdoc cref="PenOptions.StrokePatternOffset"/>
+    public float StrokePatternOffset { get; }
 
     /// <inheritdoc cref="PenOptions.StrokeOptions"/>
     public StrokeOptions StrokeOptions { get; }
@@ -106,6 +111,7 @@ public abstract class Pen : IEquatable<Pen>
         => other != null
         && this.StrokeWidth == other.StrokeWidth
         && this.StrokeFill.Equals(other.StrokeFill)
+        && this.StrokePatternOffset == other.StrokePatternOffset
         && this.StrokeOptions.Equals(other.StrokeOptions)
         && this.StrokePattern.Span.SequenceEqual(other.StrokePattern.Span);
 
@@ -114,5 +120,5 @@ public abstract class Pen : IEquatable<Pen>
 
     /// <inheritdoc/>
     public override int GetHashCode()
-        => HashCode.Combine(this.StrokeWidth, this.StrokeFill, this.StrokeOptions, this.pattern);
+        => HashCode.Combine(this.StrokeWidth, this.StrokeFill, this.StrokePatternOffset, this.StrokeOptions, this.pattern);
 }

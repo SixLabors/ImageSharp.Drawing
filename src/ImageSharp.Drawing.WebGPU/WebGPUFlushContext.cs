@@ -48,6 +48,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         WebGPUTextureHandle targetTextureHandle,
         WebGPUTextureViewHandle targetTextureViewHandle,
         in Rectangle targetBounds,
+        Point targetTextureOffset,
         TextureFormat textureFormat,
         MemoryAllocator memoryAllocator,
         WebGPURuntime.DeviceSharedState deviceState)
@@ -59,6 +60,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.TargetTextureHandle = targetTextureHandle;
         this.TargetTextureViewHandle = targetTextureViewHandle;
         this.TargetBounds = targetBounds;
+        this.TargetTextureOffset = targetTextureOffset;
         this.TextureFormat = textureFormat;
         this.MemoryAllocator = memoryAllocator;
         this.DeviceState = deviceState;
@@ -106,6 +108,11 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// Gets the target bounds for this flush context.
     /// </summary>
     public Rectangle TargetBounds { get; }
+
+    /// <summary>
+    /// Gets the offset applied when mapping logical target coordinates to target texture coordinates.
+    /// </summary>
+    public Point TargetTextureOffset { get; }
 
     /// <summary>
     /// Gets the target texture format for this flush.
@@ -178,6 +185,12 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         TextureFormat textureFormat = WebGPUTextureFormatMapper.ToNative(nativeTarget.TargetFormat);
         Rectangle bounds = frame.Bounds;
         Rectangle nativeBounds = new(0, 0, nativeTarget.Width, nativeTarget.Height);
+        Point targetTextureOffset = nativeTarget.TextureCoordinateOffset;
+        Rectangle textureBounds = new(
+            bounds.X + targetTextureOffset.X,
+            bounds.Y + targetTextureOffset.Y,
+            bounds.Width,
+            bounds.Height);
         WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(api, nativeTarget.DeviceHandle);
 
         if (nativeTarget.DeviceHandle.IsInvalid ||
@@ -196,7 +209,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         // Region frames expose bounds relative to their parent target. The flush context must preserve
         // that absolute slice so later scene encoding, dispatch planning, and texture copies address
         // the correct sub-rectangle of the native surface instead of silently expanding back to full-frame.
-        if (!nativeBounds.Contains(bounds))
+        if (!nativeBounds.Contains(textureBounds))
         {
             throw new InvalidOperationException("The native WebGPU target bounds do not contain the flush bounds.");
         }
@@ -209,6 +222,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             nativeTarget.TargetTextureHandle,
             nativeTarget.TargetTextureViewHandle,
             in bounds,
+            targetTextureOffset,
             textureFormat,
             memoryAllocator,
             deviceState);

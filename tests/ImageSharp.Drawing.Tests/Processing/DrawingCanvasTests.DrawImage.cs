@@ -77,7 +77,8 @@ public partial class DrawingCanvasTests
 
         DrawingOptions transformedOptions = new()
         {
-            Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.32F, new Vector2(180, 120)))
+            Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.32F, new Vector2(180, 120))),
+            ShapeOptions = new ShapeOptions { BooleanOperation = BooleanOperation.Difference }
         };
 
         IPath clipPath = new EllipsePolygon(new PointF(180, 120), new SizeF(208, 126));

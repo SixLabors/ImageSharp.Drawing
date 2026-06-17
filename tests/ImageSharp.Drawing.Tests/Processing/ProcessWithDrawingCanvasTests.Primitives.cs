@@ -294,7 +294,7 @@ public partial class ProcessWithDrawingCanvasTests
             overlap ? new Vector2(130, 40) : new Vector2(93, 85),
             new Vector2(65, 137)));
 
-        IPath clipped = simplePath.Clip(hole1);
+        IPath clipped = simplePath.Clip(new ShapeOptions { BooleanOperation = BooleanOperation.Difference }, hole1);
 
         Color color = Color.White;
         if (transparent)
@@ -352,7 +352,7 @@ public partial class ProcessWithDrawingCanvasTests
             overlap ? new Vector2(130, 40) : new Vector2(93, 85),
             new Vector2(65, 137)));
 
-        IPath clipped = simplePath.Clip(hole1);
+        IPath clipped = simplePath.Clip(new ShapeOptions { BooleanOperation = BooleanOperation.Difference }, hole1);
 
         Color color = Color.HotPink;
         if (transparent)

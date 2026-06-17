@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing;
 /// A aggregate of <see cref="ILineSegment"/>s making a single logical path.
 /// </summary>
 /// <seealso cref="IPath" />
-public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
+public class Path : IPath, ISimplePath, IInternalPathOwner
 {
     private readonly ILineSegment[] lineSegments;
     private InternalPath? innerPath;
@@ -146,9 +146,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
                     Bounds = RectangleF.Empty,
                     ContourCount = 0,
                     PointCount = 0,
-                    SegmentCount = 0,
-                    NonHorizontalSegmentCountPixelBoundary = 0,
-                    NonHorizontalSegmentCountPixelCenter = 0
+                    SegmentCount = 0
                 },
                 [],
                 []);
@@ -173,8 +171,6 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
         float minY = float.MaxValue;
         float maxX = float.MinValue;
         float maxY = float.MinValue;
-        int nonHorizontalSegmentCountPixelBoundary = 0;
-        int nonHorizontalSegmentCountPixelCenter = 0;
         int pointIndex = 0;
         lastEndPoint = null;
 
@@ -202,7 +198,6 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
         }
 
         int segmentCount = pointCount == 0 ? 0 : this.IsClosed ? pointCount : pointCount - 1;
-        CountNonHorizontalSegments(points, pointCount, this.IsClosed, ref nonHorizontalSegmentCountPixelBoundary, ref nonHorizontalSegmentCountPixelCenter);
 
         if (pointCount > 0)
         {
@@ -224,17 +219,15 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
                 Bounds = bounds,
                 ContourCount = contours.Length,
                 PointCount = points.Length,
-                SegmentCount = segmentCount,
-                NonHorizontalSegmentCountPixelBoundary = nonHorizontalSegmentCountPixelBoundary,
-                NonHorizontalSegmentCountPixelCenter = nonHorizontalSegmentCountPixelCenter
+                SegmentCount = segmentCount
             },
             contours,
             points);
     }
 
     /// <inheritdoc/>
-    SegmentInfo IPathInternals.PointAlongPath(float distance)
-       => this.InnerPath.PointAlongPath(distance);
+    public virtual PathPoint GetPathPointAtDistance(float distance)
+        => this.InnerPath.GetPathPointAtDistance(distance);
 
     /// <inheritdoc/>
     IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
@@ -270,57 +263,6 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
         Guard.NotNull(segments, nameof(segments));
         return segments as ILineSegment[] ?? [.. segments];
     }
-
-    /// <summary>
-    /// Counts how many derived segments survive as non-horizontal raster work for each sampling origin.
-    /// </summary>
-    /// <param name="points">The retained contour point run.</param>
-    /// <param name="pointCount">The number of retained points in the contour.</param>
-    /// <param name="isClosed">Whether the contour closes back to its first point.</param>
-    /// <param name="nonHorizontalSegmentCountPixelBoundary">The accumulated pixel-boundary count to update.</param>
-    /// <param name="nonHorizontalSegmentCountPixelCenter">The accumulated pixel-center count to update.</param>
-    private static void CountNonHorizontalSegments(
-        ReadOnlySpan<PointF> points,
-        int pointCount,
-        bool isClosed,
-        ref int nonHorizontalSegmentCountPixelBoundary,
-        ref int nonHorizontalSegmentCountPixelCenter)
-    {
-        if (pointCount <= 1)
-        {
-            return;
-        }
-
-        int segmentCount = isClosed ? pointCount : pointCount - 1;
-        for (int i = 0; i < segmentCount; i++)
-        {
-            PointF start = points[i];
-            PointF end = points[(i + 1) == pointCount ? 0 : i + 1];
-            if (ToFixedBoundary(start.Y) != ToFixedBoundary(end.Y))
-            {
-                nonHorizontalSegmentCountPixelBoundary++;
-            }
-
-            if (ToFixedCenter(start.Y) != ToFixedCenter(end.Y))
-            {
-                nonHorizontalSegmentCountPixelCenter++;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Converts a coordinate to the fixed-point row space used by boundary-sampled raster work.
-    /// </summary>
-    /// <param name="value">The coordinate to convert.</param>
-    /// <returns>The rounded 24.8 fixed-point value.</returns>
-    private static int ToFixedBoundary(float value) => (int)MathF.Round(value * 256F);
-
-    /// <summary>
-    /// Converts a coordinate to the fixed-point row space used by center-sampled raster work.
-    /// </summary>
-    /// <param name="value">The coordinate to convert.</param>
-    /// <returns>The rounded 24.8 fixed-point value after the half-pixel sampling offset is applied.</returns>
-    private static int ToFixedCenter(float value) => (int)MathF.Round((value + 0.5F) * 256F);
 
     /// <summary>
     /// Converts an SVG path string into an <see cref="IPath"/>.

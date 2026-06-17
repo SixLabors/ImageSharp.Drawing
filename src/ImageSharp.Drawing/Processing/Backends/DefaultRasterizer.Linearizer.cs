@@ -29,8 +29,6 @@ internal static partial class DefaultRasterizer
             int height,
             int firstBandIndex,
             int rowBandCount,
-            float samplingOffsetX,
-            float samplingOffsetY,
             MemoryAllocator allocator)
         {
             this.Geometry = geometry;
@@ -44,8 +42,6 @@ internal static partial class DefaultRasterizer
             this.Height = height;
             this.FirstBandIndex = firstBandIndex;
             this.RowBandCount = rowBandCount;
-            this.SamplingOffsetX = samplingOffsetX;
-            this.SamplingOffsetY = samplingOffsetY;
             this.Allocator = allocator;
             this.BandTopStart = (firstBandIndex * PreferredRowHeight) - minY;
             this.FirstBlockLineCounts = new int[rowBandCount];
@@ -110,16 +106,6 @@ internal static partial class DefaultRasterizer
         protected int RowBandCount { get; }
 
         /// <summary>
-        /// Gets the horizontal sampling offset applied before fixed-point conversion.
-        /// </summary>
-        protected float SamplingOffsetX { get; }
-
-        /// <summary>
-        /// Gets the vertical sampling offset applied before fixed-point conversion.
-        /// </summary>
-        protected float SamplingOffsetY { get; }
-
-        /// <summary>
         /// Gets the allocator used for retained start-cover storage.
         /// </summary>
         protected MemoryAllocator Allocator { get; }
@@ -163,7 +149,7 @@ internal static partial class DefaultRasterizer
             RectangleF translatedBounds = this.HasResidual
                 ? RectangleF.Transform(this.Geometry.Info.Bounds, this.Residual)
                 : this.Geometry.Info.Bounds;
-            translatedBounds.Offset(this.TranslateX + this.SamplingOffsetX - this.MinX, this.TranslateY + this.SamplingOffsetY - this.MinY);
+            translatedBounds.Offset(this.TranslateX - this.MinX, this.TranslateY - this.MinY);
 
             bool contains =
                 translatedBounds.Left >= 0F &&
@@ -212,10 +198,10 @@ internal static partial class DefaultRasterizer
                 }
 
                 this.AddContainedLineF24Dot8(
-                    FloatToFixed24Dot8(((p0.X + this.TranslateX) - this.MinX) + this.SamplingOffsetX),
-                    FloatToFixed24Dot8(((p0.Y + this.TranslateY) - this.MinY) + this.SamplingOffsetY),
-                    FloatToFixed24Dot8(((p1.X + this.TranslateX) - this.MinX) + this.SamplingOffsetX),
-                    FloatToFixed24Dot8(((p1.Y + this.TranslateY) - this.MinY) + this.SamplingOffsetY));
+                    FloatToFixed24Dot8((p0.X + this.TranslateX) - this.MinX),
+                    FloatToFixed24Dot8((p0.Y + this.TranslateY) - this.MinY),
+                    FloatToFixed24Dot8((p1.X + this.TranslateX) - this.MinX),
+                    FloatToFixed24Dot8((p1.Y + this.TranslateY) - this.MinY));
             }
         }
 
@@ -239,10 +225,10 @@ internal static partial class DefaultRasterizer
                 }
 
                 this.AddUncontainedLine(
-                    ((p0.X + this.TranslateX) - this.MinX) + this.SamplingOffsetX,
-                    ((p0.Y + this.TranslateY) - this.MinY) + this.SamplingOffsetY,
-                    ((p1.X + this.TranslateX) - this.MinX) + this.SamplingOffsetX,
-                    ((p1.Y + this.TranslateY) - this.MinY) + this.SamplingOffsetY);
+                    (p0.X + this.TranslateX) - this.MinX,
+                    (p0.Y + this.TranslateY) - this.MinY,
+                    (p1.X + this.TranslateX) - this.MinX,
+                    (p1.Y + this.TranslateY) - this.MinY);
             }
         }
 
@@ -792,10 +778,8 @@ internal static partial class DefaultRasterizer
             int height,
             int firstBandIndex,
             int rowBandCount,
-            float samplingOffsetX,
-            float samplingOffsetY,
             MemoryAllocator allocator)
-            : base(geometry, residual, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, allocator)
+            : base(geometry, residual, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, allocator)
             => this.FinalLines = new LineArrayX32Y16Block?[rowBandCount];
 
         /// <summary>
@@ -864,10 +848,8 @@ internal static partial class DefaultRasterizer
             int height,
             int firstBandIndex,
             int rowBandCount,
-            float samplingOffsetX,
-            float samplingOffsetY,
             MemoryAllocator allocator)
-            : base(geometry, residual, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, allocator)
+            : base(geometry, residual, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, allocator)
             => this.FinalLines = new LineArrayX16Y16Block?[rowBandCount];
 
         /// <summary>

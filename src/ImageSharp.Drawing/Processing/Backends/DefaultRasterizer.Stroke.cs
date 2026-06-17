@@ -78,9 +78,6 @@ internal static partial class DefaultRasterizer
             return null;
         }
 
-        float samplingOffsetX = 0.5F;
-        float samplingOffsetY = 0.5F;
-
         StrokeStyle strokeStyle = new(pen, widthScale);
 
         RectangleF bounds = RectangleF.FromLTRB(
@@ -91,7 +88,7 @@ internal static partial class DefaultRasterizer
 
         RectangleF translatedBounds = InflateStrokeBounds(bounds, strokeStyle);
 
-        translatedBounds.Offset(translateX + samplingOffsetX, translateY + samplingOffsetY);
+        translatedBounds.Offset(translateX, translateY);
 
         Rectangle geometryBounds = Rectangle.FromLTRB(
             (int)MathF.Floor(translatedBounds.Left),
@@ -151,9 +148,7 @@ internal static partial class DefaultRasterizer
                 translateX,
                 translateY,
                 firstRowBandIndex,
-                rowBandCount,
-                samplingOffsetX,
-                samplingOffsetY));
+                rowBandCount));
     }
 
     /// <summary>
@@ -181,12 +176,9 @@ internal static partial class DefaultRasterizer
             return null;
         }
 
-        float samplingOffsetX = 0.5F;
-        float samplingOffsetY = 0.5F;
-
         RectangleF sourceBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
         RectangleF translatedBounds = InflateStrokeBounds(sourceBounds, stroke);
-        translatedBounds.Offset(translateX + samplingOffsetX, translateY + samplingOffsetY);
+        translatedBounds.Offset(translateX, translateY);
 
         Rectangle geometryBounds = Rectangle.FromLTRB(
             (int)MathF.Floor(translatedBounds.Left),
@@ -227,8 +219,6 @@ internal static partial class DefaultRasterizer
                 height,
                 firstRowBandIndex,
                 rowBandCount,
-                samplingOffsetX,
-                samplingOffsetY,
                 allocator);
 
             if (!linearizer.TryProcess(out LinearizedRasterData<LineArrayX16Y16Block> result))
@@ -259,8 +249,6 @@ internal static partial class DefaultRasterizer
             height,
             firstRowBandIndex,
             rowBandCount,
-            samplingOffsetX,
-            samplingOffsetY,
             allocator);
 
         if (!wideLinearizer.TryProcess(out LinearizedRasterData<LineArrayX32Y16Block> wideResult))
@@ -403,8 +391,7 @@ internal static partial class DefaultRasterizer
     /// <returns>The estimated retained line count for the stroke.</returns>
     private static int EstimateStrokeBandLineCount(PointF start, PointF end)
     {
-        float samplingOffset = 0.5F;
-        int segmentCount = (int)MathF.Floor(start.Y + samplingOffset) != (int)MathF.Floor(end.Y + samplingOffset) ? 1 : 0;
+        int segmentCount = (int)MathF.Floor(start.Y) != (int)MathF.Floor(end.Y) ? 1 : 0;
         return Math.Max(segmentCount * 4, 1);
     }
 
@@ -446,24 +433,18 @@ internal static partial class DefaultRasterizer
         /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
         /// <param name="firstBandIndex">The first retained row-band index touched by the stroke.</param>
         /// <param name="rowBandCount">The number of retained row bands touched by the stroke.</param>
-        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
-        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
         protected StrokeRasterData(
             StrokeStyle stroke,
             int translateX,
             int translateY,
             int firstBandIndex,
-            int rowBandCount,
-            float samplingOffsetX,
-            float samplingOffsetY)
+            int rowBandCount)
         {
             this.Stroke = stroke;
             this.TranslateX = translateX;
             this.TranslateY = translateY;
             this.FirstBandIndex = firstBandIndex;
             this.RowBandCount = rowBandCount;
-            this.SamplingOffsetX = samplingOffsetX;
-            this.SamplingOffsetY = samplingOffsetY;
         }
 
         public StrokeStyle Stroke { get; }
@@ -487,16 +468,6 @@ internal static partial class DefaultRasterizer
         /// Gets the number of retained row bands touched by this stroke.
         /// </summary>
         public int RowBandCount { get; }
-
-        /// <summary>
-        /// Gets the horizontal sampling offset applied during rasterization.
-        /// </summary>
-        public float SamplingOffsetX { get; }
-
-        /// <summary>
-        /// Gets the vertical sampling offset applied during rasterization.
-        /// </summary>
-        public float SamplingOffsetY { get; }
 
         public virtual bool RequiresBandCoverage => false;
 
@@ -533,8 +504,6 @@ internal static partial class DefaultRasterizer
         /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
         /// <param name="firstBandIndex">The first retained row-band index touched by the stroke.</param>
         /// <param name="rowBandCount">The number of retained row bands touched by the stroke.</param>
-        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
-        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
         public LineSegmentStrokeRasterData(
             PointF start,
             PointF end,
@@ -542,10 +511,8 @@ internal static partial class DefaultRasterizer
             int translateX,
             int translateY,
             int firstBandIndex,
-            int rowBandCount,
-            float samplingOffsetX,
-            float samplingOffsetY)
-            : base(stroke, translateX, translateY, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY)
+            int rowBandCount)
+            : base(stroke, translateX, translateY, firstBandIndex, rowBandCount)
         {
             this.Start = start;
             this.End = end;
@@ -580,8 +547,6 @@ internal static partial class DefaultRasterizer
                 this.Stroke,
                 this.TranslateX,
                 this.TranslateY,
-                this.SamplingOffsetX,
-                this.SamplingOffsetY,
                 in bandInfo,
                 scanline,
                 ref rowHandler);
@@ -597,7 +562,7 @@ internal static partial class DefaultRasterizer
         /// </summary>
         /// <param name="outline">The retained fill-style raster payload replayed for the stroke.</param>
         public RetainedStrokeRasterData(RasterizableGeometry outline)
-            : base(default, 0, 0, outline.FirstRowBandIndex, outline.RowBandCount, 0F, 0F)
+            : base(default, 0, 0, outline.FirstRowBandIndex, outline.RowBandCount)
             => this.Outline = outline;
 
         /// <summary>
@@ -775,8 +740,6 @@ internal static partial class DefaultRasterizer
         /// <param name="stroke">The stroke style.</param>
         /// <param name="translateX">The destination-space X translation applied at composition time.</param>
         /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
-        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
-        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
         /// <param name="bandInfo">The retained band metadata.</param>
         private DirectLineSegmentBandRasterizer(
             PointF start,
@@ -784,13 +747,11 @@ internal static partial class DefaultRasterizer
             StrokeStyle stroke,
             int translateX,
             int translateY,
-            float samplingOffsetX,
-            float samplingOffsetY,
             in RasterizableBandInfo bandInfo)
         {
             this.translation = new(
-                (translateX - bandInfo.DestinationLeft) + samplingOffsetX,
-                (translateY - bandInfo.DestinationTop) + samplingOffsetY);
+                translateX - bandInfo.DestinationLeft,
+                translateY - bandInfo.DestinationTop);
 
             this.start = start;
             this.end = end;
@@ -812,8 +773,6 @@ internal static partial class DefaultRasterizer
         /// <param name="stroke">The stroke style.</param>
         /// <param name="translateX">The destination-space X translation applied at composition time.</param>
         /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
-        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
-        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
         /// <param name="bandInfo">The retained band metadata.</param>
         /// <param name="scanline">The reusable scanline scratch buffer.</param>
         /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
@@ -823,8 +782,6 @@ internal static partial class DefaultRasterizer
             StrokeStyle stroke,
             int translateX,
             int translateY,
-            float samplingOffsetX,
-            float samplingOffsetY,
             in RasterizableBandInfo bandInfo,
             Span<float> scanline,
             ref TRowHandler rowHandler)
@@ -835,8 +792,6 @@ internal static partial class DefaultRasterizer
                 stroke,
                 translateX,
                 translateY,
-                samplingOffsetX,
-                samplingOffsetY,
                 in bandInfo).Rasterize(scanline, ref rowHandler);
 
         /// <summary>

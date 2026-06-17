@@ -53,6 +53,290 @@ public partial class DrawingCanvasTests
     }
 
     [Theory]
+    [WithSolidFilledImages(420, 180, nameof(Color.White), PixelTypes.Rgba32)]
+    public void DrawText_Inter_OverlappingContours_NoHoles<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> target = provider.GetImage();
+
+        // Inter Light is the exact font the Avalonia sample renders (it ships Inter as its embedded UI
+        // font). Inter draws glyphs such as 'A' and 't' with overlapping contours, so if the glyph fill
+        // applies the wrong winding those overlaps render as holes. This isolates the fill issue at the
+        // library level (CPU canvas), independent of the Avalonia/WebGPU backends where it was observed.
+        Font font = TestFontUtilities.GetFont(TestFonts.InterLight, 32);
+        const string text = "Avalonia Test";
+
+        RichTextOptions textOptions = new(font) { Origin = new PointF(16, 16) };
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null);
+        }
+
+        // No reference comparison yet: the bug being isolated is still present, so DebugSave the output for
+        // inspection. Promote to CompareToReferenceOutput once the overlap-hole fill issue is fixed.
+        target.DebugSave(provider, appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(420, 180, nameof(Color.White), PixelTypes.Rgba32)]
+    public void DrawGlyphById_Inter_OverlappingContours_NoHoles<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> target = provider.GetImage();
+
+        // The string-based DrawText path renders Inter cleanly; the Avalonia sample instead renders glyph
+        // by glyph through DrawText(glyphId, RichGlyphOptions, ...) (the RenderGlyph path). This test drives
+        // that exact path so we can see whether the holes originate there rather than in the shared fill.
+        Font font = TestFontUtilities.GetFont(TestFonts.InterLight, 32);
+        const string text = "Avalonia Test";
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+
+            float penX = 16F;
+            const float baselineY = 130F;
+            foreach (char c in text)
+            {
+                if (!font.FontMetrics.TryGetGlyphMetrics(
+                        new CodePoint(c),
+                        TextAttributes.None,
+                        TextDecorations.None,
+                        LayoutMode.HorizontalTopBottom,
+                        ColorFontSupport.None,
+                        out FontGlyphMetrics metrics))
+                {
+                    continue;
+                }
+
+                RichGlyphOptions glyphOptions = new()
+                {
+                    Font = font,
+                    Origin = new Vector2(penX, baselineY)
+                };
+
+                canvas.DrawText(metrics.GlyphId, glyphOptions, Brushes.Solid(Color.Black), pen: null);
+
+                penX += metrics.AdvanceWidth * font.Size / metrics.UnitsPerEm;
+            }
+        }
+
+        target.DebugSave(provider, appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(420, 180, nameof(Color.White), PixelTypes.Rgba32)]
+    public void DrawGlyphById_Inter_EvenOddCanvasState_NoHoles<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> target = provider.GetImage();
+
+        // The Avalonia backend wraps its glyph loop in PushDrawingState(), whose ShapeOptions default to
+        // EvenOdd. The previous glyph-id test uses a default (NonZero) canvas state and renders cleanly;
+        // this one replicates the sample's EvenOdd state to confirm the glyph fill's forced non-zero winding
+        // holds even when the canvas requests even-odd. If holes appear here, the force has a gap.
+        DrawingOptions options = new()
+        {
+            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.EvenOdd }
+        };
+
+        Font font = TestFontUtilities.GetFont(TestFonts.InterLight, 32);
+        const string text = "Avalonia Test";
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, options))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+
+            float penX = 16F;
+            const float baselineY = 130F;
+            foreach (char c in text)
+            {
+                if (!font.FontMetrics.TryGetGlyphMetrics(
+                        new CodePoint(c),
+                        TextAttributes.None,
+                        TextDecorations.None,
+                        LayoutMode.HorizontalTopBottom,
+                        ColorFontSupport.None,
+                        out FontGlyphMetrics metrics))
+                {
+                    continue;
+                }
+
+                RichGlyphOptions glyphOptions = new()
+                {
+                    Font = font,
+                    Origin = new Vector2(penX, baselineY)
+                };
+
+                canvas.DrawText(metrics.GlyphId, glyphOptions, Brushes.Solid(Color.Black), pen: null);
+
+                penX += metrics.AdvanceWidth * font.Size / metrics.UnitsPerEm;
+            }
+        }
+
+        target.DebugSave(provider, appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(420, 180, nameof(Color.Black), PixelTypes.Rgba32)]
+    public void DrawGlyphById_Inter_EvenOddCanvasState_MatchesNonZeroCanvasState<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> expected = provider.GetImage();
+        using Image<TPixel> actual = provider.GetImage();
+        Font font = TestFontUtilities.GetFont(TestFonts.InterLight, 32);
+        const string text = "Avalonia Test";
+        PointF origin = new(16F, 130F);
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, expected, new DrawingOptions()))
+        {
+            DrawGlyphs(canvas, text, font, origin);
+        }
+
+        DrawingOptions evenOddOptions = new()
+        {
+            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.EvenOdd }
+        };
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, actual, evenOddOptions))
+        {
+            DrawGlyphs(canvas, text, font, origin);
+        }
+
+        expected.DebugSave(provider, "expected", appendSourceFileOrDescription: false);
+        actual.DebugSave(provider, "actual", appendSourceFileOrDescription: false);
+
+        ImageComparer.TolerantPercentage(0.005F).VerifySimilarity(expected, actual);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(420, 180, nameof(Color.Black), PixelTypes.Rgba32)]
+    public void DrawGlyphById_SubjectNonZero_ClipNonZeroRect_DoesNotChangeGlyph<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> expected = provider.GetImage();
+        using Image<TPixel> actual = provider.GetImage();
+        Font font = TestFontUtilities.GetFont(TestFonts.InterLight, 32);
+        const string text = "Avalonia Test";
+        PointF origin = new(16F, 130F);
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, expected, new DrawingOptions()))
+        {
+            DrawGlyphs(canvas, text, font, origin);
+        }
+
+        DrawingOptions clipOptions = new()
+        {
+            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.NonZero }
+        };
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, actual, new DrawingOptions()))
+        {
+            _ = canvas.Save(clipOptions);
+            canvas.Clip(new RectanglePolygon(0, 0, 420, 180));
+            DrawGlyphs(canvas, text, font, origin);
+            canvas.Restore();
+        }
+
+        expected.DebugSave(provider, "expected-unclipped", appendSourceFileOrDescription: false);
+        actual.DebugSave(provider, "actual-clipped", appendSourceFileOrDescription: false);
+
+        ImageComparer.TolerantPercentage(0.0027F).VerifySimilarity(expected, actual);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(420, 180, nameof(Color.Black), PixelTypes.Rgba32)]
+    public void DrawGlyphById_SubjectNonZero_ClipEvenOddRect_DoesNotChangeGlyph<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> expected = provider.GetImage();
+        using Image<TPixel> actual = provider.GetImage();
+        Font font = TestFontUtilities.GetFont(TestFonts.InterLight, 32);
+        const string text = "Avalonia Test";
+        PointF origin = new(16F, 130F);
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, expected, new DrawingOptions()))
+        {
+            DrawGlyphs(canvas, text, font, origin);
+        }
+
+        DrawingOptions evenOddClipOptions = new()
+        {
+            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.EvenOdd }
+        };
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, actual, new DrawingOptions()))
+        {
+            _ = canvas.Save(evenOddClipOptions);
+            canvas.Clip(new RectanglePolygon(0, 0, 420, 180));
+            DrawGlyphs(canvas, text, font, origin);
+            canvas.Restore();
+        }
+
+        expected.DebugSave(provider, "expected-unclipped", appendSourceFileOrDescription: false);
+        actual.DebugSave(provider, "actual-clipped", appendSourceFileOrDescription: false);
+
+        ImageComparer.TolerantPercentage(0.0027F).VerifySimilarity(expected, actual);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(420, 180, nameof(Color.Black), PixelTypes.Rgba32)]
+    public void DrawGlyphRun_Inter_MatchesGlyphByIdLoop<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> expected = provider.GetImage();
+        using Image<TPixel> actual = provider.GetImage();
+        Font font = TestFontUtilities.GetFont(TestFonts.InterLight, 32);
+        const string text = "Avalonia Test";
+        PointF origin = new(16F, 130F);
+        ushort[] glyphIds = new ushort[text.Length];
+        Vector2[] origins = new Vector2[text.Length];
+        float penX = origin.X;
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, expected, new DrawingOptions()))
+        {
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (!font.FontMetrics.TryGetGlyphMetrics(
+                        new CodePoint(text[i]),
+                        TextAttributes.None,
+                        TextDecorations.None,
+                        LayoutMode.HorizontalTopBottom,
+                        ColorFontSupport.None,
+                        out FontGlyphMetrics metrics))
+                {
+                    continue;
+                }
+
+                RichGlyphOptions options = new()
+                {
+                    Font = font,
+                    Origin = new Vector2(penX, origin.Y)
+                };
+
+                glyphIds[i] = metrics.GlyphId;
+                origins[i] = options.Origin;
+                canvas.DrawText(metrics.GlyphId, options, Brushes.Solid(Color.White), pen: null);
+
+                penX += metrics.AdvanceWidth * font.Size / metrics.UnitsPerEm;
+            }
+        }
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, actual, new DrawingOptions()))
+        {
+            RichGlyphOptions options = new() { Font = font };
+            canvas.DrawText(new GlyphRun(glyphIds, origins), options, Brushes.Solid(Color.White), pen: null);
+        }
+
+        expected.DebugSave(provider, "per-glyph-loop", appendSourceFileOrDescription: false);
+        actual.DebugSave(provider, "batched-glyph-run", appendSourceFileOrDescription: false);
+
+        ImageComparer.Exact.VerifySimilarity(expected, actual);
+    }
+
+    [Theory]
     [WithBlankImage(760, 320, PixelTypes.Rgba32)]
     public void DrawText_Multiline_WithLineMetricsGuides_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -353,5 +637,41 @@ public partial class DrawingCanvasTests
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
+    }
+
+    /// <summary>
+    /// Draws text through the glyph-id API used by the glyph regression tests.
+    /// </summary>
+    /// <param name="canvas">The canvas under test.</param>
+    /// <param name="text">The text to draw.</param>
+    /// <param name="font">The font used to resolve glyph ids and advances.</param>
+    /// <param name="origin">The baseline origin in the current canvas coordinate space.</param>
+    private static void DrawGlyphs<TPixel>(DrawingCanvas<TPixel> canvas, string text, Font font, PointF origin)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        float penX = origin.X;
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (!font.FontMetrics.TryGetGlyphMetrics(
+                    new CodePoint(text[i]),
+                    TextAttributes.None,
+                    TextDecorations.None,
+                    LayoutMode.HorizontalTopBottom,
+                    ColorFontSupport.None,
+                    out FontGlyphMetrics metrics))
+            {
+                continue;
+            }
+
+            RichGlyphOptions options = new()
+            {
+                Font = font,
+                Origin = new Vector2(penX, origin.Y)
+            };
+
+            canvas.DrawText(metrics.GlyphId, options, Brushes.Solid(Color.White), pen: null);
+
+            penX += metrics.AdvanceWidth * font.Size / metrics.UnitsPerEm;
+        }
     }
 }

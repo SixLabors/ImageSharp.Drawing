@@ -3,6 +3,7 @@
 
 using SixLabors.PolygonClipper;
 using PCPolygon = SixLabors.PolygonClipper.Polygon;
+using PolygonClipperAction = SixLabors.PolygonClipper.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing.PolygonGeometry;
 
@@ -22,6 +23,15 @@ internal static class PolygonClipperFactory
     /// <param name="paths">The paths to convert.</param>
     /// <returns>A <see cref="PCPolygon"/> containing all flattened paths as contours.</returns>
     public static PCPolygon FromClosedPaths(IEnumerable<IPath> paths)
+        => FromClosedPaths(paths, IntersectionRule.NonZero);
+
+    /// <summary>
+    /// Creates a polygon area from multiple paths using the specified fill rule.
+    /// </summary>
+    /// <param name="paths">The paths to convert.</param>
+    /// <param name="intersectionRule">The fill rule used to interpret the input paths.</param>
+    /// <returns>A <see cref="PCPolygon"/> containing the converted contours.</returns>
+    public static PCPolygon FromClosedPaths(IEnumerable<IPath> paths, IntersectionRule intersectionRule)
     {
         PCPolygon polygon = [];
 
@@ -30,7 +40,20 @@ internal static class PolygonClipperFactory
             polygon = FromSimpleClosedPaths(path.Flatten(), polygon);
         }
 
-        return polygon;
+        return ApplyIntersectionRule(polygon, intersectionRule);
+    }
+
+    /// <summary>
+    /// Creates a polygon area from a path using the specified fill rule.
+    /// </summary>
+    /// <param name="path">The path to convert.</param>
+    /// <param name="intersectionRule">The fill rule used to interpret the path.</param>
+    /// <returns>A <see cref="PCPolygon"/> containing the converted contours.</returns>
+    public static PCPolygon FromClosedPath(IPath path, IntersectionRule intersectionRule)
+    {
+        PCPolygon polygon = FromSimpleClosedPaths(path.AsClosedPath().Flatten());
+
+        return ApplyIntersectionRule(polygon, intersectionRule);
     }
 
     /// <summary>
@@ -70,10 +93,20 @@ internal static class PolygonClipperFactory
                 contour.Add(new Vertex(points[i].X, points[i].Y));
             }
 
-            // Add the contour - PolygonClipper will determine parent/depth/orientation during sweep
             polygon.Add(contour);
         }
 
         return polygon;
     }
+
+    /// <summary>
+    /// Applies the input orientation required before polygon clipping.
+    /// </summary>
+    /// <param name="polygon">The polygon to prepare.</param>
+    /// <param name="intersectionRule">The fill rule used to interpret the polygon.</param>
+    /// <returns>A <see cref="PCPolygon"/> containing the prepared contours.</returns>
+    private static PCPolygon ApplyIntersectionRule(PCPolygon polygon, IntersectionRule intersectionRule)
+        => intersectionRule == IntersectionRule.NonZero
+            ? PolygonClipperAction.Normalize(polygon)
+            : polygon;
 }

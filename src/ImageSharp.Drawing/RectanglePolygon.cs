@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing;
 /// <summary>
 /// A closed rectangular path defined by four straight edges.
 /// </summary>
-public sealed class RectanglePolygon : IPath, ISimplePath, IPathInternals
+public sealed class RectanglePolygon : IPath, ISimplePath
 {
     private readonly Vector2 topLeft;
     private readonly Vector2 bottomRight;
@@ -168,17 +168,18 @@ public sealed class RectanglePolygon : IPath, ISimplePath, IPathInternals
     }
 
     /// <inheritdoc />
-    SegmentInfo IPathInternals.PointAlongPath(float distance)
+    public PathPoint GetPathPointAtDistance(float distance)
     {
         distance %= this.length;
 
         if (distance < this.Width)
         {
             // we are on the top stretch
-            return new SegmentInfo
+            return new PathPoint
             {
                 Point = new Vector2(this.Left + distance, this.Top),
-                Angle = MathF.PI
+                Tangent = new Vector2(1, 0),
+                Angle = 0
             };
         }
 
@@ -186,10 +187,11 @@ public sealed class RectanglePolygon : IPath, ISimplePath, IPathInternals
         if (distance < this.Height)
         {
             // down on right
-            return new SegmentInfo
+            return new PathPoint
             {
                 Point = new Vector2(this.Right, this.Top + distance),
-                Angle = -MathF.PI / 2
+                Tangent = new Vector2(0, 1),
+                Angle = 90F
             };
         }
 
@@ -197,18 +199,20 @@ public sealed class RectanglePolygon : IPath, ISimplePath, IPathInternals
         if (distance < this.Width)
         {
             // bottom right to left
-            return new SegmentInfo
+            return new PathPoint
             {
                 Point = new Vector2(this.Right - distance, this.Bottom),
-                Angle = 0
+                Tangent = new Vector2(-1, 0),
+                Angle = 180F
             };
         }
 
         distance -= this.Width;
-        return new SegmentInfo
+        return new PathPoint
         {
             Point = new Vector2(this.Left, this.Bottom - distance),
-            Angle = (float)(Math.PI / 2)
+            Tangent = new Vector2(0, -1),
+            Angle = -90F
         };
     }
 
@@ -238,34 +242,13 @@ public sealed class RectanglePolygon : IPath, ISimplePath, IPathInternals
         float maxX = MathF.Max(MathF.Max(p0.X, p1.X), MathF.Max(p2.X, p3.X));
         float maxY = MathF.Max(MathF.Max(p0.Y, p1.Y), MathF.Max(p2.Y, p3.Y));
 
-        // Any rotation or shear in the transform can turn the axis-aligned edges into slanted ones,
-        // so count each edge individually rather than assuming the axis-aligned case.
-        int nonHorizontalSegmentCountPixelBoundary = 0;
-        int nonHorizontalSegmentCountPixelCenter = 0;
-        for (int i = 0; i < 4; i++)
-        {
-            PointF a = points[i];
-            PointF b = points[(i + 1) % 4];
-            if (MathF.Floor(a.Y) != MathF.Floor(b.Y))
-            {
-                nonHorizontalSegmentCountPixelBoundary++;
-            }
-
-            if (MathF.Floor(a.Y + 0.5F) != MathF.Floor(b.Y + 0.5F))
-            {
-                nonHorizontalSegmentCountPixelCenter++;
-            }
-        }
-
         return new LinearGeometry(
             new LinearGeometryInfo
             {
                 Bounds = RectangleF.FromLTRB(minX, minY, maxX, maxY),
                 ContourCount = 1,
                 PointCount = 4,
-                SegmentCount = 4,
-                NonHorizontalSegmentCountPixelBoundary = nonHorizontalSegmentCountPixelBoundary,
-                NonHorizontalSegmentCountPixelCenter = nonHorizontalSegmentCountPixelCenter
+                SegmentCount = 4
             },
             [new LinearContour { PointStart = 0, PointCount = 4, SegmentStart = 0, SegmentCount = 4, IsClosed = true }],
             points);

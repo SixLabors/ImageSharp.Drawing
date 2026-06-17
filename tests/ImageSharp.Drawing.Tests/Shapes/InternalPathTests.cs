@@ -83,22 +83,21 @@ public class InternalPathTests
             },
         };
 
-    private const float HalfPi = (float)(Math.PI / 2);
-    private const float Pi = (float)Math.PI;
-
     [Theory]
-    [InlineData(0, 50, 50, Pi)]
-    [InlineData(100, 150, 50, Pi)]
-    [InlineData(200, 250, 50, -HalfPi)]
-    [InlineData(259, 250, 109, -HalfPi)]
-    [InlineData(261, 249, 110, 0)]
-    [InlineData(620, 150, 50, Pi)] // wrap about end of path
-    public void PointOnPath(float distance, float expectedX, float expectedY, float expectedAngle)
+    [InlineData(0, 50, 50, 0, 1, 0)]
+    [InlineData(100, 150, 50, 0, 1, 0)]
+    [InlineData(200, 250, 50, 90F, 0, 1)]
+    [InlineData(259, 250, 109, 90F, 0, 1)]
+    [InlineData(261, 249, 110, 180F, -1, 0)]
+    [InlineData(620, 150, 50, 0, 1, 0)] // wrap about end of path
+    public void PointOnPath(float distance, float expectedX, float expectedY, float expectedAngle, float expectedTangentX, float expectedTangentY)
     {
         InternalPath shape = Create(new PointF(50, 50), new Size(200, 60));
-        SegmentInfo point = shape.PointAlongPath(distance);
+        PathPoint point = shape.GetPathPointAtDistance(distance);
         Assert.Equal(expectedX, point.Point.X, 4F);
         Assert.Equal(expectedY, point.Point.Y, 4F);
+        Assert.Equal(expectedTangentX, point.Tangent.X, 4F);
+        Assert.Equal(expectedTangentY, point.Tangent.Y, 4F);
         Assert.Equal(expectedAngle, point.Angle, 4F);
     }
 }

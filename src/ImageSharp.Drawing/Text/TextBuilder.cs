@@ -30,6 +30,40 @@ public static class TextBuilder
     }
 
     /// <summary>
+    /// Generates the combined outline paths for all glyphs in <paramref name="glyphRun"/>.
+    /// The result merges per-glyph outlines into a single <see cref="IPathCollection"/> suitable for filling or stroking as one unit.
+    /// </summary>
+    /// <param name="glyphRun">The positioned glyph run to render.</param>
+    /// <param name="glyphOptions">The glyph rendering options.</param>
+    /// <returns>The combined <see cref="IPathCollection"/> for the rendered glyphs.</returns>
+    public static IPathCollection GeneratePaths(GlyphRun glyphRun, GlyphOptions glyphOptions)
+    {
+        GlyphBuilder glyphBuilder = new();
+        TextRenderer renderer = new(glyphBuilder);
+
+        renderer.RenderGlyphRun(glyphRun, glyphOptions);
+
+        return glyphBuilder.Paths;
+    }
+
+    /// <summary>
+    /// Generates per-glyph path data and metadata for the rendered <paramref name="glyphRun"/>.
+    /// Each entry contains the combined outline paths for a glyph and associated metadata that enables intelligent fill or stroke decisions at the glyph level.
+    /// </summary>
+    /// <param name="glyphRun">The positioned glyph run to render.</param>
+    /// <param name="glyphOptions">The glyph rendering options.</param>
+    /// <returns>A read-only list of <see cref="GlyphPathCollection"/> entries, one for each rendered glyph.</returns>
+    public static IReadOnlyList<GlyphPathCollection> GenerateGlyphs(GlyphRun glyphRun, GlyphOptions glyphOptions)
+    {
+        GlyphBuilder glyphBuilder = new();
+        TextRenderer renderer = new(glyphBuilder);
+
+        renderer.RenderGlyphRun(glyphRun, glyphOptions);
+
+        return glyphBuilder.Glyphs;
+    }
+
+    /// <summary>
     /// Generates per-glyph path data and metadata for the rendered <paramref name="text"/>.
     /// Each entry contains the combined outline paths for a glyph and associated metadata that enables intelligent fill or stroke decisions at the glyph level.
     /// </summary>

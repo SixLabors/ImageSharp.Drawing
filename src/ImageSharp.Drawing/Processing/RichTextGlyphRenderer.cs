@@ -31,10 +31,10 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     private readonly Brush? defaultBrush;
 
     /// <summary>
-    /// When the text is laid out along a path, this holds the path internals
+    /// When the text is laid out along a path, this holds the path
     /// for point-along-path queries. <see langword="null"/> for normal (linear) text.
     /// </summary>
-    private readonly IPathInternals? path;
+    private readonly IPath? path;
     private bool isDisposed;
 
     // --- Per-glyph mutable state reset in BeginGlyph ---
@@ -133,14 +133,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             // so cache hits are vanishingly rare; disable caching entirely.
             this.rasterizationRequired = true;
             this.noCache = true;
-            if (path is IPathInternals internals)
-            {
-                this.path = internals;
-            }
-            else
-            {
-                this.path = new ComplexPolygon(path);
-            }
+            this.path = path;
         }
     }
 
@@ -770,12 +763,13 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         // Find the point of this intersection along the given path.
         // We want to find the point on the path that is closest to the center-bottom side of the glyph.
         Vector2 half = new(bounds.Width * .5F, 0);
-        SegmentInfo pathPoint = this.path.PointAlongPath(bounds.Left + half.X);
+        PathPoint pathPoint = this.path.GetPathPointAtDistance(bounds.Left + half.X);
+        float angle = GeometryUtilities.DegreeToRadian(pathPoint.Angle);
 
         // Now offset to our target point since we're aligning the top-left location of our glyph against the path.
         Vector2 translation = (Vector2)pathPoint.Point - bounds.Location - half + new Vector2(0, bounds.Top);
         return Matrix4x4.CreateTranslation(translation.X, translation.Y, 0)
-            * new Matrix4x4(Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, (Vector2)pathPoint.Point));
+            * new Matrix4x4(Matrix3x2.CreateRotation(angle, (Vector2)pathPoint.Point));
     }
 
     /// <summary>

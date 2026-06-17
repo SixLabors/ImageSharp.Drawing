@@ -70,16 +70,59 @@ public sealed partial class DefaultDrawingBackend
     }
 
     /// <summary>
+    /// Walks retained row-operation blocks without flattening them into another list.
+    /// </summary>
+    private struct SceneOperationCursor
+    {
+        private FlushScene.SceneOperationBlock? block;
+        private int index;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SceneOperationCursor"/> struct.
+        /// </summary>
+        /// <param name="block">The first retained row-operation block.</param>
+        public SceneOperationCursor(FlushScene.SceneOperationBlock? block)
+        {
+            this.block = block;
+            this.index = 0;
+        }
+
+        /// <summary>
+        /// Reads the next retained row operation.
+        /// </summary>
+        /// <param name="operation">The next operation.</param>
+        /// <returns>True when an operation was read; otherwise false.</returns>
+        public bool TryRead(out FlushScene.SceneOperation operation)
+        {
+            while (this.block is not null)
+            {
+                Span<FlushScene.SceneOperation> items = this.block.Items;
+                if (this.index < items.Length)
+                {
+                    operation = items[this.index++];
+                    return true;
+                }
+
+                this.block = this.block.Next;
+                this.index = 0;
+            }
+
+            operation = default;
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Represents one active composition target for a retained row.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private sealed class BandTarget<TPixel> : IDisposable
+    private readonly struct BandTarget<TPixel> : IDisposable
         where TPixel : unmanaged, IPixel<TPixel>
     {
         private readonly Buffer2D<TPixel>? owner;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="BandTarget{TPixel}"/> class over an existing region.
+        /// Initializes a new instance of the <see cref="BandTarget{TPixel}"/> struct over an existing region.
         /// </summary>
         /// <param name="region">The destination region.</param>
         /// <param name="absoluteLeft">The absolute X origin of the region.</param>
@@ -94,7 +137,7 @@ public sealed partial class DefaultDrawingBackend
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="BandTarget{TPixel}"/> class over an owned temporary buffer.
+        /// Initializes a new instance of the <see cref="BandTarget{TPixel}"/> struct over an owned temporary buffer.
         /// </summary>
         /// <param name="owner">The owned buffer backing the target.</param>
         /// <param name="bounds">The absolute bounds represented by the target.</param>
@@ -112,6 +155,11 @@ public sealed partial class DefaultDrawingBackend
         /// Gets the writable pixel region for the target.
         /// </summary>
         public Buffer2DRegion<TPixel> Region { get; }
+
+        /// <summary>
+        /// Gets the absolute bounds represented by <see cref="Region"/>.
+        /// </summary>
+        public Rectangle Bounds => new(this.AbsoluteLeft, this.AbsoluteTop, this.Region.Width, this.Region.Height);
 
         /// <summary>
         /// Gets the absolute X origin of <see cref="Region"/>.
@@ -149,26 +197,18 @@ public sealed partial class DefaultDrawingBackend
         /// </summary>
         /// <param name="allocator">The memory allocator used for scratch growth.</param>
         /// <param name="destinationWidth">The destination width used to size the brush workspace.</param>
-        /// <param name="layerDepth">The maximum retained layer depth required by the scene.</param>
         public WorkerState(
             MemoryAllocator allocator,
-            int destinationWidth,
-            int layerDepth)
+            int destinationWidth)
         {
             this.allocator = allocator;
             this.BrushWorkspace = new BrushWorkspace<TPixel>(allocator, destinationWidth);
-            this.TargetStack = new BandTarget<TPixel>[layerDepth];
         }
 
         /// <summary>
         /// Gets the reusable brush workspace for the worker.
         /// </summary>
         public BrushWorkspace<TPixel> BrushWorkspace { get; }
-
-        /// <summary>
-        /// Gets the reusable composition target stack for the worker.
-        /// </summary>
-        public BandTarget<TPixel>[] TargetStack { get; }
 
         /// <summary>
         /// Returns a reusable raster scratch instance sized for the requested width.

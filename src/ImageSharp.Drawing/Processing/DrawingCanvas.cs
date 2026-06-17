@@ -114,6 +114,18 @@ public abstract partial class DrawingCanvas : IDisposable
     public abstract void Fill(Brush brush, IPath path);
 
     /// <summary>
+    /// Narrows the current clip region by intersecting it with the supplied clip paths.
+    /// </summary>
+    /// <remarks>
+    /// The clip paths are transformed by the active transform at the point this is called, then
+    /// intersected with the existing clip — clipping only ever narrows. The resulting clip is part of
+    /// the current saved state and is restored by <see cref="Restore"/>. Multiple paths combine as a
+    /// union before intersecting (e.g. a region built from several rectangles).
+    /// </remarks>
+    /// <param name="clipPaths">The clip paths to intersect with the current clip, in local coordinates.</param>
+    public abstract void Clip(params IPath[] clipPaths);
+
+    /// <summary>
     /// Applies an image-processing operation to a local region.
     /// </summary>
     /// <param name="region">The local region to process.</param>
@@ -236,6 +248,34 @@ public abstract partial class DrawingCanvas : IDisposable
         Pen? pen);
 
     /// <summary>
+    /// Draws a single glyph, identified by its glyph id, onto this canvas.
+    /// </summary>
+    /// <param name="glyphId">The id of the glyph within the font face referenced by <paramref name="options"/>.</param>
+    /// <param name="options">
+    /// The glyph rendering options, including the font, origin, grapheme index and optional per-glyph paint.
+    /// </param>
+    /// <param name="brush">Default brush used to fill the glyph when <see cref="RichGlyphOptions.Brush"/> is not set.</param>
+    /// <param name="pen">Default pen used to outline the glyph when <see cref="RichGlyphOptions.Pen"/> is not set.</param>
+    public abstract void DrawText(
+        ushort glyphId,
+        RichGlyphOptions options,
+        Brush? brush,
+        Pen? pen);
+
+    /// <summary>
+    /// Draws positioned glyphs onto this canvas.
+    /// </summary>
+    /// <param name="glyphRun">The positioned glyphs.</param>
+    /// <param name="options">The glyph rendering options, including the font and optional glyph paint.</param>
+    /// <param name="brush">Default brush used to fill glyphs when <see cref="RichGlyphOptions.Brush"/> is not set.</param>
+    /// <param name="pen">Default pen used to outline glyphs when <see cref="RichGlyphOptions.Pen"/> is not set.</param>
+    public abstract void DrawText(
+        GlyphRun glyphRun,
+        RichGlyphOptions options,
+        Brush? brush,
+        Pen? pen);
+
+    /// <summary>
     /// Draws layered glyph geometry.
     /// </summary>
     /// <param name="brush">Brush used to fill glyph layers.</param>
@@ -267,6 +307,26 @@ public abstract partial class DrawingCanvas : IDisposable
         Image image,
         Rectangle sourceRect,
         RectangleF destinationRect,
+        IResampler? sampler = null);
+
+    /// <summary>
+    /// Draws an image source region into a destination rectangle, tiling the painted area by repeating
+    /// the destination rectangle outwards per the supplied <see cref="WrapMode"/>s.
+    /// </summary>
+    /// <param name="image">The source image.</param>
+    /// <param name="sourceRect">The source rectangle within <paramref name="image"/>.</param>
+    /// <param name="destinationRect">The destination rectangle in local canvas coordinates (defines a single tile cell).</param>
+    /// <param name="wrapX">The horizontal wrap mode applied when sampling beyond <paramref name="destinationRect"/>.</param>
+    /// <param name="wrapY">The vertical wrap mode applied when sampling beyond <paramref name="destinationRect"/>.</param>
+    /// <param name="sampler">
+    /// Optional resampler used when scaling or transforming the image. Defaults to <see cref="KnownResamplers.Bicubic"/>.
+    /// </param>
+    public abstract void DrawImage(
+        Image image,
+        Rectangle sourceRect,
+        RectangleF destinationRect,
+        WrapMode wrapX,
+        WrapMode wrapY,
         IResampler? sampler = null);
 
     /// <summary>

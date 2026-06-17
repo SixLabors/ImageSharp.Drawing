@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.PolygonClipper;
 using PCPolygon = SixLabors.PolygonClipper.Polygon;
 using PolygonClipperAction = SixLabors.PolygonClipper.PolygonClipper;
@@ -34,21 +35,88 @@ internal static class ClippedShapeGenerator
         BooleanOperation operation,
         IPath subject,
         IEnumerable<IPath> clip)
+        => GenerateClippedShapes(new ShapeOptions { BooleanOperation = operation }, subject, clip);
+
+    /// <summary>
+    /// Generates the final clipped shapes from the previously provided subject and clip paths.
+    /// </summary>
+    /// <param name="options">The shape options used to interpret the input paths.</param>
+    /// <param name="subject">The subject path.</param>
+    /// <param name="clip">The clipping paths.</param>
+    /// <returns>
+    /// The <see cref="ComplexPolygon"/> representing the result of the boolean operation.
+    /// </returns>
+    public static ComplexPolygon GenerateClippedShapes(
+        ShapeOptions options,
+        IPath subject,
+        IEnumerable<IPath> clip)
+        => GenerateClippedShapes(options, subject, clip, options.IntersectionRule);
+
+    /// <summary>
+    /// Generates the final clipped shapes from the previously provided subject and clip paths.
+    /// </summary>
+    /// <param name="options">The shape options used to interpret the subject path and choose the boolean operation.</param>
+    /// <param name="subject">The subject path.</param>
+    /// <param name="clip">The clipping paths.</param>
+    /// <param name="clipIntersectionRule">The fill rule used to interpret the clipping paths.</param>
+    /// <returns>
+    /// The <see cref="ComplexPolygon"/> representing the result of the boolean operation.
+    /// </returns>
+    public static ComplexPolygon GenerateClippedShapes(
+        ShapeOptions options,
+        IPath subject,
+        IEnumerable<IPath> clip,
+        IntersectionRule clipIntersectionRule)
     {
         Guard.NotNull(subject);
         Guard.NotNull(clip);
 
-        PCPolygon s = PolygonClipperFactory.FromSimpleClosedPaths(subject.Flatten());
-        PCPolygon c = PolygonClipperFactory.FromClosedPaths(clip);
+        PCPolygon s = PolygonClipperFactory.FromClosedPath(subject, options.IntersectionRule);
+        PCPolygon c = PolygonClipperFactory.FromClosedPaths(clip, clipIntersectionRule);
 
-        PCPolygon result = operation switch
+        return GenerateClippedShapes(options, s, c);
+    }
+
+    /// <summary>
+    /// Generates the final clipped shape from the previously provided subject and clip path.
+    /// </summary>
+    /// <param name="options">The shape options used to interpret the subject path and choose the boolean operation.</param>
+    /// <param name="subject">The subject path.</param>
+    /// <param name="clip">The clipping path.</param>
+    /// <param name="clipIntersectionRule">The fill rule used to interpret the clipping path.</param>
+    /// <returns>
+    /// The <see cref="ComplexPolygon"/> representing the result of the boolean operation.
+    /// </returns>
+    public static ComplexPolygon GenerateClippedShapes(
+        ShapeOptions options,
+        IPath subject,
+        IPath clip,
+        IntersectionRule clipIntersectionRule)
+    {
+        Guard.NotNull(subject);
+        Guard.NotNull(clip);
+
+        PCPolygon s = PolygonClipperFactory.FromClosedPath(subject, options.IntersectionRule);
+        PCPolygon c = PolygonClipperFactory.FromClosedPath(clip, clipIntersectionRule);
+
+        return GenerateClippedShapes(options, s, c);
+    }
+
+    private static ComplexPolygon GenerateClippedShapes(ShapeOptions options, PCPolygon subject, PCPolygon clip)
+    {
+        PCPolygon result = options.BooleanOperation switch
         {
-            BooleanOperation.Xor => PolygonClipperAction.Xor(s, c),
-            BooleanOperation.Difference => PolygonClipperAction.Difference(s, c),
-            BooleanOperation.Union => PolygonClipperAction.Union(s, c),
-            _ => PolygonClipperAction.Intersection(s, c),
+            BooleanOperation.Xor => PolygonClipperAction.Xor(subject, clip),
+            BooleanOperation.Difference => PolygonClipperAction.Difference(subject, clip),
+            BooleanOperation.Union => PolygonClipperAction.Union(subject, clip),
+            _ => PolygonClipperAction.Intersection(subject, clip),
         };
 
+        return ToComplexPolygon(result);
+    }
+
+    private static ComplexPolygon ToComplexPolygon(PCPolygon result)
+    {
         IPath[] shapes = new IPath[result.Count];
 
         int index = 0;
@@ -66,7 +134,7 @@ internal static class ClippedShapeGenerator
     /// <param name="polygon">The polygon containing the contour hierarchy.</param>
     /// <param name="contourIndex">The contour index to convert.</param>
     /// <returns>The converted point array.</returns>
-    private static PointF[] CreateContourPoints(PCPolygon polygon, int contourIndex)
+    internal static PointF[] CreateContourPoints(PCPolygon polygon, int contourIndex)
     {
         Contour contour = polygon[contourIndex];
         PointF[] points = new PointF[contour.Count];

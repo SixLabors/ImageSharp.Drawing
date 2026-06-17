@@ -16,9 +16,7 @@ public sealed class EmptyPath : IPath
             Bounds = RectangleF.Empty,
             ContourCount = 0,
             PointCount = 0,
-            SegmentCount = 0,
-            NonHorizontalSegmentCountPixelBoundary = 0,
-            NonHorizontalSegmentCountPixelCenter = 0
+            SegmentCount = 0
         },
         [],
         []);
@@ -49,6 +47,9 @@ public sealed class EmptyPath : IPath
 
     /// <inheritdoc />
     public LinearGeometry ToLinearGeometry(Vector2 scale) => EmptyGeometry;
+
+    /// <inheritdoc />
+    public PathPoint GetPathPointAtDistance(float distance) => default;
 
     /// <inheritdoc />
     public IPath Transform(Matrix4x4 matrix) => this;
