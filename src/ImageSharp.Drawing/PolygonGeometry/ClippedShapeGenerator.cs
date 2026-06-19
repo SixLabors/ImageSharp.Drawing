@@ -72,6 +72,12 @@ internal static class ClippedShapeGenerator
         Guard.NotNull(clip);
 
         PCPolygon s = PolygonClipperFactory.FromClosedPath(subject, options.IntersectionRule);
+
+        if (clip is IReadOnlyList<IPath> { Count: 1 } clipList && clipList[0] is IRegionPath regionPath)
+        {
+            return GenerateRegionClippedShapes(options, s, regionPath);
+        }
+
         PCPolygon c = PolygonClipperFactory.FromClosedPaths(clip, clipIntersectionRule);
 
         return GenerateClippedShapes(options, s, c);
@@ -97,9 +103,51 @@ internal static class ClippedShapeGenerator
         Guard.NotNull(clip);
 
         PCPolygon s = PolygonClipperFactory.FromClosedPath(subject, options.IntersectionRule);
+
+        if (clip is IRegionPath regionPath)
+        {
+            return GenerateRegionClippedShapes(options, s, regionPath);
+        }
+
         PCPolygon c = PolygonClipperFactory.FromClosedPath(clip, clipIntersectionRule);
 
         return GenerateClippedShapes(options, s, c);
+    }
+
+    private static ComplexPolygon GenerateRegionClippedShapes(ShapeOptions options, PCPolygon subject, IRegionPath regionPath)
+    {
+        IReadOnlyList<Rectangle> rectangles = regionPath.Rectangles;
+        if (options.BooleanOperation == BooleanOperation.Intersection)
+        {
+            PCPolygon result = [];
+
+            // RegionPath is a rect-set operand: S & (r0 | r1 | ...) is the union of
+            // each per-rectangle intersection. Keeping that algebra explicit avoids
+            // asking the generic polygon clipper to infer region union semantics from
+            // adjacent/disjoint rectangle contours.
+            for (int i = 0; i < rectangles.Count; i++)
+            {
+                PCPolygon clip = PolygonClipperFactory.FromRectangle(rectangles[i]);
+                result.Join(PolygonClipperAction.Intersection(subject, clip));
+            }
+
+            return ToComplexPolygon(result);
+        }
+
+        PCPolygon current = subject;
+        for (int i = 0; i < rectangles.Count; i++)
+        {
+            PCPolygon clip = PolygonClipperFactory.FromRectangle(rectangles[i]);
+            current = options.BooleanOperation switch
+            {
+                BooleanOperation.Xor => PolygonClipperAction.Xor(current, clip),
+                BooleanOperation.Difference => PolygonClipperAction.Difference(current, clip),
+                BooleanOperation.Union => PolygonClipperAction.Union(current, clip),
+                _ => PolygonClipperAction.Intersection(current, clip),
+            };
+        }
+
+        return ToComplexPolygon(current);
     }
 
     private static ComplexPolygon GenerateClippedShapes(ShapeOptions options, PCPolygon subject, PCPolygon clip)

@@ -21,9 +21,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 internal sealed class DrawingCanvasBatcher<TPixel>
     where TPixel : unmanaged, IPixel<TPixel>
 {
-    private static readonly object TraceLock = new();
-    private static readonly string? TracePath = CreateTracePath();
-    private static int traceOperationIndex;
     private readonly Configuration configuration;
 
     // Draw commands stay in this buffer until replay lowers referenced command ranges
@@ -392,11 +389,6 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                 IPath path = composition.SourcePath;
                 DrawingOptions sourceOptions = composition.DrawingOptions;
                 bool hasTransform = sourceOptions.Transform != Matrix4x4.Identity;
-                string? tracePath = TracePath;
-                if (tracePath is not null)
-                {
-                    TraceCommand(tracePath, $"PrepareFill sourceRule={sourceOptions.ShapeOptions.IntersectionRule} clipRule={composition.ClipIntersectionRule} clipCount={composition.ClipPaths.Count} sourceBounds={Describe(path.Bounds)} sourceInterest={Describe(composition.RasterizerOptions.Interest)} target={Describe(composition.TargetBounds)} transform={(hasTransform ? "non-identity" : "identity")}");
-                }
 
                 if (hasTransform)
                 {
@@ -415,12 +407,6 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                     composition.RasterizerOptions,
                     intersectionRule,
                     interest);
-
-                tracePath = TracePath;
-                if (tracePath is not null)
-                {
-                    TraceCommand(tracePath, $"PreparedFill rule={intersectionRule} clippedBounds={Describe(path.Bounds)} clippedInterest={Describe(interest)}");
-                }
 
                 DrawingOptions preparedOptions = WithIdentityTransformAndIntersectionRule(sourceOptions, intersectionRule);
 
@@ -487,11 +473,6 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                 bool hasTransform = sourceOptions.Transform != Matrix4x4.Identity;
 
                 IPath path = composition.Pen.GeneratePath(composition.SourcePath);
-                string? tracePath = TracePath;
-                if (tracePath is not null)
-                {
-                    TraceCommand(tracePath, $"PrepareStroke sourceRule={sourceOptions.ShapeOptions.IntersectionRule} clipRule={composition.ClipIntersectionRule} clipCount={composition.ClipPaths.Count} sourceBounds={Describe(composition.SourcePath.Bounds)} generatedBounds={Describe(path.Bounds)} sourceInterest={Describe(composition.RasterizerOptions.Interest)} target={Describe(composition.TargetBounds)} transform={(hasTransform ? "non-identity" : "identity")} width={composition.Pen.StrokeWidth:0.###}");
-                }
 
                 if (hasTransform)
                 {
@@ -517,12 +498,6 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                     sourceOptions.Transform,
                     composition.RasterizerOptions.Interest,
                     interest);
-
-                tracePath = TracePath;
-                if (tracePath is not null)
-                {
-                    TraceCommand(tracePath, $"PreparedStrokeAsFill rule={intersectionRule} clippedBounds={Describe(path.Bounds)} clippedInterest={Describe(interest)}");
-                }
 
                 DrawingOptions preparedOptions = WithIdentityTransformAndIntersectionRule(sourceOptions, intersectionRule);
 
@@ -730,57 +705,4 @@ internal sealed class DrawingCanvasBatcher<TPixel>
             (int)MathF.Floor(bounds.Top),
             (int)MathF.Ceiling(bounds.Right) + 1,
             (int)MathF.Ceiling(bounds.Bottom) + 1);
-
-    /// <summary>
-    /// Writes one opt-in batcher diagnostic line.
-    /// </summary>
-    /// <param name="path">The trace file path.</param>
-    /// <param name="message">The diagnostic message.</param>
-    private static void TraceCommand(string path, string message)
-    {
-        lock (TraceLock)
-        {
-            File.AppendAllText(
-                path,
-                $"{traceOperationIndex++}: {message}{Environment.NewLine}");
-        }
-    }
-
-    /// <summary>
-    /// Gets the opt-in batcher trace path from the capture environment.
-    /// </summary>
-    /// <returns>The batcher trace path, or <see langword="null"/> when batcher tracing is disabled.</returns>
-    private static string? CreateTracePath()
-    {
-        if (Environment.GetEnvironmentVariable("IMAGESHARP_DRAWING_BATCHER_TRACE") != "1")
-        {
-            return null;
-        }
-
-        string? directory = Environment.GetEnvironmentVariable("IMAGESHARP_DRAWING_CAPTURE_DIRECTORY");
-        if (string.IsNullOrWhiteSpace(directory))
-        {
-            directory = System.IO.Path.GetTempPath();
-        }
-
-        Directory.CreateDirectory(directory);
-
-        return System.IO.Path.Combine(directory, "imagesharp-batcher-trace.log");
-    }
-
-    /// <summary>
-    /// Formats a floating-point rectangle for diagnostics.
-    /// </summary>
-    /// <param name="rectangle">The rectangle to format.</param>
-    /// <returns>The formatted rectangle.</returns>
-    private static string Describe(RectangleF rectangle)
-        => $"({rectangle.X:0.###},{rectangle.Y:0.###},{rectangle.Width:0.###},{rectangle.Height:0.###})";
-
-    /// <summary>
-    /// Formats an integer rectangle for diagnostics.
-    /// </summary>
-    /// <param name="rectangle">The rectangle to format.</param>
-    /// <returns>The formatted rectangle.</returns>
-    private static string Describe(Rectangle rectangle)
-        => $"({rectangle.X},{rectangle.Y},{rectangle.Width},{rectangle.Height})";
 }

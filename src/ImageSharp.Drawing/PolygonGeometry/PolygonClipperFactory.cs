@@ -37,6 +37,12 @@ internal static class PolygonClipperFactory
 
         foreach (IPath path in paths)
         {
+            if (path is IRegionPath regionPath)
+            {
+                AddRegionRectangles(regionPath.Rectangles, polygon);
+                continue;
+            }
+
             polygon = FromSimpleClosedPaths(path.Flatten(), polygon);
         }
 
@@ -51,9 +57,63 @@ internal static class PolygonClipperFactory
     /// <returns>A <see cref="PCPolygon"/> containing the converted contours.</returns>
     public static PCPolygon FromClosedPath(IPath path, IntersectionRule intersectionRule)
     {
+        if (path is IRegionPath regionPath)
+        {
+            PCPolygon regionPolygon = [];
+            AddRegionRectangles(regionPath.Rectangles, regionPolygon);
+
+            return ApplyIntersectionRule(regionPolygon, intersectionRule);
+        }
+
         PCPolygon polygon = FromSimpleClosedPaths(path.AsClosedPath().Flatten());
 
         return ApplyIntersectionRule(polygon, intersectionRule);
+    }
+
+    /// <summary>
+    /// Creates a polygon from one axis-aligned integer rectangle.
+    /// </summary>
+    /// <param name="rectangle">The rectangle to convert.</param>
+    /// <returns>A <see cref="PCPolygon"/> containing one rectangle contour.</returns>
+    public static PCPolygon FromRectangle(Rectangle rectangle)
+    {
+        PCPolygon polygon = [];
+        AddRectangle(rectangle, polygon);
+        return polygon;
+    }
+
+    /// <summary>
+    /// Adds an integer region as rectangle contours without first exporting its boundary path.
+    /// </summary>
+    /// <param name="rectangles">The normalized rectangles that cover the region.</param>
+    /// <param name="polygon">The polygon receiving the rectangle contours.</param>
+    private static void AddRegionRectangles(IReadOnlyList<Rectangle> rectangles, PCPolygon polygon)
+    {
+        // Skia clips regions as rectangle sets. Preserve that model at the polygon boundary so
+        // disjoint dirty-region islands are unioned by coverage instead of being inferred from
+        // boundary-link geometry.
+        for (int i = 0; i < rectangles.Count; i++)
+        {
+            AddRectangle(rectangles[i], polygon);
+        }
+    }
+
+    /// <summary>
+    /// Adds one rectangle contour to a polygon.
+    /// </summary>
+    /// <param name="rectangle">The rectangle to add.</param>
+    /// <param name="polygon">The polygon receiving the rectangle contour.</param>
+    private static void AddRectangle(Rectangle rectangle, PCPolygon polygon)
+    {
+        Contour contour =
+        [
+            new Vertex(rectangle.Left, rectangle.Top),
+            new Vertex(rectangle.Right, rectangle.Top),
+            new Vertex(rectangle.Right, rectangle.Bottom),
+            new Vertex(rectangle.Left, rectangle.Bottom)
+        ];
+
+        polygon.Add(contour);
     }
 
     /// <summary>
