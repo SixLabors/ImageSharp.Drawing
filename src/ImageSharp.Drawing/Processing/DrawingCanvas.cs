@@ -70,6 +70,22 @@ public abstract partial class DrawingCanvas : IDisposable
     public abstract int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds);
 
     /// <summary>
+    /// Saves the current drawing state and begins an isolated compositing layer
+    /// using the supplied drawing options and clip paths for commands recorded into the layer.
+    /// </summary>
+    /// <param name="layerOptions">
+    /// Graphics options controlling how the closed layer is composited against the parent canvas
+    /// when the canvas timeline is rendered during <see cref="IDisposable.Dispose"/>.
+    /// </param>
+    /// <param name="bounds">
+    /// The local bounds of the layer. Only this region is allocated and composited.
+    /// </param>
+    /// <param name="options">Drawing options for the layer contents.</param>
+    /// <param name="clipPaths">Clip paths for the layer contents.</param>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    public abstract int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds, DrawingOptions options, params IPath[] clipPaths);
+
+    /// <summary>
     /// Restores the most recently saved state.
     /// </summary>
     /// <remarks>
@@ -124,6 +140,16 @@ public abstract partial class DrawingCanvas : IDisposable
     /// </remarks>
     /// <param name="clipPaths">The clip paths to intersect with the current clip, in local coordinates.</param>
     public abstract void Clip(params IPath[] clipPaths);
+
+    /// <summary>
+    /// Narrows the current clip region by applying the specified clipping operation with the supplied clip paths.
+    /// </summary>
+    /// <remarks>
+    /// The clip paths are transformed by the active transform at the point this is called.
+    /// </remarks>
+    /// <param name="operation">The operation to apply to the current clip.</param>
+    /// <param name="clipPaths">The clip paths to combine with the current clip, in local coordinates.</param>
+    public abstract void Clip(ClipOperation operation, params IPath[] clipPaths);
 
     /// <summary>
     /// Applies an image-processing operation to a local region.

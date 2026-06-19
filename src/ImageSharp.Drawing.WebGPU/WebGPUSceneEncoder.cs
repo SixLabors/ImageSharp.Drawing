@@ -1458,8 +1458,6 @@ internal static class WebGPUSceneEncoder
                 resolved.BrushBounds,
                 resolved.Pen,
                 widthScale,
-                command.Transform,
-                segmentScale,
                 start,
                 end);
             error = null;
@@ -1498,8 +1496,6 @@ internal static class WebGPUSceneEncoder
                 resolved.BrushBounds,
                 resolved.Pen,
                 widthScale,
-                command.Transform,
-                polylineScale,
                 geometry);
             error = null;
             return true;
@@ -1650,8 +1646,6 @@ internal static class WebGPUSceneEncoder
                 command.BrushBounds,
                 command.GraphicsOptions,
                 drawTag,
-                scale,
-                command.Transform,
                 this.rootTargetBounds,
                 ref this.DrawData,
                 ref this.GradientPixels,
@@ -1743,8 +1737,6 @@ internal static class WebGPUSceneEncoder
                 command.BrushBounds,
                 command.GraphicsOptions,
                 drawTag,
-                scale,
-                command.Transform,
                 this.rootTargetBounds,
                 ref this.DrawData,
                 ref this.GradientPixels,
@@ -1765,8 +1757,6 @@ internal static class WebGPUSceneEncoder
             Rectangle brushBounds,
             Pen pen,
             float widthScale,
-            Matrix4x4 transform,
-            Vector2 scale,
             LinearGeometry geometry)
         {
             uint drawTag = GetDrawTag(brush);
@@ -1840,8 +1830,6 @@ internal static class WebGPUSceneEncoder
                 brushBounds,
                 graphicsOptions,
                 drawTag,
-                scale,
-                transform,
                 this.rootTargetBounds,
                 ref this.DrawData,
                 ref this.GradientPixels,
@@ -1862,8 +1850,6 @@ internal static class WebGPUSceneEncoder
             Rectangle brushBounds,
             Pen pen,
             float widthScale,
-            Matrix4x4 transform,
-            Vector2 scale,
             PointF start,
             PointF end)
         {
@@ -1938,8 +1924,6 @@ internal static class WebGPUSceneEncoder
                 brushBounds,
                 graphicsOptions,
                 drawTag,
-                scale,
-                transform,
                 this.rootTargetBounds,
                 ref this.DrawData,
                 ref this.GradientPixels,
@@ -3736,8 +3720,6 @@ internal static class WebGPUSceneEncoder
         Rectangle brushBounds,
         GraphicsOptions graphicsOptions,
         uint drawTag,
-        Vector2 scale,
-        Matrix4x4 transform,
         Rectangle rootTargetBounds,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,
@@ -3763,19 +3745,19 @@ internal static class WebGPUSceneEncoder
                 AppendRecolorData((RecolorBrush)brush, ref drawData);
                 break;
             case GpuSceneDrawTag.FillLinGradient:
-                AppendLinearGradientData((LinearGradientBrush)brush, scale, ref drawData, ref gradientPixels, ref gradientRowCount);
+                AppendLinearGradientData((LinearGradientBrush)brush, ref drawData, ref gradientPixels, ref gradientRowCount);
                 break;
             case GpuSceneDrawTag.FillRadGradient:
-                AppendRadialGradientData((RadialGradientBrush)brush, scale, ref drawData, ref gradientPixels, ref gradientRowCount);
+                AppendRadialGradientData((RadialGradientBrush)brush, ref drawData, ref gradientPixels, ref gradientRowCount);
                 break;
             case GpuSceneDrawTag.FillEllipticGradient:
-                AppendEllipticGradientData((EllipticGradientBrush)brush, scale, ref drawData, ref gradientPixels, ref gradientRowCount);
+                AppendEllipticGradientData((EllipticGradientBrush)brush, ref drawData, ref gradientPixels, ref gradientRowCount);
                 break;
             case GpuSceneDrawTag.FillSweepGradient:
-                AppendSweepGradientData((SweepGradientBrush)brush, scale, ref drawData, ref gradientPixels, ref gradientRowCount);
+                AppendSweepGradientData((SweepGradientBrush)brush, ref drawData, ref gradientPixels, ref gradientRowCount);
                 break;
             case GpuSceneDrawTag.FillPathGradient:
-                AppendPathGradientData((PathGradientBrush)brush, transform, rootTargetBounds, ref drawData, ref pathGradientData);
+                AppendPathGradientData((PathGradientBrush)brush, rootTargetBounds, ref drawData, ref pathGradientData);
                 break;
             case GpuSceneDrawTag.FillImage:
                 AppendImageData(brush, localBrushBounds, ref drawData, images);
@@ -3891,7 +3873,6 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     private static void AppendLinearGradientData(
         LinearGradientBrush brush,
-        Vector2 scale,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,
         ref int gradientRowCount)
@@ -3900,14 +3881,11 @@ internal static class WebGPUSceneEncoder
         AppendGradientRamp(brush.ColorStops, ref gradientPixels);
         gradientRowCount++;
 
-        PointF start = new(brush.StartPoint.X * scale.X, brush.StartPoint.Y * scale.Y);
-        PointF end = new(brush.EndPoint.X * scale.X, brush.EndPoint.Y * scale.Y);
-
         drawData.Add(indexMode);
-        drawData.Add(BitcastSingle(start.X));
-        drawData.Add(BitcastSingle(start.Y));
-        drawData.Add(BitcastSingle(end.X));
-        drawData.Add(BitcastSingle(end.Y));
+        drawData.Add(BitcastSingle(brush.StartPoint.X));
+        drawData.Add(BitcastSingle(brush.StartPoint.Y));
+        drawData.Add(BitcastSingle(brush.EndPoint.X));
+        drawData.Add(BitcastSingle(brush.EndPoint.Y));
     }
 
     /// <summary>
@@ -3915,7 +3893,6 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     private static void AppendRadialGradientData(
         RadialGradientBrush brush,
-        Vector2 scale,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,
         ref int gradientRowCount)
@@ -3944,12 +3921,6 @@ internal static class WebGPUSceneEncoder
             radius1 = brush.Radius0;
         }
 
-        float radiusScale = 0.5F * (scale.X + scale.Y);
-        center0 = new(center0.X * scale.X, center0.Y * scale.Y);
-        center1 = new(center1.X * scale.X, center1.Y * scale.Y);
-        radius0 *= radiusScale;
-        radius1 *= radiusScale;
-
         drawData.Add(indexMode);
         drawData.Add(BitcastSingle(center0.X));
         drawData.Add(BitcastSingle(center0.Y));
@@ -3964,7 +3935,6 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     private static void AppendEllipticGradientData(
         EllipticGradientBrush brush,
-        Vector2 scale,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,
         ref int gradientRowCount)
@@ -3973,28 +3943,22 @@ internal static class WebGPUSceneEncoder
         AppendGradientRamp(brush.ColorStops, ref gradientPixels);
         gradientRowCount++;
 
-        // The perpendicular axis of the ellipse must be constructed in local space where it is
-        // geometrically orthogonal to the main axis; componentwise scale-bake does not commute with
-        // rotation, so reconstructing it from the scale-baked main axis in the shader goes wrong
-        // under non-uniform scale. Bake all three points instead and let the shader derive the
-        // device-space axis ratio from the transformed distances.
+        // Brushes reach the encoder after batcher normalization, so gradient payload points are
+        // already in render coordinates. The shader still expects the ellipse as three points,
+        // so reconstruct the secondary-axis endpoint from the stored center, axis, and ratio.
         PointF localCenter = brush.Center;
         PointF localAxisEnd = brush.ReferenceAxisEnd;
         Vector2 localAxis = new(localAxisEnd.X - localCenter.X, localAxisEnd.Y - localCenter.Y);
         Vector2 localPerpendicular = new Vector2(-localAxis.Y, localAxis.X) * brush.AxisRatio;
         PointF localSecondEnd = new(localCenter.X + localPerpendicular.X, localCenter.Y + localPerpendicular.Y);
 
-        PointF center = new(localCenter.X * scale.X, localCenter.Y * scale.Y);
-        PointF axisEnd = new(localAxisEnd.X * scale.X, localAxisEnd.Y * scale.Y);
-        PointF secondEnd = new(localSecondEnd.X * scale.X, localSecondEnd.Y * scale.Y);
-
         drawData.Add(indexMode);
-        drawData.Add(BitcastSingle(center.X));
-        drawData.Add(BitcastSingle(center.Y));
-        drawData.Add(BitcastSingle(axisEnd.X));
-        drawData.Add(BitcastSingle(axisEnd.Y));
-        drawData.Add(BitcastSingle(secondEnd.X));
-        drawData.Add(BitcastSingle(secondEnd.Y));
+        drawData.Add(BitcastSingle(localCenter.X));
+        drawData.Add(BitcastSingle(localCenter.Y));
+        drawData.Add(BitcastSingle(localAxisEnd.X));
+        drawData.Add(BitcastSingle(localAxisEnd.Y));
+        drawData.Add(BitcastSingle(localSecondEnd.X));
+        drawData.Add(BitcastSingle(localSecondEnd.Y));
     }
 
     /// <summary>
@@ -4002,7 +3966,6 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     private static void AppendSweepGradientData(
         SweepGradientBrush brush,
-        Vector2 scale,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,
         ref int gradientRowCount)
@@ -4018,11 +3981,9 @@ internal static class WebGPUSceneEncoder
             t1 = t0 + 1F;
         }
 
-        PointF center = new(brush.Center.X * scale.X, brush.Center.Y * scale.Y);
-
         drawData.Add(indexMode);
-        drawData.Add(BitcastSingle(center.X));
-        drawData.Add(BitcastSingle(center.Y));
+        drawData.Add(BitcastSingle(brush.Center.X));
+        drawData.Add(BitcastSingle(brush.Center.Y));
         drawData.Add(BitcastSingle(t0));
         drawData.Add(BitcastSingle(t1));
     }
@@ -4032,7 +3993,6 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     private static void AppendPathGradientData(
         PathGradientBrush brush,
-        Matrix4x4 transform,
         Rectangle rootTargetBounds,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> pathGradientData)
@@ -4044,7 +4004,7 @@ internal static class WebGPUSceneEncoder
 
         for (int i = 0; i < edgeCount; i++)
         {
-            PointF point = TransformPathGradientPoint(points[i], transform, rootTargetBounds);
+            PointF point = TranslatePathGradientPoint(points[i], rootTargetBounds);
             center = new PointF(center.X + point.X, center.Y + point.Y);
         }
 
@@ -4053,7 +4013,7 @@ internal static class WebGPUSceneEncoder
         float maxDistance = 0F;
         for (int i = 0; i < edgeCount; i++)
         {
-            PointF point = TransformPathGradientPoint(points[i], transform, rootTargetBounds);
+            PointF point = TranslatePathGradientPoint(points[i], rootTargetBounds);
             maxDistance = MathF.Max(maxDistance, Vector2.Distance(point, center));
         }
 
@@ -4067,8 +4027,8 @@ internal static class WebGPUSceneEncoder
         for (int i = 0; i < edgeCount; i++)
         {
             int payloadOffset = PathGradientHeaderWordCount + (i * PathGradientEdgeWordCount);
-            PointF start = TransformPathGradientPoint(points[i], transform, rootTargetBounds);
-            PointF end = TransformPathGradientPoint(points[(i + 1) % edgeCount], transform, rootTargetBounds);
+            PointF start = TranslatePathGradientPoint(points[i], rootTargetBounds);
+            PointF end = TranslatePathGradientPoint(points[(i + 1) % edgeCount], rootTargetBounds);
 
             payload[payloadOffset] = BitcastSingle(start.X);
             payload[payloadOffset + 1] = BitcastSingle(start.Y);
@@ -4089,15 +4049,13 @@ internal static class WebGPUSceneEncoder
     /// Transforms one path-gradient point into the target-local coordinates consumed by the fine pass.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static PointF TransformPathGradientPoint(
+    private static PointF TranslatePathGradientPoint(
         PointF point,
-        Matrix4x4 transform,
         Rectangle rootTargetBounds)
     {
-        PointF transformed = transform.IsIdentity ? point : PointF.Transform(point, transform);
         return new PointF(
-            transformed.X - rootTargetBounds.X,
-            transformed.Y - rootTargetBounds.Y);
+            point.X - rootTargetBounds.X,
+            point.Y - rootTargetBounds.Y);
     }
 
     /// <summary>

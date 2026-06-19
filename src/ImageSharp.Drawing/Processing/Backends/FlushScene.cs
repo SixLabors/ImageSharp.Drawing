@@ -1010,11 +1010,9 @@ internal sealed partial class FlushScene : IDisposable
         out PreparedFillItem prepared)
     {
         Matrix4x4 transform = drawingOptions.Transform;
-        bool hasTransform = !transform.IsIdentity;
         Vector2 scale = ExtractScale(transform);
         Matrix4x4 residual = ComputeResidual(scale, transform);
         LinearGeometry geometry = path.ToLinearGeometry(scale);
-        sourceBrush = hasTransform ? sourceBrush.Transform(transform) : sourceBrush;
         RectangleF geometryBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
 
         if (!TryResolveRasterization(
@@ -1056,14 +1054,13 @@ internal sealed partial class FlushScene : IDisposable
     {
         IPath path = command.SourcePath;
         Matrix4x4 transform = command.Transform;
-        bool hasTransform = !transform.IsIdentity;
         Vector2 scale = ExtractScale(transform);
         Matrix4x4 residual = ComputeResidual(scale, transform);
         LinearGeometry geometry = path.ToLinearGeometry(scale);
         float widthScale = GetTransformWidthScale(transform);
         RectangleF geometryBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
         RectangleF strokeBounds = GetStrokeBounds(geometryBounds, command.Pen, widthScale);
-        Brush sourceBrush = hasTransform ? command.Brush.Transform(transform) : command.Brush;
+        Brush sourceBrush = command.Brush;
 
         if (!TryResolveRasterization(
                 sourceBrush,
@@ -1114,7 +1111,7 @@ internal sealed partial class FlushScene : IDisposable
             MathF.Max(start.X, end.X),
             MathF.Max(start.Y, end.Y));
         RectangleF bounds = GetStrokeBounds(segmentBounds, command.Pen, widthScale);
-        Brush sourceBrush = hasTransform ? command.Brush.Transform(transform) : command.Brush;
+        Brush sourceBrush = command.Brush;
 
         if (!TryResolveRasterization(
                 sourceBrush,
@@ -1156,14 +1153,13 @@ internal sealed partial class FlushScene : IDisposable
         out PreparedStrokeItem prepared)
     {
         Matrix4x4 transform = command.Transform;
-        bool hasTransform = !transform.IsIdentity;
         Vector2 scale = ExtractScale(transform);
         Matrix4x4 residual = ComputeResidual(scale, transform);
         LinearGeometry geometry = LinearGeometry.CreateOpenPolyline(command.SourcePoints, scale);
         float widthScale = GetTransformWidthScale(transform);
         RectangleF geometryBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
         RectangleF strokeBounds = GetStrokeBounds(geometryBounds, command.Pen, widthScale);
-        Brush sourceBrush = hasTransform ? command.Brush.Transform(transform) : command.Brush;
+        Brush sourceBrush = command.Brush;
 
         if (!TryResolveRasterization(
                 sourceBrush,

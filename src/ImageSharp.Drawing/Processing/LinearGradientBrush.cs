@@ -65,7 +65,7 @@ public sealed class LinearGradientBrush : GradientBrush
     public PointF EndPoint { get; }
 
     /// <inheritdoc/>
-    public override Brush Transform(Matrix4x4 matrix)
+    public override Brush Transform(Matrix4x4 matrix, Rectangle sourceInterest, Rectangle preparedInterest)
         => new LinearGradientBrush(
             PointF.Transform(this.StartPoint, matrix),
             PointF.Transform(this.EndPoint, matrix),

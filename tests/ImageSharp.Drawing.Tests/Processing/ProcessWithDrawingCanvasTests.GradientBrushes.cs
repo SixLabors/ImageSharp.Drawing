@@ -113,7 +113,7 @@ public partial class ProcessWithDrawingCanvasTests
 
         Matrix4x4 matrix = Matrix4x4.CreateTranslation(50F, 30F, 0F);
 
-        SweepGradientBrush transformed = Assert.IsType<SweepGradientBrush>(brush.Transform(matrix));
+        SweepGradientBrush transformed = Assert.IsType<SweepGradientBrush>(brush.Transform(matrix, default, default));
 
         Assert.Equal(150F, transformed.Center.X, 0.01F);
         Assert.Equal(130F, transformed.Center.Y, 0.01F);
@@ -135,7 +135,7 @@ public partial class ProcessWithDrawingCanvasTests
         // which corresponds to counter-clockwise on the design grid.
         Matrix4x4 matrix = Matrix4x4.CreateRotationZ(MathF.PI / 2F);
 
-        SweepGradientBrush transformed = Assert.IsType<SweepGradientBrush>(brush.Transform(matrix));
+        SweepGradientBrush transformed = Assert.IsType<SweepGradientBrush>(brush.Transform(matrix, default, default));
 
         // The 90-degree sweep should be preserved.
         float sweep = transformed.EndAngleDegrees - transformed.StartAngleDegrees;
@@ -156,7 +156,7 @@ public partial class ProcessWithDrawingCanvasTests
         // Reflect across Y axis (negative determinant).
         Matrix4x4 matrix = Matrix4x4.CreateScale(-1F, 1F, 1F);
 
-        SweepGradientBrush transformed = Assert.IsType<SweepGradientBrush>(brush.Transform(matrix));
+        SweepGradientBrush transformed = Assert.IsType<SweepGradientBrush>(brush.Transform(matrix, default, default));
 
         // Reflection should flip the sweep direction: positive 90 becomes negative 90.
         float sweep = transformed.EndAngleDegrees - transformed.StartAngleDegrees;
@@ -179,7 +179,7 @@ public partial class ProcessWithDrawingCanvasTests
             Matrix4x4.CreateScale(2F)
             * Matrix4x4.CreateTranslation(10F, 20F, 0F);
 
-        SweepGradientBrush transformed = Assert.IsType<SweepGradientBrush>(brush.Transform(matrix));
+        SweepGradientBrush transformed = Assert.IsType<SweepGradientBrush>(brush.Transform(matrix, default, default));
 
         // Full sweep should remain a full 360 degrees.
         float sweep = MathF.Abs(transformed.EndAngleDegrees - transformed.StartAngleDegrees);
@@ -202,7 +202,7 @@ public partial class ProcessWithDrawingCanvasTests
             Matrix4x4.CreateScale(2F, 4F, 1F)
             * Matrix4x4.CreateTranslation(5F, 7F, 0F);
 
-        RadialGradientBrush transformed = Assert.IsType<RadialGradientBrush>(brush.Transform(matrix));
+        RadialGradientBrush transformed = Assert.IsType<RadialGradientBrush>(brush.Transform(matrix, default, default));
 
         Assert.Equal(PointF.Transform(brush.Center0, matrix), transformed.Center0);
         Assert.Equal(PointF.Transform(brush.Center1.Value, matrix), transformed.Center1.Value);

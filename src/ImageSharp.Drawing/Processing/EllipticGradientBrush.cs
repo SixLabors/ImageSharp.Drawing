@@ -52,7 +52,7 @@ public sealed class EllipticGradientBrush : GradientBrush
     public float AxisRatio { get; }
 
     /// <inheritdoc/>
-    public override Brush Transform(Matrix4x4 matrix)
+    public override Brush Transform(Matrix4x4 matrix, Rectangle sourceInterest, Rectangle preparedInterest)
     {
         PointF tc = PointF.Transform(this.Center, matrix);
         PointF tRef = PointF.Transform(this.ReferenceAxisEnd, matrix);

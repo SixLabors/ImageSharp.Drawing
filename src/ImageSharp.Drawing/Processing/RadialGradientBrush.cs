@@ -84,7 +84,7 @@ public sealed class RadialGradientBrush : GradientBrush
     public bool IsTwoCircle => this.Center1.HasValue && this.Radius1.HasValue;
 
     /// <inheritdoc/>
-    public override Brush Transform(Matrix4x4 matrix)
+    public override Brush Transform(Matrix4x4 matrix, Rectangle sourceInterest, Rectangle preparedInterest)
     {
         PointF tc0 = PointF.Transform(this.Center0, matrix);
         float scale = MatrixUtilities.GetAverageScale(in matrix);

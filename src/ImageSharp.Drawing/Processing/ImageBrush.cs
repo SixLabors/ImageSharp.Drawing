@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -98,6 +99,24 @@ public sealed class ImageBrush<TPixel> : ImageBrush
     /// Gets the typed source image used by this brush.
     /// </summary>
     public Image<TPixel> SourceImage { get; }
+
+    /// <inheritdoc />
+    public override Brush Transform(Matrix4x4 matrix, Rectangle sourceInterest, Rectangle preparedInterest)
+    {
+        int offsetX = sourceInterest.X - preparedInterest.X;
+        int offsetY = sourceInterest.Y - preparedInterest.Y;
+        if (offsetX == 0 && offsetY == 0)
+        {
+            return this;
+        }
+
+        return new ImageBrush<TPixel>(
+            this.SourceImage,
+            this.SourceRegion,
+            new Point(this.Offset.X + offsetX, this.Offset.Y + offsetY),
+            this.WrapX,
+            this.WrapY);
+    }
 }
 
 /// <summary>

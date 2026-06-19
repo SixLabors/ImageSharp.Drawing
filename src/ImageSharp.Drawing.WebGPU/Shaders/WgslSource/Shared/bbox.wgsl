@@ -2,7 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 // The annotated bounding box for a path. It has been transformed,
-// but contains a link to the active transform, mostly for gradients.
+// but keeps the transform index for stages that still need geometry-space metadata.
 // Coordinates are integer pixels (for the convenience of atomic update)
 // but will probably become fixed-point fractions for rectangles.
 //

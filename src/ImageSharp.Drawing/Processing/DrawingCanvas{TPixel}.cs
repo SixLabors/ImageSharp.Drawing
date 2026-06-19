@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
@@ -209,7 +210,11 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             ? current.ClipIntersectionRule
             : options.ShapeOptions.IntersectionRule;
 
-        DrawingCanvasState state = new(options, clips, clipIntersectionRule, current.TargetBounds, current.DestinationOffset);
+        DrawingCanvasState state = new(options, clips, clipIntersectionRule, current.TargetBounds, current.DestinationOffset)
+        {
+            IsLayer = current.IsLayer,
+            Layer = current.Layer,
+        };
 
         _ = this.savedStates.Pop();
         this.savedStates.Push(state);
@@ -225,14 +230,56 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         Guard.MustBeGreaterThan(bounds.Height, 0, nameof(bounds));
 
         DrawingCanvasState currentState = this.ResolveState();
-        Rectangle absoluteLayerBounds = ResolveLayerBounds(currentState, bounds);
+        return this.SaveLayerCore(layerOptions, bounds, currentState.Options, currentState.ClipPaths, currentState.ClipIntersectionRule);
+    }
+
+    /// <inheritdoc />
+    public override int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds, DrawingOptions options, params IPath[] clipPaths)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(layerOptions, nameof(layerOptions));
+        Guard.NotNull(options, nameof(options));
+        Guard.NotNull(clipPaths, nameof(clipPaths));
+        Guard.MustBeGreaterThan(bounds.Width, 0, nameof(bounds));
+        Guard.MustBeGreaterThan(bounds.Height, 0, nameof(bounds));
+
+        DrawingCanvasState currentState = this.ResolveState();
+        IReadOnlyList<IPath> clips = clipPaths.Length == 0
+            ? currentState.ClipPaths
+            : TransformClipPaths(clipPaths, options.Transform);
+
+        IntersectionRule clipIntersectionRule = clipPaths.Length == 0
+            ? currentState.ClipIntersectionRule
+            : options.ShapeOptions.IntersectionRule;
+
+        return this.SaveLayerCore(layerOptions, bounds, options, clips, clipIntersectionRule);
+    }
+
+    /// <summary>
+    /// Pushes a layer state with already-resolved drawing options and clip paths.
+    /// </summary>
+    /// <param name="layerOptions">Graphics options used when compositing the closed layer.</param>
+    /// <param name="bounds">Layer bounds in local canvas coordinates.</param>
+    /// <param name="options">Drawing options for commands recorded into the layer.</param>
+    /// <param name="clipPaths">Clip paths for commands recorded into the layer.</param>
+    /// <param name="clipIntersectionRule">The fill rule used to interpret the clip paths.</param>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    private int SaveLayerCore(
+        GraphicsOptions layerOptions,
+        Rectangle bounds,
+        DrawingOptions options,
+        IReadOnlyList<IPath> clipPaths,
+        IntersectionRule clipIntersectionRule)
+    {
+        DrawingCanvasState currentState = this.ResolveState();
+        Rectangle absoluteLayerBounds = ResolveLayerBounds(options.Transform, currentState.TargetBounds, currentState.DestinationOffset, bounds);
         DrawingCanvasLayer layer = new(layerOptions);
 
         // Keep layer boundaries in the shared command stream so the backend can lower them inline.
         this.batcher.AddComposition(CompositionCommand.CreateBeginLayer(absoluteLayerBounds, layer));
 
         // A bounded layer clips and allocates the isolated target, but it does not shift the canvas coordinate system.
-        DrawingCanvasState layerState = new(currentState.Options, currentState.ClipPaths, currentState.ClipIntersectionRule, absoluteLayerBounds, currentState.DestinationOffset)
+        DrawingCanvasState layerState = new(options, clipPaths, clipIntersectionRule, absoluteLayerBounds, currentState.DestinationOffset)
         {
             IsLayer = true,
             Layer = layer,
@@ -309,6 +356,10 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
     /// <inheritdoc />
     public override void Clip(params IPath[] clipPaths)
+        => this.Clip(ClipOperation.Intersection, clipPaths);
+
+    /// <inheritdoc />
+    public override void Clip(ClipOperation operation, params IPath[] clipPaths)
     {
         this.EnsureNotDisposed();
         if (clipPaths is null || clipPaths.Length == 0)
@@ -324,57 +375,93 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         IPath[] transformed = TransformClipPaths(clipPaths, transform);
 
         // The current shape rule belongs to the incoming clip geometry, not to future draw
-        // subjects. Keeping it beside the stored clip lets non-zero text, even-odd shapes,
-        // and region clips all be interpreted independently when they are combined later.
+        // subjects. Keep it separate from the stored clip rule because each side of a later
+        // boolean operation can come from a different canvas state.
         IntersectionRule incomingRule = state.Options.ShapeOptions.IntersectionRule;
-        IPath incoming = transformed[0];
-        if (transformed.Length > 1)
+
+        IReadOnlyList<IPath> combined;
+        IntersectionRule combinedRule;
+        if (operation == ClipOperation.Intersection && state.ClipPaths.Count == 0)
         {
-            // Multiple paths in a single Clip call form one incoming region before that region
-            // narrows the existing clip.
-            IPath[] rest = new IPath[transformed.Length - 1];
-            for (int i = 1; i < transformed.Length; i++)
+            // With no stored clip, an intersection clip becomes the stored clip. If there is
+            // only one incoming path, keep it as-is so region paths retain their exact metadata.
+            // Multiple paths in one Clip call are one incoming clip region, so they must be
+            // unioned before storing; otherwise later code would have to remember that this list
+            // is one unioned clip operand rather than several sequential clips.
+            if (transformed.Length == 1)
             {
-                rest[i - 1] = transformed[i];
+                combined = transformed;
+            }
+            else
+            {
+                IPath[] rest = new IPath[transformed.Length - 1];
+                for (int i = 1; i < transformed.Length; i++)
+                {
+                    rest[i - 1] = transformed[i];
+                }
+
+                ShapeOptions unionOptions = new()
+                {
+                    BooleanOperation = BooleanOperation.Union,
+                    IntersectionRule = incomingRule
+                };
+
+                combined = [ClippedShapeGenerator.GenerateClippedShapes(unionOptions, transformed[0], rest)];
             }
 
-            ShapeOptions unionOptions = new()
-            {
-                BooleanOperation = BooleanOperation.Union,
-                IntersectionRule = incomingRule
-            };
-
-            incoming = ClippedShapeGenerator.GenerateClippedShapes(unionOptions, transformed[0], rest);
+            combinedRule = incomingRule;
         }
-
-        // Clipping only ever narrows. The stored clip can have a different rule from the incoming
-        // clip, so use the overload that supplies both subject and clip fill rules explicitly.
-        IReadOnlyList<IPath> combined;
-        IntersectionRule combinedRule = incomingRule;
-        if (state.ClipPaths.Count == 0)
+        else if (operation == ClipOperation.Intersection
+            && transformed.Length == 1
+            && TryIntersectRegionClips(state.ClipPaths, transformed[0], out IPath regionClip))
         {
-            combined = [incoming];
-        }
-        else if (TryIntersectRegionClips(state.ClipPaths, incoming, out IPath regionClip))
-        {
+            // Two integer region clips can be intersected exactly as rect sets. This preserves
+            // SkRegion-style hard region semantics and avoids lowering a simple dirty-region
+            // clip through general polygon clipping.
             combined = [regionClip];
+            combinedRule = IntersectionRule.NonZero;
         }
         else
         {
-            IPath existing = state.ClipPaths.Count == 1
-                ? state.ClipPaths[0]
-                : new ComplexPolygon(state.ClipPaths);
+            // Every remaining case is a real boolean operation against the existing clip:
+            //
+            // - Intersection with an existing clip:
+            //   existing ∩ union(incoming paths)
+            //
+            // - Difference with or without an existing clip:
+            //   existing - union(incoming paths)
+            //
+            // ClippedShapeGenerator already accepts multiple clip paths and lowers them as the
+            // clip operand, so do not pre-union the incoming paths here. Pre-unioning would make
+            // Difference pay for two polygon clip operations while producing the same result.
+            IPath existing = state.ClipPaths.Count == 0
+                ? new RectanglePolygon(new RectangleF(0, 0, state.TargetBounds.Width, state.TargetBounds.Height))
+                : state.ClipPaths.Count == 1
+                    ? state.ClipPaths[0]
+                    : new ComplexPolygon(state.ClipPaths);
 
-            ShapeOptions intersectOptions = new()
+            // The subject side is either the full target rectangle or the previously stored clip.
+            // That rule is independent from incomingRule, which belongs only to the new clip paths.
+            IntersectionRule operationRule = state.ClipPaths.Count == 0
+                ? IntersectionRule.NonZero
+                : state.ClipIntersectionRule;
+
+            ShapeOptions operationOptions = new()
             {
-                BooleanOperation = BooleanOperation.Intersection,
-                IntersectionRule = state.ClipIntersectionRule
+                BooleanOperation = operation == ClipOperation.Intersection
+                    ? BooleanOperation.Intersection
+                    : BooleanOperation.Difference,
+                IntersectionRule = operationRule
             };
 
             combined =
             [
-                ClippedShapeGenerator.GenerateClippedShapes(intersectOptions, existing, [incoming], incomingRule)
+                ClippedShapeGenerator.GenerateClippedShapes(operationOptions, existing, transformed, incomingRule)
             ];
+
+            combinedRule = operation == ClipOperation.Intersection
+                ? incomingRule
+                : operationRule;
         }
 
         this.savedStates.Push(new DrawingCanvasState(state.Options, combined, combinedRule, state.TargetBounds, state.DestinationOffset)
@@ -1714,15 +1801,16 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     }
 
     /// <summary>
-    /// Resolves local layer bounds to absolute target bounds using the active transform.
+    /// Resolves local layer bounds to absolute target bounds using the supplied transform.
     /// </summary>
-    /// <param name="state">The current drawing state.</param>
+    /// <param name="transform">The transform active for the layer state.</param>
+    /// <param name="targetBounds">The absolute target bounds to clip against.</param>
+    /// <param name="destinationOffset">Absolute destination offset for local canvas coordinates.</param>
     /// <param name="bounds">The layer bounds in local canvas coordinates.</param>
     /// <returns>The absolute layer bounds clipped to the active target.</returns>
-    private static Rectangle ResolveLayerBounds(DrawingCanvasState state, Rectangle bounds)
+    private static Rectangle ResolveLayerBounds(Matrix4x4 transform, Rectangle targetBounds, Point destinationOffset, Rectangle bounds)
     {
         RectangleF transformedBounds = bounds;
-        Matrix4x4 transform = state.Options.Transform;
         if (!transform.IsIdentity)
         {
             transformedBounds = RectangleF.Transform(transformedBounds, transform);
@@ -1730,12 +1818,12 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         Rectangle localLayerBounds = ToConservativeBounds(transformedBounds);
         Rectangle absoluteLayerBounds = new(
-            state.DestinationOffset.X + localLayerBounds.X,
-            state.DestinationOffset.Y + localLayerBounds.Y,
+            destinationOffset.X + localLayerBounds.X,
+            destinationOffset.Y + localLayerBounds.Y,
             localLayerBounds.Width,
             localLayerBounds.Height);
 
-        return Rectangle.Intersect(state.TargetBounds, absoluteLayerBounds);
+        return Rectangle.Intersect(targetBounds, absoluteLayerBounds);
     }
 
     /// <summary>
@@ -1875,9 +1963,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         IPath[] transformed = new IPath[clipPaths.Length];
         for (int i = 0; i < transformed.Length; i++)
         {
-            // Skia's clipRegion is already in canvas/device region coordinates. Transforming it
-            // here turns dirty regions into ordinary path geometry and loses exact region ops.
-            transformed[i] = clipPaths[i] is IRegionPath ? clipPaths[i] : clipPaths[i].Transform(transform);
+            transformed[i] = clipPaths[i].Transform(transform);
         }
 
         return transformed;
@@ -1898,78 +1984,41 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             return false;
         }
 
-        if (!TryGetRegionClip(existingPaths[0], out IReadOnlyList<Rectangle>? existingRectangles, out Rectangle existingRectangle)
-            || !TryGetRegionClip(incoming, out IReadOnlyList<Rectangle>? incomingRectangles, out Rectangle incomingRectangle))
+        if (!TryGetRegionClip(existingPaths[0], out Region? existingRegion)
+            || !TryGetRegionClip(incoming, out Region? incomingRegion))
         {
             return false;
         }
 
-        Region region = new();
-        if (existingRectangles is null)
-        {
-            AddRegionIntersections(region, existingRectangle, incomingRectangles, incomingRectangle);
-        }
-        else
-        {
-            for (int i = 0; i < existingRectangles.Count; i++)
-            {
-                AddRegionIntersections(region, existingRectangles[i], incomingRectangles, incomingRectangle);
-            }
-        }
-
-        clip = region.ToPath();
+        _ = existingRegion.Intersect(incomingRegion);
+        clip = existingRegion.ToPath();
         return true;
     }
 
     /// <summary>
-    /// Adds the rectangle intersections that form one region clip intersection.
-    /// </summary>
-    /// <param name="region">The region receiving intersected rectangles.</param>
-    /// <param name="existingRectangle">The existing clip rectangle.</param>
-    /// <param name="incomingRectangles">The incoming clip rectangles, or <see langword="null"/> when there is one rectangle.</param>
-    /// <param name="incomingRectangle">The incoming clip rectangle when <paramref name="incomingRectangles"/> is <see langword="null"/>.</param>
-    private static void AddRegionIntersections(
-        Region region,
-        Rectangle existingRectangle,
-        IReadOnlyList<Rectangle>? incomingRectangles,
-        Rectangle incomingRectangle)
-    {
-        if (incomingRectangles is null)
-        {
-            region.Add(Rectangle.Intersect(existingRectangle, incomingRectangle));
-            return;
-        }
-
-        for (int i = 0; i < incomingRectangles.Count; i++)
-        {
-            region.Add(Rectangle.Intersect(existingRectangle, incomingRectangles[i]));
-        }
-    }
-
-    /// <summary>
-    /// Gets the integer rectangles represented by a region-compatible clip path.
+    /// Gets the integer region represented by a region-compatible clip path.
     /// </summary>
     /// <param name="path">The clip path.</param>
-    /// <param name="rectangles">The region rectangles, or <see langword="null"/> when there is one rectangle.</param>
-    /// <param name="rectangle">The single rectangle when <paramref name="rectangles"/> is <see langword="null"/>.</param>
+    /// <param name="region">The region represented by the path.</param>
     /// <returns><see langword="true"/> when the path can be treated as a region clip; otherwise, <see langword="false"/>.</returns>
-    private static bool TryGetRegionClip(IPath path, out IReadOnlyList<Rectangle>? rectangles, out Rectangle rectangle)
+    private static bool TryGetRegionClip(IPath path, [NotNullWhen(true)] out Region? region)
     {
         if (path is IRegionPath regionPath)
         {
-            rectangles = regionPath.Rectangles;
-            rectangle = default;
+            // Region.ToPath exports a boundary IPath but keeps exact rect-set metadata while the
+            // path remains in integer region space. Use that metadata here so clipping two region
+            // clips stays a region operation instead of lowering through polygon clipping.
+            region = new Region(regionPath.Rectangles);
             return true;
         }
 
-        if (TryGetIntegerRectangle(path, out rectangle))
+        if (TryGetIntegerRectangle(path, out Rectangle rectangle))
         {
-            rectangles = null;
+            region = new Region(rectangle);
             return true;
         }
 
-        rectangles = null;
-        rectangle = default;
+        region = null;
         return false;
     }
 

@@ -43,6 +43,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     // remain in the same command buffer until replay consumes it.
     private bool hasClips;
     private bool hasDashes;
+    private bool hasBrushTransforms;
 
     // Timeline entries keep compact indexes into the command and retained
     // scene buffers while preserving the order recorded by the canvas.
@@ -90,6 +91,8 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         }
 
         this.hasClips |= composition.ClipPaths is not null;
+        this.hasBrushTransforms |= composition.Kind is CompositionCommandKind.FillLayer
+            && composition.Transform != Matrix4x4.Identity;
     }
 
     /// <summary>
@@ -102,6 +105,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         this.commands[this.commandCount++] = new StrokePathCompositionSceneCommand(command);
         this.hasClips |= command.ClipPaths is not null;
         this.hasDashes |= command.Pen.StrokePattern.Length >= 2;
+        this.hasBrushTransforms |= command.Transform != Matrix4x4.Identity;
     }
 
     /// <summary>
@@ -112,6 +116,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     {
         this.EnsureCommandCapacity(this.commandCount + 1);
         this.commands[this.commandCount++] = new LineSegmentCompositionSceneCommand(command);
+        this.hasBrushTransforms |= command.Transform != Matrix4x4.Identity;
     }
 
     /// <summary>
@@ -122,6 +127,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     {
         this.EnsureCommandCapacity(this.commandCount + 1);
         this.commands[this.commandCount++] = new PolylineCompositionSceneCommand(command);
+        this.hasBrushTransforms |= command.Transform != Matrix4x4.Identity;
     }
 
     /// <summary>
@@ -265,6 +271,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         this.insertedSceneCount = 0;
         this.hasClips = false;
         this.hasDashes = false;
+        this.hasBrushTransforms = false;
     }
 
     /// <summary>
@@ -329,7 +336,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 
     private void PrepareCommands()
     {
-        if (!this.hasClips && !this.hasDashes)
+        if (!this.hasClips && !this.hasDashes && !this.hasBrushTransforms)
         {
             return;
         }
@@ -347,6 +354,9 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                 PrepareCommand(ref this.commands[i]);
             }
 
+            this.hasClips = false;
+            this.hasDashes = false;
+            this.hasBrushTransforms = false;
             return;
         }
 
@@ -366,6 +376,10 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                     PrepareCommand(ref this.commands[i]);
                 }
             });
+
+        this.hasClips = false;
+        this.hasDashes = false;
+        this.hasBrushTransforms = false;
     }
 
     private static void PrepareCommand(ref CompositionSceneCommand command)
@@ -401,6 +415,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                     composition.RasterizerOptions,
                     intersectionRule,
                     interest);
+
                 tracePath = TracePath;
                 if (tracePath is not null)
                 {
@@ -409,22 +424,57 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 
                 DrawingOptions preparedOptions = WithIdentityTransformAndIntersectionRule(sourceOptions, intersectionRule);
 
-                pathCommand.Command = composition.Kind == CompositionCommandKind.Apply
-                    ? CompositionCommand.CreatePreparedApply(
+                if (composition.Kind == CompositionCommandKind.Apply)
+                {
+                    pathCommand.Command = CompositionCommand.CreatePreparedApply(
                         composition.ApplyBarrier,
                         path,
                         preparedOptions,
-                        in rasterizerOptions)
-                    : CompositionCommand.Create(
-                        path,
-                        composition.Brush.Transform(sourceOptions.Transform),
-                        preparedOptions,
-                        in rasterizerOptions,
-                        composition.TargetBounds,
-                        composition.DestinationOffset,
-                        null,
-                        composition.ClipIntersectionRule,
-                        composition.OwnerLayer);
+                        in rasterizerOptions);
+                    return;
+                }
+
+                // The path has already been transformed and clipped, and the rebuilt command
+                // clears its transform below. Transform the brush at the same boundary; both
+                // interests are supplied so bounds-anchored brushes keep their original sampling
+                // origin after clipping narrows the renderer bounds.
+                Brush brush = composition.Brush.Transform(
+                    sourceOptions.Transform,
+                    composition.RasterizerOptions.Interest,
+                    interest);
+
+                pathCommand.Command = CompositionCommand.Create(
+                    path,
+                    brush,
+                    preparedOptions,
+                    in rasterizerOptions,
+                    composition.TargetBounds,
+                    composition.DestinationOffset,
+                    null,
+                    composition.ClipIntersectionRule,
+                    composition.OwnerLayer);
+            }
+            else if (composition.Kind == CompositionCommandKind.FillLayer &&
+                composition.Transform != Matrix4x4.Identity)
+            {
+                // The batcher is the brush normalization boundary. Backends still use
+                // DrawingOptions.Transform for geometry, but brush coordinates are prepared here
+                // so CPU and WebGPU do not each bake the transform in their own way.
+                Brush brush = composition.Brush.Transform(
+                    composition.Transform,
+                    composition.RasterizerOptions.Interest,
+                    composition.RasterizerOptions.Interest);
+
+                pathCommand.Command = CompositionCommand.Create(
+                    composition.SourcePath,
+                    brush,
+                    composition.DrawingOptions,
+                    composition.RasterizerOptions,
+                    composition.TargetBounds,
+                    composition.DestinationOffset,
+                    null,
+                    composition.ClipIntersectionRule,
+                    composition.OwnerLayer);
             }
         }
         else if (command is StrokePathCompositionSceneCommand strokePathCommand)
@@ -460,6 +510,14 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                     composition.RasterizerOptions,
                     intersectionRule,
                     interest);
+
+                // The stroke has been expanded, transformed, and clipped into a fill path.
+                // Prepare the brush at the same boundary before the command transform is cleared.
+                Brush brush = composition.Brush.Transform(
+                    sourceOptions.Transform,
+                    composition.RasterizerOptions.Interest,
+                    interest);
+
                 tracePath = TracePath;
                 if (tracePath is not null)
                 {
@@ -471,7 +529,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                 command = new PathCompositionSceneCommand(
                     CompositionCommand.Create(
                         path,
-                        composition.Brush.Transform(sourceOptions.Transform),
+                        brush,
                         preparedOptions,
                         in rasterizerOptions,
                         composition.TargetBounds,
@@ -482,13 +540,22 @@ internal sealed class DrawingCanvasBatcher<TPixel>
             }
             else
             {
+                Matrix4x4 transform = composition.Transform;
+                bool hasTransform = transform != Matrix4x4.Identity;
+                Brush brush = hasTransform
+                    ? composition.Brush.Transform(
+                        transform,
+                        composition.RasterizerOptions.Interest,
+                        composition.RasterizerOptions.Interest)
+                    : composition.Brush;
+
                 // We need to dash the path here before sending it to the backend.
                 Pen pen = composition.Pen;
                 if (pen.StrokePattern.Length >= 2)
                 {
                     strokePathCommand.Command = new StrokePathCommand(
                         composition.SourcePath.GenerateDashes(pen.StrokeWidth, pen.StrokePattern.Span, pen.StrokePatternOffset),
-                        composition.Brush,
+                        brush,
                         composition.DrawingOptions,
                         composition.RasterizerOptions,
                         composition.TargetBounds,
@@ -499,6 +566,70 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                         composition.IsInsideLayer,
                         composition.OwnerLayer);
                 }
+                else if (hasTransform)
+                {
+                    strokePathCommand.Command = new StrokePathCommand(
+                        composition.SourcePath,
+                        brush,
+                        composition.DrawingOptions,
+                        composition.RasterizerOptions,
+                        composition.TargetBounds,
+                        composition.DestinationOffset,
+                        composition.Pen,
+                        null,
+                        composition.ClipIntersectionRule,
+                        composition.IsInsideLayer,
+                        composition.OwnerLayer);
+                }
+            }
+        }
+        else if (command is LineSegmentCompositionSceneCommand lineSegmentCommand)
+        {
+            StrokeLineSegmentCommand composition = lineSegmentCommand.Command;
+            Matrix4x4 transform = composition.Transform;
+            if (transform != Matrix4x4.Identity)
+            {
+                Brush brush = composition.Brush.Transform(
+                    transform,
+                    composition.RasterizerOptions.Interest,
+                    composition.RasterizerOptions.Interest);
+
+                command = new LineSegmentCompositionSceneCommand(
+                    new StrokeLineSegmentCommand(
+                        composition.SourceStart,
+                        composition.SourceEnd,
+                        brush,
+                        composition.DrawingOptions,
+                        composition.RasterizerOptions,
+                        composition.TargetBounds,
+                        composition.DestinationOffset,
+                        composition.Pen,
+                        composition.IsInsideLayer,
+                        composition.OwnerLayer));
+            }
+        }
+        else if (command is PolylineCompositionSceneCommand polylineCommand)
+        {
+            StrokePolylineCommand composition = polylineCommand.Command;
+            Matrix4x4 transform = composition.Transform;
+            if (transform != Matrix4x4.Identity)
+            {
+                Brush brush = composition.Brush.Transform(
+                    transform,
+                    composition.RasterizerOptions.Interest,
+                    composition.RasterizerOptions.Interest);
+
+                command = new PolylineCompositionSceneCommand(
+                    new StrokePolylineCommand(
+                        composition.SourcePoints,
+                        brush,
+                        composition.DrawingOptions,
+                        composition.RasterizerOptions,
+                        composition.TargetBounds,
+                        composition.DestinationOffset,
+                        composition.Pen,
+                        composition.IsInsideLayer,
+                        composition.OwnerLayer));
             }
         }
     }

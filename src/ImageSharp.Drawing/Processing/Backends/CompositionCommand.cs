@@ -365,11 +365,14 @@ public readonly struct CompositionCommand
         in RasterizerOptions rasterizerOptions,
         IReadOnlyList<IPath>? clipPaths,
         IntersectionRule clipIntersectionRule)
-        => new(
+    {
+        DrawingOptions applyOptions = drawingOptions.CloneForClearOperation();
+
+        return new CompositionCommand(
             CompositionCommandKind.Apply,
             path,
             null,
-            drawingOptions,
+            applyOptions,
             barrier.OwnerLayer,
             in rasterizerOptions,
             barrier.TargetBounds,
@@ -379,6 +382,7 @@ public readonly struct CompositionCommand
             clipIntersectionRule,
             barrier.IsInsideLayer,
             barrier);
+    }
 
     private static RasterizerOptions CreateApplyRasterizerOptions(
         IPath path,

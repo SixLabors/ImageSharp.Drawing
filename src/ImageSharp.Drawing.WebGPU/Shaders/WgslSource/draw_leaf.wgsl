@@ -118,12 +118,6 @@ fn main(
         {
             let bbox = path_bbox[m.path_ix];
             let draw_flags = bbox.draw_flags;
-            var transform = transform_identity();
-            if tag_word == DRAWTAG_FILL_LIN_GRADIENT || tag_word == DRAWTAG_FILL_RAD_GRADIENT ||
-                tag_word == DRAWTAG_FILL_ELLIPTIC_GRADIENT || tag_word == DRAWTAG_FILL_SWEEP_GRADIENT
-            {
-                transform = read_transform(config.transform_base, bbox.trans_ix);
-            }
             switch tag_word {
                 case DRAWTAG_FILL_COLOR: {
                     info[di] = draw_flags;
@@ -136,10 +130,8 @@ fn main(
                 }
                 case DRAWTAG_FILL_LIN_GRADIENT: {
                     info[di] = draw_flags;
-                    var p0 = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
-                    var p1 = bitcast<vec2<f32>>(vec2(scene[dd + 3u], scene[dd + 4u]));
-                    p0 = transform_apply(transform, p0);
-                    p1 = transform_apply(transform, p1);
+                    let p0 = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
+                    let p1 = bitcast<vec2<f32>>(vec2(scene[dd + 3u], scene[dd + 4u]));
                     let dxy = p1 - p0;
                     let scale = 1.0 / dot(dxy, dxy);
                     let line_xy = dxy * scale;
@@ -158,7 +150,7 @@ fn main(
                     var p1 = bitcast<vec2<f32>>(vec2(scene[dd + 3u], scene[dd + 4u]));
                     var r0 = bitcast<f32>(scene[dd + 5u]);
                     var r1 = bitcast<f32>(scene[dd + 6u]);
-                    let user_to_gradient = transform_inverse(transform);
+                    let user_to_gradient = transform_identity();
                     var xform = transform_identity();
                     var focal_x = 0.0;
                     var radius = 0.0;
@@ -226,12 +218,9 @@ fn main(
                 }
                 case DRAWTAG_FILL_ELLIPTIC_GRADIENT: {
                     info[di] = draw_flags;
-                    var center = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
-                    var axis_end = bitcast<vec2<f32>>(vec2(scene[dd + 3u], scene[dd + 4u]));
-                    var second_end = bitcast<vec2<f32>>(vec2(scene[dd + 5u], scene[dd + 6u]));
-                    center = transform_apply(transform, center);
-                    axis_end = transform_apply(transform, axis_end);
-                    second_end = transform_apply(transform, second_end);
+                    let center = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
+                    let axis_end = bitcast<vec2<f32>>(vec2(scene[dd + 3u], scene[dd + 4u]));
+                    let second_end = bitcast<vec2<f32>>(vec2(scene[dd + 5u], scene[dd + 6u]));
                     let dxy = axis_end - center;
                     let axis = length(dxy);
                     let inv_axis = 1.0 / axis;
@@ -257,14 +246,12 @@ fn main(
                 case DRAWTAG_FILL_SWEEP_GRADIENT: {
                     info[di] = draw_flags;
                     let p0 = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
-                    let xform = transform_mul(transform, Transform(vec4(1.0, 0.0, 0.0, 1.0), p0, vec3(0.0, 0.0, 1.0)));
-                    let inv = transform_inverse(xform);
-                    info[di + 1u] = bitcast<u32>(inv.matrx.x);
-                    info[di + 2u] = bitcast<u32>(inv.matrx.y);
-                    info[di + 3u] = bitcast<u32>(inv.matrx.z);
-                    info[di + 4u] = bitcast<u32>(inv.matrx.w);
-                    info[di + 5u] = bitcast<u32>(inv.translate.x);
-                    info[di + 6u] = bitcast<u32>(inv.translate.y);
+                    info[di + 1u] = bitcast<u32>(1.0);
+                    info[di + 2u] = bitcast<u32>(0.0);
+                    info[di + 3u] = bitcast<u32>(0.0);
+                    info[di + 4u] = bitcast<u32>(1.0);
+                    info[di + 5u] = bitcast<u32>(-p0.x);
+                    info[di + 6u] = bitcast<u32>(-p0.y);
                     info[di + 7u] = scene[dd + 3u];
                     info[di + 8u] = scene[dd + 4u];
                 }

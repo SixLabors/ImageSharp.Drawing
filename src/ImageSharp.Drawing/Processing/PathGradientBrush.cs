@@ -77,7 +77,7 @@ public sealed class PathGradientBrush : Brush
     public bool HasExplicitCenterColor { get; }
 
     /// <inheritdoc/>
-    public override Brush Transform(Matrix4x4 matrix)
+    public override Brush Transform(Matrix4x4 matrix, Rectangle sourceInterest, Rectangle preparedInterest)
     {
         if (matrix.IsIdentity)
         {

@@ -55,7 +55,7 @@ public sealed class SweepGradientBrush : GradientBrush
     public float EndAngleDegrees { get; }
 
     /// <inheritdoc/>
-    public override Brush Transform(Matrix4x4 matrix)
+    public override Brush Transform(Matrix4x4 matrix, Rectangle sourceInterest, Rectangle preparedInterest)
     {
         PointF tc = PointF.Transform(this.Center, matrix);
 

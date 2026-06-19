@@ -40,8 +40,11 @@ public abstract class Brush : IEquatable<Brush>
     /// Returns a new brush with its defining geometry transformed by the given matrix.
     /// </summary>
     /// <param name="matrix">The transformation matrix to apply.</param>
+    /// <param name="sourceInterest">The command interest before preparation.</param>
+    /// <param name="preparedInterest">The command interest after preparation.</param>
     /// <returns>A transformed brush, or <c>this</c> if the brush has no spatial parameters.</returns>
-    public virtual Brush Transform(Matrix4x4 matrix) => this;
+    public virtual Brush Transform(Matrix4x4 matrix, Rectangle sourceInterest, Rectangle preparedInterest)
+        => this;
 
     /// <inheritdoc/>
     public abstract bool Equals(Brush? other);

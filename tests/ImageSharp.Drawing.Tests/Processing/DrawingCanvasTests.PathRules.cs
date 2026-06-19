@@ -93,6 +93,37 @@ public partial class DrawingCanvasTests
         ImageComparer.TolerantPercentage(0.005F).VerifySimilarity(expected, actual);
     }
 
+    [Theory]
+    [WithBlankImage(96, 64, PixelTypes.Rgba32)]
+    public void Clip_DifferenceWithMultiplePaths_MatchesSequentialDifferenceClips<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> expected = provider.GetImage();
+        using Image<TPixel> actual = provider.GetImage();
+        IPath firstClip = new RectanglePolygon(20, 12, 34, 30);
+        IPath secondClip = new RectanglePolygon(38, 28, 34, 24);
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, expected, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.Clip(ClipOperation.Difference, firstClip);
+            canvas.Clip(ClipOperation.Difference, secondClip);
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(4, 4, 88, 56));
+        }
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, actual, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.Clip(ClipOperation.Difference, firstClip, secondClip);
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(4, 4, 88, 56));
+        }
+
+        expected.DebugSave(provider, "expected-sequential-difference-clips", appendSourceFileOrDescription: false);
+        actual.DebugSave(provider, "actual-multiple-difference-clips", appendSourceFileOrDescription: false);
+
+        ImageComparer.Exact.VerifySimilarity(expected, actual);
+    }
+
     /// <summary>
     /// Creates a rectangle path that is equivalent to <see cref="RectanglePolygon"/> but intentionally
     /// has five vertices so the rectangle fast path does not recognize it.
