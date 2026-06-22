@@ -312,7 +312,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                         encodedScene,
                         operation.Range,
                         requiredFeature,
-                        dynamicImageTextureView: null,
+                        externalTextureView: null,
                         ref currentBumpSizes,
                         ref resourceArena,
                         ref schedulingArena);
@@ -462,7 +462,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         WebGPUEncodedScene encodedScene,
         WebGPUSceneRange range,
         FeatureName requiredFeature,
-        TextureView* dynamicImageTextureView,
+        TextureView* externalTextureView,
         ref WebGPUSceneBumpSizes currentBumpSizes,
         ref WebGPUSceneResourceArena? resourceArena,
         ref WebGPUSceneSchedulingArena? schedulingArena)
@@ -482,7 +482,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 range,
                 requiredFeature,
                 currentBumpSizes,
-                dynamicImageTextureView,
+                externalTextureView,
                 ref resourceArena);
 
             try

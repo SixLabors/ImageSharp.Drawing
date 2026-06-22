@@ -209,7 +209,7 @@ internal static class WebGPUSceneDispatch
         WebGPUSceneRange range,
         FeatureName requiredFeature,
         WebGPUSceneBumpSizes bumpSizes,
-        TextureView* dynamicImageTextureView,
+        TextureView* externalTextureView,
         ref WebGPUSceneResourceArena? resourceArena)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -250,7 +250,7 @@ internal static class WebGPUSceneDispatch
                 range,
                 config,
                 baseColor,
-                dynamicImageTextureView,
+                externalTextureView,
                 ref resourceArena,
                 out WebGPUSceneResourceSet resources,
                 out error))

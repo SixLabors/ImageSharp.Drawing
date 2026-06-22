@@ -35,7 +35,7 @@ internal static unsafe class WebGPUSceneResources
             scene,
             config,
             baseColor,
-            dynamicImageTextureView: null,
+            externalTextureView: null,
             ref arena,
             out resources,
             out error);
@@ -49,7 +49,7 @@ internal static unsafe class WebGPUSceneResources
         WebGPUSceneRange range,
         WebGPUSceneConfig config,
         uint baseColor,
-        TextureView* dynamicImageTextureView,
+        TextureView* externalTextureView,
         [NotNullWhen(true)] ref WebGPUSceneResourceArena? arena,
         out WebGPUSceneResourceSet resources,
         out string? error)
@@ -60,7 +60,7 @@ internal static unsafe class WebGPUSceneResources
             range,
             config,
             baseColor,
-            dynamicImageTextureView,
+            externalTextureView,
             ref arena,
             out resources,
             out error);
@@ -73,7 +73,7 @@ internal static unsafe class WebGPUSceneResources
         WebGPUEncodedScene scene,
         WebGPUSceneConfig config,
         uint baseColor,
-        TextureView* dynamicImageTextureView,
+        TextureView* externalTextureView,
         [NotNullWhen(true)] ref WebGPUSceneResourceArena? arena,
         out WebGPUSceneResourceSet resources,
         out string? error)
@@ -84,7 +84,7 @@ internal static unsafe class WebGPUSceneResources
             null,
             config,
             baseColor,
-            dynamicImageTextureView,
+            externalTextureView,
             ref arena,
             out resources,
             out error);
@@ -95,7 +95,7 @@ internal static unsafe class WebGPUSceneResources
         WebGPUSceneRange? range,
         WebGPUSceneConfig config,
         uint baseColor,
-        TextureView* dynamicImageTextureView,
+        TextureView* externalTextureView,
         [NotNullWhen(true)] ref WebGPUSceneResourceArena? arena,
         out WebGPUSceneResourceSet resources,
         out string? error)
@@ -110,7 +110,7 @@ internal static unsafe class WebGPUSceneResources
             return false;
         }
 
-        if (!TryCreateImageAtlasTexture<TPixel>(flushContext, scene, range, flushContext.TextureFormat, dynamicImageTextureView, out TextureView* imageAtlasTextureView, out error))
+        if (!TryCreateImageAtlasTexture<TPixel>(flushContext, scene, range, flushContext.TextureFormat, externalTextureView, out TextureView* imageAtlasTextureView, out error))
         {
             return false;
         }
@@ -338,26 +338,26 @@ internal static unsafe class WebGPUSceneResources
         WebGPUEncodedScene scene,
         WebGPUSceneRange? range,
         TextureFormat textureFormat,
-        TextureView* dynamicImageTextureView,
+        TextureView* externalTextureView,
         out TextureView* textureView,
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        if (dynamicImageTextureView is not null)
+        if (externalTextureView is not null)
         {
             foreach (GpuImageDescriptor descriptor in scene.Images)
             {
                 if (IsImageDescriptorInRange(descriptor, range) &&
-                    descriptor.Brush is WebGPUDynamicImageBrush dynamicImageBrush)
+                    descriptor.Source.IsExternalTexture)
                 {
                     int sceneIndex = (int)scene.Layout.DrawDataBase + descriptor.DrawDataWordOffset;
                     scene.SetSceneWord(sceneIndex, PackImageAtlasOffset(0, 0));
-                    scene.SetSceneWord(sceneIndex + 1, PackImageExtents(dynamicImageBrush.Size.Width, dynamicImageBrush.Size.Height));
-                    scene.SetSceneWord(sceneIndex + 2, PackImageSampleInfo(MapImageWrapMode(dynamicImageBrush.WrapX), MapImageWrapMode(dynamicImageBrush.WrapY)));
+                    scene.SetSceneWord(sceneIndex + 1, PackImageExtents(descriptor.Source.Size.Width, descriptor.Source.Size.Height));
+                    scene.SetSceneWord(sceneIndex + 2, PackImageSampleInfo(MapImageWrapMode(descriptor.Source.WrapX), MapImageWrapMode(descriptor.Source.WrapY)));
                 }
             }
 
-            textureView = dynamicImageTextureView;
+            textureView = externalTextureView;
             error = null;
             return true;
         }
@@ -366,7 +366,7 @@ internal static unsafe class WebGPUSceneResources
         foreach (GpuImageDescriptor descriptor in scene.Images)
         {
             if (IsImageDescriptorInRange(descriptor, range) &&
-                descriptor.Brush is ImageBrush or PatternBrush)
+                descriptor.Source.Brush is ImageBrush or PatternBrush)
             {
                 imageCount++;
             }
@@ -382,12 +382,12 @@ internal static unsafe class WebGPUSceneResources
         foreach (GpuImageDescriptor descriptor in scene.Images)
         {
             if (!IsImageDescriptorInRange(descriptor, range) ||
-                descriptor.Brush is not (ImageBrush or PatternBrush))
+                descriptor.Source.Brush is not (ImageBrush or PatternBrush))
             {
                 continue;
             }
 
-            GetImageEntrySize(descriptor.Brush, out int width, out int height);
+            GetImageEntrySize(descriptor.Source.Brush, out int width, out int height);
             atlasWidth = Math.Max(atlasWidth, width);
             atlasHeight += height;
         }
@@ -402,7 +402,7 @@ internal static unsafe class WebGPUSceneResources
         foreach (GpuImageDescriptor descriptor in scene.Images)
         {
             if (!IsImageDescriptorInRange(descriptor, range) ||
-                descriptor.Brush is not (ImageBrush or PatternBrush))
+                descriptor.Source.Brush is not (ImageBrush or PatternBrush))
             {
                 continue;
             }
@@ -410,7 +410,7 @@ internal static unsafe class WebGPUSceneResources
             if (!TryUploadImageEntry(
                 flushContext,
                 texture,
-                descriptor.Brush,
+                descriptor.Source.Brush,
                 atlasY,
                 rowBuffer,
                 out int entryWidth,
@@ -422,7 +422,7 @@ internal static unsafe class WebGPUSceneResources
 
             WrapMode wrapX = WrapMode.Repeat;
             WrapMode wrapY = WrapMode.Repeat;
-            if (descriptor.Brush is ImageBrush imageBrush)
+            if (descriptor.Source.Brush is ImageBrush imageBrush)
             {
                 wrapX = imageBrush.WrapX;
                 wrapY = imageBrush.WrapY;
@@ -546,13 +546,6 @@ internal static unsafe class WebGPUSceneResources
     /// </summary>
     private static void GetImageEntrySize(Brush brush, out int width, out int height)
     {
-        if (brush is WebGPUDynamicImageBrush dynamicImageBrush)
-        {
-            width = dynamicImageBrush.Size.Width;
-            height = dynamicImageBrush.Size.Height;
-            return;
-        }
-
         if (brush is PatternBrush patternBrush)
         {
             width = patternBrush.Pattern.Columns;

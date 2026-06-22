@@ -248,7 +248,7 @@ internal sealed class WebGPUApplySceneItem : IDisposable
     /// </summary>
     /// <param name="operation">The ImageSharp processor operation.</param>
     /// <param name="sourceRect">The source rectangle copied from the current target.</param>
-    /// <param name="drawRange">The encoded dynamic-image draw range inside the retained scene.</param>
+    /// <param name="drawRange">The encoded image-fill draw range inside the retained scene.</param>
     public WebGPUApplySceneItem(
         Action<IImageProcessingContext> operation,
         Rectangle sourceRect,
@@ -270,7 +270,7 @@ internal sealed class WebGPUApplySceneItem : IDisposable
     public Rectangle SourceRect { get; }
 
     /// <summary>
-    /// Gets the encoded dynamic-image draw range inside the retained scene.
+    /// Gets the encoded image-fill draw range inside the retained scene.
     /// </summary>
     public WebGPUSceneRange DrawRange { get; }
 
@@ -308,7 +308,7 @@ internal sealed class WebGPUScopedLayerSceneItem : IDisposable
     public int OperationCount { get; private set; }
 
     /// <summary>
-    /// Gets the encoded dynamic-image draw range that composites the layer texture into the parent target.
+    /// Gets the encoded image-fill draw range that composites the layer texture into the parent target.
     /// </summary>
     public WebGPUSceneRange CompositeRange { get; private set; }
 
@@ -321,7 +321,7 @@ internal sealed class WebGPUScopedLayerSceneItem : IDisposable
     /// Completes the retained layer metadata after the child and composite ranges have been lowered.
     /// </summary>
     /// <param name="operationCount">The number of operations rendered into the temporary layer target.</param>
-    /// <param name="compositeRange">The encoded dynamic-image draw range that composites the layer texture into the parent target.</param>
+    /// <param name="compositeRange">The encoded image-fill draw range that composites the layer texture into the parent target.</param>
     public void SetComposite(int operationCount, WebGPUSceneRange compositeRange)
     {
         this.OperationCount = operationCount;

@@ -467,19 +467,16 @@ internal static class WebGPUSceneEncoder
         encoding.BeginIndependentRange(targetBounds);
         SceneEncodingCheckpoint drawStart = encoding.CaptureCheckpoint();
         RasterizerOptions rasterizerOptions = source.RasterizerOptions;
-        CompositionCommand command = CompositionCommand.Create(
+        LinearGeometry geometry = source.SourcePath.ToLinearGeometry(ExtractScale(source.Transform));
+        if (!encoding.TryAppendExternalTextureFill(
             source.SourcePath,
-            new WebGPUDynamicImageBrush(new Size(sourceRect.Width, sourceRect.Height), brushOffset),
+            new GpuImageSource(new Size(sourceRect.Width, sourceRect.Height), brushOffset, WrapMode.Repeat, WrapMode.Repeat),
             source.DrawingOptions,
             in rasterizerOptions,
             targetBounds,
             source.DestinationOffset,
-            null,
-            source.ClipIntersectionRule,
-            source.IsInsideLayer);
-
-        LinearGeometry geometry = command.SourcePath.ToLinearGeometry(ExtractScale(command.Transform));
-        if (!encoding.TryAppend(command, geometry, out error))
+            geometry,
+            out error))
         {
             operation = null!;
             return false;
@@ -505,19 +502,17 @@ internal static class WebGPUSceneEncoder
         };
 
         RasterizerOptions rasterizerOptions = CreateRasterizerOptions(destinationBounds, options);
-        CompositionCommand command = CompositionCommand.Create(
-            new RectanglePolygon(0, 0, destinationBounds.Width, destinationBounds.Height),
-            new WebGPUDynamicImageBrush(new Size(destinationBounds.Width, destinationBounds.Height), Point.Empty),
+        RectanglePolygon path = new(0, 0, destinationBounds.Width, destinationBounds.Height);
+        LinearGeometry geometry = path.ToLinearGeometry(ExtractScale(options.Transform));
+        return encoding.TryAppendExternalTextureFill(
+            path,
+            new GpuImageSource(new Size(destinationBounds.Width, destinationBounds.Height), Point.Empty, WrapMode.Repeat, WrapMode.Repeat),
             options,
             in rasterizerOptions,
             targetBounds,
             destinationBounds.Location,
-            null,
-            IntersectionRule.NonZero,
-            false);
-
-        LinearGeometry geometry = command.SourcePath.ToLinearGeometry(ExtractScale(command.Transform));
-        return encoding.TryAppend(command, geometry, out error);
+            geometry,
+            out error);
     }
 
     private static int FindMatchingLayerEnd(DrawingCommandBatch scene, int layerBegin, int commandEnd)
@@ -1375,7 +1370,7 @@ internal static class WebGPUSceneEncoder
                         return true;
                     }
 
-                    if (!this.TryRegisterVisibleFill(resolved.Brush, resolved.RasterizerOptions, out error))
+                    if (!this.TryRegisterVisibleFill(resolved.RasterizerOptions, out error))
                     {
                         return false;
                     }
@@ -1403,6 +1398,50 @@ internal static class WebGPUSceneEncoder
         }
 
         /// <summary>
+        /// Appends one image fill whose texture view is supplied by the WebGPU render path.
+        /// </summary>
+        /// <param name="path">The path to fill.</param>
+        /// <param name="imageSource">The external texture source metadata to encode.</param>
+        /// <param name="options">Drawing options used for the fill.</param>
+        /// <param name="rasterizerOptions">Rasterizer options used to generate coverage.</param>
+        /// <param name="targetBounds">The absolute bounds of the target being encoded.</param>
+        /// <param name="destinationOffset">Absolute destination offset where coverage is composited.</param>
+        /// <param name="geometry">Optional pre-flattened geometry for <paramref name="path"/>.</param>
+        /// <param name="error">The error message when the command cannot be encoded.</param>
+        /// <returns><see langword="true"/> when the command was encoded.</returns>
+        public bool TryAppendExternalTextureFill(
+            IPath path,
+            in GpuImageSource imageSource,
+            DrawingOptions options,
+            in RasterizerOptions rasterizerOptions,
+            Rectangle targetBounds,
+            Point destinationOffset,
+            LinearGeometry? geometry,
+            out string? error)
+        {
+            if (!this.TryRegisterVisibleFill(rasterizerOptions, out error))
+            {
+                return false;
+            }
+
+            Matrix4x4 residual = ComputeResidual(ExtractScale(options.Transform), options.Transform);
+            this.AppendTransformIfChanged(residual);
+
+            ResolvedPathCommand resolved = new(
+                path,
+                imageSource,
+                options.GraphicsOptions,
+                rasterizerOptions,
+                destinationOffset,
+                rasterizerOptions.Interest,
+                options.Transform);
+
+            this.AppendPlainFill(resolved, geometry);
+            error = null;
+            return true;
+        }
+
+        /// <summary>
         /// Appends one prepared stroked path command to the scene streams.
         /// </summary>
         public bool TryAppend(
@@ -1416,14 +1455,14 @@ internal static class WebGPUSceneEncoder
                 return true;
             }
 
-            if (!this.TryRegisterVisibleFill(resolved.Brush, resolved.RasterizerOptions, out error))
+            if (!this.TryRegisterVisibleFill(resolved.RasterizerOptions, out error))
             {
                 return false;
             }
 
             Matrix4x4 strokeResidual = ComputeResidual(ExtractScale(command.Transform), command.Transform);
             this.AppendTransformIfChanged(strokeResidual);
-            this.AppendPlainStroke(resolved, command.Pen, geometry);
+            this.AppendPlainStroke(resolved, command.Brush, command.Pen, geometry);
             error = null;
             return true;
         }
@@ -1439,7 +1478,7 @@ internal static class WebGPUSceneEncoder
                 return true;
             }
 
-            if (!this.TryRegisterVisibleFill(resolved.Brush, resolved.RasterizerOptions, out error))
+            if (!this.TryRegisterVisibleFill(resolved.RasterizerOptions, out error))
             {
                 return false;
             }
@@ -1478,7 +1517,7 @@ internal static class WebGPUSceneEncoder
                 return true;
             }
 
-            if (!this.TryRegisterVisibleFill(resolved.Brush, resolved.RasterizerOptions, out error))
+            if (!this.TryRegisterVisibleFill(resolved.RasterizerOptions, out error))
             {
                 return false;
             }
@@ -1501,14 +1540,8 @@ internal static class WebGPUSceneEncoder
             return true;
         }
 
-        private bool TryRegisterVisibleFill(Brush brush, in RasterizerOptions options, out string? error)
+        private bool TryRegisterVisibleFill(in RasterizerOptions options, out string? error)
         {
-            if (!IsSupportedBrush(brush))
-            {
-                error = $"The staged WebGPU scene pipeline does not support brush type '{brush.GetType().Name}'.";
-                return false;
-            }
-
             this.VisibleFillCount++;
             if (this.VisibleFillCount == 1)
             {
@@ -1571,7 +1604,7 @@ internal static class WebGPUSceneEncoder
             in ResolvedPathCommand command,
             LinearGeometry? geometry)
         {
-            uint drawTag = GetDrawTag(command.Brush);
+            uint drawTag = GetDrawTag(command);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
             (uint style0, uint style1, uint style2, uint style3, uint style4) = GetFillStyle(command.GraphicsOptions, command.RasterizerOptions.IntersectionRule);
             int pathTagCheckpoint = this.PathTags.Count;
@@ -1592,7 +1625,7 @@ internal static class WebGPUSceneEncoder
                 geometry.Info,
                 drawTag,
                 appendStyle,
-                GetPathGradientDataWordCount(command.Brush),
+                GetPathGradientDataWordCount(command),
                 ref this.PathTags,
                 ref this.PathData,
                 ref this.DrawTags,
@@ -1640,18 +1673,30 @@ internal static class WebGPUSceneEncoder
             this.InfoWordCount += (int)drawTagMonoid.InfoOffset;
             this.DrawTags.Add(drawTag);
             int gradientRowCount = this.GradientRowCount;
+            Brush? brush = command.Brush;
+            if (brush is null)
+            {
+                AppendImageData(
+                    command.ImageSource,
+                    ToTargetLocal(command.BrushBounds, this.rootTargetBounds),
+                    ref this.DrawData,
+                    this.Images);
+            }
+            else
+            {
+                AppendDrawData(
+                    brush,
+                    command.BrushBounds,
+                    command.GraphicsOptions,
+                    drawTag,
+                    this.rootTargetBounds,
+                    ref this.DrawData,
+                    ref this.GradientPixels,
+                    ref this.PathGradientData,
+                    this.Images,
+                    ref gradientRowCount);
+            }
 
-            AppendDrawData(
-                command.Brush,
-                command.BrushBounds,
-                command.GraphicsOptions,
-                drawTag,
-                this.rootTargetBounds,
-                ref this.DrawData,
-                ref this.GradientPixels,
-                ref this.PathGradientData,
-                this.Images,
-                ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
         }
 
@@ -1660,13 +1705,14 @@ internal static class WebGPUSceneEncoder
         /// </summary>
         private void AppendPlainStroke(
             in ResolvedPathCommand command,
+            Brush brush,
             Pen pen,
             LinearGeometry? geometry)
         {
             Vector2 scale = ExtractScale(command.Transform);
             geometry ??= command.Path.ToLinearGeometry(scale);
             float widthScale = GetTransformWidthScale(command.Transform);
-            uint drawTag = GetDrawTag(command.Brush);
+            uint drawTag = GetDrawTag(brush);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
             (uint style0, uint style1, uint style2, uint style3, uint style4) = GetStrokeStyle(command.GraphicsOptions, pen, widthScale);
             int pathTagCheckpoint = this.PathTags.Count;
@@ -1682,7 +1728,7 @@ internal static class WebGPUSceneEncoder
                 geometry,
                 drawTag,
                 appendStyle,
-                GetPathGradientDataWordCount(command.Brush),
+                GetPathGradientDataWordCount(brush),
                 ref this.PathTags,
                 ref this.PathData,
                 ref this.DrawTags,
@@ -1733,7 +1779,7 @@ internal static class WebGPUSceneEncoder
             int gradientRowCount = this.GradientRowCount;
 
             AppendDrawData(
-                command.Brush,
+                brush,
                 command.BrushBounds,
                 command.GraphicsOptions,
                 drawTag,
@@ -2536,7 +2582,7 @@ internal static class WebGPUSceneEncoder
                     for (int imageIndex = 0; imageIndex < partition.Images.Count; imageIndex++)
                     {
                         GpuImageDescriptor image = partition.Images[imageIndex];
-                        images.Add(new GpuImageDescriptor(image.Brush, drawDataOffset + image.DrawDataWordOffset));
+                        images.Add(new GpuImageDescriptor(image.Source, drawDataOffset + image.DrawDataWordOffset));
                     }
 
                     drawDataOffset += partition.DrawDataWordCount;
@@ -2678,8 +2724,7 @@ internal static class WebGPUSceneEncoder
             or SweepGradientBrush
             or PathGradientBrush
             or PatternBrush
-            or ImageBrush
-            or WebGPUDynamicImageBrush;
+            or ImageBrush;
 
     /// <summary>
     /// Maps one prepared fill command to the draw-tag consumed by the staged scene pipeline.
@@ -2698,7 +2743,7 @@ internal static class WebGPUSceneEncoder
             command.GraphicsOptions,
             command.RasterizerOptions,
             command.DestinationOffset,
-            command.Brush is ImageBrush or WebGPUDynamicImageBrush ? command.RasterizerOptions.Interest : default,
+            command.Brush is ImageBrush ? command.RasterizerOptions.Interest : default,
             command.Transform);
         return true;
     }
@@ -2711,7 +2756,7 @@ internal static class WebGPUSceneEncoder
             command.GraphicsOptions,
             command.RasterizerOptions,
             command.DestinationOffset,
-            command.Brush is ImageBrush or WebGPUDynamicImageBrush ? command.RasterizerOptions.Interest : default,
+            command.Brush is ImageBrush ? command.RasterizerOptions.Interest : default,
             command.Transform);
         return true;
     }
@@ -2726,7 +2771,7 @@ internal static class WebGPUSceneEncoder
             command.GraphicsOptions,
             command.RasterizerOptions,
             command.DestinationOffset,
-            command.Brush is ImageBrush or WebGPUDynamicImageBrush ? command.RasterizerOptions.Interest : default);
+            command.Brush is ImageBrush ? command.RasterizerOptions.Interest : default);
         return true;
     }
 
@@ -2739,7 +2784,7 @@ internal static class WebGPUSceneEncoder
             command.GraphicsOptions,
             command.RasterizerOptions,
             command.DestinationOffset,
-            command.Brush is ImageBrush or WebGPUDynamicImageBrush ? command.RasterizerOptions.Interest : default);
+            command.Brush is ImageBrush ? command.RasterizerOptions.Interest : default);
         return true;
     }
 
@@ -2756,6 +2801,26 @@ internal static class WebGPUSceneEncoder
         {
             this.Path = path;
             this.Brush = brush;
+            this.ImageSource = new GpuImageSource(brush);
+            this.GraphicsOptions = graphicsOptions;
+            this.RasterizerOptions = rasterizerOptions;
+            this.DestinationOffset = destinationOffset;
+            this.BrushBounds = brushBounds;
+            this.Transform = transform;
+        }
+
+        public ResolvedPathCommand(
+            IPath path,
+            in GpuImageSource imageSource,
+            GraphicsOptions graphicsOptions,
+            RasterizerOptions rasterizerOptions,
+            Point destinationOffset,
+            Rectangle brushBounds,
+            Matrix4x4 transform)
+        {
+            this.Path = path;
+            this.Brush = null;
+            this.ImageSource = imageSource;
             this.GraphicsOptions = graphicsOptions;
             this.RasterizerOptions = rasterizerOptions;
             this.DestinationOffset = destinationOffset;
@@ -2765,7 +2830,9 @@ internal static class WebGPUSceneEncoder
 
         public IPath Path { get; }
 
-        public Brush Brush { get; }
+        public Brush? Brush { get; }
+
+        public GpuImageSource ImageSource { get; }
 
         public GraphicsOptions GraphicsOptions { get; }
 
@@ -2868,9 +2935,15 @@ internal static class WebGPUSceneEncoder
             PathGradientBrush => GpuSceneDrawTag.FillPathGradient,
             PatternBrush => GpuSceneDrawTag.FillImage,
             ImageBrush => GpuSceneDrawTag.FillImage,
-            WebGPUDynamicImageBrush => GpuSceneDrawTag.FillImage,
             _ => throw new UnreachableException($"Unsupported brush type '{brush.GetType().Name}' should have been rejected before scene encoding.")
         };
+
+    /// <summary>
+    /// Maps one resolved fill source to the draw-tag consumed by the staged scene pipeline.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint GetDrawTag(in ResolvedPathCommand command)
+        => command.Brush is not null ? GetDrawTag(command.Brush) : GpuSceneDrawTag.FillImage;
 
     /// <summary>
     /// Encodes a lowered path into path-tag and path-data streams in target-local space.
@@ -2882,9 +2955,21 @@ internal static class WebGPUSceneEncoder
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
         out int lineCount)
+        => EncodePath(command.DestinationOffset, geometry, rootTargetBounds, ref pathTags, ref pathData, out lineCount);
+
+    /// <summary>
+    /// Encodes a lowered path into path-tag and path-data streams in target-local space.
+    /// </summary>
+    private static int EncodePath(
+        Point destinationOffset,
+        LinearGeometry geometry,
+        in Rectangle rootTargetBounds,
+        ref OwnedStream<byte> pathTags,
+        ref OwnedStream<uint> pathData,
+        out int lineCount)
     {
-        float pointTranslateX = command.DestinationOffset.X - rootTargetBounds.X;
-        float pointTranslateY = command.DestinationOffset.Y - rootTargetBounds.Y;
+        float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
+        float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
         lineCount = 0;
 
         for (int i = 0; i < geometry.Contours.Count; i++)
@@ -3516,6 +3601,12 @@ internal static class WebGPUSceneEncoder
             : 0;
 
     /// <summary>
+    /// Gets the exact path-gradient payload word count emitted for one resolved fill source.
+    /// </summary>
+    private static int GetPathGradientDataWordCount(in ResolvedPathCommand command)
+        => command.Brush is not null ? GetPathGradientDataWordCount(command.Brush) : 0;
+
+    /// <summary>
     /// Returns a value indicating whether the draw tag emits one gradient ramp row.
     /// </summary>
     private static bool DrawTagUsesGradientRamp(uint drawTag)
@@ -3727,7 +3818,7 @@ internal static class WebGPUSceneEncoder
         List<GpuImageDescriptor> images,
         ref int gradientRowCount)
     {
-        Rectangle localBrushBounds = brush is ImageBrush or WebGPUDynamicImageBrush
+        Rectangle localBrushBounds = brush is ImageBrush
             ? ToTargetLocal(brushBounds, rootTargetBounds)
             : brushBounds;
 
@@ -3760,7 +3851,7 @@ internal static class WebGPUSceneEncoder
                 AppendPathGradientData((PathGradientBrush)brush, rootTargetBounds, ref drawData, ref pathGradientData);
                 break;
             case GpuSceneDrawTag.FillImage:
-                AppendImageData(brush, localBrushBounds, ref drawData, images);
+                AppendImageData(new GpuImageSource(brush), localBrushBounds, ref drawData, images);
                 break;
             default:
                 throw new UnreachableException($"Unsupported draw tag '{drawTag}' reached scene draw-data encoding.");
@@ -3838,7 +3929,7 @@ internal static class WebGPUSceneEncoder
     /// Appends the deferred image payload placeholder and records the patch site.
     /// </summary>
     private static void AppendImageData(
-        Brush brush,
+        in GpuImageSource source,
         Rectangle brushBounds,
         ref OwnedStream<uint> drawData,
         List<GpuImageDescriptor> images)
@@ -3849,15 +3940,15 @@ internal static class WebGPUSceneEncoder
         drawData.Add(0);
         drawData.Add(0);
         drawData.Add(0);
-        if (brush is ImageBrush imageBrush)
+        if (source.Brush is ImageBrush imageBrush)
         {
             drawData.Add(BitcastSingle(brushBounds.Left + imageBrush.Offset.X));
             drawData.Add(BitcastSingle(brushBounds.Top + imageBrush.Offset.Y));
         }
-        else if (brush is WebGPUDynamicImageBrush dynamicImageBrush)
+        else if (source.IsExternalTexture)
         {
-            drawData.Add(BitcastSingle(brushBounds.Left + dynamicImageBrush.Offset.X));
-            drawData.Add(BitcastSingle(brushBounds.Top + dynamicImageBrush.Offset.Y));
+            drawData.Add(BitcastSingle(brushBounds.Left + source.Offset.X));
+            drawData.Add(BitcastSingle(brushBounds.Top + source.Offset.Y));
         }
         else
         {
@@ -3865,7 +3956,7 @@ internal static class WebGPUSceneEncoder
             drawData.Add(0);
         }
 
-        images.Add(new GpuImageDescriptor(brush, payloadWordOffset));
+        images.Add(new GpuImageDescriptor(source, payloadWordOffset));
     }
 
     /// <summary>
@@ -4485,6 +4576,73 @@ internal sealed class WebGPUEncodedScene : IDisposable
 }
 
 /// <summary>
+/// Describes the source metadata for one encoded image fill.
+/// </summary>
+internal readonly struct GpuImageSource
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GpuImageSource"/> struct from a CPU-backed image or pattern brush.
+    /// </summary>
+    /// <param name="brush">The image or pattern brush.</param>
+    public GpuImageSource(Brush brush)
+    {
+        this.Brush = brush;
+        this.Size = default;
+        this.Offset = default;
+        this.WrapX = default;
+        this.WrapY = default;
+        this.IsExternalTexture = false;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GpuImageSource"/> struct from a render-time WebGPU texture.
+    /// </summary>
+    /// <param name="size">The render-time texture size.</param>
+    /// <param name="offset">The image offset encoded into the fill payload.</param>
+    /// <param name="wrapX">The horizontal wrap mode.</param>
+    /// <param name="wrapY">The vertical wrap mode.</param>
+    public GpuImageSource(Size size, Point offset, WrapMode wrapX, WrapMode wrapY)
+    {
+        this.Brush = null;
+        this.Size = size;
+        this.Offset = offset;
+        this.WrapX = wrapX;
+        this.WrapY = wrapY;
+        this.IsExternalTexture = true;
+    }
+
+    /// <summary>
+    /// Gets the CPU-backed image or pattern brush when this source is not an external texture.
+    /// </summary>
+    public Brush? Brush { get; }
+
+    /// <summary>
+    /// Gets the render-time texture size.
+    /// </summary>
+    public Size Size { get; }
+
+    /// <summary>
+    /// Gets the image offset encoded into the fill payload.
+    /// </summary>
+    public Point Offset { get; }
+
+    /// <summary>
+    /// Gets the horizontal wrap mode.
+    /// </summary>
+    public WrapMode WrapX { get; }
+
+    /// <summary>
+    /// Gets the vertical wrap mode.
+    /// </summary>
+    public WrapMode WrapY { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the source texture is supplied by the WebGPU render path.
+    /// </summary>
+    public bool IsExternalTexture { get; }
+}
+
+/// <summary>
 /// Describes one deferred image payload patch site in the encoded draw-data stream.
 /// </summary>
 internal readonly struct GpuImageDescriptor
@@ -4492,16 +4650,18 @@ internal readonly struct GpuImageDescriptor
     /// <summary>
     /// Initializes a new instance of the <see cref="GpuImageDescriptor"/> struct.
     /// </summary>
-    public GpuImageDescriptor(Brush brush, int drawDataWordOffset)
+    /// <param name="source">The image source metadata.</param>
+    /// <param name="drawDataWordOffset">The draw-data word offset to patch once the source texture is known.</param>
+    public GpuImageDescriptor(in GpuImageSource source, int drawDataWordOffset)
     {
-        this.Brush = brush;
+        this.Source = source;
         this.DrawDataWordOffset = drawDataWordOffset;
     }
 
     /// <summary>
-    /// Gets the image-producing brush instance.
+    /// Gets the image source metadata.
     /// </summary>
-    public Brush Brush { get; }
+    public GpuImageSource Source { get; }
 
     /// <summary>
     /// Gets the draw-data word offset to patch once the image atlas is built.
