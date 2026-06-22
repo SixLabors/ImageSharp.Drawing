@@ -52,6 +52,11 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     private readonly bool ownsBatcher;
 
     /// <summary>
+    /// Indicates whether this canvas owns clearing the text drawing cache.
+    /// </summary>
+    private readonly bool ownsTextCache;
+
+    /// <summary>
     /// Tracks whether this instance has already been disposed.
     /// </summary>
     private bool isDisposed;
@@ -61,11 +66,10 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// </summary>
     private readonly Stack<DrawingCanvasState> savedStates = new();
 
-    // Per-canvas glyph-outline cache: hoists RichTextGlyphRenderer's per-glyph outline cache from
-    // per-DrawText-call scope up to the whole canvas, so a glyph outline built once is reused by
-    // every DrawText call on this canvas (across a frame's many text runs) instead of being
-    // rebuilt for every run on a text-heavy page.
-    private readonly Dictionary<RichTextGlyphRenderer.CacheKey, List<RichTextGlyphRenderer.GlyphRenderData>> glyphCache = [];
+    /// <summary>
+    /// Shared text drawing cache used by glyph rendering operations.
+    /// </summary>
+    private readonly DrawingTextCache textCache;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class.
@@ -79,7 +83,25 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingOptions options,
         Buffer2DRegion<TPixel> targetRegion,
         params IPath[] clipPaths)
-        : this(configuration, options, new MemoryCanvasFrame<TPixel>(targetRegion), clipPaths)
+        : this(configuration, options, new DrawingTextCache(), ownsTextCache: true, new MemoryCanvasFrame<TPixel>(targetRegion), clipPaths)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class.
+    /// </summary>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="options">Initial drawing options for this canvas instance.</param>
+    /// <param name="textCache">The text drawing cache used by this canvas instance.</param>
+    /// <param name="targetRegion">The destination target region.</param>
+    /// <param name="clipPaths">Initial clip paths for this canvas instance.</param>
+    public DrawingCanvas(
+        Configuration configuration,
+        DrawingOptions options,
+        DrawingTextCache textCache,
+        Buffer2DRegion<TPixel> targetRegion,
+        params IPath[] clipPaths)
+        : this(configuration, options, textCache, ownsTextCache: false, new MemoryCanvasFrame<TPixel>(targetRegion), clipPaths)
     {
     }
 
@@ -95,7 +117,25 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingOptions options,
         ICanvasFrame<TPixel> targetFrame,
         params IPath[] clipPaths)
-        : this(configuration, options, configuration.GetDrawingBackend(), targetFrame, clipPaths)
+        : this(configuration, options, new DrawingTextCache(), ownsTextCache: true, configuration.GetDrawingBackend(), targetFrame, clipPaths)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class.
+    /// </summary>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="options">Initial drawing options for this canvas instance.</param>
+    /// <param name="textCache">The text drawing cache used by this canvas instance.</param>
+    /// <param name="targetFrame">The destination frame.</param>
+    /// <param name="clipPaths">Initial clip paths for this canvas instance.</param>
+    public DrawingCanvas(
+        Configuration configuration,
+        DrawingOptions options,
+        DrawingTextCache textCache,
+        ICanvasFrame<TPixel> targetFrame,
+        params IPath[] clipPaths)
+        : this(configuration, options, textCache, ownsTextCache: false, configuration.GetDrawingBackend(), targetFrame, clipPaths)
     {
     }
 
@@ -113,11 +153,56 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         IDrawingBackend backend,
         ICanvasFrame<TPixel> targetFrame,
         params IPath[] clipPaths)
+        : this(configuration, options, new DrawingTextCache(), true, backend, targetFrame, clipPaths)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class with an explicit backend and initial state.
+    /// </summary>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="options">Initial drawing options for this canvas instance.</param>
+    /// <param name="textCache">The text drawing cache used by this canvas instance.</param>
+    /// <param name="backend">The drawing backend implementation.</param>
+    /// <param name="targetFrame">The destination frame.</param>
+    /// <param name="clipPaths">Initial clip paths for this canvas instance.</param>
+    public DrawingCanvas(
+        Configuration configuration,
+        DrawingOptions options,
+        DrawingTextCache textCache,
+        IDrawingBackend backend,
+        ICanvasFrame<TPixel> targetFrame,
+        params IPath[] clipPaths)
+        : this(configuration, options, textCache, false, backend, targetFrame, clipPaths)
+    {
+    }
+
+    private DrawingCanvas(
+        Configuration configuration,
+        DrawingOptions options,
+        DrawingTextCache textCache,
+        bool ownsTextCache,
+        ICanvasFrame<TPixel> targetFrame,
+        params IPath[] clipPaths)
+        : this(configuration, options, textCache, ownsTextCache, configuration.GetDrawingBackend(), targetFrame, clipPaths)
+    {
+    }
+
+    private DrawingCanvas(
+        Configuration configuration,
+        DrawingOptions options,
+        DrawingTextCache textCache,
+        bool ownsTextCache,
+        IDrawingBackend backend,
+        ICanvasFrame<TPixel> targetFrame,
+        params IPath[] clipPaths)
         : this(
             configuration,
             backend,
             targetFrame,
             new DrawingCanvasBatcher<TPixel>(configuration),
+            textCache,
+            ownsTextCache,
             new DrawingCanvasState(options, clipPaths, options.ShapeOptions.IntersectionRule, targetFrame.Bounds, targetFrame.Bounds.Location),
             true)
     {
@@ -131,6 +216,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// <param name="backend">The drawing backend implementation.</param>
     /// <param name="targetFrame">The destination frame.</param>
     /// <param name="batcher">The command batcher used for deferred composition.</param>
+    /// <param name="textCache">The text drawing cache used by this canvas instance.</param>
+    /// <param name="ownsTextCache">Whether this canvas owns clearing the text drawing cache.</param>
     /// <param name="defaultState">The default state used when no scoped state is active.</param>
     /// <param name="ownsBatcher">Whether this canvas owns final disposal of the shared batcher.</param>
     private DrawingCanvas(
@@ -138,6 +225,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         IDrawingBackend backend,
         ICanvasFrame<TPixel> targetFrame,
         DrawingCanvasBatcher<TPixel> batcher,
+        DrawingTextCache textCache,
+        bool ownsTextCache,
         DrawingCanvasState defaultState,
         bool ownsBatcher)
     {
@@ -145,6 +234,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         Guard.NotNull(backend, nameof(backend));
         Guard.NotNull(targetFrame, nameof(targetFrame));
         Guard.NotNull(batcher, nameof(batcher));
+        Guard.NotNull(textCache, nameof(textCache));
         Guard.NotNull(defaultState, nameof(defaultState));
 
         if (!targetFrame.TryGetCpuRegion(out _) && !targetFrame.TryGetNativeSurface(out _))
@@ -156,7 +246,9 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         this.backend = backend;
         this.targetFrame = targetFrame;
         this.batcher = batcher;
+        this.textCache = textCache;
         this.ownsBatcher = ownsBatcher;
+        this.ownsTextCache = ownsTextCache;
 
         // Canvas coordinates are local to the current frame; origin stays at (0,0).
         this.Bounds = new Rectangle(0, 0, targetFrame.Bounds.Width, targetFrame.Bounds.Height);
@@ -329,6 +421,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             this.backend,
             childFrame,
             this.batcher,
+            this.textCache,
+            false,
             new DrawingCanvasState(currentState.Options, currentState.ClipPaths, currentState.ClipIntersectionRule, childFrame.Bounds, childFrame.Bounds.Location)
             {
                 IsLayer = currentState.IsLayer,
@@ -633,7 +727,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         EnsureTextPaint(brush, pen);
 
         RichTextOptions configuredOptions = ConfigureTextOptions(textOptions, path, out IPath? configuredPath);
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, configuredPath, pen, brush, this.glyphCache);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, configuredPath, pen, brush, this.textCache);
         TextRenderer renderer = new(glyphRenderer);
         renderer.RenderText(text, configuredOptions);
 
@@ -663,7 +757,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             effectiveOptions.ShapeOptions,
             Matrix4x4.CreateTranslation(location.X, location.Y, 0) * effectiveOptions.Transform);
 
-        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.glyphCache);
+        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache);
         textBlock.RenderTo(glyphRenderer, wrappingLength);
 
         this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions, state.ClipPaths, state.ClipIntersectionRule);
@@ -685,7 +779,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.glyphCache);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.textCache);
         textBlock.RenderTo(glyphRenderer, wrappingLength);
 
         this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipPaths, state.ClipIntersectionRule);
@@ -713,7 +807,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             effectiveOptions.ShapeOptions,
             Matrix4x4.CreateTranslation(location.X, location.Y, 0) * effectiveOptions.Transform);
 
-        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.glyphCache);
+        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache);
         lineLayout.RenderTo(glyphRenderer);
 
         this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions, state.ClipPaths, state.ClipIntersectionRule);
@@ -734,7 +828,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.glyphCache);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.textCache);
         lineLayout.RenderTo(glyphRenderer);
 
         this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipPaths, state.ClipIntersectionRule);
@@ -754,7 +848,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path: null, pen, brush, this.glyphCache);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path: null, pen, brush, this.textCache);
         TextRenderer renderer = new(glyphRenderer);
         renderer.RenderGlyph(glyphId, options);
 
@@ -782,7 +876,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path: null, pen, brush, this.glyphCache);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path: null, pen, brush, this.textCache);
         TextRenderer renderer = new(glyphRenderer);
         renderer.RenderGlyphRun(glyphRun, options);
 
@@ -1521,8 +1615,10 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 this.DisposePendingImageResources();
             }
 
-            // Release the per-canvas glyph-outline cache.
-            this.glyphCache.Clear();
+            if (this.ownsTextCache)
+            {
+                this.textCache.Clear();
+            }
 
             this.isDisposed = true;
         }

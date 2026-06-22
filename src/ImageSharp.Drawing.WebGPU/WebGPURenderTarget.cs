@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using Silk.NET.WebGPU;
+using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -173,6 +174,28 @@ public sealed class WebGPURenderTarget : IDisposable
         return WebGPUCanvasFactory.CreateCanvas(
             this.deviceContext.Configuration,
             options,
+            this.deviceContext.Backend,
+            this.Bounds,
+            this.Surface,
+            this.Format);
+    }
+
+    /// <summary>
+    /// Creates a drawing canvas over this render target.
+    /// </summary>
+    /// <param name="options">The initial drawing options.</param>
+    /// <param name="textCache">The text drawing cache used by this canvas instance.</param>
+    /// <returns>A drawing canvas targeting this render target.</returns>
+    public DrawingCanvas CreateCanvas(DrawingOptions options, DrawingTextCache textCache)
+    {
+        this.ThrowIfDisposed();
+        this.deviceContext.ThrowIfDisposed();
+        Guard.NotNull(textCache, nameof(textCache));
+
+        return WebGPUCanvasFactory.CreateCanvas(
+            this.deviceContext.Configuration,
+            options,
+            textCache,
             this.deviceContext.Backend,
             this.Bounds,
             this.Surface,

@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
 using SixLabors.Fonts.Unicode;
+using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Text;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
@@ -72,10 +73,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     // Benchmarked to give <0.2% image difference vs. uncached, with >60% cache hit ratio.
     private const float AccuracyMultiple = 8;
 
-    /// <summary>Maps cache keys to their list of <see cref="GlyphRenderData"/> entries (one per layer).
-    /// Owned by the enclosing <see cref="DrawingCanvas{TPixel}"/> and shared across every DrawText
-    /// call on that canvas, so glyph outlines persist beyond a single text draw.</summary>
-    private readonly Dictionary<CacheKey, List<GlyphRenderData>> glyphCache;
+    /// <summary>Cache storing reusable glyph outline entries.</summary>
+    private readonly DrawingTextCache glyphCache;
 
     /// <summary>Read cursor into the cached layer list for layered cache hits.</summary>
     private int cacheReadIndex;
@@ -95,6 +94,9 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// <summary>The cache key computed for the current glyph in <see cref="BeginGlyph"/>.</summary>
     private CacheKey currentCacheKey;
 
+    /// <summary>The cache entries for the current glyph key.</summary>
+    private List<GlyphRenderData> currentCacheEntries = [];
+
     /// <summary>
     /// The transformed (post-<see cref="DrawingOptions.Transform"/>) bounding-box location
     /// of the current glyph. Stored so <see cref="EndGlyph"/> can compute
@@ -109,14 +111,13 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// <param name="path">Optional path to draw the text along.</param>
     /// <param name="pen">Default pen for outlined text, or <see langword="null"/> for fill-only.</param>
     /// <param name="brush">Default brush for filled text, or <see langword="null"/> for outline-only.</param>
-    /// <param name="glyphCache">Caller-owned per-canvas glyph cache shared across renderer
-    /// instances so glyph outlines persist beyond a single text draw.</param>
+    /// <param name="glyphCache">Caller-owned glyph cache shared across renderer instances.</param>
     public RichTextGlyphRenderer(
         DrawingOptions drawingOptions,
         IPath? path,
         Pen? pen,
         Brush? brush,
-        Dictionary<CacheKey, List<GlyphRenderData>> glyphCache)
+        DrawingTextCache glyphCache)
         : base(drawingOptions.Transform)
     {
         this.drawingOptions = drawingOptions;
@@ -156,6 +157,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         //   2. Layered or decorated cache hit: reuse cached path, return true for EndGlyph/SetDecoration.
         //   3. Cache miss: rasterize from scratch.
         this.cacheReadIndex = 0;
+        this.currentCacheEntries = [];
         this.currentDecorationIsVertical = parameters.LayoutMode is GlyphLayoutMode.Vertical or GlyphLayoutMode.VerticalRotated;
         this.currentTextRun = parameters.TextRun;
         if (parameters.TextRun is RichTextRun drawingRun)
@@ -196,6 +198,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
 
             if (this.glyphCache.TryGetValue(this.currentCacheKey, out List<GlyphRenderData>? cachedEntries))
             {
+                this.currentCacheEntries = cachedEntries;
+
                 if (cachedEntries.Count > 0 && !cachedEntries[0].IsLayered
                     && this.EnabledDecorations() == TextDecorations.None)
                 {
@@ -284,7 +288,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         }
         else
         {
-            renderData = this.glyphCache[this.currentCacheKey][this.cacheReadIndex++];
+            renderData = this.currentCacheEntries[this.cacheReadIndex++];
 
             // Offset the render location by the delta from the cached glyph and this one.
             Vector2 previousDelta = renderData.LocationDelta;
@@ -543,7 +547,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         }
         else
         {
-            renderData = this.glyphCache[this.currentCacheKey][this.cacheReadIndex++];
+            renderData = this.currentCacheEntries[this.cacheReadIndex++];
 
             // Offset the render location by the delta from the cached glyph and this one.
             Vector2 previousDelta = renderData.LocationDelta;
@@ -722,12 +726,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// </summary>
     private void UpdateCache(GlyphRenderData renderData)
     {
-        if (!this.glyphCache.TryGetValue(this.currentCacheKey, out List<GlyphRenderData>? _))
-        {
-            this.glyphCache[this.currentCacheKey] = [];
-        }
-
-        this.glyphCache[this.currentCacheKey].Add(renderData);
+        this.glyphCache.GetOrAdd(this.currentCacheKey).Add(renderData);
     }
 
     /// <inheritdoc />
@@ -773,7 +772,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     }
 
     /// <summary>
-    /// Releases managed resources (glyph cache and drawing operations list).
+    /// Releases managed resources owned by this renderer.
     /// </summary>
     /// <param name="disposing"><see langword="true"/> to release managed resources.</param>
     private void Dispose(bool disposing)
@@ -782,7 +781,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         {
             if (disposing)
             {
-                // The glyph cache is owned by the canvas and outlives this renderer.
+                // The glyph cache is owned outside this renderer and outlives this draw call.
                 this.DrawingOperations.Clear();
             }
 
