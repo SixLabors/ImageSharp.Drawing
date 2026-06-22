@@ -385,7 +385,7 @@ public abstract class ImageBrush : Brush
             int y,
             BrushWorkspace<TPixel> workspace)
         {
-            Span<float> amountSpan = workspace.GetAmounts(scanline.Length);
+            Span<float> coverageSpan = workspace.GetAmounts(scanline.Length);
             Span<TPixel> overlaySpan = workspace.GetOverlays(scanline.Length);
 
             int baseX = x - this.offsetX;
@@ -398,23 +398,24 @@ public abstract class ImageBrush : Brush
             {
                 if (rowInRange && TryWrap(baseX + i, this.sourceRegion.Width, this.sourceRegion.X, this.wrapX, out int sourceX))
                 {
-                    amountSpan[i] = scanline[i] * this.Options.BlendPercentage;
+                    coverageSpan[i] = scanline[i];
                     overlaySpan[i] = sourceRow[sourceX];
                 }
                 else
                 {
                     // None wrap mode outside the source region: contribute nothing.
-                    amountSpan[i] = 0;
+                    coverageSpan[i] = 0;
                     overlaySpan[i] = default;
                 }
             }
 
-            this.Blender.Blend(
+            this.Blender.BlendWithCoverage<TPixel>(
                 this.Configuration,
                 destinationRow,
                 destinationRow,
                 overlaySpan,
-                amountSpan,
+                this.Options.BlendPercentage,
+                coverageSpan,
                 workspace.GetBlendScratch(scanline.Length, 3));
         }
 

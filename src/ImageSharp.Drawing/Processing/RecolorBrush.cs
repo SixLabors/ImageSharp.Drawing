@@ -116,12 +116,10 @@ public sealed class RecolorBrush : Brush
             int y,
             BrushWorkspace<TPixel> workspace)
         {
-            Span<float> amounts = workspace.GetAmounts(scanline.Length);
             Span<TPixel> overlays = workspace.GetOverlays(scanline.Length);
 
             for (int i = 0; i < scanline.Length; i++)
             {
-                amounts[i] = scanline[i] * this.Options.BlendPercentage;
                 TPixel result = destinationRow[i];
                 Vector4 background = result.ToVector4();
                 float distance = Vector4.DistanceSquared(background, this.sourceColor);
@@ -130,12 +128,13 @@ public sealed class RecolorBrush : Brush
                     : result;
             }
 
-            this.Blender.Blend(
+            this.Blender.BlendWithCoverage<TPixel>(
                 this.Configuration,
                 destinationRow,
                 destinationRow,
                 overlays,
-                amounts,
+                this.Options.BlendPercentage,
+                scanline,
                 workspace.GetBlendScratch(scanline.Length, 3));
         }
     }

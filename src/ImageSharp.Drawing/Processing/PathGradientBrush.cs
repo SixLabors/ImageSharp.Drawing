@@ -314,34 +314,21 @@ public sealed class PathGradientBrush : Brush
             int y,
             BrushWorkspace<TPixel> workspace)
         {
-            Span<float> amounts = workspace.GetAmounts(scanline.Length);
             Span<TPixel> overlays = workspace.GetOverlays(scanline.Length);
-            float blendPercentage = this.Options.BlendPercentage;
 
             // TODO: Remove bounds checks.
-            if (blendPercentage < 1)
+            for (int i = 0; i < scanline.Length; i++)
             {
-                for (int i = 0; i < scanline.Length; i++)
-                {
-                    amounts[i] = scanline[i] * blendPercentage;
-                    overlays[i] = this[x + i, y];
-                }
-            }
-            else
-            {
-                for (int i = 0; i < scanline.Length; i++)
-                {
-                    amounts[i] = scanline[i];
-                    overlays[i] = this[x + i, y];
-                }
+                overlays[i] = this[x + i, y];
             }
 
-            this.Blender.Blend(
+            this.Blender.BlendWithCoverage<TPixel>(
                 this.Configuration,
                 destinationRow,
                 destinationRow,
                 overlays,
-                amounts,
+                this.Options.BlendPercentage,
+                scanline,
                 workspace.GetBlendScratch(scanline.Length, 3));
         }
 

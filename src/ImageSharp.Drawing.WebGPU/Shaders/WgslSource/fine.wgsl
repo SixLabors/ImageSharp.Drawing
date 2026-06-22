@@ -189,9 +189,6 @@ fn is_default_draw_blend(draw_flags: u32) -> bool {
 
 fn compose_draw(backdrop: vec4<f32>, source: vec4<f32>, draw_flags: u32) -> vec4<f32> {
     let effective_alpha = source.a * read_draw_blend_alpha(draw_flags);
-    if effective_alpha <= (0.5 / 255.0) {
-        return backdrop;
-    }
 
     if is_default_draw_blend(draw_flags) {
         return backdrop * (1.0 - source.a) + source;
@@ -266,6 +263,11 @@ fn compose_draw(backdrop: vec4<f32>, source: vec4<f32>, draw_flags: u32) -> vec4
             return blend_mix_compose(backdrop, source * read_draw_blend_alpha(draw_flags), read_draw_blend_mode(draw_flags));
         }
     }
+}
+
+fn compose_draw_with_coverage(backdrop: vec4<f32>, source: vec4<f32>, coverage: f32, draw_flags: u32) -> vec4<f32> {
+    let composed = compose_draw(backdrop, source, draw_flags);
+    return backdrop + ((composed - backdrop) * coverage);
 }
 
 const PIXEL_FORMAT_RGBA: u32 = 0u;
@@ -627,8 +629,7 @@ fn main(
                 let fg = unpack4x8unorm(color.rgba_color);
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
                     if area[i] != 0.0 {
-                        let fg_i = fg * area[i];
-                        rgba[i] = compose_draw(rgba[i], fg_i, color.draw_flags);
+                        rgba[i] = compose_draw_with_coverage(rgba[i], fg, area[i], color.draw_flags);
                     }
                 }
                 cmd_ix += 3u;
@@ -647,8 +648,7 @@ fn main(
                             let t = (recolor.threshold - distance) / recolor.threshold;
                             let target_premul = premul_alpha(target_color);
                             let recolored = target_premul * t + bg * (1.0 - target_color.a * t);
-                            let fg = (recolored - bg) * area[i] + bg * area[i];
-                            rgba[i] = compose_draw(bg, fg, recolor.draw_flags);
+                            rgba[i] = compose_draw_with_coverage(bg, recolored, area[i], recolor.draw_flags);
                         }
                     }
                 }
@@ -686,7 +686,7 @@ fn main(
                         bg_rgba = blend_spill[local_blend_start + i];
                     }
                     let bg = unpack4x8unorm(bg_rgba);
-                    let fg = rgba[i] * area[i] * end_clip.alpha;
+                    let fg = rgba[i] * end_clip.alpha;
                     if end_clip.blend == LUMINANCE_MASK_LAYER {
                         // TODO: Does this case apply more generally?
                         // See https://github.com/linebender/vello/issues/1061
@@ -697,9 +697,11 @@ fn main(
                             continue;
                         }
                         let luminance = clamp(svg_lum(unpremultiply(fg)) * fg.a, 0.0, 1.0);
-                        rgba[i] = bg * luminance;
+                        let composed = bg * luminance;
+                        rgba[i] = bg + ((composed - bg) * area[i]);
                     } else {
-                        rgba[i] = blend_mix_compose(bg, fg, end_clip.blend);
+                        let composed = blend_mix_compose(bg, fg, end_clip.blend);
+                        rgba[i] = bg + ((composed - bg) * area[i]);
                     }
                 }
                 cmd_ix += 3u;
@@ -716,8 +718,7 @@ fn main(
                         let my_d = d + lin.line_x * f32(i);
                         let x = i32(round(extend_mode_normalized(my_d, lin.extend_mode) * f32(GRADIENT_WIDTH - 1)));
                         let fg_rgba = textureLoad(gradients, vec2(x, i32(lin.index)), 0);
-                        let fg_i = fg_rgba * area[i];
-                        rgba[i] = compose_draw(rgba[i], fg_i, draw_flags);
+                        rgba[i] = compose_draw_with_coverage(rgba[i], fg_rgba, area[i], draw_flags);
                     }
                 }
                 cmd_ix += 3u;
@@ -762,8 +763,7 @@ fn main(
                         t = select(t, 1.0 - t, is_swapped);
                         let x = i32(round(t * f32(GRADIENT_WIDTH - 1)));
                         let fg_rgba = textureLoad(gradients, vec2(x, i32(rad.index)), 0);
-                        let fg_i = fg_rgba * area[i];
-                        rgba[i] = compose_draw(rgba[i], fg_i, draw_flags);
+                        rgba[i] = compose_draw_with_coverage(rgba[i], fg_rgba, area[i], draw_flags);
                     }
                 }
                 cmd_ix += 3u;
@@ -780,8 +780,7 @@ fn main(
                             let t = extend_mode_normalized(radius, elliptic.extend_mode);
                             let ramp_x = i32(round(t * f32(GRADIENT_WIDTH - 1)));
                             let fg_rgba = textureLoad(gradients, vec2(ramp_x, i32(elliptic.index)), 0);
-                            let fg_i = fg_rgba * area[i];
-                            rgba[i] = compose_draw(rgba[i], fg_i, draw_flags);
+                            rgba[i] = compose_draw_with_coverage(rgba[i], fg_rgba, area[i], draw_flags);
                         }
                     }
                 }
@@ -818,8 +817,7 @@ fn main(
                         let t = extend_mode_normalized(phi, sweep.extend_mode);
                         let ramp_x = i32(round(t * f32(GRADIENT_WIDTH - 1)));
                         let fg_rgba = textureLoad(gradients, vec2(ramp_x, i32(sweep.index)), 0);
-                        let fg_i = fg_rgba * area[i];
-                        rgba[i] = compose_draw(rgba[i], fg_i, draw_flags);
+                        rgba[i] = compose_draw_with_coverage(rgba[i], fg_rgba, area[i], draw_flags);
                     }
                 }
                 cmd_ix += 3u;
@@ -830,8 +828,7 @@ fn main(
                     if area[i] != 0.0 {
                         let my_xy = vec2(xy.x + f32(i) + 0.5, xy.y + 0.5);
                         let fg_rgba = evaluate_path_gradient(path_grad, my_xy);
-                        let fg_i = fg_rgba * area[i];
-                        rgba[i] = compose_draw(rgba[i], fg_i, path_grad.draw_flags);
+                        rgba[i] = compose_draw_with_coverage(rgba[i], fg_rgba, area[i], path_grad.draw_flags);
                     }
                 }
                 cmd_ix += 5u;
@@ -851,8 +848,8 @@ fn main(
                         if (atlas_ix >= 0 && atlas_iy >= 0) {
                             let atlas_uv_clamped = vec2<i32>(i32(image.atlas_offset.x) + atlas_ix, i32(image.atlas_offset.y) + atlas_iy);
                             let fg_rgba = maybe_premul_alpha(textureLoad(image_atlas, atlas_uv_clamped, 0), image.alpha_type);
-                            let fg_i = pixel_format(fg_rgba * area[i] * image.alpha, image.format);
-                            rgba[i] = compose_draw(rgba[i], fg_i, draw_flags);
+                            let fg_i = pixel_format(fg_rgba * image.alpha, image.format);
+                            rgba[i] = compose_draw_with_coverage(rgba[i], fg_i, area[i], draw_flags);
                         }
                     }
                 }
