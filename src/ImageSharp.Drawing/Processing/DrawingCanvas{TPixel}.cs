@@ -475,16 +475,28 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         IReadOnlyList<IPath> combined;
         IntersectionRule combinedRule;
+        Rectangle targetBounds = state.TargetBounds;
         if (operation == ClipOperation.Intersection && state.ClipPaths.Count == 0)
         {
+            if (transformed.Length == 1 && TryGetRectangleClip(transformed[0], state.DestinationOffset, out Rectangle rectangleClip))
+            {
+                // A first integer rectangle clip is equivalent to shrinking the command target.
+                // Keeping it in TargetBounds preserves hard pixel edges and avoids attaching a
+                // path clip to every later draw recorded in this state.
+                targetBounds = Rectangle.Intersect(state.TargetBounds, rectangleClip);
+                combined = [];
+                combinedRule = incomingRule;
+            }
+
             // With no stored clip, an intersection clip becomes the stored clip. If there is
             // only one incoming path, keep it as-is so region paths retain their exact metadata.
             // Multiple paths in one Clip call are one incoming clip region, so they must be
             // unioned before storing; otherwise later code would have to remember that this list
             // is one unioned clip operand rather than several sequential clips.
-            if (transformed.Length == 1)
+            else if (transformed.Length == 1)
             {
                 combined = transformed;
+                combinedRule = incomingRule;
             }
             else
             {
@@ -501,23 +513,22 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 };
 
                 combined = [ClippedShapeGenerator.GenerateClippedShapes(unionOptions, transformed[0], rest)];
+                combinedRule = incomingRule;
             }
-
-            combinedRule = incomingRule;
         }
         else if (operation == ClipOperation.Intersection
             && transformed.Length == 1
             && TryIntersectRegionClips(state.ClipPaths, transformed[0], out IPath regionClip))
         {
-            // Two integer region clips can be intersected exactly as rect sets. This preserves
-            // SkRegion-style hard region semantics and avoids lowering a simple dirty-region
-            // clip through general polygon clipping.
+            // Two integer region clips can be intersected exactly as rect sets. Region clips
+            // represent device-pixel coverage, so keeping them as rectangles preserves their
+            // hard edges and avoids lowering a simple dirty-region clip through polygon clipping.
             combined = [regionClip];
             combinedRule = IntersectionRule.NonZero;
         }
         else
         {
-            // Every remaining case is a real boolean operation against the existing clip:
+            // Every remaining case needs a stored geometric clip:
             //
             // - Intersection with an existing clip:
             //   existing ∩ union(incoming paths)
@@ -525,11 +536,22 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             // - Difference with or without an existing clip:
             //   existing - union(incoming paths)
             //
-            // ClippedShapeGenerator already accepts multiple clip paths and lowers them as the
-            // clip operand, so do not pre-union the incoming paths here. Pre-unioning would make
-            // Difference pay for two polygon clip operations while producing the same result.
+            // When no clip path has been stored, the subject side is the current target
+            // bounds. Target bounds are absolute, while clip paths are stored in the
+            // current canvas destination space. Translate the implicit subject rectangle
+            // back to local coordinates before handing it to the path clipper.
+            //
+            // ClippedShapeGenerator accepts multiple clip paths and lowers them as one clip
+            // operand. Passing the incoming paths directly keeps Difference to one polygon clip
+            // operation instead of unioning first and clipping the unioned result again.
+            RectangleF localTargetBounds = new(
+                state.TargetBounds.X - state.DestinationOffset.X,
+                state.TargetBounds.Y - state.DestinationOffset.Y,
+                state.TargetBounds.Width,
+                state.TargetBounds.Height);
+
             IPath existing = state.ClipPaths.Count == 0
-                ? new RectanglePolygon(new RectangleF(0, 0, state.TargetBounds.Width, state.TargetBounds.Height))
+                ? new RectanglePolygon(localTargetBounds)
                 : state.ClipPaths.Count == 1
                     ? state.ClipPaths[0]
                     : new ComplexPolygon(state.ClipPaths);
@@ -558,7 +580,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 : operationRule;
         }
 
-        this.savedStates.Push(new DrawingCanvasState(state.Options, combined, combinedRule, state.TargetBounds, state.DestinationOffset)
+        this.savedStates.Push(new DrawingCanvasState(state.Options, combined, combinedRule, targetBounds, state.DestinationOffset)
         {
             IsLayer = state.IsLayer,
             Layer = state.Layer,
@@ -2090,6 +2112,62 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         clip = existingRegion.ToPath();
         return true;
     }
+
+    /// <summary>
+    /// Gets a pixel-aligned rectangular clip in absolute target coordinates.
+    /// </summary>
+    /// <param name="path">The local clip path to inspect.</param>
+    /// <param name="destinationOffset">The absolute destination offset for the current canvas state.</param>
+    /// <param name="rectangle">The absolute target rectangle represented by <paramref name="path"/>.</param>
+    /// <returns>
+    /// <see langword="true"/> when the clip is a single axis-aligned integer rectangle that can
+    /// be represented by target bounds; otherwise, <see langword="false"/>.
+    /// </returns>
+    private static bool TryGetRectangleClip(IPath path, Point destinationOffset, out Rectangle rectangle)
+    {
+        rectangle = Rectangle.Empty;
+        if (path is IRegionPath regionPath)
+        {
+            IReadOnlyList<Rectangle> rectangles = regionPath.Rectangles;
+            if (rectangles.Count != 1)
+            {
+                return false;
+            }
+
+            Rectangle regionRectangle = rectangles[0];
+            rectangle = new Rectangle(
+                regionRectangle.X + destinationOffset.X,
+                regionRectangle.Y + destinationOffset.Y,
+                regionRectangle.Width,
+                regionRectangle.Height);
+
+            return true;
+        }
+
+        if (path is not RectanglePolygon rectanglePolygon)
+        {
+            return false;
+        }
+
+        float left = rectanglePolygon.Left;
+        float top = rectanglePolygon.Top;
+        float right = rectanglePolygon.Right;
+        float bottom = rectanglePolygon.Bottom;
+        if (!IsInteger(left) || !IsInteger(top) || !IsInteger(right) || !IsInteger(bottom))
+        {
+            return false;
+        }
+
+        rectangle = Rectangle.FromLTRB(
+            (int)left + destinationOffset.X,
+            (int)top + destinationOffset.Y,
+            (int)right + destinationOffset.X,
+            (int)bottom + destinationOffset.Y);
+
+        return true;
+    }
+
+    private static bool IsInteger(float value) => value == MathF.Truncate(value);
 
     /// <summary>
     /// Gets the integer region represented by a region-compatible clip path.
