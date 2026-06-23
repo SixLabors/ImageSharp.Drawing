@@ -272,6 +272,17 @@ fn main(
                 }
                 default: {}
             }
+
+            // Visible fills carry dirty-region state in the info stream so coarse can read it without
+            // exceeding the eight-storage-buffer limit on common WebGPU devices.
+            if tag_word != DRAWTAG_BEGIN_CLIP {
+                let interest_offset = di + ((tag_word >> 6u) & 0xfu) - 5u;
+                info[interest_offset] = bitcast<u32>(bbox.coverage_threshold);
+                info[interest_offset + 1u] = bitcast<u32>(bbox.interest.x);
+                info[interest_offset + 2u] = bitcast<u32>(bbox.interest.y);
+                info[interest_offset + 3u] = bitcast<u32>(bbox.interest.z);
+                info[interest_offset + 4u] = bitcast<u32>(bbox.interest.w);
+            }
         }
         if tag_word == DRAWTAG_BEGIN_CLIP || tag_word == DRAWTAG_END_CLIP {
             var path_ix = ~ix;

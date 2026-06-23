@@ -1068,6 +1068,32 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         this.batcher.AddScene(scene);
     }
 
+    /// <inheritdoc />
+    public override void CopyPixelsFrom(DrawingCanvas source, Rectangle sourceRectangle, Point targetPoint)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(source, nameof(source));
+
+        if (source is not DrawingCanvas<TPixel> typedSource)
+        {
+            throw new ArgumentException("The source canvas pixel type must match the target canvas pixel type.", nameof(source));
+        }
+
+        typedSource.EnsureNotDisposed();
+
+        // Pixel copy transfers already-rasterized frame contents. Materialize both timelines at
+        // this ordering boundary so the backend copies pixels instead of replaying commands.
+        typedSource.RenderRecordedTimeline();
+        this.RenderRecordedTimeline();
+
+        this.backend.CopyPixels(
+            this.configuration,
+            typedSource.targetFrame,
+            this.targetFrame,
+            sourceRectangle,
+            targetPoint);
+    }
+
     private void DrawImageCore(
         Image<TPixel> image,
         Rectangle sourceRect,
@@ -1653,7 +1679,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
 
     /// <summary>
-    /// Renders the recorded timeline owned by the root canvas during disposal.
+    /// Renders the recorded timeline owned by the root canvas.
     /// </summary>
     /// <remarks>
     /// Command-range entries are lowered to short-lived backend scenes here. Scene entries

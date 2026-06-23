@@ -88,16 +88,14 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     {
         this.ThrowIfDisposed();
 
-        WebGPUEncodedScene encodedScene;
-        string? error;
         bool encoded = commandBatch.HasApply
             ? WebGPUSceneEncoder.TryEncodeOrdered(
                 commandBatch,
                 targetBounds,
                 configuration.MemoryAllocator,
                 configuration.MaxDegreeOfParallelism,
-                out encodedScene,
-                out error)
+                out WebGPUEncodedScene encodedScene,
+                out string? error)
             : WebGPUSceneEncoder.TryEncode(
                 commandBatch,
                 targetBounds,
@@ -131,7 +129,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         if (scene is not WebGPUDrawingBackendScene webGPUScene)
         {
-            throw new InvalidOperationException("The retained scene is not a WebGPU drawing backend scene.");
+            throw new InvalidOperationException("The scene is not compatible with the WebGPU drawing backend.");
         }
 
         if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormat formatId, out FeatureName requiredFeature))
@@ -147,12 +145,12 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         if (webGPUTarget.TargetFormat != formatId)
         {
-            throw new InvalidOperationException("The target texture format does not match the retained WebGPU scene pixel format.");
+            throw new InvalidOperationException("The target texture format does not match the WebGPU drawing backend scene pixel format.");
         }
 
         if (nativeTarget.Bounds != webGPUScene.Bounds)
         {
-            throw new InvalidOperationException("The target bounds do not match the retained WebGPU scene bounds.");
+            throw new InvalidOperationException("The target bounds do not match the WebGPU drawing backend scene bounds.");
         }
 
         this.DiagnosticLastFlushUsedChunking = false;

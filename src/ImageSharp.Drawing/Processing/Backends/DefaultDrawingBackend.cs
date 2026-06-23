@@ -41,7 +41,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     {
         if (scene is not DefaultDrawingBackendScene cpuScene)
         {
-            throw new InvalidOperationException("The retained scene is not a CPU drawing backend scene.");
+            throw new InvalidOperationException("The scene is not compatible with the CPU drawing backend.");
         }
 
         if (!target.TryGetCpuRegion(out Buffer2DRegion<TPixel> destinationFrame))
@@ -51,7 +51,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
 
         if (target.Bounds != cpuScene.Bounds)
         {
-            throw new InvalidOperationException("The target bounds do not match the retained CPU scene bounds.");
+            throw new InvalidOperationException("The target bounds do not match the CPU drawing backend scene bounds.");
         }
 
         if (cpuScene.Scene.RowCount != 0 || cpuScene.Scene.HasApply)
@@ -674,6 +674,63 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             Span<TPixel> dstRow = destinationRegion.DangerousGetRowSpan(dstY).Slice(dstX, width);
 
             blender.Blend(configuration, dstRow, dstRow, srcRow, amounts);
+        }
+    }
+
+    /// <inheritdoc />
+    public void CopyPixels<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> source,
+        ICanvasFrame<TPixel> target,
+        Rectangle sourceRectangle,
+        Point targetPoint)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Guard.NotNull(configuration, nameof(configuration));
+
+        if (!source.TryGetCpuRegion(out Buffer2DRegion<TPixel> sourceRegion))
+        {
+            throw new NotSupportedException($"{nameof(DefaultDrawingBackend)} requires CPU-accessible source frames.");
+        }
+
+        if (!target.TryGetCpuRegion(out Buffer2DRegion<TPixel> targetRegion))
+        {
+            throw new NotSupportedException($"{nameof(DefaultDrawingBackend)} requires CPU-accessible target frames.");
+        }
+
+        Rectangle sourceBounds = new(0, 0, sourceRegion.Width, sourceRegion.Height);
+        Rectangle clippedSource = Rectangle.Intersect(sourceBounds, sourceRectangle);
+        if (clippedSource.Width <= 0 || clippedSource.Height <= 0)
+        {
+            return;
+        }
+
+        Rectangle targetBounds = new(0, 0, targetRegion.Width, targetRegion.Height);
+        Rectangle targetRectangle = new(
+            targetPoint.X + clippedSource.X - sourceRectangle.X,
+            targetPoint.Y + clippedSource.Y - sourceRectangle.Y,
+            clippedSource.Width,
+            clippedSource.Height);
+
+        Rectangle clippedTarget = Rectangle.Intersect(targetBounds, targetRectangle);
+
+        if (clippedTarget.Width <= 0 || clippedTarget.Height <= 0)
+        {
+            return;
+        }
+
+        int sourceX = clippedSource.X + clippedTarget.X - targetRectangle.X;
+        int sourceY = clippedSource.Y + clippedTarget.Y - targetRectangle.Y;
+        int targetX = clippedTarget.X;
+        int targetY = clippedTarget.Y;
+        int width = clippedTarget.Width;
+        int height = clippedTarget.Height;
+
+        for (int y = 0; y < height; y++)
+        {
+            sourceRegion.DangerousGetRowSpan(sourceY + y)
+                .Slice(sourceX, width)
+                .CopyTo(targetRegion.DangerousGetRowSpan(targetY + y).Slice(targetX, width));
         }
     }
 

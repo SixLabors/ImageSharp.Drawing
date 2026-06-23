@@ -36,8 +36,6 @@ var<storage, read_write> bump: BumpAllocators;
 @group(0) @binding(8)
 var<storage, read_write> ptcl: array<u32>;
 
-
-
 // Much of this code assumes WG_SIZE == N_TILE. If these diverge, then
 // a fair amount of fixup is needed.
 const WG_SIZE = 256u;
@@ -90,7 +88,25 @@ fn alloc_cmd(size: u32) {
     }
 }
 
-fn write_path(tile: Tile, tile_ix: u32, draw_flags: u32) {
+fn solid_tile_has_coverage(draw_flags: u32, backdrop: i32, coverage_threshold: f32) -> bool {
+    let even_odd = (draw_flags & DRAW_INFO_FLAGS_FILL_RULE_BIT) != 0u;
+    let aliased = (draw_flags & DRAW_INFO_FLAGS_ALIASED_BIT) != 0u;
+    var coverage = f32(backdrop);
+
+    if even_odd {
+        coverage = abs(coverage - 2.0 * round(0.5 * coverage));
+    } else {
+        coverage = min(abs(coverage), 1.0);
+    }
+
+    if aliased {
+        coverage = select(0.0, 1.0, coverage >= coverage_threshold);
+    }
+
+    return coverage != 0.0;
+}
+
+fn write_path(tile: Tile, tile_ix: u32, draw_flags: u32, coverage_threshold: f32, interest: vec4<f32>, emit_empty_solid: bool) -> bool {
     // We overload the "segments" field to store both count (written by
     // path_count stage) and segment allocation (used by path_tiling and
     // fine).
@@ -98,19 +114,36 @@ fn write_path(tile: Tile, tile_ix: u32, draw_flags: u32) {
     if n_segs != 0u {
         var seg_ix = atomicAdd(&bump.segments, n_segs);
         tiles[tile_ix].segment_count_or_ix = ~seg_ix;
-        alloc_cmd(4u);
+        alloc_cmd(9u);
         ptcl[cmd_offset] = CMD_FILL;
         let even_odd = (draw_flags & DRAW_INFO_FLAGS_FILL_RULE_BIT) != 0u;
-        let size_and_rule = (n_segs << 1u) | u32(even_odd);
-        let fill = CmdFill(size_and_rule, seg_ix, tile.backdrop);
+        let aliased = (draw_flags & DRAW_INFO_FLAGS_ALIASED_BIT) != 0u;
+        // size_and_rule: bit 0 = even-odd, bit 1 = aliased coverage, bits 2.. = segment count.
+        let size_and_rule = (n_segs << 2u) | (u32(aliased) << 1u) | u32(even_odd);
+        let fill = CmdFill(size_and_rule, seg_ix, tile.backdrop, coverage_threshold, interest);
         ptcl[cmd_offset + 1u] = fill.size_and_rule;
         ptcl[cmd_offset + 2u] = fill.seg_data;
         ptcl[cmd_offset + 3u] = u32(fill.backdrop);
-        cmd_offset += 4u;
+        ptcl[cmd_offset + 4u] = bitcast<u32>(fill.coverage_threshold);
+        ptcl[cmd_offset + 5u] = bitcast<u32>(fill.interest.x);
+        ptcl[cmd_offset + 6u] = bitcast<u32>(fill.interest.y);
+        ptcl[cmd_offset + 7u] = bitcast<u32>(fill.interest.z);
+        ptcl[cmd_offset + 8u] = bitcast<u32>(fill.interest.w);
+        cmd_offset += 9u;
+        return true;
     } else {
-        alloc_cmd(1u);
+        if !emit_empty_solid && !solid_tile_has_coverage(draw_flags, tile.backdrop, coverage_threshold) {
+            return false;
+        }
+
+        alloc_cmd(5u);
         ptcl[cmd_offset] = CMD_SOLID;
-        cmd_offset += 1u;
+        ptcl[cmd_offset + 1u] = bitcast<u32>(interest.x);
+        ptcl[cmd_offset + 2u] = bitcast<u32>(interest.y);
+        ptcl[cmd_offset + 3u] = bitcast<u32>(interest.z);
+        ptcl[cmd_offset + 4u] = bitcast<u32>(interest.w);
+        cmd_offset += 5u;
+        return true;
     }
 }
 
@@ -444,6 +477,19 @@ fn main(
             let dd = config.drawdata_base + dm.scene_offset;
             let di = dm.info_offset;
             let draw_flags = info_bin_data[di];
+            var coverage_threshold = -1.0;
+            var interest = vec4<f32>(0.0, 0.0, f32(config.target_width), f32(config.target_height));
+            let drawtag_info_size = (drawtag >> 6u) & 0xfu;
+            if drawtag_info_size >= 5u {
+                let interest_offset = di + drawtag_info_size - 5u;
+                coverage_threshold = bitcast<f32>(info_bin_data[interest_offset]);
+                interest = vec4<f32>(
+                    bitcast<f32>(info_bin_data[interest_offset + 1u]),
+                    bitcast<f32>(info_bin_data[interest_offset + 2u]),
+                    bitcast<f32>(info_bin_data[interest_offset + 3u]),
+                    bitcast<f32>(info_bin_data[interest_offset + 4u]));
+            }
+
             if clip_zero_depth == 0u {
                 let path = paths[dm.path_ix];
                 let tile_ref = lookup_tile(path, bin_tile_x + tile_x, bin_tile_y + tile_y);
@@ -455,45 +501,53 @@ fn main(
                 let tile = tiles[tile_ix];
                 switch drawtag {
                     case DRAWTAG_FILL_COLOR: {
-                        write_path(tile, tile_ix, draw_flags);
-                        let rgba_color = scene[dd];
-                        write_color(CmdColor(rgba_color, draw_flags));
+                        if write_path(tile, tile_ix, draw_flags, coverage_threshold, interest, false) {
+                            let rgba_color = scene[dd];
+                            write_color(CmdColor(rgba_color, draw_flags));
+                        }
                     }
                     case DRAWTAG_FILL_RECOLOR: {
-                        write_path(tile, tile_ix, draw_flags);
-                        write_recolor(scene[dd], scene[dd + 1u], scene[dd + 2u], draw_flags);
+                        if write_path(tile, tile_ix, draw_flags, coverage_threshold, interest, false) {
+                            write_recolor(scene[dd], scene[dd + 1u], scene[dd + 2u], draw_flags);
+                        }
                     }
                     case DRAWTAG_FILL_LIN_GRADIENT: {
-                        write_path(tile, tile_ix, draw_flags);
-                        let index = scene[dd];
-                        let info_offset = di + 1u;
-                        write_grad(CMD_LIN_GRAD, index, info_offset);
+                        if write_path(tile, tile_ix, draw_flags, coverage_threshold, interest, false) {
+                            let index = scene[dd];
+                            let info_offset = di + 1u;
+                            write_grad(CMD_LIN_GRAD, index, info_offset);
+                        }
                     }
                     case DRAWTAG_FILL_RAD_GRADIENT: {
-                        write_path(tile, tile_ix, draw_flags);
-                        let index = scene[dd];
-                        let info_offset = di + 1u;
-                        write_grad(CMD_RAD_GRAD, index, info_offset);
+                        if write_path(tile, tile_ix, draw_flags, coverage_threshold, interest, false) {
+                            let index = scene[dd];
+                            let info_offset = di + 1u;
+                            write_grad(CMD_RAD_GRAD, index, info_offset);
+                        }
                     }
                     case DRAWTAG_FILL_ELLIPTIC_GRADIENT: {
-                        write_path(tile, tile_ix, draw_flags);
-                        let index = scene[dd];
-                        let info_offset = di + 1u;
-                        write_grad(CMD_ELLIPTIC_GRAD, index, info_offset);
+                        if write_path(tile, tile_ix, draw_flags, coverage_threshold, interest, false) {
+                            let index = scene[dd];
+                            let info_offset = di + 1u;
+                            write_grad(CMD_ELLIPTIC_GRAD, index, info_offset);
+                        }
                     }
                     case DRAWTAG_FILL_SWEEP_GRADIENT: {
-                        write_path(tile, tile_ix, draw_flags);
-                        let index = scene[dd];
-                        let info_offset = di + 1u;
-                        write_grad(CMD_SWEEP_GRAD, index, info_offset);
+                        if write_path(tile, tile_ix, draw_flags, coverage_threshold, interest, false) {
+                            let index = scene[dd];
+                            let info_offset = di + 1u;
+                            write_grad(CMD_SWEEP_GRAD, index, info_offset);
+                        }
                     }
                     case DRAWTAG_FILL_PATH_GRADIENT: {
-                        write_path(tile, tile_ix, draw_flags);
-                        write_path_grad(config.path_gradient_data_base + scene[dd], scene[dd + 1u], scene[dd + 2u], draw_flags);
+                        if write_path(tile, tile_ix, draw_flags, coverage_threshold, interest, false) {
+                            write_path_grad(config.path_gradient_data_base + scene[dd], scene[dd + 1u], scene[dd + 2u], draw_flags);
+                        }
                     }
                     case DRAWTAG_FILL_IMAGE: {
-                        write_path(tile, tile_ix, draw_flags);
-                        write_image(di + 1u);
+                        if write_path(tile, tile_ix, draw_flags, coverage_threshold, interest, false) {
+                            write_image(di + 1u);
+                        }
                     }
                     case DRAWTAG_BEGIN_CLIP: {
                         let even_odd = (draw_flags & DRAW_INFO_FLAGS_FILL_RULE_BIT) != 0u;
@@ -509,7 +563,10 @@ fn main(
                     }
                     case DRAWTAG_END_CLIP: {
                         clip_depth -= 1u;
-                        write_path(tile, tile_ix, draw_flags);
+                        // End-clip borrows the following draw's info word for its flags, so force the
+                        // aliased bit off: clip-exit coverage is always antialiased here.
+                        let clip_interest = vec4<f32>(0.0, 0.0, f32(config.target_width), f32(config.target_height));
+                        write_path(tile, tile_ix, draw_flags & ~DRAW_INFO_FLAGS_ALIASED_BIT, coverage_threshold, clip_interest, true);
                         let blend = scene[dd];
                         let alpha = bitcast<f32>(scene[dd + 1u]);
                         write_end_clip(CmdEndClip(blend, alpha));

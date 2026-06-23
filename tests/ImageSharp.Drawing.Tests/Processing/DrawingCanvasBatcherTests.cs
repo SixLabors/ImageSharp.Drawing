@@ -278,6 +278,15 @@ public class DrawingCanvasBatcherTests
         {
         }
 
+        public void CopyPixels<TPixel>(
+            Configuration configuration,
+            ICanvasFrame<TPixel> source,
+            ICanvasFrame<TPixel> target,
+            Rectangle sourceRectangle,
+            Point targetPoint)
+            where TPixel : unmanaged, IPixel<TPixel>
+            => throw new NotSupportedException();
+
         public void ReadRegion<TPixel>(
             Configuration configuration,
             ICanvasFrame<TPixel> target,

@@ -47,11 +47,8 @@ public abstract partial class DrawingCanvas : IDisposable
     public abstract int Save(DrawingOptions options, params IPath[] clipPaths);
 
     /// <summary>
-    /// Saves the current drawing state and begins an isolated compositing layer
-    /// bounded to a subregion. Subsequent draw commands are recorded into that isolated
-    /// logical layer. When <see cref="Restore"/> closes the layer, it is recorded into the
-    /// canvas timeline and later composed during <see cref="IDisposable.Dispose"/> using the specified
-    /// <paramref name="layerOptions"/>.
+    /// Saves the current drawing state and begins an isolated compositing layer bounded to a subregion.
+    /// Subsequent draw commands target that layer until <see cref="Restore"/> closes it.
     /// </summary>
     /// <remarks>
     /// The layer bounds are expressed in the current local coordinate system and are
@@ -60,8 +57,7 @@ public abstract partial class DrawingCanvas : IDisposable
     /// system used by commands recorded inside the layer.
     /// </remarks>
     /// <param name="layerOptions">
-    /// Graphics options controlling how the closed layer is composited against the parent canvas
-    /// when the canvas timeline is rendered during <see cref="IDisposable.Dispose"/>.
+    /// Graphics options controlling how the closed layer is composited against the parent canvas.
     /// </param>
     /// <param name="bounds">
     /// The local bounds of the layer. Only this region is allocated and composited.
@@ -74,8 +70,7 @@ public abstract partial class DrawingCanvas : IDisposable
     /// using the supplied drawing options and clip paths for commands recorded into the layer.
     /// </summary>
     /// <param name="layerOptions">
-    /// Graphics options controlling how the closed layer is composited against the parent canvas
-    /// when the canvas timeline is rendered during <see cref="IDisposable.Dispose"/>.
+    /// Graphics options controlling how the closed layer is composited against the parent canvas.
     /// </param>
     /// <param name="bounds">
     /// The local bounds of the layer. Only this region is allocated and composited.
@@ -90,8 +85,7 @@ public abstract partial class DrawingCanvas : IDisposable
     /// </summary>
     /// <remarks>
     /// If the most recently saved state was created by a <c>SaveLayer</c> overload,
-    /// the layer is closed in the recorded timeline. Actual composition happens during
-    /// <see cref="IDisposable.Dispose"/>.
+    /// the layer is closed and becomes part of subsequent rendering.
     /// </remarks>
     public abstract void Restore();
 
@@ -102,8 +96,7 @@ public abstract partial class DrawingCanvas : IDisposable
     /// State frames above <paramref name="saveCount"/> are discarded,
     /// and the last discarded frame becomes the current state.
     /// If any discarded state was created by a <c>SaveLayer</c> overload,
-    /// those layers are closed in the recorded timeline and composed during
-    /// <see cref="IDisposable.Dispose"/>.
+    /// those layers are closed and become part of subsequent rendering.
     /// </remarks>
     /// <param name="saveCount">The save count to restore to.</param>
     public abstract void RestoreTo(int saveCount);
@@ -356,19 +349,30 @@ public abstract partial class DrawingCanvas : IDisposable
         IResampler? sampler = null);
 
     /// <summary>
-    /// Creates a retained backend scene from the drawing commands currently queued on this canvas.
+    /// Copies pixels from another canvas into this canvas.
     /// </summary>
-    /// <returns>A retained backend scene.</returns>
+    /// <remarks>
+    /// Any queued commands on both canvases are applied before the copy.
+    /// </remarks>
+    /// <param name="source">The source canvas.</param>
+    /// <param name="sourceRectangle">The source rectangle in source-local coordinates.</param>
+    /// <param name="targetPoint">The target point in this canvas' local coordinates.</param>
+    public abstract void CopyPixelsFrom(DrawingCanvas source, Rectangle sourceRectangle, Point targetPoint);
+
+    /// <summary>
+    /// Creates a backend scene from the drawing commands currently queued on this canvas.
+    /// </summary>
+    /// <returns>The created backend scene.</returns>
     public abstract DrawingBackendScene CreateScene();
 
     /// <summary>
-    /// Renders a retained backend scene into this canvas target.
+    /// Renders a backend scene into this canvas target.
     /// </summary>
-    /// <param name="scene">The retained backend scene to render.</param>
+    /// <param name="scene">The backend scene to render.</param>
     public abstract void RenderScene(DrawingBackendScene scene);
 
     /// <summary>
-    /// Seals queued drawing commands into the canvas timeline.
+    /// Makes queued drawing commands available for rendering.
     /// </summary>
     public abstract void Flush();
 

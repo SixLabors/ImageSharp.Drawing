@@ -21,6 +21,14 @@ internal static unsafe class WebGPUSceneResources
     /// <summary>
     /// Creates the flush-scoped GPU resources required by the staged scene pipeline.
     /// </summary>
+    /// <param name="flushContext">The active WebGPU flush context.</param>
+    /// <param name="scene">The encoded scene to stage.</param>
+    /// <param name="config">The scene configuration.</param>
+    /// <param name="baseColor">The packed base color for the target.</param>
+    /// <param name="arena">The reusable resource arena for this staging operation.</param>
+    /// <param name="resources">The staged resource set.</param>
+    /// <param name="error">The error message when resource creation fails.</param>
+    /// <returns><see langword="true"/> when the resources were created.</returns>
     public static bool TryCreate<TPixel>(
         WebGPUFlushContext flushContext,
         WebGPUEncodedScene scene,
@@ -43,6 +51,16 @@ internal static unsafe class WebGPUSceneResources
     /// <summary>
     /// Creates the flush-scoped GPU resources required by the staged scene pipeline for one range.
     /// </summary>
+    /// <param name="flushContext">The active WebGPU flush context.</param>
+    /// <param name="scene">The encoded scene to stage.</param>
+    /// <param name="range">The scene range to stage.</param>
+    /// <param name="config">The scene configuration.</param>
+    /// <param name="baseColor">The packed base color for the target.</param>
+    /// <param name="externalTextureView">The target texture view supplied by the caller.</param>
+    /// <param name="arena">The reusable resource arena for this staging operation.</param>
+    /// <param name="resources">The staged resource set.</param>
+    /// <param name="error">The error message when resource creation fails.</param>
+    /// <returns><see langword="true"/> when the resources were created.</returns>
     public static bool TryCreate<TPixel>(
         WebGPUFlushContext flushContext,
         WebGPUEncodedScene scene,
@@ -68,6 +86,15 @@ internal static unsafe class WebGPUSceneResources
     /// <summary>
     /// Creates the flush-scoped GPU resources required by the staged scene pipeline.
     /// </summary>
+    /// <param name="flushContext">The active WebGPU flush context.</param>
+    /// <param name="scene">The encoded scene to stage.</param>
+    /// <param name="config">The scene configuration.</param>
+    /// <param name="baseColor">The packed base color for the target.</param>
+    /// <param name="externalTextureView">The target texture view supplied by the caller.</param>
+    /// <param name="arena">The reusable resource arena for this staging operation.</param>
+    /// <param name="resources">The staged resource set.</param>
+    /// <param name="error">The error message when resource creation fails.</param>
+    /// <returns><see langword="true"/> when the resources were created.</returns>
     public static bool TryCreate<TPixel>(
         WebGPUFlushContext flushContext,
         WebGPUEncodedScene scene,
@@ -454,6 +481,11 @@ internal static unsafe class WebGPUSceneResources
     /// <summary>
     /// Creates and uploads the packed gradient-ramp texture used by gradient draw records.
     /// </summary>
+    /// <param name="flushContext">The active WebGPU flush context.</param>
+    /// <param name="scene">The encoded scene containing gradient rows.</param>
+    /// <param name="textureView">The created texture view.</param>
+    /// <param name="error">The error message when texture creation fails.</param>
+    /// <returns><see langword="true"/> when the texture was created.</returns>
     private static bool TryCreateGradientTexture(
         WebGPUFlushContext flushContext,
         WebGPUEncodedScene scene,
@@ -544,6 +576,9 @@ internal static unsafe class WebGPUSceneResources
     /// <summary>
     /// Gets the atlas footprint for one sampled image or pattern brush entry.
     /// </summary>
+    /// <param name="brush">The sampled brush.</param>
+    /// <param name="width">The atlas entry width in pixels.</param>
+    /// <param name="height">The atlas entry height in pixels.</param>
     private static void GetImageEntrySize(Brush brush, out int width, out int height)
     {
         if (brush is PatternBrush patternBrush)
@@ -696,6 +731,12 @@ internal static unsafe class WebGPUSceneResources
     /// <summary>
     /// Creates a one-pixel transparent fallback texture so shader bindings stay valid when a scene omits that input.
     /// </summary>
+    /// <param name="flushContext">The active WebGPU flush context.</param>
+    /// <param name="textureFormat">The texture format to create.</param>
+    /// <param name="texture">The created texture.</param>
+    /// <param name="textureView">The created texture view.</param>
+    /// <param name="error">The error message when texture creation fails.</param>
+    /// <returns><see langword="true"/> when the texture and view were created.</returns>
     private static bool TryCreateTransparentSampledTexture(
         WebGPUFlushContext flushContext,
         TextureFormat textureFormat,
@@ -776,6 +817,15 @@ internal static unsafe class WebGPUSceneResources
     /// <summary>
     /// Creates one sampled texture and its default 2D view.
     /// </summary>
+    /// <param name="flushContext">The active WebGPU flush context.</param>
+    /// <param name="textureFormat">The texture format to create.</param>
+    /// <param name="width">The texture width in pixels.</param>
+    /// <param name="height">The texture height in pixels.</param>
+    /// <param name="textureName">The texture name used in error messages.</param>
+    /// <param name="texture">The created texture.</param>
+    /// <param name="textureView">The created texture view.</param>
+    /// <param name="error">The error message when texture creation fails.</param>
+    /// <returns><see langword="true"/> when the texture and view were created.</returns>
     private static bool TryCreateTexture(
         WebGPUFlushContext flushContext,
         TextureFormat textureFormat,
@@ -894,6 +944,8 @@ internal static unsafe class WebGPUSceneResources
     /// <summary>
     /// Packs the texture-format and extend-mode bits consumed by the image sampling shader path.
     /// </summary>
+    /// <param name="mode">The ImageSharp wrap mode.</param>
+    /// <returns>The shader atlas extend mode.</returns>
     private static uint MapImageWrapMode(WrapMode mode)
         => mode switch
         {
@@ -1005,6 +1057,25 @@ internal readonly unsafe struct WebGPUSceneResourceSet
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUSceneResourceSet"/> struct.
     /// </summary>
+    /// <param name="headerBuffer">The root scene-config buffer.</param>
+    /// <param name="sceneBuffer">The packed scene-data buffer.</param>
+    /// <param name="pathReducedBuffer">The first pathtag-reduction scratch buffer.</param>
+    /// <param name="pathReduced2Buffer">The second pathtag-reduction scratch buffer.</param>
+    /// <param name="pathReducedScanBuffer">The pathtag scan scratch buffer.</param>
+    /// <param name="pathMonoidBuffer">The final pathtag monoid buffer.</param>
+    /// <param name="pathBboxBuffer">The per-path bounding-box buffer.</param>
+    /// <param name="drawReducedBuffer">The draw reduction buffer.</param>
+    /// <param name="drawMonoidBuffer">The final draw monoid buffer.</param>
+    /// <param name="infoBinDataBuffer">The packed info-bin data buffer.</param>
+    /// <param name="clipInputBuffer">The clip input buffer.</param>
+    /// <param name="clipElementBuffer">The clip element buffer.</param>
+    /// <param name="clipBicBuffer">The clip bicubic coefficient buffer.</param>
+    /// <param name="clipBboxBuffer">The clip bounding-box buffer.</param>
+    /// <param name="drawBboxBuffer">The draw bounding-box buffer.</param>
+    /// <param name="pathBuffer">The flattened path buffer.</param>
+    /// <param name="lineBuffer">The flattened line buffer.</param>
+    /// <param name="gradientTextureView">The gradient texture view.</param>
+    /// <param name="imageAtlasTextureView">The image atlas texture view.</param>
     public WebGPUSceneResourceSet(
         WgpuBuffer* headerBuffer,
         WgpuBuffer* sceneBuffer,
@@ -1248,6 +1319,11 @@ internal sealed unsafe class WebGPUSceneResourceArena
     /// <summary>
     /// Returns true if every buffer fits the required sizes for this scene.
     /// </summary>
+    /// <param name="flushContext">The active WebGPU flush context.</param>
+    /// <param name="bufferSizes">The required buffer sizes.</param>
+    /// <param name="infoBinDataByteLength">The required info-bin data length in bytes.</param>
+    /// <param name="sceneByteLength">The required scene-data length in bytes.</param>
+    /// <returns><see langword="true"/> when the arena can be reused.</returns>
     public bool CanReuse(WebGPUFlushContext flushContext, WebGPUSceneBufferSizes bufferSizes, nuint infoBinDataByteLength, nuint sceneByteLength)
         => ReferenceEquals(this.Device, flushContext.DeviceHandle) &&
            this.HeaderBuffer is not null &&
@@ -1272,6 +1348,7 @@ internal sealed unsafe class WebGPUSceneResourceArena
     /// <summary>
     /// Releases all GPU buffers owned by this arena.
     /// </summary>
+    /// <param name="arena">The arena to dispose.</param>
     public static void Dispose(WebGPUSceneResourceArena? arena)
     {
         if (arena is null || arena.HeaderBuffer is null)
@@ -1344,12 +1421,33 @@ internal readonly struct GpuTagMonoid
 }
 
 /// <summary>
-/// Per-path bounding box and metadata consumed by later scheduling passes.
+/// Per-path bounding box and scheduling data written by the flatten pass.
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuPathBbox
 {
-    public GpuPathBbox(int x0, int y0, int x1, int y1, uint drawFlags, uint transIndex)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GpuPathBbox"/> struct.
+    /// </summary>
+    /// <param name="x0">The left edge of the transformed integer path bounds.</param>
+    /// <param name="y0">The top edge of the transformed integer path bounds.</param>
+    /// <param name="x1">The right edge of the transformed integer path bounds.</param>
+    /// <param name="y1">The bottom edge of the transformed integer path bounds.</param>
+    /// <param name="drawFlags">The draw flags associated with the path.</param>
+    /// <param name="transIndex">The transform index associated with the path.</param>
+    /// <param name="coverageThreshold">The aliased coverage threshold for the path.</param>
+    /// <param name="padding">The reserved layout slot matching <c>PathBbox._padding</c> in <c>bbox.wgsl</c>.</param>
+    /// <param name="interest">The root-target-local raster interest rectangle.</param>
+    public GpuPathBbox(
+        int x0,
+        int y0,
+        int x1,
+        int y1,
+        uint drawFlags,
+        uint transIndex,
+        float coverageThreshold,
+        uint padding,
+        Vector4 interest)
     {
         this.X0 = x0;
         this.Y0 = y0;
@@ -1357,19 +1455,55 @@ internal readonly struct GpuPathBbox
         this.Y1 = y1;
         this.DrawFlags = drawFlags;
         this.TransIndex = transIndex;
+        this.CoverageThreshold = coverageThreshold;
+        this.Padding = padding;
+        this.Interest = interest;
     }
 
+    /// <summary>
+    /// Gets the left edge of the transformed integer path bounds.
+    /// </summary>
     public int X0 { get; }
 
+    /// <summary>
+    /// Gets the top edge of the transformed integer path bounds.
+    /// </summary>
     public int Y0 { get; }
 
+    /// <summary>
+    /// Gets the right edge of the transformed integer path bounds.
+    /// </summary>
     public int X1 { get; }
 
+    /// <summary>
+    /// Gets the bottom edge of the transformed integer path bounds.
+    /// </summary>
     public int Y1 { get; }
 
+    /// <summary>
+    /// Gets the draw flags associated with this path.
+    /// </summary>
     public uint DrawFlags { get; }
 
+    /// <summary>
+    /// Gets the transform index associated with this path.
+    /// </summary>
     public uint TransIndex { get; }
+
+    /// <summary>
+    /// Gets the aliased coverage threshold for this path.
+    /// </summary>
+    public float CoverageThreshold { get; }
+
+    /// <summary>
+    /// Gets the reserved layout slot matching <c>PathBbox._padding</c> in <c>bbox.wgsl</c>.
+    /// </summary>
+    public uint Padding { get; }
+
+    /// <summary>
+    /// Gets the root-target-local raster interest rectangle.
+    /// </summary>
+    public Vector4 Interest { get; }
 }
 
 /// <summary>
@@ -1611,72 +1745,6 @@ internal readonly struct GpuSceneConfig
     /// Gets the scene-wide coverage threshold consumed by the aliased fine pass.
     /// </summary>
     public float FineCoverageThreshold { get; }
-}
-
-/// <summary>
-/// Encoded draw-tag constants matching the staged-scene shader contract.
-/// </summary>
-internal static class GpuSceneDrawTag
-{
-    // These values are not a plain enum because each word also encodes the path-count, clip-count,
-    // scene-word-count, and info-word-count increments consumed by the scan/reduction stages.
-    public const uint Nop = 0U;
-    public const uint FillColor = 0x44U;
-    public const uint FillRecolor = 0x4CU;
-    public const uint FillLinGradient = 0x114U;
-    public const uint FillRadGradient = 0x29CU;
-    public const uint FillEllipticGradient = 0x1DCU;
-    public const uint FillSweepGradient = 0x254U;
-    public const uint FillPathGradient = 0x50U;
-    public const uint FillImage = 0x294U;
-    public const uint BeginClip = 0x49U;
-    public const uint EndClip = 0x21U;
-    public const uint FillInfoFlagsFillRuleBit = 1U;
-
-    /// <summary>
-    /// Decodes one packed draw tag into the additive monoid scanned by later scheduling passes.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static GpuSceneDrawMonoid Map(uint tagWord)
-        => new(
-            tagWord != Nop ? 1U : 0U,
-            tagWord & 1U,
-            (tagWord >> 2) & 0x07U,
-            (tagWord >> 6) & 0x0FU);
-}
-
-/// <summary>
-/// Additive monoid scanned over the draw-tag stream to derive scene offsets for later stages.
-/// </summary>
-[StructLayout(LayoutKind.Sequential)]
-internal readonly struct GpuSceneDrawMonoid
-{
-    public GpuSceneDrawMonoid(uint pathIndex, uint clipIndex, uint sceneOffset, uint infoOffset)
-    {
-        this.PathIndex = pathIndex;
-        this.ClipIndex = clipIndex;
-        this.SceneOffset = sceneOffset;
-        this.InfoOffset = infoOffset;
-    }
-
-    public uint PathIndex { get; }
-
-    public uint ClipIndex { get; }
-
-    public uint SceneOffset { get; }
-
-    public uint InfoOffset { get; }
-
-    /// <summary>
-    /// Combines two draw monoids by adding each offset/count component independently.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static GpuSceneDrawMonoid Combine(in GpuSceneDrawMonoid a, in GpuSceneDrawMonoid b)
-        => new(
-            a.PathIndex + b.PathIndex,
-            a.ClipIndex + b.ClipIndex,
-            a.SceneOffset + b.SceneOffset,
-            a.InfoOffset + b.InfoOffset);
 }
 
 /// <summary>

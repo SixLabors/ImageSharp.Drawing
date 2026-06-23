@@ -12,6 +12,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 public sealed unsafe class WebGPUSurfaceFrame : IDisposable
 {
     private readonly WebGPU api;
+    private readonly WebGPUDeviceContext deviceContext;
+    private readonly WebGPUTextureFormat format;
     private WebGPUHandle.HandleReference surfaceReference;
     private readonly WebGPUTextureHandle textureHandle;
     private readonly WebGPUTextureViewHandle textureViewHandle;
@@ -20,6 +22,8 @@ public sealed unsafe class WebGPUSurfaceFrame : IDisposable
 
     internal WebGPUSurfaceFrame(
         WebGPU api,
+        WebGPUDeviceContext deviceContext,
+        WebGPUTextureFormat format,
         WebGPUSurfaceHandle surfaceHandle,
         WebGPUTextureHandle textureHandle,
         WebGPUTextureViewHandle textureViewHandle,
@@ -27,9 +31,11 @@ public sealed unsafe class WebGPUSurfaceFrame : IDisposable
         Action? onDisposed = null)
     {
         this.api = api;
+        this.deviceContext = deviceContext;
         this.surfaceReference = surfaceHandle.AcquireReference();
         this.textureHandle = textureHandle;
         this.textureViewHandle = textureViewHandle;
+        this.format = format;
         this.Canvas = canvas;
         this.onDisposed = onDisposed;
     }
@@ -38,6 +44,22 @@ public sealed unsafe class WebGPUSurfaceFrame : IDisposable
     /// Gets the drawing canvas for the acquired frame.
     /// </summary>
     public DrawingCanvas Canvas { get; }
+
+    /// <summary>
+    /// Creates an empty render target with the same texture format as this frame.
+    /// </summary>
+    /// <param name="width">The target width in pixels.</param>
+    /// <param name="height">The target height in pixels.</param>
+    /// <returns>The created render target.</returns>
+    /// <remarks>
+    /// The created target does not contain a copy of this frame's pixels.
+    /// </remarks>
+    public WebGPURenderTarget CreateRenderTarget(int width, int height)
+    {
+        this.ThrowIfDisposed();
+
+        return this.deviceContext.CreateRenderTarget(this.format, width, height);
+    }
 
     /// <summary>
     /// Disposes the frame, rendering and presenting it, then releasing the per-frame WebGPU resources.
@@ -51,8 +73,7 @@ public sealed unsafe class WebGPUSurfaceFrame : IDisposable
 
         try
         {
-            // Canvas disposal replays the recorded timeline. Present only after rendering has submitted work for
-            // this acquired surface texture.
+            // Dispose submits the canvas work. Present only after rendering has targeted this acquired surface texture.
             this.Canvas.Dispose();
             this.api.SurfacePresent((Surface*)this.surfaceReference.Handle);
         }
@@ -65,4 +86,7 @@ public sealed unsafe class WebGPUSurfaceFrame : IDisposable
             this.onDisposed?.Invoke();
         }
     }
+
+    private void ThrowIfDisposed()
+        => ObjectDisposedException.ThrowIf(this.isDisposed, this);
 }

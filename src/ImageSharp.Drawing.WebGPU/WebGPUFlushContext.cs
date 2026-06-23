@@ -191,6 +191,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             bounds.Y + targetTextureOffset.Y,
             bounds.Width,
             bounds.Height);
+
         WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(api, nativeTarget.DeviceHandle);
 
         if (nativeTarget.DeviceHandle.IsInvalid ||

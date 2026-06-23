@@ -3,6 +3,7 @@
 
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
+using SixLabors.ImageSharp.Drawing.Tests;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.Attributes;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
@@ -22,7 +23,7 @@ public class WebGPUDeviceContextTests
     public void CreateCanvas_RejectsInvalidHandles_AndReadbackRejectsMismatchedFormat()
     {
         using WebGPUDeviceContext drawing = new();
-        using WebGPURenderTarget target = drawing.CreateRenderTarget(8, 8);
+        using WebGPURenderTarget target = drawing.CreateRenderTarget(WebGPUTextureFormat.Rgba8Unorm, 8, 8);
         using WebGPUHandle.HandleReference textureReference = target.TextureHandle.AcquireReference();
         using WebGPUHandle.HandleReference textureViewReference = target.TextureViewHandle.AcquireReference();
 
@@ -42,7 +43,7 @@ public class WebGPUDeviceContextTests
     public void CreateCanvas_WithExternalTexture_UsesGpuPath()
     {
         using WebGPUDeviceContext drawing = new();
-        using WebGPURenderTarget target = drawing.CreateRenderTarget(32, 24);
+        using WebGPURenderTarget target = drawing.CreateRenderTarget(WebGPUTextureFormat.Rgba8Unorm, 32, 24);
         using (DrawingCanvas canvas = drawing.CreateCanvas(
                    new DrawingOptions(),
                    target.TextureHandle,
@@ -62,7 +63,7 @@ public class WebGPUDeviceContextTests
     public void RenderTarget_CreateCanvas_RendersAndReadsBack()
     {
         using WebGPUDeviceContext drawing = new();
-        using WebGPURenderTarget target = drawing.CreateRenderTarget(18, 14);
+        using WebGPURenderTarget target = drawing.CreateRenderTarget(WebGPUTextureFormat.Rgba8Unorm, 18, 14);
         using (DrawingCanvas canvas = target.CreateCanvas())
         {
             canvas.Fill(Brushes.Solid(Color.Green), new RectanglePolygon(0, 0, 18, 14));
@@ -116,7 +117,7 @@ public class WebGPUDeviceContextTests
     public void Dispose_Context_DoesNotReleaseOwnedTargetHandles()
     {
         using WebGPUDeviceContext drawing = new();
-        using WebGPURenderTarget target = drawing.CreateRenderTarget(12, 10);
+        using WebGPURenderTarget target = drawing.CreateRenderTarget(WebGPUTextureFormat.Rgba8Unorm, 12, 10);
 
         drawing.Dispose();
 

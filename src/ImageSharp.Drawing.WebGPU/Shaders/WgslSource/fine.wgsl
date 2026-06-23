@@ -50,7 +50,13 @@ fn read_fill(cmd_ix: u32) -> CmdFill {
     let size_and_rule = ptcl[cmd_ix + 1u];
     let seg_data = ptcl[cmd_ix + 2u];
     let backdrop = i32(ptcl[cmd_ix + 3u]);
-    return CmdFill(size_and_rule, seg_data, backdrop);
+    let coverage_threshold = bitcast<f32>(ptcl[cmd_ix + 4u]);
+    let interest = vec4<f32>(
+        bitcast<f32>(ptcl[cmd_ix + 5u]),
+        bitcast<f32>(ptcl[cmd_ix + 6u]),
+        bitcast<f32>(ptcl[cmd_ix + 7u]),
+        bitcast<f32>(ptcl[cmd_ix + 8u]));
+    return CmdFill(size_and_rule, seg_data, backdrop, coverage_threshold, interest);
 }
 
 fn read_color(cmd_ix: u32) -> CmdColor {
@@ -522,9 +528,11 @@ const PIXELS_PER_THREAD = 4u;
 // Analytic area anti-aliasing.
 //
 // FIXME: This should return an array when https://github.com/gfx-rs/naga/issues/1930 is fixed.
-fn fill_path(fill: CmdFill, xy: vec2<f32>, result: ptr<function, array<f32, PIXELS_PER_THREAD>>) {
-    let n_segs = fill.size_and_rule >> 1u;
+fn fill_path(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result: ptr<function, array<f32, PIXELS_PER_THREAD>>) {
+    // size_and_rule: bit 0 = even-odd, bit 1 = aliased coverage, bits 2.. = segment count.
+    let n_segs = fill.size_and_rule >> 2u;
     let even_odd = (fill.size_and_rule & 1u) != 0u;
+    let aliased = (fill.size_and_rule & 2u) != 0u;
     var area: array<f32, PIXELS_PER_THREAD>;
     let backdrop_f = f32(fill.backdrop);
     for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
@@ -575,6 +583,21 @@ fn fill_path(fill: CmdFill, xy: vec2<f32>, result: ptr<function, array<f32, PIXE
             area[i] = min(abs(area[i]), 1.0);
         }
     }
+    if aliased {
+        // Aliased fills quantize analytic coverage against this fill's own coverage threshold,
+        // matching the CPU rasterizer's per-fill RasterizationMode.Aliased + AntialiasThreshold.
+        let threshold = fill.coverage_threshold;
+        for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+            area[i] = select(0.0, 1.0, area[i] >= threshold);
+        }
+    }
+    for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+        let pixel = global_xy + vec2<f32>(f32(i), 0.0);
+        if pixel.x < fill.interest.x || pixel.y < fill.interest.y || pixel.x >= fill.interest.z || pixel.y >= fill.interest.w {
+            area[i] = 0.0;
+        }
+    }
+
     *result = area;
 }
 
@@ -615,14 +638,20 @@ fn main(
         switch tag {
             case CMD_FILL: {
                 let fill = read_fill(cmd_ix);
-                fill_path(fill, local_xy, &area);
-                cmd_ix += 4u;
+                fill_path(fill, local_xy, xy, &area);
+                cmd_ix += 9u;
             }
             case CMD_SOLID: {
+                let interest = vec4<f32>(
+                    bitcast<f32>(ptcl[cmd_ix + 1u]),
+                    bitcast<f32>(ptcl[cmd_ix + 2u]),
+                    bitcast<f32>(ptcl[cmd_ix + 3u]),
+                    bitcast<f32>(ptcl[cmd_ix + 4u]));
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                    area[i] = 1.0;
+                    let pixel = xy + vec2<f32>(f32(i), 0.0);
+                    area[i] = select(0.0, 1.0, pixel.x >= interest.x && pixel.y >= interest.y && pixel.x < interest.z && pixel.y < interest.w);
                 }
-                cmd_ix += 1u;
+                cmd_ix += 5u;
             }
             case CMD_COLOR: {
                 let color = read_color(cmd_ix);

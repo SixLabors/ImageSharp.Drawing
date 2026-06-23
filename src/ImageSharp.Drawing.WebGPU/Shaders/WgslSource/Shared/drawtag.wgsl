@@ -16,22 +16,28 @@ struct DrawMonoid {
 
 // Each draw object has a 32-bit draw tag, which is a bit-packed
 // version of the draw monoid.
+// Visible-fill draw tags carry five extra info words: coverage threshold plus raster interest.
+// Clip tags are unchanged: their coverage is always antialiased and supplies constants in coarse.
 const DRAWTAG_NOP = 0u;
-const DRAWTAG_FILL_COLOR = 0x44u;
-const DRAWTAG_FILL_RECOLOR = 0x4cu;
-const DRAWTAG_FILL_LIN_GRADIENT = 0x114u;
-const DRAWTAG_FILL_RAD_GRADIENT = 0x29cu;
-const DRAWTAG_FILL_ELLIPTIC_GRADIENT = 0x1dcu;
-const DRAWTAG_FILL_SWEEP_GRADIENT = 0x254u;
-const DRAWTAG_FILL_PATH_GRADIENT = 0x50u;
-const DRAWTAG_FILL_IMAGE = 0x294u;
+const DRAWTAG_FILL_COLOR = 0x184u;
+const DRAWTAG_FILL_RECOLOR = 0x18cu;
+const DRAWTAG_FILL_LIN_GRADIENT = 0x254u;
+const DRAWTAG_FILL_RAD_GRADIENT = 0x3dcu;
+const DRAWTAG_FILL_ELLIPTIC_GRADIENT = 0x31cu;
+const DRAWTAG_FILL_SWEEP_GRADIENT = 0x394u;
+const DRAWTAG_FILL_PATH_GRADIENT = 0x190u;
+const DRAWTAG_FILL_IMAGE = 0x3d4u;
 const DRAWTAG_BEGIN_CLIP = 0x49u;
 const DRAWTAG_END_CLIP = 0x21u;
 
-/// The first word of each draw info stream entry contains the flags. This is not a part of the
-/// draw object stream but get used after the draw objects have been reduced on the GPU.
+/// The first word of each draw info stream entry contains the flags. This is not part of the
+/// draw object stream but is used after the draw objects have been reduced on the GPU.
 /// 0 represents a non-zero fill. 1 represents an even-odd fill.
 const DRAW_INFO_FLAGS_FILL_RULE_BIT = 1u;
+// Per-fill coverage rule. When set, the fill is rasterized aliased (coverage quantized against
+// config.fine_coverage_threshold) instead of using analytic area coverage. Carried in a free
+// high bit of the draw-flags word alongside the fill-rule bit.
+const DRAW_INFO_FLAGS_ALIASED_BIT = 0x40000000u;
 const DRAW_FLAGS_BLEND_MODE_SHIFT = 1u;
 const DRAW_FLAGS_BLEND_MODE_MASK = 0x3ffeu;
 const DRAW_FLAGS_BLEND_ALPHA_SHIFT = 14u;

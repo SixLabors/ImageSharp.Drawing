@@ -25,6 +25,8 @@ The public WebGPU surface area around this backend is small and target-first.
 - `WebGPUExternalSurface` attaches to a caller-owned native host via `WebGPUSurfaceHost`; the host application owns the UI object and tells the external surface when the drawable framebuffer resizes
 - `WebGPURenderTarget` owns an offscreen native target for GPU rendering and readback
 
+`WebGPURenderTarget.CreateRenderTarget(...)` and `WebGPUSurfaceFrame.CreateRenderTarget(...)` create empty offscreen render targets with the same texture format as the source target or frame. They do not copy pixels from the source.
+
 `WebGPUDeviceContext` is internal infrastructure used by targets and surfaces. It is not part of the public WebGPU entry-point model.
 
 `WebGPUEnvironment.Options` configures the library-managed WebGPU environment before first use. Set it before
@@ -73,7 +75,7 @@ That means `WebGPUDrawingBackend` is responsible for entry-point orchestration, 
 
 - per-flush diagnostic state
 - staged-scene creation attempts during render
-- lowering explicit layer boundaries into the staged scene path
+- keeping explicit layer boundaries in the shared command stream until scene encoding
 
 It is the policy boundary of the GPU path.
 
@@ -145,6 +147,7 @@ The expensive staged work is delegated:
 - `WebGPUSceneConfig` owns planning data
 - `WebGPUSceneResources` owns flush-scoped GPU resources
 - `WebGPUSceneDispatch` owns the staged compute pipeline
+- `GpuSceneDrawTag` and related GPU scene structs describe packed scene words shared with WGSL
 
 The public object graph around those responsibilities is also separate:
 
@@ -257,6 +260,7 @@ If you want to understand the backend first, read the code in this order:
 5. `WebGPURuntime.cs`
 6. `WebGPURuntime.DeviceSharedState.cs`
 7. `WEBGPU_RASTERIZER.md`
+8. `GpuSceneDrawTag.cs`, `GpuSceneDrawMonoid.cs`, and the packed GPU record structs in `WebGPUSceneResources.cs` when following the shader contract
 
 That order mirrors the newcomer view of the system:
 

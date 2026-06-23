@@ -116,7 +116,7 @@ fn main(
 
         let path_bbox = path_bbox_buf[draw_monoid.path_ix];
         let pb = vec4<f32>(vec4(path_bbox.x0, path_bbox.y0, path_bbox.x1, path_bbox.y1));
-        let bbox = bbox_intersect(clip_bbox, pb);
+        let bbox = bbox_intersect(clip_bbox, bbox_intersect(pb, path_bbox.interest));
 
         // Only the first bin-chunk workgroup writes the intersected bbox, since
         // the value is identical across chunks and later stages read it once.

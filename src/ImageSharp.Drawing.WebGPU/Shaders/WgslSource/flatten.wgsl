@@ -26,6 +26,10 @@ struct AtomicPathBbox {
     y1: atomic<i32>,
     draw_flags: u32,
     trans_ix: u32,
+    // Must mirror PathBbox in bbox.wgsl: both views alias the same buffer, so the strides must match.
+    coverage_threshold: f32,
+    _padding: u32,
+    interest: vec4<f32>,
 }
 
 @group(0) @binding(3)
@@ -950,11 +954,19 @@ fn main(
     let out = &path_bboxes[path_ix];
     let style_flags = scene[config.style_base + style_ix];
     let style_draw_flags = scene[config.style_base + style_ix + 2u];
+    let coverage_threshold = bitcast<f32>(scene[config.style_base + style_ix + 5u]);
+    let style_interest = vec4<f32>(
+        bitcast<f32>(scene[config.style_base + style_ix + 6u]),
+        bitcast<f32>(scene[config.style_base + style_ix + 7u]),
+        bitcast<f32>(scene[config.style_base + style_ix + 8u]),
+        bitcast<f32>(scene[config.style_base + style_ix + 9u]));
     let fill_rule = select(DRAW_INFO_FLAGS_FILL_RULE_BIT, 0u, (style_flags & STYLE_FLAGS_FILL) == 0u);
     let draw_flags = style_draw_flags | fill_rule;
     if (tag.tag_byte & PATH_TAG_PATH) != 0u {
         (*out).draw_flags = draw_flags;
         (*out).trans_ix = trans_ix;
+        (*out).coverage_threshold = coverage_threshold;
+        (*out).interest = style_interest;
     }
     // Decode path data
     let seg_type = tag.tag_byte & PATH_TAG_SEG_TYPE;

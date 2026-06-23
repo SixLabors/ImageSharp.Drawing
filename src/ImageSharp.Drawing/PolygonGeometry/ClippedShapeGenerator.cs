@@ -71,11 +71,22 @@ internal static class ClippedShapeGenerator
         Guard.NotNull(subject);
         Guard.NotNull(clip);
 
+        IRegionPath? singleRegionPath = clip is IReadOnlyList<IPath> { Count: 1 } clipList &&
+            clipList[0] is IRegionPath candidate
+                ? candidate
+                : null;
+
+        if (singleRegionPath is not null &&
+            TryClipRectangleByRegion(options, subject, singleRegionPath, out ComplexPolygon clippedRectangle))
+        {
+            return clippedRectangle;
+        }
+
         PCPolygon s = PolygonClipperFactory.FromClosedPath(subject, options.IntersectionRule);
 
-        if (clip is IReadOnlyList<IPath> { Count: 1 } clipList && clipList[0] is IRegionPath regionPath)
+        if (singleRegionPath is not null)
         {
-            return GenerateRegionClippedShapes(options, s, regionPath);
+            return GenerateRegionClippedShapes(options, s, singleRegionPath);
         }
 
         PCPolygon c = PolygonClipperFactory.FromClosedPaths(clip, clipIntersectionRule);
@@ -102,17 +113,56 @@ internal static class ClippedShapeGenerator
         Guard.NotNull(subject);
         Guard.NotNull(clip);
 
+        if (clip is IRegionPath regionPath &&
+            TryClipRectangleByRegion(options, subject, regionPath, out ComplexPolygon clippedRectangle))
+        {
+            return clippedRectangle;
+        }
+
         PCPolygon s = PolygonClipperFactory.FromClosedPath(subject, options.IntersectionRule);
 
-        if (clip is IRegionPath regionPath)
+        if (clip is IRegionPath regionPathAfterFastPath)
         {
-            return GenerateRegionClippedShapes(options, s, regionPath);
+            return GenerateRegionClippedShapes(options, s, regionPathAfterFastPath);
         }
 
         PCPolygon c = PolygonClipperFactory.FromClosedPath(clip, clipIntersectionRule);
 
         return GenerateClippedShapes(options, s, c);
     }
+
+    private static bool TryClipRectangleByRegion(
+        ShapeOptions options,
+        IPath subject,
+        IRegionPath regionPath,
+        out ComplexPolygon clipped)
+    {
+        clipped = null!;
+        if (options.BooleanOperation != BooleanOperation.Intersection ||
+            subject is not RectanglePolygon rectangle)
+        {
+            return false;
+        }
+
+        RectangleF subjectBounds = rectangle.Bounds;
+        IReadOnlyList<Rectangle> rectangles = regionPath.Rectangles;
+        List<IPath> paths = [];
+
+        for (int i = 0; i < rectangles.Count; i++)
+        {
+            RectangleF intersection = RectangleF.Intersect(subjectBounds, ToRectangleF(rectangles[i]));
+            if (intersection.Width > 0 && intersection.Height > 0)
+            {
+                paths.Add(new RectanglePolygon(intersection));
+            }
+        }
+
+        clipped = new ComplexPolygon(paths);
+        return true;
+    }
+
+    private static RectangleF ToRectangleF(Rectangle rectangle)
+        => new(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height);
 
     private static ComplexPolygon GenerateRegionClippedShapes(ShapeOptions options, PCPolygon subject, IRegionPath regionPath)
     {

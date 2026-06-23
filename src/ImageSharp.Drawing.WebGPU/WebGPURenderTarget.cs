@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using Silk.NET.WebGPU;
-using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -71,7 +70,7 @@ public sealed class WebGPURenderTarget : IDisposable
     {
     }
 
-    private WebGPURenderTarget(
+    internal WebGPURenderTarget(
         WebGPUDeviceContext deviceContext,
         bool ownsDeviceContext,
         WebGPUTextureFormat format,
@@ -153,6 +152,26 @@ public sealed class WebGPURenderTarget : IDisposable
     /// Gets the owned wrapped texture-view handle bound when this render target is used as a native surface.
     /// </summary>
     internal WebGPUTextureViewHandle TextureViewHandle { get; }
+
+    /// <summary>
+    /// Creates an empty render target with the same texture format as this target.
+    /// </summary>
+    /// <param name="width">The target width in pixels.</param>
+    /// <param name="height">The target height in pixels.</param>
+    /// <returns>The created render target.</returns>
+    /// <remarks>
+    /// The created target does not contain a copy of this target's pixels.
+    /// This target must remain undisposed while the created target is in use.
+    /// </remarks>
+    public WebGPURenderTarget CreateRenderTarget(int width, int height)
+    {
+        this.ThrowIfDisposed();
+        this.deviceContext.ThrowIfDisposed();
+        Guard.MustBeGreaterThan(width, 0, nameof(width));
+        Guard.MustBeGreaterThan(height, 0, nameof(height));
+
+        return new WebGPURenderTarget(this.deviceContext, false, this.Format, width, height);
+    }
 
     /// <summary>
     /// Creates a drawing canvas over this render target.
@@ -290,16 +309,6 @@ public sealed class WebGPURenderTarget : IDisposable
 
         this.isDisposed = true;
     }
-
-    /// <summary>
-    /// Allocates an owned render target for the specified context, format, and size.
-    /// </summary>
-    internal static WebGPURenderTarget CreateFromContext(
-        WebGPUDeviceContext deviceContext,
-        WebGPUTextureFormat format,
-        int width,
-        int height)
-        => new(deviceContext, false, format, width, height);
 
     private void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);

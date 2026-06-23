@@ -33,6 +33,9 @@ struct CmdFill {
     size_and_rule: u32,
     seg_data: u32,
     backdrop: i32,
+    // Per-fill aliased coverage threshold. Used only when the aliased bit in size_and_rule is set.
+    coverage_threshold: f32,
+    interest: vec4<f32>,
 }
 
 struct CmdStroke {

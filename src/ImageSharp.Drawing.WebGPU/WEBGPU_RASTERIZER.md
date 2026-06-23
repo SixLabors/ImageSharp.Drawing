@@ -8,6 +8,7 @@ In this codebase, the WebGPU rasterizer is not a single type with one scan-conve
 - `WebGPUSceneConfig`
 - `WebGPUSceneResources`
 - `WebGPUSceneDispatch`
+- `GpuSceneDrawTag`, `GpuSceneDrawMonoid`, and the packed GPU scene structs
 - the WGSL shader set under `Shaders/WgslSource`
 
 Together, these types turn one retained encoded scene into staged GPU work, schedule that scene into tile-relative work, run the fine raster pass, and write final pixels.
@@ -50,6 +51,7 @@ That split explains the major responsibilities:
 - `WebGPUSceneConfig` owns planning
 - `WebGPUSceneResources` owns flush-scoped buffers and textures
 - `WebGPUSceneDispatch` owns pass ordering and submission
+- the `GpuScene*` format types own the CPU-side constants and structs that mirror WGSL scene layout
 
 ## The Most Important Terms
 
@@ -80,6 +82,8 @@ This includes:
 - the scheduling scratch buffers
 - the gradient texture
 - the image atlas texture
+
+It does not own the draw-tag contract itself. `GpuSceneDrawTag` and `GpuSceneDrawMonoid` live in files named for those types. The remaining shader-visible record structs are still grouped in `WebGPUSceneResources.cs` near the resource set they back.
 
 ### Scheduling Passes
 
@@ -141,6 +145,8 @@ The encoder first builds several logical streams such as:
 - deferred image atlas descriptors
 
 Those streams are then packed into the final scene word buffer plus separate gradient and image payloads.
+
+The draw-tag words and draw-info flag bits are defined by `GpuSceneDrawTag` and must match `Shaders/WgslSource/Shared/drawtag.wgsl`. The encoder chooses which tag or flag to write; the format type owns the numeric shader contract.
 
 Explicit layers are part of this encoding step too. `BeginLayer` and `EndLayer` stay in the prepared command stream until `WebGPUSceneEncoder` lowers them into `BeginClip` and `EndClip` draw records inside the encoded scene.
 
@@ -245,12 +251,10 @@ flowchart TD
 
 The fine pass is where the scheduled scene becomes final pixel writes.
 
-Two fine shaders exist:
-
-- `FineAreaComputeShader`
-- `FineAliasedThresholdComputeShader`
-
-Only one is selected for a flush.
+A single fine shader (`FineAreaComputeShader`) handles every flush. It computes analytic
+area coverage and, per fill, quantizes that coverage against `config.fine_coverage_threshold`
+when the fill carries the aliased draw-flag bit. Antialiased and aliased fills therefore
+coexist within one flush, matching the CPU rasterizer's per-fill `RasterizationMode`.
 
 The fine pass consumes data such as:
 
@@ -313,14 +317,15 @@ That separation is why it helps to document them separately.
 If you want to understand the staged rasterizer itself, read the code in this order:
 
 1. `WebGPUSceneEncoder.cs`
-2. `WebGPUSceneConfig.cs`
-3. `WebGPUSceneResources.cs`
-4. `WebGPUSceneDispatch.cs`
-5. `Shaders`
+2. `GpuSceneDrawTag.cs` and `GpuSceneDrawMonoid.cs`
+3. `WebGPUSceneConfig.cs`
+4. `WebGPUSceneResources.cs` for resource creation and the remaining packed GPU record structs
+5. `WebGPUSceneDispatch.cs`
+6. `Shaders`
 
 That order mirrors the data lifecycle:
 
-encoded scene -> planning -> resources -> staged execution -> shader contract
+encoded scene -> draw-tag format -> planning -> resources and record layout -> staged execution -> WGSL
 
 ## The Mental Model To Keep
 
@@ -331,6 +336,7 @@ it is a staged scene pipeline. It stages one retained encoded scene, plans the w
 If that model is clear, the major types fall into place:
 
 - `WebGPUSceneEncoder` encodes
+- `GpuScene*` types define the packed CPU/WGSL scene contract
 - `WebGPUSceneConfig` plans
 - `WebGPUSceneResources` creates flush-scoped resources
 - `WebGPUSceneDispatch` records and submits the staged pipeline

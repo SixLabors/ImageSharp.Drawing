@@ -135,15 +135,6 @@ internal sealed class WebGPUDeviceContext : IDisposable
     internal WebGPUQueueHandle QueueHandle { get; }
 
     /// <summary>
-    /// Creates an owned offscreen WebGPU render target using the default RGBA8 texture format.
-    /// </summary>
-    /// <param name="width">The target width in pixels.</param>
-    /// <param name="height">The target height in pixels.</param>
-    /// <returns>An owned offscreen WebGPU render target.</returns>
-    internal WebGPURenderTarget CreateRenderTarget(int width, int height)
-        => this.CreateRenderTarget(WebGPUTextureFormat.Rgba8Unorm, width, height);
-
-    /// <summary>
     /// Creates an owned offscreen WebGPU render target for this context.
     /// </summary>
     /// <param name="format">The target texture format.</param>
@@ -159,7 +150,7 @@ internal sealed class WebGPUDeviceContext : IDisposable
         Guard.MustBeGreaterThan(width, 0, nameof(width));
         Guard.MustBeGreaterThan(height, 0, nameof(height));
 
-        return WebGPURenderTarget.CreateFromContext(this, format, width, height);
+        return new WebGPURenderTarget(this, false, format, width, height);
     }
 
     /// <summary>

@@ -354,6 +354,8 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
             this.frameInFlight = true;
             frame = new WebGPUSurfaceFrame(
                 this.Api,
+                this.deviceContext,
+                this.Format,
                 this.SurfaceHandle,
                 textureHandle,
                 textureViewHandle,

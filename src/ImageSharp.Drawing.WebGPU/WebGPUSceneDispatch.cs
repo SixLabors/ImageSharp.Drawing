@@ -45,7 +45,6 @@ internal static class WebGPUSceneDispatch
     private const string PathTilingSetupPipelineKey = "scene/path-tiling-setup";
     private const string PathTilingPipelineKey = "scene/path-tiling";
     private const string FineAreaPipelineKey = "scene/fine-area";
-    private const string FineAliasedThresholdPipelineKey = "scene/fine-aliased-threshold";
     private const string ChunkResetPipelineKey = "scene/chunk-reset";
 
     /// <summary>
@@ -136,7 +135,7 @@ internal static class WebGPUSceneDispatch
     /// <summary>
     /// Builds flush-scoped GPU resources for a retained encoded scene.
     /// </summary>
-    public static unsafe WebGPUStagedScene CreateStagedScene<TPixel>(
+    public static WebGPUStagedScene CreateStagedScene<TPixel>(
         Configuration configuration,
         NativeCanvasFrame<TPixel> target,
         WebGPUEncodedScene encodedScene,
@@ -672,6 +671,7 @@ internal static class WebGPUSceneDispatch
         nuint sceneBufferSize = GetBindingByteLength<uint>(encodedScene.SceneWordCount);
         nuint drawMonoidBufferSize = bufferSizes.DrawMonoids.ByteLength;
         nuint infoBinDataBufferSize = checked(bufferSizes.Info.ByteLength + bufferSizes.BinData.ByteLength + bufferSizes.BinHeaders.ByteLength);
+        nuint pathBboxBufferSize = bufferSizes.PathBboxes.ByteLength;
         nuint drawBboxBufferSize = bufferSizes.DrawBboxes.ByteLength;
         nuint pathBufferSize = bufferSizes.Paths.ByteLength;
         nuint lineBufferSize = bufferSizes.Lines.ByteLength;
@@ -2745,30 +2745,22 @@ internal static class WebGPUSceneDispatch
         uint groupCountY,
         out string? error)
     {
-        bool useAliasedThreshold = encodedScene.FineRasterizationMode == RasterizationMode.Aliased;
-        byte[] shaderCode = useAliasedThreshold
-            ? FineAliasedThresholdComputeShader.GetCode(flushContext.TextureFormat)
-            : FineAreaComputeShader.GetCode(flushContext.TextureFormat);
+        // A single analytic fine pass handles every flush. Aliased coverage is applied per fill inside
+        // the shader from the draw-flags aliased bit, so there is no separate aliased pipeline variant.
+        byte[] shaderCode = FineAreaComputeShader.GetCode(flushContext.TextureFormat);
 
         bool LayoutFactory(WebGPU api, Device* device, out BindGroupLayout* layout, out string? layoutError)
-            => useAliasedThreshold
-                ? FineAliasedThresholdComputeShader.TryCreateBindGroupLayout(
-                    api,
-                    device,
-                    flushContext.TextureFormat,
-                    out layout,
-                    out layoutError)
-                : FineAreaComputeShader.TryCreateBindGroupLayout(
-                    api,
-                    device,
-                    flushContext.TextureFormat,
-                    out layout,
-                    out layoutError);
+            => FineAreaComputeShader.TryCreateBindGroupLayout(
+                api,
+                device,
+                flushContext.TextureFormat,
+                out layout,
+                out layoutError);
 
         if (!flushContext.DeviceState.TryGetOrCreateCompositeComputePipeline(
-                $"{(useAliasedThreshold ? FineAliasedThresholdPipelineKey : FineAreaPipelineKey)}/{flushContext.TextureFormat}",
+                $"{FineAreaPipelineKey}/{flushContext.TextureFormat}",
                 shaderCode,
-                useAliasedThreshold ? FineAliasedThresholdComputeShader.EntryPoint : FineAreaComputeShader.EntryPoint,
+                FineAreaComputeShader.EntryPoint,
                 LayoutFactory,
                 out BindGroupLayout* bindGroupLayout,
                 out ComputePipeline* pipeline,
@@ -3548,7 +3540,7 @@ internal enum WebGPUSceneShaderId
 }
 
 /// <summary>
-/// Serializable placeholder for one buffer or texture-view binding recorded before execution.
+/// Recorded reference to one buffer or texture-view binding resolved before execution.
 /// </summary>
 internal readonly struct WebGPUSceneResourceProxy
 {

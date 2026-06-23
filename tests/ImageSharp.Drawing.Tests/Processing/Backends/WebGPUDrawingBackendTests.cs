@@ -582,6 +582,95 @@ public partial class WebGPUDrawingBackendTests
     }
 
     [WebGPUTheory]
+    [WithBlankImage(96, 72, PixelTypes.Bgra32)]
+    public void CopyPixelsFrom_WithWebGPUBackend_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        Rectangle sourceBounds = new(0, 0, 42, 30);
+        Rectangle targetBounds = new(0, 0, 96, 72);
+
+        static void DrawSource(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.Red), new RectanglePolygon(0, 0, 42, 30));
+            canvas.Fill(Brushes.Solid(Color.Yellow), new RectanglePolygon(7, 6, 18, 12));
+        }
+
+        static void DrawTargetBeforeCopy(DrawingCanvas canvas)
+            => canvas.Fill(Brushes.Solid(Color.Blue), new RectanglePolygon(0, 0, 96, 72));
+
+        static void DrawTargetAfterCopy(DrawingCanvas canvas)
+            => canvas.Fill(Brushes.Solid(Color.Green), new RectanglePolygon(14, 10, 8, 6));
+
+        void DrawDefault(DrawingCanvas targetCanvas)
+        {
+            using Image<TPixel> sourceImage = new(sourceBounds.Width, sourceBounds.Height);
+            using (DrawingCanvas sourceCanvas = sourceImage.Frames.RootFrame.CreateCanvas(Configuration.Default, drawingOptions))
+            {
+                DrawSource(sourceCanvas);
+            }
+
+            DrawTargetBeforeCopy(targetCanvas);
+
+            using (DrawingCanvas sourceCanvas = sourceImage.Frames.RootFrame.CreateCanvas(Configuration.Default, drawingOptions))
+            {
+                targetCanvas.CopyPixelsFrom(sourceCanvas, sourceBounds, new Point(0, 0));
+            }
+
+            DrawTargetAfterCopy(targetCanvas);
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawDefault);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using WebGPURenderTarget sourceRenderTarget = new(WebGPUTextureFormat.Bgra8Unorm, sourceBounds.Width, sourceBounds.Height);
+        using WebGPURenderTarget targetRenderTarget = sourceRenderTarget.CreateRenderTarget(targetBounds.Width, targetBounds.Height);
+        Configuration nativeSurfaceConfiguration = Configuration.Default.Clone();
+        nativeSurfaceConfiguration.SetDrawingBackend(nativeSurfaceBackend);
+
+        using (DrawingCanvas sourceCanvas = WebGPUCanvasFactory.CreateCanvas(
+                   nativeSurfaceConfiguration,
+                   drawingOptions,
+                   nativeSurfaceBackend,
+                   sourceRenderTarget.Bounds,
+                   sourceRenderTarget.Surface,
+                   sourceRenderTarget.Format))
+        {
+            DrawSource(sourceCanvas);
+        }
+
+        using (DrawingCanvas targetCanvas = WebGPUCanvasFactory.CreateCanvas(
+                   nativeSurfaceConfiguration,
+                   drawingOptions,
+                   nativeSurfaceBackend,
+                   targetRenderTarget.Bounds,
+                   targetRenderTarget.Surface,
+                   targetRenderTarget.Format))
+
+        using (DrawingCanvas sourceCanvas = WebGPUCanvasFactory.CreateCanvas(
+                   nativeSurfaceConfiguration,
+                   drawingOptions,
+                   nativeSurfaceBackend,
+                   sourceRenderTarget.Bounds,
+                   sourceRenderTarget.Surface,
+                   sourceRenderTarget.Format))
+        {
+            DrawTargetBeforeCopy(targetCanvas);
+            targetCanvas.CopyPixelsFrom(sourceCanvas, sourceBounds, new Point(0, 0));
+            DrawTargetAfterCopy(targetCanvas);
+        }
+
+        using Image<TPixel> nativeSurfaceImage = targetRenderTarget.ReadbackImage<TPixel>();
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
+    }
+
+    [WebGPUTheory]
     [WithBlankImage(220, 160, PixelTypes.Rgba32)]
     public void Process_WithWebGPUBackend_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>

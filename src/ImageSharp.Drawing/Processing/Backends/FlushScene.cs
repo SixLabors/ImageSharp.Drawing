@@ -1220,6 +1220,7 @@ internal sealed partial class FlushScene : IDisposable
             localInterest.Height);
 
         Rectangle clippedDestination = Rectangle.Intersect(targetBounds, absoluteInterest);
+
         if (clippedDestination.Width <= 0 || clippedDestination.Height <= 0)
         {
             resolvedOptions = default;
@@ -1228,7 +1229,7 @@ internal sealed partial class FlushScene : IDisposable
         }
 
         resolvedOptions = new RasterizerOptions(
-            absoluteInterest,
+            clippedDestination,
             options.IntersectionRule,
             options.RasterizationMode,
             options.AntialiasThreshold);
@@ -1244,6 +1245,13 @@ internal sealed partial class FlushScene : IDisposable
             (int)MathF.Ceiling(bounds.Right),
             (int)MathF.Ceiling(bounds.Bottom));
 
+    /// <summary>
+    /// Expands path bounds by the stroke joins and caps that can extend past the path geometry.
+    /// </summary>
+    /// <param name="bounds">The path geometry bounds before stroke inflation.</param>
+    /// <param name="pen">The pen that defines stroke width, joins, caps, and miter limit.</param>
+    /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+    /// <returns>The inflated stroke bounds.</returns>
     private static RectangleF GetStrokeBounds(RectangleF bounds, Pen pen, float widthScale)
     {
         float halfWidth = pen.StrokeWidth * widthScale * 0.5F;
@@ -1266,6 +1274,8 @@ internal sealed partial class FlushScene : IDisposable
     /// <summary>
     /// Returns the isotropic scale factor embedded in a drawing transform so stroke widths match device-space pixels.
     /// </summary>
+    /// <param name="transform">The transform to inspect.</param>
+    /// <returns>The scale factor to apply to stroke widths.</returns>
     /// <remarks>
     /// Uses the square root of the absolute 2D determinant, the SVG-style fallback for non-uniform
     /// scale. Reduces to the uniform scale for pure scale/rotate/translate matrices.
