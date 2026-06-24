@@ -49,9 +49,25 @@ public sealed class EmptyPath : IPath
     public LinearGeometry ToLinearGeometry(Vector2 scale) => EmptyGeometry;
 
     /// <inheritdoc />
-    public bool TryGetPathPointAtDistance(float distance, out PathPoint pathPoint)
+    public float ComputeLength(Vector2 scale) => 0;
+
+    /// <inheritdoc />
+    public float ComputeArea(Vector2 scale) => 0;
+
+    /// <inheritdoc />
+    public bool Contains(PointF point, IntersectionRule intersectionRule, Vector2 scale) => false;
+
+    /// <inheritdoc />
+    public bool TryGetPathPointAtDistance(float distance, Vector2 scale, out PathPoint pathPoint)
     {
         pathPoint = default;
+        return false;
+    }
+
+    /// <inheritdoc />
+    public bool TryGetSegment(float startDistance, float stopDistance, bool startOnBeginFigure, Vector2 scale, out IPath path)
+    {
+        path = this;
         return false;
     }
 

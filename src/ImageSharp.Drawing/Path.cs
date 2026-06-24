@@ -136,6 +136,22 @@ public class Path : IPath, ISimplePath, IInternalPathOwner
             ? hit
             : this.geometryCache.Store(scale, this.BuildLinearGeometry(scale));
 
+    /// <inheritdoc/>
+    public virtual float ComputeLength(Vector2 scale)
+        => this.ToLinearGeometry(scale).ComputeLength();
+
+    /// <inheritdoc/>
+    public virtual float ComputeArea(Vector2 scale)
+        => this.ToLinearGeometry(scale).ComputeArea();
+
+    /// <inheritdoc/>
+    public virtual bool Contains(PointF point, IntersectionRule intersectionRule, Vector2 scale)
+    {
+        PointF scaledPoint = new(point.X * scale.X, point.Y * scale.Y);
+
+        return this.ToLinearGeometry(scale).Contains(scaledPoint, intersectionRule);
+    }
+
     private LinearGeometry BuildLinearGeometry(Vector2 scale)
     {
         if (this.lineSegments.Length == 0)
@@ -198,6 +214,7 @@ public class Path : IPath, ISimplePath, IInternalPathOwner
         }
 
         int segmentCount = pointCount == 0 ? 0 : this.IsClosed ? pointCount : pointCount - 1;
+        RectangleF bounds = hasBounds ? RectangleF.FromLTRB(minX, minY, maxX, maxY) : RectangleF.Empty;
 
         if (pointCount > 0)
         {
@@ -205,13 +222,12 @@ public class Path : IPath, ISimplePath, IInternalPathOwner
             {
                 PointStart = 0,
                 PointCount = pointCount,
+                Bounds = bounds,
                 SegmentStart = 0,
                 SegmentCount = segmentCount,
                 IsClosed = this.IsClosed
             };
         }
-
-        RectangleF bounds = hasBounds ? RectangleF.FromLTRB(minX, minY, maxX, maxY) : RectangleF.Empty;
 
         return new LinearGeometry(
             new LinearGeometryInfo
@@ -226,8 +242,12 @@ public class Path : IPath, ISimplePath, IInternalPathOwner
     }
 
     /// <inheritdoc/>
-    public virtual bool TryGetPathPointAtDistance(float distance, out PathPoint pathPoint)
-        => this.InnerPath.TryGetPathPointAtDistance(distance, out pathPoint);
+    public virtual bool TryGetPathPointAtDistance(float distance, Vector2 scale, out PathPoint pathPoint)
+        => this.ToLinearGeometry(scale).TryGetPathPointAtDistance(distance, out pathPoint);
+
+    /// <inheritdoc/>
+    public virtual bool TryGetSegment(float startDistance, float stopDistance, bool startOnBeginFigure, Vector2 scale, out IPath path)
+        => this.ToLinearGeometry(scale).TryGetSegment(startDistance, stopDistance, startOnBeginFigure, out path);
 
     /// <inheritdoc/>
     IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()

@@ -52,7 +52,7 @@ public ref struct SegmentEnumerator
                     ? this.geometry.Points[pointStart]
                     : this.geometry.Points[pointIndex + 1];
 
-                this.current = CreateSegment(start, end);
+                this.current = CreateSegment(start, end, this.contourIndex);
                 this.segmentIndexInContour++;
                 return true;
             }
@@ -64,11 +64,12 @@ public ref struct SegmentEnumerator
         return false;
     }
 
-    private static LinearSegment CreateSegment(PointF start, PointF end)
+    private static LinearSegment CreateSegment(PointF start, PointF end, int contourIndex)
         => new()
         {
             Start = start,
             End = end,
+            ContourIndex = contourIndex,
             MinY = MathF.Min(start.Y, end.Y),
             MaxY = MathF.Max(start.Y, end.Y),
             IsHorizontal = start.Y == end.Y

@@ -15,7 +15,6 @@ public sealed class ComplexPolygon : IPath, IInternalPathOwner
 {
     private readonly IPath[] paths;
     private List<InternalPath>? internalPaths;
-    private float length;
     private RectangleF? bounds;
     private IPath? closedPath;
     private LinearGeometryCache geometryCache;
@@ -105,6 +104,22 @@ public sealed class ComplexPolygon : IPath, IInternalPathOwner
             ? hit
             : this.geometryCache.Store(scale, this.BuildLinearGeometry(scale));
 
+    /// <inheritdoc/>
+    public float ComputeLength(Vector2 scale)
+        => this.ToLinearGeometry(scale).ComputeLength();
+
+    /// <inheritdoc/>
+    public float ComputeArea(Vector2 scale)
+        => this.ToLinearGeometry(scale).ComputeArea();
+
+    /// <inheritdoc/>
+    public bool Contains(PointF point, IntersectionRule intersectionRule, Vector2 scale)
+    {
+        PointF scaledPoint = new(point.X * scale.X, point.Y * scale.Y);
+
+        return this.ToLinearGeometry(scale).Contains(scaledPoint, intersectionRule);
+    }
+
     private LinearGeometry BuildLinearGeometry(Vector2 scale)
     {
         int pointCount = 0;
@@ -164,6 +179,7 @@ public sealed class ComplexPolygon : IPath, IInternalPathOwner
                 {
                     PointStart = pointStart + contour.PointStart,
                     PointCount = contour.PointCount,
+                    Bounds = contour.Bounds,
                     SegmentStart = segmentStart + contour.SegmentStart,
                     SegmentCount = contour.SegmentCount,
                     IsClosed = contour.IsClosed
@@ -213,29 +229,12 @@ public sealed class ComplexPolygon : IPath, IInternalPathOwner
     }
 
     /// <inheritdoc/>
-    public bool TryGetPathPointAtDistance(float distance, out PathPoint pathPoint)
-    {
-        pathPoint = default;
-        this.EnsureInternalPaths();
-        if (this.length <= 0 || float.IsNaN(distance) || float.IsInfinity(distance) || distance < 0)
-        {
-            return false;
-        }
+    public bool TryGetPathPointAtDistance(float distance, Vector2 scale, out PathPoint pathPoint)
+        => this.ToLinearGeometry(scale).TryGetPathPointAtDistance(distance, out pathPoint);
 
-        distance %= this.length;
-        foreach (InternalPath p in this.internalPaths)
-        {
-            if (p.Length >= distance)
-            {
-                return p.TryGetPathPointAtDistance(distance, out pathPoint);
-            }
-
-            // Reduce it before trying the next path
-            distance -= p.Length;
-        }
-
-        return false;
-    }
+    /// <inheritdoc/>
+    public bool TryGetSegment(float startDistance, float stopDistance, bool startOnBeginFigure, Vector2 scale, out IPath path)
+        => this.ToLinearGeometry(scale).TryGetSegment(startDistance, stopDistance, startOnBeginFigure, out path);
 
     /// <inheritdoc/>
     IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
@@ -256,20 +255,18 @@ public sealed class ComplexPolygon : IPath, IInternalPathOwner
     }
 
     /// <summary>
-    /// Initializes <see cref="internalPaths"/> and <see cref="length"/>.
+    /// Initializes <see cref="internalPaths"/>.
     /// </summary>
     [MemberNotNull(nameof(internalPaths))]
     private void InitInternalPaths()
     {
         this.internalPaths = new List<InternalPath>(this.paths.Length);
-        this.length = 0;
 
         foreach (IPath p in this.paths)
         {
             foreach (ISimplePath s in p.Flatten())
             {
                 InternalPath ip = new(s.Points, s.IsClosed);
-                this.length += ip.Length;
                 this.internalPaths.Add(ip);
             }
         }

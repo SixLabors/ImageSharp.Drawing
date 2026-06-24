@@ -76,10 +76,6 @@ public sealed class EllipsePolygon : Polygon
         return new EllipsePolygon(segments);
     }
 
-    /// <inheritdoc />
-    public override bool TryGetPathPointAtDistance(float distance, out PathPoint pathPoint)
-        => this.InnerPath.TryGetPathPointAtDistance(distance, out pathPoint);
-
     private static CubicBezierLineSegment CreateSegment(Vector2 location, SizeF size)
     {
         Guard.MustBeGreaterThan(size.Width, 0, "width");

@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Drawing;
 
 namespace SixLabors.ImageSharp.Drawing.Helpers;
@@ -42,6 +43,16 @@ internal static class PolygonUtilities
             polygon.Reverse();
         }
     }
+
+    /// <summary>
+    /// Returns the 2D cross product scalar of the supplied vectors.
+    /// </summary>
+    /// <param name="left">The left operand.</param>
+    /// <param name="right">The right operand.</param>
+    /// <returns>The 2D cross product scalar.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float CrossProduct(Vector2 left, Vector2 right)
+        => (left.X * right.Y) - (left.Y * right.X);
 
     /// <summary>
     /// Returns the orientation sign of a closed polygon ring using the shoelace sum.

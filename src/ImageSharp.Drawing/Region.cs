@@ -1011,11 +1011,25 @@ public sealed class Region
         public IEnumerable<ISimplePath> Flatten() => this.path.Flatten();
 
         /// <inheritdoc />
-        public bool TryGetPathPointAtDistance(float distance, out PathPoint pathPoint)
-            => this.path.TryGetPathPointAtDistance(distance, out pathPoint);
+        public bool Contains(PointF point, IntersectionRule intersectionRule, Vector2 scale)
+            => this.path.Contains(point, intersectionRule, scale);
+
+        /// <inheritdoc />
+        public bool TryGetPathPointAtDistance(float distance, Vector2 scale, out PathPoint pathPoint)
+            => this.path.TryGetPathPointAtDistance(distance, scale, out pathPoint);
+
+        /// <inheritdoc />
+        public bool TryGetSegment(float startDistance, float stopDistance, bool startOnBeginFigure, Vector2 scale, out IPath segment)
+            => this.path.TryGetSegment(startDistance, stopDistance, startOnBeginFigure, scale, out segment);
 
         /// <inheritdoc />
         public LinearGeometry ToLinearGeometry(Vector2 scale) => this.path.ToLinearGeometry(scale);
+
+        /// <inheritdoc />
+        public float ComputeLength(Vector2 scale) => this.path.ComputeLength(scale);
+
+        /// <inheritdoc />
+        public float ComputeArea(Vector2 scale) => this.path.ComputeArea(scale);
 
         /// <inheritdoc />
         public IPath Transform(Matrix4x4 matrix) =>

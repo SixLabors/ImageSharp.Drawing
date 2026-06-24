@@ -13,8 +13,6 @@ public sealed class RectanglePolygon : IPath, ISimplePath
     private readonly Vector2 topLeft;
     private readonly Vector2 bottomRight;
     private readonly PointF[] points;
-    private readonly float halfLength;
-    private readonly float length;
     private LinearGeometryCache geometryCache;
 
     /// <summary>
@@ -53,8 +51,6 @@ public sealed class RectanglePolygon : IPath, ISimplePath
             new Vector2(this.topLeft.X, this.bottomRight.Y)
         ];
 
-        this.halfLength = this.Size.Width + this.Size.Height;
-        this.length = this.halfLength * 2;
         this.Bounds = new RectangleF(this.Location, this.Size);
     }
 
@@ -167,69 +163,6 @@ public sealed class RectanglePolygon : IPath, ISimplePath
         return new Polygon(new LinearLineSegment(this.points).Transform(matrix));
     }
 
-    /// <inheritdoc />
-    public bool TryGetPathPointAtDistance(float distance, out PathPoint pathPoint)
-    {
-        pathPoint = default;
-        if (this.length <= 0 || float.IsNaN(distance) || float.IsInfinity(distance) || distance < 0)
-        {
-            return false;
-        }
-
-        distance %= this.length;
-
-        if (distance < this.Width)
-        {
-            // we are on the top stretch
-            pathPoint = new PathPoint
-            {
-                Point = new Vector2(this.Left + distance, this.Top),
-                Tangent = new Vector2(1, 0),
-                Angle = 0
-            };
-
-            return true;
-        }
-
-        distance -= this.Width;
-        if (distance < this.Height)
-        {
-            // down on right
-            pathPoint = new PathPoint
-            {
-                Point = new Vector2(this.Right, this.Top + distance),
-                Tangent = new Vector2(0, 1),
-                Angle = 90F
-            };
-
-            return true;
-        }
-
-        distance -= this.Height;
-        if (distance < this.Width)
-        {
-            // bottom right to left
-            pathPoint = new PathPoint
-            {
-                Point = new Vector2(this.Right - distance, this.Bottom),
-                Tangent = new Vector2(-1, 0),
-                Angle = 180F
-            };
-
-            return true;
-        }
-
-        distance -= this.Width;
-        pathPoint = new PathPoint
-        {
-            Point = new Vector2(this.Left, this.Bottom - distance),
-            Tangent = new Vector2(0, -1),
-            Angle = -90F
-        };
-
-        return true;
-    }
-
     /// <inheritdoc/>
     public IEnumerable<ISimplePath> Flatten()
     {
@@ -241,6 +174,30 @@ public sealed class RectanglePolygon : IPath, ISimplePath
         => this.geometryCache.TryGet(scale, out LinearGeometry? hit)
             ? hit
             : this.geometryCache.Store(scale, this.BuildLinearGeometry(scale));
+
+    /// <inheritdoc/>
+    public float ComputeLength(Vector2 scale)
+        => this.ToLinearGeometry(scale).ComputeLength();
+
+    /// <inheritdoc/>
+    public float ComputeArea(Vector2 scale)
+        => this.ToLinearGeometry(scale).ComputeArea();
+
+    /// <inheritdoc/>
+    public bool Contains(PointF point, IntersectionRule intersectionRule, Vector2 scale)
+    {
+        PointF scaledPoint = new(point.X * scale.X, point.Y * scale.Y);
+
+        return this.ToLinearGeometry(scale).Contains(scaledPoint, intersectionRule);
+    }
+
+    /// <inheritdoc />
+    public bool TryGetPathPointAtDistance(float distance, Vector2 scale, out PathPoint pathPoint)
+        => this.ToLinearGeometry(scale).TryGetPathPointAtDistance(distance, out pathPoint);
+
+    /// <inheritdoc/>
+    public bool TryGetSegment(float startDistance, float stopDistance, bool startOnBeginFigure, Vector2 scale, out IPath path)
+        => this.ToLinearGeometry(scale).TryGetSegment(startDistance, stopDistance, startOnBeginFigure, out path);
 
     private LinearGeometry BuildLinearGeometry(Vector2 scale)
     {
@@ -255,16 +212,26 @@ public sealed class RectanglePolygon : IPath, ISimplePath
         float minY = MathF.Min(MathF.Min(p0.Y, p1.Y), MathF.Min(p2.Y, p3.Y));
         float maxX = MathF.Max(MathF.Max(p0.X, p1.X), MathF.Max(p2.X, p3.X));
         float maxY = MathF.Max(MathF.Max(p0.Y, p1.Y), MathF.Max(p2.Y, p3.Y));
+        RectangleF bounds = RectangleF.FromLTRB(minX, minY, maxX, maxY);
 
         return new LinearGeometry(
             new LinearGeometryInfo
             {
-                Bounds = RectangleF.FromLTRB(minX, minY, maxX, maxY),
+                Bounds = bounds,
                 ContourCount = 1,
                 PointCount = 4,
                 SegmentCount = 4
             },
-            [new LinearContour { PointStart = 0, PointCount = 4, SegmentStart = 0, SegmentCount = 4, IsClosed = true }],
+            [new LinearContour
+            {
+                PointStart = 0,
+                PointCount = 4,
+                Bounds = bounds,
+                SegmentStart = 0,
+                SegmentCount = 4,
+                IsClosed = true
+            }
+            ],
             points);
     }
 
