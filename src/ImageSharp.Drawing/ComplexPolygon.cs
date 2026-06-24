@@ -213,24 +213,28 @@ public sealed class ComplexPolygon : IPath, IInternalPathOwner
     }
 
     /// <inheritdoc/>
-    public PathPoint GetPathPointAtDistance(float distance)
+    public bool TryGetPathPointAtDistance(float distance, out PathPoint pathPoint)
     {
+        pathPoint = default;
         this.EnsureInternalPaths();
+        if (this.length <= 0 || float.IsNaN(distance) || float.IsInfinity(distance) || distance < 0)
+        {
+            return false;
+        }
 
         distance %= this.length;
         foreach (InternalPath p in this.internalPaths)
         {
             if (p.Length >= distance)
             {
-                return p.GetPathPointAtDistance(distance);
+                return p.TryGetPathPointAtDistance(distance, out pathPoint);
             }
 
             // Reduce it before trying the next path
             distance -= p.Length;
         }
 
-        ThrowOutOfRange();
-        return default;
+        return false;
     }
 
     /// <inheritdoc/>
@@ -290,6 +294,4 @@ public sealed class ComplexPolygon : IPath, IInternalPathOwner
 
         return new RectangleF(minX, minY, maxX - minX, maxY - minY);
     }
-
-    private static InvalidOperationException ThrowOutOfRange() => new("Should not be possible to reach this line");
 }

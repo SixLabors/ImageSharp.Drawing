@@ -226,8 +226,8 @@ public class Path : IPath, ISimplePath, IInternalPathOwner
     }
 
     /// <inheritdoc/>
-    public virtual PathPoint GetPathPointAtDistance(float distance)
-        => this.InnerPath.GetPathPointAtDistance(distance);
+    public virtual bool TryGetPathPointAtDistance(float distance, out PathPoint pathPoint)
+        => this.InnerPath.TryGetPathPointAtDistance(distance, out pathPoint);
 
     /// <inheritdoc/>
     IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()

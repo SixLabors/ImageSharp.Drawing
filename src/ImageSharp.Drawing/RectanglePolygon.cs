@@ -168,52 +168,66 @@ public sealed class RectanglePolygon : IPath, ISimplePath
     }
 
     /// <inheritdoc />
-    public PathPoint GetPathPointAtDistance(float distance)
+    public bool TryGetPathPointAtDistance(float distance, out PathPoint pathPoint)
     {
+        pathPoint = default;
+        if (this.length <= 0 || float.IsNaN(distance) || float.IsInfinity(distance) || distance < 0)
+        {
+            return false;
+        }
+
         distance %= this.length;
 
         if (distance < this.Width)
         {
             // we are on the top stretch
-            return new PathPoint
+            pathPoint = new PathPoint
             {
                 Point = new Vector2(this.Left + distance, this.Top),
                 Tangent = new Vector2(1, 0),
                 Angle = 0
             };
+
+            return true;
         }
 
         distance -= this.Width;
         if (distance < this.Height)
         {
             // down on right
-            return new PathPoint
+            pathPoint = new PathPoint
             {
                 Point = new Vector2(this.Right, this.Top + distance),
                 Tangent = new Vector2(0, 1),
                 Angle = 90F
             };
+
+            return true;
         }
 
         distance -= this.Height;
         if (distance < this.Width)
         {
             // bottom right to left
-            return new PathPoint
+            pathPoint = new PathPoint
             {
                 Point = new Vector2(this.Right - distance, this.Bottom),
                 Tangent = new Vector2(-1, 0),
                 Angle = 180F
             };
+
+            return true;
         }
 
         distance -= this.Width;
-        return new PathPoint
+        pathPoint = new PathPoint
         {
             Point = new Vector2(this.Left, this.Bottom - distance),
             Tangent = new Vector2(0, -1),
             Angle = -90F
         };
+
+        return true;
     }
 
     /// <inheritdoc/>

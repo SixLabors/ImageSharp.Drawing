@@ -179,7 +179,7 @@ public class RectangleTests
     public void PointOnPath(float distance, float expectedX, float expectedY, float expectedAngle, float expectedTangentX, float expectedTangentY)
     {
         RectanglePolygon shape = new(50, 50, 200, 60);
-        PathPoint point = shape.GetPathPointAtDistance(distance);
+        Assert.True(shape.TryGetPathPointAtDistance(distance, out PathPoint point));
         Assert.Equal(expectedX, point.Point.X);
         Assert.Equal(expectedY, point.Point.Y);
         Assert.Equal(expectedTangentX, point.Tangent.X);

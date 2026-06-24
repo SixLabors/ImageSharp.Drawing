@@ -49,7 +49,11 @@ public sealed class EmptyPath : IPath
     public LinearGeometry ToLinearGeometry(Vector2 scale) => EmptyGeometry;
 
     /// <inheritdoc />
-    public PathPoint GetPathPointAtDistance(float distance) => default;
+    public bool TryGetPathPointAtDistance(float distance, out PathPoint pathPoint)
+    {
+        pathPoint = default;
+        return false;
+    }
 
     /// <inheritdoc />
     public IPath Transform(Matrix4x4 matrix) => this;

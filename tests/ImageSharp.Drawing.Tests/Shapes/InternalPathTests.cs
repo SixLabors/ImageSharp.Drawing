@@ -93,7 +93,7 @@ public class InternalPathTests
     public void PointOnPath(float distance, float expectedX, float expectedY, float expectedAngle, float expectedTangentX, float expectedTangentY)
     {
         InternalPath shape = Create(new PointF(50, 50), new Size(200, 60));
-        PathPoint point = shape.GetPathPointAtDistance(distance);
+        Assert.True(shape.TryGetPathPointAtDistance(distance, out PathPoint point));
         Assert.Equal(expectedX, point.Point.X, 4F);
         Assert.Equal(expectedY, point.Point.Y, 4F);
         Assert.Equal(expectedTangentX, point.Tangent.X, 4F);

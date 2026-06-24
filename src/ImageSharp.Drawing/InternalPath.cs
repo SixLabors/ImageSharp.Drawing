@@ -118,21 +118,45 @@ internal class InternalPath
     internal ReadOnlyMemory<PointF> Points() => this.materializedPoints ??= this.CreatePoints();
 
     /// <summary>
-    /// Calculates the point a certain distance a path.
+    /// Attempts to calculate the point at a distance along a path.
     /// </summary>
     /// <param name="distanceAlongPath">The distance along the path to find details of.</param>
-    /// <returns>
-    /// Returns details about a point along a path.
-    /// </returns>
-    /// <exception cref="InvalidOperationException">Thrown if no points found.</exception>
-    internal PathPoint GetPathPointAtDistance(float distanceAlongPath)
+    /// <param name="pathPoint">The path point when the distance is valid.</param>
+    /// <returns><see langword="true"/> when the distance resolves to a point on the path.</returns>
+    internal bool TryGetPathPointAtDistance(float distanceAlongPath, out PathPoint pathPoint)
     {
+        pathPoint = default;
+        if (this.Length <= 0 || float.IsNaN(distanceAlongPath) || float.IsInfinity(distanceAlongPath) || distanceAlongPath < 0)
+        {
+            return false;
+        }
+
         int pointCount = this.PointCount;
         if (this.closedPath)
         {
             // Move the distance back to the beginning since this is a closed polygon.
             distanceAlongPath %= this.Length;
             pointCount--;
+        }
+        else if (distanceAlongPath > this.Length)
+        {
+            return false;
+        }
+        else if (distanceAlongPath == this.Length)
+        {
+            PointF previous = this.points[^2].Point;
+            PointF end = this.points[^1].Point;
+            Vector2 endTangent = Vector2.Normalize((Vector2)end - (Vector2)previous);
+            float angle = (float)(Math.Atan2(endTangent.Y, endTangent.X) % (Math.PI * 2));
+
+            pathPoint = new PathPoint
+            {
+                Point = end,
+                Tangent = endTangent,
+                Angle = GeometryUtilities.RadianToDegree(angle)
+            };
+
+            return true;
         }
 
         for (int i = 0; i < pointCount; i++)
@@ -145,33 +169,20 @@ internal class InternalPath
                 Vector2 segmentTangent = Vector2.Normalize(this.points[next].Point - this.points[i].Point);
                 float segmentAngle = (float)(Math.Atan2(segmentTangent.Y, segmentTangent.X) % (Math.PI * 2));
 
-                return new PathPoint
+                pathPoint = new PathPoint
                 {
                     Point = point,
                     Tangent = segmentTangent,
                     Angle = GeometryUtilities.RadianToDegree(segmentAngle)
                 };
+
+                return true;
             }
 
             distanceAlongPath -= this.points[next].Length;
         }
 
-        // Closed paths will never reach this point.
-        // For open paths we're going to create a new virtual point that extends past the path.
-        // The position and angle for that point are calculated based upon the last two points.
-        PointF a = this.points[Math.Max(this.points.Length - 2, 0)].Point;
-        PointF b = this.points[^1].Point;
-        Vector2 endTangent = Vector2.Normalize((Vector2)b - (Vector2)a);
-        float angle = (float)(Math.Atan2(endTangent.Y, endTangent.X) % (Math.PI * 2));
-
-        Matrix4x4 transform = Matrix4x4.CreateRotationZ(angle) * Matrix4x4.CreateTranslation(b.X, b.Y, 0);
-
-        return new PathPoint
-        {
-            Point = PointF.Transform(new PointF(distanceAlongPath, 0), transform),
-            Tangent = endTangent,
-            Angle = GeometryUtilities.RadianToDegree(angle)
-        };
+        return false;
     }
 
     // Modulo is a very slow operation.

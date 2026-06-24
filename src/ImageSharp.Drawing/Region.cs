@@ -1011,7 +1011,8 @@ public sealed class Region
         public IEnumerable<ISimplePath> Flatten() => this.path.Flatten();
 
         /// <inheritdoc />
-        public PathPoint GetPathPointAtDistance(float distance) => this.path.GetPathPointAtDistance(distance);
+        public bool TryGetPathPointAtDistance(float distance, out PathPoint pathPoint)
+            => this.path.TryGetPathPointAtDistance(distance, out pathPoint);
 
         /// <inheritdoc />
         public LinearGeometry ToLinearGeometry(Vector2 scale) => this.path.ToLinearGeometry(scale);

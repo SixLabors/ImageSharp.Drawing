@@ -77,9 +77,8 @@ public sealed class EllipsePolygon : Polygon
     }
 
     /// <inheritdoc />
-    // TODO switch this out to a calculated algorithm
-    public override PathPoint GetPathPointAtDistance(float distance)
-        => this.InnerPath.GetPathPointAtDistance(distance);
+    public override bool TryGetPathPointAtDistance(float distance, out PathPoint pathPoint)
+        => this.InnerPath.TryGetPathPointAtDistance(distance, out pathPoint);
 
     private static CubicBezierLineSegment CreateSegment(Vector2 location, SizeF size)
     {

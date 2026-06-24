@@ -762,7 +762,11 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         // Find the point of this intersection along the given path.
         // We want to find the point on the path that is closest to the center-bottom side of the glyph.
         Vector2 half = new(bounds.Width * .5F, 0);
-        PathPoint pathPoint = this.path.GetPathPointAtDistance(bounds.Left + half.X);
+        if (!this.path.TryGetPathPointAtDistance(bounds.Left + half.X, out PathPoint pathPoint))
+        {
+            return Matrix4x4.Identity;
+        }
+
         float angle = GeometryUtilities.DegreeToRadian(pathPoint.Angle);
 
         // Now offset to our target point since we're aligning the top-left location of our glyph against the path.

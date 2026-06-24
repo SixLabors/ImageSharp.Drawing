@@ -46,7 +46,11 @@ internal sealed class PathGlyphBuilder : GlyphBuilder
     {
         // Query the path at the glyph's horizontal center.
         Vector2 half = new(bounds.Width * .5F, 0);
-        PathPoint pathPoint = this.path.GetPathPointAtDistance(bounds.Left + half.X);
+        if (!this.path.TryGetPathPointAtDistance(bounds.Left + half.X, out PathPoint pathPoint))
+        {
+            return;
+        }
+
         float angle = GeometryUtilities.DegreeToRadian(pathPoint.Angle);
 
         // Translate so the glyph's top-left aligns with the path point,

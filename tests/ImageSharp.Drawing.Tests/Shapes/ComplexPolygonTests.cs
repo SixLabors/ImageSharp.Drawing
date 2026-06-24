@@ -67,43 +67,43 @@ public class ComplexPolygonTests
     }
 
     [Fact]
-    public void GetPathPointAtDistance_AtStart_ReturnsFirstPoint()
+    public void TryGetPathPointAtDistance_AtStart_ReturnsFirstPoint()
     {
         ComplexPolygon complex = new(CreateSquare(0, 0, 10));
 
-        PathPoint info = complex.GetPathPointAtDistance(0);
+        Assert.True(complex.TryGetPathPointAtDistance(0, out PathPoint info));
 
         Assert.Equal(0, info.Point.X, 1F);
         Assert.Equal(0, info.Point.Y, 1F);
     }
 
     [Fact]
-    public void GetPathPointAtDistance_MidSegment_ReturnsInterpolatedPoint()
+    public void TryGetPathPointAtDistance_MidSegment_ReturnsInterpolatedPoint()
     {
         // First segment goes from (0,0) to (10,0), length 10.
         ComplexPolygon complex = new(CreateSquare(0, 0, 10));
 
-        PathPoint info = complex.GetPathPointAtDistance(5);
+        Assert.True(complex.TryGetPathPointAtDistance(5, out PathPoint info));
 
         Assert.Equal(5, info.Point.X, 1F);
         Assert.Equal(0, info.Point.Y, 1F);
     }
 
     [Fact]
-    public void GetPathPointAtDistance_WrapsAroundTotalLength()
+    public void TryGetPathPointAtDistance_WrapsAroundTotalLength()
     {
         // Perimeter is 40, so distance 45 should wrap to 5.
         ComplexPolygon complex = new(CreateSquare(0, 0, 10));
 
-        PathPoint atFive = complex.GetPathPointAtDistance(5);
-        PathPoint wrapped = complex.GetPathPointAtDistance(45);
+        Assert.True(complex.TryGetPathPointAtDistance(5, out PathPoint atFive));
+        Assert.True(complex.TryGetPathPointAtDistance(45, out PathPoint wrapped));
 
         Assert.Equal(atFive.Point.X, wrapped.Point.X, 1F);
         Assert.Equal(atFive.Point.Y, wrapped.Point.Y, 1F);
     }
 
     [Fact]
-    public void GetPathPointAtDistance_MultipleSubPaths_TraversesSecondPath()
+    public void TryGetPathPointAtDistance_MultipleSubPaths_TraversesSecondPath()
     {
         // Two separate squares; first has perimeter 40, second has perimeter 20.
         Polygon first = CreateSquare(0, 0, 10);
@@ -112,7 +112,7 @@ public class ComplexPolygonTests
 
         // Distance 42 = 40 (first path perimeter) + 2 into second path.
         // Second path first segment goes from (50,50) to (55,50), so 2 units in -> (52,50).
-        PathPoint info = complex.GetPathPointAtDistance(42);
+        Assert.True(complex.TryGetPathPointAtDistance(42, out PathPoint info));
 
         Assert.Equal(52, info.Point.X, 1F);
         Assert.Equal(50, info.Point.Y, 1F);
