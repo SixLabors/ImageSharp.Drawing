@@ -107,4 +107,117 @@ public partial class DrawingCanvasTests
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
     }
+
+    [Theory]
+    [WithBasicTestPatternImages(320, 240, PixelTypes.Rgba32)]
+    public void DrawImage_WithForeignPixelFormat_MatchesFullConversion<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => AssertForeignPixelFormatMatchesFullConversion(
+            provider,
+            new Rectangle(64, 48, 180, 150),
+            new RectangleF(40, 30, 200, 170),
+            new Matrix4x4(Matrix3x2.CreateRotation(0.28F, new Vector2(160, 120))));
+
+    [Theory]
+    [WithBasicTestPatternImages(320, 240, PixelTypes.Rgba32)]
+    public void DrawImage_WithForeignPixelFormat_PartialRegionNoTransform_MatchesFullConversion<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => AssertForeignPixelFormatMatchesFullConversion(
+            provider,
+            new Rectangle(64, 48, 180, 150),
+            new RectangleF(40, 30, 200, 170),
+            Matrix4x4.Identity);
+
+    [Theory]
+    [WithBasicTestPatternImages(320, 240, PixelTypes.Rgba32)]
+    public void DrawImage_WithForeignPixelFormat_SourceOutsideTopLeft_MatchesFullConversion<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => AssertForeignPixelFormatMatchesFullConversion(
+            provider,
+            new Rectangle(-48, -32, 220, 190),
+            new RectangleF(30, 24, 210, 180),
+            new Matrix4x4(Matrix3x2.CreateRotation(0.21F, new Vector2(160, 120))));
+
+    [Theory]
+    [WithBasicTestPatternImages(320, 240, PixelTypes.Rgba32)]
+    public void DrawImage_WithForeignPixelFormat_SourceOutsideBottomRight_MatchesFullConversion<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => AssertForeignPixelFormatMatchesFullConversion(
+            provider,
+            new Rectangle(200, 150, 260, 220),
+            new RectangleF(48, 40, 200, 168),
+            Matrix4x4.Identity);
+
+    [Theory]
+    [WithBasicTestPatternImages(320, 240, PixelTypes.Rgba32)]
+    public void DrawImage_WithForeignPixelFormat_ProjectiveTransform_MatchesFullConversion<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        // A quad/projective transform (non-affine Matrix4x4 with perspective terms) combined
+        // with a rotation, exercising the transform path over the clipped region.
+        Matrix4x4 projective = new Matrix4x4(Matrix3x2.CreateRotation(0.18F, new Vector2(160, 120)))
+        {
+            M14 = 0.0006F,
+            M24 = 0.0004F
+        };
+
+        AssertForeignPixelFormatMatchesFullConversion(
+            provider,
+            new Rectangle(56, 40, 190, 160),
+            new RectangleF(44, 34, 200, 168),
+            projective);
+    }
+
+    [Theory]
+    [WithBasicTestPatternImages(320, 240, PixelTypes.Rgba32)]
+    public void DrawImage_WithForeignPixelFormat_WholeImage_MatchesFullConversion<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => AssertForeignPixelFormatMatchesFullConversion(
+            provider,
+            new Rectangle(0, 0, 320, 240),
+            new RectangleF(24, 20, 260, 200),
+            new Matrix4x4(Matrix3x2.CreateRotation(0.15F, new Vector2(160, 120))));
+
+    /// <summary>
+    /// Drawing a foreign-pixel-format image (which converts only the clipped source region) must
+    /// produce pixels identical to first converting the whole image to the canvas format and drawing that.
+    /// </summary>
+    private static void AssertForeignPixelFormatMatchesFullConversion<TPixel>(
+        TestImageProvider<TPixel> provider,
+        Rectangle sourceRect,
+        RectangleF destinationRect,
+        Matrix4x4 transform)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> source = provider.GetImage();
+
+        // A source image whose pixel format differs from the canvas, forcing a per-pixel conversion.
+        using Image<Rgb24> foreignSource = source.CloneAs<Rgb24>();
+
+        // Reference source: the whole foreign image converted up-front to the canvas format.
+        using Image<TPixel> convertedSource = foreignSource.CloneAs<TPixel>();
+
+        DrawingOptions options = new()
+        {
+            Transform = transform
+        };
+
+        using Image<TPixel> actual = new(source.Width, source.Height);
+        using Image<TPixel> expected = new(source.Width, source.Height);
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, actual, options))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.DrawImage((Image)foreignSource, sourceRect, destinationRect, KnownResamplers.Bicubic);
+        }
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, expected, options))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.DrawImage(convertedSource, sourceRect, destinationRect, KnownResamplers.Bicubic);
+        }
+
+        // Converting only the clipped region must produce pixels identical to converting the whole image.
+        ImageComparer.Exact.VerifySimilarity(expected, actual);
+    }
 }
