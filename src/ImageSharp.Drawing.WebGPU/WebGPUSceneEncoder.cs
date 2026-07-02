@@ -30,7 +30,10 @@ internal static class WebGPUSceneEncoder
     private const int TileHeight = 16;
     private const float PointStrokeSegmentHalfLength = 1F / 128F;
     private const float StrokeMicroSegmentEpsilon = 1F / 64F;
-    private static readonly GraphicsOptions DefaultClipGraphicsOptions = new();
+    private const uint ClipBlendMode = (128U << 8) | 3U;
+    private const uint ClipDifferenceMaskBit = 0x80000000U;
+    private const uint ClipHardMaskBit = 0x40000000U;
+    private static readonly GraphicsOptions LayerMaskGraphicsOptions = new();
 
     /// <summary>
     /// Tags packed into the byte path-tag stream consumed by the WebGPU shaders.
@@ -110,9 +113,22 @@ internal static class WebGPUSceneEncoder
         int lastTargetRowBandIndex = (targetBounds.Bottom - 1) / TileHeight;
         int targetRowCount = (lastTargetRowBandIndex - firstTargetRowBandIndex) + 1;
         int commandCount = scene.CommandCount;
-        int partitionCount = GetPartitionCount(maxDegreeOfParallelism, commandCount, targetRowCount);
 
-        SceneEncodingPlan plan = SceneEncodingPlan.Create(scene, maxDegreeOfParallelism, partitionCount);
+        // Clip scopes do not force a single range: each partition replays the clip scopes open at
+        // its boundary and closes its own, so contiguous partitions concatenate into one valid
+        // push/pop clip sequence. Layer scopes composite their contents as one group with the
+        // layer's graphics options when they close, so a partition boundary may not cut through
+        // an open layer; the prescan snaps boundaries forward to the next point where no layer
+        // scope is open instead of serializing the whole scene.
+        int partitionCount = GetPartitionCount(maxDegreeOfParallelism, commandCount, targetRowCount);
+        int[]? partitionBoundaries = null;
+        CompositionCommand[][]? partitionSeedClips = null;
+        if (partitionCount > 1 && (scene.HasClipControls || scene.HasLayers))
+        {
+            CreatePartitionCommandRanges(scene, partitionCount, out partitionBoundaries, out partitionSeedClips);
+        }
+
+        SceneEncodingPlan plan = SceneEncodingPlan.Create(scene, maxDegreeOfParallelism, partitionCount, partitionBoundaries);
         if (partitionCount > 1)
         {
             Rectangle targetRectangle = targetBounds;
@@ -130,14 +146,17 @@ internal static class WebGPUSceneEncoder
                     {
                         // Match the CPU retained scene builder: partitions are contiguous command ranges,
                         // and the final merge appends them by partition index to preserve timeline order.
-                        int commandStart = (partitionIndex * commandCount) / partitionCount;
-                        int commandEnd = ((partitionIndex + 1) * commandCount) / partitionCount;
+                        // Boundary-snapped ranges can be empty; empty ranges skip clip seeding so they
+                        // do not emit balanced-but-useless clip records.
+                        int commandStart = partitionBoundaries is null ? (partitionIndex * commandCount) / partitionCount : partitionBoundaries[partitionIndex];
+                        int commandEnd = partitionBoundaries is null ? ((partitionIndex + 1) * commandCount) / partitionCount : partitionBoundaries[partitionIndex + 1];
                         SceneEncodingPlan partitionPlan = plan.GetPartitionPlan(partitionIndex);
                         SupportedSubsetSceneEncoding partitionEncoding = new(allocator, targetRectangle, partitionPlan);
 
                         try
                         {
-                            if (!partitionEncoding.TryBuild(scene, partitionPlan, commandStart, commandEnd, out string? partitionError))
+                            CompositionCommand[]? seedClips = commandStart == commandEnd ? null : partitionSeedClips?[partitionIndex];
+                            if (!partitionEncoding.TryBuild(scene, partitionPlan, commandStart, commandEnd, seedClips, out string? partitionError))
                             {
                                 failed[partitionIndex] = true;
                                 errors[partitionIndex] = partitionError;
@@ -253,8 +272,7 @@ internal static class WebGPUSceneEncoder
 
         try
         {
-            encoding.BeginIndependentRange(targetBounds);
-            SceneEncodingCheckpoint rangeStart = encoding.CaptureCheckpoint();
+            SceneEncodingCheckpoint rangeStart = encoding.BeginPackedIndependentRange(targetBounds, ClipBlendMode, replayActiveClips: true);
             if (!TryEncodeOrderedOperations(scene, 0, scene.CommandCount, targetBounds, ref encoding, operations, ref rangeStart, out error))
             {
                 DisposeOperations(operations);
@@ -262,11 +280,10 @@ internal static class WebGPUSceneEncoder
                 return false;
             }
 
-            if (!TryAddRenderRange(targetBounds, ref encoding, operations, ref rangeStart))
+            WebGPUSceneRange finalRange = encoding.EndPackedIndependentRange(targetBounds, rangeStart, closeActiveClips: true);
+            if (finalRange.FillCount != 0)
             {
-                encodedScene = WebGPUEncodedScene.Empty;
-                error = null;
-                return true;
+                operations.Add(new WebGPUSceneOperation(finalRange));
             }
 
             if (encoding.IsEmpty)
@@ -308,7 +325,11 @@ internal static class WebGPUSceneEncoder
                 CompositionCommand command = pathCommand.Command;
                 if (command.Kind == CompositionCommandKind.BeginLayer && command.RequiresScopedApply)
                 {
-                    TryAddRenderRange(targetBounds, ref encoding, operations, ref rangeStart);
+                    WebGPUSceneRange pendingRange = encoding.EndPackedIndependentRange(targetBounds, rangeStart, closeActiveClips: true);
+                    if (pendingRange.FillCount != 0)
+                    {
+                        operations.Add(new WebGPUSceneOperation(pendingRange));
+                    }
 
                     int layerEnd = FindMatchingLayerEnd(scene, i, commandEnd);
                     if (layerEnd < 0)
@@ -320,39 +341,47 @@ internal static class WebGPUSceneEncoder
                     Rectangle layerBounds = command.LayerBounds;
                     WebGPUScopedLayerSceneItem layer = new(layerBounds);
                     operations.Add(new WebGPUSceneOperation(layer));
+
                     int childOperationStart = operations.Count;
-                    encoding.BeginIndependentRange(layerBounds);
-                    SceneEncodingCheckpoint childStart = encoding.CaptureCheckpoint();
+
+                    SceneEncodingCheckpoint childStart = encoding.BeginPackedIndependentRange(layerBounds, ClipBlendMode, replayActiveClips: true);
                     if (!TryEncodeOrderedOperations(scene, i + 1, layerEnd, layerBounds, ref encoding, operations, ref childStart, out error))
                     {
                         return false;
                     }
 
-                    TryAddRenderRange(layerBounds, ref encoding, operations, ref childStart);
+                    WebGPUSceneRange childRange = encoding.EndPackedIndependentRange(layerBounds, childStart, closeActiveClips: true);
+                    if (childRange.FillCount != 0)
+                    {
+                        operations.Add(new WebGPUSceneOperation(childRange));
+                    }
+
                     int childOperationCount = operations.Count - childOperationStart;
 
-                    encoding.BeginIndependentRange(targetBounds);
-                    SceneEncodingCheckpoint compositeStart = encoding.CaptureCheckpoint();
-                    if (!TryAppendLayerCompositeCommand(command, ref encoding, out error))
+                    // Children are rendered into the temporary layer with the active clip stack
+                    // already replayed. Replaying the same clips again while compositing the
+                    // layer would clip antialias/filter coverage twice and diverge from the CPU
+                    // retained renderer's scoped-layer execution.
+                    SceneEncodingCheckpoint compositeStart = encoding.BeginPackedIndependentRange(targetBounds, ClipBlendMode, replayActiveClips: false);
+                    if (!TryAppendLayerCompositeCommand(command, targetBounds, ref encoding, out error))
                     {
                         return false;
                     }
 
-                    encoding.EndIndependentRange();
-                    WebGPUSceneRange compositeRange = SupportedSubsetSceneEncoding.CreateRange(compositeStart, encoding.CaptureCheckpoint(), targetBounds);
+                    WebGPUSceneRange compositeRange = encoding.EndPackedIndependentRange(targetBounds, compositeStart, closeActiveClips: false);
                     layer.SetComposite(childOperationCount, compositeRange);
 
-                    encoding.BeginIndependentRange(targetBounds);
-                    rangeStart = encoding.CaptureCheckpoint();
+                    rangeStart = encoding.BeginPackedIndependentRange(targetBounds, ClipBlendMode, replayActiveClips: true);
                     i = layerEnd;
                     continue;
                 }
 
                 if (command.Kind == CompositionCommandKind.Apply)
                 {
-                    TryAddRenderRange(targetBounds, ref encoding, operations, ref rangeStart);
+                    uint applyClipBlendMode = PackBlendMode(command.DrawingOptions.GraphicsOptions);
+                    AddRenderRange(targetBounds, ref encoding, operations, ref rangeStart, applyClipBlendMode);
 
-                    if (!TryAppendApplyCommand(command, targetBounds, ref encoding, out WebGPUSceneOperation? applyOperation, out error))
+                    if (!TryAppendApplyCommand(command, targetBounds, ref encoding, rangeStart, out WebGPUSceneOperation? applyOperation, out error))
                     {
                         return false;
                     }
@@ -360,18 +389,22 @@ internal static class WebGPUSceneEncoder
                     if (applyOperation is not null)
                     {
                         operations.Add(applyOperation);
+                        rangeStart = encoding.BeginPackedIndependentRange(targetBounds, ClipBlendMode, replayActiveClips: true);
                     }
 
-                    encoding.BeginIndependentRange(targetBounds);
-                    rangeStart = encoding.CaptureCheckpoint();
                     continue;
                 }
             }
 
             if (sceneCommand is PathCompositionSceneCommand fillCommand)
             {
-                geometry = fillCommand.Command.SourcePath.ToLinearGeometry(ExtractScale(fillCommand.Command.Transform));
-                if (!encoding.TryAppend(fillCommand.Command, geometry, out error))
+                CompositionCommand command = fillCommand.Command;
+                if (command.Kind == CompositionCommandKind.FillLayer)
+                {
+                    geometry = command.SourcePath.ToLinearGeometry(ExtractScale(command.Transform));
+                }
+
+                if (!encoding.TryAppend(command, geometry, out error))
                 {
                     return false;
                 }
@@ -405,35 +438,34 @@ internal static class WebGPUSceneEncoder
         return true;
     }
 
-    private static bool TryAddRenderRange(
+    private static void AddRenderRange(
         Rectangle targetBounds,
         ref SupportedSubsetSceneEncoding encoding,
         List<WebGPUSceneOperation> operations,
-        ref SceneEncodingCheckpoint rangeStart)
+        ref SceneEncodingCheckpoint rangeStart,
+        uint nextClipBlendMode)
     {
-        encoding.EndIndependentRange();
-        SceneEncodingCheckpoint rangeEnd = encoding.CaptureCheckpoint();
-        WebGPUSceneRange range = SupportedSubsetSceneEncoding.CreateRange(rangeStart, rangeEnd, targetBounds);
+        WebGPUSceneRange range = encoding.EndPackedIndependentRange(targetBounds, rangeStart, closeActiveClips: true);
 
-        if (range.DrawTagCount != 0)
+        if (range.FillCount != 0)
         {
             operations.Add(new WebGPUSceneOperation(range));
         }
 
-        encoding.BeginIndependentRange(targetBounds);
-        rangeStart = encoding.CaptureCheckpoint();
-        return true;
+        rangeStart = encoding.BeginPackedIndependentRange(targetBounds, nextClipBlendMode, replayActiveClips: true);
     }
 
     private static bool TryAppendApplyCommand(
         in CompositionCommand source,
         Rectangle targetBounds,
         ref SupportedSubsetSceneEncoding encoding,
+        in SceneEncodingCheckpoint drawStart,
         out WebGPUSceneOperation? operation,
         out string? error)
     {
         RectangleF rawBounds = RectangleF.Transform(source.SourcePath.Bounds, source.DrawingOptions.Transform);
-        Rectangle sourceRect = Rectangle.Intersect(targetBounds, Rectangle.Intersect(source.ApplyCanvasBounds, ToConservativeBounds(rawBounds)));
+        Rectangle sourceRect = Rectangle.Intersect(source.ApplyCanvasBounds, ToConservativeBounds(rawBounds));
+
         if (sourceRect.Width <= 0 || sourceRect.Height <= 0)
         {
             operation = null;
@@ -445,8 +477,6 @@ internal static class WebGPUSceneEncoder
             sourceRect.X - (int)MathF.Floor(rawBounds.Left),
             sourceRect.Y - (int)MathF.Floor(rawBounds.Top));
 
-        encoding.BeginIndependentRange(targetBounds);
-        SceneEncodingCheckpoint drawStart = encoding.CaptureCheckpoint();
         RasterizerOptions rasterizerOptions = source.RasterizerOptions;
         LinearGeometry geometry = source.SourcePath.ToLinearGeometry(ExtractScale(source.Transform));
         if (!encoding.TryAppendExternalTextureFill(
@@ -455,6 +485,7 @@ internal static class WebGPUSceneEncoder
             source.DrawingOptions,
             in rasterizerOptions,
             source.DestinationOffset,
+            targetBounds,
             geometry,
             out error))
         {
@@ -462,8 +493,7 @@ internal static class WebGPUSceneEncoder
             return false;
         }
 
-        encoding.EndIndependentRange();
-        WebGPUSceneRange drawRange = SupportedSubsetSceneEncoding.CreateRange(drawStart, encoding.CaptureCheckpoint(), targetBounds);
+        WebGPUSceneRange drawRange = encoding.EndPackedIndependentRange(targetBounds, drawStart, closeActiveClips: true);
         operation = new WebGPUSceneOperation(new WebGPUApplySceneItem(source.ApplyOperation, sourceRect, drawRange));
         error = null;
         return true;
@@ -471,13 +501,14 @@ internal static class WebGPUSceneEncoder
 
     private static bool TryAppendLayerCompositeCommand(
         in CompositionCommand beginCommand,
+        Rectangle targetBounds,
         ref SupportedSubsetSceneEncoding encoding,
         out string? error)
     {
         Rectangle destinationBounds = beginCommand.LayerBounds;
         DrawingOptions options = new()
         {
-            GraphicsOptions = beginCommand.GraphicsOptions
+            GraphicsOptions = beginCommand.LayerOptions
         };
 
         RasterizerOptions rasterizerOptions = CreateRasterizerOptions(destinationBounds, options);
@@ -489,6 +520,7 @@ internal static class WebGPUSceneEncoder
             options,
             in rasterizerOptions,
             destinationBounds.Location,
+            targetBounds,
             geometry,
             out error);
     }
@@ -725,11 +757,13 @@ internal static class WebGPUSceneEncoder
         /// <param name="scene">The command batch to plan.</param>
         /// <param name="maxDegreeOfParallelism">The maximum parallel worker count.</param>
         /// <param name="partitionCount">The number of command-range partitions.</param>
+        /// <param name="partitionBoundaries">The snapped range boundaries, or <see langword="null"/> for uniform ranges.</param>
         /// <returns>The created encoding plan.</returns>
         public static SceneEncodingPlan Create(
             DrawingCommandBatch scene,
             int maxDegreeOfParallelism,
-            int partitionCount)
+            int partitionCount,
+            int[]? partitionBoundaries)
         {
             int commandCount = scene.CommandCount;
             if (partitionCount <= 1)
@@ -746,8 +780,8 @@ internal static class WebGPUSceneEncoder
                 CreateParallelOptions(maxDegreeOfParallelism, partitionCount),
                 partitionIndex =>
                 {
-                    int commandStart = (partitionIndex * commandCount) / partitionCount;
-                    int commandEnd = ((partitionIndex + 1) * commandCount) / partitionCount;
+                    int commandStart = partitionBoundaries is null ? (partitionIndex * commandCount) / partitionCount : partitionBoundaries[partitionIndex];
+                    int commandEnd = partitionBoundaries is null ? ((partitionIndex + 1) * commandCount) / partitionCount : partitionBoundaries[partitionIndex + 1];
                     SceneCapacityEstimate estimate = default;
 
                     for (int i = commandStart; i < commandEnd; i++)
@@ -764,8 +798,8 @@ internal static class WebGPUSceneEncoder
             {
                 total.Add(estimates[i]);
 
-                int commandStart = (i * commandCount) / partitionCount;
-                int commandEnd = ((i + 1) * commandCount) / partitionCount;
+                int commandStart = partitionBoundaries is null ? (i * commandCount) / partitionCount : partitionBoundaries[i];
+                int commandEnd = partitionBoundaries is null ? ((i + 1) * commandCount) / partitionCount : partitionBoundaries[i + 1];
                 partitionPlans[i] = estimates[i].ToPlan(commandEnd - commandStart, geometries, null);
             }
 
@@ -853,6 +887,61 @@ internal static class WebGPUSceneEncoder
             this.PathTagCount += geometryInfo.SegmentCount + 3L;
             this.PathDataWordCount += (geometryInfo.ContourCount * 2L) + (geometryInfo.SegmentCount * 2L);
             this.AddDrawPayload(drawTag, brush);
+        }
+
+        /// <summary>
+        /// Adds capacity for one explicit begin-clip command.
+        /// </summary>
+        /// <param name="descriptor">The clip descriptor opened by the command.</param>
+        public void AddBeginClip(DrawingClipDescriptor descriptor)
+        {
+            int rectangleCount = GetRectangleClipCount(in descriptor);
+
+            // The encoder resets clip commands to identity before emitting descriptor
+            // geometry so a preceding draw transform cannot leak into the clip stack.
+            this.PathTagCount++;
+            this.TransformWordCount += WebGPUSceneEncoder.TransformWordCount;
+
+            if (rectangleCount > 0)
+            {
+                this.PathTagCount += (rectangleCount * 4L) + 2L;
+                this.PathDataWordCount += rectangleCount * 10L;
+            }
+            else if (descriptor.Kind == DrawingClipKind.Path)
+            {
+                LinearGeometry clipGeometry = descriptor.ToLinearGeometry(out Matrix4x4 descriptorTransform);
+                this.PathTagCount += clipGeometry.Info.SegmentCount + 2L;
+                this.PathDataWordCount += clipGeometry.Info.SegmentCount == 0
+                    ? 4L
+                    : (clipGeometry.Info.ContourCount * 2L) + (clipGeometry.Info.SegmentCount * 2L);
+
+                if (descriptorTransform != Matrix4x4.Identity)
+                {
+                    // Clip descriptors share the path stream with ordinary draws. Count the
+                    // transform transition explicitly so a path clip cannot leave a residual
+                    // transform active for later draws.
+                    this.PathTagCount++;
+                    this.TransformWordCount += WebGPUSceneEncoder.TransformWordCount;
+                }
+            }
+            else
+            {
+                this.PathTagCount += 2L;
+                this.PathDataWordCount += 4L;
+            }
+
+            this.DrawTagCount++;
+            this.DrawDataWordCount += 2;
+            this.StyleWordCount += WebGPUSceneEncoder.StyleWordCount;
+        }
+
+        /// <summary>
+        /// Adds capacity for one explicit end-clip command.
+        /// </summary>
+        public void AddEndClip()
+        {
+            this.PathTagCount++;
+            this.DrawTagCount++;
         }
 
         /// <summary>
@@ -984,6 +1073,14 @@ internal static class WebGPUSceneEncoder
                 case CompositionCommandKind.EndLayer:
                     estimate.AddEndLayer();
                     return estimate;
+
+                case CompositionCommandKind.BeginClip:
+                    estimate.AddBeginClip(composition.ClipDescriptor);
+                    return estimate;
+
+                case CompositionCommandKind.EndClip:
+                    estimate.AddEndClip();
+                    return estimate;
             }
         }
 
@@ -1047,6 +1144,79 @@ internal static class WebGPUSceneEncoder
         => new() { MaxDegreeOfParallelism = Math.Min(maxDegreeOfParallelism, partitionCount) };
 
     /// <summary>
+    /// Computes the partition command-range boundaries and, for each partition's command start,
+    /// the stack of clip scopes opened by earlier partitions, outermost first.
+    /// </summary>
+    /// <remarks>
+    /// This single sequential prescan only inspects command kinds, so it stays cheap relative to
+    /// the parallel encode it enables. Each partition replays its seed clips before its range and
+    /// closes every open clip after it, keeping the concatenated clip stream balanced. Layer
+    /// scopes cannot be replayed the same way because a layer composites its contents as one
+    /// group when it closes, so each boundary snaps forward from its ideal position to the next
+    /// command index where no layer scope is open. Snapping can produce empty trailing ranges
+    /// when one layer spans most of the scene; those partitions simply encode nothing.
+    /// </remarks>
+    /// <param name="scene">The command batch being partitioned.</param>
+    /// <param name="partitionCount">The partition count used to compute the ideal boundaries.</param>
+    /// <param name="boundaries">Receives the <paramref name="partitionCount"/> + 1 range boundaries.</param>
+    /// <param name="seedClips">Receives the per-partition seed clip stacks.</param>
+    private static void CreatePartitionCommandRanges(
+        DrawingCommandBatch scene,
+        int partitionCount,
+        out int[] boundaries,
+        out CompositionCommand[][] seedClips)
+    {
+        int commandCount = scene.CommandCount;
+        boundaries = new int[partitionCount + 1];
+        boundaries[partitionCount] = commandCount;
+        seedClips = new CompositionCommand[partitionCount][];
+        seedClips[0] = [];
+
+        List<CompositionCommand> openClips = [];
+        int layerDepth = 0;
+        int cursor = 0;
+
+        for (int partitionIndex = 1; partitionIndex < partitionCount; partitionIndex++)
+        {
+            int ideal = (partitionIndex * commandCount) / partitionCount;
+            while (cursor < commandCount && (cursor < ideal || layerDepth > 0))
+            {
+                if (scene.Commands[cursor] is PathCompositionSceneCommand pathCommand)
+                {
+                    switch (pathCommand.Command.Kind)
+                    {
+                        case CompositionCommandKind.BeginClip:
+                            openClips.Add(pathCommand.Command);
+                            break;
+                        case CompositionCommandKind.EndClip:
+                            if (openClips.Count > 0)
+                            {
+                                openClips.RemoveAt(openClips.Count - 1);
+                            }
+
+                            break;
+                        case CompositionCommandKind.BeginLayer:
+                            layerDepth++;
+                            break;
+                        case CompositionCommandKind.EndLayer:
+                            if (layerDepth > 0)
+                            {
+                                layerDepth--;
+                            }
+
+                            break;
+                    }
+                }
+
+                cursor++;
+            }
+
+            boundaries[partitionIndex] = cursor;
+            seedClips[partitionIndex] = openClips.Count == 0 ? [] : [.. openClips];
+        }
+    }
+
+    /// <summary>
     /// Mutable flush-scoped encoder state used while appending supported commands into contiguous scene streams.
     /// </summary>
     private ref struct SupportedSubsetSceneEncoding
@@ -1068,6 +1238,7 @@ internal static class WebGPUSceneEncoder
         private uint lastStyle9;
         private GpuSceneTransform lastTransform;
         private Rectangle rootTargetBounds;
+        private List<CompositionCommand>? activeClips;
         private List<Rectangle>? openLayerBounds;
 
         /// <summary>
@@ -1076,7 +1247,7 @@ internal static class WebGPUSceneEncoder
         /// <param name="allocator">The allocator used for all temporary scene streams.</param>
         /// <param name="rootTargetBounds">The root target bounds used for target-local coordinate conversion.</param>
         /// <param name="plan">The large-batch encoding plan used for initial stream sizing and prepared geometry.</param>
-        internal SupportedSubsetSceneEncoding(
+        public SupportedSubsetSceneEncoding(
             MemoryAllocator allocator,
             in Rectangle rootTargetBounds,
             in SceneEncodingPlan plan)
@@ -1114,6 +1285,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle9 = 0;
             this.rootTargetBounds = rootTargetBounds;
             this.lastTransform = GpuSceneTransform.Identity;
+            this.activeClips = null;
             this.openLayerBounds = null;
             this.estimatedPathRowCount = 0;
             this.VisibleFillCount = 0;
@@ -1246,7 +1418,7 @@ internal static class WebGPUSceneEncoder
         /// Starts a range that can be decoded independently by the staged pipeline.
         /// </summary>
         /// <param name="targetBounds">The target bounds for the independent range.</param>
-        public void BeginIndependentRange(Rectangle targetBounds)
+        private void BeginIndependentRange(Rectangle targetBounds)
         {
             this.PadPathTagsToSegmentBoundary();
             this.rootTargetBounds = targetBounds;
@@ -1256,9 +1428,113 @@ internal static class WebGPUSceneEncoder
         }
 
         /// <summary>
+        /// Starts a packed independent range and replays the logical clip stack into it.
+        /// </summary>
+        /// <param name="targetBounds">The target bounds for the independent range.</param>
+        /// <param name="clipBlendMode">The blend mode used when closing replayed clips.</param>
+        /// <param name="replayActiveClips">Whether the current active clip stack is replayed into the range.</param>
+        /// <returns>The checkpoint captured before replaying active clips.</returns>
+        public SceneEncodingCheckpoint BeginPackedIndependentRange(
+            Rectangle targetBounds,
+            uint clipBlendMode,
+            bool replayActiveClips)
+        {
+            this.BeginIndependentRange(targetBounds);
+            SceneEncodingCheckpoint checkpoint = this.CaptureCheckpoint();
+
+            // Each packed range is scanned from its own path-tag base, but flatten.wgsl
+            // still rebases transform indices by the implicit identity transform. Emit
+            // that identity inside the range so range-local identity paths resolve to
+            // transform index zero instead of underflowing into unrelated transform data.
+            this.PathTags.EnsureAdditionalCapacity(1);
+            this.Transforms.EnsureAdditionalCapacity(TransformWordCount);
+            this.PathTags.Add(PackPathTag(PathTag.Transform));
+            AppendIdentityTransform(ref this.Transforms);
+            this.lastTransform = GpuSceneTransform.Identity;
+
+            if (replayActiveClips)
+            {
+                this.AppendActiveClipBegins(clipBlendMode);
+            }
+
+            return checkpoint;
+        }
+
+        /// <summary>
+        /// Ends a packed independent range after balancing the logical clip stack.
+        /// </summary>
+        /// <param name="targetBounds">The target bounds for the independent range.</param>
+        /// <param name="start">The range checkpoint captured by <see cref="BeginPackedIndependentRange"/>.</param>
+        /// <param name="closeActiveClips">Whether the current active clip stack is closed before the range ends.</param>
+        /// <returns>The balanced range.</returns>
+        public WebGPUSceneRange EndPackedIndependentRange(
+            Rectangle targetBounds,
+            in SceneEncodingCheckpoint start,
+            bool closeActiveClips)
+        {
+            if (closeActiveClips)
+            {
+                this.AppendActiveClipEnds();
+            }
+
+            this.EndIndependentRange();
+            return CreateRange(start, this.CaptureCheckpoint(), targetBounds);
+        }
+
+        /// <summary>
+        /// Records one logical begin-clip command in the active clip stack.
+        /// </summary>
+        /// <param name="command">The begin-clip command to keep active for later packed ranges.</param>
+        private void PushActiveClip(in CompositionCommand command)
+            => (this.activeClips ??= []).Add(command);
+
+        /// <summary>
+        /// Removes the most recently opened logical clip from the active clip stack.
+        /// </summary>
+        private readonly void PopActiveClip()
+        {
+            List<CompositionCommand>? activeClips = this.activeClips;
+            activeClips?.RemoveAt(activeClips.Count - 1);
+        }
+
+        /// <summary>
+        /// Replays the logical active clip stack at the start of a packed independent range.
+        /// </summary>
+        private void AppendActiveClipBegins(uint clipBlendMode)
+        {
+            List<CompositionCommand>? activeClips = this.activeClips;
+            if (activeClips is null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < activeClips.Count; i++)
+            {
+                this.AppendBeginClip(activeClips[i], clipBlendMode);
+            }
+        }
+
+        /// <summary>
+        /// Appends physical end-clip records to balance the current packed independent range.
+        /// </summary>
+        private void AppendActiveClipEnds()
+        {
+            List<CompositionCommand>? activeClips = this.activeClips;
+            if (activeClips is null)
+            {
+                return;
+            }
+
+            for (int i = activeClips.Count - 1; i >= 0; i--)
+            {
+                this.AppendEndClip();
+            }
+        }
+
+        /// <summary>
         /// Ends a range that can be decoded independently by the staged pipeline.
         /// </summary>
-        public void EndIndependentRange() => this.PadPathTagsToSegmentBoundary();
+        private void EndIndependentRange() => this.PadPathTagsToSegmentBoundary();
 
         /// <summary>
         /// Creates one render range from two stream checkpoints.
@@ -1340,7 +1616,7 @@ internal static class WebGPUSceneEncoder
         /// <param name="plan">The encoding plan for the command batch.</param>
         /// <param name="error">The error message when appending fails.</param>
         /// <returns><see langword="true"/> when all supported commands were appended.</returns>
-        internal bool TryBuild(
+        public bool TryBuild(
             DrawingCommandBatch scene,
             in SceneEncodingPlan plan,
             out string? error)
@@ -1355,7 +1631,65 @@ internal static class WebGPUSceneEncoder
         /// <param name="commandEnd">The exclusive command end index.</param>
         /// <param name="error">The error message when appending fails.</param>
         /// <returns><see langword="true"/> when all supported commands were appended.</returns>
-        internal bool TryBuild(
+        public bool TryBuild(
+            DrawingCommandBatch scene,
+            in SceneEncodingPlan plan,
+            int commandStart,
+            int commandEnd,
+            out string? error)
+            => this.TryBuild(scene, plan, commandStart, commandEnd, seedClips: null, out error);
+
+        /// <summary>
+        /// Appends a contiguous command range into this partition's mutable scene streams,
+        /// replaying clip scopes opened by earlier partitions and closing every clip scope
+        /// still open at the range end.
+        /// </summary>
+        /// <remarks>
+        /// Seeding and closing keep each partition's clip stream balanced independently, so
+        /// contiguous partitions concatenate into one valid Vello-style push/pop clip sequence
+        /// even when a partition boundary falls inside an open clip scope. This is what allows
+        /// clipped scenes to encode in parallel.
+        /// </remarks>
+        /// <param name="scene">The command batch to append.</param>
+        /// <param name="plan">The encoding plan for the command batch.</param>
+        /// <param name="commandStart">The inclusive command start index.</param>
+        /// <param name="commandEnd">The exclusive command end index.</param>
+        /// <param name="seedClips">The begin-clip commands opened by earlier partitions, outermost first.</param>
+        /// <param name="error">The error message when appending fails.</param>
+        /// <returns><see langword="true"/> when all supported commands were appended.</returns>
+        public bool TryBuild(
+            DrawingCommandBatch scene,
+            in SceneEncodingPlan plan,
+            int commandStart,
+            int commandEnd,
+            CompositionCommand[]? seedClips,
+            out string? error)
+        {
+            if (seedClips is not null)
+            {
+                for (int i = 0; i < seedClips.Length; i++)
+                {
+                    CompositionCommand seed = seedClips[i];
+                    this.AppendBeginClip(seed, ClipBlendMode);
+                    this.PushActiveClip(seed);
+                }
+            }
+
+            if (!this.TryBuildCore(scene, plan, commandStart, commandEnd, out error))
+            {
+                return false;
+            }
+
+            while (this.activeClips is { Count: > 0 })
+            {
+                this.AppendEndClip();
+                this.PopActiveClip();
+            }
+
+            return true;
+        }
+
+        private bool TryBuildCore(
             DrawingCommandBatch scene,
             in SceneEncodingPlan plan,
             int commandStart,
@@ -1416,6 +1750,12 @@ internal static class WebGPUSceneEncoder
             {
                 case CompositionCommandKind.FillLayer:
                     geometry ??= command.SourcePath.ToLinearGeometry(ExtractScale(command.Transform));
+                    if (geometry.Info.SegmentCount == 0)
+                    {
+                        error = null;
+                        return true;
+                    }
+
                     if (!TryResolveCommand(command, geometry, out ResolvedPathCommand resolved))
                     {
                         error = null;
@@ -1428,9 +1768,9 @@ internal static class WebGPUSceneEncoder
                     }
 
                     Matrix4x4 fillResidual = ComputeResidual(ExtractScale(command.Transform), command.Transform);
-                    this.AppendTransformIfChanged(fillResidual);
+                    Point pathDataOffset = this.AppendTargetTransform(fillResidual, command.DestinationOffset);
 
-                    this.AppendPlainFill(resolved, geometry);
+                    this.AppendPlainFill(resolved, geometry, pathDataOffset);
                     error = null;
                     return true;
 
@@ -1441,6 +1781,20 @@ internal static class WebGPUSceneEncoder
 
                 case CompositionCommandKind.EndLayer:
                     this.AppendEndLayer();
+                    error = null;
+                    return true;
+
+                case CompositionCommandKind.BeginClip:
+                    this.AppendBeginClip(command, ClipBlendMode);
+                    this.PushActiveClip(command);
+
+                    error = null;
+                    return true;
+
+                case CompositionCommandKind.EndClip:
+                    this.AppendEndClip();
+                    this.PopActiveClip();
+
                     error = null;
                     return true;
             }
@@ -1455,8 +1809,9 @@ internal static class WebGPUSceneEncoder
         /// <param name="path">The path to fill.</param>
         /// <param name="imageSource">The external texture source metadata to encode.</param>
         /// <param name="options">Drawing options used for the fill.</param>
-        /// <param name="rasterizerOptions">Rasterizer options used to generate coverage.</param>
+        /// <param name="rasterizerOptions">Local rasterizer options used to generate coverage.</param>
         /// <param name="destinationOffset">Absolute destination offset where coverage is composited.</param>
+        /// <param name="targetBounds">Absolute target bounds that own the composited pixels.</param>
         /// <param name="geometry">Optional pre-flattened geometry for <paramref name="path"/>.</param>
         /// <param name="error">The error message when the command cannot be encoded.</param>
         /// <returns><see langword="true"/> when the command was encoded.</returns>
@@ -1466,27 +1821,44 @@ internal static class WebGPUSceneEncoder
             DrawingOptions options,
             in RasterizerOptions rasterizerOptions,
             Point destinationOffset,
+            Rectangle targetBounds,
             LinearGeometry? geometry,
             out string? error)
         {
-            if (!this.TryRegisterVisibleFill(rasterizerOptions, out error))
+            Vector2 scale = ExtractScale(options.Transform);
+            geometry ??= path.ToLinearGeometry(scale);
+            Matrix4x4 residual = ComputeResidual(scale, options.Transform);
+            RectangleF geometryBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
+
+            if (!TryResolveRasterization(
+                    rasterizerOptions,
+                    geometryBounds,
+                    destinationOffset,
+                    targetBounds,
+                    out RasterizerOptions resolvedOptions,
+                    out Rectangle brushBounds))
+            {
+                error = null;
+                return true;
+            }
+
+            if (!this.TryRegisterVisibleFill(resolvedOptions, out error))
             {
                 return false;
             }
-
-            Matrix4x4 residual = ComputeResidual(ExtractScale(options.Transform), options.Transform);
-            this.AppendTransformIfChanged(residual);
 
             ResolvedPathCommand resolved = new(
                 path,
                 imageSource,
                 options.GraphicsOptions,
-                rasterizerOptions,
+                resolvedOptions,
                 destinationOffset,
-                rasterizerOptions.Interest,
+                brushBounds,
                 options.Transform);
 
-            this.AppendPlainFill(resolved, geometry);
+            Point pathDataOffset = this.AppendTargetTransform(residual, destinationOffset);
+
+            this.AppendPlainFill(resolved, geometry, pathDataOffset);
             error = null;
             return true;
         }
@@ -1504,6 +1876,12 @@ internal static class WebGPUSceneEncoder
             out string? error)
         {
             geometry ??= command.SourcePath.ToLinearGeometry(ExtractScale(command.Transform));
+            if (geometry.Info.SegmentCount == 0)
+            {
+                error = null;
+                return true;
+            }
+
             if (!TryResolveCommand(command, geometry, out ResolvedPathCommand resolved))
             {
                 error = null;
@@ -1516,8 +1894,9 @@ internal static class WebGPUSceneEncoder
             }
 
             Matrix4x4 strokeResidual = ComputeResidual(ExtractScale(command.Transform), command.Transform);
-            this.AppendTransformIfChanged(strokeResidual);
-            this.AppendPlainStroke(resolved, command.Brush, command.Pen, geometry);
+            Point pathDataOffset = this.AppendTargetTransform(strokeResidual, command.DestinationOffset);
+
+            this.AppendPlainStroke(resolved, command.Brush, command.Pen, geometry, pathDataOffset);
             error = null;
             return true;
         }
@@ -1543,15 +1922,17 @@ internal static class WebGPUSceneEncoder
 
             Vector2 segmentScale = ExtractScale(command.Transform);
             Matrix4x4 segmentResidual = ComputeResidual(segmentScale, command.Transform);
-            this.AppendTransformIfChanged(segmentResidual);
             PointF start = new(resolved.Start.X * segmentScale.X, resolved.Start.Y * segmentScale.Y);
             PointF end = new(resolved.End.X * segmentScale.X, resolved.End.Y * segmentScale.Y);
             float widthScale = GetTransformWidthScale(command.Transform);
+
+            Point pathDataOffset = this.AppendTargetTransform(segmentResidual, resolved.DestinationOffset);
+
             this.AppendExplicitStroke(
                 resolved.Brush,
                 resolved.GraphicsOptions,
                 resolved.RasterizerOptions,
-                resolved.DestinationOffset,
+                pathDataOffset,
                 resolved.BrushBounds,
                 resolved.Pen,
                 widthScale,
@@ -1586,14 +1967,16 @@ internal static class WebGPUSceneEncoder
                 return false;
             }
 
-            Matrix4x4 polylineResidual = ComputeResidual(polylineScale, command.Transform);
-            this.AppendTransformIfChanged(polylineResidual);
             float widthScale = GetTransformWidthScale(command.Transform);
+
+            Matrix4x4 polylineResidual = ComputeResidual(polylineScale, command.Transform);
+            Point pathDataOffset = this.AppendTargetTransform(polylineResidual, resolved.DestinationOffset);
+
             this.AppendExplicitStroke(
                 resolved.Brush,
                 resolved.GraphicsOptions,
                 resolved.RasterizerOptions,
-                resolved.DestinationOffset,
+                pathDataOffset,
                 resolved.BrushBounds,
                 resolved.Pen,
                 widthScale,
@@ -1633,6 +2016,25 @@ internal static class WebGPUSceneEncoder
         }
 
         /// <summary>
+        /// Emits the path transform with the canvas destination offset applied after local geometry transforms.
+        /// </summary>
+        private Point AppendTargetTransform(Matrix4x4 transform, Point destinationOffset)
+        {
+            float translateX = destinationOffset.X - this.rootTargetBounds.X;
+            float translateY = destinationOffset.Y - this.rootTargetBounds.Y;
+            if (translateX != 0F || translateY != 0F)
+            {
+                // Canvas offsets are post-transform translations. Encoding the offset in the
+                // transform keeps rotated/skewed region-local clips aligned with the CPU path.
+                transform *= Matrix4x4.CreateTranslation(translateX, translateY, 0F);
+                destinationOffset = new Point(this.rootTargetBounds.X, this.rootTargetBounds.Y);
+            }
+
+            this.AppendTransformIfChanged(transform);
+            return destinationOffset;
+        }
+
+        /// <summary>
         /// Pads the byte path-tag stream so a later render range can start at a WGSL scan-segment boundary.
         /// </summary>
         private void PadPathTagsToSegmentBoundary()
@@ -1655,7 +2057,8 @@ internal static class WebGPUSceneEncoder
         /// </summary>
         private void AppendPlainFill(
             in ResolvedPathCommand command,
-            LinearGeometry? geometry)
+            LinearGeometry? geometry,
+            Point pathDataOffset)
         {
             uint drawTag = GetDrawTag(command);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
@@ -1664,7 +2067,9 @@ internal static class WebGPUSceneEncoder
                 GetFillStyle(command.GraphicsOptions, command.RasterizerOptions.IntersectionRule, interestBounds);
             int pathTagCheckpoint = this.PathTags.Count;
             int pathDataCheckpoint = this.PathData.Count;
+            int transformCheckpoint = this.Transforms.Count;
             int styleCheckpoint = this.Styles.Count;
+            GpuSceneTransform lastTransformCheckpoint = this.lastTransform;
             bool appendStyle = !this.hasLastStyle ||
                 style0 != this.lastStyle0 ||
                 style1 != this.lastStyle1 ||
@@ -1710,7 +2115,7 @@ internal static class WebGPUSceneEncoder
             }
 
             int encodedPathCount = EncodePath(
-                command,
+                pathDataOffset,
                 geometry,
                 this.rootTargetBounds,
                 ref this.PathTags,
@@ -1721,7 +2126,9 @@ internal static class WebGPUSceneEncoder
             {
                 this.PathTags.SetCount(pathTagCheckpoint);
                 this.PathData.SetCount(pathDataCheckpoint);
+                this.Transforms.SetCount(transformCheckpoint);
                 this.Styles.SetCount(styleCheckpoint);
+                this.lastTransform = lastTransformCheckpoint;
                 return;
             }
 
@@ -1777,7 +2184,8 @@ internal static class WebGPUSceneEncoder
             in ResolvedPathCommand command,
             Brush brush,
             Pen pen,
-            LinearGeometry? geometry)
+            LinearGeometry? geometry,
+            Point pathDataOffset)
         {
             Vector2 scale = ExtractScale(command.Transform);
             geometry ??= command.Path.ToLinearGeometry(scale);
@@ -1831,7 +2239,7 @@ internal static class WebGPUSceneEncoder
 
             int encodedPathCount = EncodeStrokePath(
                 geometry,
-                command.DestinationOffset,
+                pathDataOffset,
                 pen,
                 widthScale,
                 this.rootTargetBounds,
@@ -1886,7 +2294,7 @@ internal static class WebGPUSceneEncoder
             Brush brush,
             GraphicsOptions graphicsOptions,
             RasterizerOptions rasterizerOptions,
-            Point destinationOffset,
+            Point pathDataOffset,
             Rectangle brushBounds,
             Pen pen,
             float widthScale,
@@ -1941,7 +2349,7 @@ internal static class WebGPUSceneEncoder
 
             int encodedPathCount = EncodeStrokePath(
                 geometry,
-                destinationOffset,
+                pathDataOffset,
                 pen,
                 widthScale,
                 this.rootTargetBounds,
@@ -1996,7 +2404,7 @@ internal static class WebGPUSceneEncoder
             Brush brush,
             GraphicsOptions graphicsOptions,
             RasterizerOptions rasterizerOptions,
-            Point destinationOffset,
+            Point pathDataOffset,
             Rectangle brushBounds,
             Pen pen,
             float widthScale,
@@ -2052,7 +2460,7 @@ internal static class WebGPUSceneEncoder
             int encodedPathCount = EncodeOpenSegmentStrokePath(
                 start,
                 end,
-                destinationOffset,
+                pathDataOffset,
                 pen,
                 widthScale,
                 this.rootTargetBounds,
@@ -2101,15 +2509,327 @@ internal static class WebGPUSceneEncoder
         }
 
         /// <summary>
+        /// Emits the clip descriptor carried by one explicit begin-clip command.
+        /// </summary>
+        /// <param name="command">The begin-clip command to append.</param>
+        /// <param name="clipBlendMode">The blend mode used when closing this clip.</param>
+        private void AppendBeginClip(in CompositionCommand command, uint clipBlendMode)
+        {
+            DrawingClipDescriptor descriptor = command.ClipDescriptor;
+
+            // Clip descriptors share the path stream with ordinary draws. Reset the path
+            // transform before emitting the descriptor so a previous draw transform cannot
+            // leak into clip geometry.
+            this.PathTags.EnsureAdditionalCapacity(1);
+            this.Transforms.EnsureAdditionalCapacity(TransformWordCount);
+            this.AppendTransformIfChanged(Matrix4x4.Identity);
+            _ = this.AppendClipDescriptor(in descriptor, command.DestinationOffset, clipBlendMode);
+        }
+
+        /// <summary>
+        /// Emits one begin-clip record from a normalized clip descriptor.
+        /// </summary>
+        /// <param name="descriptor">The clip descriptor to emit.</param>
+        /// <param name="destinationOffset">The destination offset used to place canvas-local clip geometry.</param>
+        /// <param name="clipBlendMode">The blend mode used when closing this clip.</param>
+        /// <returns><see langword="true"/> when a non-empty clip record was emitted.</returns>
+        private bool AppendClipDescriptor(in DrawingClipDescriptor descriptor, Point destinationOffset, uint clipBlendMode)
+        {
+            Rectangle clipBounds = ToTargetLocal(descriptor.GetConservativeBounds(destinationOffset), this.rootTargetBounds);
+
+            uint style0 = descriptor.IntersectionRule == IntersectionRule.EvenOdd ? (uint)StyleFlags.Fill : 0U;
+            const uint style1 = 0U;
+            const uint style2 = 0U;
+            const uint style3 = 0U;
+            const uint style4 = 0U;
+            const uint style5 = 0U;
+
+            // Clip coverage must not be restricted by a raster interest rectangle; a zero interest
+            // makes binning intersect the clip path away. Use the full target region.
+            uint style6 = BitcastSingle(0F);
+            uint style7 = BitcastSingle(0F);
+            uint style8 = BitcastSingle(this.rootTargetBounds.Width);
+            uint style9 = BitcastSingle(this.rootTargetBounds.Height);
+
+            int pathTagCheckpoint = this.PathTags.Count;
+            int pathDataCheckpoint = this.PathData.Count;
+            int transformCheckpoint = this.Transforms.Count;
+            int styleCheckpoint = this.Styles.Count;
+            GpuSceneTransform lastTransformCheckpoint = this.lastTransform;
+            bool appendStyle = !this.hasLastStyle ||
+                this.lastStyle0 != style0 ||
+                this.lastStyle1 != style1 ||
+                this.lastStyle2 != style2 ||
+                this.lastStyle3 != style3 ||
+                this.lastStyle4 != style4 ||
+                this.lastStyle5 != style5 ||
+                this.lastStyle6 != style6 ||
+                this.lastStyle7 != style7 ||
+                this.lastStyle8 != style8 ||
+                this.lastStyle9 != style9;
+
+            int encodedPathCount;
+            int clipLineCount;
+            int rectangleCount = GetRectangleClipCount(in descriptor);
+            if (clipBounds.Width <= 0 || clipBounds.Height <= 0)
+            {
+                ReservePlainFillCapacity(
+                    0,
+                    0,
+                    GpuSceneDrawTag.BeginClip,
+                    appendStyle,
+                    0,
+                    ref this.PathTags,
+                    ref this.PathData,
+                    ref this.DrawTags,
+                    ref this.DrawData,
+                    ref this.Styles,
+                    ref this.GradientPixels,
+                    ref this.PathGradientData);
+
+                if (appendStyle)
+                {
+                    this.PathTags.Add(PackPathTag(PathTag.Style));
+                    this.Styles.Add(style0);
+                    this.Styles.Add(style1);
+                    this.Styles.Add(style2);
+                    this.Styles.Add(style3);
+                    this.Styles.Add(style4);
+                    this.Styles.Add(style5);
+                    this.Styles.Add(style6);
+                    this.Styles.Add(style7);
+                    this.Styles.Add(style8);
+                    this.Styles.Add(style9);
+                }
+
+                this.PathTags.EnsureAdditionalCapacity(1);
+                this.Transforms.EnsureAdditionalCapacity(TransformWordCount);
+                this.AppendTransformIfChanged(Matrix4x4.Identity);
+
+                EncodeEmptyBeginClipPath(ref this.PathTags, ref this.PathData);
+                encodedPathCount = 1;
+                clipLineCount = 1;
+            }
+            else if (rectangleCount == 0 && descriptor.Kind == DrawingClipKind.Path)
+            {
+                LinearGeometry geometry = descriptor.ToLinearGeometry(out Matrix4x4 clipTransform);
+                if (geometry.Info.SegmentCount == 0)
+                {
+                    ReservePlainFillCapacity(
+                        0,
+                        0,
+                        GpuSceneDrawTag.BeginClip,
+                        appendStyle,
+                        0,
+                        ref this.PathTags,
+                        ref this.PathData,
+                        ref this.DrawTags,
+                        ref this.DrawData,
+                        ref this.Styles,
+                        ref this.GradientPixels,
+                        ref this.PathGradientData);
+
+                    if (appendStyle)
+                    {
+                        this.PathTags.Add(PackPathTag(PathTag.Style));
+                        this.Styles.Add(style0);
+                        this.Styles.Add(style1);
+                        this.Styles.Add(style2);
+                        this.Styles.Add(style3);
+                        this.Styles.Add(style4);
+                        this.Styles.Add(style5);
+                        this.Styles.Add(style6);
+                        this.Styles.Add(style7);
+                        this.Styles.Add(style8);
+                        this.Styles.Add(style9);
+                    }
+
+                    this.PathTags.EnsureAdditionalCapacity(1);
+                    this.Transforms.EnsureAdditionalCapacity(TransformWordCount);
+                    this.AppendTransformIfChanged(Matrix4x4.Identity);
+
+                    EncodeEmptyBeginClipPath(ref this.PathTags, ref this.PathData);
+                    encodedPathCount = 1;
+                    clipLineCount = 1;
+                }
+                else
+                {
+                    // General path clips are real clip nodes. They are not boolean-applied to the
+                    // subject geometry; the GPU clip stack combines their coverage with later draws.
+                    ReservePlainFillCapacity(
+                        geometry.Info,
+                        GpuSceneDrawTag.BeginClip,
+                        appendStyle,
+                        0,
+                        ref this.PathTags,
+                        ref this.PathData,
+                        ref this.DrawTags,
+                        ref this.DrawData,
+                        ref this.Styles,
+                        ref this.GradientPixels,
+                        ref this.PathGradientData);
+
+                    if (appendStyle)
+                    {
+                        this.PathTags.Add(PackPathTag(PathTag.Style));
+                        this.Styles.Add(style0);
+                        this.Styles.Add(style1);
+                        this.Styles.Add(style2);
+                        this.Styles.Add(style3);
+                        this.Styles.Add(style4);
+                        this.Styles.Add(style5);
+                        this.Styles.Add(style6);
+                        this.Styles.Add(style7);
+                        this.Styles.Add(style8);
+                        this.Styles.Add(style9);
+                    }
+
+                    this.PathTags.EnsureAdditionalCapacity(1);
+                    this.Transforms.EnsureAdditionalCapacity(TransformWordCount);
+                    Point pathDataOffset = this.AppendTargetTransform(clipTransform, destinationOffset);
+
+                    encodedPathCount = EncodePath(
+                        pathDataOffset,
+                        geometry,
+                        this.rootTargetBounds,
+                        ref this.PathTags,
+                        ref this.PathData,
+                        out clipLineCount);
+                }
+            }
+            else if (rectangleCount > 0)
+            {
+                // Rectangular clip descriptors are already a path-equivalent rect-set. Encode the
+                // contours directly so dirty regions never pass through Region.ToPath/LinearGeometry.
+                ReservePlainFillCapacity(
+                    rectangleCount,
+                    rectangleCount * 4,
+                    GpuSceneDrawTag.BeginClip,
+                    appendStyle,
+                    0,
+                    ref this.PathTags,
+                    ref this.PathData,
+                    ref this.DrawTags,
+                    ref this.DrawData,
+                    ref this.Styles,
+                    ref this.GradientPixels,
+                    ref this.PathGradientData);
+
+                if (appendStyle)
+                {
+                    this.PathTags.Add(PackPathTag(PathTag.Style));
+                    this.Styles.Add(style0);
+                    this.Styles.Add(style1);
+                    this.Styles.Add(style2);
+                    this.Styles.Add(style3);
+                    this.Styles.Add(style4);
+                    this.Styles.Add(style5);
+                    this.Styles.Add(style6);
+                    this.Styles.Add(style7);
+                    this.Styles.Add(style8);
+                    this.Styles.Add(style9);
+                }
+
+                this.PathTags.EnsureAdditionalCapacity(1);
+                this.Transforms.EnsureAdditionalCapacity(TransformWordCount);
+                this.AppendTransformIfChanged(Matrix4x4.Identity);
+
+                encodedPathCount = EncodeRectangleClipPath(
+                    in descriptor,
+                    destinationOffset,
+                    this.rootTargetBounds,
+                    ref this.PathTags,
+                    ref this.PathData,
+                    out clipLineCount);
+            }
+            else
+            {
+                encodedPathCount = 0;
+                clipLineCount = 0;
+            }
+
+            if (encodedPathCount == 0)
+            {
+                this.PathTags.SetCount(pathTagCheckpoint);
+                this.PathData.SetCount(pathDataCheckpoint);
+                this.Transforms.SetCount(transformCheckpoint);
+                this.Styles.SetCount(styleCheckpoint);
+                this.lastTransform = lastTransformCheckpoint;
+
+                ReservePlainFillCapacity(
+                    0,
+                    0,
+                    GpuSceneDrawTag.BeginClip,
+                    appendStyle,
+                    0,
+                    ref this.PathTags,
+                    ref this.PathData,
+                    ref this.DrawTags,
+                    ref this.DrawData,
+                    ref this.Styles,
+                    ref this.GradientPixels,
+                    ref this.PathGradientData);
+
+                if (appendStyle)
+                {
+                    this.PathTags.Add(PackPathTag(PathTag.Style));
+                    this.Styles.Add(style0);
+                    this.Styles.Add(style1);
+                    this.Styles.Add(style2);
+                    this.Styles.Add(style3);
+                    this.Styles.Add(style4);
+                    this.Styles.Add(style5);
+                    this.Styles.Add(style6);
+                    this.Styles.Add(style7);
+                    this.Styles.Add(style8);
+                    this.Styles.Add(style9);
+                }
+
+                this.PathTags.EnsureAdditionalCapacity(1);
+                this.Transforms.EnsureAdditionalCapacity(TransformWordCount);
+                this.AppendTransformIfChanged(Matrix4x4.Identity);
+
+                // Packed ranges replay active clips independently. Even when the clipped
+                // geometry is empty for this range, the physical BeginClip must remain in
+                // the stream so the later EndClip closes a real GPU clip-stack entry.
+                EncodeEmptyBeginClipPath(ref this.PathTags, ref this.PathData);
+                encodedPathCount = 1;
+                clipLineCount = 1;
+            }
+
+            this.hasLastStyle = true;
+            this.lastStyle0 = style0;
+            this.lastStyle1 = style1;
+            this.lastStyle2 = style2;
+            this.lastStyle3 = style3;
+            this.lastStyle4 = style4;
+            this.lastStyle5 = style5;
+            this.lastStyle6 = style6;
+            this.lastStyle7 = style7;
+            this.lastStyle8 = style8;
+            this.lastStyle9 = style9;
+            this.AccumulateDrawRowEstimateLocal(clipBounds);
+            this.PathCount += encodedPathCount;
+            this.LineCount += clipLineCount;
+            this.InfoWordCount += (int)GpuSceneDrawTag.Map(GpuSceneDrawTag.BeginClip).InfoOffset;
+            this.DrawTags.Add(GpuSceneDrawTag.BeginClip);
+            AppendClipBeginData(descriptor.Operation, descriptor.EdgeMode, descriptor.AntialiasThreshold, clipBlendMode, ref this.DrawData);
+            this.ClipCount++;
+            return true;
+        }
+
+        /// <summary>
         /// Encodes one begin-layer clip command as a rectangular clip path and draw record.
         /// </summary>
         private void AppendBeginLayer(in CompositionCommand command)
         {
             Rectangle layerBounds = ToTargetLocal(command.LayerBounds, this.rootTargetBounds);
+
+            // The layer rectangle opens an isolated target; layer graphics options are applied
+            // when that target is composited back, not when the temporary target is bounded.
             (uint style0, uint style1, uint style2, uint style3, uint style4, uint style5, uint style6, uint style7, uint style8, uint style9) =
-                GetFillStyle(DefaultClipGraphicsOptions, IntersectionRule.NonZero, layerBounds);
-            int pathTagCheckpoint = this.PathTags.Count;
-            int styleCheckpoint = this.Styles.Count;
+                GetFillStyle(LayerMaskGraphicsOptions, IntersectionRule.NonZero, layerBounds);
+
             bool appendStyle = !this.hasLastStyle ||
                 style0 != this.lastStyle0 ||
                 style1 != this.lastStyle1 ||
@@ -2147,11 +2867,20 @@ internal static class WebGPUSceneEncoder
                 this.Styles.Add(style9);
             }
 
+            this.PathTags.EnsureAdditionalCapacity(1);
+            this.Transforms.EnsureAdditionalCapacity(TransformWordCount);
+            this.AppendTransformIfChanged(Matrix4x4.Identity);
+
+            int encodedPathCount;
             if (EncodeRectanglePath(layerBounds, ref this.PathTags, ref this.PathData, out int clipLineCount) == 0)
             {
-                this.PathTags.SetCount(pathTagCheckpoint);
-                this.Styles.SetCount(styleCheckpoint);
-                return;
+                EncodeEmptyBeginClipPath(ref this.PathTags, ref this.PathData);
+                encodedPathCount = 1;
+                clipLineCount = 1;
+            }
+            else
+            {
+                encodedPathCount = 1;
             }
 
             this.hasLastStyle = true;
@@ -2166,11 +2895,11 @@ internal static class WebGPUSceneEncoder
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
             this.AccumulateDrawRowEstimateLocal(layerBounds);
-            this.PathCount++;
+            this.PathCount += encodedPathCount;
             this.LineCount += clipLineCount;
             this.InfoWordCount += (int)GpuSceneDrawTag.Map(GpuSceneDrawTag.BeginClip).InfoOffset;
             this.DrawTags.Add(GpuSceneDrawTag.BeginClip);
-            AppendBeginClipData(command.GraphicsOptions, ref this.DrawData);
+            AppendBeginClipData(command.LayerOptions, ref this.DrawData);
             this.ClipCount++;
             this.openLayerBounds ??= new List<Rectangle>(4);
             this.openLayerBounds.Add(layerBounds);
@@ -2220,10 +2949,19 @@ internal static class WebGPUSceneEncoder
                 this.openLayerBounds.RemoveAt(this.openLayerBounds.Count - 1);
             }
 
-            // End-layer emission is fixed-size: one EndClip draw tag and one PathTagPath
-            // terminator for the zero-data end marker. In parallel encoding, a partition can
-            // see the closing layer command without the matching opener, so the command itself
-            // is the ordering contract rather than the local estimate stack.
+            // A packed range can contain an EndLayer whose matching BeginLayer was emitted
+            // in an earlier range. The command stream is still balanced, so the close marker
+            // must be emitted even when the local row-estimate stack has no opener to pop.
+            this.AppendEndClip();
+        }
+
+        /// <summary>
+        /// Encodes one end-clip command.
+        /// </summary>
+        private void AppendEndClip()
+        {
+            // EndClip is fixed-size: one draw tag plus a zero-data path terminator. The canvas
+            // records balanced command ranges, so this method does not inspect local stack state.
             ReserveEndLayerCapacity(ref this.PathTags, ref this.DrawTags);
             this.DrawTags.Add(GpuSceneDrawTag.EndClip);
             this.PathTags.Add(PackPathTag(PathTag.Path));
@@ -2910,7 +3648,7 @@ internal static class WebGPUSceneEncoder
         resolved = new ResolvedPathCommand(
             command.SourcePath,
             command.Brush,
-            command.GraphicsOptions,
+            command.DrawingOptions.GraphicsOptions,
             rasterizerOptions,
             command.DestinationOffset,
             command.Brush is ImageBrush ? brushBounds : default,
@@ -3235,18 +3973,6 @@ internal static class WebGPUSceneEncoder
     /// Encodes a lowered path into path-tag and path-data streams in target-local space.
     /// </summary>
     private static int EncodePath(
-        in ResolvedPathCommand command,
-        LinearGeometry geometry,
-        in Rectangle rootTargetBounds,
-        ref OwnedStream<byte> pathTags,
-        ref OwnedStream<uint> pathData,
-        out int lineCount)
-        => EncodePath(command.DestinationOffset, geometry, rootTargetBounds, ref pathTags, ref pathData, out lineCount);
-
-    /// <summary>
-    /// Encodes a lowered path into path-tag and path-data streams in target-local space.
-    /// </summary>
-    private static int EncodePath(
         Point destinationOffset,
         LinearGeometry geometry,
         in Rectangle rootTargetBounds,
@@ -3317,8 +4043,16 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Encodes a stroke centerline into Vello-style path tags and path data in target-local space.
+    /// Encodes a stroke centerline into Vello-style path tags and path data in target-local space,
+    /// applying the CPU stroker's contour preprocessing so the GPU stroker consumes the same
+    /// segment list the CPU stroker strokes.
     /// </summary>
+    /// <remarks>
+    /// This ports <c>DefaultRasterizer.StrokeLinearizer.BuildContourSegments</c> (exact-duplicate
+    /// and 1/64 px micro-segment collapse) and <c>IsContourClosedForEmission</c> (closed-contour
+    /// normalization) to encode time. The GPU shader then expands clean segments with the ported
+    /// CPU join and cap geometry; it never sees a degenerate-tangent segment.
+    /// </remarks>
     private static int EncodeStrokePath(
         LinearGeometry geometry,
         Point destinationOffset,
@@ -3332,61 +4066,129 @@ internal static class WebGPUSceneEncoder
         float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
         float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
         lineCount = EstimateStrokeLineCount(geometry, pen, widthScale);
+        float strokeWidth = pen.StrokeWidth * widthScale;
         int encodedContourCount = 0;
+        IReadOnlyList<PointF> geometryPoints = geometry.Points;
 
         for (int i = 0; i < geometry.Contours.Count; i++)
         {
             LinearContour contour = geometry.Contours[i];
-            if (TryGetPointStrokeContour(geometry, contour, out PointF point))
+            if (contour.PointCount == 0)
             {
-                EncodePointStrokeContour(
-                    point,
-                    pointTranslateX,
-                    pointTranslateY,
-                    ref pathTags,
-                    ref pathData);
-                encodedContourCount++;
                 continue;
             }
 
-            int markerWordCount = contour.IsClosed ? 2 : 4;
-            Span<uint> contourData = pathData.GetAppendSpan(2 + (contour.SegmentCount * 2) + markerWordCount);
-            Span<byte> contourTags = pathTags.GetAppendSpan(contour.SegmentCount + 1);
-
-            int dataIndex = 0;
-            int tagIndex = 0;
-            PointF firstPoint = geometry.Points[contour.PointStart];
-            PointF firstTangentEndPoint = GetStrokeMarkerTangentPoint(geometry, contour);
-            contourData[dataIndex++] = BitcastSingle(firstPoint.X + pointTranslateX);
-            contourData[dataIndex++] = BitcastSingle(firstPoint.Y + pointTranslateY);
-
-            for (int segmentIndex = 0; segmentIndex < contour.SegmentCount; segmentIndex++)
+            PointF[] kept = ArrayPool<PointF>.Shared.Rent(contour.PointCount);
+            try
             {
-                int endPointIndex = contour.PointStart + ((segmentIndex + 1) == contour.PointCount ? 0 : segmentIndex + 1);
-                PointF endPoint = geometry.Points[endPointIndex];
-                contourData[dataIndex++] = BitcastSingle(endPoint.X + pointTranslateX);
-                contourData[dataIndex++] = BitcastSingle(endPoint.Y + pointTranslateY);
-                contourTags[tagIndex++] = PackPathTag(PathTag.LineToF32);
-            }
+                // CPU stroker preprocessing: collapse exact duplicates and micro-segments below
+                // 1/64 px forward onto the last kept point.
+                int keptCount = 0;
+                PointF firstPoint = geometryPoints[contour.PointStart];
+                kept[keptCount++] = firstPoint;
+                PointF pointLike = firstPoint;
+                for (int j = 1; j < contour.PointCount; j++)
+                {
+                    PointF point = geometryPoints[contour.PointStart + j];
+                    PointF previous = kept[keptCount - 1];
+                    if (point == previous)
+                    {
+                        continue;
+                    }
 
-            if (!contour.IsClosed)
-            {
-                contourData[dataIndex++] = BitcastSingle(firstPoint.X + pointTranslateX);
-                contourData[dataIndex++] = BitcastSingle(firstPoint.Y + pointTranslateY);
-                contourData[dataIndex++] = BitcastSingle(firstTangentEndPoint.X + pointTranslateX);
-                contourData[dataIndex++] = BitcastSingle(firstTangentEndPoint.Y + pointTranslateY);
-                contourTags[tagIndex] = PackPathTag(PathTag.QuadToF32 | PathTag.SubpathEnd);
-            }
-            else
-            {
-                contourData[dataIndex++] = BitcastSingle(firstTangentEndPoint.X + pointTranslateX);
-                contourData[dataIndex++] = BitcastSingle(firstTangentEndPoint.Y + pointTranslateY);
-                contourTags[tagIndex] = PackPathTag(PathTag.LineToF32 | PathTag.SubpathEnd);
-            }
+                    if (Vector2.DistanceSquared(previous, point) > StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon)
+                    {
+                        kept[keptCount++] = point;
+                    }
 
-            pathData.Advance(contourData.Length);
-            pathTags.Advance(contourTags.Length);
-            encodedContourCount++;
+                    pointLike = point;
+                }
+
+                int segmentCount = keptCount - 1;
+
+                // CPU stroker closed-contour normalization.
+                bool isClosed = false;
+                if (contour.PointCount >= 3)
+                {
+                    PointF last = geometryPoints[contour.PointStart + contour.PointCount - 1];
+                    float closeThreshold = MathF.Max(strokeWidth, 1E-3F);
+                    isClosed = contour.IsClosed ||
+                        firstPoint == last ||
+                        Vector2.DistanceSquared(firstPoint, last) <= closeThreshold * closeThreshold;
+                }
+
+                bool duplicateClosingPoint = keptCount > 1 && kept[keptCount - 1] == kept[0];
+                int distinctPointCount = keptCount - (isClosed && duplicateClosingPoint ? 1 : 0);
+
+                if (segmentCount == 0)
+                {
+                    EncodePointStrokeContour(pointLike, pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
+                    encodedContourCount++;
+                    continue;
+                }
+
+                if (segmentCount == 1 || distinctPointCount == 2)
+                {
+                    // The CPU stroker emits these as one capped open segment even when declared closed.
+                    EncodeOpenStrokeContour(kept.AsSpan(0, 2), pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
+                    encodedContourCount++;
+                    continue;
+                }
+
+                if (isClosed)
+                {
+                    int emitCount = duplicateClosingPoint ? keptCount - 1 : keptCount;
+
+                    // A closing segment exists when the contour ends exactly on its first point or
+                    // the gap back to it is a real (non micro) segment; a sub-1/64 gap is bridged
+                    // by the wrap join, matching the CPU stroker.
+                    bool closingSegment = duplicateClosingPoint ||
+                        (segmentCount > 1 &&
+                         Vector2.DistanceSquared(kept[keptCount - 1], kept[0]) > StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon);
+
+                    int linetoCount = (emitCount - 1) + (closingSegment ? 1 : 0);
+                    Span<uint> contourData = pathData.GetAppendSpan(2 + (linetoCount * 2) + 2);
+                    Span<byte> contourTags = pathTags.GetAppendSpan(linetoCount + 1);
+
+                    int dataIndex = 0;
+                    int tagIndex = 0;
+                    contourData[dataIndex++] = BitcastSingle(kept[0].X + pointTranslateX);
+                    contourData[dataIndex++] = BitcastSingle(kept[0].Y + pointTranslateY);
+                    for (int j = 1; j < emitCount; j++)
+                    {
+                        contourData[dataIndex++] = BitcastSingle(kept[j].X + pointTranslateX);
+                        contourData[dataIndex++] = BitcastSingle(kept[j].Y + pointTranslateY);
+                        contourTags[tagIndex++] = PackPathTag(PathTag.LineToF32);
+                    }
+
+                    PointF lastEndpoint = kept[emitCount - 1];
+                    if (closingSegment)
+                    {
+                        contourData[dataIndex++] = BitcastSingle(kept[0].X + pointTranslateX);
+                        contourData[dataIndex++] = BitcastSingle(kept[0].Y + pointTranslateY);
+                        contourTags[tagIndex++] = PackPathTag(PathTag.LineToF32);
+                        lastEndpoint = kept[0];
+                    }
+
+                    // Closed-stroke marker: carries the first segment's tangent and length so the
+                    // wrap join at the closing corner matches the CPU stroker's join arguments.
+                    contourData[dataIndex++] = BitcastSingle(lastEndpoint.X + (kept[1].X - kept[0].X) + pointTranslateX);
+                    contourData[dataIndex] = BitcastSingle(lastEndpoint.Y + (kept[1].Y - kept[0].Y) + pointTranslateY);
+                    contourTags[tagIndex] = PackPathTag(PathTag.LineToF32 | PathTag.SubpathEnd);
+
+                    pathData.Advance(contourData.Length);
+                    pathTags.Advance(contourTags.Length);
+                    encodedContourCount++;
+                    continue;
+                }
+
+                EncodeOpenStrokeContour(kept.AsSpan(0, keptCount), pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
+                encodedContourCount++;
+            }
+            finally
+            {
+                ArrayPool<PointF>.Shared.Return(kept);
+            }
         }
 
         if (encodedContourCount == 0)
@@ -3396,6 +4198,43 @@ internal static class WebGPUSceneEncoder
 
         pathTags.Add(PackPathTag(PathTag.Path));
         return 1;
+    }
+
+    /// <summary>
+    /// Encodes one open (capped) stroke centerline contour from preprocessed points.
+    /// </summary>
+    private static void EncodeOpenStrokeContour(
+        scoped ReadOnlySpan<PointF> points,
+        float pointTranslateX,
+        float pointTranslateY,
+        ref OwnedStream<byte> pathTags,
+        ref OwnedStream<uint> pathData)
+    {
+        int linetoCount = points.Length - 1;
+        Span<uint> contourData = pathData.GetAppendSpan(2 + (linetoCount * 2) + 4);
+        Span<byte> contourTags = pathTags.GetAppendSpan(linetoCount + 1);
+
+        int dataIndex = 0;
+        int tagIndex = 0;
+        contourData[dataIndex++] = BitcastSingle(points[0].X + pointTranslateX);
+        contourData[dataIndex++] = BitcastSingle(points[0].Y + pointTranslateY);
+        for (int j = 1; j < points.Length; j++)
+        {
+            contourData[dataIndex++] = BitcastSingle(points[j].X + pointTranslateX);
+            contourData[dataIndex++] = BitcastSingle(points[j].Y + pointTranslateY);
+            contourTags[tagIndex++] = PackPathTag(PathTag.LineToF32);
+        }
+
+        // Open-stroke cap marker: stores the subpath start point and its outgoing tangent point.
+        PointF tangentPoint = GetStrokeMarkerTangentPoint(points[0], points[1]);
+        contourData[dataIndex++] = BitcastSingle(points[0].X + pointTranslateX);
+        contourData[dataIndex++] = BitcastSingle(points[0].Y + pointTranslateY);
+        contourData[dataIndex++] = BitcastSingle(tangentPoint.X + pointTranslateX);
+        contourData[dataIndex] = BitcastSingle(tangentPoint.Y + pointTranslateY);
+        contourTags[tagIndex] = PackPathTag(PathTag.QuadToF32 | PathTag.SubpathEnd);
+
+        pathData.Advance(contourData.Length);
+        pathTags.Advance(contourTags.Length);
     }
 
     /// <summary>
@@ -3445,49 +4284,11 @@ internal static class WebGPUSceneEncoder
         float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
         float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
         NormalizePointStrokeSegment(ref start, ref end);
-        PointF firstTangentEndPoint = GetStrokeMarkerTangentPoint(start, end);
-
-        Span<uint> contourData = pathData.GetAppendSpan(8);
-        Span<byte> contourTags = pathTags.GetAppendSpan(2);
-        contourData[0] = BitcastSingle(start.X + pointTranslateX);
-        contourData[1] = BitcastSingle(start.Y + pointTranslateY);
-        contourData[2] = BitcastSingle(end.X + pointTranslateX);
-        contourData[3] = BitcastSingle(end.Y + pointTranslateY);
-        contourTags[0] = PackPathTag(PathTag.LineToF32);
-        contourData[4] = BitcastSingle(start.X + pointTranslateX);
-        contourData[5] = BitcastSingle(start.Y + pointTranslateY);
-        contourData[6] = BitcastSingle(firstTangentEndPoint.X + pointTranslateX);
-        contourData[7] = BitcastSingle(firstTangentEndPoint.Y + pointTranslateY);
-        contourTags[1] = PackPathTag(PathTag.QuadToF32 | PathTag.SubpathEnd);
-        pathData.Advance(contourData.Length);
-        pathTags.Advance(contourTags.Length);
+        Span<PointF> segmentPoints = [start, end];
+        EncodeOpenStrokeContour(segmentPoints, pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
         pathTags.Add(PackPathTag(PathTag.Path));
         lineCount = EstimateStrokeLineCountForOpenSegment(pen, widthScale);
         return 1;
-    }
-
-    /// <summary>
-    /// Gets whether a contour collapses to the point-stroke path used by the CPU rasterizer.
-    /// </summary>
-    private static bool TryGetPointStrokeContour(LinearGeometry geometry, LinearContour contour, out PointF point)
-    {
-        point = default;
-        if (contour.PointCount == 0)
-        {
-            return false;
-        }
-
-        point = geometry.Points[contour.PointStart];
-        for (int i = 1; i < contour.PointCount; i++)
-        {
-            PointF next = geometry.Points[contour.PointStart + i];
-            if (Vector2.DistanceSquared(next, point) > StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon)
-            {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     /// <summary>
@@ -3510,6 +4311,36 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     private static int EncodeRectanglePath(
         in Rectangle rectangle,
+        ref OwnedStream<byte> pathTags,
+        ref OwnedStream<uint> pathData,
+        out int lineCount)
+        => EncodeRectanglePath(new RectangleF(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height), ref pathTags, ref pathData, out lineCount);
+
+    /// <summary>
+    /// Encodes the Vello empty path shape required by begin-clip records with no drawable geometry.
+    /// </summary>
+    private static void EncodeEmptyBeginClipPath(
+        ref OwnedStream<byte> pathTags,
+        ref OwnedStream<uint> pathData)
+    {
+        // Vello reserves a bare Path tag for EndClip dummy paths. Empty BeginClip paths still
+        // carry one degenerate segment so the path scan has a real path object to associate
+        // with the BeginClip draw record.
+        Span<uint> data = pathData.GetAppendSpan(4);
+        Span<byte> tags = pathTags.GetAppendSpan(2);
+        data.Clear();
+        tags[0] = PackPathTag(PathTag.LineToF32 | PathTag.SubpathEnd);
+        tags[1] = PackPathTag(PathTag.Path);
+
+        pathData.Advance(data.Length);
+        pathTags.Advance(tags.Length);
+    }
+
+    /// <summary>
+    /// Encodes a floating-point rectangle as a fixed-size closed path.
+    /// </summary>
+    private static int EncodeRectanglePath(
+        in RectangleF rectangle,
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
         out int lineCount)
@@ -3552,6 +4383,168 @@ internal static class WebGPUSceneEncoder
         pathTags.Advance(tags.Length);
         lineCount = 2;
         return 1;
+    }
+
+    /// <summary>
+    /// Gets the number of rectangle contours represented by a normalized clip descriptor.
+    /// </summary>
+    private static int GetRectangleClipCount(in DrawingClipDescriptor descriptor)
+        => descriptor.Kind switch
+        {
+            DrawingClipKind.Rectangle => descriptor.Rectangle.Width > 0 && descriptor.Rectangle.Height > 0 ? 1 : 0,
+            DrawingClipKind.IntegerRegion => GetPositiveIntegerRectangleCount(descriptor.IntegerRectangles),
+            DrawingClipKind.Region => GetPositiveRectangleCount(descriptor.Rectangles),
+            _ => 0
+        };
+
+    /// <summary>
+    /// Encodes a rectangle or rectangle-set clip descriptor as one path with multiple contours.
+    /// </summary>
+    private static int EncodeRectangleClipPath(
+        in DrawingClipDescriptor descriptor,
+        Point destinationOffset,
+        in Rectangle rootTargetBounds,
+        ref OwnedStream<byte> pathTags,
+        ref OwnedStream<uint> pathData,
+        out int lineCount)
+    {
+        float translateX = destinationOffset.X - rootTargetBounds.X;
+        float translateY = destinationOffset.Y - rootTargetBounds.Y;
+        lineCount = 0;
+
+        switch (descriptor.Kind)
+        {
+            case DrawingClipKind.Rectangle:
+            {
+                if (descriptor.Rectangle.Width > 0 && descriptor.Rectangle.Height > 0)
+                {
+                    AppendRectangleContour(descriptor.Rectangle, translateX, translateY, ref pathTags, ref pathData);
+                    lineCount = 2;
+                }
+
+                break;
+            }
+
+            case DrawingClipKind.IntegerRegion:
+            {
+                IReadOnlyList<Rectangle> rectangles = descriptor.IntegerRectangles;
+                for (int i = 0; i < rectangles.Count; i++)
+                {
+                    Rectangle rectangle = rectangles[i];
+                    if (rectangle.Width <= 0 || rectangle.Height <= 0)
+                    {
+                        continue;
+                    }
+
+                    AppendRectangleContour(new RectangleF(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height), translateX, translateY, ref pathTags, ref pathData);
+                    lineCount += 2;
+                }
+
+                break;
+            }
+
+            case DrawingClipKind.Region:
+            {
+                IReadOnlyList<RectangleF> rectangles = descriptor.Rectangles;
+                for (int i = 0; i < rectangles.Count; i++)
+                {
+                    RectangleF rectangle = rectangles[i];
+                    if (rectangle.Width <= 0 || rectangle.Height <= 0)
+                    {
+                        continue;
+                    }
+
+                    AppendRectangleContour(rectangle, translateX, translateY, ref pathTags, ref pathData);
+                    lineCount += 2;
+                }
+
+                break;
+            }
+        }
+
+        if (lineCount == 0)
+        {
+            return 0;
+        }
+
+        pathTags.Add(PackPathTag(PathTag.Path));
+        return 1;
+    }
+
+    /// <summary>
+    /// Counts region rectangles that can produce non-degenerate GPU path contours.
+    /// </summary>
+    private static int GetPositiveIntegerRectangleCount(IReadOnlyList<Rectangle> rectangles)
+    {
+        int count = 0;
+        for (int i = 0; i < rectangles.Count; i++)
+        {
+            Rectangle rectangle = rectangles[i];
+            if (rectangle.Width > 0 && rectangle.Height > 0)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// Counts region rectangles that can produce non-degenerate GPU path contours.
+    /// </summary>
+    private static int GetPositiveRectangleCount(IReadOnlyList<RectangleF> rectangles)
+    {
+        int count = 0;
+        for (int i = 0; i < rectangles.Count; i++)
+        {
+            RectangleF rectangle = rectangles[i];
+            if (rectangle.Width > 0 && rectangle.Height > 0)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// Appends one rectangle contour to a pending path without terminating the path.
+    /// </summary>
+    private static void AppendRectangleContour(
+        RectangleF rectangle,
+        float translateX,
+        float translateY,
+        ref OwnedStream<byte> pathTags,
+        ref OwnedStream<uint> pathData)
+    {
+        float left = rectangle.Left + translateX;
+        float top = rectangle.Top + translateY;
+        float right = rectangle.Right + translateX;
+        float bottom = rectangle.Bottom + translateY;
+
+        Span<uint> data = pathData.GetAppendSpan(10);
+        Span<byte> tags = pathTags.GetAppendSpan(4);
+        data[0] = BitcastSingle(left);
+        data[1] = BitcastSingle(top);
+
+        data[2] = BitcastSingle(right);
+        data[3] = BitcastSingle(top);
+        tags[0] = PackPathTag(PathTag.LineToF32);
+
+        data[4] = BitcastSingle(right);
+        data[5] = BitcastSingle(bottom);
+        tags[1] = PackPathTag(PathTag.LineToF32);
+
+        data[6] = BitcastSingle(left);
+        data[7] = BitcastSingle(bottom);
+        tags[2] = PackPathTag(PathTag.LineToF32);
+
+        data[8] = BitcastSingle(left);
+        data[9] = BitcastSingle(top);
+        tags[3] = PackPathTag(PathTag.LineToF32 | PathTag.SubpathEnd);
+
+        pathData.Advance(data.Length);
+        pathTags.Advance(tags.Length);
     }
 
     /// <summary>
@@ -3787,20 +4780,6 @@ internal static class WebGPUSceneEncoder
         float ratio = Math.Clamp(safeRadius / (safeRadius + (0.125F / safeScale)), -1F, 1F);
         float theta = Math.Max(0.0001F, 2F * MathF.Acos(ratio));
         return Math.Max(1, (int)MathF.Ceiling(angle / theta));
-    }
-
-    /// <summary>
-    /// Returns the encoded tangent point used by the staged stroker's cap marker segment.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static PointF GetStrokeMarkerTangentPoint(LinearGeometry geometry, LinearContour contour)
-    {
-        PointF firstPoint = geometry.Points[contour.PointStart];
-        int nextPointIndex = contour.PointStart + (contour.PointCount > 1 ? 1 : 0);
-        PointF nextPoint = geometry.Points[nextPointIndex];
-        return new PointF(
-            firstPoint.X + ((nextPoint.X - firstPoint.X) / 3F),
-            firstPoint.Y + ((nextPoint.Y - firstPoint.Y) / 3F));
     }
 
     /// <summary>
@@ -4197,6 +5176,31 @@ internal static class WebGPUSceneEncoder
     {
         drawData.Add(PackBlendMode(options));
         drawData.Add(BitcastSingle(Math.Clamp(options.BlendPercentage, 0F, 1F)));
+    }
+
+    /// <summary>
+    /// Appends the draw-data payload for an ordinary clip record.
+    /// </summary>
+    private static void AppendClipBeginData(
+        ClipOperation operation,
+        DrawingClipEdgeMode edgeMode,
+        float antialiasThreshold,
+        uint clipBlendMode,
+        ref OwnedStream<uint> drawData)
+    {
+        // Difference is ImageSharp-specific clip state, not a Vello blend mode; encode it
+        // in a spare bit while ordinary clips keep Vello's exact MIX_CLIP|SRC_OVER marker.
+        uint blendMode = operation == ClipOperation.Difference
+            ? clipBlendMode | ClipDifferenceMaskBit
+            : clipBlendMode;
+
+        if (edgeMode == DrawingClipEdgeMode.Hard)
+        {
+            blendMode |= ClipHardMaskBit;
+        }
+
+        drawData.Add(blendMode);
+        drawData.Add(BitcastSingle(edgeMode == DrawingClipEdgeMode.Hard ? antialiasThreshold : 1F));
     }
 
     /// <summary>
