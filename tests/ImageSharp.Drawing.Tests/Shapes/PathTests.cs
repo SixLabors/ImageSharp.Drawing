@@ -144,6 +144,45 @@ public class PathTests
         Assert.Equal(RectangleF.Empty, collection.Bounds);
     }
 
+    [Theory]
+    [InlineData(-30, -30, 0, 0, 1, 0)] // extrapolates backward along the first segment
+    [InlineData(0, 0, 0, 0, 1, 0)]
+    [InlineData(150, 100, 50, 90, 0, 1)]
+    [InlineData(230, 100, 130, 90, 0, 1)] // extrapolates forward along the last segment
+    public void PointOnPathUnbounded(float distance, float expectedX, float expectedY, float expectedAngle, float expectedTangentX, float expectedTangentY)
+    {
+        IPath path = new Path(new LinearLineSegment(new PointF(0, 0), new PointF(100, 0), new PointF(100, 100)));
+
+        Assert.True(path.TryGetPathPointAtDistanceUnbounded(distance, out PathPoint point));
+        Assert.Equal(expectedX, point.Point.X, 4F);
+        Assert.Equal(expectedY, point.Point.Y, 4F);
+        Assert.Equal(expectedTangentX, point.Tangent.X, 4F);
+        Assert.Equal(expectedTangentY, point.Tangent.Y, 4F);
+        Assert.Equal(expectedAngle, point.Angle, 4F);
+    }
+
+    [Theory]
+    [InlineData(-30)]
+    [InlineData(230)]
+    public void PointOnPathUnbounded_StrictVariantRejectsOutOfRangeDistances(float distance)
+    {
+        IPath path = new Path(new LinearLineSegment(new PointF(0, 0), new PointF(100, 0), new PointF(100, 100)));
+
+        Assert.False(path.TryGetPathPointAtDistance(distance, out _));
+        Assert.True(path.TryGetPathPointAtDistanceUnbounded(distance, out _));
+    }
+
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    [InlineData(float.NegativeInfinity)]
+    public void PointOnPathUnbounded_RejectsNonFiniteDistances(float distance)
+    {
+        IPath path = new Path(new LinearLineSegment(new PointF(0, 0), new PointF(100, 0)));
+
+        Assert.False(path.TryGetPathPointAtDistanceUnbounded(distance, out _));
+    }
+
     [Fact]
     public void PathCollection_Transform_TransformsEachPath()
     {

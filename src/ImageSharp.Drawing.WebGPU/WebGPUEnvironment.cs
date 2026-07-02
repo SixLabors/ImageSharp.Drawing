@@ -1,14 +1,21 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Runtime.InteropServices;
+using Silk.NET.WebGPU.Extensions.WGPU;
+
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
 /// Provides explicit support probes for the library-managed WebGPU environment.
 /// Use this type when you want to check availability or compute pipeline support before constructing WebGPU objects.
 /// </summary>
-public static class WebGPUEnvironment
+public static unsafe class WebGPUEnvironment
 {
+    // Rooted so the native wgpu log callback is not collected while wgpu holds it.
+    private static PfnLogCallback nativeLogCallback;
+    private static Action<string>? nativeLogSink;
+
     /// <summary>
     /// Gets or sets the options used when the library-managed WebGPU environment is initialized.
     /// </summary>
@@ -26,6 +33,45 @@ public static class WebGPUEnvironment
     /// Exceptions thrown by the handler are not propagated back through the native callback.
     /// </remarks>
     public static Action<WebGPUErrorType, string>? UncapturedError { get; set; }
+
+    /// <summary>
+    /// Routes the native wgpu-native log stream (including the validation errors that precede a
+    /// lost device) to a managed sink. Unlike <see cref="UncapturedError"/>, this surfaces errors
+    /// that abort the process through the binding's submit panic before the uncaptured callback runs.
+    /// </summary>
+    /// <param name="sink">The managed sink invoked for each native log line, or <see langword="null"/> to disable.</param>
+    public static void EnableNativeLogging(Action<string>? sink)
+    {
+        nativeLogSink = sink;
+        if (sink is null)
+        {
+            return;
+        }
+
+        Wgpu wgpu = WebGPURuntime.GetWgpuExtension();
+        nativeLogCallback = PfnLogCallback.From(HandleNativeLog);
+        wgpu.SetLogCallback(nativeLogCallback, null);
+        wgpu.SetLogLevel(LogLevel.Warn);
+    }
+
+    private static void HandleNativeLog(LogLevel level, byte* message, void* userData)
+    {
+        Action<string>? sink = nativeLogSink;
+        if (sink is null)
+        {
+            return;
+        }
+
+        string text = message is null ? string.Empty : Marshal.PtrToStringUTF8((nint)message) ?? string.Empty;
+        try
+        {
+            sink($"[wgpu {level}] {text}");
+        }
+        catch
+        {
+            // The native wgpu callback has no managed caller to receive exceptions.
+        }
+    }
 
     /// <summary>
     /// Probes whether the library-managed WebGPU device and queue are available.

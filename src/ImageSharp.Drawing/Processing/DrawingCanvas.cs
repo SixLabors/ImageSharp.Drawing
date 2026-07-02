@@ -35,16 +35,15 @@ public abstract partial class DrawingCanvas : IDisposable
     public abstract int Save();
 
     /// <summary>
-    /// Saves the current drawing state and replaces the active state with the provided options and clip paths.
+    /// Saves the current drawing state and replaces the active state with the provided options.
     /// </summary>
     /// <remarks>
     /// The provided <paramref name="options"/> instance is stored by reference.
     /// Mutating it after this call mutates the active/restored state behavior.
     /// </remarks>
     /// <param name="options">Drawing options for the new active state.</param>
-    /// <param name="clipPaths">Clip paths for the new active state.</param>
     /// <returns>The save count after the previous state has been pushed.</returns>
-    public abstract int Save(DrawingOptions options, params IPath[] clipPaths);
+    public abstract int Save(DrawingOptions options);
 
     /// <summary>
     /// Saves the current drawing state and begins an isolated compositing layer bounded to a subregion.
@@ -67,7 +66,7 @@ public abstract partial class DrawingCanvas : IDisposable
 
     /// <summary>
     /// Saves the current drawing state and begins an isolated compositing layer
-    /// using the supplied drawing options and clip paths for commands recorded into the layer.
+    /// using the supplied drawing options for commands recorded into the layer.
     /// </summary>
     /// <param name="layerOptions">
     /// Graphics options controlling how the closed layer is composited against the parent canvas.
@@ -76,9 +75,8 @@ public abstract partial class DrawingCanvas : IDisposable
     /// The local bounds of the layer. Only this region is allocated and composited.
     /// </param>
     /// <param name="options">Drawing options for the layer contents.</param>
-    /// <param name="clipPaths">Clip paths for the layer contents.</param>
     /// <returns>The save count after the layer state has been pushed.</returns>
-    public abstract int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds, DrawingOptions options, params IPath[] clipPaths);
+    public abstract int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds, DrawingOptions options);
 
     /// <summary>
     /// Restores the most recently saved state.

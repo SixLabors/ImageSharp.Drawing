@@ -77,6 +77,14 @@ fn load_clip_path(ix: u32) -> i32 {
     }
 }
 
+fn load_clip_operation(ix: u32) -> u32 {
+    if ix < config.n_clip {
+        return clip_inp[ix].operation;
+    }
+
+    return CLIP_OPERATION_INTERSECTION;
+}
+
 @compute @workgroup_size(256)
 fn main(
     @builtin(global_invocation_id) global_id: vec3<u32>,
@@ -129,13 +137,23 @@ fn main(
     sh_stack_bbox[local_id.x] = bbox;
 
     // Read input and compute Bic binary tree
+    let is_active = global_id.x < config.n_clip;
     let inp = load_clip_path(global_id.x);
-    let is_push = inp >= 0;
-    bic = Bic(1u - u32(is_push), u32(is_push));
+    let operation = load_clip_operation(global_id.x);
+    let is_push = is_active && inp >= 0;
+    bic = Bic();
+    if is_active {
+        bic = Bic(1u - u32(is_push), u32(is_push));
+    }
+
     sh_bic[local_id.x] = bic;
     if is_push {
         let path_bbox = path_bboxes[inp];
-        bbox = vec4(f32(path_bbox.x0), f32(path_bbox.y0), f32(path_bbox.x1), f32(path_bbox.y1));
+        let path_box = vec4(f32(path_bbox.x0), f32(path_bbox.y0), f32(path_bbox.x1), f32(path_bbox.y1));
+        // Difference clips are an ImageSharp extension over Vello's ix/path_ix clip
+        // record. They keep everything outside the path, so their conservative stack
+        // bbox stays unchanged even though fine still needs the path coverage.
+        bbox = select(path_box, vec4(-1e9, -1e9, 1e9, 1e9), operation == CLIP_OPERATION_DIFFERENCE);
     } else {
         bbox = vec4(-1e9, -1e9, 1e9, 1e9);
     }
@@ -152,10 +170,21 @@ fn main(
     workgroupBarrier();
     // search for predecessor node
     bic = Bic();
-    var link = search_link(&bic, local_id.x);
+    var link = -1;
+    if global_id.x < config.n_clip {
+        link = search_link(&bic, local_id.x);
+    }
+
     sh_link[local_id.x] = link;
     workgroupBarrier();
-    let grandparent = select(link - 1, sh_link[link], link >= 0);
+
+    // Keep the indexed branch explicit. Some GPU backends can still materialize
+    // inactive select operands, and sh_link[-1] is an invalid workgroup read.
+    var grandparent = link - 1;
+    if link >= 0 {
+        grandparent = sh_link[link];
+    }
+
     var parent: i32;
     if link >= 0 {
         parent = i32(wg_id.x * WG_SIZE) + link;

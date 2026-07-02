@@ -40,6 +40,10 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     private readonly Configuration configuration;
     private WebGPUDeviceContext deviceContext;
 
+    // Rooted so the native callbacks are not collected while wgpu holds them.
+    private static readonly PfnDeviceLostCallback DeviceLostCallbackRoot = PfnDeviceLostCallback.From(HandleDeviceLost);
+    private static readonly PfnErrorCallback UncapturedErrorCallbackRoot = PfnErrorCallback.From(HandleUncapturedError);
+
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUSurfaceResources"/> class with already-acquired handles.
     /// Only invoked by <see cref="Create"/> after every handle has been successfully bootstrapped.
@@ -557,6 +561,28 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     }
 
     /// <summary>
+    /// Reports a native device-lost callback through the managed WebGPU error callback.
+    /// </summary>
+    private static void HandleDeviceLost(DeviceLostReason reason, byte* message, void* userData)
+    {
+        string text = message is null
+            ? string.Empty
+            : System.Runtime.InteropServices.Marshal.PtrToStringUTF8((nint)message) ?? string.Empty;
+        WebGPUEnvironment.ReportUncapturedError(WebGPUErrorType.DeviceLost, $"Device lost ({reason}): {text}");
+    }
+
+    /// <summary>
+    /// Reports a native uncaptured-error callback through the managed WebGPU error callback.
+    /// </summary>
+    private static void HandleUncapturedError(ErrorType type, byte* message, void* userData)
+    {
+        string text = message is null
+            ? string.Empty
+            : System.Runtime.InteropServices.Marshal.PtrToStringUTF8((nint)message) ?? string.Empty;
+        WebGPUEnvironment.ReportUncapturedError(WebGPUErrorType.Validation, $"Surface device error ({type}): {text}");
+    }
+
+    /// <summary>
     /// Requests a device from <paramref name="adapter"/> with <paramref name="requiredFeature"/> enabled (when not
     /// <see cref="FeatureName.Undefined"/>) and waits synchronously on the asynchronous callback, up to
     /// <see cref="CallbackTimeoutMilliseconds"/>.
@@ -589,17 +615,18 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         }
 
         using PfnRequestDeviceCallback callbackPtr = PfnRequestDeviceCallback.From(Callback);
+        FeatureName requestedFeature = requiredFeature;
         DeviceDescriptor descriptor = default;
         if (requiredFeature != FeatureName.Undefined)
         {
-            FeatureName requestedFeature = requiredFeature;
-            descriptor = new DeviceDescriptor
-            {
-                RequiredFeatureCount = 1,
-                RequiredFeatures = &requestedFeature,
-            };
+            descriptor.RequiredFeatureCount = 1;
+            descriptor.RequiredFeatures = &requestedFeature;
         }
 
+        // A device loss (TDR/hang/removal) is reported through this callback, NOT the uncaptured
+        // error or log callbacks, so without it the loss is invisible and only surfaces later as a
+        // panic on the next submit. Route the reason and message through the environment callback.
+        descriptor.DeviceLostCallback = DeviceLostCallbackRoot;
         api.AdapterRequestDevice(adapter, in descriptor, callbackPtr, null);
         if (!callbackReady.Wait(CallbackTimeoutMilliseconds))
         {
@@ -610,6 +637,11 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         {
             throw new InvalidOperationException($"The WebGPU runtime failed to acquire a device. Status: '{callbackStatus}'.");
         }
+
+        // The surface device renders the application, but unlike the shared runtime device it had no
+        // uncaptured-error callback, so validation errors on the render device were silently dropped.
+        // Wire it here so the root error that loses the device is logged before the submit panic.
+        api.DeviceSetUncapturedErrorCallback(callbackDevice, UncapturedErrorCallbackRoot, null);
 
         return callbackDevice;
     }

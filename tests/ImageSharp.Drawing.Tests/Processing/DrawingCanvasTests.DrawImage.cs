@@ -77,8 +77,7 @@ public partial class DrawingCanvasTests
 
         DrawingOptions transformedOptions = new()
         {
-            Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.32F, new Vector2(180, 120))),
-            ShapeOptions = new ShapeOptions { BooleanOperation = BooleanOperation.Difference }
+            Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.32F, new Vector2(180, 120)))
         };
 
         IPath clipPath = new EllipsePolygon(new PointF(180, 120), new SizeF(208, 126));
@@ -88,7 +87,9 @@ public partial class DrawingCanvasTests
             canvas.Clear(Brushes.Solid(Color.White));
             canvas.Fill(Brushes.Solid(Color.LightGray.WithAlpha(0.45F)), new Rectangle(18, 16, 324, 208));
 
-            _ = canvas.Save(transformedOptions, clipPath);
+            _ = canvas.Save(transformedOptions);
+            canvas.Clip(ClipOperation.Difference, clipPath);
+
             canvas.DrawImage(
                 foreground,
                 new Rectangle(10, 8, 234, 180),
@@ -106,6 +107,7 @@ public partial class DrawingCanvasTests
         }
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
+
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
     }
 }

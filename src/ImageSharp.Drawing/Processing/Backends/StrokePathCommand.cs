@@ -13,8 +13,6 @@ public readonly struct StrokePathCommand
     private readonly IPath sourcePath;
     private readonly DrawingOptions drawingOptions;
     private readonly DrawingCanvasLayer? ownerLayer;
-    private readonly IReadOnlyList<IPath>? clipPaths;
-    private readonly IntersectionRule clipIntersectionRule;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StrokePathCommand"/> struct.
@@ -26,10 +24,8 @@ public readonly struct StrokePathCommand
     /// <param name="targetBounds">The absolute bounds of the logical target.</param>
     /// <param name="destinationOffset">The absolute destination offset of the command.</param>
     /// <param name="pen">The stroke metadata.</param>
-    /// <param name="clipPaths">Optional clip paths supplied with the command.</param>
-    /// <param name="clipIntersectionRule">The fill rule used to interpret the clip paths.</param>
     /// <param name="isInsideLayer">True if the command was recorded inside a layer.</param>
-    public StrokePathCommand(
+    internal StrokePathCommand(
         IPath sourcePath,
         Brush brush,
         DrawingOptions drawingOptions,
@@ -37,8 +33,6 @@ public readonly struct StrokePathCommand
         Rectangle targetBounds,
         Point destinationOffset,
         Pen pen,
-        IReadOnlyList<IPath>? clipPaths,
-        IntersectionRule clipIntersectionRule,
         bool isInsideLayer)
         : this(
             sourcePath,
@@ -48,8 +42,6 @@ public readonly struct StrokePathCommand
             targetBounds,
             destinationOffset,
             pen,
-            clipPaths,
-            clipIntersectionRule,
             isInsideLayer,
             null)
     {
@@ -65,8 +57,6 @@ public readonly struct StrokePathCommand
     /// <param name="targetBounds">The absolute bounds of the logical target.</param>
     /// <param name="destinationOffset">The absolute destination offset of the command.</param>
     /// <param name="pen">The stroke metadata.</param>
-    /// <param name="clipPaths">Optional clip paths supplied with the command.</param>
-    /// <param name="clipIntersectionRule">The fill rule used to interpret the clip paths.</param>
     /// <param name="isInsideLayer">True if the command was recorded inside a layer.</param>
     /// <param name="ownerLayer">The layer that owned this command when it was recorded.</param>
     internal StrokePathCommand(
@@ -77,16 +67,12 @@ public readonly struct StrokePathCommand
         Rectangle targetBounds,
         Point destinationOffset,
         Pen pen,
-        IReadOnlyList<IPath>? clipPaths,
-        IntersectionRule clipIntersectionRule,
         bool isInsideLayer,
         DrawingCanvasLayer? ownerLayer)
     {
         this.sourcePath = sourcePath;
         this.drawingOptions = drawingOptions;
         this.ownerLayer = ownerLayer;
-        this.clipPaths = clipPaths;
-        this.clipIntersectionRule = clipIntersectionRule;
         this.Brush = brush;
         this.RasterizerOptions = rasterizerOptions;
         this.TargetBounds = targetBounds;
@@ -139,16 +125,6 @@ public readonly struct StrokePathCommand
     /// Gets the drawing transform.
     /// </summary>
     public Matrix4x4 Transform => this.drawingOptions.Transform;
-
-    /// <summary>
-    /// Gets the optional clip paths carried by the command.
-    /// </summary>
-    public IReadOnlyList<IPath>? ClipPaths => this.clipPaths;
-
-    /// <summary>
-    /// Gets the fill rule used to interpret the clip paths.
-    /// </summary>
-    public IntersectionRule ClipIntersectionRule => this.clipIntersectionRule;
 
     /// <summary>
     /// Gets the shape options carried by the command.

@@ -65,6 +65,13 @@ public sealed class EmptyPath : IPath
     }
 
     /// <inheritdoc />
+    public bool TryGetPathPointAtDistanceUnbounded(float distance, Vector2 scale, out PathPoint pathPoint)
+    {
+        pathPoint = default;
+        return false;
+    }
+
+    /// <inheritdoc />
     public bool TryGetSegment(float startDistance, float stopDistance, bool startOnBeginFigure, Vector2 scale, out IPath path)
     {
         path = this;

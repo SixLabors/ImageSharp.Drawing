@@ -332,14 +332,18 @@ public sealed class LinearGeometry
                 continue;
             }
 
-            if (distance <= segmentLength)
+            if (distance < segmentLength)
             {
                 Vector2 tangent = Vector2.Normalize((Vector2)segment.End - (Vector2)segment.Start);
                 float angle = (float)(Math.Atan2(tangent.Y, tangent.X) % (Math.PI * 2));
 
                 pathPoint = new PathPoint
                 {
-                    Point = Vector2.Lerp(segment.Start, segment.End, distance / segmentLength),
+                    // Advance from the segment start along the unit tangent. This is exact for
+                    // axis-aligned segments, unlike interpolating by the fractional distance.
+                    // The strict comparison above makes the outgoing segment win at an exact
+                    // shared vertex.
+                    Point = (Vector2)segment.Start + (tangent * distance),
                     Tangent = tangent,
                     Angle = GeometryUtilities.RadianToDegree(angle)
                 };
@@ -359,6 +363,64 @@ public sealed class LinearGeometry
             Point = lastSegment.End,
             Tangent = endTangent,
             Angle = GeometryUtilities.RadianToDegree(endAngle)
+        };
+
+        return true;
+    }
+
+    /// <summary>
+    /// Gets path information at the specified distance along the geometry, extrapolating along the
+    /// boundary tangents when the distance falls before the start or beyond the end of an open geometry.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="TryGetPathPointAtDistance(float, out PathPoint)"/>, out-of-range distances
+    /// resolve to a point on the virtual straight-line continuation of the geometry's first or last
+    /// segment. The method returns <see langword="false"/> only when the distance is not a finite
+    /// number or the geometry has no measurable length.
+    /// </remarks>
+    /// <param name="distance">The distance along the geometry.</param>
+    /// <param name="pathPoint">When this method returns, contains the path information at <paramref name="distance"/> if the geometry is measurable; otherwise, the default value.</param>
+    /// <returns><see langword="true"/> if the point could be resolved; otherwise, <see langword="false"/>.</returns>
+    public bool TryGetPathPointAtDistanceUnbounded(float distance, out PathPoint pathPoint)
+    {
+        if (this.TryGetPathPointAtDistance(distance, out pathPoint))
+        {
+            return true;
+        }
+
+        if (!float.IsFinite(distance))
+        {
+            return false;
+        }
+
+        if (distance < 0)
+        {
+            if (!this.TryGetPathPointAtDistance(0, out PathPoint start))
+            {
+                return false;
+            }
+
+            pathPoint = new PathPoint
+            {
+                Point = (Vector2)start.Point + ((Vector2)start.Tangent * distance),
+                Tangent = start.Tangent,
+                Angle = start.Angle
+            };
+
+            return true;
+        }
+
+        float length = this.ComputeLength();
+        if (length <= 0 || !this.TryGetPathPointAtDistance(length, out PathPoint end))
+        {
+            return false;
+        }
+
+        pathPoint = new PathPoint
+        {
+            Point = (Vector2)end.Point + ((Vector2)end.Tangent * (distance - length)),
+            Tangent = end.Tangent,
+            Angle = end.Angle
         };
 
         return true;

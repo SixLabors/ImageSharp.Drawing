@@ -13,8 +13,6 @@ internal sealed class ApplyBarrier
     /// </summary>
     /// <param name="path">The closed path defining the processed region.</param>
     /// <param name="options">The drawing options captured when the barrier was recorded.</param>
-    /// <param name="clipPaths">The active clip paths captured when the barrier was recorded.</param>
-    /// <param name="clipIntersectionRule">The fill rule used to interpret the clip paths.</param>
     /// <param name="canvasBounds">The canvas-local bounds captured when the barrier was recorded.</param>
     /// <param name="targetBounds">The absolute target bounds captured when the barrier was recorded.</param>
     /// <param name="destinationOffset">The absolute destination offset captured when the barrier was recorded.</param>
@@ -23,8 +21,6 @@ internal sealed class ApplyBarrier
     internal ApplyBarrier(
         IPath path,
         DrawingOptions options,
-        IReadOnlyList<IPath> clipPaths,
-        IntersectionRule clipIntersectionRule,
         Rectangle canvasBounds,
         Rectangle targetBounds,
         Point destinationOffset,
@@ -33,8 +29,6 @@ internal sealed class ApplyBarrier
     {
         this.Path = path;
         this.Options = options;
-        this.ClipPaths = clipPaths;
-        this.ClipIntersectionRule = clipIntersectionRule;
         this.CanvasBounds = canvasBounds;
         this.TargetBounds = targetBounds;
         this.DestinationOffset = destinationOffset;
@@ -51,16 +45,6 @@ internal sealed class ApplyBarrier
     /// Gets the drawing options captured when the barrier was recorded.
     /// </summary>
     public DrawingOptions Options { get; }
-
-    /// <summary>
-    /// Gets the active clip paths captured when the barrier was recorded.
-    /// </summary>
-    public IReadOnlyList<IPath> ClipPaths { get; }
-
-    /// <summary>
-    /// Gets the fill rule used to interpret the clip paths.
-    /// </summary>
-    public IntersectionRule ClipIntersectionRule { get; }
 
     /// <summary>
     /// Gets the canvas-local bounds captured when the barrier was recorded.

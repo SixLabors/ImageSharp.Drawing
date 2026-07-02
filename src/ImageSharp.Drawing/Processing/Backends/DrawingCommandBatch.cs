@@ -20,6 +20,7 @@ public readonly struct DrawingCommandBatch
         this.Commands = commands;
         this.HasLayers = hasLayers;
         this.HasApply = false;
+        this.HasClipControls = false;
     }
 
     /// <summary>
@@ -29,15 +30,18 @@ public readonly struct DrawingCommandBatch
     /// <param name="commandCount">The number of commands in the prepared batch.</param>
     /// <param name="hasLayers">Indicates whether the command stream contains layer boundaries.</param>
     /// <param name="hasApply">Indicates whether the command stream contains apply barriers.</param>
+    /// <param name="hasClipControls">Indicates whether the command stream contains clip controls.</param>
     internal DrawingCommandBatch(
         CompositionSceneCommand[] commands,
         int commandCount,
         bool hasLayers,
-        bool hasApply)
+        bool hasApply,
+        bool hasClipControls)
     {
         this.Commands = new ArraySegment<CompositionSceneCommand>(commands, 0, commandCount);
         this.HasLayers = hasLayers;
         this.HasApply = hasApply;
+        this.HasClipControls = hasClipControls;
     }
 
     /// <summary>
@@ -48,16 +52,19 @@ public readonly struct DrawingCommandBatch
     /// <param name="commandCount">The number of commands in the prepared batch.</param>
     /// <param name="hasLayers">Indicates whether the command stream contains layer boundaries.</param>
     /// <param name="hasApply">Indicates whether the command stream contains apply barriers.</param>
+    /// <param name="hasClipControls">Indicates whether the command stream contains clip controls.</param>
     internal DrawingCommandBatch(
         CompositionSceneCommand[] commands,
         int startIndex,
         int commandCount,
         bool hasLayers,
-        bool hasApply)
+        bool hasApply,
+        bool hasClipControls)
     {
         this.Commands = new ArraySegment<CompositionSceneCommand>(commands, startIndex, commandCount);
         this.HasLayers = hasLayers;
         this.HasApply = hasApply;
+        this.HasClipControls = hasClipControls;
     }
 
     /// <summary>
@@ -79,4 +86,9 @@ public readonly struct DrawingCommandBatch
     /// Gets a value indicating whether this scene contains apply barriers.
     /// </summary>
     public bool HasApply { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this scene contains clip control commands.
+    /// </summary>
+    public bool HasClipControls { get; }
 }

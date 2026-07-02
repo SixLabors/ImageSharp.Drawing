@@ -77,13 +77,13 @@ It is the bridge between the immediate-looking public API and the deferred backe
 
 `CompositionCommand` is the recorded unit of drawing intent. In the common case it means "fill this path with this brush under this state". The command stream also carries explicit layer boundaries through `BeginLayer` and `EndLayer`.
 
-The command remains relatively close to the original user request. It may hold the original path, pen, brush, transform, and clip paths.
+The command remains relatively close to the original user request. It may hold the original path, pen, brush, transform, and clip state.
 
 ### Preparation
 
 Preparation is the normalization step that turns recorded intent into backend-ready commands.
 
-`DrawingCanvasBatcher<TPixel>.PrepareCommands(...)` runs only when needed. It applies command transforms, expands strokes to fill paths, applies clip paths so clipped commands reach the backend as ordinary fills, and expands dashed strokes when a stroke pattern is present.
+`DrawingCanvasBatcher<TPixel>.PrepareCommands(...)` runs only when needed. It applies command transforms, expands strokes to fill paths, preserves clip state for backend lowering, and expands dashed strokes when a stroke pattern is present.
 
 Preparation stops at `DrawingCommandBatch`. Backend-specific lowering happens after that, inside `IDrawingBackend.CreateScene(...)`.
 
@@ -160,7 +160,7 @@ At this point the canvas is mostly recording:
 - geometry references
 - brushes or pens
 - active transform
-- clip paths
+- clip state
 - graphics options
 - target bounds relevant to this command
 
@@ -187,11 +187,11 @@ For a typical path-based command, canvas preparation does the following in conce
 
 1. transform the source path into its final geometry space
 2. if a pen is present, expand the stroke to fill geometry
-3. apply clip paths
+3. carry the clip state with the command
 4. transform the brush into the same command space
 5. leave backend-specific retained geometry construction to `CreateScene(...)`
 
-This is the architectural center of gravity. It is the shared normalization stage that makes the backends simpler.
+This is the architectural center of gravity. It is the shared normalization stage that makes the backends simpler. Clip state is carried as rendering state, not as a boolean operation against the subject path; explicit path boolean operations stay on the geometry APIs.
 
 ### Step 4: The backend creates and renders scenes
 
@@ -214,7 +214,7 @@ Drawing APIs look stateful because they are stateful. The active transform, clip
 The state snapshot contains the active options and target information for subsequent commands, including:
 
 - `Options`
-- `ClipPaths`
+- `ClipState`
 - `IsLayer`
 - layer-related graphics options and bounds
 - current target bounds

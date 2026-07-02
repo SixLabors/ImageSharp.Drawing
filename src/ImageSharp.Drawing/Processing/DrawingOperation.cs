@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
+
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 internal enum DrawingOperationKind : byte
@@ -16,6 +18,10 @@ internal struct DrawingOperation
     public IPath Path { get; set; }
 
     public Point RenderLocation { get; set; }
+
+    public RichTextGlyphRenderer.CacheKey GlyphKey { get; set; }
+
+    public bool HasGlyphKey { get; set; }
 
     public IntersectionRule IntersectionRule { get; set; }
 

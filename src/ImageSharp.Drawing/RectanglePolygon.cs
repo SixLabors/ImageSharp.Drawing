@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing;
 
@@ -159,7 +160,29 @@ public sealed class RectanglePolygon : IPath, ISimplePath
             return this;
         }
 
-        // Rectangles may be rotated and skewed which means they will then need representing by a polygon
+        if (MatrixUtilities.PreservesAxisAlignedRectangles(matrix))
+        {
+            // Keep the rectangle type when possible so later clip/scissor code can still
+            // recognize the shape without flattening a generic polygon.
+            Vector2 topRight = new(this.bottomRight.X, this.topLeft.Y);
+            Vector2 bottomLeft = new(this.topLeft.X, this.bottomRight.Y);
+
+            // Transform all four corners rather than transforming location/size. Negative
+            // scales and axis swaps can invert edges, so the bounds must be recomputed.
+            Vector2 p0 = Vector2.Transform(this.topLeft, matrix);
+            Vector2 p1 = Vector2.Transform(topRight, matrix);
+            Vector2 p2 = Vector2.Transform(this.bottomRight, matrix);
+            Vector2 p3 = Vector2.Transform(bottomLeft, matrix);
+
+            float left = MathF.Min(MathF.Min(p0.X, p1.X), MathF.Min(p2.X, p3.X));
+            float top = MathF.Min(MathF.Min(p0.Y, p1.Y), MathF.Min(p2.Y, p3.Y));
+            float right = MathF.Max(MathF.Max(p0.X, p1.X), MathF.Max(p2.X, p3.X));
+            float bottom = MathF.Max(MathF.Max(p0.Y, p1.Y), MathF.Max(p2.Y, p3.Y));
+
+            return new RectanglePolygon(RectangleF.FromLTRB(left, top, right, bottom));
+        }
+
+        // Skewed or freely rotated rectangles need polygon geometry to preserve their edges.
         return new Polygon(new LinearLineSegment(this.points).Transform(matrix));
     }
 
@@ -194,6 +217,10 @@ public sealed class RectanglePolygon : IPath, ISimplePath
     /// <inheritdoc />
     public bool TryGetPathPointAtDistance(float distance, Vector2 scale, out PathPoint pathPoint)
         => this.ToLinearGeometry(scale).TryGetPathPointAtDistance(distance, out pathPoint);
+
+    /// <inheritdoc />
+    public bool TryGetPathPointAtDistanceUnbounded(float distance, Vector2 scale, out PathPoint pathPoint)
+        => this.ToLinearGeometry(scale).TryGetPathPointAtDistanceUnbounded(distance, out pathPoint);
 
     /// <inheritdoc/>
     public bool TryGetSegment(float startDistance, float stopDistance, bool startOnBeginFigure, Vector2 scale, out IPath path)

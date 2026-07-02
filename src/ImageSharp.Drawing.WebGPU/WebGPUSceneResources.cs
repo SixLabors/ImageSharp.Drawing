@@ -1512,15 +1512,37 @@ internal readonly struct GpuPathBbox
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuClipInp
 {
-    public GpuClipInp(uint drawIndex, int pathIndex)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GpuClipInp"/> struct.
+    /// </summary>
+    /// <param name="drawIndex">The draw object index for the clip record.</param>
+    /// <param name="pathIndex">The begin-clip path index, or the bitwise-not end-clip draw object index.</param>
+    /// <param name="operation">The ImageSharp render clip operation for begin-clip records.</param>
+    public GpuClipInp(uint drawIndex, int pathIndex, uint operation)
     {
         this.DrawIndex = drawIndex;
         this.PathIndex = pathIndex;
+        this.Operation = operation;
     }
 
+    /// <summary>
+    /// Gets the draw object index for the clip record.
+    /// </summary>
     public uint DrawIndex { get; }
 
+    /// <summary>
+    /// Gets the begin-clip path index, or the bitwise-not end-clip draw object index.
+    /// </summary>
     public int PathIndex { get; }
+
+    /// <summary>
+    /// Gets the ImageSharp render clip operation.
+    /// </summary>
+    /// <remarks>
+    /// Vello's source clip record stores only <c>DrawIndex</c> and <c>PathIndex</c>.
+    /// This field is ImageSharp's extension for <see cref="ClipOperation.Difference"/>.
+    /// </remarks>
+    public uint Operation { get; }
 }
 
 /// <summary>
@@ -1546,9 +1568,18 @@ internal readonly struct GpuBic
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuClipElement
 {
+    // ClipEl in clip.wgsl places bbox at offset 16 because vec4<f32> has 16-byte
+    // alignment in storage buffers. These fields are part of the GPU ABI.
+    private readonly uint padding0;
+    private readonly uint padding1;
+    private readonly uint padding2;
+
     public GpuClipElement(uint parentIndex, Vector4 bbox)
     {
         this.ParentIndex = parentIndex;
+        this.padding0 = 0;
+        this.padding1 = 0;
+        this.padding2 = 0;
         this.Bbox = bbox;
     }
 
@@ -1753,6 +1784,8 @@ internal readonly struct GpuSceneConfig
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuScenePath
 {
+    // Path in tile.wgsl has a vec4<u32> followed by one u32 and therefore a
+    // 32-byte array stride. The padding keeps reusable GPU buffer sizing exact.
     private readonly uint padding0;
     private readonly uint padding1;
     private readonly uint padding2;
@@ -1831,6 +1864,8 @@ internal struct GpuPathRow
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuSceneLine
 {
+    // LineSoup in segment.wgsl has a u32 followed by vec2<f32> values. WGSL
+    // aligns the first vec2 to offset 8, so this field is part of the buffer ABI.
     private readonly uint padding0;
 
     public GpuSceneLine(uint pathIndex, Vector2 point0, Vector2 point1)
@@ -1888,6 +1923,8 @@ internal readonly struct GpuSegmentCount
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuPathSegment
 {
+    // Segment in segment.wgsl has two vec2<f32> values followed by one f32 and
+    // a 24-byte array stride. The final slot preserves that stride from C#.
     private readonly float padding0;
 
     public GpuPathSegment(Vector2 point0, Vector2 point1, float yEdge)

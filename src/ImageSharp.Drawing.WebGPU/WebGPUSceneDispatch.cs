@@ -46,6 +46,7 @@ internal static class WebGPUSceneDispatch
     private const string PathTilingPipelineKey = "scene/path-tiling";
     private const string FineAreaPipelineKey = "scene/fine-area";
     private const string ChunkResetPipelineKey = "scene/chunk-reset";
+    private const int MaxClipStackDepth = 256;
 
     /// <summary>
     /// Identifies the staged-scene storage binding that exceeded the device limit for one flush attempt.
@@ -158,7 +159,12 @@ internal static class WebGPUSceneDispatch
             uint baseColor = 0U;
             bool chunkingRequired = false;
 
-            if (!TryValidateBindingSizes(encodedScene, config, flushContext.DeviceState.MaxStorageBufferBindingSize, out BindingLimitFailure bindingLimitFailure, out string? error))
+            if (!TryValidateEncodedClipStream(encodedScene, out string? error))
+            {
+                throw new InvalidOperationException(error);
+            }
+
+            if (!TryValidateBindingSizes(encodedScene, config, flushContext.DeviceState.MaxStorageBufferBindingSize, out BindingLimitFailure bindingLimitFailure, out error))
             {
                 if (!IsChunkableBindingFailure(bindingLimitFailure.Buffer))
                 {
@@ -222,7 +228,12 @@ internal static class WebGPUSceneDispatch
         uint baseColor = 0U;
         bool chunkingRequired = false;
 
-        if (!TryValidateBindingSizes(encodedScene, config, flushContext.DeviceState.MaxStorageBufferBindingSize, out BindingLimitFailure bindingLimitFailure, out string? error))
+        if (!TryValidateEncodedClipStream(encodedScene, range, out string? error))
+        {
+            throw new InvalidOperationException(error);
+        }
+
+        if (!TryValidateBindingSizes(encodedScene, config, flushContext.DeviceState.MaxStorageBufferBindingSize, out BindingLimitFailure bindingLimitFailure, out error))
         {
             if (!IsChunkableBindingFailure(bindingLimitFailure.Buffer))
             {
@@ -232,7 +243,7 @@ internal static class WebGPUSceneDispatch
             chunkingRequired = true;
         }
 
-        if (range.DrawTagCount == 0)
+        if (range.FillCount == 0)
         {
             return new WebGPUStagedScene(
                 flushContext,
@@ -264,6 +275,202 @@ internal static class WebGPUSceneDispatch
             config,
             resources,
             chunkingRequired ? bindingLimitFailure : BindingLimitFailure.None);
+    }
+
+    /// <summary>
+    /// Validates the full encoded scene clip-control stream before GPU staging.
+    /// </summary>
+    /// <param name="encodedScene">The scene whose draw-tag stream will be staged.</param>
+    /// <param name="error">Receives the validation failure reason.</param>
+    /// <returns><see langword="true"/> when the clip stream is safe for GPU scheduling.</returns>
+    private static bool TryValidateEncodedClipStream(WebGPUEncodedScene encodedScene, out string? error)
+        => TryValidateEncodedClipStream(
+            encodedScene,
+            0,
+            encodedScene.DrawTagCount,
+            encodedScene.DrawDataWordCount,
+            encodedScene.InfoWordCount,
+            encodedScene.PathCount,
+            encodedScene.ClipCount,
+            "full scene",
+            out error);
+
+    /// <summary>
+    /// Validates one encoded range clip-control stream before GPU staging.
+    /// </summary>
+    /// <param name="encodedScene">The scene that owns the packed draw-tag stream.</param>
+    /// <param name="range">The staged range inside <paramref name="encodedScene"/>.</param>
+    /// <param name="error">Receives the validation failure reason.</param>
+    /// <returns><see langword="true"/> when the clip stream is safe for GPU scheduling.</returns>
+    private static bool TryValidateEncodedClipStream(WebGPUEncodedScene encodedScene, WebGPUSceneRange range, out string? error)
+        => TryValidateEncodedClipStream(
+            encodedScene,
+            range.DrawTagStart,
+            range.DrawTagCount,
+            range.DrawDataWordCount,
+            range.InfoWordCount,
+            range.PathCount,
+            range.ClipCount,
+            "scene range",
+            out error);
+
+    /// <summary>
+    /// Validates the BeginClip/EndClip sequence consumed by clip_leaf.wgsl.
+    /// </summary>
+    /// <param name="encodedScene">The scene that owns the packed draw-tag stream.</param>
+    /// <param name="drawTagStart">The first draw-tag index in the stream slice.</param>
+    /// <param name="drawTagCount">The number of draw tags in the stream slice.</param>
+    /// <param name="expectedDrawDataWordCount">The draw-data word count declared for the stream slice.</param>
+    /// <param name="expectedInfoWordCount">The info word count declared for the stream slice.</param>
+    /// <param name="expectedPathCount">The path count declared for the stream slice.</param>
+    /// <param name="expectedClipCount">The expected number of clip-control draw tags in the stream slice.</param>
+    /// <param name="label">A short label used in the validation message.</param>
+    /// <param name="error">Receives the validation failure reason.</param>
+    /// <returns><see langword="true"/> when the stream slice satisfies the shader clip-stack contract.</returns>
+    private static bool TryValidateEncodedClipStream(
+        WebGPUEncodedScene encodedScene,
+        int drawTagStart,
+        int drawTagCount,
+        int expectedDrawDataWordCount,
+        int expectedInfoWordCount,
+        int expectedPathCount,
+        int expectedClipCount,
+        string label,
+        out string? error)
+    {
+        if (drawTagStart < 0 || drawTagCount < 0 || drawTagStart + drawTagCount > encodedScene.DrawTagCount)
+        {
+            error = $"The WebGPU {label} draw-tag range [{drawTagStart}, {drawTagStart + drawTagCount}) is outside the encoded draw-tag stream length {encodedScene.DrawTagCount}.";
+            return false;
+        }
+
+        ReadOnlySpan<uint> sceneWords = encodedScene.SceneData.Span;
+        long drawTagWordStart = (long)encodedScene.Layout.DrawTagBase + drawTagStart;
+        long drawTagWordEnd = drawTagWordStart + drawTagCount;
+        if (drawTagWordStart < 0 || drawTagWordEnd > sceneWords.Length)
+        {
+            error = $"The WebGPU {label} draw-tag words [{drawTagWordStart}, {drawTagWordEnd}) are outside the packed scene word length {sceneWords.Length}.";
+            return false;
+        }
+
+        ReadOnlySpan<uint> drawTags = sceneWords.Slice((int)drawTagWordStart, drawTagCount);
+        int depth = 0;
+        int clipCount = 0;
+        long pathIndex = 0;
+        long clipIndex = 0;
+        long sceneOffset = 0;
+        long infoOffset = 0;
+        Span<long> clipPathStack = stackalloc long[MaxClipStackDepth];
+        Span<long> clipDrawStack = stackalloc long[MaxClipStackDepth];
+        for (int i = 0; i < drawTags.Length; i++)
+        {
+            uint drawTag = drawTags[i];
+            GpuSceneDrawMonoid drawMonoid = GpuSceneDrawTag.Map(drawTag);
+            if (drawTag != GpuSceneDrawTag.Nop && pathIndex >= expectedPathCount)
+            {
+                error = $"The WebGPU {label} draw tag {drawTagStart + i} references path {pathIndex}, but the stream declares {expectedPathCount} paths.";
+                return false;
+            }
+
+            if (sceneOffset + drawMonoid.SceneOffset > expectedDrawDataWordCount)
+            {
+                error = $"The WebGPU {label} draw tag {drawTagStart + i} reads draw-data words [{sceneOffset}, {sceneOffset + drawMonoid.SceneOffset}), but the stream declares {expectedDrawDataWordCount} words.";
+                return false;
+            }
+
+            if (infoOffset + drawMonoid.InfoOffset > expectedInfoWordCount)
+            {
+                error = $"The WebGPU {label} draw tag {drawTagStart + i} writes info words [{infoOffset}, {infoOffset + drawMonoid.InfoOffset}), but the stream declares {expectedInfoWordCount} words.";
+                return false;
+            }
+
+            if (drawTag == GpuSceneDrawTag.BeginClip)
+            {
+                // clip_leaf.wgsl reconstructs clip parents with one 256-entry workgroup stack.
+                if (depth == MaxClipStackDepth)
+                {
+                    error = $"The WebGPU {label} clip stack exceeds {MaxClipStackDepth} entries at draw tag {drawTagStart + i}.";
+                    return false;
+                }
+
+                clipPathStack[depth] = pathIndex;
+                clipDrawStack[depth] = i;
+                depth++;
+                clipCount++;
+            }
+            else if (drawTag == GpuSceneDrawTag.EndClip)
+            {
+                if (depth == 0)
+                {
+                    error = $"The WebGPU {label} has an EndClip without a matching BeginClip at draw tag {drawTagStart + i}.";
+                    return false;
+                }
+
+                depth--;
+
+                // This mirrors Vello's CPU clip_leaf stack: EndClip must pop a BeginClip whose
+                // path and draw indices remain valid inside the range-local GPU buffers.
+                long parentPathIndex = clipPathStack[depth];
+                long parentDrawIndex = clipDrawStack[depth];
+                if (parentPathIndex < 0 || parentPathIndex >= expectedPathCount)
+                {
+                    error = $"The WebGPU {label} EndClip at draw tag {drawTagStart + i} resolves to path {parentPathIndex}, but the stream declares {expectedPathCount} paths.";
+                    return false;
+                }
+
+                if (parentDrawIndex < 0 || parentDrawIndex >= drawTagCount)
+                {
+                    error = $"The WebGPU {label} EndClip at draw tag {drawTagStart + i} resolves to draw tag {parentDrawIndex}, but the stream contains {drawTagCount} draw tags.";
+                    return false;
+                }
+
+                clipCount++;
+            }
+
+            pathIndex += drawMonoid.PathIndex;
+            clipIndex += drawMonoid.ClipIndex;
+            sceneOffset += drawMonoid.SceneOffset;
+            infoOffset += drawMonoid.InfoOffset;
+        }
+
+        if (depth != 0)
+        {
+            error = $"The WebGPU {label} closes with {depth} unmatched BeginClip records.";
+            return false;
+        }
+
+        if (pathIndex != expectedPathCount)
+        {
+            error = $"The WebGPU {label} declares {expectedPathCount} paths but the draw-tag stream encodes {pathIndex}.";
+            return false;
+        }
+
+        if (clipIndex != expectedClipCount)
+        {
+            error = $"The WebGPU {label} declares {expectedClipCount} clip records but the draw-tag monoid encodes {clipIndex}.";
+            return false;
+        }
+
+        if (sceneOffset != expectedDrawDataWordCount)
+        {
+            error = $"The WebGPU {label} declares {expectedDrawDataWordCount} draw-data words but the draw-tag stream encodes {sceneOffset}.";
+            return false;
+        }
+
+        if (infoOffset != expectedInfoWordCount)
+        {
+            error = $"The WebGPU {label} declares {expectedInfoWordCount} info words but the draw-tag stream encodes {infoOffset}.";
+            return false;
+        }
+
+        if (clipCount != expectedClipCount)
+        {
+            error = $"The WebGPU {label} declares {expectedClipCount} clip records but contains {clipCount} BeginClip/EndClip draw tags.";
+            return false;
+        }
+
+        error = null;
+        return true;
     }
 
     /// <summary>
@@ -1062,12 +1269,17 @@ internal static class WebGPUSceneDispatch
             (nuint)sizeof(GpuSceneBumpAllocators),
             ref schedulingArena);
 
+        WebGPUFlushContext flushContext = stagedScene.FlushContext;
+        if (!TryWriteSceneHeader(flushContext, stagedScene.Resources.HeaderBuffer, CreateHeader(stagedScene, 0U), out error))
+        {
+            return false;
+        }
+
         if (!TryDispatchSchedulingStages(ref stagedScene, currentArena, out WebGPUSceneSchedulingResources scheduling, out error))
         {
             return false;
         }
 
-        WebGPUFlushContext flushContext = stagedScene.FlushContext;
         int targetWidth = target.Bounds.Width;
         int targetHeight = target.Bounds.Height;
 
@@ -1549,7 +1761,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="stagedScene">The staged scene whose full-scene or range work is being checked.</param>
     /// <returns>The retained draw count for the staged scene.</returns>
     private static int GetRenderableDrawCount(WebGPUStagedScene stagedScene)
-        => stagedScene.Range.HasValue ? stagedScene.Range.Value.DrawTagCount : stagedScene.EncodedScene.FillCount;
+        => stagedScene.Range.HasValue ? stagedScene.Range.Value.FillCount : stagedScene.EncodedScene.FillCount;
 
     /// <summary>
     /// Records one copy from a per-chunk header upload buffer into the shared staged-scene header buffer so subsequent chunk-local passes see the correct tile window.

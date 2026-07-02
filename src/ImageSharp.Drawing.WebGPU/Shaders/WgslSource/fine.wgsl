@@ -714,23 +714,41 @@ fn main(
                         let local_blend_start = blend_offset + blend_in_scratch * TILE_WIDTH * TILE_HEIGHT + local_tile_ix;
                         bg_rgba = blend_spill[local_blend_start + i];
                     }
+                    // Difference clips reuse the same clip path but invert the mask at the
+                    // point where the saved backdrop is restored. This keeps clip operation
+                    // semantics in the clip stack instead of fabricating inverse path geometry.
+                    let is_hard_clip = (end_clip.blend & CLIP_HARD_MASK_BIT) != 0u;
+                    var source_clip_area = area[i];
+                    if is_hard_clip {
+                        source_clip_area = select(0.0, 1.0, source_clip_area > end_clip.alpha);
+                    }
+
+                    let clip_area = select(source_clip_area, 1.0 - source_clip_area, (end_clip.blend & CLIP_DIFFERENCE_MASK_BIT) != 0u);
+                    var clip_blend = end_clip.blend & ~CLIP_DIFFERENCE_MASK_BIT;
+                    if is_hard_clip {
+                        clip_blend &= ~CLIP_HARD_MASK_BIT;
+                    }
+
                     let bg = unpack4x8unorm(bg_rgba);
-                    let fg = rgba[i] * end_clip.alpha;
-                    if end_clip.blend == LUMINANCE_MASK_LAYER {
+                    let clip_alpha = select(end_clip.alpha, 1.0, is_hard_clip);
+                    let fg = rgba[i] * clip_alpha;
+
+                    if clip_blend == LUMINANCE_MASK_LAYER {
                         // TODO: Does this case apply more generally?
                         // See https://github.com/linebender/vello/issues/1061
                         // TODO: How do we handle anti-aliased edges here?
                         // This is really an imaging model question
-                        if area[i] == 0f {
+                        if clip_area == 0.0 {
                             rgba[i] = bg;
                             continue;
                         }
+
                         let luminance = clamp(svg_lum(unpremultiply(fg)) * fg.a, 0.0, 1.0);
                         let composed = bg * luminance;
-                        rgba[i] = bg + ((composed - bg) * area[i]);
+                        rgba[i] = bg + ((composed - bg) * clip_area);
                     } else {
-                        let composed = blend_mix_compose(bg, fg, end_clip.blend);
-                        rgba[i] = bg + ((composed - bg) * area[i]);
+                        let composed = blend_mix_compose(bg, fg, clip_blend);
+                        rgba[i] = bg + ((composed - bg) * clip_area);
                     }
                 }
                 cmd_ix += 3u;

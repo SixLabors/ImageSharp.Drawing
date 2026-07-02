@@ -1,11 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
-using SixLabors.ImageSharp.Drawing.PolygonGeometry;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
 using SixLabors.ImageSharp.Drawing.Text;
@@ -203,7 +201,15 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             new DrawingCanvasBatcher<TPixel>(configuration),
             textCache,
             ownsTextCache,
-            new DrawingCanvasState(options, clipPaths, options.ShapeOptions.IntersectionRule, targetFrame.Bounds, targetFrame.Bounds.Location),
+            new DrawingCanvasState(
+                options,
+                DrawingClipState.FromPaths(
+                    clipPaths,
+                    ClipOperation.Intersection,
+                    options.GraphicsOptions.Antialias ? DrawingClipEdgeMode.Antialiased : DrawingClipEdgeMode.Hard,
+                    options.GraphicsOptions.AntialiasThreshold),
+                targetFrame.Bounds,
+                targetFrame.Bounds.Location),
             true)
     {
     }
@@ -253,6 +259,13 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         // Canvas coordinates are local to the current frame; origin stays at (0,0).
         this.Bounds = new Rectangle(0, 0, targetFrame.Bounds.Width, targetFrame.Bounds.Height);
         this.savedStates.Push(defaultState);
+
+        if (ownsBatcher)
+        {
+            // The root canvas owns the command stream. Child regions inherit the already-open
+            // parent stack and only narrow TargetBounds, so they must not emit duplicate opens.
+            this.AppendBeginClips(defaultState.ClipState, defaultState.DestinationOffset);
+        }
     }
 
     /// <inheritdoc />
@@ -270,7 +283,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         // Push a state that does not close a layer on restore. If the current state is already
         // inside a layer, keep recording commands into that same layer.
         // Only states pushed by SaveLayer() should trigger layer compositing on restore.
-        this.savedStates.Push(new DrawingCanvasState(current.Options, current.ClipPaths, current.ClipIntersectionRule, current.TargetBounds, current.DestinationOffset)
+        this.savedStates.Push(new DrawingCanvasState(current.Options, current.ClipState, current.TargetBounds, current.DestinationOffset)
         {
             Layer = current.Layer
         });
@@ -279,30 +292,14 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     }
 
     /// <inheritdoc />
-    public override int Save(DrawingOptions options, params IPath[] clipPaths)
-        => this.SaveCore(options, clipPaths);
-
-    private int SaveCore(DrawingOptions options, IPath[] clipPaths)
+    public override int Save(DrawingOptions options)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(options, nameof(options));
-        Guard.NotNull(clipPaths, nameof(clipPaths));
 
         _ = this.Save();
         DrawingCanvasState current = this.ResolveState();
-
-        // Save snapshots the current state: with no clip paths it inherits the existing clip;
-        // the transform is changed separately. Explicit clip paths are transformed into the active
-        // space once and set as this state's clip, so later draws never re-transform their own copy.
-        IReadOnlyList<IPath> clips = clipPaths.Length == 0
-            ? current.ClipPaths
-            : TransformClipPaths(clipPaths, options.Transform);
-
-        IntersectionRule clipIntersectionRule = clipPaths.Length == 0
-            ? current.ClipIntersectionRule
-            : options.ShapeOptions.IntersectionRule;
-
-        DrawingCanvasState state = new(options, clips, clipIntersectionRule, current.TargetBounds, current.DestinationOffset)
+        DrawingCanvasState state = new(options, current.ClipState, current.TargetBounds, current.DestinationOffset)
         {
             IsLayer = current.IsLayer,
             Layer = current.Layer,
@@ -322,29 +319,20 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         Guard.MustBeGreaterThan(bounds.Height, 0, nameof(bounds));
 
         DrawingCanvasState currentState = this.ResolveState();
-        return this.SaveLayerCore(layerOptions, bounds, currentState.Options, currentState.ClipPaths, currentState.ClipIntersectionRule);
+        return this.SaveLayerCore(layerOptions, bounds, currentState.Options, currentState.ClipState);
     }
 
     /// <inheritdoc />
-    public override int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds, DrawingOptions options, params IPath[] clipPaths)
+    public override int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds, DrawingOptions options)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(layerOptions, nameof(layerOptions));
         Guard.NotNull(options, nameof(options));
-        Guard.NotNull(clipPaths, nameof(clipPaths));
         Guard.MustBeGreaterThan(bounds.Width, 0, nameof(bounds));
         Guard.MustBeGreaterThan(bounds.Height, 0, nameof(bounds));
 
         DrawingCanvasState currentState = this.ResolveState();
-        IReadOnlyList<IPath> clips = clipPaths.Length == 0
-            ? currentState.ClipPaths
-            : TransformClipPaths(clipPaths, options.Transform);
-
-        IntersectionRule clipIntersectionRule = clipPaths.Length == 0
-            ? currentState.ClipIntersectionRule
-            : options.ShapeOptions.IntersectionRule;
-
-        return this.SaveLayerCore(layerOptions, bounds, options, clips, clipIntersectionRule);
+        return this.SaveLayerCore(layerOptions, bounds, options, currentState.ClipState);
     }
 
     /// <summary>
@@ -353,25 +341,24 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// <param name="layerOptions">Graphics options used when compositing the closed layer.</param>
     /// <param name="bounds">Layer bounds in local canvas coordinates.</param>
     /// <param name="options">Drawing options for commands recorded into the layer.</param>
-    /// <param name="clipPaths">Clip paths for commands recorded into the layer.</param>
-    /// <param name="clipIntersectionRule">The fill rule used to interpret the clip paths.</param>
+    /// <param name="clipState">The normalized clip state to apply during backend rendering.</param>
     /// <returns>The save count after the layer state has been pushed.</returns>
     private int SaveLayerCore(
         GraphicsOptions layerOptions,
         Rectangle bounds,
         DrawingOptions options,
-        IReadOnlyList<IPath> clipPaths,
-        IntersectionRule clipIntersectionRule)
+        DrawingClipState clipState)
     {
         DrawingCanvasState currentState = this.ResolveState();
         Rectangle absoluteLayerBounds = ResolveLayerBounds(options.Transform, currentState.TargetBounds, currentState.DestinationOffset, bounds);
         DrawingCanvasLayer layer = new(layerOptions);
 
-        // Keep layer boundaries in the shared command stream so the backend can lower them inline.
+        // Clips and layers are separate ordered controls. The active clip stack is already open
+        // in the command stream; the layer marker only pushes the isolated layer rectangle.
         this.batcher.AddComposition(CompositionCommand.CreateBeginLayer(absoluteLayerBounds, layer));
 
         // A bounded layer clips and allocates the isolated target, but it does not shift the canvas coordinate system.
-        DrawingCanvasState layerState = new(options, clipPaths, clipIntersectionRule, absoluteLayerBounds, currentState.DestinationOffset)
+        DrawingCanvasState layerState = new(options, clipState, absoluteLayerBounds, currentState.DestinationOffset)
         {
             IsLayer = true,
             Layer = layer,
@@ -391,8 +378,13 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         }
 
         DrawingCanvasState popped = this.savedStates.Pop();
+        DrawingCanvasState current = this.ResolveState();
+        this.AppendEndClips(popped.ClipState.Count - current.ClipState.Count);
+
         if (popped.IsLayer)
         {
+            // Layer closure happens after nested clips are closed so the encoded stream remains
+            // parent clips -> layer -> layer content -> nested clip ends -> layer end.
             this.batcher.AddComposition(CompositionCommand.CreateEndLayer(popped.TargetBounds, popped.Layer!));
         }
     }
@@ -423,7 +415,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             this.batcher,
             this.textCache,
             false,
-            new DrawingCanvasState(currentState.Options, currentState.ClipPaths, currentState.ClipIntersectionRule, childFrame.Bounds, childFrame.Bounds.Location)
+            new DrawingCanvasState(currentState.Options, currentState.ClipState, childFrame.Bounds, childFrame.Bounds.Location)
             {
                 IsLayer = currentState.IsLayer,
                 Layer = currentState.Layer,
@@ -436,7 +428,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     {
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions options = state.Options.CloneForClearOperation();
-        this.ExecuteWithTemporaryState(options, state.ClipPaths, state.ClipIntersectionRule, () => this.Fill(brush, path));
+        this.ExecuteWithTemporaryState(options, state.ClipState, () => this.Fill(brush, path));
     }
 
     /// <inheritdoc />
@@ -463,124 +455,46 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         DrawingCanvasState state = this.savedStates.Pop();
 
-        // Clip paths are supplied in the active coordinate space; transform them into the clip
-        // space once, here, so the stored clip never has to be re-transformed by later draws.
+        // Clip paths are supplied in the active coordinate space. Build descriptors before
+        // applying the transform so rectangle and region metadata can survive translations
+        // and axis-aligned scales instead of being erased by IPath.Transform.
         Matrix4x4 transform = state.Options.Transform;
-        IPath[] transformed = TransformClipPaths(clipPaths, transform);
 
-        // The current shape rule belongs to the incoming clip geometry, not to future draw
-        // subjects. Keep it separate from the stored clip rule because each side of a later
-        // boolean operation can come from a different canvas state.
-        IntersectionRule incomingRule = state.Options.ShapeOptions.IntersectionRule;
-
-        IReadOnlyList<IPath> combined;
-        IntersectionRule combinedRule;
         Rectangle targetBounds = state.TargetBounds;
-        if (operation == ClipOperation.Intersection && state.ClipPaths.Count == 0)
+
+        DrawingClipState incomingState = CreateClipState(
+            clipPaths,
+            transform,
+            operation,
+            state.Options.GraphicsOptions.Antialias ? DrawingClipEdgeMode.Antialiased : DrawingClipEdgeMode.Hard,
+            state.Options.GraphicsOptions.AntialiasThreshold);
+
+        this.AppendBeginClips(incomingState, state.DestinationOffset);
+
+        if (operation == ClipOperation.Intersection &&
+            incomingState.TryGetConservativeBounds(state.DestinationOffset, out Rectangle incomingBounds))
         {
-            if (transformed.Length == 1 && TryGetRectangleClip(transformed[0], state.DestinationOffset, out Rectangle rectangleClip))
-            {
-                // A first integer rectangle clip is equivalent to shrinking the command target.
-                // Keeping it in TargetBounds preserves hard pixel edges and avoids attaching a
-                // path clip to every later draw recorded in this state.
-                targetBounds = Rectangle.Intersect(state.TargetBounds, rectangleClip);
-                combined = [];
-                combinedRule = incomingRule;
-            }
-
-            // With no stored clip, an intersection clip becomes the stored clip. If there is
-            // only one incoming path, keep it as-is so region paths retain their exact metadata.
-            // Multiple paths in one Clip call are one incoming clip region, so they must be
-            // unioned before storing; otherwise later code would have to remember that this list
-            // is one unioned clip operand rather than several sequential clips.
-            else if (transformed.Length == 1)
-            {
-                combined = transformed;
-                combinedRule = incomingRule;
-            }
-            else
-            {
-                IPath[] rest = new IPath[transformed.Length - 1];
-                for (int i = 1; i < transformed.Length; i++)
-                {
-                    rest[i - 1] = transformed[i];
-                }
-
-                ShapeOptions unionOptions = new()
-                {
-                    BooleanOperation = BooleanOperation.Union,
-                    IntersectionRule = incomingRule
-                };
-
-                combined = [ClippedShapeGenerator.GenerateClippedShapes(unionOptions, transformed[0], rest)];
-                combinedRule = incomingRule;
-            }
-        }
-        else if (operation == ClipOperation.Intersection
-            && transformed.Length == 1
-            && TryIntersectRegionClips(state.ClipPaths, transformed[0], out IPath regionClip))
-        {
-            // Two integer region clips can be intersected exactly as rect sets. Region clips
-            // represent device-pixel coverage, so keeping them as rectangles preserves their
-            // hard edges and avoids lowering a simple dirty-region clip through polygon clipping.
-            combined = [regionClip];
-            combinedRule = IntersectionRule.NonZero;
-        }
-        else
-        {
-            // Every remaining case needs a stored geometric clip:
-            //
-            // - Intersection with an existing clip:
-            //   existing ∩ union(incoming paths)
-            //
-            // - Difference with or without an existing clip:
-            //   existing - union(incoming paths)
-            //
-            // When no clip path has been stored, the subject side is the current target
-            // bounds. Target bounds are absolute, while clip paths are stored in the
-            // current canvas destination space. Translate the implicit subject rectangle
-            // back to local coordinates before handing it to the path clipper.
-            //
-            // ClippedShapeGenerator accepts multiple clip paths and lowers them as one clip
-            // operand. Passing the incoming paths directly keeps Difference to one polygon clip
-            // operation instead of unioning first and clipping the unioned result again.
-            RectangleF localTargetBounds = new(
-                state.TargetBounds.X - state.DestinationOffset.X,
-                state.TargetBounds.Y - state.DestinationOffset.Y,
-                state.TargetBounds.Width,
-                state.TargetBounds.Height);
-
-            IPath existing = state.ClipPaths.Count == 0
-                ? new RectanglePolygon(localTargetBounds)
-                : state.ClipPaths.Count == 1
-                    ? state.ClipPaths[0]
-                    : new ComplexPolygon(state.ClipPaths);
-
-            // The subject side is either the full target rectangle or the previously stored clip.
-            // That rule is independent from incomingRule, which belongs only to the new clip paths.
-            IntersectionRule operationRule = state.ClipPaths.Count == 0
-                ? IntersectionRule.NonZero
-                : state.ClipIntersectionRule;
-
-            ShapeOptions operationOptions = new()
-            {
-                BooleanOperation = operation == ClipOperation.Intersection
-                    ? BooleanOperation.Intersection
-                    : BooleanOperation.Difference,
-                IntersectionRule = operationRule
-            };
-
-            combined =
-            [
-                ClippedShapeGenerator.GenerateClippedShapes(operationOptions, existing, transformed, incomingRule)
-            ];
-
-            combinedRule = operation == ClipOperation.Intersection
-                ? incomingRule
-                : operationRule;
+            // TargetBounds is the work scheduler's coarse limit. The exact clip state is still
+            // retained below so fractional edge coverage and region membership are not lost.
+            targetBounds = Rectangle.Intersect(targetBounds, incomingBounds);
         }
 
-        this.savedStates.Push(new DrawingCanvasState(state.Options, combined, combinedRule, targetBounds, state.DestinationOffset)
+        if (!state.ClipState.HasClips)
+        {
+            this.savedStates.Push(new DrawingCanvasState(state.Options, incomingState, targetBounds, state.DestinationOffset)
+            {
+                IsLayer = state.IsLayer,
+                Layer = state.Layer,
+            });
+
+            return;
+        }
+
+        // Clip operations are recorded as ordered state. Backends consume that state as
+        // clip primitives, so recording never rewrites future subject geometry.
+        DrawingClipState combinedClipState = state.ClipState.Append(incomingState);
+
+        this.savedStates.Push(new DrawingCanvasState(state.Options, combinedClipState, targetBounds, state.DestinationOffset)
         {
             IsLayer = state.IsLayer,
             Layer = state.Layer,
@@ -622,14 +536,13 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         ApplyBarrier barrier = new(
             path.AsClosedPath(),
             state.Options,
-            state.ClipPaths,
-            state.ClipIntersectionRule,
             this.Bounds,
             state.TargetBounds,
             state.DestinationOffset,
             state.Layer,
             operation);
 
+        this.batcher.EnsureClipAnchors(state.DestinationOffset);
         this.batcher.AddApplyBarrier(barrier);
     }
 
@@ -647,13 +560,12 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        if (state.ClipPaths.Count > 0 || !pen.StrokePattern.IsEmpty)
+        if (state.ClipState.HasClips || !pen.StrokePattern.IsEmpty)
         {
             this.PrepareCompositionCore(
                 new Path([start, end]),
                 pen.StrokeFill,
                 effectiveOptions,
-                state.ClipPaths,
                 pen);
             return;
         }
@@ -678,13 +590,12 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        if (state.ClipPaths.Count > 0 || !pen.StrokePattern.IsEmpty)
+        if (state.ClipState.HasClips || !pen.StrokePattern.IsEmpty)
         {
             this.PrepareCompositionCore(
                 new Path(points),
                 pen.StrokeFill,
                 effectiveOptions,
-                state.ClipPaths,
                 pen);
             return;
         }
@@ -705,7 +616,6 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             path,
             pen.StrokeFill,
             state.Options,
-            state.ClipPaths,
             pen);
     }
 
@@ -753,7 +663,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         TextRenderer renderer = new(glyphRenderer);
         renderer.RenderText(text, configuredOptions);
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipPaths, state.ClipIntersectionRule);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipState);
     }
 
     /// <inheritdoc />
@@ -782,7 +692,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache);
         textBlock.RenderTo(glyphRenderer, wrappingLength);
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions, state.ClipPaths, state.ClipIntersectionRule);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions, state.ClipState);
     }
 
     /// <inheritdoc />
@@ -804,7 +714,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.textCache);
         textBlock.RenderTo(glyphRenderer, wrappingLength);
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipPaths, state.ClipIntersectionRule);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipState);
     }
 
     /// <inheritdoc />
@@ -832,7 +742,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache);
         lineLayout.RenderTo(glyphRenderer);
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions, state.ClipPaths, state.ClipIntersectionRule);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions, state.ClipState);
     }
 
     /// <inheritdoc />
@@ -853,7 +763,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.textCache);
         lineLayout.RenderTo(glyphRenderer);
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipPaths, state.ClipIntersectionRule);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipState);
     }
 
     /// <inheritdoc />
@@ -874,7 +784,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         TextRenderer renderer = new(glyphRenderer);
         renderer.RenderGlyph(glyphId, options);
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipPaths, state.ClipIntersectionRule);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipState);
     }
 
     /// <inheritdoc />
@@ -903,10 +813,9 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         renderer.RenderGlyphRun(glyphRun, options);
 
         this.DrawTextOperations(
-            BatchGlyphRunOperations(glyphRenderer.DrawingOperations),
+            this.BatchGlyphRunOperations(glyphRenderer.DrawingOperations),
             effectiveOptions,
-            state.ClipPaths,
-            state.ClipIntersectionRule);
+            state.ClipState);
     }
 
     /// <inheritdoc />
@@ -922,8 +831,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions baseOptions = state.Options;
-        IReadOnlyList<IPath> clipPaths = state.ClipPaths;
-        IntersectionRule clipIntersectionRule = state.ClipIntersectionRule;
+        DrawingClipState clipState = state.ClipState;
 
         foreach (GlyphPathCollection glyph in glyphs)
         {
@@ -964,7 +872,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                     shouldFill = layerArea > 0F && glyphArea > 0F && (layerArea / glyphArea) < 0.50F;
                 }
 
-                this.ExecuteWithTemporaryState(layerOptions, clipPaths, clipIntersectionRule, () =>
+                this.ExecuteWithTemporaryState(layerOptions, clipState, () =>
                 {
                     if (shouldFill)
                     {
@@ -1042,6 +950,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     public override DrawingBackendScene CreateScene()
     {
         this.EnsureNotDisposed();
+        this.CloseClipsAndSealActiveCommandRange();
 
         IDisposable[]? ownedResources = this.DetachPendingImageResources();
 
@@ -1057,6 +966,9 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         finally
         {
             this.batcher.ClearCommandBatch();
+
+            DrawingCanvasState state = this.ResolveState();
+            this.AppendBeginClips(state.ClipState, state.DestinationOffset);
         }
     }
 
@@ -1065,7 +977,12 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     {
         this.EnsureNotDisposed();
         Guard.NotNull(scene, nameof(scene));
+
+        this.CloseClipsAndSealActiveCommandRange();
         this.batcher.AddScene(scene);
+
+        DrawingCanvasState state = this.ResolveState();
+        this.AppendBeginClips(state.ClipState, state.DestinationOffset);
     }
 
     /// <inheritdoc />
@@ -1083,8 +1000,17 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         // Pixel copy transfers already-rasterized frame contents. Materialize both timelines at
         // this ordering boundary so the backend copies pixels instead of replaying commands.
+        typedSource.CloseClipsAndSealActiveCommandRange();
         typedSource.RenderRecordedTimeline();
+
+        DrawingCanvasState sourceState = typedSource.ResolveState();
+        typedSource.AppendBeginClips(sourceState.ClipState, sourceState.DestinationOffset);
+
+        this.CloseClipsAndSealActiveCommandRange();
         this.RenderRecordedTimeline();
+
+        DrawingCanvasState targetState = this.ResolveState();
+        this.AppendBeginClips(targetState.ClipState, targetState.DestinationOffset);
 
         this.backend.CopyPixels(
             this.configuration,
@@ -1108,7 +1034,6 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
         DrawingOptions commandOptions = effectiveOptions;
-        IReadOnlyList<IPath> commandClipPaths = state.ClipPaths;
 
         if (sourceRect.Width <= 0 ||
             sourceRect.Height <= 0 ||
@@ -1215,8 +1140,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             this.PrepareCompositionCore(
                 destinationPath,
                 brush,
-                commandOptions,
-                commandClipPaths);
+                commandOptions);
         }
         finally
         {
@@ -1234,13 +1158,11 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// <param name="path">Path to fill.</param>
     /// <param name="brush">Brush used for shading.</param>
     /// <param name="options">Effective drawing options.</param>
-    /// <param name="clipPaths">Optional clip paths to apply during preparation.</param>
     /// <param name="pen">Optional pen for stroke commands.</param>
     private void PrepareCompositionCore(
         IPath path,
         Brush brush,
         DrawingOptions options,
-        IReadOnlyList<IPath>? clipPaths = null,
         Pen? pen = null)
     {
         brush = this.NormalizeBrush(brush);
@@ -1278,6 +1200,10 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         DrawingCanvasState state = this.ResolveState();
 
+        // The ordered begin/end-clip stream is the clip source of truth; anchor it at this
+        // state's destination offset before recording the draw.
+        this.batcher.EnsureClipAnchors(state.DestinationOffset);
+
         // Commands carry their absolute target bounds and destination origin explicitly.
         // Bounded layers can clip the target while preserving the active canvas coordinate origin.
         if (pen is null)
@@ -1290,8 +1216,6 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                     in rasterizerOptions,
                     state.TargetBounds,
                     state.DestinationOffset,
-                    clipPaths,
-                    state.ClipIntersectionRule,
                     state.Layer));
             return;
         }
@@ -1305,8 +1229,6 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 state.TargetBounds,
                 state.DestinationOffset,
                 pen,
-                clipPaths,
-                state.ClipIntersectionRule,
                 state.Layer is not null,
                 state.Layer));
     }
@@ -1339,6 +1261,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             graphicsOptions.AntialiasThreshold);
 
         DrawingCanvasState state = this.ResolveState();
+        this.batcher.EnsureClipAnchors(state.DestinationOffset);
         this.batcher.AddStrokeLineSegment(
             new StrokeLineSegmentCommand(
                 start,
@@ -1380,6 +1303,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             graphicsOptions.AntialiasThreshold);
 
         DrawingCanvasState state = this.ResolveState();
+        this.batcher.EnsureClipAnchors(state.DestinationOffset);
         this.batcher.AddStrokePolyline(
             new StrokePolylineCommand(
                 points,
@@ -1429,8 +1353,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         this.PrepareCompositionCore(
             closed,
             brush,
-            state.Options,
-            state.ClipPaths);
+            state.Options);
     }
 
     /// <summary>
@@ -1438,17 +1361,19 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// </summary>
     /// <param name="operations">Glyph operations produced by the text renderer.</param>
     /// <returns>The original operations when they cannot be combined; otherwise the combined operations.</returns>
-    private static List<DrawingOperation> BatchGlyphRunOperations(List<DrawingOperation> operations)
+    private List<DrawingOperation> BatchGlyphRunOperations(List<DrawingOperation> operations)
     {
         if (operations.Count < 2)
         {
             return operations;
         }
 
-        List<IPath>? fillPaths = null;
-        List<IPath>? drawPaths = null;
+        DrawingTextCache.RunPathCacheEntry[]? fillEntries = null;
+        DrawingTextCache.RunPathCacheEntry[]? drawEntries = null;
         DrawingOperation fillOperation = default;
         DrawingOperation drawOperation = default;
+        int fillCount = 0;
+        int drawCount = 0;
 
         for (int i = 0; i < operations.Count; i++)
         {
@@ -1456,10 +1381,10 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             switch (operation.Kind)
             {
                 case DrawingOperationKind.Fill:
-                    if (fillPaths is null)
+                    if (fillEntries is null)
                     {
                         fillOperation = operation;
-                        fillPaths = new List<IPath>(operations.Count);
+                        fillEntries = new DrawingTextCache.RunPathCacheEntry[operations.Count];
                     }
                     else if (!CanBatchGlyphRunOperation(fillOperation, operation))
                     {
@@ -1468,14 +1393,14 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                         return operations;
                     }
 
-                    fillPaths.Add(GetPositionedGlyphPath(operation));
+                    fillEntries[fillCount++] = new DrawingTextCache.RunPathCacheEntry(operation.Path, operation.RenderLocation, operation.GlyphKey, operation.HasGlyphKey);
                     break;
 
                 case DrawingOperationKind.Draw:
-                    if (drawPaths is null)
+                    if (drawEntries is null)
                     {
                         drawOperation = operation;
-                        drawPaths = new List<IPath>(operations.Count);
+                        drawEntries = new DrawingTextCache.RunPathCacheEntry[operations.Count];
                     }
                     else if (!CanBatchGlyphRunOperation(drawOperation, operation))
                     {
@@ -1484,24 +1409,24 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                         return operations;
                     }
 
-                    drawPaths.Add(GetPositionedGlyphPath(operation));
+                    drawEntries[drawCount++] = new DrawingTextCache.RunPathCacheEntry(operation.Path, operation.RenderLocation, operation.GlyphKey, operation.HasGlyphKey);
                     break;
             }
         }
 
-        int capacity = (fillPaths is null ? 0 : 1) + (drawPaths is null ? 0 : 1);
+        int capacity = (fillEntries is null ? 0 : 1) + (drawEntries is null ? 0 : 1);
         List<DrawingOperation> batched = new(capacity);
 
-        if (fillPaths is not null)
+        if (fillEntries is not null)
         {
-            fillOperation.Path = fillPaths.Count == 1 ? fillPaths[0] : new ComplexPolygon(fillPaths);
+            fillOperation.Path = this.GetPositionedGlyphRunPath(fillEntries, fillCount);
             fillOperation.RenderLocation = default;
             batched.Add(fillOperation);
         }
 
-        if (drawPaths is not null)
+        if (drawEntries is not null)
         {
-            drawOperation.Path = drawPaths.Count == 1 ? drawPaths[0] : new ComplexPolygon(drawPaths);
+            drawOperation.Path = this.GetPositionedGlyphRunPath(drawEntries, drawCount);
             drawOperation.RenderLocation = default;
             batched.Add(drawOperation);
         }
@@ -1525,16 +1450,50 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             && left.PixelColorBlendingMode == right.PixelColorBlendingMode;
 
     /// <summary>
+    /// Gets a stable positioned path for a uniform glyph-run operation group.
+    /// </summary>
+    /// <param name="entries">The positioned glyph path entries.</param>
+    /// <param name="count">The number of entries to include in the path.</param>
+    /// <returns>The positioned glyph-run path.</returns>
+    private IPath GetPositionedGlyphRunPath(DrawingTextCache.RunPathCacheEntry[] entries, int count)
+    {
+        DrawingTextCache.RunPathCacheKey key = new(entries, count);
+        if (this.textCache.TryGetRunPath(key, out IPath? path))
+        {
+            return path;
+        }
+
+        IPath positionedPath;
+        if (count == 1)
+        {
+            positionedPath = GetPositionedGlyphPath(entries[0]);
+        }
+        else
+        {
+            List<IPath> paths = new(count);
+            for (int i = 0; i < count; i++)
+            {
+                paths.Add(GetPositionedGlyphPath(entries[i]));
+            }
+
+            positionedPath = new ComplexPolygon(paths);
+        }
+
+        this.textCache.AddRunPath(key, positionedPath);
+        return positionedPath;
+    }
+
+    /// <summary>
     /// Gets a glyph path in canvas-local coordinates.
     /// </summary>
-    /// <param name="operation">The glyph operation.</param>
+    /// <param name="entry">The positioned glyph path entry.</param>
     /// <returns>The positioned path.</returns>
-    private static IPath GetPositionedGlyphPath(DrawingOperation operation)
+    private static IPath GetPositionedGlyphPath(DrawingTextCache.RunPathCacheEntry entry)
     {
-        Point renderLocation = operation.RenderLocation;
+        Point renderLocation = entry.RenderLocation;
         return renderLocation.X == 0 && renderLocation.Y == 0
-            ? operation.Path
-            : operation.Path.Translate(renderLocation.X, renderLocation.Y);
+            ? entry.Path
+            : entry.Path.Translate(renderLocation.X, renderLocation.Y);
     }
 
     /// <summary>
@@ -1542,13 +1501,11 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// </summary>
     /// <param name="operations">Text drawing operations produced by glyph layout/rendering.</param>
     /// <param name="drawingOptions">Drawing options applied to each operation.</param>
-    /// <param name="clipPaths">Clip paths resolved from effective canvas state.</param>
-    /// <param name="clipIntersectionRule">The fill rule used to interpret the clip paths.</param>
+    /// <param name="clipState">The normalized clip state resolved from effective canvas state.</param>
     private void DrawTextOperations(
         List<DrawingOperation> operations,
         DrawingOptions drawingOptions,
-        IReadOnlyList<IPath> clipPaths,
-        IntersectionRule clipIntersectionRule)
+        DrawingClipState clipState)
     {
         // Build composition commands and enforce render-pass ordering while preserving
         // original emission order inside each pass. This preserves overlapping color-font
@@ -1557,7 +1514,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         for (int i = 0; i < operations.Count; i++)
         {
             DrawingOperation operation = operations[i];
-            entries.Add((operation.RenderPass, i, this.CreateTextCompositionCommand(operation, drawingOptions, clipPaths, clipIntersectionRule)));
+            entries.Add((operation.RenderPass, i, this.CreateTextCompositionCommand(operation, drawingOptions, clipState)));
         }
 
         entries.Sort(static (a, b) =>
@@ -1602,20 +1559,18 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// Executes an action with a temporary scoped state, restoring the previous scoped state afterwards.
     /// </summary>
     /// <param name="options">Temporary drawing options.</param>
-    /// <param name="clipPaths">Temporary clip paths.</param>
-    /// <param name="clipIntersectionRule">The fill rule used to interpret the temporary clip paths.</param>
+    /// <param name="clipState">The normalized clip state used by the temporary state.</param>
     /// <param name="action">Action to execute.</param>
     private void ExecuteWithTemporaryState(
         DrawingOptions options,
-        IReadOnlyList<IPath> clipPaths,
-        IntersectionRule clipIntersectionRule,
+        DrawingClipState clipState,
         Action action)
     {
         this.EnsureNotDisposed();
 
         int saveCount = this.savedStates.Count;
         DrawingCanvasState current = this.ResolveState();
-        this.savedStates.Push(new DrawingCanvasState(options, clipPaths, clipIntersectionRule, current.TargetBounds, current.DestinationOffset)
+        this.savedStates.Push(new DrawingCanvasState(options, clipState, current.TargetBounds, current.DestinationOffset)
         {
             IsLayer = current.IsLayer,
             Layer = current.Layer,
@@ -1635,7 +1590,9 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     public override void Flush()
     {
         this.EnsureNotDisposed();
-        this.batcher.SealCommands();
+        this.CloseClipsAndSealActiveCommandRange();
+        DrawingCanvasState state = this.ResolveState();
+        this.AppendBeginClips(state.ClipState, state.DestinationOffset);
     }
 
     /// <inheritdoc />
@@ -1651,8 +1608,10 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             // Dispose should finalize the same drawing state transitions as RestoreTo(1),
             // otherwise active layers can composite with different options than an explicit restore.
             this.RestoreToCore(1);
+
             if (this.ownsBatcher)
             {
+                this.AppendEndClips(this.ResolveState().ClipState.Count);
                 this.RenderRecordedTimeline();
             }
         }
@@ -1745,11 +1704,54 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         while (this.savedStates.Count > saveCount)
         {
             DrawingCanvasState popped = this.savedStates.Pop();
+            DrawingCanvasState current = this.ResolveState();
+            this.AppendEndClips(popped.ClipState.Count - current.ClipState.Count);
+
             if (popped.IsLayer)
             {
                 // Restore and Dispose unwind layers through the same command stream path.
                 this.batcher.AddComposition(CompositionCommand.CreateEndLayer(popped.TargetBounds, popped.Layer!));
             }
+        }
+    }
+
+    /// <summary>
+    /// Seals the current command range with the active clip stack balanced inside that range.
+    /// </summary>
+    private void CloseClipsAndSealActiveCommandRange()
+    {
+        DrawingCanvasState state = this.ResolveState();
+
+        // Backend scenes are created per sealed command range. A Vello-style clip stream cannot
+        // span those scene boundaries, so the canvas closes the active suffix before sealing and
+        // the caller reopens it for later commands.
+        this.AppendEndClips(state.ClipState.Count);
+        this.batcher.SealCommands();
+    }
+
+    /// <summary>
+    /// Appends begin-clip commands for the supplied clip state.
+    /// </summary>
+    /// <param name="clipState">The clip state to open.</param>
+    /// <param name="destinationOffset">The destination offset associated with the clip state.</param>
+    private void AppendBeginClips(DrawingClipState clipState, Point destinationOffset)
+    {
+        for (int i = 0; i < clipState.Count; i++)
+        {
+            DrawingClipDescriptor descriptor = clipState.GetDescriptor(i);
+            this.batcher.AddComposition(CompositionCommand.CreateBeginClip(descriptor, destinationOffset));
+        }
+    }
+
+    /// <summary>
+    /// Appends end-clip commands for a previously opened clip-state suffix.
+    /// </summary>
+    /// <param name="count">The number of clip scopes to close.</param>
+    private void AppendEndClips(int count)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            this.batcher.AddComposition(CompositionCommand.CreateEndClip());
         }
     }
 
@@ -1783,14 +1785,12 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// </summary>
     /// <param name="operation">The source drawing operation.</param>
     /// <param name="drawingOptions">Drawing options applied to the operation.</param>
-    /// <param name="clipPaths">Optional clip paths to apply during preparation.</param>
-    /// <param name="clipIntersectionRule">The fill rule used to interpret the clip paths.</param>
+    /// <param name="clipState">Optional normalized clip state to apply during preparation.</param>
     /// <returns>A composition scene command ready for batching.</returns>
     private CompositionSceneCommand CreateTextCompositionCommand(
         DrawingOperation operation,
         DrawingOptions drawingOptions,
-        IReadOnlyList<IPath>? clipPaths = null,
-        IntersectionRule clipIntersectionRule = IntersectionRule.NonZero)
+        DrawingClipState? clipState = null)
     {
         Brush compositeBrush = operation.Kind == DrawingOperationKind.Fill
             ? operation.Brush!
@@ -1859,21 +1859,9 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             ? drawingOptions
             : new DrawingOptions(graphicsOptions, shapeOptions, Matrix4x4.Identity);
 
-        IReadOnlyList<IPath>? operationClipPaths = clipPaths;
-        if (clipPaths != null && clipPaths.Count > 0 && (operation.RenderLocation.X != 0 || operation.RenderLocation.Y != 0))
-        {
-            IPath[] translatedClipPaths = new IPath[clipPaths.Count];
-
-            // Text glyph paths are queued in glyph-local coordinates and placed with RenderLocation,
-            // so canvas-space clip paths must be moved into that same local space before clipping.
-            for (int i = 0; i < clipPaths.Count; i++)
-            {
-                translatedClipPaths[i] = clipPaths[i].Translate(-operation.RenderLocation);
-            }
-
-            operationClipPaths = translatedClipPaths;
-        }
-
+        // Clipping is resolved from the ordered begin/end-clip stream, which the canvas anchors
+        // at the state's destination offset. Glyph render locations only move the glyph geometry;
+        // they never re-anchor the clip stack, so no per-operation clip translation is required.
         if (pen is null)
         {
             return new PathCompositionSceneCommand(
@@ -1884,8 +1872,6 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                     in rasterizerOptions,
                     state.TargetBounds,
                     destinationOffset,
-                    operationClipPaths,
-                    clipIntersectionRule,
                     state.Layer));
         }
 
@@ -1898,8 +1884,6 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 state.TargetBounds,
                 destinationOffset,
                 pen,
-                operationClipPaths,
-                clipIntersectionRule,
                 state.Layer is not null,
                 state.Layer));
     }
@@ -2092,254 +2076,30 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     }
 
     /// <summary>
-    /// Transforms clip paths into the same coordinate space as an eagerly-transformed draw-image command.
+    /// Creates a normalized clip state in the same coordinate space as recorded commands.
     /// </summary>
-    /// <param name="clipPaths">Clip paths from the current canvas state.</param>
-    /// <param name="transform">Canvas transform already applied to the image content.</param>
-    /// <returns>The transformed clip paths.</returns>
-    private static IPath[] TransformClipPaths(IPath[] clipPaths, Matrix4x4 transform)
+    /// <param name="clipPaths">Clip paths from the active canvas state.</param>
+    /// <param name="transform">Canvas transform to apply to the clip state.</param>
+    /// <param name="operation">The operation used to combine the paths with the existing clip.</param>
+    /// <param name="edgeMode">The clip edge mode.</param>
+    /// <param name="antialiasThreshold">The coverage threshold used for hard clip edges.</param>
+    /// <returns>The transformed clip state.</returns>
+    private static DrawingClipState CreateClipState(
+        IPath[] clipPaths,
+        Matrix4x4 transform,
+        ClipOperation operation,
+        DrawingClipEdgeMode edgeMode,
+        float antialiasThreshold)
     {
-        if (clipPaths.Length == 0 || transform.IsIdentity)
-        {
-            return clipPaths;
-        }
+        DrawingClipState clipState = DrawingClipState.FromPaths(
+            clipPaths,
+            operation,
+            edgeMode,
+            antialiasThreshold);
 
-        IPath[] transformed = new IPath[clipPaths.Length];
-        for (int i = 0; i < transformed.Length; i++)
-        {
-            transformed[i] = clipPaths[i].Transform(transform);
-        }
-
-        return transformed;
-    }
-
-    /// <summary>
-    /// Intersects accumulated region clips without lowering them through polygon clipping.
-    /// </summary>
-    /// <param name="existingPaths">The existing clip paths.</param>
-    /// <param name="incoming">The incoming clip path.</param>
-    /// <param name="clip">The intersected clip path.</param>
-    /// <returns><see langword="true"/> when both clips are region-compatible; otherwise, <see langword="false"/>.</returns>
-    private static bool TryIntersectRegionClips(IReadOnlyList<IPath> existingPaths, IPath incoming, out IPath clip)
-    {
-        clip = EmptyPath.ClosedPath;
-        if (existingPaths.Count != 1)
-        {
-            return false;
-        }
-
-        if (!TryGetRegionClip(existingPaths[0], out Region? existingRegion)
-            || !TryGetRegionClip(incoming, out Region? incomingRegion))
-        {
-            return false;
-        }
-
-        _ = existingRegion.Intersect(incomingRegion);
-        clip = existingRegion.ToPath();
-        return true;
-    }
-
-    /// <summary>
-    /// Gets a pixel-aligned rectangular clip in absolute target coordinates.
-    /// </summary>
-    /// <param name="path">The local clip path to inspect.</param>
-    /// <param name="destinationOffset">The absolute destination offset for the current canvas state.</param>
-    /// <param name="rectangle">The absolute target rectangle represented by <paramref name="path"/>.</param>
-    /// <returns>
-    /// <see langword="true"/> when the clip is a single axis-aligned integer rectangle that can
-    /// be represented by target bounds; otherwise, <see langword="false"/>.
-    /// </returns>
-    private static bool TryGetRectangleClip(IPath path, Point destinationOffset, out Rectangle rectangle)
-    {
-        rectangle = Rectangle.Empty;
-        if (path is IRegionPath regionPath)
-        {
-            IReadOnlyList<Rectangle> rectangles = regionPath.Rectangles;
-            if (rectangles.Count != 1)
-            {
-                return false;
-            }
-
-            Rectangle regionRectangle = rectangles[0];
-            rectangle = new Rectangle(
-                regionRectangle.X + destinationOffset.X,
-                regionRectangle.Y + destinationOffset.Y,
-                regionRectangle.Width,
-                regionRectangle.Height);
-
-            return true;
-        }
-
-        if (path is not RectanglePolygon rectanglePolygon)
-        {
-            return false;
-        }
-
-        float left = rectanglePolygon.Left;
-        float top = rectanglePolygon.Top;
-        float right = rectanglePolygon.Right;
-        float bottom = rectanglePolygon.Bottom;
-        if (!IsInteger(left) || !IsInteger(top) || !IsInteger(right) || !IsInteger(bottom))
-        {
-            return false;
-        }
-
-        rectangle = Rectangle.FromLTRB(
-            (int)left + destinationOffset.X,
-            (int)top + destinationOffset.Y,
-            (int)right + destinationOffset.X,
-            (int)bottom + destinationOffset.Y);
-
-        return true;
-    }
-
-    private static bool IsInteger(float value) => value == MathF.Truncate(value);
-
-    /// <summary>
-    /// Gets the integer region represented by a region-compatible clip path.
-    /// </summary>
-    /// <param name="path">The clip path.</param>
-    /// <param name="region">The region represented by the path.</param>
-    /// <returns><see langword="true"/> when the path can be treated as a region clip; otherwise, <see langword="false"/>.</returns>
-    private static bool TryGetRegionClip(IPath path, [NotNullWhen(true)] out Region? region)
-    {
-        if (path is IRegionPath regionPath)
-        {
-            // Region.ToPath exports a boundary IPath but keeps exact rect-set metadata while the
-            // path remains in integer region space. Use that metadata here so clipping two region
-            // clips stays a region operation instead of lowering through polygon clipping.
-            region = new Region(regionPath.Rectangles);
-            return true;
-        }
-
-        if (TryGetIntegerRectangle(path, out Rectangle rectangle))
-        {
-            region = new Region(rectangle);
-            return true;
-        }
-
-        region = null;
-        return false;
-    }
-
-    /// <summary>
-    /// Gets an integer axis-aligned rectangle from a path.
-    /// </summary>
-    /// <param name="path">The path to inspect.</param>
-    /// <param name="rectangle">The integer rectangle.</param>
-    /// <returns><see langword="true"/> when the path is one integer axis-aligned rectangle; otherwise, <see langword="false"/>.</returns>
-    private static bool TryGetIntegerRectangle(IPath path, out Rectangle rectangle)
-    {
-        if (path is RectanglePolygon rectanglePolygon)
-        {
-            return TryGetIntegerRectangle(rectanglePolygon.Bounds, out rectangle);
-        }
-
-        if (path is ISimplePath simplePath)
-        {
-            return TryGetIntegerRectangle(simplePath, out rectangle);
-        }
-
-        using IEnumerator<ISimplePath> simplePaths = path.Flatten().GetEnumerator();
-        if (!simplePaths.MoveNext())
-        {
-            rectangle = default;
-            return false;
-        }
-
-        ISimplePath first = simplePaths.Current;
-        if (simplePaths.MoveNext())
-        {
-            rectangle = default;
-            return false;
-        }
-
-        return TryGetIntegerRectangle(first, out rectangle);
-    }
-
-    /// <summary>
-    /// Gets an integer axis-aligned rectangle from a simple path.
-    /// </summary>
-    /// <param name="path">The path to inspect.</param>
-    /// <param name="rectangle">The integer rectangle.</param>
-    /// <returns><see langword="true"/> when the path is one integer axis-aligned rectangle; otherwise, <see langword="false"/>.</returns>
-    private static bool TryGetIntegerRectangle(ISimplePath path, out Rectangle rectangle)
-    {
-        rectangle = default;
-        if (!path.IsClosed)
-        {
-            return false;
-        }
-
-        ReadOnlySpan<PointF> points = path.Points.Span;
-        if (points.Length != 4)
-        {
-            return false;
-        }
-
-        float left = points[0].X;
-        float top = points[0].Y;
-        float right = points[0].X;
-        float bottom = points[0].Y;
-
-        for (int i = 1; i < points.Length; i++)
-        {
-            PointF point = points[i];
-            left = MathF.Min(left, point.X);
-            top = MathF.Min(top, point.Y);
-            right = MathF.Max(right, point.X);
-            bottom = MathF.Max(bottom, point.Y);
-        }
-
-        if (!TryGetIntegerRectangle(RectangleF.FromLTRB(left, top, right, bottom), out rectangle))
-        {
-            return false;
-        }
-
-        for (int i = 0; i < points.Length; i++)
-        {
-            PointF point = points[i];
-            if ((point.X != left && point.X != right) || (point.Y != top && point.Y != bottom))
-            {
-                rectangle = default;
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Gets an integer rectangle from rectangle bounds.
-    /// </summary>
-    /// <param name="bounds">The rectangle bounds.</param>
-    /// <param name="rectangle">The integer rectangle.</param>
-    /// <returns><see langword="true"/> when every coordinate is an integer; otherwise, <see langword="false"/>.</returns>
-    private static bool TryGetIntegerRectangle(RectangleF bounds, out Rectangle rectangle)
-    {
-        rectangle = default;
-        if (!TryGetInteger(bounds.Left, out int left)
-            || !TryGetInteger(bounds.Top, out int top)
-            || !TryGetInteger(bounds.Right, out int right)
-            || !TryGetInteger(bounds.Bottom, out int bottom))
-        {
-            return false;
-        }
-
-        rectangle = Rectangle.FromLTRB(left, top, right, bottom);
-        return true;
-    }
-
-    /// <summary>
-    /// Gets an integer from an exact single-precision value.
-    /// </summary>
-    /// <param name="value">The value to inspect.</param>
-    /// <param name="result">The integer value.</param>
-    /// <returns><see langword="true"/> when the value is exactly integral; otherwise, <see langword="false"/>.</returns>
-    private static bool TryGetInteger(float value, out int result)
-    {
-        result = (int)value;
-        return value == result;
+        // Transform after descriptor creation. DrawingClipDescriptor.Transform has the
+        // rectangle/region-specific logic needed to preserve cheap clip primitives.
+        return clipState.Transform(transform);
     }
 
     /// <summary>

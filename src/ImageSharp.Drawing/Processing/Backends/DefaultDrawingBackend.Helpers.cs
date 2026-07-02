@@ -1,6 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Buffers;
+using System.Numerics;
+using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -19,22 +22,38 @@ public sealed partial class DefaultDrawingBackend
     {
         private readonly BrushRenderer<TPixel> renderer;
         private readonly BandTarget<TPixel> target;
+        private readonly DrawingClipState clipState;
+        private readonly PreparedPathClipState? pathClipState;
+        private readonly Point destinationOffset;
         private readonly BrushWorkspace<TPixel> brushWorkspace;
+        private readonly WorkerState<TPixel> workerState;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FillCoverageRowHandler{TPixel}"/> struct.
         /// </summary>
         /// <param name="renderer">The brush renderer that will consume emitted coverage spans.</param>
         /// <param name="target">The active band target being rendered.</param>
+        /// <param name="clipState">The exact clip state captured with the retained scene item.</param>
+        /// <param name="pathClipState">The retained path clip raster data captured with the retained scene item.</param>
+        /// <param name="destinationOffset">The destination offset used to place clip descriptors.</param>
         /// <param name="brushWorkspace">The worker-local brush workspace.</param>
+        /// <param name="workerState">The worker-local execution state.</param>
         public FillCoverageRowHandler(
             BrushRenderer<TPixel> renderer,
             BandTarget<TPixel> target,
-            BrushWorkspace<TPixel> brushWorkspace)
+            DrawingClipState clipState,
+            PreparedPathClipState? pathClipState,
+            Point destinationOffset,
+            BrushWorkspace<TPixel> brushWorkspace,
+            WorkerState<TPixel> workerState)
         {
             this.renderer = renderer;
             this.target = target;
+            this.clipState = clipState;
+            this.pathClipState = pathClipState;
+            this.destinationOffset = destinationOffset;
             this.brushWorkspace = brushWorkspace;
+            this.workerState = workerState;
         }
 
         /// <summary>
@@ -65,7 +84,723 @@ public sealed partial class DefaultDrawingBackend
             Span<TPixel> destinationRow = this.target.Region
                 .DangerousGetRowSpan(localY)
                 .Slice(clipStartX - this.target.AbsoluteLeft, clippedLength);
-            this.renderer.Apply(destinationRow, coverage.Slice(coverageOffset, clippedLength), clipStartX, y, this.brushWorkspace);
+
+            Span<float> clippedCoverage = coverage.Slice(coverageOffset, clippedLength);
+            this.ApplyClipDescriptors(0, y, clipStartX, destinationRow, clippedCoverage);
+        }
+
+        /// <summary>
+        /// Applies the retained clip stack to a coverage span, then forwards surviving coverage to the brush renderer.
+        /// </summary>
+        /// <param name="clipIndex">The current clip descriptor index.</param>
+        /// <param name="y">The absolute destination row.</param>
+        /// <param name="startX">The absolute start column of <paramref name="destination"/> and <paramref name="coverage"/>.</param>
+        /// <param name="destination">The destination pixels covered by the span.</param>
+        /// <param name="coverage">The subject coverage values for <paramref name="destination"/>.</param>
+        private void ApplyClipDescriptors(
+            int clipIndex,
+            int y,
+            int startX,
+            Span<TPixel> destination,
+            Span<float> coverage)
+        {
+            if (coverage.Length == 0)
+            {
+                return;
+            }
+
+            if (clipIndex == this.clipState.Count)
+            {
+                // Clip descriptors are applied recursively by narrowing or scaling the active span.
+                // Once the stack is exhausted, the brush sees only pixels that survived every clip.
+                this.renderer.Apply(destination, coverage, startX, y, this.brushWorkspace);
+                return;
+            }
+
+            DrawingClipDescriptor descriptor = this.clipState.GetDescriptor(clipIndex);
+            switch (descriptor.Kind)
+            {
+                case DrawingClipKind.Rectangle:
+                    this.ApplyRectangleClip(clipIndex, descriptor, y, startX, destination, coverage);
+                    break;
+
+                case DrawingClipKind.IntegerRegion:
+                    this.ApplyIntegerRegionClip(clipIndex, descriptor, y, startX, destination, coverage);
+                    break;
+
+                case DrawingClipKind.Region:
+                    this.ApplyRegionClip(clipIndex, descriptor, y, startX, destination, coverage);
+                    break;
+
+                default:
+                    this.ApplyPathClip(clipIndex, descriptor, y, startX, destination, coverage);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Applies one rectangle clip descriptor to a coverage span.
+        /// </summary>
+        /// <param name="clipIndex">The current clip descriptor index.</param>
+        /// <param name="descriptor">The rectangle clip descriptor.</param>
+        /// <param name="y">The absolute destination row.</param>
+        /// <param name="startX">The absolute start column of <paramref name="destination"/> and <paramref name="coverage"/>.</param>
+        /// <param name="destination">The destination pixels covered by the span.</param>
+        /// <param name="coverage">The subject coverage values for <paramref name="destination"/>.</param>
+        private void ApplyRectangleClip(
+            int clipIndex,
+            DrawingClipDescriptor descriptor,
+            int y,
+            int startX,
+            Span<TPixel> destination,
+            Span<float> coverage)
+        {
+            RectangleF rectangle = descriptor.Rectangle;
+            rectangle.Offset(this.destinationOffset.X, this.destinationOffset.Y);
+
+            if (descriptor.Operation == ClipOperation.Difference)
+            {
+                this.ApplyRectangleDifference(clipIndex, descriptor, rectangle, y, startX, destination, coverage);
+                return;
+            }
+
+            this.ApplyRectangleIntersection(clipIndex, descriptor, rectangle, y, startX, destination, coverage);
+        }
+
+        /// <summary>
+        /// Applies an intersecting rectangle clip to a coverage span.
+        /// </summary>
+        /// <param name="clipIndex">The current clip descriptor index.</param>
+        /// <param name="descriptor">The rectangle clip descriptor.</param>
+        /// <param name="rectangle">The destination-space rectangle.</param>
+        /// <param name="y">The absolute destination row.</param>
+        /// <param name="startX">The absolute start column of <paramref name="destination"/> and <paramref name="coverage"/>.</param>
+        /// <param name="destination">The destination pixels covered by the span.</param>
+        /// <param name="coverage">The subject coverage values for <paramref name="destination"/>.</param>
+        private void ApplyRectangleIntersection(
+            int clipIndex,
+            DrawingClipDescriptor descriptor,
+            RectangleF rectangle,
+            int y,
+            int startX,
+            Span<TPixel> destination,
+            Span<float> coverage)
+        {
+            float yCoverage = GetAxisCoverage(y, rectangle.Top, rectangle.Bottom, descriptor.EdgeMode, descriptor.AntialiasThreshold);
+            if (yCoverage <= 0F)
+            {
+                return;
+            }
+
+            int clipStart = Math.Max(startX, (int)MathF.Floor(rectangle.Left));
+            int clipEnd = Math.Min(startX + coverage.Length, (int)MathF.Ceiling(rectangle.Right));
+            if (clipEnd <= clipStart)
+            {
+                return;
+            }
+
+            this.ApplyRectangleInterior(clipIndex, descriptor, rectangle, yCoverage, y, startX, clipStart, clipEnd, destination, coverage);
+        }
+
+        /// <summary>
+        /// Applies a subtracting rectangle clip to a coverage span.
+        /// </summary>
+        /// <param name="clipIndex">The current clip descriptor index.</param>
+        /// <param name="descriptor">The rectangle clip descriptor.</param>
+        /// <param name="rectangle">The destination-space rectangle.</param>
+        /// <param name="y">The absolute destination row.</param>
+        /// <param name="startX">The absolute start column of <paramref name="destination"/> and <paramref name="coverage"/>.</param>
+        /// <param name="destination">The destination pixels covered by the span.</param>
+        /// <param name="coverage">The subject coverage values for <paramref name="destination"/>.</param>
+        private void ApplyRectangleDifference(
+            int clipIndex,
+            DrawingClipDescriptor descriptor,
+            RectangleF rectangle,
+            int y,
+            int startX,
+            Span<TPixel> destination,
+            Span<float> coverage)
+        {
+            float yCoverage = GetAxisCoverage(y, rectangle.Top, rectangle.Bottom, descriptor.EdgeMode, descriptor.AntialiasThreshold);
+            if (yCoverage <= 0F)
+            {
+                this.ApplyClipDescriptors(clipIndex + 1, y, startX, destination, coverage);
+                return;
+            }
+
+            int spanEnd = startX + coverage.Length;
+            int clipStart = Math.Max(startX, (int)MathF.Floor(rectangle.Left));
+            int clipEnd = Math.Min(spanEnd, (int)MathF.Ceiling(rectangle.Right));
+            if (clipEnd <= clipStart)
+            {
+                this.ApplyClipDescriptors(clipIndex + 1, y, startX, destination, coverage);
+                return;
+            }
+
+            // Difference clips preserve the span outside the rectangle and invert only the
+            // overlapping interior, so the outside ranges can advance to the next clip unchanged.
+            this.ApplyClipDescriptors(clipIndex + 1, y, startX, destination[..(clipStart - startX)], coverage[..(clipStart - startX)]);
+            this.ApplyRectangleDifferenceInterior(clipIndex, descriptor, rectangle, yCoverage, y, startX, clipStart, clipEnd, destination, coverage);
+            this.ApplyClipDescriptors(clipIndex + 1, y, clipEnd, destination[(clipEnd - startX)..], coverage[(clipEnd - startX)..]);
+        }
+
+        /// <summary>
+        /// Applies the interior of an intersecting rectangle clip to a coverage span.
+        /// </summary>
+        /// <param name="clipIndex">The current clip descriptor index.</param>
+        /// <param name="descriptor">The rectangle clip descriptor.</param>
+        /// <param name="rectangle">The destination-space rectangle.</param>
+        /// <param name="yCoverage">The vertical coverage contribution for the current row.</param>
+        /// <param name="y">The absolute destination row.</param>
+        /// <param name="spanStart">The absolute start column of <paramref name="destination"/> and <paramref name="coverage"/>.</param>
+        /// <param name="clipStart">The first absolute column overlapped by the rectangle.</param>
+        /// <param name="clipEnd">The exclusive absolute column where rectangle overlap ends.</param>
+        /// <param name="destination">The destination pixels covered by the span.</param>
+        /// <param name="coverage">The subject coverage values for <paramref name="destination"/>.</param>
+        private void ApplyRectangleInterior(
+            int clipIndex,
+            DrawingClipDescriptor descriptor,
+            RectangleF rectangle,
+            float yCoverage,
+            int y,
+            int spanStart,
+            int clipStart,
+            int clipEnd,
+            Span<TPixel> destination,
+            Span<float> coverage)
+        {
+            int x = clipStart;
+            while (x < clipEnd)
+            {
+                float xCoverage = GetAxisCoverage(x, rectangle.Left, rectangle.Right, descriptor.EdgeMode, descriptor.AntialiasThreshold);
+                int runStart = x++;
+                float multiplier = xCoverage * yCoverage;
+
+                // Rectangle edge coverage is constant across interior pixels and only changes
+                // at the left/right edge pixels, so collapse adjacent equal-coverage columns.
+                while (x < clipEnd && GetAxisCoverage(x, rectangle.Left, rectangle.Right, descriptor.EdgeMode, descriptor.AntialiasThreshold) == xCoverage)
+                {
+                    x++;
+                }
+
+                this.ApplyCoverageRun(clipIndex + 1, y, runStart, x, spanStart, multiplier, destination, coverage);
+            }
+        }
+
+        /// <summary>
+        /// Applies the interior of a subtracting rectangle clip to a coverage span.
+        /// </summary>
+        /// <param name="clipIndex">The current clip descriptor index.</param>
+        /// <param name="descriptor">The rectangle clip descriptor.</param>
+        /// <param name="rectangle">The destination-space rectangle.</param>
+        /// <param name="yCoverage">The vertical coverage contribution for the current row.</param>
+        /// <param name="y">The absolute destination row.</param>
+        /// <param name="spanStart">The absolute start column of <paramref name="destination"/> and <paramref name="coverage"/>.</param>
+        /// <param name="clipStart">The first absolute column overlapped by the rectangle.</param>
+        /// <param name="clipEnd">The exclusive absolute column where rectangle overlap ends.</param>
+        /// <param name="destination">The destination pixels covered by the span.</param>
+        /// <param name="coverage">The subject coverage values for <paramref name="destination"/>.</param>
+        private void ApplyRectangleDifferenceInterior(
+            int clipIndex,
+            DrawingClipDescriptor descriptor,
+            RectangleF rectangle,
+            float yCoverage,
+            int y,
+            int spanStart,
+            int clipStart,
+            int clipEnd,
+            Span<TPixel> destination,
+            Span<float> coverage)
+        {
+            int x = clipStart;
+            while (x < clipEnd)
+            {
+                float xCoverage = GetAxisCoverage(x, rectangle.Left, rectangle.Right, descriptor.EdgeMode, descriptor.AntialiasThreshold);
+                int runStart = x++;
+                float multiplier = 1F - (xCoverage * yCoverage);
+
+                // Subtraction uses the inverse coverage of the rectangle, but the same run
+                // coalescing applies: edge pixels differ, interior pixels share one value.
+                while (x < clipEnd && GetAxisCoverage(x, rectangle.Left, rectangle.Right, descriptor.EdgeMode, descriptor.AntialiasThreshold) == xCoverage)
+                {
+                    x++;
+                }
+
+                this.ApplyCoverageRun(clipIndex + 1, y, runStart, x, spanStart, multiplier, destination, coverage);
+            }
+        }
+
+        /// <summary>
+        /// Applies an integer-region clip descriptor to a coverage span.
+        /// </summary>
+        /// <param name="clipIndex">The current clip descriptor index.</param>
+        /// <param name="descriptor">The integer-region clip descriptor.</param>
+        /// <param name="y">The absolute destination row.</param>
+        /// <param name="startX">The absolute start column of <paramref name="destination"/> and <paramref name="coverage"/>.</param>
+        /// <param name="destination">The destination pixels covered by the span.</param>
+        /// <param name="coverage">The subject coverage values for <paramref name="destination"/>.</param>
+        private void ApplyIntegerRegionClip(
+            int clipIndex,
+            DrawingClipDescriptor descriptor,
+            int y,
+            int startX,
+            Span<TPixel> destination,
+            Span<float> coverage)
+        {
+            IReadOnlyList<Rectangle> rectangles = descriptor.IntegerRectangles;
+            if (descriptor.Operation == ClipOperation.Difference)
+            {
+                int cursor = startX;
+                int endX = startX + coverage.Length;
+
+                // Integer regions are hard-edged, so difference clips can split the span into
+                // retained gaps without allocating or rasterizing a mask.
+                for (int i = 0; i < rectangles.Count && cursor < endX; i++)
+                {
+                    Rectangle rectangle = rectangles[i];
+                    rectangle.Offset(this.destinationOffset);
+                    if ((uint)(y - rectangle.Top) >= (uint)rectangle.Height || rectangle.Right <= cursor)
+                    {
+                        continue;
+                    }
+
+                    if (rectangle.Left > cursor)
+                    {
+                        int runEnd = Math.Min(rectangle.Left, endX);
+                        this.ApplyIntegerRun(clipIndex + 1, y, cursor, startX, runEnd, destination, coverage);
+                    }
+
+                    cursor = Math.Max(cursor, rectangle.Right);
+                }
+
+                this.ApplyIntegerRun(clipIndex + 1, y, cursor, startX, endX, destination, coverage);
+                return;
+            }
+
+            for (int i = 0; i < rectangles.Count; i++)
+            {
+                Rectangle rectangle = rectangles[i];
+                rectangle.Offset(this.destinationOffset);
+                if ((uint)(y - rectangle.Top) >= (uint)rectangle.Height)
+                {
+                    continue;
+                }
+
+                int runStart = Math.Max(startX, rectangle.Left);
+                int runEnd = Math.Min(startX + coverage.Length, rectangle.Right);
+                this.ApplyIntegerRun(clipIndex + 1, y, runStart, startX, runEnd, destination, coverage);
+            }
+        }
+
+        /// <summary>
+        /// Applies a floating-point region clip descriptor to a coverage span.
+        /// </summary>
+        /// <param name="clipIndex">The current clip descriptor index.</param>
+        /// <param name="descriptor">The region clip descriptor.</param>
+        /// <param name="y">The absolute destination row.</param>
+        /// <param name="startX">The absolute start column of <paramref name="destination"/> and <paramref name="coverage"/>.</param>
+        /// <param name="destination">The destination pixels covered by the span.</param>
+        /// <param name="coverage">The subject coverage values for <paramref name="destination"/>.</param>
+        private void ApplyRegionClip(
+            int clipIndex,
+            DrawingClipDescriptor descriptor,
+            int y,
+            int startX,
+            Span<TPixel> destination,
+            Span<float> coverage)
+        {
+            IReadOnlyList<RectangleF> rectangles = descriptor.Rectangles;
+            if (descriptor.Operation == ClipOperation.Difference)
+            {
+                this.ApplyFloatingRegionDifference(clipIndex, descriptor, rectangles, y, startX, destination, coverage);
+                return;
+            }
+
+            for (int i = 0; i < rectangles.Count; i++)
+            {
+                RectangleF rectangle = rectangles[i];
+                rectangle.Offset(this.destinationOffset.X, this.destinationOffset.Y);
+                this.ApplyRectangleIntersection(clipIndex, descriptor, rectangle, y, startX, destination, coverage);
+            }
+        }
+
+        /// <summary>
+        /// Applies a subtracting floating-point region clip to a coverage span.
+        /// </summary>
+        /// <param name="clipIndex">The current clip descriptor index.</param>
+        /// <param name="descriptor">The region clip descriptor.</param>
+        /// <param name="rectangles">The region rectangles in descriptor order.</param>
+        /// <param name="y">The absolute destination row.</param>
+        /// <param name="startX">The absolute start column of <paramref name="destination"/> and <paramref name="coverage"/>.</param>
+        /// <param name="destination">The destination pixels covered by the span.</param>
+        /// <param name="coverage">The subject coverage values for <paramref name="destination"/>.</param>
+        private void ApplyFloatingRegionDifference(
+            int clipIndex,
+            DrawingClipDescriptor descriptor,
+            IReadOnlyList<RectangleF> rectangles,
+            int y,
+            int startX,
+            Span<TPixel> destination,
+            Span<float> coverage)
+        {
+            int cursor = startX;
+            int endX = startX + coverage.Length;
+
+            // The cursor marks the prefix already emitted to the next clip. This avoids
+            // revisiting or re-emitting spans when a region contributes multiple rectangles.
+            for (int i = 0; i < rectangles.Count && cursor < endX; i++)
+            {
+                RectangleF rectangle = rectangles[i];
+                rectangle.Offset(this.destinationOffset.X, this.destinationOffset.Y);
+
+                float yCoverage = GetAxisCoverage(y, rectangle.Top, rectangle.Bottom, descriptor.EdgeMode, descriptor.AntialiasThreshold);
+                if (yCoverage <= 0F)
+                {
+                    continue;
+                }
+
+                int clipStart = Math.Max(startX, (int)MathF.Floor(rectangle.Left));
+                int clipEnd = Math.Min(endX, (int)MathF.Ceiling(rectangle.Right));
+                if (clipEnd <= cursor)
+                {
+                    continue;
+                }
+
+                if (clipStart > cursor)
+                {
+                    int runEnd = Math.Min(clipStart, endX);
+                    this.ApplyIntegerRun(clipIndex + 1, y, cursor, startX, runEnd, destination, coverage);
+                }
+
+                this.ApplyRectangleDifferenceInterior(clipIndex, descriptor, rectangle, yCoverage, y, startX, Math.Max(cursor, clipStart), clipEnd, destination, coverage);
+                cursor = Math.Max(cursor, clipEnd);
+            }
+
+            this.ApplyIntegerRun(clipIndex + 1, y, cursor, startX, endX, destination, coverage);
+        }
+
+        /// <summary>
+        /// Applies a retained path clip descriptor to a coverage span.
+        /// </summary>
+        /// <param name="clipIndex">The current clip descriptor index.</param>
+        /// <param name="descriptor">The path clip descriptor.</param>
+        /// <param name="y">The absolute destination row.</param>
+        /// <param name="startX">The absolute start column of <paramref name="destination"/> and <paramref name="coverage"/>.</param>
+        /// <param name="destination">The destination pixels covered by the span.</param>
+        /// <param name="coverage">The subject coverage values for <paramref name="destination"/>.</param>
+        private void ApplyPathClip(
+            int clipIndex,
+            DrawingClipDescriptor descriptor,
+            int y,
+            int startX,
+            Span<TPixel> destination,
+            Span<float> coverage)
+        {
+            DefaultRasterizer.RasterizableGeometry? rasterizable = this.pathClipState?.GetRasterizable(clipIndex);
+            if (rasterizable is null)
+            {
+                if (descriptor.Operation == ClipOperation.Difference)
+                {
+                    this.ApplyClipDescriptors(clipIndex + 1, y, startX, destination, coverage);
+                }
+
+                return;
+            }
+
+            int rowBandIndex = y / DefaultRasterizer.DefaultTileHeight;
+            int localRowIndex = rowBandIndex - rasterizable.FirstRowBandIndex;
+            if ((uint)localRowIndex >= (uint)rasterizable.RowBandCount || !rasterizable.HasCoverage(localRowIndex))
+            {
+                if (descriptor.Operation == ClipOperation.Difference)
+                {
+                    this.ApplyClipDescriptors(clipIndex + 1, y, startX, destination, coverage);
+                }
+
+                return;
+            }
+
+            Span<float> clipCoverage = this.workerState.GetOrCreatePathClipCoverage(coverage.Length);
+            clipCoverage = clipCoverage[..coverage.Length];
+            clipCoverage.Fill(descriptor.Operation == ClipOperation.Difference ? 1F : 0F);
+
+            DefaultRasterizer.RasterizableItem item = new(rasterizable, localRowIndex);
+            DefaultRasterizer.RasterizableBandInfo bandInfo = rasterizable.GetBandInfo(localRowIndex);
+            DefaultRasterizer.WorkerScratch scratch = this.workerState.GetOrCreatePathClipScratch(rasterizable.Width);
+            DefaultRasterizer.Context context = scratch.CreateContext(
+                bandInfo.IntersectionRule,
+                bandInfo.RasterizationMode,
+                bandInfo.AntialiasThreshold);
+
+            PathClipCoverageRowHandler<TPixel> rowHandler = new(
+                this.workerState,
+                descriptor.Operation,
+                y,
+                startX,
+                coverage.Length);
+
+            // Path clips use the same retained rasterizer as fills. The clip row is materialized
+            // into worker-local coverage only for the subject span currently being painted, so
+            // rectangle and region clips stay on their cheaper span-slicing paths.
+            DefaultRasterizer.ExecuteRasterizableItem(
+                ref context,
+                in item,
+                in bandInfo,
+                scratch.Scanline,
+                ref rowHandler);
+
+            int spanEnd = startX + coverage.Length;
+            int runStart = startX;
+            float runCoverage = clipCoverage[0];
+            for (int x = startX + 1; x < spanEnd; x++)
+            {
+                float pixelCoverage = clipCoverage[x - startX];
+                if (pixelCoverage == runCoverage)
+                {
+                    continue;
+                }
+
+                // Coalesce equal clip coverage into runs so deeper clips and brush rendering
+                // are invoked per coverage run instead of once per pixel.
+                this.ApplyCoverageRun(clipIndex + 1, y, runStart, x, startX, runCoverage, destination, coverage);
+
+                runStart = x;
+                runCoverage = pixelCoverage;
+            }
+
+            this.ApplyCoverageRun(clipIndex + 1, y, runStart, spanEnd, startX, runCoverage, destination, coverage);
+        }
+
+        /// <summary>
+        /// Advances one hard-edged integer run to the next clip descriptor.
+        /// </summary>
+        /// <param name="clipIndex">The next clip descriptor index.</param>
+        /// <param name="y">The absolute destination row.</param>
+        /// <param name="runStart">The absolute first column in the run.</param>
+        /// <param name="spanStart">The absolute start column of <paramref name="destination"/> and <paramref name="coverage"/>.</param>
+        /// <param name="runEnd">The exclusive absolute end column in the run.</param>
+        /// <param name="destination">The destination pixels covered by the parent span.</param>
+        /// <param name="coverage">The subject coverage values for <paramref name="destination"/>.</param>
+        private void ApplyIntegerRun(
+            int clipIndex,
+            int y,
+            int runStart,
+            int spanStart,
+            int runEnd,
+            Span<TPixel> destination,
+            Span<float> coverage)
+        {
+            if (runEnd <= runStart)
+            {
+                return;
+            }
+
+            int offset = runStart - spanStart;
+            this.ApplyClipDescriptors(clipIndex, y, runStart, destination.Slice(offset, runEnd - runStart), coverage.Slice(offset, runEnd - runStart));
+        }
+
+        /// <summary>
+        /// Applies a coverage multiplier to one run before advancing it to the next clip descriptor.
+        /// </summary>
+        /// <param name="clipIndex">The next clip descriptor index.</param>
+        /// <param name="y">The absolute destination row.</param>
+        /// <param name="runStart">The absolute first column in the run.</param>
+        /// <param name="runEnd">The exclusive absolute end column in the run.</param>
+        /// <param name="spanStart">The absolute start column of <paramref name="destination"/> and <paramref name="coverage"/>.</param>
+        /// <param name="multiplier">The clip coverage multiplier applied to the run.</param>
+        /// <param name="destination">The destination pixels covered by the parent span.</param>
+        /// <param name="coverage">The subject coverage values for <paramref name="destination"/>.</param>
+        private void ApplyCoverageRun(
+            int clipIndex,
+            int y,
+            int runStart,
+            int runEnd,
+            int spanStart,
+            float multiplier,
+            Span<TPixel> destination,
+            Span<float> coverage)
+        {
+            if (multiplier <= 0F)
+            {
+                return;
+            }
+
+            int offset = runStart - spanStart;
+            int length = runEnd - runStart;
+
+            Span<float> runCoverage = coverage.Slice(offset, length);
+            if (multiplier != 1F)
+            {
+                int i = 0;
+                if (Vector.IsHardwareAccelerated)
+                {
+                    int vectorCount = Vector<float>.Count;
+                    int vectorLength = runCoverage.Length - (runCoverage.Length % vectorCount);
+                    Vector<float> multiplierVector = new(multiplier);
+                    Span<Vector<float>> vectors = MemoryMarshal.Cast<float, Vector<float>>(runCoverage[..vectorLength]);
+
+                    // The coverage span is borrowed from the rasterizer. Scale it in place so
+                    // downstream clipping and blending consume the combined coverage without
+                    // allocating a temporary span for every clipped run.
+                    for (int j = 0; j < vectors.Length; j++)
+                    {
+                        vectors[j] *= multiplierVector;
+                    }
+
+                    i = vectorLength;
+                }
+
+                for (; i < runCoverage.Length; i++)
+                {
+                    runCoverage[i] *= multiplier;
+                }
+            }
+
+            this.ApplyClipDescriptors(clipIndex, y, runStart, destination.Slice(offset, length), runCoverage);
+
+            if (multiplier != 1F)
+            {
+                int i = 0;
+                if (Vector.IsHardwareAccelerated)
+                {
+                    int vectorCount = Vector<float>.Count;
+                    int vectorLength = runCoverage.Length - (runCoverage.Length % vectorCount);
+                    Vector<float> multiplierVector = new(multiplier);
+                    Span<Vector<float>> vectors = MemoryMarshal.Cast<float, Vector<float>>(runCoverage[..vectorLength]);
+
+                    // Restore the borrowed coverage before returning; sibling runs and outer
+                    // clip descriptors still observe the original rasterizer coverage buffer.
+                    for (int j = 0; j < vectors.Length; j++)
+                    {
+                        vectors[j] /= multiplierVector;
+                    }
+
+                    i = vectorLength;
+                }
+
+                for (; i < runCoverage.Length; i++)
+                {
+                    runCoverage[i] /= multiplier;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Computes one-dimensional pixel coverage against a clip interval.
+        /// </summary>
+        /// <param name="pixel">The integer pixel coordinate.</param>
+        /// <param name="clipStart">The inclusive clip interval start.</param>
+        /// <param name="clipEnd">The exclusive clip interval end.</param>
+        /// <param name="edgeMode">The edge mode used to quantize coverage.</param>
+        /// <param name="antialiasThreshold">The hard-edge threshold used when <paramref name="edgeMode"/> is hard.</param>
+        /// <returns>The coverage contribution for the pixel.</returns>
+        private static float GetAxisCoverage(
+            int pixel,
+            float clipStart,
+            float clipEnd,
+            DrawingClipEdgeMode edgeMode,
+            float antialiasThreshold)
+        {
+            float coverage = MathF.Min(pixel + 1F, clipEnd) - MathF.Max(pixel, clipStart);
+            coverage = Math.Clamp(coverage, 0F, 1F);
+
+            return edgeMode == DrawingClipEdgeMode.Hard
+                ? coverage > antialiasThreshold ? 1F : 0F
+                : coverage;
+        }
+    }
+
+    /// <summary>
+    /// Writes retained path clip coverage into a worker-local span for one subject row.
+    /// </summary>
+    private readonly struct PathClipCoverageRowHandler<TPixel> : IRasterizerCoverageRowHandler
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        private readonly WorkerState<TPixel> workerState;
+        private readonly ClipOperation operation;
+        private readonly int targetY;
+        private readonly int targetStartX;
+        private readonly int targetLength;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PathClipCoverageRowHandler{TPixel}"/> struct.
+        /// </summary>
+        /// <param name="workerState">The worker-local execution state that owns the clip coverage span.</param>
+        /// <param name="operation">The clip operation represented by the path descriptor.</param>
+        /// <param name="targetY">The subject row being clipped.</param>
+        /// <param name="targetStartX">The subject span start.</param>
+        /// <param name="targetLength">The subject span length.</param>
+        public PathClipCoverageRowHandler(
+            WorkerState<TPixel> workerState,
+            ClipOperation operation,
+            int targetY,
+            int targetStartX,
+            int targetLength)
+        {
+            this.workerState = workerState;
+            this.operation = operation;
+            this.targetY = targetY;
+            this.targetStartX = targetStartX;
+            this.targetLength = targetLength;
+        }
+
+        /// <summary>
+        /// Records clip coverage emitted by the rasterizer for the target subject row.
+        /// </summary>
+        /// <param name="y">The absolute row emitted by the clip rasterizer.</param>
+        /// <param name="startX">The absolute start column emitted by the clip rasterizer.</param>
+        /// <param name="coverage">The emitted clip coverage values.</param>
+        public void Handle(int y, int startX, Span<float> coverage)
+        {
+            if (y != this.targetY)
+            {
+                return;
+            }
+
+            int targetEndX = this.targetStartX + this.targetLength;
+            int overlapStart = Math.Max(startX, this.targetStartX);
+            int overlapEnd = Math.Min(startX + coverage.Length, targetEndX);
+            if (overlapEnd <= overlapStart)
+            {
+                return;
+            }
+
+            Span<float> clipCoverage = this.workerState.PathClipCoverage;
+            int sourceOffset = overlapStart - startX;
+            int targetOffset = overlapStart - this.targetStartX;
+            int length = overlapEnd - overlapStart;
+            Span<float> source = coverage.Slice(sourceOffset, length);
+            Span<float> target = clipCoverage.Slice(targetOffset, length);
+
+            if (this.operation == ClipOperation.Difference)
+            {
+                int i = 0;
+                if (Vector.IsHardwareAccelerated)
+                {
+                    int vectorCount = Vector<float>.Count;
+                    int vectorLength = length - (length % vectorCount);
+                    Vector<float> one = Vector<float>.One;
+                    ReadOnlySpan<Vector<float>> sourceVectors = MemoryMarshal.Cast<float, Vector<float>>(source[..vectorLength]);
+                    Span<Vector<float>> targetVectors = MemoryMarshal.Cast<float, Vector<float>>(target[..vectorLength]);
+
+                    // Difference clips invert the clip coverage into the reusable target span.
+                    // Casting the vector-width prefix avoids per-lane loads and stores when SIMD is available.
+                    for (int j = 0; j < sourceVectors.Length; j++)
+                    {
+                        targetVectors[j] = one - sourceVectors[j];
+                    }
+
+                    i = vectorLength;
+                }
+
+                for (; i < length; i++)
+                {
+                    target[i] = 1F - source[i];
+                }
+
+                return;
+            }
+
+            source.CopyTo(target);
         }
     }
 
@@ -191,6 +926,9 @@ public sealed partial class DefaultDrawingBackend
     {
         private readonly MemoryAllocator allocator;
         private DefaultRasterizer.WorkerScratch? scratch;
+        private DefaultRasterizer.WorkerScratch? pathClipScratch;
+        private IMemoryOwner<float>? pathClipCoverageOwner;
+        private int pathClipCoverageLength;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WorkerState{TPixel}"/> class.
@@ -211,6 +949,18 @@ public sealed partial class DefaultDrawingBackend
         public BrushWorkspace<TPixel> BrushWorkspace { get; }
 
         /// <summary>
+        /// Gets the worker-local path clip coverage span last requested by <see cref="GetOrCreatePathClipCoverage"/>.
+        /// </summary>
+        public Span<float> PathClipCoverage
+        {
+            get
+            {
+                IMemoryOwner<float>? owner = this.pathClipCoverageOwner;
+                return owner is null ? [] : owner.Memory.Span[..this.pathClipCoverageLength];
+            }
+        }
+
+        /// <summary>
         /// Returns a reusable raster scratch instance sized for the requested width.
         /// </summary>
         /// <param name="requiredWidth">The minimum scanline width required by the current row.</param>
@@ -229,11 +979,49 @@ public sealed partial class DefaultDrawingBackend
         }
 
         /// <summary>
+        /// Returns a reusable raster scratch instance reserved for path clip rasterization.
+        /// </summary>
+        /// <param name="requiredWidth">The minimum scanline width required by the current clip row.</param>
+        /// <returns>A scratch instance that can execute the clip row.</returns>
+        public DefaultRasterizer.WorkerScratch GetOrCreatePathClipScratch(int requiredWidth)
+        {
+            DefaultRasterizer.WorkerScratch? current = this.pathClipScratch;
+            if (current is not null && current.CanReuse(requiredWidth))
+            {
+                return current;
+            }
+
+            current?.Dispose();
+            this.pathClipScratch = DefaultRasterizer.CreateWorkerScratch(this.allocator, requiredWidth);
+            return this.pathClipScratch;
+        }
+
+        /// <summary>
+        /// Returns a reusable coverage span used to combine one path clip with one subject span.
+        /// </summary>
+        /// <param name="requiredLength">The minimum coverage length required by the current subject span.</param>
+        /// <returns>A worker-local coverage span.</returns>
+        public Span<float> GetOrCreatePathClipCoverage(int requiredLength)
+        {
+            IMemoryOwner<float>? current = this.pathClipCoverageOwner;
+            if (current is null || current.Memory.Length < requiredLength)
+            {
+                current?.Dispose();
+                this.pathClipCoverageOwner = this.allocator.Allocate<float>(requiredLength);
+            }
+
+            this.pathClipCoverageLength = requiredLength;
+            return this.PathClipCoverage;
+        }
+
+        /// <summary>
         /// Releases the worker-local scratch and brush workspace.
         /// </summary>
         public void Dispose()
         {
             this.scratch?.Dispose();
+            this.pathClipScratch?.Dispose();
+            this.pathClipCoverageOwner?.Dispose();
             this.BrushWorkspace.Dispose();
         }
     }

@@ -46,7 +46,8 @@ public partial class DrawingCanvasTests
             canvas.DrawEllipse(Pens.Solid(Color.Gold, 5F), new PointF(160, 100), new SizeF(196, 116));
 
             IPath clipPath = new EllipsePolygon(new PointF(160, 100), new SizeF(214, 126));
-            _ = canvas.Save(new DrawingOptions { ShapeOptions = new ShapeOptions { BooleanOperation = BooleanOperation.Difference } }, clipPath);
+            _ = canvas.Save(new DrawingOptions());
+            canvas.Clip(ClipOperation.Difference, clipPath);
 
             canvas.Clear(Brushes.Solid(Color.LightYellow.WithAlpha(0.85F)));
             canvas.Clear(Brushes.Solid(Color.MediumPurple.WithAlpha(0.72F)), new Rectangle(40, 24, 108, 72));

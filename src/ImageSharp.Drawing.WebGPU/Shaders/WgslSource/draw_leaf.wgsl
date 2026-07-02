@@ -273,10 +273,11 @@ fn main(
                 default: {}
             }
 
-            // Visible fills carry dirty-region state in the info stream so coarse can read it without
-            // exceeding the eight-storage-buffer limit on common WebGPU devices.
-            if tag_word != DRAWTAG_BEGIN_CLIP {
-                let interest_offset = di + ((tag_word >> 6u) & 0xfu) - 5u;
+            // Visible fills and begin clips carry raster interest in the info stream so coarse can
+            // read it without another storage-buffer binding.
+            let tag_info_size = (tag_word >> 6u) & 0xfu;
+            if tag_info_size >= 5u {
+                let interest_offset = di + tag_info_size - 5u;
                 info[interest_offset] = bitcast<u32>(bbox.coverage_threshold);
                 info[interest_offset + 1u] = bitcast<u32>(bbox.interest.x);
                 info[interest_offset + 2u] = bitcast<u32>(bbox.interest.y);
@@ -286,10 +287,19 @@ fn main(
         }
         if tag_word == DRAWTAG_BEGIN_CLIP || tag_word == DRAWTAG_END_CLIP {
             var path_ix = ~ix;
+            var operation = CLIP_OPERATION_INTERSECTION;
             if tag_word == DRAWTAG_BEGIN_CLIP {
                 path_ix = m.path_ix;
+                // ImageSharp carries ClipOperation through the same begin/end records that
+                // Vello uses for ordinary clip stacks. The high bit is masked out again by
+                // coarse/fine when they need the underlying blend marker.
+                operation = select(
+                    CLIP_OPERATION_INTERSECTION,
+                    CLIP_OPERATION_DIFFERENCE,
+                    (scene[dd] & CLIP_DIFFERENCE_MASK_BIT) != 0u);
             }
-            clip_inp[m.clip_ix] = ClipInp(ix, i32(path_ix));
+
+            clip_inp[m.clip_ix] = ClipInp(ix, i32(path_ix), operation);
         }
         block_start += WG_SIZE;
         // break here on end to save monoid aggregation?

@@ -233,6 +233,10 @@ public sealed class ComplexPolygon : IPath, IInternalPathOwner
         => this.ToLinearGeometry(scale).TryGetPathPointAtDistance(distance, out pathPoint);
 
     /// <inheritdoc/>
+    public bool TryGetPathPointAtDistanceUnbounded(float distance, Vector2 scale, out PathPoint pathPoint)
+        => this.ToLinearGeometry(scale).TryGetPathPointAtDistanceUnbounded(distance, out pathPoint);
+
+    /// <inheritdoc/>
     public bool TryGetSegment(float startDistance, float stopDistance, bool startOnBeginFigure, Vector2 scale, out IPath path)
         => this.ToLinearGeometry(scale).TryGetSegment(startDistance, stopDistance, startOnBeginFigure, out path);
 

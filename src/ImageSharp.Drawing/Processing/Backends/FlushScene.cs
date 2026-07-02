@@ -1,10 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -188,6 +187,13 @@ internal sealed partial class FlushScene : IDisposable
         int partitionCount = ParallelExecutionHelper.GetPartitionCount(maxDegreeOfParallelism, commandCount, targetRowCount);
         PartitionState[] partitions = new PartitionState[partitionCount];
 
+        // The ordered begin/end-clip command stream is the single source of truth for clipping.
+        // A single sequential prescan resolves the clip scopes open at each partition boundary so
+        // partitions can track the stream independently while processing commands in parallel.
+        (DrawingClipDescriptor Descriptor, Point Anchor)[][]? partitionClipSeeds = scene.HasClipControls
+            ? CreatePartitionClipSeeds(scene.Commands, commandCount, partitionCount)
+            : null;
+
         _ = Parallel.For(
             0,
             partitionCount,
@@ -203,6 +209,7 @@ internal sealed partial class FlushScene : IDisposable
                     scene.Commands,
                     partitionCommandStart,
                     partitionCommandEnd,
+                    partitionClipSeeds?[partitionIndex],
                     targetRectangle,
                     firstTargetRowBandIndex,
                     targetRowCount,
@@ -628,9 +635,9 @@ internal sealed partial class FlushScene : IDisposable
 
                 case SceneOperationKind.EndLayer:
                     if (scopedLayers.Count != 0 &&
-                        ReferenceEquals(scopedLayers[scopedLayers.Count - 1].Layer, controlItem.Layer))
+                        ReferenceEquals(scopedLayers[^1].Layer, controlItem.Layer))
                     {
-                        ScopedLayerBuildFrame frame = scopedLayers[scopedLayers.Count - 1];
+                        ScopedLayerBuildFrame frame = scopedLayers[^1];
                         scopedLayers.RemoveAt(scopedLayers.Count - 1);
                         current = frame.Parent;
                         current.AddLayer(new ScopedLayerSceneBuilder(frame.Layer, frame.Bounds, frame.Content));
@@ -667,10 +674,51 @@ internal sealed partial class FlushScene : IDisposable
         return root.FinalizeSegments(out rowCount, out rowItemCount);
     }
 
+    /// <summary>
+    /// Computes, for each partition's command start, the clip scopes opened by earlier partitions,
+    /// outermost first, resolved from the ordered begin/end-clip command stream.
+    /// </summary>
+    private static (DrawingClipDescriptor Descriptor, Point Anchor)[][] CreatePartitionClipSeeds(
+        IReadOnlyList<CompositionSceneCommand> commands,
+        int commandCount,
+        int partitionCount)
+    {
+        (DrawingClipDescriptor Descriptor, Point Anchor)[][] seeds = new (DrawingClipDescriptor, Point)[partitionCount][];
+        List<(DrawingClipDescriptor Descriptor, Point Anchor)> openClips = [];
+        int cursor = 0;
+
+        for (int partitionIndex = 0; partitionIndex < partitionCount; partitionIndex++)
+        {
+            int boundary = (partitionIndex * commandCount) / partitionCount;
+            for (; cursor < boundary; cursor++)
+            {
+                if (commands[cursor] is not PathCompositionSceneCommand pathCommand)
+                {
+                    continue;
+                }
+
+                CompositionCommand composition = pathCommand.Command;
+                if (composition.Kind == CompositionCommandKind.BeginClip)
+                {
+                    openClips.Add((composition.ClipDescriptor, composition.DestinationOffset));
+                }
+                else if (composition.Kind == CompositionCommandKind.EndClip && openClips.Count > 0)
+                {
+                    openClips.RemoveAt(openClips.Count - 1);
+                }
+            }
+
+            seeds[partitionIndex] = openClips.Count == 0 ? [] : [.. openClips];
+        }
+
+        return seeds;
+    }
+
     private static PartitionState ProcessPartition(
         IReadOnlyList<CompositionSceneCommand> commands,
         int commandStart,
         int commandEnd,
+        (DrawingClipDescriptor Descriptor, Point Anchor)[]? clipSeed,
         in Rectangle targetBounds,
         int firstTargetRowBandIndex,
         int targetRowCount,
@@ -688,15 +736,31 @@ internal sealed partial class FlushScene : IDisposable
         int smallEdgeItemCount = 0;
         int currentLayerDepth = 0;
         int maxLayerDepth = 0;
+        ClipStreamTracker clipTracker = ClipStreamTracker.CreateFromSeed(clipSeed);
 
         for (int commandIndex = commandStart; commandIndex < commandEnd; commandIndex++)
         {
             CompositionSceneCommand command = commands[commandIndex];
             if (command is PathCompositionSceneCommand pathCommand)
             {
+                CompositionCommand composition = pathCommand.Command;
+                if (composition.Kind == CompositionCommandKind.BeginClip)
+                {
+                    clipTracker.Push(composition.ClipDescriptor, composition.DestinationOffset);
+                    continue;
+                }
+
+                if (composition.Kind == CompositionCommandKind.EndClip)
+                {
+                    clipTracker.Pop();
+                    continue;
+                }
+
                 ProcessPathCommand(
-                    pathCommand.Command,
+                    composition,
                     commandIndex,
+                    clipTracker.Current,
+                    clipTracker.Anchor,
                     targetBounds,
                     firstTargetRowBandIndex,
                     rowBuilders,
@@ -718,6 +782,8 @@ internal sealed partial class FlushScene : IDisposable
                 ProcessStrokePathCommand(
                     strokePathCommand.Command,
                     commandIndex,
+                    clipTracker.Current,
+                    clipTracker.Anchor,
                     targetRowCount,
                     firstTargetRowBandIndex,
                     rowBuilders,
@@ -733,6 +799,8 @@ internal sealed partial class FlushScene : IDisposable
                 ProcessLineSegmentCommand(
                     lineSegmentCommand.Command,
                     commandIndex,
+                    clipTracker.Current,
+                    clipTracker.Anchor,
                     targetRowCount,
                     firstTargetRowBandIndex,
                     rowBuilders,
@@ -748,6 +816,8 @@ internal sealed partial class FlushScene : IDisposable
                 ProcessPolylineCommand(
                     polylineCommand.Command,
                     commandIndex,
+                    clipTracker.Current,
+                    clipTracker.Anchor,
                     targetRowCount,
                     firstTargetRowBandIndex,
                     rowBuilders,
@@ -774,6 +844,8 @@ internal sealed partial class FlushScene : IDisposable
     private static void ProcessPathCommand(
         in CompositionCommand command,
         int commandIndex,
+        DrawingClipState clipState,
+        Point clipAnchor,
         in Rectangle targetBounds,
         int firstTargetRowBandIndex,
         RowBuilder[] rowBuilders,
@@ -812,6 +884,17 @@ internal sealed partial class FlushScene : IDisposable
                 return;
             }
 
+            if (!PreparedPathClipState.TryCreate(
+                    clipState,
+                    command.TargetBounds,
+                    clipAnchor,
+                    allocator,
+                    out PreparedPathClipState? preparedApplyPathClips))
+            {
+                preparedApply.Rasterizable.Dispose();
+                return;
+            }
+
             Point brushOffset = new(
                 sourceRect.X - (int)MathF.Floor(rawBounds.Left),
                 sourceRect.Y - (int)MathF.Floor(rawBounds.Top));
@@ -824,6 +907,9 @@ internal sealed partial class FlushScene : IDisposable
                     preparedApply.GraphicsOptions,
                     preparedApply.BrushBounds,
                     preparedApply.Rasterizable,
+                    clipState,
+                    preparedApplyPathClips,
+                    clipAnchor,
                     command.OwnerLayer));
             return;
         }
@@ -875,7 +961,26 @@ internal sealed partial class FlushScene : IDisposable
             return;
         }
 
-        fillItems[commandIndex] = new FillSceneItem(preparedFill.Brush, preparedFill.GraphicsOptions, preparedFill.BrushBounds, preparedFill.Rasterizable, command.OwnerLayer);
+        if (!PreparedPathClipState.TryCreate(
+                clipState,
+                command.TargetBounds,
+                clipAnchor,
+                allocator,
+                out PreparedPathClipState? preparedPathClips))
+        {
+            preparedFill.Rasterizable.Dispose();
+            return;
+        }
+
+        fillItems[commandIndex] = new FillSceneItem(
+            preparedFill.Brush,
+            preparedFill.GraphicsOptions,
+            preparedFill.BrushBounds,
+            preparedFill.Rasterizable,
+            clipState,
+            preparedPathClips,
+            clipAnchor,
+            command.OwnerLayer);
         fillItemCount++;
         AccumulateFillItemStats(preparedFill.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
         GetEffectiveRowSlotRange(command.TargetBounds, firstTargetRowBandIndex, rowBuilders.Length, command.IsInsideLayer, out int rowStart, out int rowEnd);
@@ -885,6 +990,8 @@ internal sealed partial class FlushScene : IDisposable
     private static void ProcessStrokePathCommand(
         in StrokePathCommand command,
         int commandIndex,
+        DrawingClipState clipState,
+        Point clipAnchor,
         int targetRowCount,
         int firstTargetRowBandIndex,
         RowBuilder[] rowBuilders,
@@ -901,7 +1008,26 @@ internal sealed partial class FlushScene : IDisposable
             return;
         }
 
-        strokeItems[commandIndex] = new StrokeSceneItem(preparedStroke.Brush, preparedStroke.GraphicsOptions, preparedStroke.BrushBounds, preparedStroke.Rasterizable, command.OwnerLayer);
+        if (!PreparedPathClipState.TryCreate(
+                clipState,
+                command.TargetBounds,
+                clipAnchor,
+                allocator,
+                out PreparedPathClipState? preparedPathClips))
+        {
+            preparedStroke.Rasterizable.Dispose();
+            return;
+        }
+
+        strokeItems[commandIndex] = new StrokeSceneItem(
+            preparedStroke.Brush,
+            preparedStroke.GraphicsOptions,
+            preparedStroke.BrushBounds,
+            preparedStroke.Rasterizable,
+            clipState,
+            preparedPathClips,
+            clipAnchor,
+            command.OwnerLayer);
         strokeItemCount++;
         AccumulateStrokeItemStats(preparedStroke.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
         GetEffectiveRowSlotRange(command.TargetBounds, firstTargetRowBandIndex, targetRowCount, command.IsInsideLayer, out int rowStart, out int rowEnd);
@@ -911,6 +1037,8 @@ internal sealed partial class FlushScene : IDisposable
     private static void ProcessLineSegmentCommand(
         in StrokeLineSegmentCommand command,
         int commandIndex,
+        DrawingClipState clipState,
+        Point clipAnchor,
         int targetRowCount,
         int firstTargetRowBandIndex,
         RowBuilder[] rowBuilders,
@@ -927,7 +1055,26 @@ internal sealed partial class FlushScene : IDisposable
             return;
         }
 
-        strokeItems[commandIndex] = new StrokeSceneItem(preparedStroke.Brush, preparedStroke.GraphicsOptions, preparedStroke.BrushBounds, preparedStroke.Rasterizable, command.OwnerLayer);
+        if (!PreparedPathClipState.TryCreate(
+                clipState,
+                command.TargetBounds,
+                clipAnchor,
+                allocator,
+                out PreparedPathClipState? preparedPathClips))
+        {
+            preparedStroke.Rasterizable.Dispose();
+            return;
+        }
+
+        strokeItems[commandIndex] = new StrokeSceneItem(
+            preparedStroke.Brush,
+            preparedStroke.GraphicsOptions,
+            preparedStroke.BrushBounds,
+            preparedStroke.Rasterizable,
+            clipState,
+            preparedPathClips,
+            clipAnchor,
+            command.OwnerLayer);
         strokeItemCount++;
         AccumulateStrokeItemStats(preparedStroke.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
         GetEffectiveRowSlotRange(command.TargetBounds, firstTargetRowBandIndex, targetRowCount, command.IsInsideLayer, out int rowStart, out int rowEnd);
@@ -937,6 +1084,8 @@ internal sealed partial class FlushScene : IDisposable
     private static void ProcessPolylineCommand(
         in StrokePolylineCommand command,
         int commandIndex,
+        DrawingClipState clipState,
+        Point clipAnchor,
         int targetRowCount,
         int firstTargetRowBandIndex,
         RowBuilder[] rowBuilders,
@@ -953,7 +1102,26 @@ internal sealed partial class FlushScene : IDisposable
             return;
         }
 
-        strokeItems[commandIndex] = new StrokeSceneItem(preparedStroke.Brush, preparedStroke.GraphicsOptions, preparedStroke.BrushBounds, preparedStroke.Rasterizable, command.OwnerLayer);
+        if (!PreparedPathClipState.TryCreate(
+                clipState,
+                command.TargetBounds,
+                clipAnchor,
+                allocator,
+                out PreparedPathClipState? preparedPathClips))
+        {
+            preparedStroke.Rasterizable.Dispose();
+            return;
+        }
+
+        strokeItems[commandIndex] = new StrokeSceneItem(
+            preparedStroke.Brush,
+            preparedStroke.GraphicsOptions,
+            preparedStroke.BrushBounds,
+            preparedStroke.Rasterizable,
+            clipState,
+            preparedPathClips,
+            clipAnchor,
+            command.OwnerLayer);
         strokeItemCount++;
         AccumulateStrokeItemStats(preparedStroke.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
         GetEffectiveRowSlotRange(command.TargetBounds, firstTargetRowBandIndex, targetRowCount, command.IsInsideLayer, out int rowStart, out int rowEnd);
@@ -1501,13 +1669,13 @@ internal sealed partial class FlushScene : IDisposable
                     out int segmentRowCount,
                     out int segmentRowItemCount))
                 {
-                    finalized.Add(segment!);
+                    finalized.Add(segment);
                     rowCount += segmentRowCount;
                     rowItemCount += segmentRowItemCount;
                 }
             }
 
-            return finalized.Count == 0 ? [] : finalized.ToArray();
+            return finalized.Count == 0 ? [] : [.. finalized];
         }
 
         private SceneSegmentBuilder CreateSegment()
@@ -1579,7 +1747,7 @@ internal sealed partial class FlushScene : IDisposable
         /// <returns>True when the segment has retained work.</returns>
         public bool FinalizeSegment(
             int firstTargetRowBandIndex,
-            out SceneSegment? segment,
+            [NotNullWhen(true)] out SceneSegment? segment,
             out int rowCount,
             out int rowItemCount)
         {
@@ -1654,5 +1822,64 @@ internal sealed partial class FlushScene : IDisposable
             SceneSegment[] segments = this.content.FinalizeSegments(out int rowCount, out int rowItemCount);
             return new ScopedLayerSceneItem(this.layer, this.bounds, segments, rowCount, rowItemCount);
         }
+    }
+
+    /// <summary>
+    /// Tracks the active clip stack resolved from the ordered begin/end-clip command stream.
+    /// </summary>
+    /// <remarks>
+    /// Clip descriptors are recorded in canvas-local coordinates; the canvas re-anchors the
+    /// stream at each consuming state's destination offset, so at every draw command all open
+    /// descriptors share one anchor offset.
+    /// </remarks>
+    private sealed class ClipStreamTracker
+    {
+        private readonly Stack<DrawingClipState> previous = new();
+
+        /// <summary>
+        /// Gets the clip state composed from the currently open clip scopes.
+        /// </summary>
+        public DrawingClipState Current { get; private set; } = DrawingClipState.Empty;
+
+        /// <summary>
+        /// Gets the destination offset the open clip scopes are anchored at.
+        /// </summary>
+        public Point Anchor { get; private set; }
+
+        /// <summary>
+        /// Creates a tracker seeded with the clip scopes opened by earlier partitions.
+        /// </summary>
+        /// <param name="seed">The seed clip scopes, outermost first.</param>
+        /// <returns>The seeded tracker.</returns>
+        public static ClipStreamTracker CreateFromSeed((DrawingClipDescriptor Descriptor, Point Anchor)[]? seed)
+        {
+            ClipStreamTracker tracker = new();
+            if (seed is not null)
+            {
+                for (int i = 0; i < seed.Length; i++)
+                {
+                    tracker.Push(seed[i].Descriptor, seed[i].Anchor);
+                }
+            }
+
+            return tracker;
+        }
+
+        /// <summary>
+        /// Opens one clip scope.
+        /// </summary>
+        /// <param name="descriptor">The clip descriptor to open.</param>
+        /// <param name="anchor">The destination offset the descriptor is anchored at.</param>
+        public void Push(DrawingClipDescriptor descriptor, Point anchor)
+        {
+            this.previous.Push(this.Current);
+            this.Current = this.Current.Append(descriptor);
+            this.Anchor = anchor;
+        }
+
+        /// <summary>
+        /// Closes the most recently opened clip scope.
+        /// </summary>
+        public void Pop() => this.Current = this.previous.Count > 0 ? this.previous.Pop() : DrawingClipState.Empty;
     }
 }

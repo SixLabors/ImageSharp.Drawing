@@ -18,7 +18,15 @@ struct ClipInp {
     // this entry is a BeginClip and contains the associated path index. If negative,
     // it is an EndClip and contains the bitwise-not of the EndClip draw object index.
     path_ix: i32,
+    // ImageSharp extension over Vello's clip record. Vello's Clip has only ix/path_ix;
+    // we carry the render clip operation so Difference clips can remain stack records
+    // instead of being rewritten as inverse geometry.
+    operation: u32,
 }
+
+const CLIP_OPERATION_INTERSECTION = 0u;
+const CLIP_OPERATION_DIFFERENCE = 1u;
+const CLIP_DIFFERENCE_MASK_BIT = 0x80000000u;
 
 struct ClipEl {
     parent_ix: u32,

@@ -70,6 +70,23 @@ public interface IPath
     public bool TryGetPathPointAtDistance(float distance, Vector2 scale, out PathPoint pathPoint);
 
     /// <summary>
+    /// Gets path information at the specified distance along the path, extrapolating along the
+    /// boundary tangents when the distance falls before the start or beyond the end of an open path.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="TryGetPathPointAtDistance(float, Vector2, out PathPoint)"/>, out-of-range
+    /// distances resolve to a point on the virtual straight-line continuation of the path's first
+    /// or last segment. Text layout uses this to place aligned glyphs that overflow their layout
+    /// path. The method returns <see langword="false"/> only when the distance is not a finite
+    /// number or the path has no measurable length.
+    /// </remarks>
+    /// <param name="distance">The distance along the path.</param>
+    /// <param name="scale">The X/Y scale at which curves are flattened for distance measurement.</param>
+    /// <param name="pathPoint">When this method returns, contains the path information at <paramref name="distance"/> if the path is measurable; otherwise, the default value.</param>
+    /// <returns><see langword="true"/> if the point could be resolved; otherwise, <see langword="false"/>.</returns>
+    public bool TryGetPathPointAtDistanceUnbounded(float distance, Vector2 scale, out PathPoint pathPoint);
+
+    /// <summary>
     /// Creates a path segment between two distances along the path.
     /// </summary>
     /// <param name="startDistance">The segment start distance.</param>

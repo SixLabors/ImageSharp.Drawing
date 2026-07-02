@@ -332,6 +332,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 Kind = DrawingOperationKind.Fill,
                 Path = fillPath,
                 RenderLocation = renderLocation,
+                GlyphKey = this.currentCacheKey,
+                HasGlyphKey = !this.noCache,
                 IntersectionRule = fillRule,
                 Brush = this.currentBrush,
                 RenderPass = RenderOrderFill,
@@ -596,6 +598,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 Kind = DrawingOperationKind.Fill,
                 Path = glyphPath,
                 RenderLocation = renderLocation,
+                GlyphKey = this.currentCacheKey,
+                HasGlyphKey = !this.noCache,
                 IntersectionRule = fillRule,
                 Brush = this.currentBrush,
                 RenderPass = RenderOrderFill,
@@ -612,6 +616,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 Kind = DrawingOperationKind.Draw,
                 Path = glyphPath,
                 RenderLocation = renderLocation,
+                GlyphKey = this.currentCacheKey,
+                HasGlyphKey = !this.noCache,
                 IntersectionRule = outlineRule,
                 Pen = this.currentPen,
                 RenderPass = RenderOrderOutline,
@@ -661,6 +667,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 Kind = DrawingOperationKind.Fill,
                 Path = glyphPath,
                 RenderLocation = renderLocation,
+                GlyphKey = this.currentCacheKey,
+                HasGlyphKey = !this.noCache,
                 IntersectionRule = fillRule,
                 Brush = brush,
                 RenderPass = RenderOrderFill,
@@ -677,6 +685,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 Kind = DrawingOperationKind.Draw,
                 Path = glyphPath,
                 RenderLocation = renderLocation,
+                GlyphKey = this.currentCacheKey,
+                HasGlyphKey = !this.noCache,
                 IntersectionRule = outlineRule,
                 Pen = pen,
                 RenderPass = RenderOrderOutline,
@@ -761,8 +771,10 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
 
         // Find the point of this intersection along the given path.
         // We want to find the point on the path that is closest to the center-bottom side of the glyph.
+        // Aligned text can overflow the path on either side, so overflowing glyphs extrapolate
+        // along the boundary tangents.
         Vector2 half = new(bounds.Width * .5F, 0);
-        if (!this.path.TryGetPathPointAtDistance(bounds.Left + half.X, out PathPoint pathPoint))
+        if (!this.path.TryGetPathPointAtDistanceUnbounded(bounds.Left + half.X, out PathPoint pathPoint))
         {
             return Matrix4x4.Identity;
         }

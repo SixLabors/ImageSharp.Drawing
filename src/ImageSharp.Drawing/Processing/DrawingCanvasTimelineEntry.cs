@@ -34,13 +34,15 @@ internal readonly struct DrawingCanvasTimelineEntry
         int index,
         int count,
         bool hasLayers,
-        bool hasApply)
+        bool hasApply,
+        bool hasClipControls)
     {
         this.Kind = kind;
         this.Index = index;
         this.Count = count;
         this.HasLayers = hasLayers;
         this.HasApply = hasApply;
+        this.HasClipControls = hasClipControls;
     }
 
     /// <summary>
@@ -69,15 +71,26 @@ internal readonly struct DrawingCanvasTimelineEntry
     public bool HasApply { get; }
 
     /// <summary>
+    /// Gets a value indicating whether the command range contains ordered clip-control commands.
+    /// </summary>
+    public bool HasClipControls { get; }
+
+    /// <summary>
     /// Creates a command-range entry.
     /// </summary>
     /// <param name="startIndex">The first command index.</param>
     /// <param name="count">The command count.</param>
     /// <param name="hasLayers">Indicates whether the command range contains layer boundary commands.</param>
     /// <param name="hasApply">Indicates whether the command range contains apply barriers.</param>
+    /// <param name="hasClipControls">Indicates whether the command range contains ordered clip-control commands.</param>
     /// <returns>The command-range entry.</returns>
-    public static DrawingCanvasTimelineEntry CreateCommandRange(int startIndex, int count, bool hasLayers, bool hasApply)
-        => new(DrawingCanvasTimelineEntryKind.CommandRange, startIndex, count, hasLayers, hasApply);
+    public static DrawingCanvasTimelineEntry CreateCommandRange(
+        int startIndex,
+        int count,
+        bool hasLayers,
+        bool hasApply,
+        bool hasClipControls)
+        => new(DrawingCanvasTimelineEntryKind.CommandRange, startIndex, count, hasLayers, hasApply, hasClipControls);
 
     /// <summary>
     /// Creates an entry for an existing retained scene recorded through <see cref="DrawingCanvas.RenderScene"/>.
@@ -85,5 +98,5 @@ internal readonly struct DrawingCanvasTimelineEntry
     /// <param name="index">The retained-scene reference index.</param>
     /// <returns>The retained-scene entry.</returns>
     public static DrawingCanvasTimelineEntry CreateScene(int index)
-        => new(DrawingCanvasTimelineEntryKind.Scene, index, 0, false, false);
+        => new(DrawingCanvasTimelineEntryKind.Scene, index, 0, false, false, false);
 }

@@ -17,7 +17,6 @@ struct DrawMonoid {
 // Each draw object has a 32-bit draw tag, which is a bit-packed
 // version of the draw monoid.
 // Visible-fill draw tags carry five extra info words: coverage threshold plus raster interest.
-// Clip tags are unchanged: their coverage is always antialiased and supplies constants in coarse.
 const DRAWTAG_NOP = 0u;
 const DRAWTAG_FILL_COLOR = 0x184u;
 const DRAWTAG_FILL_RECOLOR = 0x18cu;

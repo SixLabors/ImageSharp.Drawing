@@ -514,6 +514,9 @@ internal sealed partial class FlushScene
         /// <param name="graphicsOptions">The graphics options used by the apply item.</param>
         /// <param name="brushBounds">The brush bounds used for applicator creation.</param>
         /// <param name="rasterizable">The retained rasterizable geometry.</param>
+        /// <param name="clipState">The exact clip state captured with the command.</param>
+        /// <param name="pathClipState">The retained path clip raster data captured with the command.</param>
+        /// <param name="destinationOffset">The destination offset used to place clip descriptors.</param>
         /// <param name="ownerLayer">The layer that owned this item when it was recorded.</param>
         public ApplySceneItem(
             Action<IImageProcessingContext> operation,
@@ -522,6 +525,9 @@ internal sealed partial class FlushScene
             GraphicsOptions graphicsOptions,
             Rectangle brushBounds,
             DefaultRasterizer.RasterizableGeometry rasterizable,
+            DrawingClipState clipState,
+            PreparedPathClipState? pathClipState,
+            Point destinationOffset,
             DrawingCanvasLayer? ownerLayer)
         {
             this.Operation = operation;
@@ -530,6 +536,9 @@ internal sealed partial class FlushScene
             this.GraphicsOptions = graphicsOptions;
             this.BrushBounds = brushBounds;
             this.Rasterizable = rasterizable;
+            this.ClipState = clipState;
+            this.PathClipState = pathClipState;
+            this.DestinationOffset = destinationOffset;
             this.OwnerLayer = ownerLayer;
         }
 
@@ -564,12 +573,31 @@ internal sealed partial class FlushScene
         public DefaultRasterizer.RasterizableGeometry Rasterizable { get; }
 
         /// <summary>
+        /// Gets the exact clip state captured with the command.
+        /// </summary>
+        public DrawingClipState ClipState { get; }
+
+        /// <summary>
+        /// Gets the retained path clip raster data captured with the command.
+        /// </summary>
+        public PreparedPathClipState? PathClipState { get; }
+
+        /// <summary>
+        /// Gets the destination offset used to place clip descriptors.
+        /// </summary>
+        public Point DestinationOffset { get; }
+
+        /// <summary>
         /// Gets the layer that owned this item when it was recorded.
         /// </summary>
         public DrawingCanvasLayer? OwnerLayer { get; }
 
         /// <inheritdoc />
-        public void Dispose() => this.Rasterizable.Dispose();
+        public void Dispose()
+        {
+            this.Rasterizable.Dispose();
+            this.PathClipState?.Dispose();
+        }
     }
 
     /// <summary>
@@ -586,18 +614,27 @@ internal sealed partial class FlushScene
         /// <param name="graphicsOptions">The graphics options used by the fill item.</param>
         /// <param name="brushBounds">The brush bounds used for applicator creation.</param>
         /// <param name="rasterizable">The retained rasterizable geometry.</param>
+        /// <param name="clipState">The exact clip state captured with the command.</param>
+        /// <param name="pathClipState">The retained path clip raster data captured with the command.</param>
+        /// <param name="destinationOffset">The destination offset used to place clip descriptors.</param>
         /// <param name="ownerLayer">The layer that owned this item when it was recorded.</param>
         public FillSceneItem(
             Brush brush,
             GraphicsOptions graphicsOptions,
             Rectangle brushBounds,
             DefaultRasterizer.RasterizableGeometry rasterizable,
+            DrawingClipState clipState,
+            PreparedPathClipState? pathClipState,
+            Point destinationOffset,
             DrawingCanvasLayer? ownerLayer)
         {
             this.Brush = brush;
             this.GraphicsOptions = graphicsOptions;
             this.BrushBounds = brushBounds;
             this.Rasterizable = rasterizable;
+            this.ClipState = clipState;
+            this.PathClipState = pathClipState;
+            this.DestinationOffset = destinationOffset;
             this.OwnerLayer = ownerLayer;
         }
 
@@ -622,6 +659,21 @@ internal sealed partial class FlushScene
         public DefaultRasterizer.RasterizableGeometry Rasterizable { get; }
 
         /// <summary>
+        /// Gets the exact clip state captured with the command.
+        /// </summary>
+        public DrawingClipState ClipState { get; }
+
+        /// <summary>
+        /// Gets the retained path clip raster data captured with the command.
+        /// </summary>
+        public PreparedPathClipState? PathClipState { get; }
+
+        /// <summary>
+        /// Gets the destination offset used to place clip descriptors.
+        /// </summary>
+        public Point DestinationOffset { get; }
+
+        /// <summary>
         /// Gets the layer that owned this item when it was recorded.
         /// </summary>
         public DrawingCanvasLayer? OwnerLayer { get; }
@@ -652,7 +704,11 @@ internal sealed partial class FlushScene
         }
 
         /// <inheritdoc />
-        public void Dispose() => this.Rasterizable.Dispose();
+        public void Dispose()
+        {
+            this.Rasterizable.Dispose();
+            this.PathClipState?.Dispose();
+        }
     }
 
     /// <summary>
@@ -669,18 +725,27 @@ internal sealed partial class FlushScene
         /// <param name="graphicsOptions">The graphics options for the stroke item.</param>
         /// <param name="brushBounds">The prepared brush bounds.</param>
         /// <param name="rasterizable">The retained stroke rasterizable geometry.</param>
+        /// <param name="clipState">The exact clip state captured with the command.</param>
+        /// <param name="pathClipState">The retained path clip raster data captured with the command.</param>
+        /// <param name="destinationOffset">The destination offset used to place clip descriptors.</param>
         /// <param name="ownerLayer">The layer that owned this item when it was recorded.</param>
         public StrokeSceneItem(
             Brush brush,
             GraphicsOptions graphicsOptions,
             Rectangle brushBounds,
             DefaultRasterizer.StrokeRasterizableGeometry rasterizable,
+            DrawingClipState clipState,
+            PreparedPathClipState? pathClipState,
+            Point destinationOffset,
             DrawingCanvasLayer? ownerLayer)
         {
             this.Brush = brush;
             this.GraphicsOptions = graphicsOptions;
             this.BrushBounds = brushBounds;
             this.Rasterizable = rasterizable;
+            this.ClipState = clipState;
+            this.PathClipState = pathClipState;
+            this.DestinationOffset = destinationOffset;
             this.OwnerLayer = ownerLayer;
         }
 
@@ -705,6 +770,21 @@ internal sealed partial class FlushScene
         public DefaultRasterizer.StrokeRasterizableGeometry Rasterizable { get; }
 
         /// <summary>
+        /// Gets the exact clip state captured with the command.
+        /// </summary>
+        public DrawingClipState ClipState { get; }
+
+        /// <summary>
+        /// Gets the retained path clip raster data captured with the command.
+        /// </summary>
+        public PreparedPathClipState? PathClipState { get; }
+
+        /// <summary>
+        /// Gets the destination offset used to place clip descriptors.
+        /// </summary>
+        public Point DestinationOffset { get; }
+
+        /// <summary>
         /// Gets the layer that owned this item when it was recorded.
         /// </summary>
         public DrawingCanvasLayer? OwnerLayer { get; }
@@ -735,6 +815,10 @@ internal sealed partial class FlushScene
         }
 
         /// <inheritdoc />
-        public void Dispose() => this.Rasterizable.Dispose();
+        public void Dispose()
+        {
+            this.Rasterizable.Dispose();
+            this.PathClipState?.Dispose();
+        }
     }
 }

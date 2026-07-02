@@ -91,6 +91,8 @@ public partial class DrawingCanvasTests
         actual.DebugSave(provider, "actual-rect-clip", appendSourceFileOrDescription: false);
 
         ImageComparer.TolerantPercentage(0.005F).VerifySimilarity(expected, actual);
+        expected.CompareToReferenceOutput(provider, "expected-general-clip", appendSourceFileOrDescription: false);
+        actual.CompareToReferenceOutput(provider, "actual-rect-clip", appendSourceFileOrDescription: false);
     }
 
     [Theory]
@@ -122,6 +124,8 @@ public partial class DrawingCanvasTests
         actual.DebugSave(provider, "actual-multiple-difference-clips", appendSourceFileOrDescription: false);
 
         ImageComparer.Exact.VerifySimilarity(expected, actual);
+        expected.CompareToReferenceOutput(provider, "expected-sequential-difference-clips", appendSourceFileOrDescription: false);
+        actual.CompareToReferenceOutput(provider, "actual-multiple-difference-clips", appendSourceFileOrDescription: false);
     }
 
     /// <summary>

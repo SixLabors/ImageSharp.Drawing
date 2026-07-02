@@ -4,8 +4,8 @@
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Provides options for controlling how vector shapes are interpreted during rasterization,
-/// including the fill-rule intersection mode and boolean clipping operations.
+/// Provides options for controlling how vector shapes are interpreted during rasterization
+/// and explicit boolean geometry operations.
 /// </summary>
 public class ShapeOptions : IDeepCloneable<ShapeOptions>
 {
@@ -23,13 +23,13 @@ public class ShapeOptions : IDeepCloneable<ShapeOptions>
     }
 
     /// <summary>
-    /// Gets or sets the boolean clipping operation used when a clipping path is applied.
-    /// Determines how the clip shape interacts with the target region
-    /// (e.g. <see cref="BooleanOperation.Difference"/> subtracts the clip shape).
+    /// Gets or sets the boolean operation used by explicit path-combination APIs.
+    /// Determines how the operand shape interacts with the target region
+    /// (e.g. <see cref="BooleanOperation.Difference"/> subtracts the operand shape).
     /// <para/>
     /// Defaults to <see cref="BooleanOperation.Intersection"/>, matching the zero value of
     /// <see cref="BooleanOperation"/> and <c>PolygonClipper.BooleanOperation</c> so that a
-    /// clip restricts the region rather than subtracting it.
+    /// explicit path combination restricts the region rather than subtracting it.
     /// </summary>
     public BooleanOperation BooleanOperation { get; set; } = BooleanOperation.Intersection;
 

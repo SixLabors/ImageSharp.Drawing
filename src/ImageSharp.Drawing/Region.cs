@@ -3,6 +3,7 @@
 
 using System.Collections.ObjectModel;
 using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing;
 
@@ -1019,6 +1020,10 @@ public sealed class Region
             => this.path.TryGetPathPointAtDistance(distance, scale, out pathPoint);
 
         /// <inheritdoc />
+        public bool TryGetPathPointAtDistanceUnbounded(float distance, Vector2 scale, out PathPoint pathPoint)
+            => this.path.TryGetPathPointAtDistanceUnbounded(distance, scale, out pathPoint);
+
+        /// <inheritdoc />
         public bool TryGetSegment(float startDistance, float stopDistance, bool startOnBeginFigure, Vector2 scale, out IPath segment)
             => this.path.TryGetSegment(startDistance, stopDistance, startOnBeginFigure, scale, out segment);
 
@@ -1032,11 +1037,56 @@ public sealed class Region
         public float ComputeArea(Vector2 scale) => this.path.ComputeArea(scale);
 
         /// <inheritdoc />
-        public IPath Transform(Matrix4x4 matrix) =>
+        public IPath Transform(Matrix4x4 matrix)
+        {
+            if (matrix.IsIdentity)
+            {
+                return this;
+            }
 
-            // The rectangle metadata is valid only while the exported path remains in the
-            // same integer coordinate space as the region. A real transform turns it into
-            // ordinary path geometry, so the marker is intentionally dropped.
-            matrix.IsIdentity ? this : this.path.Transform(matrix);
+            if (MatrixUtilities.PreservesAxisAlignedRectangles(matrix))
+            {
+                // RegionPath metadata is an integer rect-set. It can survive translation,
+                // scale, reflection, and axis swaps only while every transformed edge is
+                // still integer; fractional edges need the exact path geometry fallback.
+                Rectangle[] transformedRectangles = new Rectangle[this.Rectangles.Count];
+                for (int i = 0; i < transformedRectangles.Length; i++)
+                {
+                    Rectangle rectangle = this.Rectangles[i];
+
+                    // Transform every corner so negative scales and axis swaps cannot leave
+                    // left/right or top/bottom inverted.
+                    Vector2 p0 = Vector2.Transform(new Vector2(rectangle.Left, rectangle.Top), matrix);
+                    Vector2 p1 = Vector2.Transform(new Vector2(rectangle.Right, rectangle.Top), matrix);
+                    Vector2 p2 = Vector2.Transform(new Vector2(rectangle.Right, rectangle.Bottom), matrix);
+                    Vector2 p3 = Vector2.Transform(new Vector2(rectangle.Left, rectangle.Bottom), matrix);
+
+                    float left = MathF.Min(MathF.Min(p0.X, p1.X), MathF.Min(p2.X, p3.X));
+                    float top = MathF.Min(MathF.Min(p0.Y, p1.Y), MathF.Min(p2.Y, p3.Y));
+                    float right = MathF.Max(MathF.Max(p0.X, p1.X), MathF.Max(p2.X, p3.X));
+                    float bottom = MathF.Max(MathF.Max(p0.Y, p1.Y), MathF.Max(p2.Y, p3.Y));
+
+                    int integerLeft = (int)left;
+                    int integerTop = (int)top;
+                    int integerRight = (int)right;
+                    int integerBottom = (int)bottom;
+                    if (left != integerLeft || top != integerTop || right != integerRight || bottom != integerBottom)
+                    {
+                        // Keep exact clipping semantics rather than widening a fractional
+                        // transformed region into conservative integer rectangles.
+                        return this.path.Transform(matrix);
+                    }
+
+                    transformedRectangles[i] = Rectangle.FromLTRB(integerLeft, integerTop, integerRight, integerBottom);
+                }
+
+                // Rebuild through Region so scaled/reflected rectangles are normalized before
+                // the metadata is exposed again.
+                return new Region(transformedRectangles).ToPath();
+            }
+
+            // Skew and free rotation turn the rect-set into ordinary path geometry.
+            return this.path.Transform(matrix);
+        }
     }
 }

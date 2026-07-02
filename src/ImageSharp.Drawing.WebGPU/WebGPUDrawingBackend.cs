@@ -466,7 +466,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         ref WebGPUSceneSchedulingArena? schedulingArena)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        if (range.DrawTagCount == 0)
+        if (range.FillCount == 0)
         {
             return;
         }

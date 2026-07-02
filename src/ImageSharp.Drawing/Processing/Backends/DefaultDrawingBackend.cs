@@ -290,6 +290,9 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
                         new DefaultRasterizer.RasterizableItem(sceneItem.Rasterizable, operation.LocalRowIndex),
                         target,
                         scratch,
+                        sceneItem.ClipState,
+                        sceneItem.PathClipState,
+                        sceneItem.DestinationOffset,
                         state);
                     break;
 
@@ -300,6 +303,9 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
                         new DefaultRasterizer.StrokeRasterizableItem(strokeSceneItem.Rasterizable, operation.LocalRowIndex),
                         target,
                         scratch,
+                        strokeSceneItem.ClipState,
+                        strokeSceneItem.PathClipState,
+                        strokeSceneItem.DestinationOffset,
                         state);
                     break;
             }
@@ -368,6 +374,9 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
                         new DefaultRasterizer.RasterizableItem(item.Rasterizable, localRowIndex),
                         target,
                         scratch,
+                        item.ClipState,
+                        item.PathClipState,
+                        item.DestinationOffset,
                         state);
                 }
 
@@ -443,12 +452,18 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     /// <param name="item">The retained rasterizable row item to execute.</param>
     /// <param name="target">The active composition target for the row.</param>
     /// <param name="scratch">The worker-local raster scratch.</param>
+    /// <param name="clipState">The exact clip state captured with the retained scene item.</param>
+    /// <param name="pathClipState">The retained path clip raster data captured with the retained scene item.</param>
+    /// <param name="destinationOffset">The destination offset used to place clip descriptors.</param>
     /// <param name="state">The worker-local execution state.</param>
     private static void ExecuteFillOperation<TPixel>(
         BrushRenderer<TPixel> renderer,
         DefaultRasterizer.RasterizableItem item,
         BandTarget<TPixel> target,
         DefaultRasterizer.WorkerScratch scratch,
+        DrawingClipState clipState,
+        PreparedPathClipState? pathClipState,
+        Point destinationOffset,
         WorkerState<TPixel> state)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -457,7 +472,16 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             bandInfo.IntersectionRule,
             bandInfo.RasterizationMode,
             bandInfo.AntialiasThreshold);
-        FillCoverageRowHandler<TPixel> rowHandler = new(renderer, target, state.BrushWorkspace);
+
+        FillCoverageRowHandler<TPixel> rowHandler = new(
+            renderer,
+            target,
+            clipState,
+            pathClipState,
+            destinationOffset,
+            state.BrushWorkspace,
+            state);
+
         DefaultRasterizer.ExecuteRasterizableItem(
             ref context,
             in item,
@@ -474,12 +498,18 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     /// <param name="item">The retained stroke rasterizable row item to execute.</param>
     /// <param name="target">The active composition target for the row.</param>
     /// <param name="scratch">The worker-local raster scratch.</param>
+    /// <param name="clipState">The exact clip state captured with the retained scene item.</param>
+    /// <param name="pathClipState">The retained path clip raster data captured with the retained scene item.</param>
+    /// <param name="destinationOffset">The destination offset used to place clip descriptors.</param>
     /// <param name="state">The worker-local execution state.</param>
     private static void ExecuteStrokeOperation<TPixel>(
         BrushRenderer<TPixel> renderer,
         DefaultRasterizer.StrokeRasterizableItem item,
         BandTarget<TPixel> target,
         DefaultRasterizer.WorkerScratch scratch,
+        DrawingClipState clipState,
+        PreparedPathClipState? pathClipState,
+        Point destinationOffset,
         WorkerState<TPixel> state)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -488,7 +518,16 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             bandInfo.IntersectionRule,
             bandInfo.RasterizationMode,
             bandInfo.AntialiasThreshold);
-        FillCoverageRowHandler<TPixel> rowHandler = new(renderer, target, state.BrushWorkspace);
+
+        FillCoverageRowHandler<TPixel> rowHandler = new(
+            renderer,
+            target,
+            clipState,
+            pathClipState,
+            destinationOffset,
+            state.BrushWorkspace,
+            state);
+
         Span<float> strokeBandCoverage = item.Rasterizable.RequiresBandCoverage ? scratch.StrokeBandCoverage : [];
         DefaultRasterizer.ExecuteStrokeRasterizableItem(
             ref context,

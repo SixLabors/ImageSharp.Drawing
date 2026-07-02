@@ -217,7 +217,9 @@ internal sealed class RichTextEditorScene : RenderScene
         // Selection is painted before glyphs, matching normal editor behavior.
         // The clipping scope applies only to text so the editor chrome remains crisp.
         this.DrawSelection(canvas, metrics);
-        canvas.Save(new DrawingOptions(), editorClip);
+        canvas.Save(new DrawingOptions());
+        canvas.Clip(editorClip);
+
         canvas.DrawText(textOptions, this.text, DefaultTextBrush, pen: null);
         canvas.Restore();
         this.DrawCaret(canvas);

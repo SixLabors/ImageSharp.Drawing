@@ -39,6 +39,7 @@ var<storage, read_write> ptcl: array<u32>;
 // Much of this code assumes WG_SIZE == N_TILE. If these diverge, then
 // a fair amount of fixup is needed.
 const WG_SIZE = 256u;
+const BLEND_CLIP = (128u << 8u) | 3u;
 const N_SLICE = WG_SIZE / 32u;
 
 var<workgroup> sh_bitmaps: array<array<atomic<u32>, N_TILE>, N_SLICE>;
@@ -424,11 +425,21 @@ fn main(
             let tile = tiles[tile_ix];
             let is_clip = (tag & 1u) != 0u;
             var is_blend = false;
+            var is_difference_clip = false;
             if is_clip {
-                let BLEND_CLIP = (128u << 8u) | 3u;
                 let scene_offset = draw_monoids[drawobj_ix].scene_offset;
                 let dd = config.drawdata_base + scene_offset;
-                let blend = scene[dd];
+                // Difference clips carry their operation in the high bit of the blend word.
+                // Coarse only needs to know whether this is a plain clip marker or a true
+                // blend layer, so mask the operation bit before comparing with BLEND_CLIP.
+                let raw_blend = scene[dd];
+                is_difference_clip = (raw_blend & CLIP_DIFFERENCE_MASK_BIT) != 0u;
+                let is_hard_clip = (raw_blend & CLIP_HARD_MASK_BIT) != 0u;
+                var blend = raw_blend & ~CLIP_DIFFERENCE_MASK_BIT;
+                if is_hard_clip {
+                    blend &= ~CLIP_HARD_MASK_BIT;
+                }
+
                 is_blend = blend != BLEND_CLIP;
             }
 
@@ -441,7 +452,8 @@ fn main(
             // crosses this tile and then this draw object should not contribute to the tile if its
             // backdrop (i.e. the winding number of its top-left corner) is even.
             let backdrop_clear = select(tile.backdrop, abs(tile.backdrop) & 1, even_odd) == 0;
-            let include_tile = n_segs != 0u || (backdrop_clear == is_clip) || is_blend;
+            let include_clip_tile = select(backdrop_clear, !backdrop_clear, is_difference_clip);
+            let include_tile = n_segs != 0u || (include_clip_tile == is_clip) || is_blend;
             if include_tile {
                 let el_slice = el_ix / 32u;
                 let el_mask = 1u << (el_ix & 31u);
@@ -552,22 +564,23 @@ fn main(
                     case DRAWTAG_BEGIN_CLIP: {
                         let even_odd = (draw_flags & DRAW_INFO_FLAGS_FILL_RULE_BIT) != 0u;
                         let backdrop_clear = select(tile.backdrop, abs(tile.backdrop) & 1, even_odd) == 0;
-                        if tile.segment_count_or_ix == 0u && backdrop_clear {
+                        let raw_blend = scene[dd];
+                        let is_difference_clip = (raw_blend & CLIP_DIFFERENCE_MASK_BIT) != 0u;
+                        let retained_area_clear = select(backdrop_clear, !backdrop_clear, is_difference_clip);
+                        if tile.segment_count_or_ix == 0u && retained_area_clear {
                             clip_zero_depth = clip_depth + 1u;
                         } else {
                             write_begin_clip();
                             render_blend_depth += 1u;
                             max_blend_depth = max(max_blend_depth, render_blend_depth);
                         }
+
                         clip_depth += 1u;
                     }
                     case DRAWTAG_END_CLIP: {
                         clip_depth -= 1u;
-                        // End-clip borrows the following draw's info word for its flags, so force the
-                        // aliased bit off: clip-exit coverage is always antialiased here.
-                        let clip_interest = vec4<f32>(0.0, 0.0, f32(config.target_width), f32(config.target_height));
-                        write_path(tile, tile_ix, draw_flags & ~DRAW_INFO_FLAGS_ALIASED_BIT, coverage_threshold, clip_interest, true);
                         let blend = scene[dd];
+                        write_path(tile, tile_ix, draw_flags, coverage_threshold, interest, true);
                         let alpha = bitcast<f32>(scene[dd + 1u]);
                         write_end_clip(CmdEndClip(blend, alpha));
                         render_blend_depth -= 1u;

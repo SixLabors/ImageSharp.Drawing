@@ -12,20 +12,17 @@ internal sealed class DrawingCanvasState
     /// Initializes a new instance of the <see cref="DrawingCanvasState"/> class.
     /// </summary>
     /// <param name="options">Drawing options for this state.</param>
-    /// <param name="clipPaths">Clip paths for this state.</param>
-    /// <param name="clipIntersectionRule">The fill rule used to interpret the clip paths.</param>
+    /// <param name="clipState">The normalized clip state.</param>
     /// <param name="targetBounds">Absolute target bounds used for commands recorded in this state.</param>
     /// <param name="destinationOffset">Absolute destination offset for paths recorded in local canvas coordinates.</param>
     public DrawingCanvasState(
         DrawingOptions options,
-        IReadOnlyList<IPath> clipPaths,
-        IntersectionRule clipIntersectionRule,
+        DrawingClipState clipState,
         Rectangle targetBounds,
         Point destinationOffset)
     {
         this.Options = options;
-        this.ClipPaths = clipPaths;
-        this.ClipIntersectionRule = clipIntersectionRule;
+        this.ClipState = clipState;
         this.TargetBounds = targetBounds;
         this.DestinationOffset = destinationOffset;
     }
@@ -40,18 +37,9 @@ internal sealed class DrawingCanvasState
     public DrawingOptions Options { get; }
 
     /// <summary>
-    /// Gets clip paths associated with this state.
+    /// Gets the normalized clip state associated with this state.
     /// </summary>
-    public IReadOnlyList<IPath> ClipPaths { get; }
-
-    /// <summary>
-    /// Gets the fill rule used to interpret the clip paths.
-    /// </summary>
-    /// <remarks>
-    /// Clip paths keep their own fill rule because a later draw may use a different rule for its subject
-    /// geometry. Text, for example, remains non-zero even when it is clipped by an even-odd path.
-    /// </remarks>
-    public IntersectionRule ClipIntersectionRule { get; }
+    public DrawingClipState ClipState { get; }
 
     /// <summary>
     /// Gets the absolute target bounds used for commands recorded in this state.

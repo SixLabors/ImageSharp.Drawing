@@ -246,6 +246,10 @@ public class Path : IPath, ISimplePath, IInternalPathOwner
         => this.ToLinearGeometry(scale).TryGetPathPointAtDistance(distance, out pathPoint);
 
     /// <inheritdoc/>
+    public virtual bool TryGetPathPointAtDistanceUnbounded(float distance, Vector2 scale, out PathPoint pathPoint)
+        => this.ToLinearGeometry(scale).TryGetPathPointAtDistanceUnbounded(distance, out pathPoint);
+
+    /// <inheritdoc/>
     public virtual bool TryGetSegment(float startDistance, float stopDistance, bool startOnBeginFigure, Vector2 scale, out IPath path)
         => this.ToLinearGeometry(scale).TryGetSegment(startDistance, stopDistance, startOnBeginFigure, out path);
 

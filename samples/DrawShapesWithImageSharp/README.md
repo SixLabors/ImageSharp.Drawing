@@ -9,7 +9,7 @@ Poster-style landscape that exercises the building blocks:
 
 - `LinearGradientBrush` and `RadialGradientBrush` for the sky, lake, and sun.
 - `PathBuilder` + `CloseFigure` for the mountain ridges, lake, and shoreline.
-- `canvas.Save(options, IPath)` with `BooleanOperation.Intersection` for the lake highlight clip.
+- `canvas.Save()` plus `canvas.Clip(IPath)` for the lake highlight clip.
 - `canvas.Save` + `canvas.SaveLayer` to apply a Z rotation and then composite the title panel and text together with `GraphicsOptions.BlendPercentage`.
 - `TextMeasurer.MeasureRenderableBounds` to size the title panel to the laid-out text.
 
@@ -38,7 +38,7 @@ Image-compositing scene demonstrating four ways a photograph (`tests/Images/Inpu
 - **Before / after wipe** — `canvas.Apply(rightHalfRect, ctx => ctx.OilPaint(15, 5))` scopes an `OilPaint` processor to the right half of the photograph.
 - **Privacy redaction** — `canvas.Apply(ellipse, ctx => ctx.Pixelate(10))` pixelates an elliptical face-shaped region and leaves the rest untouched.
 - **Image as a brush** — `new ImageBrush<Rgba32>(source, source.Bounds, brushOffset)` wraps the photograph as a `Brush` so a `StarPolygon` path can be filled with it as a texture; the brush offset aligns the mountain in the photograph with the star's centre.
-- **Photo in text** — `TextBuilder.GeneratePaths("MASK", ...)` produces one `IPath` per glyph; `canvas.Save(intersectionOptions, glyphPaths)` uses them as a compound clip so `DrawImage` only renders inside the letterforms.
+- **Photo in text** — `TextBuilder.GeneratePaths("MASK", ...)` produces one `IPath` per glyph; `canvas.Clip(glyphPaths)` uses them as a compound clip so `DrawImage` only renders inside the letterforms.
 
 ## Running
 

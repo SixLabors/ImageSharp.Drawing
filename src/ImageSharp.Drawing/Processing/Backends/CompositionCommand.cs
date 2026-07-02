@@ -2,8 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -30,7 +28,17 @@ public enum CompositionCommandKind : byte
     /// <summary>
     /// Applies an image processor to the current target before later commands are rendered.
     /// </summary>
-    Apply = 3
+    Apply = 3,
+
+    /// <summary>
+    /// Starts a clip scope.
+    /// </summary>
+    BeginClip = 4,
+
+    /// <summary>
+    /// Ends the most recently opened clip scope.
+    /// </summary>
+    EndClip = 5
 }
 
 /// <summary>
@@ -45,8 +53,7 @@ public readonly struct CompositionCommand
     private readonly Brush? brush;
     private readonly DrawingOptions? drawingOptions;
     private readonly DrawingCanvasLayer? layer;
-    private readonly IReadOnlyList<IPath>? clipPaths;
-    private readonly IntersectionRule clipIntersectionRule;
+    private readonly DrawingClipDescriptor? clipDescriptor;
     private readonly ApplyBarrier? applyBarrier;
 
     private CompositionCommand(
@@ -59,8 +66,7 @@ public readonly struct CompositionCommand
         Rectangle targetBounds,
         Rectangle layerBounds,
         Point destinationOffset,
-        IReadOnlyList<IPath>? clipPaths,
-        IntersectionRule clipIntersectionRule,
+        DrawingClipDescriptor? clipDescriptor,
         bool isInsideLayer,
         ApplyBarrier? applyBarrier)
     {
@@ -73,8 +79,7 @@ public readonly struct CompositionCommand
         this.TargetBounds = targetBounds;
         this.LayerBounds = layerBounds;
         this.DestinationOffset = destinationOffset;
-        this.clipPaths = clipPaths;
-        this.clipIntersectionRule = clipIntersectionRule;
+        this.clipDescriptor = clipDescriptor;
         this.IsInsideLayer = isInsideLayer;
         this.applyBarrier = applyBarrier;
     }
@@ -109,9 +114,9 @@ public readonly struct CompositionCommand
     public DrawingOptions DrawingOptions => this.drawingOptions ?? throw new InvalidOperationException("Layer commands do not carry drawing options.");
 
     /// <summary>
-    /// Gets graphics options used for composition or layer compositing.
+    /// Gets graphics options used by layer compositing commands.
     /// </summary>
-    public GraphicsOptions GraphicsOptions => this.drawingOptions?.GraphicsOptions ?? this.Layer.Options;
+    public GraphicsOptions LayerOptions => this.Layer.Options;
 
     /// <summary>
     /// Gets rasterizer options used to generate coverage.
@@ -134,19 +139,14 @@ public readonly struct CompositionCommand
     public Matrix4x4 Transform => this.drawingOptions?.Transform ?? Matrix4x4.Identity;
 
     /// <summary>
-    /// Gets the clip paths carried by the command.
+    /// Gets the clip descriptor opened by a <see cref="CompositionCommandKind.BeginClip"/> command.
     /// </summary>
-    public IReadOnlyList<IPath>? ClipPaths => this.clipPaths;
-
-    /// <summary>
-    /// Gets the fill rule used to interpret the clip paths.
-    /// </summary>
-    public IntersectionRule ClipIntersectionRule => this.clipIntersectionRule;
-
-    /// <summary>
-    /// Gets the shape options carried by the command.
-    /// </summary>
-    public ShapeOptions ShapeOptions => this.drawingOptions?.ShapeOptions ?? throw new InvalidOperationException("Layer commands do not carry shape options.");
+    /// <remarks>
+    /// The ordered begin/end-clip command stream is the single source of truth for clipping.
+    /// Draw commands do not carry clip state; backends resolve the active clip stack from the
+    /// stream commands surrounding each draw.
+    /// </remarks>
+    public DrawingClipDescriptor ClipDescriptor => this.clipDescriptor ?? throw new InvalidOperationException("Only begin-clip commands carry a clip descriptor.");
 
     /// <summary>
     /// Gets a value indicating whether the command was recorded inside a layer.
@@ -192,19 +192,15 @@ public readonly struct CompositionCommand
     /// <param name="rasterizerOptions">Rasterizer options used to generate coverage.</param>
     /// <param name="targetBounds">The absolute bounds of the logical target for this command.</param>
     /// <param name="destinationOffset">Absolute destination offset where coverage is composited.</param>
-    /// <param name="clipPaths">Optional clip paths supplied with the command.</param>
-    /// <param name="clipIntersectionRule">The fill rule used to interpret the clip paths.</param>
     /// <param name="isInsideLayer">True if the command was recorded inside a layer.</param>
     /// <returns>The composition command.</returns>
-    public static CompositionCommand Create(
+    internal static CompositionCommand Create(
         IPath path,
         Brush brush,
         DrawingOptions drawingOptions,
         in RasterizerOptions rasterizerOptions,
         Rectangle targetBounds,
         Point destinationOffset,
-        IReadOnlyList<IPath>? clipPaths,
-        IntersectionRule clipIntersectionRule,
         bool isInsideLayer)
         => new(
             CompositionCommandKind.FillLayer,
@@ -216,8 +212,7 @@ public readonly struct CompositionCommand
             targetBounds,
             default,
             destinationOffset,
-            clipPaths,
-            clipIntersectionRule,
+            null,
             isInsideLayer,
             null);
 
@@ -230,8 +225,6 @@ public readonly struct CompositionCommand
     /// <param name="rasterizerOptions">Rasterizer options used to generate coverage.</param>
     /// <param name="targetBounds">The absolute bounds of the logical target for this command.</param>
     /// <param name="destinationOffset">Absolute destination offset where coverage is composited.</param>
-    /// <param name="clipPaths">Optional clip paths supplied with the command.</param>
-    /// <param name="clipIntersectionRule">The fill rule used to interpret the clip paths.</param>
     /// <param name="layer">The layer that owned this command when it was recorded.</param>
     /// <returns>The composition command.</returns>
     internal static CompositionCommand Create(
@@ -241,8 +234,6 @@ public readonly struct CompositionCommand
         in RasterizerOptions rasterizerOptions,
         Rectangle targetBounds,
         Point destinationOffset,
-        IReadOnlyList<IPath>? clipPaths,
-        IntersectionRule clipIntersectionRule,
         DrawingCanvasLayer? layer)
         => new(
             CompositionCommandKind.FillLayer,
@@ -254,20 +245,9 @@ public readonly struct CompositionCommand
             targetBounds,
             default,
             destinationOffset,
-            clipPaths,
-            clipIntersectionRule,
+            null,
             layer is not null,
             null);
-
-    /// <summary>
-    /// Creates a begin-layer composition command. <see cref="IsInsideLayer"/> is false on the
-    /// BeginLayer marker itself; the flag is only meaningful for fills/strokes that follow it.
-    /// </summary>
-    /// <param name="layerBounds">The absolute bounds of the layer.</param>
-    /// <param name="graphicsOptions">The compositing options used when the layer closes.</param>
-    /// <returns>The begin-layer command.</returns>
-    public static CompositionCommand CreateBeginLayer(Rectangle layerBounds, GraphicsOptions graphicsOptions)
-        => CreateBeginLayer(layerBounds, new DrawingCanvasLayer(graphicsOptions));
 
     /// <summary>
     /// Creates a begin-layer composition command with shared layer state.
@@ -275,7 +255,9 @@ public readonly struct CompositionCommand
     /// <param name="layerBounds">The absolute bounds of the layer.</param>
     /// <param name="layer">The layer state shared by the begin and end commands.</param>
     /// <returns>The begin-layer command.</returns>
-    internal static CompositionCommand CreateBeginLayer(Rectangle layerBounds, DrawingCanvasLayer layer)
+    internal static CompositionCommand CreateBeginLayer(
+        Rectangle layerBounds,
+        DrawingCanvasLayer layer)
         => new(
             CompositionCommandKind.BeginLayer,
             null,
@@ -287,19 +269,8 @@ public readonly struct CompositionCommand
             layerBounds,
             default,
             null,
-            IntersectionRule.NonZero,
             false,
             null);
-
-    /// <summary>
-    /// Creates an end-layer composition command. <see cref="IsInsideLayer"/> is false on the
-    /// EndLayer marker itself; the flag is only meaningful for fills/strokes that preceded it.
-    /// </summary>
-    /// <param name="layerBounds">The absolute bounds of the layer being closed.</param>
-    /// <param name="graphicsOptions">The compositing options used by the layer.</param>
-    /// <returns>The end-layer command.</returns>
-    public static CompositionCommand CreateEndLayer(Rectangle layerBounds, GraphicsOptions graphicsOptions)
-        => CreateEndLayer(layerBounds, new DrawingCanvasLayer(graphicsOptions));
 
     /// <summary>
     /// Creates an end-layer composition command with shared layer state.
@@ -319,7 +290,46 @@ public readonly struct CompositionCommand
             layerBounds,
             default,
             null,
-            IntersectionRule.NonZero,
+            false,
+            null);
+
+    /// <summary>
+    /// Creates a begin-clip composition command.
+    /// </summary>
+    /// <param name="descriptor">The clip descriptor opened by the command.</param>
+    /// <param name="destinationOffset">Absolute destination offset used to place clip geometry.</param>
+    /// <returns>The begin-clip command.</returns>
+    internal static CompositionCommand CreateBeginClip(DrawingClipDescriptor descriptor, Point destinationOffset)
+        => new(
+            CompositionCommandKind.BeginClip,
+            null,
+            null,
+            null,
+            null,
+            default,
+            default,
+            default,
+            destinationOffset,
+            descriptor,
+            false,
+            null);
+
+    /// <summary>
+    /// Creates an end-clip composition command.
+    /// </summary>
+    /// <returns>The end-clip command.</returns>
+    internal static CompositionCommand CreateEndClip()
+        => new(
+            CompositionCommandKind.EndClip,
+            null,
+            null,
+            null,
+            null,
+            default,
+            default,
+            default,
+            default,
+            null,
             false,
             null);
 
@@ -330,41 +340,16 @@ public readonly struct CompositionCommand
     /// <returns>The apply command.</returns>
     internal static CompositionCommand CreateApply(ApplyBarrier barrier)
     {
-        RasterizerOptions rasterizerOptions = CreateApplyRasterizerOptions(
-            barrier.Path,
-            barrier.Options);
+        RasterizerOptions rasterizerOptions = CreateApplyRasterizerOptions(barrier.Path, barrier.Options);
 
-        return CreateApply(barrier, barrier.Path, barrier.Options, in rasterizerOptions, barrier.ClipPaths, barrier.ClipIntersectionRule);
+        return CreateApply(barrier, barrier.Path, barrier.Options, in rasterizerOptions);
     }
-
-    /// <summary>
-    /// Creates an apply composition command after batcher command preparation.
-    /// </summary>
-    /// <param name="barrier">The apply barrier to execute.</param>
-    /// <param name="path">The prepared apply path.</param>
-    /// <param name="drawingOptions">The prepared drawing options.</param>
-    /// <param name="rasterizerOptions">The prepared rasterizer options.</param>
-    /// <returns>The apply command.</returns>
-    internal static CompositionCommand CreatePreparedApply(
-        ApplyBarrier barrier,
-        IPath path,
-        DrawingOptions drawingOptions,
-        in RasterizerOptions rasterizerOptions)
-        => CreateApply(
-            barrier,
-            path,
-            drawingOptions,
-            in rasterizerOptions,
-            null,
-            barrier.ClipIntersectionRule);
 
     private static CompositionCommand CreateApply(
         ApplyBarrier barrier,
         IPath path,
         DrawingOptions drawingOptions,
-        in RasterizerOptions rasterizerOptions,
-        IReadOnlyList<IPath>? clipPaths,
-        IntersectionRule clipIntersectionRule)
+        in RasterizerOptions rasterizerOptions)
     {
         DrawingOptions applyOptions = drawingOptions.CloneForClearOperation();
 
@@ -378,8 +363,7 @@ public readonly struct CompositionCommand
             barrier.TargetBounds,
             default,
             barrier.DestinationOffset,
-            clipPaths,
-            clipIntersectionRule,
+            null,
             barrier.IsInsideLayer,
             barrier);
     }

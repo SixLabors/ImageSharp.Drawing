@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.PolygonGeometry;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -35,12 +34,18 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     private int sealedLayerCommandCount;
     private int applyCommandCount;
     private int sealedApplyCommandCount;
+    private int clipCommandCount;
+    private int sealedClipCommandCount;
 
-    // Clip and dash flags gate whole-buffer command preparation; prepared commands
+    // Dash and brush-transform flags gate whole-buffer command preparation; prepared commands
     // remain in the same command buffer until replay consumes it.
-    private bool hasClips;
     private bool hasDashes;
     private bool hasBrushTransforms;
+
+    // Mirrors the physical begin/end-clip command stream. The stream is the single source of
+    // truth for clipping in both backends; the canvas re-anchors it via EnsureClipAnchors when
+    // drawing moves to a differently-offset context (for example a child region).
+    private readonly List<(DrawingClipDescriptor Descriptor, Point AnchorOffset)> openClips = [];
 
     // Timeline entries keep compact indexes into the command and retained
     // scene buffers while preserving the order recorded by the canvas.
@@ -79,15 +84,36 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     /// <param name="composition">The command to queue.</param>
     public void AddComposition(in CompositionCommand composition)
     {
+        switch (composition.Kind)
+        {
+            case CompositionCommandKind.BeginClip:
+                this.openClips.Add((composition.ClipDescriptor, composition.DestinationOffset));
+                break;
+
+            case CompositionCommandKind.EndClip:
+                if (this.openClips.Count > 0)
+                {
+                    this.openClips.RemoveAt(this.openClips.Count - 1);
+                }
+
+                break;
+
+            default:
+                break;
+        }
+
         this.EnsureCommandCapacity(this.commandCount + 1);
         this.commands[this.commandCount++] = new PathCompositionSceneCommand(composition);
 
-        if (composition.Kind is not CompositionCommandKind.FillLayer)
+        if (composition.Kind is CompositionCommandKind.BeginLayer or CompositionCommandKind.EndLayer)
         {
             this.layerCommandCount++;
         }
+        else if (composition.Kind is CompositionCommandKind.BeginClip or CompositionCommandKind.EndClip)
+        {
+            this.clipCommandCount++;
+        }
 
-        this.hasClips |= composition.ClipPaths is not null;
         this.hasBrushTransforms |= composition.Kind is CompositionCommandKind.FillLayer
             && composition.Transform != Matrix4x4.Identity;
     }
@@ -100,7 +126,6 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     {
         this.EnsureCommandCapacity(this.commandCount + 1);
         this.commands[this.commandCount++] = new StrokePathCompositionSceneCommand(command);
-        this.hasClips |= command.ClipPaths is not null;
         this.hasDashes |= command.Pen.StrokePattern.Length >= 2;
         this.hasBrushTransforms |= command.Transform != Matrix4x4.Identity;
     }
@@ -128,6 +153,59 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     }
 
     /// <summary>
+    /// Re-anchors the open ordered clip stream at the consuming state's destination offset.
+    /// </summary>
+    /// <remarks>
+    /// Clip descriptors are recorded in canvas-local coordinates and the begin/end-clip command
+    /// stream is the single source of truth for clipping in both backends. The canvas calls this
+    /// before recording draws so that when drawing moves to a differently-offset context (for
+    /// example a child region inheriting parent clips) the open clip stack is closed and reopened
+    /// anchored at the new offset. Glyph render locations do not participate: the canvas anchors
+    /// at its state's destination offset, not at per-glyph draw offsets.
+    /// </remarks>
+    /// <param name="destinationOffset">The destination offset of the consuming canvas state.</param>
+    public void EnsureClipAnchors(Point destinationOffset)
+    {
+        List<(DrawingClipDescriptor Descriptor, Point AnchorOffset)> clips = this.openClips;
+        int count = clips.Count;
+        if (count == 0)
+        {
+            return;
+        }
+
+        bool anchored = true;
+        for (int i = 0; i < count; i++)
+        {
+            if (clips[i].AnchorOffset != destinationOffset)
+            {
+                anchored = false;
+                break;
+            }
+        }
+
+        if (anchored)
+        {
+            return;
+        }
+
+        DrawingClipDescriptor[] descriptors = new DrawingClipDescriptor[count];
+        for (int i = 0; i < count; i++)
+        {
+            descriptors[i] = clips[i].Descriptor;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            this.AddComposition(CompositionCommand.CreateEndClip());
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            this.AddComposition(CompositionCommand.CreateBeginClip(descriptors[i], destinationOffset));
+        }
+    }
+
+    /// <summary>
     /// Seals currently queued commands into the replay timeline.
     /// </summary>
     /// <remarks>
@@ -147,11 +225,13 @@ internal sealed class DrawingCanvasBatcher<TPixel>
             this.sealedCommandCount,
             count,
             this.layerCommandCount != this.sealedLayerCommandCount,
-            this.applyCommandCount != this.sealedApplyCommandCount);
+            this.applyCommandCount != this.sealedApplyCommandCount,
+            this.clipCommandCount != this.sealedClipCommandCount);
 
         this.sealedCommandCount = this.commandCount;
         this.sealedLayerCommandCount = this.layerCommandCount;
         this.sealedApplyCommandCount = this.applyCommandCount;
+        this.sealedClipCommandCount = this.clipCommandCount;
     }
 
     /// <summary>
@@ -163,7 +243,6 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         this.EnsureCommandCapacity(this.commandCount + 1);
         this.commands[this.commandCount++] = new PathCompositionSceneCommand(CompositionCommand.CreateApply(barrier));
         this.applyCommandCount++;
-        this.hasClips |= barrier.ClipPaths.Count > 0;
     }
 
     /// <summary>
@@ -208,7 +287,8 @@ internal sealed class DrawingCanvasBatcher<TPixel>
             0,
             this.commandCount,
             this.layerCommandCount > 0,
-            this.applyCommandCount > 0);
+            this.applyCommandCount > 0,
+            this.clipCommandCount > 0);
 
         return backend.CreateScene(this.configuration, targetBounds, commandBatch, ownedResources);
     }
@@ -229,10 +309,20 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     /// <param name="entry">The command-range timeline entry.</param>
     /// <returns>The command batch.</returns>
     public DrawingCommandBatch CreateCommandBatch(DrawingCanvasTimelineEntry entry)
-        => this.CreatePreparedCommandBatch(entry.Index, entry.Count, entry.HasLayers, entry.HasApply);
+        => this.CreatePreparedCommandBatch(
+            entry.Index,
+            entry.Count,
+            entry.HasLayers,
+            entry.HasApply,
+            entry.HasClipControls);
 
-    private DrawingCommandBatch CreatePreparedCommandBatch(int startIndex, int commandCount, bool hasLayers, bool hasApply)
-        => new(this.commands, startIndex, commandCount, hasLayers, hasApply);
+    private DrawingCommandBatch CreatePreparedCommandBatch(
+        int startIndex,
+        int commandCount,
+        bool hasLayers,
+        bool hasApply,
+        bool hasClipControls)
+        => new(this.commands, startIndex, commandCount, hasLayers, hasApply, hasClipControls);
 
     /// <summary>
     /// Gets one recorded timeline entry.
@@ -264,11 +354,16 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         this.sealedLayerCommandCount = 0;
         this.applyCommandCount = 0;
         this.sealedApplyCommandCount = 0;
+        this.clipCommandCount = 0;
+        this.sealedClipCommandCount = 0;
         this.TimelineEntryCount = 0;
         this.insertedSceneCount = 0;
-        this.hasClips = false;
         this.hasDashes = false;
         this.hasBrushTransforms = false;
+
+        // The canvas re-opens its active clip state after clearing, so the mirrored
+        // physical clip stream starts empty alongside the new command buffer.
+        this.openClips.Clear();
     }
 
     /// <summary>
@@ -333,14 +428,15 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 
     private void PrepareCommands()
     {
-        if (!this.hasClips && !this.hasDashes && !this.hasBrushTransforms)
+        if (!this.hasDashes && !this.hasBrushTransforms)
         {
             return;
         }
 
-        // If clipping is present we need to apply that now before handing the command
-        // to the backend. This avoids complicating the backend with clipping logic
-        // and allows us to reuse the same optimized backend code for clipped and unclipped paths.
+        // Command preparation is the last canvas-owned normalization boundary. Dashed strokes are
+        // expanded and brush coordinates are normalized here so CPU and WebGPU do not each bake
+        // the transform in their own way. Clipping is not prepared per command: the ordered
+        // begin/end-clip command stream is the single source of truth for both backends.
         int requestedParallelism = this.configuration.MaxDegreeOfParallelism;
         int partitionCount = ParallelExecutionHelper.GetPartitionCount(requestedParallelism, this.commandCount);
 
@@ -351,7 +447,6 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                 PrepareCommand(ref this.commands[i]);
             }
 
-            this.hasClips = false;
             this.hasDashes = false;
             this.hasBrushTransforms = false;
             return;
@@ -374,7 +469,6 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                 }
             });
 
-        this.hasClips = false;
         this.hasDashes = false;
         this.hasBrushTransforms = false;
     }
@@ -384,68 +478,11 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         if (command is PathCompositionSceneCommand pathCommand)
         {
             CompositionCommand composition = pathCommand.Command;
-            if (composition.ClipPaths is { Count: > 0 })
-            {
-                IPath path = composition.SourcePath;
-                DrawingOptions sourceOptions = composition.DrawingOptions;
-                bool hasTransform = sourceOptions.Transform != Matrix4x4.Identity;
-
-                if (hasTransform)
-                {
-                    path = path.Transform(sourceOptions.Transform);
-                }
-
-                path = ApplyClipStack(
-                    sourceOptions.ShapeOptions,
-                    path,
-                    composition.ClipPaths,
-                    composition.ClipIntersectionRule);
-
-                IntersectionRule intersectionRule = sourceOptions.ShapeOptions.IntersectionRule;
-                Rectangle interest = GetClippedPathInterest(path, composition.RasterizerOptions, hasTransform);
-                RasterizerOptions rasterizerOptions = WithIntersectionRuleAndInterest(
-                    composition.RasterizerOptions,
-                    intersectionRule,
-                    interest);
-
-                DrawingOptions preparedOptions = WithIdentityTransformAndIntersectionRule(sourceOptions, intersectionRule);
-
-                if (composition.Kind == CompositionCommandKind.Apply)
-                {
-                    pathCommand.Command = CompositionCommand.CreatePreparedApply(
-                        composition.ApplyBarrier,
-                        path,
-                        preparedOptions,
-                        in rasterizerOptions);
-                    return;
-                }
-
-                // The path has already been transformed and clipped, and the rebuilt command
-                // clears its transform below. Transform the brush at the same boundary; both
-                // interests are supplied so bounds-anchored brushes keep their original sampling
-                // origin after clipping narrows the renderer bounds.
-                Brush brush = composition.Brush.Transform(
-                    sourceOptions.Transform,
-                    composition.RasterizerOptions.Interest,
-                    interest);
-
-                pathCommand.Command = CompositionCommand.Create(
-                    path,
-                    brush,
-                    preparedOptions,
-                    in rasterizerOptions,
-                    composition.TargetBounds,
-                    composition.DestinationOffset,
-                    null,
-                    composition.ClipIntersectionRule,
-                    composition.OwnerLayer);
-            }
-            else if (composition.Kind == CompositionCommandKind.FillLayer &&
-                composition.Transform != Matrix4x4.Identity)
+            if (composition.Kind == CompositionCommandKind.FillLayer && composition.Transform != Matrix4x4.Identity)
             {
                 // The batcher is the brush normalization boundary. Backends still use
-                // DrawingOptions.Transform for geometry, but brush coordinates are prepared here
-                // so CPU and WebGPU do not each bake the transform in their own way.
+                // DrawingOptions.Transform for geometry, but brush coordinates are prepared
+                // here so CPU and WebGPU do not each bake the transform in their own way.
                 Brush brush = composition.Brush.Transform(
                     composition.Transform,
                     composition.RasterizerOptions.Interest,
@@ -458,104 +495,43 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                     composition.RasterizerOptions,
                     composition.TargetBounds,
                     composition.DestinationOffset,
-                    null,
-                    composition.ClipIntersectionRule,
                     composition.OwnerLayer);
             }
         }
         else if (command is StrokePathCompositionSceneCommand strokePathCommand)
         {
             StrokePathCommand composition = strokePathCommand.Command;
-
-            if (composition.ClipPaths is { Count: > 0 })
-            {
-                DrawingOptions sourceOptions = composition.DrawingOptions;
-                bool hasTransform = sourceOptions.Transform != Matrix4x4.Identity;
-
-                IPath path = composition.Pen.GeneratePath(composition.SourcePath);
-
-                if (hasTransform)
-                {
-                    path = path.Transform(sourceOptions.Transform);
-                }
-
-                path = ApplyClipStack(
-                    sourceOptions.ShapeOptions,
-                    path,
-                    composition.ClipPaths,
-                    composition.ClipIntersectionRule);
-
-                IntersectionRule intersectionRule = sourceOptions.ShapeOptions.IntersectionRule;
-                Rectangle interest = GetClippedPathInterest(path, composition.RasterizerOptions, hasTransform);
-                RasterizerOptions rasterizerOptions = WithIntersectionRuleAndInterest(
-                    composition.RasterizerOptions,
-                    intersectionRule,
-                    interest);
-
-                // The stroke has been expanded, transformed, and clipped into a fill path.
-                // Prepare the brush at the same boundary before the command transform is cleared.
-                Brush brush = composition.Brush.Transform(
-                    sourceOptions.Transform,
+            Matrix4x4 transform = composition.Transform;
+            bool hasTransform = transform != Matrix4x4.Identity;
+            Brush brush = hasTransform
+                ? composition.Brush.Transform(
+                    transform,
                     composition.RasterizerOptions.Interest,
-                    interest);
+                    composition.RasterizerOptions.Interest)
+                : composition.Brush;
 
-                DrawingOptions preparedOptions = WithIdentityTransformAndIntersectionRule(sourceOptions, intersectionRule);
-
-                command = new PathCompositionSceneCommand(
-                    CompositionCommand.Create(
-                        path,
-                        brush,
-                        preparedOptions,
-                        in rasterizerOptions,
-                        composition.TargetBounds,
-                        composition.DestinationOffset,
-                        null,
-                        composition.ClipIntersectionRule,
-                        composition.OwnerLayer));
-            }
-            else
+            Pen pen = composition.Pen;
+            IPath sourcePath = composition.SourcePath;
+            bool hasDashes = pen.StrokePattern.Length >= 2;
+            if (hasDashes)
             {
-                Matrix4x4 transform = composition.Transform;
-                bool hasTransform = transform != Matrix4x4.Identity;
-                Brush brush = hasTransform
-                    ? composition.Brush.Transform(
-                        transform,
-                        composition.RasterizerOptions.Interest,
-                        composition.RasterizerOptions.Interest)
-                    : composition.Brush;
+                // Dashing changes the subject geometry, so it must be done before the backend
+                // retains raster payload for the stroke command.
+                sourcePath = sourcePath.GenerateDashes(pen.StrokeWidth, pen.StrokePattern.Span, pen.StrokePatternOffset);
+            }
 
-                // We need to dash the path here before sending it to the backend.
-                Pen pen = composition.Pen;
-                if (pen.StrokePattern.Length >= 2)
-                {
-                    strokePathCommand.Command = new StrokePathCommand(
-                        composition.SourcePath.GenerateDashes(pen.StrokeWidth, pen.StrokePattern.Span, pen.StrokePatternOffset),
-                        brush,
-                        composition.DrawingOptions,
-                        composition.RasterizerOptions,
-                        composition.TargetBounds,
-                        composition.DestinationOffset,
-                        composition.Pen,
-                        null,
-                        composition.ClipIntersectionRule,
-                        composition.IsInsideLayer,
-                        composition.OwnerLayer);
-                }
-                else if (hasTransform)
-                {
-                    strokePathCommand.Command = new StrokePathCommand(
-                        composition.SourcePath,
-                        brush,
-                        composition.DrawingOptions,
-                        composition.RasterizerOptions,
-                        composition.TargetBounds,
-                        composition.DestinationOffset,
-                        composition.Pen,
-                        null,
-                        composition.ClipIntersectionRule,
-                        composition.IsInsideLayer,
-                        composition.OwnerLayer);
-                }
+            if (hasDashes || hasTransform)
+            {
+                strokePathCommand.Command = new StrokePathCommand(
+                    sourcePath,
+                    brush,
+                    composition.DrawingOptions,
+                    composition.RasterizerOptions,
+                    composition.TargetBounds,
+                    composition.DestinationOffset,
+                    composition.Pen,
+                    composition.IsInsideLayer,
+                    composition.OwnerLayer);
             }
         }
         else if (command is LineSegmentCompositionSceneCommand lineSegmentCommand)
@@ -608,101 +584,4 @@ internal sealed class DrawingCanvasBatcher<TPixel>
             }
         }
     }
-
-    /// <summary>
-    /// Intersects a path with the active clip stack in push order.
-    /// </summary>
-    /// <param name="sourceOptions">The shape options used to interpret the original path.</param>
-    /// <param name="path">The path to clip.</param>
-    /// <param name="clipPaths">The active clip stack.</param>
-    /// <param name="clipIntersectionRule">The fill rule used to interpret the clip paths.</param>
-    /// <returns>The clipped path.</returns>
-    private static ComplexPolygon ApplyClipStack(
-        ShapeOptions sourceOptions,
-        IPath path,
-        IReadOnlyList<IPath> clipPaths,
-        IntersectionRule clipIntersectionRule)
-    {
-        IPath clipPath = clipPaths.Count == 1
-            ? clipPaths[0]
-            : new ComplexPolygon(clipPaths);
-
-        return ClippedShapeGenerator.GenerateClippedShapes(
-            sourceOptions,
-            path,
-            clipPath,
-            clipIntersectionRule);
-    }
-
-    /// <summary>
-    /// Creates drawing options for a clipped command whose path has been resolved to the supplied fill rule.
-    /// </summary>
-    /// <param name="source">The source drawing options.</param>
-    /// <param name="intersectionRule">The intersection rule for the resolved path.</param>
-    /// <returns>Drawing options with an identity transform and the resolved path fill rule.</returns>
-    private static DrawingOptions WithIdentityTransformAndIntersectionRule(DrawingOptions source, IntersectionRule intersectionRule)
-    {
-        bool hasExpectedRule = source.ShapeOptions.IntersectionRule == intersectionRule;
-        if (source.Transform == Matrix4x4.Identity && hasExpectedRule)
-        {
-            return source;
-        }
-
-        ShapeOptions shapeOptions = source.ShapeOptions;
-        if (!hasExpectedRule)
-        {
-            shapeOptions = shapeOptions.DeepClone();
-            shapeOptions.IntersectionRule = intersectionRule;
-        }
-
-        return new DrawingOptions(source.GraphicsOptions, shapeOptions, Matrix4x4.Identity);
-    }
-
-    /// <summary>
-    /// Gets the raster interest for a path after boolean clipping.
-    /// </summary>
-    /// <param name="path">The clipped path.</param>
-    /// <param name="source">The source rasterizer options.</param>
-    /// <param name="hasResolvedTransform">True when the path has been moved into transformed coordinates.</param>
-    /// <returns>The narrowed raster interest.</returns>
-    private static Rectangle GetClippedPathInterest(IPath path, in RasterizerOptions source, bool hasResolvedTransform)
-    {
-        Rectangle pathInterest = ToRasterizerInterest(path.Bounds);
-
-        // A resolved transform changes the path coordinate space, so the original interest
-        // cannot be intersected safely. Without a transform, preserving the existing interest
-        // keeps prior source narrowing while the clipped path bounds add clip narrowing.
-        return hasResolvedTransform
-            ? pathInterest
-            : Rectangle.Intersect(source.Interest, pathInterest);
-    }
-
-    /// <summary>
-    /// Creates rasterizer options for a clipped path whose boolean result has resolved the fill rule.
-    /// </summary>
-    /// <param name="source">The source rasterizer options.</param>
-    /// <param name="intersectionRule">The intersection rule for the resolved path.</param>
-    /// <param name="interest">The resolved area of interest.</param>
-    /// <returns>Rasterizer options with the resolved path fill rule and narrowed interest.</returns>
-    private static RasterizerOptions WithIntersectionRuleAndInterest(
-        in RasterizerOptions source,
-        IntersectionRule intersectionRule,
-        Rectangle interest)
-        => new(
-            interest,
-            intersectionRule,
-            source.RasterizationMode,
-            source.AntialiasThreshold);
-
-    /// <summary>
-    /// Converts local geometry bounds to the rasterizer area of interest.
-    /// </summary>
-    /// <param name="bounds">The local geometry bounds.</param>
-    /// <returns>The conservative rasterizer interest rectangle.</returns>
-    private static Rectangle ToRasterizerInterest(RectangleF bounds)
-        => Rectangle.FromLTRB(
-            (int)MathF.Floor(bounds.Left),
-            (int)MathF.Floor(bounds.Top),
-            (int)MathF.Ceiling(bounds.Right) + 1,
-            (int)MathF.Ceiling(bounds.Bottom) + 1);
 }

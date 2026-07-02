@@ -44,9 +44,10 @@ internal sealed class PathGlyphBuilder : GlyphBuilder
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void TransformGlyph(in FontRectangle bounds)
     {
-        // Query the path at the glyph's horizontal center.
+        // Query the path at the glyph's horizontal center. Aligned text can overflow the
+        // path on either side, so overflowing glyphs extrapolate along the boundary tangents.
         Vector2 half = new(bounds.Width * .5F, 0);
-        if (!this.path.TryGetPathPointAtDistance(bounds.Left + half.X, out PathPoint pathPoint))
+        if (!this.path.TryGetPathPointAtDistanceUnbounded(bounds.Left + half.X, out PathPoint pathPoint))
         {
             return;
         }

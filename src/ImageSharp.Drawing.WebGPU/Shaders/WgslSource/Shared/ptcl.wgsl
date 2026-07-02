@@ -25,6 +25,8 @@ const CMD_BEGIN_CLIP = 10u;
 const CMD_END_CLIP = 11u;
 const CMD_JUMP = 12u;
 const CMD_PATH_GRAD = 16u;
+const CLIP_DIFFERENCE_MASK_BIT = 0x80000000u;
+const CLIP_HARD_MASK_BIT = 0x40000000u;
 
 // The individual PTCL structs are written here, but read/write is by
 // hand in the relevant shaders

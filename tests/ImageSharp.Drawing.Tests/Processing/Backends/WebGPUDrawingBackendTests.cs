@@ -57,6 +57,7 @@ public partial class WebGPUDrawingBackendTests
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
+            WebGPUTextureFormat.Rgba8Unorm,
             drawingOptions,
             DrawAction,
             nativeSurfaceInitialImage);
@@ -952,6 +953,46 @@ public partial class WebGPUDrawingBackendTests
         return renderTarget.ReadbackImage<TPixel>();
     }
 
+    private static Image<TPixel> RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        int width,
+        int height,
+        WebGPUDrawingBackend backend,
+        WebGPUTextureFormat format,
+        DrawingOptions options,
+        Action<DrawingCanvas> drawAction,
+        Image<TPixel> initialImage)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using WebGPURenderTarget renderTarget = new(format, width, height);
+        Configuration configuration = Configuration.Default.Clone();
+        configuration.SetDrawingBackend(backend);
+        Rectangle targetBounds = new(0, 0, width, height);
+
+        using (DrawingCanvas initialCanvas = WebGPUCanvasFactory.CreateCanvas(
+                   configuration,
+                   new DrawingOptions(),
+                   backend,
+                   renderTarget.Bounds,
+                   renderTarget.Surface,
+                   renderTarget.Format))
+        {
+            initialCanvas.DrawImage(initialImage, initialImage.Bounds, targetBounds);
+        }
+
+        using (DrawingCanvas canvas = WebGPUCanvasFactory.CreateCanvas(
+                   configuration,
+                   options,
+                   backend,
+                   renderTarget.Bounds,
+                   renderTarget.Surface,
+                   renderTarget.Format))
+        {
+            drawAction(canvas);
+        }
+
+        return renderTarget.ReadbackImage<TPixel>();
+    }
+
     private static void DebugSaveBackendPair<TPixel>(
         TestImageProvider<TPixel> provider,
         string testName,
@@ -1060,6 +1101,149 @@ public partial class WebGPUDrawingBackendTests
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(1024, 800, "Black", PixelTypes.Rgba32)]
+    public void ColorPickerSliderThumb_AvaloniaTemplate_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = CreateAvaloniaOptions(IntersectionRule.EvenOdd, true);
+
+        static void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.Black));
+            DrawThumb(canvas, new PointF(642F, 335F));
+            DrawThumb(canvas, new PointF(875F, 359F));
+            DrawThumb(canvas, new PointF(875F, 383F));
+            DrawThumb(canvas, new PointF(875F, 407F));
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarityInRegion(defaultImage, nativeSurfaceImage, new Rectangle(638, 331, 265, 104), 0.02F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+
+        static void DrawThumb(DrawingCanvas canvas, PointF origin)
+        {
+            const float thumbSize = 24F;
+            const float thumbBorderThickness = 5F;
+
+            RectanglePolygon thumbClip = new(origin.X, origin.Y, thumbSize, thumbSize);
+            _ = canvas.Save(CreateAvaloniaOptions(IntersectionRule.EvenOdd, false));
+            canvas.Clip(thumbClip);
+
+            RectangleF thumbBorderRectangle = new(origin.X + 2.5F, origin.Y + 2.5F, 19F, 19F);
+            RoundedRectanglePolygon thumbBorder = new(thumbBorderRectangle, 9.5F);
+            EllipsePolygon thumbEllipse = new(new PointF(origin.X + 12F, origin.Y + 12F), new SizeF(thumbSize, thumbSize));
+
+            DrawAvaloniaFill(canvas, Brushes.Solid(Color.Transparent), thumbBorder);
+            DrawAvaloniaStroke(canvas, Pens.Solid(Color.White, thumbBorderThickness), thumbBorder);
+            DrawAvaloniaFill(canvas, Brushes.Solid(Color.Transparent), thumbEllipse);
+            DrawAvaloniaStroke(canvas, Pens.Solid(Color.White, 1F), thumbEllipse);
+
+            canvas.Restore();
+        }
+
+        static void DrawAvaloniaFill(DrawingCanvas canvas, Brush brush, IPath path)
+        {
+            _ = canvas.Save(CreateAvaloniaOptions(IntersectionRule.EvenOdd, true));
+            canvas.Fill(brush, path);
+            canvas.Restore();
+        }
+
+        static void DrawAvaloniaStroke(DrawingCanvas canvas, Pen pen, IPath path)
+        {
+            _ = canvas.Save(CreateAvaloniaOptions(IntersectionRule.EvenOdd, true));
+            canvas.Draw(pen, path);
+            canvas.Restore();
+        }
+
+        static DrawingOptions CreateAvaloniaOptions(IntersectionRule fillRule, bool antialias)
+            => new()
+            {
+                GraphicsOptions = new GraphicsOptions { Antialias = antialias },
+                ShapeOptions = new ShapeOptions
+                {
+                    BooleanOperation = BooleanOperation.Intersection,
+                    IntersectionRule = fillRule
+                }
+            };
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(300, 220, "Gray", PixelTypes.Rgba32)]
+    public void BlurredBoxShadow_DifferenceClip_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true },
+            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.EvenOdd }
+        };
+
+        const float sigma = 4F;
+
+        void DrawThumbWithShadow(DrawingCanvas canvas, PointF center)
+        {
+            EllipsePolygon contentPath = new(center, new SizeF(24F, 24F));
+            EllipsePolygon shadowPath = new(new PointF(center.X, center.Y + 3F), new SizeF(24F, 24F));
+            Rectangle layerBounds = new(
+                (int)(center.X - 12F - 16F),
+                (int)(center.Y - 12F - 16F),
+                24 + 32,
+                24 + 32 + 6);
+
+            // Blurred outer box shadow: difference clip -> layer -> fill -> gaussian blur -> composite.
+            _ = canvas.Save(drawingOptions);
+            canvas.Clip(ClipOperation.Difference, contentPath);
+            _ = canvas.SaveLayer(new GraphicsOptions(), layerBounds);
+            canvas.Fill(Brushes.Solid(Color.Black.WithAlpha(0.55F)), shadowPath);
+            canvas.Apply(layerBounds, ctx => ctx.GaussianBlur(sigma));
+            canvas.Restore();
+            canvas.Restore();
+
+            canvas.Fill(Brushes.Solid(Color.White), contentPath);
+            canvas.Fill(Brushes.Solid(Color.Red), new EllipsePolygon(center, new SizeF(8F, 8F)));
+        }
+
+        void DrawAction(DrawingCanvas canvas)
+        {
+            DrawThumbWithShadow(canvas, new PointF(70F, 60F));
+            DrawThumbWithShadow(canvas, new PointF(150F, 60F));
+            DrawThumbWithShadow(canvas, new PointF(230F, 60F));
+            DrawThumbWithShadow(canvas, new PointF(110F, 150F));
+            DrawThumbWithShadow(canvas, new PointF(190F, 150F));
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.02F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2621,6 +2805,44 @@ the evil Galactic Empire.";
 
     [WebGPUTheory]
     [WithBlankImage(120, 120, PixelTypes.Rgba32)]
+    public void SaveLayer_GaussianBlur_OffCanvasLayerBounds_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+
+        static void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+
+            IPath clipPath = new EllipsePolygon(new PointF(30, 40), new SizeF(70, 60));
+
+            canvas.Save();
+            canvas.Clip(clipPath);
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(-16, 8, 88, 80));
+            canvas.Fill(Brushes.Solid(Color.Black), new Rectangle(0, 20, 56, 42));
+            canvas.Apply(new Rectangle(-16, 8, 88, 80), x => x.GaussianBlur(6F));
+            canvas.Restore();
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithBlankImage(120, 120, PixelTypes.Rgba32)]
     public void SaveLayer_Apply_ProcessesLayerTarget_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -2814,12 +3036,12 @@ the evil Galactic Empire.";
 
             DrawingOptions rootOptions = new()
             {
-                Transform = Matrix4x4.CreateTranslation(6F, 4F, 0),
-                ShapeOptions = new ShapeOptions { BooleanOperation = BooleanOperation.Difference }
+                Transform = Matrix4x4.CreateTranslation(6F, 4F, 0)
             };
 
             IPath rootClip = new EllipsePolygon(new PointF(160, 110), new SizeF(252, 164));
-            _ = canvas.Save(rootOptions, rootClip);
+            _ = canvas.Save(rootOptions);
+            canvas.Clip(ClipOperation.Difference, rootClip);
 
             using (DrawingCanvas outerRegion = canvas.CreateRegion(new Rectangle(30, 24, 240, 156)))
             {
@@ -2828,11 +3050,11 @@ the evil Galactic Empire.";
 
                 DrawingOptions outerOptions = new()
                 {
-                    Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.18F, new Vector2(120, 78))),
-                    ShapeOptions = new ShapeOptions { BooleanOperation = BooleanOperation.Difference }
+                    Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.18F, new Vector2(120, 78)))
                 };
 
-                _ = outerRegion.Save(outerOptions, new RectanglePolygon(18, 14, 204, 128));
+                _ = outerRegion.Save(outerOptions);
+                outerRegion.Clip(ClipOperation.Difference, new RectanglePolygon(18, 14, 204, 128));
 
                 outerRegion.Fill(Brushes.Solid(Color.MediumPurple.WithAlpha(0.35F)), new Rectangle(16, 16, 208, 124));
 
@@ -2842,11 +3064,11 @@ the evil Galactic Empire.";
 
                     DrawingOptions innerOptions = new()
                     {
-                        Transform = new Matrix4x4(Matrix3x2.CreateSkew(0.18F, 0F)),
-                        ShapeOptions = new ShapeOptions { BooleanOperation = BooleanOperation.Difference }
+                        Transform = new Matrix4x4(Matrix3x2.CreateSkew(0.18F, 0F))
                     };
 
-                    _ = innerRegion.Save(innerOptions, new EllipsePolygon(new PointF(66, 41), new SizeF(102, 58)));
+                    _ = innerRegion.Save(innerOptions);
+                    innerRegion.Clip(ClipOperation.Difference, new EllipsePolygon(new PointF(66, 41), new SizeF(102, 58)));
 
                     innerRegion.Fill(Brushes.Solid(Color.SeaGreen.WithAlpha(0.55F)), new Rectangle(0, 0, 132, 82));
                     innerRegion.DrawLine(

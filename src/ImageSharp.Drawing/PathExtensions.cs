@@ -146,6 +146,24 @@ public static partial class PathExtensions
         => path.TryGetPathPointAtDistance(distance, Vector2.One, out pathPoint);
 
     /// <summary>
+    /// Gets path information at the specified distance along the path, extrapolating along the
+    /// boundary tangents when the distance falls before the start or beyond the end of an open path.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="TryGetPathPointAtDistance(IPath, float, out PathPoint)"/>, out-of-range
+    /// distances resolve to a point on the virtual straight-line continuation of the path's first
+    /// or last segment. Text layout uses this to place aligned glyphs that overflow their layout
+    /// path. The method returns <see langword="false"/> only when the distance is not a finite
+    /// number or the path has no measurable length.
+    /// </remarks>
+    /// <param name="path">The path to measure.</param>
+    /// <param name="distance">The distance along the path.</param>
+    /// <param name="pathPoint">When this method returns, contains the path information at <paramref name="distance"/> if the path is measurable; otherwise, the default value.</param>
+    /// <returns><see langword="true"/> if the point could be resolved; otherwise, <see langword="false"/>.</returns>
+    public static bool TryGetPathPointAtDistanceUnbounded(this IPath path, float distance, out PathPoint pathPoint)
+        => path.TryGetPathPointAtDistanceUnbounded(distance, Vector2.One, out pathPoint);
+
+    /// <summary>
     /// Creates a path segment between two distances along the path.
     /// </summary>
     /// <param name="path">The path to measure.</param>

@@ -51,23 +51,18 @@ public partial class DrawingCanvasTests
         using Image<TPixel> target = provider.GetImage();
         IPath clipPath = new EllipsePolygon(new PointF(96, 64), new SizeF(120, 76));
 
-        ShapeOptions difference = new()
-        {
-            BooleanOperation = BooleanOperation.Difference
-        };
-
-        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions() { ShapeOptions = difference }))
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
         {
             canvas.Clear(Brushes.Solid(Color.White));
 
             // Expected output from the source operations:
-            // - Save replaces the active clip with ellipse (36,26)-(156,102), interpreted through
-            //   Difference for subsequent commands in this saved state.
+            // - Save pushes a state, then Clip applies a Difference clip with ellipse (36,26)-(156,102).
             // - The violet full-canvas fill becomes the canvas rectangle with that oval removed.
             // - The black 3px rectangle stroke is around (24,16)-(168,112); the ellipse sits inside
             //   that border, so the stroke remains a rectangular border rather than showing an oval cut.
             // - After Restore, the steel-blue bottom strip and dark-green border are drawn with no clip.
-            _ = canvas.Save(new DrawingOptions() { ShapeOptions = difference }, clipPath);
+            _ = canvas.Save(new DrawingOptions());
+            canvas.Clip(ClipOperation.Difference, clipPath);
 
             canvas.Fill(Brushes.Solid(Color.MediumVioletRed.WithAlpha(0.85F)), new Rectangle(0, 0, 192, 128));
             canvas.Draw(Pens.Solid(Color.Black, 3), new Rectangle(24, 16, 144, 96));
@@ -89,43 +84,40 @@ public partial class DrawingCanvasTests
     public void RestoreTo_MultipleStates_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        ShapeOptions difference = new()
-        {
-            BooleanOperation = BooleanOperation.Difference
-        };
-
         using Image<TPixel> target = provider.GetImage();
         DrawingOptions firstOptions = new()
         {
-            Transform = Matrix4x4.CreateTranslation(20F, 12F, 0),
-            ShapeOptions = difference
+            Transform = Matrix4x4.CreateTranslation(20F, 12F, 0)
         };
 
         DrawingOptions secondOptions = new()
         {
-            Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.24F, new Vector2(112, 80))),
-            ShapeOptions = difference
+            Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.24F, new Vector2(112, 80)))
         };
 
-        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions() { ShapeOptions = difference }))
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
         {
             canvas.Clear(Brushes.Solid(Color.White));
 
             // Expected output from the first saved state:
-            // - Save replaces the active clip with rectangle (20,20)-(164,124), transformed by
+            // - Save pushes the translated state, then Clip applies rectangle (20,20)-(164,124), transformed by
             //   translation to absolute (40,32)-(184,136).
             // - The sky-blue fill is local (0,0)-(120,84), transformed to (20,12)-(140,96).
             // - Difference leaves the translated fill only in the top strip y=12..32 and left strip
             //   x=20..40 outside the translated clip rectangle.
-            int firstSaveCount = canvas.Save(firstOptions, new RectanglePolygon(20, 20, 144, 104));
+            int firstSaveCount = canvas.Save(firstOptions);
+            canvas.Clip(ClipOperation.Difference, new RectanglePolygon(20, 20, 144, 104));
+
             canvas.Fill(Brushes.Solid(Color.SkyBlue.WithAlpha(0.8F)), new Rectangle(0, 0, 120, 84));
 
             // Expected output from the second saved state:
-            // - Save replaces the first clip with ellipse (47,35)-(177,125), transformed by the same
-            //   rotation used for the purple stroke.
+            // - Save pushes the rotated state, then Clip applies ellipse (47,35)-(177,125), transformed by
+            //   the same rotation used for the purple stroke.
             // - The purple 6px rectangle stroke is centered on (34,26)-(186,134). The ellipse is inside
             //   that border, so Difference leaves the rotated rectangular stroke visually uncut by the oval.
-            _ = canvas.Save(secondOptions, new EllipsePolygon(new PointF(112, 80), new SizeF(130, 90)));
+            _ = canvas.Save(secondOptions);
+            canvas.Clip(ClipOperation.Difference, new EllipsePolygon(new PointF(112, 80), new SizeF(130, 90)));
+
             canvas.Draw(Pens.Solid(Color.MediumPurple, 6), new Rectangle(34, 26, 152, 108));
 
             // RestoreTo(firstSaveCount) returns to the translated rectangle Difference clip. The
@@ -155,11 +147,6 @@ public partial class DrawingCanvasTests
     public void CreateRegion_NestedRegionsAndStateIsolation_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        ShapeOptions difference = new()
-        {
-            BooleanOperation = BooleanOperation.Difference
-        };
-
         using Image<TPixel> target = provider.GetImage();
 
         // This test checks the exact shape produced by each nested state:
@@ -195,18 +182,18 @@ public partial class DrawingCanvasTests
         //    border (8,8)-(312,212) and grey dashed line (20,200)->(300,20) are root-local output.
         DrawingOptions rootOptions = new()
         {
-            Transform = Matrix4x4.CreateTranslation(6F, 4F, 0),
-            ShapeOptions = difference
+            Transform = Matrix4x4.CreateTranslation(6F, 4F, 0)
         };
 
         IPath rootClip = new EllipsePolygon(new PointF(160, 110), new SizeF(252, 164));
 
-        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions() { ShapeOptions = difference }))
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
         {
             canvas.Clear(Brushes.Solid(Color.White));
             canvas.Fill(Brushes.Solid(Color.GhostWhite.WithAlpha(0.85F)), new Rectangle(12, 12, 296, 196));
 
-            _ = canvas.Save(rootOptions, rootClip);
+            _ = canvas.Save(rootOptions);
+            canvas.Clip(ClipOperation.Difference, rootClip);
 
             using (DrawingCanvas<TPixel> outerRegion = canvas.CreateRegion(new Rectangle(30, 24, 240, 156)))
             {
@@ -215,11 +202,11 @@ public partial class DrawingCanvasTests
 
                 DrawingOptions outerOptions = new()
                 {
-                    Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.18F, new Vector2(120, 78))),
-                    ShapeOptions = difference
+                    Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.18F, new Vector2(120, 78)))
                 };
 
-                _ = outerRegion.Save(outerOptions, new RectanglePolygon(18, 14, 204, 128));
+                _ = outerRegion.Save(outerOptions);
+                outerRegion.Clip(ClipOperation.Difference, new RectanglePolygon(18, 14, 204, 128));
 
                 outerRegion.Fill(Brushes.Solid(Color.MediumPurple.WithAlpha(0.35F)), new Rectangle(16, 16, 208, 124));
 
@@ -229,11 +216,11 @@ public partial class DrawingCanvasTests
 
                     DrawingOptions innerOptions = new()
                     {
-                        Transform = new Matrix4x4(Matrix3x2.CreateSkew(0.18F, 0F)),
-                        ShapeOptions = difference
+                        Transform = new Matrix4x4(Matrix3x2.CreateSkew(0.18F, 0F))
                     };
 
-                    _ = innerRegion.Save(innerOptions, new EllipsePolygon(new PointF(66, 41), new SizeF(102, 58)));
+                    _ = innerRegion.Save(innerOptions);
+                    innerRegion.Clip(ClipOperation.Difference, new EllipsePolygon(new PointF(66, 41), new SizeF(102, 58)));
 
                     innerRegion.Fill(Brushes.Solid(Color.SeaGreen.WithAlpha(0.55F)), new Rectangle(0, 0, 132, 82));
                     innerRegion.DrawLine(
