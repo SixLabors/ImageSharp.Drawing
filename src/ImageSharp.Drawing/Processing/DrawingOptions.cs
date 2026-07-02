@@ -7,12 +7,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
 /// Provides options for influencing drawing operations, combining graphics rendering settings,
-/// shape fill-rule behavior, and an optional coordinate transform.
+/// the fill-rule intersection mode, and an optional coordinate transform.
 /// </summary>
 public class DrawingOptions
 {
     private GraphicsOptions graphicsOptions;
-    private ShapeOptions shapeOptions;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DrawingOptions"/> class.
@@ -20,20 +19,18 @@ public class DrawingOptions
     public DrawingOptions()
     {
         this.graphicsOptions = new GraphicsOptions();
-        this.shapeOptions = new ShapeOptions();
         this.Transform = Matrix4x4.Identity;
     }
 
     internal DrawingOptions(
         GraphicsOptions graphicsOptions,
-        ShapeOptions shapeOptions,
+        IntersectionRule intersectionRule,
         Matrix4x4 transform)
     {
         DebugGuard.NotNull(graphicsOptions, nameof(graphicsOptions));
-        DebugGuard.NotNull(shapeOptions, nameof(shapeOptions));
 
         this.graphicsOptions = graphicsOptions;
-        this.shapeOptions = shapeOptions;
+        this.IntersectionRule = intersectionRule;
         this.Transform = transform;
     }
 
@@ -52,17 +49,10 @@ public class DrawingOptions
     }
 
     /// <summary>
-    /// Gets or sets the shape options that control fill-rule intersection mode and boolean clipping behavior.
+    /// Gets or sets the fill rule used to determine which regions of a self-intersecting or
+    /// multi-contour path are inside the filled area. Defaults to <see cref="IntersectionRule.NonZero"/>.
     /// </summary>
-    public ShapeOptions ShapeOptions
-    {
-        get => this.shapeOptions;
-        set
-        {
-            Guard.NotNull(value, nameof(this.ShapeOptions));
-            this.shapeOptions = value;
-        }
-    }
+    public IntersectionRule IntersectionRule { get; set; } = IntersectionRule.NonZero;
 
     /// <summary>
     /// Gets or sets the transform matrix applied to vector output before rasterization.

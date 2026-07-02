@@ -24,7 +24,7 @@ public partial class DrawingCanvasTests
 
         DrawingOptions evenOddOptions = new()
         {
-            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.EvenOdd }
+            IntersectionRule = IntersectionRule.EvenOdd
         };
 
         using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))

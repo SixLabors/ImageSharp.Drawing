@@ -885,7 +885,7 @@ public partial class ProcessWithDrawingCanvasTests
 
         IPathCollection glyphs = TextBuilder.GeneratePaths(text, textOptions);
 
-        DrawingOptions options = new() { ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.NonZero } };
+        DrawingOptions options = new() { IntersectionRule = IntersectionRule.NonZero };
 
         provider.RunValidatingProcessorTest(
             c =>

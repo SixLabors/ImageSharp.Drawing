@@ -35,27 +35,30 @@ internal static class ClippedShapeGenerator
         BooleanOperation operation,
         IPath subject,
         IEnumerable<IPath> clip)
-        => GenerateClippedShapes(new ShapeOptions { BooleanOperation = operation }, subject, clip);
+        => GenerateClippedShapes(operation, IntersectionRule.NonZero, subject, clip);
 
     /// <summary>
     /// Generates the final clipped shapes from the previously provided subject and clip paths.
     /// </summary>
-    /// <param name="options">The shape options used to interpret the input paths.</param>
+    /// <param name="operation">The boolean operation to perform.</param>
+    /// <param name="intersectionRule">The fill rule used to interpret both the subject and clipping paths.</param>
     /// <param name="subject">The subject path.</param>
     /// <param name="clip">The clipping paths.</param>
     /// <returns>
     /// The <see cref="ComplexPolygon"/> representing the result of the boolean operation.
     /// </returns>
     public static ComplexPolygon GenerateClippedShapes(
-        ShapeOptions options,
+        BooleanOperation operation,
+        IntersectionRule intersectionRule,
         IPath subject,
         IEnumerable<IPath> clip)
-        => GenerateClippedShapes(options, subject, clip, options.IntersectionRule);
+        => GenerateClippedShapes(operation, intersectionRule, subject, clip, intersectionRule);
 
     /// <summary>
     /// Generates the final clipped shapes from the previously provided subject and clip paths.
     /// </summary>
-    /// <param name="options">The shape options used to interpret the subject path and choose the boolean operation.</param>
+    /// <param name="operation">The boolean operation to perform.</param>
+    /// <param name="intersectionRule">The fill rule used to interpret the subject path.</param>
     /// <param name="subject">The subject path.</param>
     /// <param name="clip">The clipping paths.</param>
     /// <param name="clipIntersectionRule">The fill rule used to interpret the clipping paths.</param>
@@ -63,7 +66,8 @@ internal static class ClippedShapeGenerator
     /// The <see cref="ComplexPolygon"/> representing the result of the boolean operation.
     /// </returns>
     public static ComplexPolygon GenerateClippedShapes(
-        ShapeOptions options,
+        BooleanOperation operation,
+        IntersectionRule intersectionRule,
         IPath subject,
         IEnumerable<IPath> clip,
         IntersectionRule clipIntersectionRule)
@@ -77,27 +81,28 @@ internal static class ClippedShapeGenerator
                 : null;
 
         if (singleRegionPath is not null &&
-            TryClipRectangleByRegion(options, subject, singleRegionPath, out ComplexPolygon clippedRectangle))
+            TryClipRectangleByRegion(operation, subject, singleRegionPath, out ComplexPolygon clippedRectangle))
         {
             return clippedRectangle;
         }
 
-        PCPolygon s = PolygonClipperFactory.FromClosedPath(subject, options.IntersectionRule);
+        PCPolygon s = PolygonClipperFactory.FromClosedPath(subject, intersectionRule);
 
         if (singleRegionPath is not null)
         {
-            return GenerateRegionClippedShapes(options, s, singleRegionPath);
+            return GenerateRegionClippedShapes(operation, s, singleRegionPath);
         }
 
         PCPolygon c = PolygonClipperFactory.FromClosedPaths(clip, clipIntersectionRule);
 
-        return GenerateClippedShapes(options, s, c);
+        return GenerateClippedShapes(operation, s, c);
     }
 
     /// <summary>
     /// Generates the final clipped shape from the previously provided subject and clip path.
     /// </summary>
-    /// <param name="options">The shape options used to interpret the subject path and choose the boolean operation.</param>
+    /// <param name="operation">The boolean operation to perform.</param>
+    /// <param name="intersectionRule">The fill rule used to interpret the subject path.</param>
     /// <param name="subject">The subject path.</param>
     /// <param name="clip">The clipping path.</param>
     /// <param name="clipIntersectionRule">The fill rule used to interpret the clipping path.</param>
@@ -105,7 +110,8 @@ internal static class ClippedShapeGenerator
     /// The <see cref="ComplexPolygon"/> representing the result of the boolean operation.
     /// </returns>
     public static ComplexPolygon GenerateClippedShapes(
-        ShapeOptions options,
+        BooleanOperation operation,
+        IntersectionRule intersectionRule,
         IPath subject,
         IPath clip,
         IntersectionRule clipIntersectionRule)
@@ -114,31 +120,31 @@ internal static class ClippedShapeGenerator
         Guard.NotNull(clip);
 
         if (clip is IRegionPath regionPath &&
-            TryClipRectangleByRegion(options, subject, regionPath, out ComplexPolygon clippedRectangle))
+            TryClipRectangleByRegion(operation, subject, regionPath, out ComplexPolygon clippedRectangle))
         {
             return clippedRectangle;
         }
 
-        PCPolygon s = PolygonClipperFactory.FromClosedPath(subject, options.IntersectionRule);
+        PCPolygon s = PolygonClipperFactory.FromClosedPath(subject, intersectionRule);
 
         if (clip is IRegionPath regionPathAfterFastPath)
         {
-            return GenerateRegionClippedShapes(options, s, regionPathAfterFastPath);
+            return GenerateRegionClippedShapes(operation, s, regionPathAfterFastPath);
         }
 
         PCPolygon c = PolygonClipperFactory.FromClosedPath(clip, clipIntersectionRule);
 
-        return GenerateClippedShapes(options, s, c);
+        return GenerateClippedShapes(operation, s, c);
     }
 
     private static bool TryClipRectangleByRegion(
-        ShapeOptions options,
+        BooleanOperation operation,
         IPath subject,
         IRegionPath regionPath,
         out ComplexPolygon clipped)
     {
         clipped = null!;
-        if (options.BooleanOperation != BooleanOperation.Intersection ||
+        if (operation != BooleanOperation.Intersection ||
             subject is not RectanglePolygon rectangle)
         {
             return false;
@@ -164,10 +170,10 @@ internal static class ClippedShapeGenerator
     private static RectangleF ToRectangleF(Rectangle rectangle)
         => new(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height);
 
-    private static ComplexPolygon GenerateRegionClippedShapes(ShapeOptions options, PCPolygon subject, IRegionPath regionPath)
+    private static ComplexPolygon GenerateRegionClippedShapes(BooleanOperation operation, PCPolygon subject, IRegionPath regionPath)
     {
         IReadOnlyList<Rectangle> rectangles = regionPath.Rectangles;
-        if (options.BooleanOperation == BooleanOperation.Intersection)
+        if (operation == BooleanOperation.Intersection)
         {
             PCPolygon result = [];
 
@@ -188,7 +194,7 @@ internal static class ClippedShapeGenerator
         for (int i = 0; i < rectangles.Count; i++)
         {
             PCPolygon clip = PolygonClipperFactory.FromRectangle(rectangles[i]);
-            current = options.BooleanOperation switch
+            current = operation switch
             {
                 BooleanOperation.Xor => PolygonClipperAction.Xor(current, clip),
                 BooleanOperation.Difference => PolygonClipperAction.Difference(current, clip),
@@ -200,9 +206,9 @@ internal static class ClippedShapeGenerator
         return ToComplexPolygon(current);
     }
 
-    private static ComplexPolygon GenerateClippedShapes(ShapeOptions options, PCPolygon subject, PCPolygon clip)
+    private static ComplexPolygon GenerateClippedShapes(BooleanOperation operation, PCPolygon subject, PCPolygon clip)
     {
-        PCPolygon result = options.BooleanOperation switch
+        PCPolygon result = operation switch
         {
             BooleanOperation.Xor => PolygonClipperAction.Xor(subject, clip),
             BooleanOperation.Difference => PolygonClipperAction.Difference(subject, clip),

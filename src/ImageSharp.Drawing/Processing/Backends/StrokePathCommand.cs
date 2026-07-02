@@ -131,11 +131,6 @@ public readonly struct StrokePathCommand
     public Matrix4x4 Transform => this.drawingOptions.Transform;
 
     /// <summary>
-    /// Gets the shape options carried by the command.
-    /// </summary>
-    public ShapeOptions ShapeOptions => this.drawingOptions.ShapeOptions;
-
-    /// <summary>
     /// Gets a value indicating whether the command was recorded inside a layer.
     /// </summary>
     public bool IsInsideLayer { get; }

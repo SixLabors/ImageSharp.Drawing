@@ -58,21 +58,18 @@ internal static class TextUtilities
         PixelAlphaCompositionMode compositionMode,
         PixelColorBlendingMode colorBlendingMode)
     {
-        if (drawingOptions.ShapeOptions.IntersectionRule == intersectionRule &&
+        if (drawingOptions.IntersectionRule == intersectionRule &&
             drawingOptions.GraphicsOptions.AlphaCompositionMode == compositionMode &&
             drawingOptions.GraphicsOptions.ColorBlendingMode == colorBlendingMode)
         {
             return drawingOptions;
         }
 
-        ShapeOptions shapeOptions = drawingOptions.ShapeOptions.DeepClone();
-        shapeOptions.IntersectionRule = intersectionRule;
-
         GraphicsOptions graphicsOptions = drawingOptions.GraphicsOptions.DeepClone();
         graphicsOptions.AlphaCompositionMode = compositionMode;
         graphicsOptions.ColorBlendingMode = colorBlendingMode;
 
-        return new DrawingOptions(graphicsOptions, shapeOptions, drawingOptions.Transform);
+        return new DrawingOptions(graphicsOptions, intersectionRule, drawingOptions.Transform);
     }
 
     public static GraphicsOptions CloneOrReturnForRules(

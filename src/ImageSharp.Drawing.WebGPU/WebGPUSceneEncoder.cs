@@ -694,7 +694,7 @@ internal static class WebGPUSceneEncoder
 
         return new RasterizerOptions(
             interest,
-            options.ShapeOptions.IntersectionRule,
+            options.IntersectionRule,
             rasterizationMode,
             graphicsOptions.AntialiasThreshold);
     }

@@ -133,13 +133,13 @@ public partial class DrawingCanvasTests
     {
         using Image<TPixel> target = provider.GetImage();
 
-        // The Avalonia backend wraps its glyph loop in PushDrawingState(), whose ShapeOptions default to
+        // The Avalonia backend wraps its glyph loop in PushDrawingState(), whose IntersectionRule defaults to
         // EvenOdd. The previous glyph-id test uses a default (NonZero) canvas state and renders cleanly;
         // this one replicates the sample's EvenOdd state to confirm the glyph fill's forced non-zero winding
         // holds even when the canvas requests even-odd. If holes appear here, the force has a gap.
         DrawingOptions options = new()
         {
-            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.EvenOdd }
+            IntersectionRule = IntersectionRule.EvenOdd
         };
 
         Font font = TestFontUtilities.GetFont(TestFonts.InterLight, 32);
@@ -197,7 +197,7 @@ public partial class DrawingCanvasTests
 
         DrawingOptions evenOddOptions = new()
         {
-            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.EvenOdd }
+            IntersectionRule = IntersectionRule.EvenOdd
         };
 
         using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, actual, evenOddOptions))
@@ -229,7 +229,7 @@ public partial class DrawingCanvasTests
 
         DrawingOptions clipOptions = new()
         {
-            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.NonZero }
+            IntersectionRule = IntersectionRule.NonZero
         };
 
         using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, actual, new DrawingOptions()))
@@ -264,7 +264,7 @@ public partial class DrawingCanvasTests
 
         DrawingOptions evenOddClipOptions = new()
         {
-            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.EvenOdd }
+            IntersectionRule = IntersectionRule.EvenOdd
         };
 
         using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, actual, new DrawingOptions()))

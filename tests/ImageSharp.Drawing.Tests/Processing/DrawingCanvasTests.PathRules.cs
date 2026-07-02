@@ -20,12 +20,12 @@ public partial class DrawingCanvasTests
 
         DrawingOptions evenOddOptions = new()
         {
-            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.EvenOdd }
+            IntersectionRule = IntersectionRule.EvenOdd
         };
 
         DrawingOptions nonZeroOptions = new()
         {
-            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.NonZero }
+            IntersectionRule = IntersectionRule.NonZero
         };
 
         using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
@@ -64,7 +64,7 @@ public partial class DrawingCanvasTests
 
         DrawingOptions evenOddOptions = new()
         {
-            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.EvenOdd }
+            IntersectionRule = IntersectionRule.EvenOdd
         };
 
         using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, expected, new DrawingOptions()))

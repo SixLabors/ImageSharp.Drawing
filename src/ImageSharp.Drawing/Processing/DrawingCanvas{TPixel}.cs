@@ -686,7 +686,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         // transform, instead of mutating text options or rebuilding the block.
         DrawingOptions placedOptions = new(
             effectiveOptions.GraphicsOptions,
-            effectiveOptions.ShapeOptions,
+            effectiveOptions.IntersectionRule,
             Matrix4x4.CreateTranslation(location.X, location.Y, 0) * effectiveOptions.Transform);
 
         using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache);
@@ -736,7 +736,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         // without changing the prepared text object.
         DrawingOptions placedOptions = new(
             effectiveOptions.GraphicsOptions,
-            effectiveOptions.ShapeOptions,
+            effectiveOptions.IntersectionRule,
             Matrix4x4.CreateTranslation(location.X, location.Y, 0) * effectiveOptions.Transform);
 
         using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache);
@@ -1103,7 +1103,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 // so the queued fill must not apply the canvas transform a second time.
                 commandOptions = new DrawingOptions(
                     effectiveOptions.GraphicsOptions,
-                    effectiveOptions.ShapeOptions,
+                    effectiveOptions.IntersectionRule,
                     Matrix4x4.Identity);
             }
 
@@ -1168,7 +1168,6 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         brush = this.NormalizeBrush(brush);
 
         GraphicsOptions graphicsOptions = options.GraphicsOptions;
-        ShapeOptions shapeOptions = options.ShapeOptions;
         RasterizationMode rasterizationMode = graphicsOptions.Antialias ? RasterizationMode.Antialiased : RasterizationMode.Aliased;
 
         Matrix4x4 transform = options.Transform;
@@ -1194,7 +1193,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         Rectangle interest = ToRasterizerInterest(bounds);
         RasterizerOptions rasterizerOptions = new(
             interest,
-            shapeOptions.IntersectionRule,
+            options.IntersectionRule,
             rasterizationMode,
             graphicsOptions.AntialiasThreshold);
 
@@ -1256,7 +1255,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         RasterizerOptions rasterizerOptions = new(
             interest,
-            options.ShapeOptions.IntersectionRule,
+            options.IntersectionRule,
             rasterizationMode,
             graphicsOptions.AntialiasThreshold);
 
@@ -1298,7 +1297,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         RasterizerOptions rasterizerOptions = new(
             interest,
-            options.ShapeOptions.IntersectionRule,
+            options.IntersectionRule,
             rasterizationMode,
             graphicsOptions.AntialiasThreshold);
 
@@ -1809,12 +1808,6 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         // glyph's contours overlap. Force non-zero on both rule carriers - the rasterizer rule and the
         // shape options - so neither the per-operation rule nor the canvas's even-odd default applies.
         const IntersectionRule intersectionRule = IntersectionRule.NonZero;
-        ShapeOptions shapeOptions = drawingOptions.ShapeOptions;
-        if (shapeOptions.IntersectionRule != intersectionRule)
-        {
-            shapeOptions = shapeOptions.DeepClone();
-            shapeOptions.IntersectionRule = intersectionRule;
-        }
 
         DrawingCanvasState state = this.ResolveState();
         Point destinationOffset = new(
@@ -1851,13 +1844,13 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             graphicsOptions.AntialiasThreshold);
 
         // Glyph paths arrive pre-laid-out, so the queued command must report identity transform and the
-        // GraphicsOptions/ShapeOptions produced above. Reuse the caller's instance only when graphics
-        // options, shape options (the forced non-zero clone) and transform all already match.
+        // GraphicsOptions/IntersectionRule produced above. Reuse the caller's instance only when graphics
+        // options, the forced non-zero rule and transform all already match.
         DrawingOptions effectiveOptions = ReferenceEquals(graphicsOptions, drawingOptions.GraphicsOptions)
-            && ReferenceEquals(shapeOptions, drawingOptions.ShapeOptions)
+            && drawingOptions.IntersectionRule == intersectionRule
             && drawingOptions.Transform == Matrix4x4.Identity
             ? drawingOptions
-            : new DrawingOptions(graphicsOptions, shapeOptions, Matrix4x4.Identity);
+            : new DrawingOptions(graphicsOptions, intersectionRule, Matrix4x4.Identity);
 
         // Clipping is resolved from the ordered begin/end-clip stream, which the canvas anchors
         // at the state's destination offset. Glyph render locations only move the glyph geometry;

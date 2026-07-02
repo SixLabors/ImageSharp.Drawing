@@ -238,10 +238,7 @@ public partial class WebGPUDrawingBackendTests
         DrawingOptions drawingOptions = new()
         {
             GraphicsOptions = new GraphicsOptions { Antialias = true },
-            ShapeOptions = new ShapeOptions
-            {
-                IntersectionRule = IntersectionRule.NonZero
-            }
+            IntersectionRule = IntersectionRule.NonZero
         };
 
         PathBuilder pathBuilder = new();
@@ -1176,11 +1173,7 @@ public partial class WebGPUDrawingBackendTests
             => new()
             {
                 GraphicsOptions = new GraphicsOptions { Antialias = antialias },
-                ShapeOptions = new ShapeOptions
-                {
-                    BooleanOperation = BooleanOperation.Intersection,
-                    IntersectionRule = fillRule
-                }
+                IntersectionRule = fillRule
             };
     }
 
@@ -1192,7 +1185,7 @@ public partial class WebGPUDrawingBackendTests
         DrawingOptions drawingOptions = new()
         {
             GraphicsOptions = new GraphicsOptions { Antialias = true },
-            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.EvenOdd }
+            IntersectionRule = IntersectionRule.EvenOdd
         };
 
         const float sigma = 4F;
@@ -1487,10 +1480,7 @@ public partial class WebGPUDrawingBackendTests
         DrawingOptions drawingOptions = new()
         {
             GraphicsOptions = new GraphicsOptions { Antialias = true },
-            ShapeOptions = new ShapeOptions
-            {
-                IntersectionRule = IntersectionRule.EvenOdd
-            }
+            IntersectionRule = IntersectionRule.EvenOdd
         };
 
         PathBuilder pathBuilder = new();

@@ -280,13 +280,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
             LinearLineSegment segment = new(points);
             Polygon polygon = new(segment);
 
-            ShapeOptions options = new()
-            {
-                BooleanOperation = BooleanOperation.Intersection,
-                IntersectionRule = TextUtilities.MapFillRule(this.currentLayerFillRule)
-            };
-
-            path = path.Clip(options, polygon);
+            path = path.Clip(BooleanOperation.Intersection, TextUtilities.MapFillRule(this.currentLayerFillRule), polygon);
         }
 
         this.CurrentPaths.Add(path);
