@@ -1,7 +1,17 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// Set up dispatch size for path count stage.
+// Computes the indirect dispatch size for the per-line stages. Divides the
+// flattened line count (bump.lines) by the workgroup size, or dispatches
+// zero workgroups when an earlier stage recorded an allocation failure.
+//
+// Inputs: bump (lines counter, failed mask).
+// Outputs: indirect (workgroup counts). The same indirect buffer drives
+// both the path_row_span and path_count dispatches, which each run one
+// thread per line with the same WG_SIZE.
+//
+// Ported from Vello's path_count_setup.wgsl; locally the result is reused
+// for the sparse row span stage.
 
 #import bump
 
@@ -14,6 +24,9 @@ var<storage, read_write> indirect: IndirectCount;
 // Partition size for path count stage
 const WG_SIZE = 256u;
 
+// Single-thread stage: writes ceil(lines / WG_SIZE) workgroups on x, or 0
+// to cancel the per-line stages after an upstream failure; y and z are
+// always 1.
 @compute @workgroup_size(1)
 fn main() {
     if atomicLoad(&bump.failed) != 0u {

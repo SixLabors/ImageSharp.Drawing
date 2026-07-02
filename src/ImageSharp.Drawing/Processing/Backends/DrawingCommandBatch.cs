@@ -11,6 +11,10 @@ public readonly struct DrawingCommandBatch
     /// <summary>
     /// Initializes a new instance of the <see cref="DrawingCommandBatch"/> struct.
     /// </summary>
+    /// <remarks>
+    /// Batches created through this constructor never contain apply barriers or clip controls;
+    /// those commands are only produced by the internal canvas batcher.
+    /// </remarks>
     /// <param name="commands">The draw-order scene commands.</param>
     /// <param name="hasLayers">Indicates whether the command stream contains layer boundaries.</param>
     public DrawingCommandBatch(

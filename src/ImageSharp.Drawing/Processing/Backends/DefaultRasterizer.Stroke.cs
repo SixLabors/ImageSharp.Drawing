@@ -10,8 +10,21 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 internal static partial class DefaultRasterizer
 {
+    /// <summary>
+    /// The length threshold below which a segment direction, arc radius, or edge extent is treated as degenerate.
+    /// Mirrored on the GPU as <c>TANGENT_THRESH</c> in <c>flatten.wgsl</c>; the two must stay in lockstep.
+    /// </summary>
     private const float StrokeDirectionEpsilon = 1e-6F;
+
+    /// <summary>
+    /// The cross-product magnitude below which two offset support lines are treated as parallel
+    /// and their intersection is rejected.
+    /// </summary>
     private const float StrokeParallelEpsilon = 1e-5F;
+
+    /// <summary>
+    /// The number of vertical supersamples taken per pixel row by <see cref="DirectLineSegmentBandRasterizer"/>.
+    /// </summary>
     private const int DirectStrokeVerticalSampleCount = 4;
 
     /// <summary>
@@ -270,6 +283,15 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Wraps finalized retained stroke line storage in the normal stroke rasterizable payload.
     /// </summary>
+    /// <param name="firstRowBandIndex">The first absolute row-band index touched by the stroke.</param>
+    /// <param name="rowBandCount">The number of retained local row bands owned by the stroke.</param>
+    /// <param name="width">The stroke-local visible band width in pixels.</param>
+    /// <param name="wordsPerRow">The bit-vector width in machine words required by the stroke.</param>
+    /// <param name="coverStride">The scanner cover/area stride required by the stroke.</param>
+    /// <param name="destinationLeft">The destination-space band left edge.</param>
+    /// <param name="options">The rasterizer options used for the retained bands.</param>
+    /// <param name="result">The finalized retained line storage in the packed 16-bit-X encoding.</param>
+    /// <returns>The retained stroke rasterizable geometry.</returns>
     private static StrokeRasterizableGeometry CreateRetainedStrokeRasterizableGeometry(
         int firstRowBandIndex,
         int rowBandCount,
@@ -328,6 +350,15 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Wraps finalized retained wide stroke line storage in the normal stroke rasterizable payload.
     /// </summary>
+    /// <param name="firstRowBandIndex">The first absolute row-band index touched by the stroke.</param>
+    /// <param name="rowBandCount">The number of retained local row bands owned by the stroke.</param>
+    /// <param name="width">The stroke-local visible band width in pixels.</param>
+    /// <param name="wordsPerRow">The bit-vector width in machine words required by the stroke.</param>
+    /// <param name="coverStride">The scanner cover/area stride required by the stroke.</param>
+    /// <param name="destinationLeft">The destination-space band left edge.</param>
+    /// <param name="options">The rasterizer options used for the retained bands.</param>
+    /// <param name="result">The finalized retained line storage in the 32-bit-X encoding.</param>
+    /// <returns>The retained stroke rasterizable geometry.</returns>
     private static StrokeRasterizableGeometry CreateRetainedStrokeRasterizableGeometry(
         int firstRowBandIndex,
         int rowBandCount,
@@ -403,6 +434,8 @@ internal static partial class DefaultRasterizer
     /// <returns>The inflated stroke bounds.</returns>
     private static RectangleF InflateStrokeBounds(RectangleF bounds, in StrokeStyle stroke)
     {
+        // Miter joins can protrude up to halfWidth * miterLimit past the corner; every other
+        // join stays within halfWidth of the centerline.
         float joinInflate = stroke.LineJoin switch
         {
             LineJoin.Miter or LineJoin.MiterRevert or LineJoin.MiterRound
@@ -410,6 +443,8 @@ internal static partial class DefaultRasterizer
             _ => stroke.HalfWidth
         };
 
+        // A square cap's corner sits halfWidth along the tangent and halfWidth along the
+        // normal, so its farthest point is halfWidth * sqrt(2) from the endpoint.
         float capInflate = stroke.LineCap == LineCap.Square
             ? stroke.HalfWidth * MathF.Sqrt(2F)
             : stroke.HalfWidth;
@@ -421,7 +456,7 @@ internal static partial class DefaultRasterizer
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="StrokeRasterData"/> class.
+    /// Base retained stroke source payload that rasterizes one row band at execution time.
     /// </summary>
     internal abstract class StrokeRasterData
     {
@@ -447,6 +482,9 @@ internal static partial class DefaultRasterizer
             this.RowBandCount = rowBandCount;
         }
 
+        /// <summary>
+        /// Gets the stroke style consumed during band execution.
+        /// </summary>
         public StrokeStyle Stroke { get; }
 
         /// <summary>
@@ -469,6 +507,11 @@ internal static partial class DefaultRasterizer
         /// </summary>
         public int RowBandCount { get; }
 
+        /// <summary>
+        /// Gets a value indicating whether band execution needs the shared per-band stroke coverage
+        /// scratch buffer. Derived payloads that accumulate whole-band coverage opt in; the caller
+        /// passes an empty span otherwise.
+        /// </summary>
         public virtual bool RequiresBandCoverage => false;
 
         /// <summary>
@@ -676,6 +719,9 @@ internal static partial class DefaultRasterizer
         /// </summary>
         public int BandHeight { get; }
 
+        /// <summary>
+        /// Gets a value indicating whether band execution needs the shared per-band stroke coverage scratch buffer.
+        /// </summary>
         public bool RequiresBandCoverage => this.strokeData.RequiresBandCoverage;
 
         /// <summary>
@@ -816,6 +862,9 @@ internal static partial class DefaultRasterizer
                 return;
             }
 
+            // The stroke body is the offset rectangle p0..p3. Square caps are folded into the
+            // rectangle by extending it halfWidth along the tangent; round caps are sampled
+            // separately as endpoint circles during row emission.
             float halfWidth = this.stroke.HalfWidth;
             Vector2 normal = GetStrokeOffsetNormal(tangent) * halfWidth;
             Vector2 extension = this.stroke.LineCap == LineCap.Square ? tangent * halfWidth : Vector2.Zero;
@@ -1174,6 +1223,8 @@ internal static partial class DefaultRasterizer
                 return;
             }
 
+            // Boundary pixels receive their fractional horizontal overlap; interior pixels are
+            // fully covered by the interval so they take the whole sample weight.
             if (endPixel == startPixel + 1)
             {
                 rowCoverage[startPixel - baseColumn] += (clampedRight - clampedLeft) * sampleWeight;
@@ -1370,6 +1421,8 @@ internal static partial class DefaultRasterizer
 
     /// <summary>
     /// Returns the tessellation segment count used for one round join or cap arc.
+    /// Ported to the GPU as <c>stroke_arc_subdivision_count</c> in <c>flatten.wgsl</c>;
+    /// changes here must be mirrored there.
     /// </summary>
     /// <param name="radius">The arc radius.</param>
     /// <param name="angle">The arc sweep angle in radians.</param>
@@ -1379,6 +1432,10 @@ internal static partial class DefaultRasterizer
     {
         double safeRadius = Math.Max(radius, StrokeDirectionEpsilon);
         double safeScale = Math.Max(arcDetailScale, 0.01D);
+
+        // AGG's chordal-error step: theta is the largest angular step whose chord midpoint
+        // deviates from the arc by at most 0.125 / scale pixels, so tessellation density
+        // adapts to both radius and requested detail.
         double ratio = safeRadius / (safeRadius + (0.125D / safeScale));
         ratio = Math.Clamp(ratio, -1D, 1D);
         double theta = Math.Acos(ratio) * 2D;
@@ -1459,7 +1516,8 @@ internal static partial class DefaultRasterizer
     private static float Cross(Vector2 left, Vector2 right) => (left.X * right.Y) - (left.Y * right.X);
 
     /// <summary>
-    /// Normalizes an angle into the inclusive-exclusive range [0, 2Ï€).
+    /// Normalizes an angle into the inclusive-exclusive range [0, 2 * PI).
+    /// Ported to the GPU as <c>stroke_normalize_positive_angle</c> in <c>flatten.wgsl</c>.
     /// </summary>
     /// <param name="angle">The angle to normalize.</param>
     /// <returns>The normalized angle.</returns>

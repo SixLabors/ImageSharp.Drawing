@@ -13,10 +13,15 @@ using WgpuBuffer = Silk.NET.WebGPU.Buffer;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <content>
-/// GPU readback helpers.
+/// GPU readback helpers. Readback is strictly typed to the surface format by design: the
+/// requested pixel type must match the target's native texture format exactly, otherwise the
+/// operation throws. Callers that need a different pixel layout must read the native format
+/// and convert on the CPU.
 /// </content>
 public sealed unsafe partial class WebGPUDrawingBackend
 {
+    // Upper bound on the blocking wait for the buffer map-async callback. Prevents a lost or
+    // never-dispatched callback (for example after device loss) from hanging the caller forever.
     private const int ReadbackCallbackTimeoutMilliseconds = 5000;
 
     /// <inheritdoc />
@@ -48,6 +53,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
             throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' cannot be read back from a WebGPU target.");
         }
 
+        // Strict-format contract: no pixel conversion is performed on this path. The requested
+        // pixel type must be the surface's own native format.
         if (nativeTarget.TargetFormat != expectedFormat)
         {
             throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' does not match WebGPU target format '{nativeTarget.TargetFormat}'.");
@@ -76,6 +83,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
         Device* device = (Device*)deviceReference.Handle;
 
+        // Feature gate: some formats (for example Bgra8Unorm) require an optional device
+        // feature before they can participate in composite I/O.
         if (requiredFeature != FeatureName.Undefined
             && !WebGPURuntime.GetOrCreateDeviceState(api, nativeTarget.DeviceHandle).HasFeature(requiredFeature))
         {
@@ -213,8 +222,15 @@ public sealed unsafe partial class WebGPUDrawingBackend
     }
 
     /// <summary>
-    /// Reads a render-time scene target region into an ImageSharp pixel buffer.
+    /// Reads a render-time scene target region into an ImageSharp pixel buffer. The caller must
+    /// have submitted all pending GPU work for the target first; this method only reads what the
+    /// queue has already been told to produce.
     /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="flushContext">The flush-scoped WebGPU device, queue, and encoder state.</param>
+    /// <param name="target">The scene target to read from.</param>
+    /// <param name="sourceRectangle">The source rectangle in scene-target coordinates.</param>
+    /// <param name="destination">The destination region that receives the copied pixels.</param>
     internal static void ReadTextureRegion<TPixel>(
         WebGPUFlushContext flushContext,
         WebGPUSceneTarget target,
@@ -259,6 +275,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
                 throw new InvalidOperationException("The WebGPU device could not create a command encoder for readback.");
             }
 
+            // Scene-target bounds are logical coordinates; the texture offset translates them
+            // into texel coordinates within the (possibly larger) backing texture.
             ImageCopyTexture sourceCopy = new()
             {
                 Texture = target.Texture,
@@ -297,6 +315,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             api.CommandEncoderRelease(commandEncoder);
             commandEncoder = null;
 
+            // Map the GPU buffer and wait for completion before reading host-visible bytes.
             BufferMapAsyncStatus mapStatus = BufferMapAsyncStatus.Unknown;
             using ManualResetEventSlim mapReady = new(false);
             void Callback(BufferMapAsyncStatus status, void* userData)
@@ -323,6 +342,9 @@ public sealed unsafe partial class WebGPUDrawingBackend
             try
             {
                 ReadOnlySpan<byte> readback = new(mapped, checked((int)readbackByteCount));
+
+                // The source may have been clipped against the target bounds; offset into the
+                // destination so the copied rows land where the unclipped request began.
                 int destinationX = source.X - sourceRectangle.X;
                 int destinationY = source.Y - sourceRectangle.Y;
 
@@ -379,11 +401,16 @@ public sealed unsafe partial class WebGPUDrawingBackend
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool WaitForMapSignal(Wgpu? extension, Device* device, ManualResetEventSlim signal)
     {
+        // Without the wgpu-native extension there is no manual poll entry point; assume the
+        // implementation dispatches map callbacks on its own and block on the signal alone.
         if (extension is null)
         {
             return signal.Wait(ReadbackCallbackTimeoutMilliseconds);
         }
 
+        // wgpu-native only dispatches map-async callbacks while the device is polled, so a
+        // plain blocking wait would deadlock. DevicePoll(wait: true) blocks until the queue
+        // makes progress, driving callback delivery on this thread.
         Stopwatch stopwatch = Stopwatch.StartNew();
         while (!signal.IsSet && stopwatch.ElapsedMilliseconds < ReadbackCallbackTimeoutMilliseconds)
         {

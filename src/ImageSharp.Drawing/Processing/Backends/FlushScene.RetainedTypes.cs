@@ -66,7 +66,7 @@ internal sealed partial class FlushScene
         /// </summary>
         /// <param name="kind">The layer operation kind.</param>
         /// <param name="layerBounds">The retained row-local layer bounds.</param>
-        /// <param name="itemIndex">The retained layer-options index for begin-layer operations.</param>
+        /// <param name="itemIndex">The layer command's own index; begin-layer operations use it to look up shared layer state.</param>
         public SceneOperation(CompositionCommandKind kind, Rectangle layerBounds, int itemIndex)
         {
             this.Kind = kind == CompositionCommandKind.BeginLayer ? SceneOperationKind.BeginLayer : SceneOperationKind.EndLayer;
@@ -81,12 +81,14 @@ internal sealed partial class FlushScene
         public SceneOperationKind Kind { get; }
 
         /// <summary>
-        /// Gets the retained scene item index for fill operations.
+        /// Gets the retained fill or stroke item index for draw operations. For layer operations
+        /// this is the layer command's own index; begin-layer operations use it to look up the
+        /// shared layer state. In all cases this equals the original command index.
         /// </summary>
         public int ItemIndex { get; }
 
         /// <summary>
-        /// Gets the retained rasterizable row index for fill operations.
+        /// Gets the retained rasterizable row index for draw operations, or -1 for layer operations.
         /// </summary>
         public int LocalRowIndex { get; }
 
@@ -301,6 +303,9 @@ internal sealed partial class FlushScene
             source.firstBlock.Previous = destination.lastBlock;
             destination.lastBlock = source.lastBlock;
             destination.count += source.count;
+
+            // Block ownership transfers to the destination; resetting the source prevents its
+            // Dispose from freeing blocks that are now linked into the destination chain.
             source = default;
         }
 

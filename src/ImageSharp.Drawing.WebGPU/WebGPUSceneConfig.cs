@@ -146,10 +146,17 @@ internal readonly struct WebGPUSceneChunkWindow
     /// <returns>The tile window spanning the entire encoded range.</returns>
     public static WebGPUSceneChunkWindow FullScene(WebGPUSceneRange range)
     {
+        // Tiles are 16x16 pixels (TILE_WIDTH/TILE_HEIGHT in Shared/config.wgsl).
         uint tileHeight = DivideRoundUp(checked((uint)range.TargetBounds.Height), 16U);
         return new WebGPUSceneChunkWindow(0U, tileHeight, tileHeight);
     }
 
+    /// <summary>
+    /// Rounds up integer division for tile sizing.
+    /// </summary>
+    /// <param name="value">The dividend.</param>
+    /// <param name="divisor">The divisor.</param>
+    /// <returns>The quotient rounded up to the next whole unit.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint DivideRoundUp(uint value, uint divisor)
         => (value + divisor - 1U) / divisor;
@@ -241,6 +248,7 @@ internal readonly struct WebGPUSceneBumpSizes
     /// which are sized to accommodate its reference scenes, including paris-30k, without a
     /// grow-and-retry cycle on the first flush.
     /// </remarks>
+    /// <returns>The initial scratch capacities.</returns>
     public static WebGPUSceneBumpSizes Initial()
         => new(
             1U << 21, // Lines
@@ -470,6 +478,9 @@ internal readonly struct WebGPUSceneWorkgroupCounts
         uint lineCount = checked((uint)scene.LineCount);
         uint clipCount = checked((uint)scene.ClipCount);
         uint pathTagCount = checked((uint)scene.PathTagByteCount);
+
+        // Each pathtag_reduce workgroup consumes 256 u32 tag words (1024 tag bytes),
+        // so the tag byte stream is padded to that granularity before dividing.
         uint pathTagPadded = AlignUp(pathTagCount, 4U * 256U);
 
         // The pathtag scan has a small and large variant. We choose once here so every later
@@ -478,8 +489,14 @@ internal readonly struct WebGPUSceneWorkgroupCounts
         bool useLargePathScan = pathTagWgs > 256U;
         uint reducedSize = useLargePathScan ? AlignUp(pathTagWgs, 256U) : pathTagWgs;
         uint drawObjectWgs = DivideRoundUp(drawObjectCount, 256U);
+
+        // draw_leaf.wgsl distributes all draw blocks over at most 256 workgroups
+        // (each loops over its share of blocks), so reduce/leaf dispatches cap at 256.
         uint drawMonoidWgs = Math.Min(drawObjectWgs, 256U);
         uint flattenWgs = DivideRoundUp(pathTagCount, 256U);
+
+        // Vello's sizing: clip_leaf processes the final (possibly partial) partition
+        // itself, so clip_reduce only covers the full partitions preceding it.
         uint clipReduceWgs = clipCount == 0U ? 0U : (clipCount - 1U) / 256U;
         uint clipWgs = DivideRoundUp(clipCount, 256U);
         uint pathWgs = DivideRoundUp(pathCount, 256U);
@@ -500,7 +517,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
             256U,
             reducedSize / 256U,
             pathTagWgs,
-            drawObjectWgs,
+            pathWgs,
             flattenWgs,
             drawMonoidWgs,
             drawMonoidWgs,
@@ -534,6 +551,9 @@ internal readonly struct WebGPUSceneWorkgroupCounts
         uint lineCount = checked((uint)range.LineCount);
         uint clipCount = checked((uint)range.ClipCount);
         uint pathTagCount = checked((uint)range.PathTagByteCount);
+
+        // Same dispatch math as the full-scene overload above; see the comments
+        // there for the pathtag padding, draw cap, and clip reduce rationale.
         uint pathTagPadded = AlignUp(pathTagCount, 4U * 256U);
         uint pathTagWgs = pathTagPadded / (4U * 256U);
         bool useLargePathScan = pathTagWgs > 256U;
@@ -558,7 +578,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
             256U,
             reducedSize / 256U,
             pathTagWgs,
-            drawObjectWgs,
+            pathWgs,
             flattenWgs,
             drawMonoidWgs,
             drawMonoidWgs,
@@ -582,6 +602,9 @@ internal readonly struct WebGPUSceneWorkgroupCounts
     /// <summary>
     /// Rounds up integer division for dispatch sizing.
     /// </summary>
+    /// <param name="value">The dividend.</param>
+    /// <param name="divisor">The divisor.</param>
+    /// <returns>The quotient rounded up to the next whole unit.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint DivideRoundUp(uint value, uint divisor)
         => (value + divisor - 1U) / divisor;
@@ -589,6 +612,9 @@ internal readonly struct WebGPUSceneWorkgroupCounts
     /// <summary>
     /// Rounds <paramref name="value"/> up to the next multiple of <paramref name="alignment"/>.
     /// </summary>
+    /// <param name="value">The value to round.</param>
+    /// <param name="alignment">The alignment; must be a power of two.</param>
+    /// <returns>The rounded value.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint AlignUp(uint value, uint alignment)
         => value + (uint)(-(int)value & (alignment - 1U));
@@ -599,6 +625,34 @@ internal readonly struct WebGPUSceneWorkgroupCounts
 /// </summary>
 internal readonly struct WebGPUSceneBufferSizes
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUSceneBufferSizes"/> struct.
+    /// </summary>
+    /// <param name="pathReduced">The first pathtag-reduction scratch buffer size.</param>
+    /// <param name="pathReduced2">The second pathtag-reduction scratch buffer size.</param>
+    /// <param name="pathReducedScan">The pathtag scan scratch buffer size.</param>
+    /// <param name="pathMonoids">The final pathtag monoid buffer size.</param>
+    /// <param name="pathBboxes">The per-path bounding-box buffer size.</param>
+    /// <param name="drawReduced">The draw reduction buffer size.</param>
+    /// <param name="drawMonoids">The final draw monoid buffer size.</param>
+    /// <param name="info">The scene info-word buffer size.</param>
+    /// <param name="clipInputs">The clip input buffer size.</param>
+    /// <param name="clipElements">The clip element buffer size.</param>
+    /// <param name="clipBics">The clip bic buffer size.</param>
+    /// <param name="clipBboxes">The clip bounding-box buffer size.</param>
+    /// <param name="drawBboxes">The draw bounding-box buffer size.</param>
+    /// <param name="bumpAlloc">The bump allocator block size.</param>
+    /// <param name="paths">The per-path scheduling buffer size.</param>
+    /// <param name="lines">The flattened line buffer size.</param>
+    /// <param name="binHeaders">The bin-header buffer size.</param>
+    /// <param name="binData">The bin-data scratch buffer size.</param>
+    /// <param name="indirectCount">The indirect dispatch-count buffer size.</param>
+    /// <param name="pathRows">The sparse path-row buffer size.</param>
+    /// <param name="pathTiles">The path-tile buffer size.</param>
+    /// <param name="segCounts">The segment-count buffer size.</param>
+    /// <param name="segments">The segment buffer size.</param>
+    /// <param name="blendSpill">The blend-spill buffer size.</param>
+    /// <param name="ptcl">The PTCL buffer size.</param>
     public WebGPUSceneBufferSizes(
         WebGPUSceneBufferSize<GpuTagMonoid> pathReduced,
         WebGPUSceneBufferSize<GpuTagMonoid> pathReduced2,
@@ -793,6 +847,8 @@ internal readonly struct WebGPUSceneBufferSizes
         uint pathReducedCount = reducedSize;
         uint pathReduced2Count = 256U;
         uint pathReducedScanCount = reducedSize;
+
+        // One TagMonoid per u32 tag word; the scan writes whole 256-element partitions.
         uint pathMonoidCount = pathTagWgs * 256U;
         uint pathBboxCount = checked((uint)scene.PathCount);
         uint drawObjectCount = checked((uint)scene.DrawTagCount);
@@ -801,6 +857,8 @@ internal readonly struct WebGPUSceneBufferSizes
         uint infoCount = checked((uint)scene.InfoBufferWordCount);
         uint clipInputCount = checked((uint)scene.ClipCount);
         uint clipElementCount = checked((uint)scene.ClipCount);
+
+        // One Bic per full 256-element clip partition (Vello's n_clip / 256 sizing).
         uint clipBicCount = clipInputCount / 256U;
         uint clipBboxCount = clipInputCount;
         uint drawBboxCount = drawObjectCount;
@@ -810,7 +868,12 @@ internal readonly struct WebGPUSceneBufferSizes
         // the Y dispatch tiles the full bin grid in 256-bin chunks. The header
         // buffer therefore reserves 256 slots per (draw-partition, bin-chunk).
         uint binHeaderCount = checked(drawObjectPartitions * workgroupCounts.BinningY * 256U);
+
+        // Path records are padded to whole 256-thread allocation workgroups.
         uint pathCount = AlignUp(checked((uint)scene.PathCount), 256U);
+
+        // Every tile gets PtclInitialAlloc words up front; the bump-allocated tail
+        // (config.ptcl_dyn_start in Shared/config.wgsl) begins after that fixed region.
         uint ptclBootstrapCount = checked((uint)scene.TileCountX * chunkWindow.TileBufferHeight * WebGPUSceneDispatch.PtclInitialAlloc);
         uint ptclCount = checked(bumpSizes.Ptcl + ptclBootstrapCount);
 
@@ -857,6 +920,9 @@ internal readonly struct WebGPUSceneBufferSizes
         uint reducedSize = workgroupCounts.UseLargePathScan ? AlignUp(pathTagWgs, 256U) : pathTagWgs;
         uint drawObjectCount = checked((uint)range.DrawTagCount);
         uint drawObjectPartitions = BinningComputeShader.GetDispatchX(drawObjectCount);
+
+        // See the full-scene overload above for the bin-header, path padding,
+        // and ptcl bootstrap sizing rationale.
         uint binHeaderCount = checked(drawObjectPartitions * workgroupCounts.BinningY * 256U);
         uint pathCount = AlignUp(checked((uint)range.PathCount), 256U);
         uint tileCountX = checked((uint)((range.TargetBounds.Width + 15) / 16));
@@ -894,6 +960,9 @@ internal readonly struct WebGPUSceneBufferSizes
     /// <summary>
     /// Rounds <paramref name="value"/> up to the next multiple of <paramref name="alignment"/>.
     /// </summary>
+    /// <param name="value">The value to round.</param>
+    /// <param name="alignment">The alignment; must be a power of two.</param>
+    /// <returns>The rounded value.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint AlignUp(uint value, uint alignment)
         => value + (uint)(-(int)value & (alignment - 1U));
@@ -902,9 +971,14 @@ internal readonly struct WebGPUSceneBufferSizes
 /// <summary>
 /// Typed buffer size primitive mirroring Vello's exact-count planning style.
 /// </summary>
+/// <typeparam name="T">The unmanaged element type whose size determines the byte length.</typeparam>
 internal readonly struct WebGPUSceneBufferSize<T>
     where T : unmanaged
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUSceneBufferSize{T}"/> struct.
+    /// </summary>
+    /// <param name="length">The requested element count; zero is clamped to one.</param>
     private WebGPUSceneBufferSize(uint length)
 
         // Storage bindings must remain non-zero-sized for validation.
@@ -927,6 +1001,8 @@ internal readonly struct WebGPUSceneBufferSize<T>
     /// <summary>
     /// Creates a buffer-size wrapper that preserves WebGPU's non-zero storage-binding requirement.
     /// </summary>
+    /// <param name="length">The requested element count; zero is clamped to one.</param>
+    /// <returns>The buffer-size wrapper.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static WebGPUSceneBufferSize<T> Create(uint length) => new(length);
 }

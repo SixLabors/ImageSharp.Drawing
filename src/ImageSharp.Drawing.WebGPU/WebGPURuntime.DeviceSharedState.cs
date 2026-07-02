@@ -9,7 +9,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 internal static unsafe partial class WebGPURuntime
 {
+    /// <summary>
+    /// Maps raw native device pointers to their shared state. Keyed by the raw pointer so
+    /// distinct wrapper handles over the same native device resolve to one shared state.
+    /// </summary>
     private static readonly ConcurrentDictionary<nint, DeviceSharedState> DeviceStateCache = new();
+
+    /// <summary>
+    /// Serializes creation and teardown of cache entries so a state cannot be created
+    /// concurrently with <see cref="ClearDeviceStateCache"/> disposing the cache.
+    /// </summary>
     private static readonly object DeviceStateCacheSync = new();
 
     /// <summary>
@@ -36,7 +45,9 @@ internal static unsafe partial class WebGPURuntime
     }
 
     /// <summary>
-    /// Disposes all cached device-scoped shared state.
+    /// Disposes all cached device-scoped shared state. Called from process-exit teardown before
+    /// the runtime-owned device handles are disposed, because each state holds a reference on
+    /// its device handle.
     /// </summary>
     private static void ClearDeviceStateCache()
     {
@@ -56,14 +67,52 @@ internal static unsafe partial class WebGPURuntime
     /// </summary>
     internal sealed class DeviceSharedState : IDisposable
     {
+        /// <summary>
+        /// Fallback storage-buffer binding ceiling (WebGPU's guaranteed minimum of 128 MiB)
+        /// used when the device limit cannot be queried.
+        /// </summary>
         private const nuint DefaultMaxStorageBufferBindingSize = 128U * 1024U * 1024U;
+
+        /// <summary>
+        /// Cached graphics-pipeline families keyed by pipeline key. Creation within one family
+        /// is serialized by locking the family instance itself.
+        /// </summary>
         private readonly ConcurrentDictionary<string, CompositePipelineInfrastructure> compositePipelines = new(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Cached compute-pipeline families keyed by pipeline key. Creation within one family
+        /// is serialized by locking the family instance itself.
+        /// </summary>
         private readonly ConcurrentDictionary<string, CompositeComputePipelineInfrastructure> compositeComputePipelines = new(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Snapshot of the device features taken at construction time.
+        /// </summary>
         private readonly HashSet<FeatureName> deviceFeatures;
+
+        /// <summary>
+        /// Holds one reference on the device handle for the lifetime of this state so the
+        /// cached pipelines can never outlive the device pointer they were created from.
+        /// </summary>
         private WebGPUHandle.HandleReference deviceReference;
+
+        /// <summary>
+        /// Rooted native callback thunk; kept alive while it is registered on the device.
+        /// </summary>
         private readonly PfnErrorCallback uncapturedErrorCallback;
+
+        /// <summary>
+        /// Tracks whether <see cref="Dispose"/> has run.
+        /// </summary>
         private bool disposed;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DeviceSharedState"/> class, acquiring a
+        /// device reference, installing the uncaptured-error callback, and snapshotting the
+        /// device features and limits.
+        /// </summary>
+        /// <param name="api">The WebGPU API facade used to manage native resources.</param>
+        /// <param name="deviceHandle">The device this state is scoped to.</param>
         internal DeviceSharedState(WebGPU api, WebGPUDeviceHandle deviceHandle)
         {
             this.Api = api;
@@ -79,6 +128,8 @@ internal static unsafe partial class WebGPURuntime
             }
             catch
             {
+                // Construction failed part-way; undo the callback thunk and the device
+                // reference so the handle refcount is not left permanently elevated.
                 this.uncapturedErrorCallback.Dispose();
                 this.deviceReference.Dispose();
                 throw;
@@ -96,17 +147,13 @@ internal static unsafe partial class WebGPURuntime
         private static ReadOnlySpan<byte> CompositeFragmentEntryPoint => "fs_main\0"u8;
 
         /// <summary>
-        /// Gets the synchronization object used for shared state mutation.
-        /// </summary>
-        public object SyncRoot { get; } = new();
-
-        /// <summary>
         /// Gets the WebGPU API instance used by this shared state.
         /// </summary>
         public WebGPU Api { get; }
 
         /// <summary>
-        /// Gets the device associated with this shared state.
+        /// Gets the device associated with this shared state. The pointer stays valid for the
+        /// lifetime of this instance because <see cref="deviceReference"/> pins the handle open.
         /// </summary>
         public Device* Device { get; }
 
@@ -130,6 +177,9 @@ internal static unsafe partial class WebGPURuntime
         /// <summary>
         /// Forwards uncaptured native WebGPU errors through the public environment callback.
         /// </summary>
+        /// <param name="errorType">The native error classification.</param>
+        /// <param name="message">The native UTF-8 error message, or <see langword="null"/>.</param>
+        /// <param name="userData">Unused native user-data pointer.</param>
         private static void HandleUncapturedError(ErrorType errorType, byte* message, void* userData)
         {
             _ = userData;
@@ -144,6 +194,8 @@ internal static unsafe partial class WebGPURuntime
         /// <summary>
         /// Maps Silk's native error enum to the public API enum without exposing Silk types.
         /// </summary>
+        /// <param name="errorType">The native error classification.</param>
+        /// <returns>The equivalent public error type.</returns>
         private static WebGPUErrorType ToPublicErrorType(ErrorType errorType)
             => errorType switch
             {
@@ -158,6 +210,9 @@ internal static unsafe partial class WebGPURuntime
         /// <summary>
         /// Snapshots the feature set currently reported by the native device.
         /// </summary>
+        /// <param name="api">The WebGPU API facade.</param>
+        /// <param name="device">The device to query.</param>
+        /// <returns>The set of features the device reports; empty when the device is <see langword="null"/> or reports none.</returns>
         private static HashSet<FeatureName> EnumerateDeviceFeatures(WebGPU api, Device* device)
         {
             if (device is null)
@@ -186,6 +241,9 @@ internal static unsafe partial class WebGPURuntime
         /// <summary>
         /// Queries the device's storage-buffer binding ceiling, falling back to WebGPU's guaranteed minimum when unavailable.
         /// </summary>
+        /// <param name="api">The WebGPU API facade.</param>
+        /// <param name="device">The device to query.</param>
+        /// <returns>The maximum storage-buffer binding size in bytes.</returns>
         private static nuint QueryMaxStorageBufferBindingSize(WebGPU api, Device* device)
         {
             if (device is null)
@@ -209,8 +267,19 @@ internal static unsafe partial class WebGPURuntime
         }
 
         /// <summary>
-        /// Gets or creates a graphics pipeline used for composite rendering.
+        /// Gets or creates a graphics pipeline used for composite rendering. Pipeline variants
+        /// are cached per (texture format, blend mode) within the family identified by
+        /// <paramref name="pipelineKey"/>.
         /// </summary>
+        /// <param name="pipelineKey">The stable key identifying the pipeline family.</param>
+        /// <param name="shaderCode">Null-terminated WGSL source, used only when the family's shader module has not been created yet.</param>
+        /// <param name="bindGroupLayoutFactory">Creates the family's bind-group layout on first use.</param>
+        /// <param name="textureFormat">The color-target format for the requested variant.</param>
+        /// <param name="blendMode">The blend mode for the requested variant.</param>
+        /// <param name="bindGroupLayout">Receives the family's shared bind-group layout on success.</param>
+        /// <param name="pipeline">Receives the cached or newly created render pipeline on success.</param>
+        /// <param name="error">Receives the failure description when creation fails.</param>
+        /// <returns><see langword="true"/> when the pipeline is available; otherwise <see langword="false"/>.</returns>
         public bool TryGetOrCreateCompositePipeline(
             string pipelineKey,
             ReadOnlySpan<byte> shaderCode,
@@ -280,8 +349,19 @@ internal static unsafe partial class WebGPURuntime
         }
 
         /// <summary>
-        /// Gets or creates a compute pipeline used for composite execution.
+        /// Gets or creates a compute pipeline used for composite execution. One pipeline is
+        /// cached per family, so <paramref name="shaderCode"/> and <paramref name="entryPoint"/>
+        /// are only consumed on first creation; later calls must pass the same values for the
+        /// same <paramref name="pipelineKey"/>.
         /// </summary>
+        /// <param name="pipelineKey">The stable key identifying the pipeline family.</param>
+        /// <param name="shaderCode">Null-terminated WGSL source, used only when the family's shader module has not been created yet.</param>
+        /// <param name="entryPoint">Null-terminated compute entry-point name, used only on first creation.</param>
+        /// <param name="bindGroupLayoutFactory">Creates the family's bind-group layout on first use.</param>
+        /// <param name="bindGroupLayout">Receives the family's shared bind-group layout on success.</param>
+        /// <param name="pipeline">Receives the cached or newly created compute pipeline on success.</param>
+        /// <param name="error">Receives the failure description when creation fails.</param>
+        /// <returns><see langword="true"/> when the pipeline is available; otherwise <see langword="false"/>.</returns>
         public bool TryGetOrCreateCompositeComputePipeline(
             string pipelineKey,
             ReadOnlySpan<byte> shaderCode,
@@ -348,7 +428,9 @@ internal static unsafe partial class WebGPURuntime
         }
 
         /// <summary>
-        /// Releases all cached pipelines owned by this state.
+        /// Releases all cached pipelines owned by this state, unregisters the uncaptured-error
+        /// callback, and drops the device reference. Invoked under the runtime's cache lock via
+        /// <see cref="ClearDeviceStateCache"/>; not safe to run concurrently with pipeline creation.
         /// </summary>
         public void Dispose()
         {
@@ -371,17 +453,27 @@ internal static unsafe partial class WebGPURuntime
 
             this.compositeComputePipelines.Clear();
 
-            // Clear the native callback slot before freeing Silk's delegate thunk.
+            // Clear the native callback slot before freeing Silk's delegate thunk; otherwise the
+            // device could still invoke a callback whose managed thunk has been reclaimed.
             this.Api.DeviceSetUncapturedErrorCallback(this.Device, default, null);
             this.uncapturedErrorCallback.Dispose();
 
+            // Drop the device reference last: every release above calls into the device.
             this.deviceReference.Dispose();
             this.disposed = true;
         }
 
         /// <summary>
         /// Creates the shared bind-group layout, pipeline layout, and shader module for one cached pipeline family.
+        /// On failure every partially created object is released before returning.
         /// </summary>
+        /// <param name="shaderCode">Null-terminated WGSL source for the family's shader module.</param>
+        /// <param name="bindGroupLayoutFactory">Creates the family's bind-group layout.</param>
+        /// <param name="bindGroupLayout">Receives the created bind-group layout on success.</param>
+        /// <param name="pipelineLayout">Receives the created pipeline layout on success.</param>
+        /// <param name="shaderModule">Receives the created shader module on success.</param>
+        /// <param name="error">Receives the failure description when creation fails.</param>
+        /// <returns><see langword="true"/> when all three objects were created; otherwise <see langword="false"/>.</returns>
         private bool TryCreateCompositeInfrastructure(
             ReadOnlySpan<byte> shaderCode,
             WebGPUCompositeBindGroupLayoutFactory bindGroupLayoutFactory,
@@ -432,6 +524,11 @@ internal static unsafe partial class WebGPURuntime
         /// <summary>
         /// Creates one graphics pipeline variant for the specified output format and blend mode.
         /// </summary>
+        /// <param name="pipelineLayout">The family's shared pipeline layout.</param>
+        /// <param name="shaderModule">The family's shared shader module.</param>
+        /// <param name="textureFormat">The color-target format for the variant.</param>
+        /// <param name="blendMode">The blend mode for the variant.</param>
+        /// <returns>The created render pipeline, or <see langword="null"/> on failure.</returns>
         private RenderPipeline* CreateCompositePipeline(
             PipelineLayout* pipelineLayout,
             ShaderModule* shaderModule,
@@ -458,6 +555,13 @@ internal static unsafe partial class WebGPURuntime
         /// <summary>
         /// Creates the underlying render pipeline once the shared shader module and entry points are fixed.
         /// </summary>
+        /// <param name="pipelineLayout">The family's shared pipeline layout.</param>
+        /// <param name="shaderModule">The family's shared shader module.</param>
+        /// <param name="vertexEntryPointPtr">Pinned pointer to the null-terminated vertex entry-point name.</param>
+        /// <param name="fragmentEntryPointPtr">Pinned pointer to the null-terminated fragment entry-point name.</param>
+        /// <param name="textureFormat">The color-target format for the variant.</param>
+        /// <param name="blendMode">The blend mode for the variant.</param>
+        /// <returns>The created render pipeline, or <see langword="null"/> on failure.</returns>
         private RenderPipeline* CreateCompositePipelineCore(
             PipelineLayout* pipelineLayout,
             ShaderModule* shaderModule,
@@ -518,6 +622,10 @@ internal static unsafe partial class WebGPURuntime
         /// <summary>
         /// Creates the compute pipeline used by one cached composite compute shader.
         /// </summary>
+        /// <param name="pipelineLayout">The family's shared pipeline layout.</param>
+        /// <param name="shaderModule">The family's shared shader module.</param>
+        /// <param name="entryPoint">Null-terminated compute entry-point name.</param>
+        /// <returns>The created compute pipeline, or <see langword="null"/> on failure.</returns>
         private ComputePipeline* CreateCompositeComputePipeline(
             PipelineLayout* pipelineLayout,
             ShaderModule* shaderModule,
@@ -544,6 +652,8 @@ internal static unsafe partial class WebGPURuntime
         /// <summary>
         /// Creates a shader module from null-terminated WGSL source bytes.
         /// </summary>
+        /// <param name="shaderCode">Null-terminated WGSL source bytes.</param>
+        /// <returns>The created shader module, or <see langword="null"/> on failure.</returns>
         private ShaderModule* CreateShaderModule(ReadOnlySpan<byte> shaderCode)
         {
             fixed (byte* shaderCodePtr = shaderCode)
@@ -566,6 +676,7 @@ internal static unsafe partial class WebGPURuntime
         /// <summary>
         /// Releases one cached graphics-pipeline family and every render pipeline variant it owns.
         /// </summary>
+        /// <param name="infrastructure">The pipeline family to release.</param>
         private void ReleaseCompositeInfrastructure(CompositePipelineInfrastructure infrastructure)
         {
             foreach (nint pipelineHandle in infrastructure.Pipelines.Values)
@@ -600,6 +711,7 @@ internal static unsafe partial class WebGPURuntime
         /// <summary>
         /// Releases one cached compute-pipeline family and the shared resources behind it.
         /// </summary>
+        /// <param name="infrastructure">The pipeline family to release.</param>
         private void ReleaseCompositeComputeInfrastructure(CompositeComputePipelineInfrastructure infrastructure)
         {
             if (infrastructure.Pipeline is not null)
@@ -628,27 +740,58 @@ internal static unsafe partial class WebGPURuntime
         }
 
         /// <summary>
-        /// Shared render-pipeline infrastructure for compositing variants.
+        /// Shared render-pipeline infrastructure for compositing variants. Instances double as
+        /// the per-family lock object that serializes lazy creation of their contents.
         /// </summary>
         private sealed class CompositePipelineInfrastructure
         {
+            /// <summary>
+            /// Gets the cached pipeline variants keyed by (texture format, blend mode).
+            /// Values are stored as <see cref="nint"/> because pointer types cannot be
+            /// dictionary type arguments.
+            /// </summary>
             public Dictionary<(TextureFormat TextureFormat, CompositePipelineBlendMode BlendMode), nint> Pipelines { get; } = [];
 
+            /// <summary>
+            /// Gets or sets the bind-group layout shared by all variants in this family.
+            /// </summary>
             public BindGroupLayout* BindGroupLayout { get; set; }
 
+            /// <summary>
+            /// Gets or sets the pipeline layout shared by all variants in this family.
+            /// </summary>
             public PipelineLayout* PipelineLayout { get; set; }
 
+            /// <summary>
+            /// Gets or sets the shader module shared by all variants in this family.
+            /// </summary>
             public ShaderModule* ShaderModule { get; set; }
         }
 
+        /// <summary>
+        /// Shared compute-pipeline infrastructure for one cached compute shader. Instances
+        /// double as the per-family lock object that serializes lazy creation of their contents.
+        /// </summary>
         private sealed class CompositeComputePipelineInfrastructure
         {
+            /// <summary>
+            /// Gets or sets the bind-group layout for this family.
+            /// </summary>
             public BindGroupLayout* BindGroupLayout { get; set; }
 
+            /// <summary>
+            /// Gets or sets the pipeline layout for this family.
+            /// </summary>
             public PipelineLayout* PipelineLayout { get; set; }
 
+            /// <summary>
+            /// Gets or sets the shader module for this family.
+            /// </summary>
             public ShaderModule* ShaderModule { get; set; }
 
+            /// <summary>
+            /// Gets or sets the single cached compute pipeline for this family.
+            /// </summary>
             public ComputePipeline* Pipeline { get; set; }
         }
     }

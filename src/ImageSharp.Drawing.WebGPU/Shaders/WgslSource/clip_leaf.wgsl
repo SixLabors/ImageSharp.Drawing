@@ -1,6 +1,24 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+// Clip-stack scan stage. Second pass of the stack-monoid scan: resolves the
+// BeginClip/EndClip stack across the whole scene. Every clip record gets a
+// conservative clip bbox (the intersection of its ancestor clip bboxes),
+// and each EndClip's draw monoid is rewritten to reference the matching
+// BeginClip's path, draw data, and info so the fine stage can composite
+// real antialiased path coverage when the clip is popped.
+//
+// Inputs: config uniform; clip_inp (ClipInp records from draw_leaf);
+// path_bboxes (per-path bounds); reduced (per-workgroup Bic aggregates from
+// clip_reduce); clip_els (open-clip stack elements from clip_reduce).
+// Outputs: draw_monoids (EndClip entries rewritten in place); clip_bboxes
+// (conservative bbox per clip record, consumed by binning).
+//
+// Ported from Vello's clip_leaf.wgsl (linebender/vello,
+// vello_shaders/shader). Local divergence: ClipInp carries a clip
+// operation, and Difference clips contribute an infinite bbox because they
+// retain everything outside their path.
+
 #import config
 #import bbox
 #import clip
@@ -34,6 +52,14 @@ var<workgroup> sh_stack_bbox: array<vec4<f32>, WG_SIZE>;
 var<workgroup> sh_bbox: array<vec4<f32>, WG_SIZE>;
 var<workgroup> sh_link: array<i32, WG_SIZE>;
 
+// Searches the binary Bic tree in sh_bic (leaves at 0..WG_SIZE, internal
+// levels packed above) for the nearest preceding element whose push is
+// still open at the element at local index ix_in. Walks up the tree
+// combining aggregates into *bic until an unmatched push (b > 0) is found,
+// then walks back down to the exact leaf. Returns the predecessor's local
+// index, or, when the match lies outside this workgroup, i32(~0u - a)
+// where a is the count of still-unmatched pops; that negative value indexes
+// the cross-workgroup prefix stack as sh_stack[WG_SIZE + link].
 fn search_link(bic: ptr<function, Bic>, ix_in: u32) -> i32 {
     var ix = ix_in;
     var j = 0u;
@@ -67,16 +93,21 @@ fn search_link(bic: ptr<function, Bic>, ix_in: u32) -> i32 {
     }
 }
 
+// Loads the sign-tagged path index of clip record ix (non-negative for
+// BeginClip, negative for EndClip). Lanes past config.n_clip get i32 min,
+// a negative sentinel so padding lanes are never treated as pushes.
 fn load_clip_path(ix: u32) -> i32 {
     if ix < config.n_clip {
         return clip_inp[ix].path_ix;
     } else {
+        // 0x80000000 does not fit in an i32 literal, hence the decimal form.
         return -2147483648;
-        // literal too large?
-        // return 0x80000000;
     }
 }
 
+// Loads the clip operation (intersection or difference) of clip record ix.
+// Lanes past config.n_clip report intersection; the operation only affects
+// push records, so the value is inert for padding.
 fn load_clip_operation(ix: u32) -> u32 {
     if ix < config.n_clip {
         return clip_inp[ix].operation;
@@ -85,12 +116,24 @@ fn load_clip_operation(ix: u32) -> u32 {
     return CLIP_OPERATION_INTERSECTION;
 }
 
+// Resolves the clip stack for one workgroup's span of clip records.
+// Phase 1: scan the Bic aggregates of preceding workgroups to size the
+// cross-workgroup prefix stack, binary-search clip_els to load its top
+// WG_SIZE elements into sh_stack, and prefix-intersect their bboxes.
+// Phase 2: build a binary Bic tree over this span, find each record's
+// predecessor (the enclosing open push) with search_link, and intersect
+// bboxes along the resulting parent links.
+// Phase 3: for EndClips, rewrite the draw monoid to the matching
+// BeginClip's path/scene/info and use the grandparent bbox (the clip state
+// after the pop); emit the conservative clip bbox for every record.
 @compute @workgroup_size(256)
 fn main(
     @builtin(global_invocation_id) global_id: vec3<u32>,
     @builtin(local_invocation_id) local_id: vec3<u32>,
     @builtin(workgroup_id) wg_id: vec3<u32>,
 ) {
+    // Scan the aggregates of workgroups preceding this one; sh_bic[0] then
+    // holds their combined Bic, whose b is the prefix stack depth.
     var bic: Bic;
     if local_id.x < wg_id.x {
         bic = reduced[local_id.x];
@@ -109,7 +152,9 @@ fn main(
     let stack_size = sh_bic[0].b;
     // TODO: if stack depth > WG_SIZE desired, scan here
 
-    // binary search in stack
+    // Binary search in the prefix stack: lane local_id.x loads the element
+    // sp levels below the stack top; ix locates the workgroup whose
+    // clip_els partition still holds that element.
     let sp = WG_SIZE - 1u - local_id.x;
     var ix = 0u;
     for (var i = 0u; i < firstTrailingBit(WG_SIZE); i += 1u) {

@@ -6,6 +6,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// Retained scene created by the WebGPU drawing backend.
 /// </summary>
+/// <remarks>
+/// A retained scene can be rendered multiple times, including concurrently. The scene caches
+/// reusable GPU arenas and monotonically growing scratch capacities between renders so repeat
+/// renders skip the dynamic-growth discovery passes.
+/// </remarks>
 public sealed class WebGPUDrawingBackendScene : DrawingBackendScene
 {
     // These arenas contain mutable GPU scratch/resource buffers. They are cached on the
@@ -47,7 +52,7 @@ public sealed class WebGPUDrawingBackendScene : DrawingBackendScene
     }
 
     /// <summary>
-    /// Gets the retained encoded scene when this is a leaf scene.
+    /// Gets the retained encoded scene.
     /// </summary>
     internal WebGPUEncodedScene EncodedScene { get; }
 
@@ -71,8 +76,10 @@ public sealed class WebGPUDrawingBackendScene : DrawingBackendScene
     internal WebGPUDrawingBackend? ArenaOwner { get; set; }
 
     /// <summary>
-    /// Updates the scratch capacities retained by this scene.
+    /// Updates the scratch capacities retained by this scene. Each counter only ever grows;
+    /// values smaller than the current retained maximum are ignored.
     /// </summary>
+    /// <param name="bumpSizes">The scratch capacities observed by a completed render.</param>
     internal void UpdateBumpSizes(WebGPUSceneBumpSizes bumpSizes)
     {
         UpdateBumpSize(ref this.bumpLines, bumpSizes.Lines);
@@ -86,20 +93,25 @@ public sealed class WebGPUDrawingBackendScene : DrawingBackendScene
     }
 
     /// <summary>
-    /// Rents reusable scene resource buffers for one render.
+    /// Rents reusable scene resource buffers for one render, leaving the scene slot empty.
     /// </summary>
+    /// <returns>The cached arena, or <see langword="null"/> when the slot is empty.</returns>
     internal WebGPUSceneResourceArena? RentResourceArena()
         => Interlocked.Exchange(ref this.resourceArena, null);
 
     /// <summary>
-    /// Rents reusable scheduling scratch buffers for one render.
+    /// Rents reusable scheduling scratch buffers for one render, leaving the scene slot empty.
     /// </summary>
+    /// <returns>The cached arena, or <see langword="null"/> when the slot is empty.</returns>
     internal WebGPUSceneSchedulingArena? RentSchedulingArena()
         => Interlocked.Exchange(ref this.schedulingArena, null);
 
     /// <summary>
     /// Returns reusable arenas after one render.
     /// </summary>
+    /// <param name="resourceArena">The scene resource arena to return, or <see langword="null"/> when none was rented.</param>
+    /// <param name="schedulingArena">The scheduling arena to return, or <see langword="null"/> when none was rented.</param>
+    /// <param name="arenaOwner">The backend that receives displaced arenas and this scene's arenas on disposal.</param>
     internal void ReturnArenas(
         WebGPUSceneResourceArena? resourceArena,
         WebGPUSceneSchedulingArena? schedulingArena,
@@ -136,6 +148,8 @@ public sealed class WebGPUDrawingBackendScene : DrawingBackendScene
     /// <summary>
     /// Updates one retained scratch-capacity counter without allowing a concurrent render to shrink it.
     /// </summary>
+    /// <param name="target">The counter field storing the uint capacity bit-for-bit as int.</param>
+    /// <param name="value">The newly observed capacity.</param>
     private static void UpdateBumpSize(ref int target, uint value)
     {
         while (true)

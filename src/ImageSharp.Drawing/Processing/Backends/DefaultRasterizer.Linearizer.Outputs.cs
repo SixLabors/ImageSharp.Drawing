@@ -134,6 +134,8 @@ internal static partial class DefaultRasterizer
         /// <param name="context">The mutable scan-conversion context.</param>
         public void Iterate(int rowIndex, ref Context context)
         {
+            // The chain is newest-first: only the front block may be partially filled, so its
+            // valid count is tracked separately; every block after it is full.
             int count = this.FirstBlockLineCounts[rowIndex];
             TLineBlock? lineBlock = this.Lines[rowIndex];
             while (lineBlock is not null)

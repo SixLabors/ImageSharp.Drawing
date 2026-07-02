@@ -28,6 +28,9 @@ internal enum CompositePipelineBlendMode
 /// </summary>
 internal sealed unsafe class WebGPUFlushContext : IDisposable
 {
+    // Transient GPU objects created during this flush, stored as nint because pointer types
+    // cannot be list type arguments. All of them are released in Dispose after the open
+    // passes end, so command encoding never references a freed object.
     private readonly List<nint> transientBindGroups = [];
     private readonly List<nint> transientBuffers = [];
     private readonly List<nint> transientTextureViews = [];
@@ -40,6 +43,21 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
     private bool disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUFlushContext"/> class.
+    /// Use <see cref="Create{TPixel}"/>; this constructor only stores already-validated state.
+    /// </summary>
+    /// <param name="api">The WebGPU API facade for this flush.</param>
+    /// <param name="wgpuExtension">The wgpu-native extension used to poll asynchronous callbacks.</param>
+    /// <param name="deviceHandle">The safe handle for the device.</param>
+    /// <param name="queueHandle">The safe handle for the queue.</param>
+    /// <param name="targetTextureHandle">The safe handle for the target texture.</param>
+    /// <param name="targetTextureViewHandle">The safe handle for the target texture view.</param>
+    /// <param name="targetBounds">The target bounds for this flush.</param>
+    /// <param name="targetTextureOffset">The offset from logical target coordinates to texture coordinates.</param>
+    /// <param name="textureFormat">The target texture format.</param>
+    /// <param name="memoryAllocator">The allocator for temporary CPU staging buffers.</param>
+    /// <param name="deviceState">The device-scoped shared caches and reusable resources.</param>
     private WebGPUFlushContext(
         WebGPU api,
         Wgpu wgpuExtension,
@@ -162,6 +180,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <summary>
     /// Creates a flush context for a native WebGPU surface.
     /// </summary>
+    /// <typeparam name="TPixel">The pixel format of the target frame.</typeparam>
     /// <param name="frame">The target frame.</param>
     /// <param name="expectedTextureFormat">The expected GPU texture format.</param>
     /// <param name="requiredFeature">
@@ -234,6 +253,10 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// </summary>
     /// <param name="requiredBytes">The required number of bytes for the current flush.</param>
     /// <param name="minimumCapacityBytes">The minimum allocation size to enforce when creating a new buffer.</param>
+    /// <remarks>
+    /// Growing replaces the buffer; previous contents are discarded, so callers must re-upload
+    /// any data they still need.
+    /// </remarks>
     public void EnsureInstanceBufferCapacity(nuint requiredBytes, nuint minimumCapacityBytes)
     {
         if (this.InstanceBuffer is not null && this.InstanceBufferCapacity >= requiredBytes)
@@ -278,14 +301,24 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     }
 
     /// <summary>
-    /// Begins a render pass that targets the specified texture view.
+    /// Begins a render pass that targets the specified texture view, clearing existing contents.
     /// </summary>
+    /// <param name="targetView">The texture view that receives the pass output.</param>
+    /// <returns><see langword="true"/> if a render pass is open; otherwise <see langword="false"/>.</returns>
     public bool BeginRenderPass(TextureView* targetView)
         => this.BeginRenderPass(targetView, loadExisting: false);
 
     /// <summary>
     /// Begins a render pass that targets the specified texture view, optionally preserving existing contents.
     /// </summary>
+    /// <param name="targetView">The texture view that receives the pass output.</param>
+    /// <param name="loadExisting"><see langword="true"/> to load the existing texture contents; <see langword="false"/> to clear.</param>
+    /// <returns><see langword="true"/> if a render pass is open; otherwise <see langword="false"/>.</returns>
+    /// <remarks>
+    /// When a render pass is already open it is reused as-is; <paramref name="targetView"/> and
+    /// <paramref name="loadExisting"/> are ignored in that case. Fails when no command encoder
+    /// exists or a compute pass is open, because passes cannot be nested on one encoder.
+    /// </remarks>
     public bool BeginRenderPass(TextureView* targetView, bool loadExisting)
     {
         if (this.PassEncoder is not null)
@@ -383,6 +416,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <summary>
     /// Tracks a transient buffer allocated during this flush.
     /// </summary>
+    /// <param name="buffer">The buffer to track.</param>
     public void TrackBuffer(WgpuBuffer* buffer)
     {
         if (buffer is not null)
@@ -394,6 +428,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <summary>
     /// Tracks a transient texture view allocated during this flush.
     /// </summary>
+    /// <param name="textureView">The texture view to track.</param>
     public void TrackTextureView(TextureView* textureView)
     {
         if (textureView is not null)
@@ -405,6 +440,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <summary>
     /// Tracks a transient texture allocated during this flush.
     /// </summary>
+    /// <param name="texture">The texture to track.</param>
     public void TrackTexture(Texture* texture)
     {
         if (texture is not null)
@@ -449,6 +485,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             return;
         }
 
+        // Ordering: end any open passes before releasing the encoder they were recorded on,
+        // then release the encoder before the transient objects it may still reference.
         this.EndComputePassIfOpen();
         this.EndRenderPassIfOpen();
 

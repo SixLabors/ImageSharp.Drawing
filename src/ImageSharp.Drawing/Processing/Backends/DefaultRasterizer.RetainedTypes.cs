@@ -171,7 +171,7 @@ internal static partial class DefaultRasterizer
         public IntersectionRule IntersectionRule { get; }
 
         /// <summary>
-        /// Gets the coverage mode used by the band.
+        /// Gets the rasterization mode used by the band.
         /// </summary>
         public RasterizationMode RasterizationMode { get; }
 
@@ -197,6 +197,9 @@ internal static partial class DefaultRasterizer
     internal sealed class LineArrayX32Y16
     {
         private LineArrayX32Y16Block? current;
+
+        // Starting at full capacity forces the first AppendLine to allocate the front block,
+        // so empty rows never pay for a block allocation.
         private int count = LineArrayX32Y16Block.LineCount;
 
         /// <summary>
@@ -220,6 +223,7 @@ internal static partial class DefaultRasterizer
         /// <param name="y1">The ending Y coordinate in 24.8 fixed-point.</param>
         public void AppendLine(int x0, int y0, int x1, int y1)
         {
+            // Horizontal segments never change scanline winding, so they carry no raster payload.
             if (y0 == y1)
             {
                 return;
@@ -338,17 +342,17 @@ internal static partial class DefaultRasterizer
         private struct PackedLineX32Y16
         {
             /// <summary>
-            /// Gets or sets the packed Y endpoints.
+            /// The packed signed 16-bit Y endpoints.
             /// </summary>
             public int PackedY0Y1;
 
             /// <summary>
-            /// Gets or sets the starting X coordinate.
+            /// The starting X coordinate in 24.8 fixed-point.
             /// </summary>
             public int X0;
 
             /// <summary>
-            /// Gets or sets the ending X coordinate.
+            /// The ending X coordinate in 24.8 fixed-point.
             /// </summary>
             public int X1;
         }
@@ -369,6 +373,9 @@ internal static partial class DefaultRasterizer
     internal sealed class LineArrayX16Y16
     {
         private LineArrayX16Y16Block? current;
+
+        // Starting at full capacity forces the first AppendLine to allocate the front block,
+        // so empty rows never pay for a block allocation.
         private int count = LineArrayX16Y16Block.LineCount;
 
         /// <summary>
@@ -392,6 +399,7 @@ internal static partial class DefaultRasterizer
         /// <param name="y1">The ending Y coordinate in 24.8 fixed-point.</param>
         public void AppendLine(int x0, int y0, int x1, int y1)
         {
+            // Horizontal segments never change scanline winding, so they carry no raster payload.
             if (y0 == y1)
             {
                 return;
@@ -513,12 +521,12 @@ internal static partial class DefaultRasterizer
         private struct PackedLineX16Y16
         {
             /// <summary>
-            /// Gets or sets the packed Y endpoints.
+            /// The packed signed 16-bit Y endpoints.
             /// </summary>
             public int PackedY0Y1;
 
             /// <summary>
-            /// Gets or sets the packed X endpoints.
+            /// The packed signed 16-bit X endpoints.
             /// </summary>
             public int PackedX0X1;
         }

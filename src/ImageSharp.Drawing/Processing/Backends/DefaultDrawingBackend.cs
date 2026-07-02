@@ -99,8 +99,12 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             }
         }
 
+        // The root target carries null graphics options: options are only needed when a target
+        // is composited back as a layer, and the root frame is never composited onto anything.
         BandTarget<TPixel> target = new(destinationFrame, targetBounds.X, targetBounds.Y, null);
 
+        // Segments exist only when apply or scoped-layer barriers split the scene; each barrier
+        // requires all preceding rows to be fully rendered before it may read or composite pixels.
         if (scene.Segments.Length != 0)
         {
             ExecuteSceneSegments(configuration, destinationFrame.Width, scene, scene.Segments, target);
@@ -116,6 +120,12 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     /// <summary>
     /// Executes retained target-wide segments against the supplied target.
     /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="canvasWidth">The destination canvas width.</param>
+    /// <param name="scene">The retained flush scene.</param>
+    /// <param name="segments">The retained segments to execute in order.</param>
+    /// <param name="target">The active target receiving segment output.</param>
     private static void ExecuteSceneSegments<TPixel>(
         Configuration configuration,
         int canvasWidth,
@@ -124,6 +134,9 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         BandTarget<TPixel> target)
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        // Segments execute strictly in order: the rows preceding a barrier must be complete
+        // before the barrier runs, because apply items read the pixels those rows produced and
+        // layer composition must observe everything drawn beneath the layer.
         for (int i = 0; i < segments.Length; i++)
         {
             FlushScene.SceneSegment segment = segments[i];
@@ -138,6 +151,8 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             }
             else if (segment.LayerItem is FlushScene.ScopedLayerSceneItem layerItem)
             {
+                // Layers render into a clean temporary buffer so their contents blend back as a
+                // single unit with the layer's own graphics options, preserving back-to-front order.
                 using BandTarget<TPixel> layerTarget = new(
                     configuration.MemoryAllocator.Allocate2D<TPixel>(layerItem.Bounds.Width, layerItem.Bounds.Height, AllocationOptions.Clean),
                     layerItem.Bounds,
@@ -152,6 +167,11 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     /// <summary>
     /// Executes the retained row stream without command filtering.
     /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="canvasWidth">The destination canvas width.</param>
+    /// <param name="scene">The retained flush scene supplying the rows.</param>
+    /// <param name="target">The active target receiving row output.</param>
     private static void ExecuteSceneRows<TPixel>(
         Configuration configuration,
         int canvasWidth,
@@ -163,6 +183,12 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     /// <summary>
     /// Executes the supplied retained row stream without command filtering.
     /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="canvasWidth">The destination canvas width.</param>
+    /// <param name="scene">The retained flush scene.</param>
+    /// <param name="rows">The retained scene rows to execute.</param>
+    /// <param name="target">The active target receiving row output.</param>
     private static void ExecuteSceneRows<TPixel>(
         Configuration configuration,
         int canvasWidth,
@@ -173,6 +199,8 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     {
         int requestedParallelism = configuration.MaxDegreeOfParallelism;
 
+        // Each SceneRow owns one disjoint horizontal band of the target, so rows can execute in
+        // parallel with no synchronization: no two workers ever write the same destination pixel.
         _ = Parallel.For(
             fromInclusive: 0,
             toExclusive: rows.Length,
@@ -213,6 +241,10 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Rectangle targetBounds = target.Bounds;
+
+        // Row band indices are absolute canvas-space multiples of the tile height, but the active
+        // target may be a layer with arbitrary bounds, so the band must be clipped to the target
+        // and translated into local buffer coordinates before rendering.
         int bandTop = row.RowBandIndex * DefaultRasterizer.DefaultTileHeight;
         int bandBottom = bandTop + DefaultRasterizer.DefaultTileHeight;
         int clippedBandTop = Math.Max(bandTop, targetBounds.Y);
@@ -243,6 +275,14 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     /// <summary>
     /// Executes retained row operations against the supplied target until the current layer scope ends.
     /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="cursor">The cursor over the retained row-operation stream; shared across recursion so nested layers consume from the same stream.</param>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="canvasWidth">The destination canvas width.</param>
+    /// <param name="scene">The retained flush scene.</param>
+    /// <param name="target">The active target receiving operation output.</param>
+    /// <param name="scratch">The worker-local raster scratch.</param>
+    /// <param name="state">The worker-local execution state.</param>
     private static void ExecuteSceneRowOperations<TPixel>(
         ref SceneOperationCursor cursor,
         Configuration configuration,
@@ -350,6 +390,11 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     /// <summary>
     /// Executes every retained row band for one apply item against the supplied target.
     /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="renderer">The image brush renderer that writes the processed pixels back.</param>
+    /// <param name="item">The retained apply operation.</param>
+    /// <param name="target">The active target receiving the processed pixels.</param>
     private static void ExecuteApplyItemParallel<TPixel>(
         Configuration configuration,
         BrushRenderer<TPixel> renderer,
@@ -388,6 +433,11 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     /// <summary>
     /// Applies one retained processor operation to the current target.
     /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="canvasWidth">The destination canvas width.</param>
+    /// <param name="item">The retained apply operation.</param>
+    /// <param name="target">The active target the operation reads from and writes back to.</param>
     private static void ExecuteApplyItem<TPixel>(
         Configuration configuration,
         int canvasWidth,
@@ -395,6 +445,8 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         BandTarget<TPixel> target)
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        // Layer targets store their pixels at a layer-local origin, so the absolute source
+        // rectangle must be translated before reading; the root target already reads absolute.
         Rectangle readRect = item.SourceRect;
         if (item.OwnerLayer is not null)
         {
@@ -409,6 +461,9 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         CopyTargetToImage(target, readRect, sourceImage.Frames.RootFrame.PixelBuffer.GetRegion());
         sourceImage.Mutate(item.Operation);
 
+        // Write-back uses Src semantics: item.GraphicsOptions was cloned via
+        // CloneForClearOperation (AlphaCompositionMode.Src, full blend), so the processed pixels
+        // replace the covered region outright, including transparency, instead of blending over it.
         Brush brush = new ImageBrush<TPixel>(sourceImage, sourceImage.Bounds, item.BrushOffset);
         BrushRenderer<TPixel> renderer = brush.CreateRenderer<TPixel>(
             configuration,
@@ -422,6 +477,10 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     /// <summary>
     /// Copies the requested target rectangle into an image-sized destination region.
     /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="target">The target to read pixels from.</param>
+    /// <param name="readRect">The target-local rectangle to copy.</param>
+    /// <param name="destination">The destination region sized for the full source rectangle.</param>
     private static void CopyTargetToImage<TPixel>(
         BandTarget<TPixel> target,
         Rectangle readRect,
@@ -434,6 +493,9 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             return;
         }
 
+        // When the read rectangle extends past the target, only the overlap is copied and it is
+        // placed at the matching offset inside the destination; the uncovered remainder keeps the
+        // destination image's transparent pixels so the processor sees correctly aligned input.
         int destinationX = clipped.X - readRect.X;
         int destinationY = clipped.Y - readRect.Y;
         for (int y = 0; y < clipped.Height; y++)
@@ -541,18 +603,26 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     /// <summary>
     /// Composites one full temporary layer target back into its destination target.
     /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="source">The temporary layer target carrying the layer's graphics options.</param>
+    /// <param name="destination">The destination target to blend into.</param>
     private static void CompositeLayerTarget<TPixel>(
         Configuration configuration,
         BandTarget<TPixel> source,
         BandTarget<TPixel> destination)
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        // A null source options means the target was not created as a layer; only layer targets
+        // carry the options that define how their contents blend back into the destination.
         Rectangle overlap = Rectangle.Intersect(source.Bounds, destination.Bounds);
         if (overlap.Width <= 0 || overlap.Height <= 0 || source.GraphicsOptions is null)
         {
             return;
         }
 
+        // Composite band-by-band on the same absolute tile grid used for rendering so the
+        // parallel blend partitions rows without two workers sharing a destination row.
         int firstRowBandIndex = overlap.Top / DefaultRasterizer.DefaultTileHeight;
         int lastRowBandIndex = (overlap.Bottom - 1) / DefaultRasterizer.DefaultTileHeight;
         int rowBandCount = (lastRowBandIndex - firstRowBandIndex) + 1;

@@ -23,6 +23,9 @@ public sealed partial class WebGPUDrawingBackend
         CompositePixelRegistration.Create<NormalizedByte4>(TextureFormat.Rgba8Snorm, TextureSampleType.Float, new("rgba8snorm", CompositeTextureEncodingKind.Snorm)),
         CompositePixelRegistration.Create<HalfVector4>(TextureFormat.Rgba16float, TextureSampleType.Float, new("rgba16float", CompositeTextureEncodingKind.Float)),
         CompositePixelRegistration.Create<Rgba32>(TextureFormat.Rgba8Unorm, TextureSampleType.Float, new("rgba8unorm", CompositeTextureEncodingKind.Float)),
+
+        // Bgra8Unorm is not storage-bindable in core WebGPU; it requires the optional
+        // Bgra8UnormStorage device feature, checked at render and readback time.
         CompositePixelRegistration.Create<Bgra32>(TextureFormat.Bgra8Unorm, TextureSampleType.Float, new("bgra8unorm", CompositeTextureEncodingKind.Float), FeatureName.Bgra8UnormStorage),
     ];
 
@@ -31,7 +34,16 @@ public sealed partial class WebGPUDrawingBackend
     /// </summary>
     internal enum CompositeTextureEncodingKind
     {
+        /// <summary>
+        /// Channel values are stored as unsigned normalized or floating-point data; shader
+        /// output is written unchanged.
+        /// </summary>
         Float,
+
+        /// <summary>
+        /// Channel values are stored as signed normalized data; the shader must remap its
+        /// [0, 1] output into the [-1, 1] snorm range when storing texels.
+        /// </summary>
         Snorm
     }
 
@@ -83,10 +95,18 @@ public sealed partial class WebGPUDrawingBackend
     /// <summary>
     /// Resolves the shader-side read/write traits for a registered composite texture format.
     /// </summary>
+    /// <param name="textureFormat">The native texture format. Must be one of the registered formats.</param>
+    /// <returns>The shader traits registered for the format.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static CompositeTextureShaderTraits GetCompositeTextureShaderTraits(TextureFormat textureFormat)
         => Find(textureFormat).ShaderTraits;
 
+    /// <summary>
+    /// Finds the registration for a CLR pixel type.
+    /// </summary>
+    /// <param name="pixelType">The pixel CLR type to look up.</param>
+    /// <param name="registration">Receives the matching registration on success.</param>
+    /// <returns><see langword="true"/> when the pixel type is registered; otherwise <see langword="false"/>.</returns>
     private static bool TryFind(Type pixelType, out CompositePixelRegistration registration)
     {
         foreach (CompositePixelRegistration r in CompositeRegistrations)
@@ -102,12 +122,20 @@ public sealed partial class WebGPUDrawingBackend
         return false;
     }
 
+    /// <summary>
+    /// Finds the registration for a native texture format. Callers must pass a registered
+    /// format; an unregistered format yields the default (empty) registration.
+    /// </summary>
+    /// <param name="textureFormat">The native texture format to look up.</param>
+    /// <returns>The matching registration, or the default registration when the format is not registered.</returns>
     private static CompositePixelRegistration Find(TextureFormat textureFormat)
         => Array.Find(CompositeRegistrations, r => r.TextureFormat == textureFormat);
 
     /// <summary>
     /// Shader-facing traits derived from one registered composite texture format.
     /// </summary>
+    /// <param name="outputFormat">The WGSL storage-texture format token used for writes.</param>
+    /// <param name="encodingKind">The numeric encoding applied when storing output texels.</param>
     internal readonly struct CompositeTextureShaderTraits(string outputFormat, CompositeTextureEncodingKind encodingKind)
     {
         /// <summary>
@@ -175,12 +203,16 @@ public sealed partial class WebGPUDrawingBackend
         public CompositeTextureShaderTraits ShaderTraits { get; }
 
         /// <summary>
-        /// Creates a registration record for <typeparamref name="TPixel"/> with a required device feature.
+        /// Creates a registration record for <typeparamref name="TPixel"/>.
         /// </summary>
+        /// <typeparam name="TPixel">The pixel type to register.</typeparam>
         /// <param name="textureFormat">The matching WebGPU texture format.</param>
         /// <param name="sampleType">The sampled texture type for this format.</param>
         /// <param name="shaderTraits">Shader-facing read/write traits for this format.</param>
-        /// <param name="requiredFeature">The device feature required for storage binding.</param>
+        /// <param name="requiredFeature">
+        /// The device feature required for storage binding, or <see cref="FeatureName.Undefined"/>
+        /// when the format is natively storable.
+        /// </param>
         /// <returns>The initialized registration.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static CompositePixelRegistration Create<TPixel>(TextureFormat textureFormat, TextureSampleType sampleType, CompositeTextureShaderTraits shaderTraits, FeatureName requiredFeature = FeatureName.Undefined)

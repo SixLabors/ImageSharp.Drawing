@@ -25,10 +25,18 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </remarks>
 internal static unsafe partial class WebGPURuntime
 {
+    /// <summary>
+    /// Serializes probe execution and guards the cached probe results.
+    /// Probes hold this lock while provisioning runs, so a probe may acquire
+    /// <see cref="Sync"/> while holding <see cref="ProbeSync"/>. The global lock
+    /// order is therefore <see cref="ProbeSync"/> first, then <see cref="Sync"/>;
+    /// every path that needs both must acquire them in that order.
+    /// </summary>
     private static readonly object ProbeSync = new();
 
     /// <summary>
-    /// Synchronizes all runtime state transitions.
+    /// Synchronizes all runtime state transitions: API/extension loading, the cached
+    /// default device/queue pair, and process-exit teardown.
     /// </summary>
     private static readonly object Sync = new();
 
@@ -43,21 +51,32 @@ internal static unsafe partial class WebGPURuntime
     private static Wgpu? wgpuExtension;
 
     /// <summary>
-    /// Lazily provisioned device handle for CPU-backed frames.
+    /// Lazily provisioned device handle for CPU-backed frames. Owned by the runtime and
+    /// disposed during process-exit teardown; callers must never dispose it.
     /// </summary>
     private static WebGPUDeviceHandle? autoDeviceHandle;
 
     /// <summary>
-    /// Lazily provisioned queue handle for CPU-backed frames.
+    /// Lazily provisioned queue handle for CPU-backed frames. Owned by the runtime and
+    /// disposed during process-exit teardown; callers must never dispose it.
     /// </summary>
     private static WebGPUQueueHandle? autoQueueHandle;
 
     /// <summary>
-    /// Tracks whether the process-exit hook has been installed.
+    /// Tracks whether the process-exit hook has been installed. Guarded by <see cref="Sync"/>.
     /// </summary>
     private static bool processExitHooked;
 
+    /// <summary>
+    /// Cached result of <see cref="ProbeAvailability"/>; <see langword="null"/> until the first
+    /// probe runs. Guarded by <see cref="ProbeSync"/>.
+    /// </summary>
     private static WebGPUEnvironmentError? availabilityProbeResult;
+
+    /// <summary>
+    /// Cached result of <see cref="ProbeComputePipelineSupport"/>; <see langword="null"/> until
+    /// the first probe runs. Guarded by <see cref="ProbeSync"/>.
+    /// </summary>
     private static WebGPUEnvironmentError? computePipelineProbeResult;
 
     /// <summary>
@@ -111,6 +130,10 @@ internal static unsafe partial class WebGPURuntime
     /// <param name="queue">Receives the queue pointer on success.</param>
     /// <param name="errorCode">Receives the stable failure code on error.</param>
     /// <returns><see langword="true"/> when handles are available; otherwise <see langword="false"/>.</returns>
+    /// <remarks>
+    /// Thread safe; all provisioning happens under <see cref="Sync"/>. The returned handles stay
+    /// owned by the runtime and are disposed at process exit, so callers must not dispose them.
+    /// </remarks>
     internal static bool TryGetOrCreateDevice(
         out WebGPUDeviceHandle? device,
         out WebGPUQueueHandle? queue,
@@ -289,6 +312,9 @@ internal static unsafe partial class WebGPURuntime
                 return computePipelineProbeResult.Value;
             }
 
+            // Without process isolation the pipeline-creation attempt could crash natively and
+            // take the caller down with it, so skip the risky step and report success based on
+            // the availability probe alone.
             if (!RemoteExecutor.IsSupported)
             {
                 computePipelineProbeResult = WebGPUEnvironmentError.Success;
@@ -406,8 +432,16 @@ internal static unsafe partial class WebGPURuntime
         }
     }
 
+    /// <summary>
+    /// Releases all runtime-owned state: cached per-device shared state, the auto-provisioned
+    /// device/queue pair, cached probe results, and finally the shared loader wrappers.
+    /// Callers must hold <see cref="Sync"/>.
+    /// </summary>
     private static void DisposeRuntimeCore()
     {
+        // Device shared state holds references on the device handles, so it must be released
+        // first; otherwise disposing the auto handles below could not drain their refcounts
+        // and the native device would stay open.
         ClearDeviceStateCache();
 
         if (api is not null)
@@ -456,15 +490,26 @@ internal static unsafe partial class WebGPURuntime
         }
     }
 
+    /// <summary>
+    /// Loads the shared API loader and wgpu extension and installs the process-exit teardown hook.
+    /// Callers must hold <see cref="Sync"/>; the exit hook re-acquires the lock when it fires.
+    /// </summary>
     private static void EnsureInitialized()
     {
         if (!processExitHooked)
         {
             AppDomain.CurrentDomain.ProcessExit += (_, _) =>
             {
-                lock (Sync)
+                // Acquire in the global lock order (ProbeSync, then Sync). The probes hold
+                // ProbeSync and then enter Sync via TryGetOrCreateDevice, so taking Sync
+                // first here would deadlock against a probe racing process exit. The inner
+                // lock (ProbeSync) in DisposeRuntimeCore is then a reentrant acquisition.
+                lock (ProbeSync)
                 {
-                    DisposeRuntimeCore();
+                    lock (Sync)
+                    {
+                        DisposeRuntimeCore();
+                    }
                 }
             };
 

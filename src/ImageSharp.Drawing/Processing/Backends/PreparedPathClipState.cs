@@ -9,10 +9,22 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// Holds flush-scoped raster data for path clip descriptors.
 /// </summary>
+/// <remarks>
+/// Path descriptors in the clip stack are pre-rasterized once per flush so backends can compose
+/// them into coverage masks. All raster data is anchored at the shared destination offset so
+/// every clip layer resolves in the same coordinate space as the draw it constrains.
+/// </remarks>
 internal sealed class PreparedPathClipState : IDisposable
 {
     private readonly DefaultRasterizer.RasterizableGeometry?[] rasterizables;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PreparedPathClipState"/> class.
+    /// </summary>
+    /// <param name="rasterizables">
+    /// The retained raster data indexed by clip descriptor position. Non-path descriptors and
+    /// empty difference clips are represented by <see langword="null"/> entries.
+    /// </param>
     private PreparedPathClipState(DefaultRasterizer.RasterizableGeometry?[] rasterizables)
         => this.rasterizables = rasterizables;
 
@@ -89,6 +101,9 @@ internal sealed class PreparedPathClipState : IDisposable
             }
 
             prepared = new PreparedPathClipState(rasterizables);
+
+            // Ownership has transferred to the prepared instance; clearing the local stops the
+            // finally block from disposing raster data that is now retained.
             rasterizables = [];
             return true;
         }

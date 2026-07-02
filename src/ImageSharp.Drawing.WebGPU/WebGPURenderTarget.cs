@@ -16,6 +16,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 public sealed class WebGPURenderTarget : IDisposable
 {
     private readonly WebGPUDeviceContext deviceContext;
+
+    // False when the context is shared, e.g. targets created via CreateRenderTarget or from a
+    // surface frame; those must not tear down the context their siblings still use.
     private readonly bool ownsDeviceContext;
     private bool isDisposed;
 
@@ -70,6 +73,15 @@ public sealed class WebGPURenderTarget : IDisposable
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPURenderTarget"/> class over an existing device context,
+    /// allocating the backing texture and view on that context's device.
+    /// </summary>
+    /// <param name="deviceContext">The device context that owns the device and queue used by this target.</param>
+    /// <param name="ownsDeviceContext">Whether this target disposes <paramref name="deviceContext"/> when it is disposed.</param>
+    /// <param name="format">The target texture format.</param>
+    /// <param name="width">The target width in pixels.</param>
+    /// <param name="height">The target height in pixels.</param>
     internal WebGPURenderTarget(
         WebGPUDeviceContext deviceContext,
         bool ownsDeviceContext,
@@ -222,11 +234,15 @@ public sealed class WebGPURenderTarget : IDisposable
     }
 
     /// <summary>
-    /// Reads the current GPU texture contents back into a new CPU image.
+    /// Reads the current GPU texture contents back into a new CPU image whose pixel type matches <see cref="Format"/>.
     /// </summary>
-    /// <returns>The readback image.</returns>
+    /// <returns>
+    /// The readback image: <see cref="Image{TPixel}"/> of <see cref="Rgba32"/> for <see cref="WebGPUTextureFormat.Rgba8Unorm"/>,
+    /// <see cref="Bgra32"/> for <see cref="WebGPUTextureFormat.Bgra8Unorm"/>, <see cref="NormalizedByte4"/> for
+    /// <see cref="WebGPUTextureFormat.Rgba8Snorm"/>, and <see cref="HalfVector4"/> for <see cref="WebGPUTextureFormat.Rgba16Float"/>.
+    /// </returns>
     public Image ReadbackImage()
-#pragma warning disable CS8524
+#pragma warning disable CS8524 // Exhaustive in practice: the constructors validate Format to the four named values.
         => this.Format switch
         {
             WebGPUTextureFormat.Rgba8Unorm => this.ReadbackImage<Rgba32>(),
@@ -239,7 +255,10 @@ public sealed class WebGPURenderTarget : IDisposable
     /// <summary>
     /// Reads the current GPU texture contents back into a new CPU image.
     /// </summary>
-    /// <typeparam name="TPixel">The destination image pixel format.</typeparam>
+    /// <typeparam name="TPixel">
+    /// The destination image pixel format. Must match <see cref="Format"/>; the backend read throws
+    /// <see cref="NotSupportedException"/> on a mismatch. Use <see cref="ReadbackImage()"/> to dispatch by format.
+    /// </typeparam>
     /// <returns>The readback image.</returns>
     public Image<TPixel> ReadbackImage<TPixel>()
         where TPixel : unmanaged, IPixel<TPixel>
@@ -264,7 +283,10 @@ public sealed class WebGPURenderTarget : IDisposable
     /// <summary>
     /// Reads the current GPU texture contents back into an existing CPU buffer region.
     /// </summary>
-    /// <typeparam name="TPixel">The destination image pixel format.</typeparam>
+    /// <typeparam name="TPixel">
+    /// The destination image pixel format. Must match <see cref="Format"/>; the backend read throws
+    /// <see cref="NotSupportedException"/> on a mismatch.
+    /// </typeparam>
     /// <param name="destination">The destination buffer region that receives the readback pixels.</param>
     public void ReadbackInto<TPixel>(Buffer2DRegion<TPixel> destination)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -290,7 +312,8 @@ public sealed class WebGPURenderTarget : IDisposable
     }
 
     /// <summary>
-    /// Releases the owned texture view and texture.
+    /// Releases the owned texture view and texture, and the device context when this target created it.
+    /// Targets created from a shared context leave that context untouched.
     /// </summary>
     public void Dispose()
     {
@@ -310,6 +333,9 @@ public sealed class WebGPURenderTarget : IDisposable
         this.isDisposed = true;
     }
 
+    /// <summary>
+    /// Throws when this render target has been disposed.
+    /// </summary>
     private void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
 }

@@ -1,7 +1,15 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// This must be kept in sync with `ConfigUniform` in `vello_encoding/src/config.rs`
+// The per-scene GPU configuration uniform plus tile-geometry constants.
+//
+// Imported by every compute stage; bound at group slot zero. Derived from
+// Vello's shader/shared/config.wgsl (linebender/vello), where the struct was
+// synced with ConfigUniform in vello_encoding/src/config.rs.
+//
+// Written by the C# side each render attempt. Field order and sizes must be
+// kept in sync with GpuSceneConfig in WebGPUSceneResources.cs (values are
+// computed by WebGPUSceneConfig.cs).
 struct Config {
     width_in_tiles: u32,
     height_in_tiles: u32,
@@ -9,6 +17,8 @@ struct Config {
     target_width: u32,
     target_height: u32,
 
+    // Chunked rendering window: the first global tile row rendered by this
+    // attempt and the number of real tile rows it covers.
     chunk_tile_y_start: u32,
     chunk_tile_height: u32,
 
@@ -16,15 +26,15 @@ struct Config {
     // The format is packed RGBA8 in MSB order.
     base_color: u32,
 
-    n_drawobj: u32,
-    n_path: u32,
-    n_clip: u32,
+    n_drawobj: u32, // number of draw objects in the scene
+    n_path: u32, // number of paths in the scene
+    n_clip: u32, // number of clip begin/end records in the scene
 
     // To reduce the number of bindings, info, path-gradient data, and bin data are combined
     // into one buffer.
-    bin_data_start: u32,
-    path_gradient_data_base: u32,
-    ptcl_dyn_start: u32,
+    bin_data_start: u32, // start of bump-allocated bin data within that buffer
+    path_gradient_data_base: u32, // start of path-gradient edge data within that buffer
+    ptcl_dyn_start: u32, // start of the bump-allocated region of the ptcl buffer
 
     // offsets within scene buffer (in u32 units)
     pathtag_base: u32,
@@ -45,6 +55,8 @@ struct Config {
     segments_size: u32,
     blend_size: u32,
     ptcl_size: u32,
+    // Scene-wide coverage cutoff consumed by the aliased fine pass; per-fill
+    // thresholds (CmdFill.coverage_threshold) override it where set.
     fine_coverage_threshold: f32,
 }
 
@@ -57,12 +69,14 @@ const N_TILE_X = 16u;
 const N_TILE_Y = 16u;
 const N_TILE = N_TILE_X * N_TILE_Y;
 
-// Not currently supporting non-square tiles
+// Reciprocal of TILE_WIDTH/TILE_HEIGHT, used to map pixel coordinates to
+// tile coordinates. Not currently supporting non-square tiles.
 const TILE_SCALE = 0.0625;
 
 // The "split" point between using local memory in fine for the blend stack and spilling to the blend_spill buffer.
 // A higher value will increase vgpr ("register") pressure in fine, but decrease required dynamic memory allocation.
-// If changing, also change in vello_shaders/src/cpu/coarse.rs.
+// Used by coarse.wgsl to reserve blend_spill scratch for tiles whose clip depth
+// exceeds the split, and by fine.wgsl to pick the stack slot at run time.
 const BLEND_STACK_SPLIT = 4u;
 
 // The following are computed in draw_leaf from the generic gradient parameters

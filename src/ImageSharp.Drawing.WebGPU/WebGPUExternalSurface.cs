@@ -14,6 +14,9 @@ public sealed class WebGPUExternalSurface : IDisposable
 {
     private readonly WebGPUSurfaceResources resources;
     private readonly WebGPUPresentMode presentMode;
+
+    // Last size forwarded by the host via Resize; used for frame acquisition and to skip
+    // redundant swapchain reconfiguration when the reported size has not changed.
     private Size framebufferSize;
     private bool isDisposed;
 
@@ -71,7 +74,7 @@ public sealed class WebGPUExternalSurface : IDisposable
 
     /// <summary>
     /// Notifies the external surface that the drawable framebuffer has resized and reconfigures the swapchain when the
-    /// size changes.
+    /// size changes. Zero-area sizes (minimize, mid-layout) are ignored so the last valid configuration is retained.
     /// </summary>
     /// <param name="framebufferSize">The new framebuffer size in pixels.</param>
     public void Resize(Size framebufferSize)
@@ -92,10 +95,15 @@ public sealed class WebGPUExternalSurface : IDisposable
     }
 
     /// <summary>
-    /// Tries to acquire the next drawable frame.
+    /// Tries to acquire the next drawable frame using default drawing options.
     /// </summary>
     /// <param name="frame">Receives the acquired frame on success.</param>
     /// <returns><see langword="true"/> when a frame is available; otherwise <see langword="false"/>.</returns>
+    /// <remarks>
+    /// A <see langword="false"/> result means no drawable frame is available right now, for example because the
+    /// surface was lost, outdated, timed out, has a zero-sized framebuffer, or recovered from device loss.
+    /// Dispose the returned frame when you are done with it to present it and release its per-frame resources.
+    /// </remarks>
     public bool TryAcquireFrame([NotNullWhen(true)] out WebGPUSurfaceFrame? frame)
         => this.TryAcquireFrameCore(new DrawingOptions(), out frame);
 
@@ -105,10 +113,18 @@ public sealed class WebGPUExternalSurface : IDisposable
     /// <param name="options">The drawing options for the acquired frame.</param>
     /// <param name="frame">Receives the acquired frame on success.</param>
     /// <returns><see langword="true"/> when a frame is available; otherwise <see langword="false"/>.</returns>
+    /// <remarks>
+    /// A <see langword="false"/> result means no drawable frame is available right now, for example because the
+    /// surface was lost, outdated, timed out, has a zero-sized framebuffer, or recovered from device loss.
+    /// Dispose the returned frame when you are done with it to present it and release its per-frame resources.
+    /// </remarks>
     public bool TryAcquireFrame(DrawingOptions options, [NotNullWhen(true)] out WebGPUSurfaceFrame? frame)
         => this.TryAcquireFrameCore(options, out frame);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases the WebGPU surface stack. The native host handles supplied through
+    /// <see cref="WebGPUSurfaceHost"/> remain owned by the caller and are not released.
+    /// </summary>
     public void Dispose()
     {
         if (this.isDisposed)
@@ -120,6 +136,13 @@ public sealed class WebGPUExternalSurface : IDisposable
         this.isDisposed = true;
     }
 
+    /// <summary>
+    /// Acquires the next drawable frame from the shared surface resources using the last size reported via
+    /// <see cref="Resize(Size)"/>.
+    /// </summary>
+    /// <param name="options">The drawing options for the acquired frame.</param>
+    /// <param name="frame">Receives the acquired frame on success.</param>
+    /// <returns><see langword="true"/> when a frame is available; otherwise <see langword="false"/>.</returns>
     private bool TryAcquireFrameCore(
         DrawingOptions options,
         [NotNullWhen(true)] out WebGPUSurfaceFrame? frame)
@@ -132,6 +155,9 @@ public sealed class WebGPUExternalSurface : IDisposable
             out frame);
     }
 
+    /// <summary>
+    /// Throws when this surface has been disposed.
+    /// </summary>
     private void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
 }

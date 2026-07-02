@@ -7,7 +7,8 @@ using SixLabors.ImageSharp.PixelFormats;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <content>
-/// GPU frame-copy helpers.
+/// GPU frame-copy helpers. Copies run entirely on the GPU as texture-to-texture commands;
+/// both frames must share the same device and queue and use the pixel type's native format.
 /// </content>
 public sealed unsafe partial class WebGPUDrawingBackend
 {
@@ -53,6 +54,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
             throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' does not match one of the WebGPU target formats.");
         }
 
+        // Clip in two stages: first the request against the source bounds, then the shifted
+        // result against the target bounds. Out-of-range copies clip silently rather than throw.
         Rectangle sourceBounds = new(0, 0, source.Bounds.Width, source.Bounds.Height);
         Rectangle clippedSource = Rectangle.Intersect(sourceBounds, sourceRectangle);
         if (clippedSource.Width <= 0 || clippedSource.Height <= 0)
@@ -74,6 +77,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
             return;
         }
 
+        // Propagate any target-side clipping back to the source origin so both rectangles
+        // describe the same clipped extent.
         int sourceX = clippedSource.X + clippedTarget.X - targetRectangle.X;
         int sourceY = clippedSource.Y + clippedTarget.Y - targetRectangle.Y;
         int targetX = clippedTarget.X;
@@ -96,6 +101,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
         using WebGPUHandle.HandleReference sourceTextureReference = nativeSource.TargetTextureHandle.AcquireReference();
         using WebGPUHandle.HandleReference targetTextureReference = nativeTarget.TargetTextureHandle.AcquireReference();
 
+        // CommandEncoderCopyTextureToTexture cannot cross devices or queues; a cross-device
+        // copy would need a CPU round trip, which this GPU-only path does not provide.
         if (sourceDeviceReference.Handle != targetDeviceReference.Handle || sourceQueueReference.Handle != targetQueueReference.Handle)
         {
             throw new NotSupportedException("WebGPU frame pixel copies require source and target frames from the same device and queue.");

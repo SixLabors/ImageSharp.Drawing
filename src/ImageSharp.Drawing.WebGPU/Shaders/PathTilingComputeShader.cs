@@ -7,7 +7,10 @@ using Silk.NET.WebGPU;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// GPU stage that writes final tile-relative segments from counted line slices.
+/// GPU stage that writes the final per-tile path segments: one thread per SegmentCount record
+/// from path-count replays the line's tile-crossing traversal, clips the line to its tile, and
+/// stores the tile-relative segment in the slot range reserved by coarse. Wraps
+/// <c>path_tiling.wgsl</c>.
 /// </summary>
 internal static unsafe class PathTilingComputeShader
 {
@@ -35,6 +38,14 @@ internal static unsafe class PathTilingComputeShader
         out BindGroupLayout* layout,
         out string? error)
     {
+        // Bindings match path_tiling.wgsl:
+        //   0 bump allocators (read-write because the buffer is atomic; this stage only reads the seg_counts total)
+        //   1 seg_counts (read-only SegmentCount records from path_count)
+        //   2 lines (read-only LineSoup from flatten)
+        //   3 paths (read-only Path records)
+        //   4 rows (read-only sparse PathRow records)
+        //   5 tiles (read-only; segment_count_or_ix holds the inverted segment base index from coarse)
+        //   6 segments (read-write; tile-relative Segment records written for fine)
         BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[7];
         entries[0] = SceneShaderBindingLayoutHelper.CreateStorageEntry(0, BufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));
         entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, BufferBindingType.ReadOnlyStorage);

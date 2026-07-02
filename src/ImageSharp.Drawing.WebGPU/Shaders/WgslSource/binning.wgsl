@@ -1,7 +1,23 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// The binning stage
+// The binning stage.
+//
+// Assigns each draw object to every 16x16-tile bin that its clipped bounding
+// box touches. Each workgroup covers one 256-element draw partition crossed
+// with one 256-bin chunk of the global bin grid; per bin it counts covering
+// draw objects, bump-allocates a slice of the element list, and writes a bin
+// header (element count + chunk offset) followed by the draw-object indices,
+// which coarse later merges back into draw order.
+//
+// Inputs: draw_monoids, path_bbox_buf (path bboxes plus interest rects),
+// clip_bbox_buf (clip-stack bboxes from clip_leaf).
+// Outputs: intersected_bbox (clip- and interest-intersected bbox per draw
+// object), info_bin_data (bin headers and element lists), bump.binning.
+//
+// Derived from Vello's binning.wgsl. Local divergences: a second dispatch
+// axis chunks the bin grid so it may exceed 256 bins, and per-path interest
+// rectangles participate in the bbox intersection.
 
 #import config
 #import drawtag
@@ -38,7 +54,7 @@ const N_SLICE = WG_SIZE / 32u;
 const N_SUBSLICE = 4u;
 
 // sh_bitmaps holds one bit per (element, bin-in-chunk) pair, so its inner
-// dimension is fixed at N_TILE (= 256) — the number of bins processed by a
+// dimension is fixed at N_TILE (= 256), the number of bins processed by a
 // single workgroup. The dispatch tiles bin space in Y so the full bin grid
 // can exceed 256 without overflowing this shared array.
 var<workgroup> sh_bitmaps: array<array<atomic<u32>, N_TILE>, N_SLICE>;
@@ -56,10 +72,18 @@ fn bin_header_stride(width_in_bins: u32, height_in_bins: u32) -> u32 {
     return (n_bins + N_TILE - 1u) / N_TILE * N_TILE;
 }
 
+// Returns the u32 offset in info_bin_data of the 2-word bin header (element
+// count, chunk offset) for the given bin within the given draw partition.
+// Headers live after the element-list region, which starts at bin_data_start
+// and spans binning_size words.
 fn bin_header_ix(partition_ix: u32, bin_ix: u32, stride: u32) -> u32 {
     return config.bin_data_start + config.binning_size + (partition_ix * stride + bin_ix) * 2u;
 }
 
+// One thread per draw object within this workgroup's partition. Computes the
+// object's clipped bin coverage, rasterizes it into shared bitmaps for the
+// bins in this chunk, then cooperatively writes bin headers and element
+// lists.
 @compute @workgroup_size(256)
 fn main(
     @builtin(global_invocation_id) global_id: vec3<u32>,
@@ -124,9 +148,9 @@ fn main(
             intersected_bbox[element_ix] = bbox;
         }
 
-        // `bbox_intersect` can result in a zero or negative area intersection if the path bbox lies
-        // outside the clip bbox. If that is the case, Don't round up the bottom-right corner of the
-        // and leave the coordinates at 0. This way the path will get clipped out and won't get
+        // `bbox_intersect` can result in a zero or negative area intersection if the path bbox
+        // lies outside the clip bbox. If that is the case, skip the conversion to bin
+        // coordinates and leave them at 0. This way the path gets clipped out and is never
         // assigned to a bin.
         if bbox.x < bbox.z && bbox.y < bbox.w {
             x0 = i32(floor(bbox.x * SX));
@@ -141,6 +165,7 @@ fn main(
     y0 = clamp(y0, 0, height_in_bins_i);
     x1 = clamp(x1, 0, width_in_bins_i);
     y1 = clamp(y1, 0, height_in_bins_i);
+    // Zero-width coverage touches no bins; collapse the loop bounds.
     if x0 == x1 {
         y1 = y0;
     }

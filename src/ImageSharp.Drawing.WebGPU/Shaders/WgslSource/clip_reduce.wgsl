@@ -1,6 +1,23 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+// Clip-stack reduction stage. First pass of the stack-monoid scan over the
+// scene's clip records: each workgroup reduces its span of 256 ClipInp
+// entries to a single Bic (bicyclic semigroup) aggregate and records the
+// stack elements (BeginClips left open at the end of the span) so clip_leaf
+// can resolve pushes and pops across workgroup boundaries.
+//
+// Inputs: clip_inp (ClipInp records emitted by draw_leaf); path_bboxes
+// (per-path bounds from the path bbox stages).
+// Outputs: reduced[wg] = Bic aggregate of workgroup wg's span; clip_out =
+// ClipEl (parent draw object index plus conservative bbox) for each open
+// BeginClip, stored in stack order at the start of the workgroup's range.
+//
+// Ported from Vello's clip_reduce.wgsl (linebender/vello,
+// vello_shaders/shader). Local divergence: each ClipInp carries a clip
+// operation, and Difference clips publish an infinite bbox because they
+// retain everything outside their path.
+
 #import bbox
 #import clip
 
@@ -22,6 +39,11 @@ var<workgroup> sh_parent: array<u32, WG_SIZE>;
 var<workgroup> sh_path_ix: array<u32, WG_SIZE>;
 var<workgroup> sh_operation: array<u32, WG_SIZE>;
 
+// Reduces one workgroup's span of clip records. A reverse inclusive scan
+// computes the Bic aggregate (written to reduced[wg_id.x]); the suffix
+// values from the same scan identify which BeginClips remain open at the
+// end of the span, and those are written as ClipEl stack elements into the
+// first sh_bic[0].b slots of this workgroup's clip_out range.
 @compute @workgroup_size(256)
 fn main(
     @builtin(global_invocation_id) global_id: vec3<u32>,
@@ -34,7 +56,8 @@ fn main(
     let is_push = inp >= 0;
     var bic = Bic(1u - u32(is_push), u32(is_push));
 
-    // reverse scan of bicyclic semigroup
+    // Reverse inclusive scan of the bicyclic semigroup: after the loop,
+    // sh_bic[i] combines elements i..WG_SIZE-1, so sh_bic[0] is the span total.
     sh_bic[local_id.x] = bic;
     for (var i = 0u; i < firstTrailingBit(WG_SIZE); i += 1u) {
         workgroupBarrier();
@@ -54,6 +77,9 @@ fn main(
     if local_id.x + 1u < WG_SIZE {
         bic = sh_bic[local_id.x + 1u];
     }
+    // A push survives the span when its suffix contains no unmatched pop
+    // (bic.a == 0). Its slot orders the surviving pushes bottom-up: bic.b
+    // counts the surviving pushes that follow it.
     if is_push && bic.a == 0u {
         let local_ix = size - bic.b - 1u;
         sh_parent[local_ix] = local_id.x;

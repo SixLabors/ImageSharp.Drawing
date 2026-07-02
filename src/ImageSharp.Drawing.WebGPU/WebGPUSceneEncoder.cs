@@ -10,6 +10,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
+using SixLabors.ImageSharp.Drawing.Helpers;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -18,21 +19,88 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// Builds the flush-scoped scene payload consumed by the staged WebGPU rasterizer.
 /// </summary>
+/// <remarks>
+/// Commands are lowered into Vello-style scene streams (path tags, path data, draw tags,
+/// draw data, transforms, styles) plus auxiliary gradient and image payloads. Large batches
+/// are planned and encoded in parallel over contiguous command-range partitions whose
+/// boundaries are snapped forward so no layer scope is cut and whose open clip scopes are
+/// replayed per partition; the partitions are then concatenated in timeline order into one
+/// packed scene buffer.
+/// </remarks>
 internal static class WebGPUSceneEncoder
 {
-    private const int GradientWidth = 512;
+    /// <summary>
+    /// The pixel width of every sampled gradient ramp row uploaded to the gradient texture.
+    /// Shared with <see cref="WebGPUEncodedScene.GradientPixels"/> so the packed buffer slice
+    /// always matches the encoder's ramp stride.
+    /// </summary>
+    internal const int GradientWidth = 512;
+
+    /// <summary>
+    /// The word count of the path-gradient payload header: center x, center y, max distance, center color.
+    /// </summary>
     private const int PathGradientHeaderWordCount = 4;
+
+    /// <summary>
+    /// The word count of one path-gradient edge record: start x/y, end x/y, start color, end color.
+    /// </summary>
     private const int PathGradientEdgeWordCount = 6;
+
+    /// <summary>
+    /// The word count of one encoded style record. Must match STYLE_SIZE_IN_WORDS in pathtag.wgsl.
+    /// </summary>
     private const int StyleWordCount = 10;
+
+    /// <summary>
+    /// The word count of one encoded transform: 2x2 linear part, translation, and the m14/m24/m44 projective terms.
+    /// </summary>
     private const int TransformWordCount = 9;
 
+    /// <summary>
+    /// The tile width in pixels used by binning, coarse, and fine. Must match TILE_WIDTH in config.wgsl.
+    /// </summary>
     private const int TileWidth = 16;
+
+    /// <summary>
+    /// The tile height in pixels used by binning, coarse, and fine. Must match TILE_HEIGHT in config.wgsl.
+    /// </summary>
     private const int TileHeight = 16;
+
+    /// <summary>
+    /// Half the length of the synthetic horizontal segment substituted for point-like strokes so caps
+    /// still render a dot. The full segment length equals <see cref="StrokeMicroSegmentEpsilon"/>, keeping
+    /// the substitute just above the micro-segment collapse threshold.
+    /// </summary>
     private const float PointStrokeSegmentHalfLength = 1F / 128F;
+
+    /// <summary>
+    /// The stroke micro-segment collapse threshold in pixels. Mirrors the CPU stroker's 1/64 px
+    /// preprocessing in <c>DefaultRasterizer.StrokeLinearizer</c> so GPU strokes consume the same
+    /// segment list the CPU stroker strokes.
+    /// </summary>
     private const float StrokeMicroSegmentEpsilon = 1F / 64F;
+
+    /// <summary>
+    /// Vello's clip blend word, (MIX_CLIP &lt;&lt; 8) | COMPOSE_SRC_OVER. Values must match blend.wgsl.
+    /// </summary>
     private const uint ClipBlendMode = (128U << 8) | 3U;
+
+    /// <summary>
+    /// High bit of the clip blend word marking a Difference clip, an ImageSharp extension over
+    /// Vello's clip records. Must match CLIP_DIFFERENCE_MASK_BIT in clip.wgsl and ptcl.wgsl.
+    /// </summary>
     private const uint ClipDifferenceMaskBit = 0x80000000U;
+
+    /// <summary>
+    /// Bit of the clip blend word marking a hard-edge (aliased) clip mask.
+    /// Must match CLIP_HARD_MASK_BIT in ptcl.wgsl.
+    /// </summary>
     private const uint ClipHardMaskBit = 0x40000000U;
+
+    /// <summary>
+    /// Default options used when encoding a layer's bounding-rectangle clip mask. The layer's real
+    /// graphics options apply when the layer composites back, not when its mask is bounded.
+    /// </summary>
     private static readonly GraphicsOptions LayerMaskGraphicsOptions = new();
 
     /// <summary>
@@ -81,6 +149,11 @@ internal static class WebGPUSceneEncoder
         Stroke = 1U << 31
     }
 
+    /// <summary>
+    /// Converts one path tag to its byte-stream wire representation.
+    /// </summary>
+    /// <param name="tag">The path tag to pack.</param>
+    /// <returns>The packed tag byte.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static byte PackPathTag(PathTag tag) => (byte)tag;
 
@@ -265,6 +338,9 @@ internal static class WebGPUSceneEncoder
         out WebGPUEncodedScene encodedScene,
         out string? error)
     {
+        // Ordered scenes interleave draw ranges with Apply/layer barriers whose results feed later
+        // draws, so encoding stays sequential; the parallelism argument is accepted only for
+        // signature parity with TryEncode.
         _ = maxDegreeOfParallelism;
         SceneEncodingPlan plan = SceneEncodingPlan.CreateDefault(scene.CommandCount);
         SupportedSubsetSceneEncoding encoding = new(allocator, targetBounds, plan);
@@ -303,6 +379,19 @@ internal static class WebGPUSceneEncoder
         }
     }
 
+    /// <summary>
+    /// Encodes one command range into ordered scene operations, recursing into scoped layers and
+    /// splitting the packed draw stream at every Apply barrier.
+    /// </summary>
+    /// <param name="scene">The prepared command batch.</param>
+    /// <param name="commandStart">The inclusive command start index.</param>
+    /// <param name="commandEnd">The exclusive command end index.</param>
+    /// <param name="targetBounds">The bounds of the target the range renders into.</param>
+    /// <param name="encoding">The shared mutable scene encoding.</param>
+    /// <param name="operations">Receives the ordered scene operations.</param>
+    /// <param name="rangeStart">The checkpoint of the currently open packed range; updated whenever the range is split.</param>
+    /// <param name="error">Receives the failure reason when encoding fails.</param>
+    /// <returns><see langword="true"/> when the range encoded successfully.</returns>
     private static bool TryEncodeOrderedOperations(
         DrawingCommandBatch scene,
         int commandStart,
@@ -401,7 +490,7 @@ internal static class WebGPUSceneEncoder
                 CompositionCommand command = fillCommand.Command;
                 if (command.Kind == CompositionCommandKind.FillLayer)
                 {
-                    geometry = command.SourcePath.ToLinearGeometry(ExtractScale(command.Transform));
+                    geometry = command.SourcePath.ToLinearGeometry(MatrixUtilities.GetScale(command.Transform));
                 }
 
                 if (!encoding.TryAppend(command, geometry, out error))
@@ -411,7 +500,7 @@ internal static class WebGPUSceneEncoder
             }
             else if (sceneCommand is StrokePathCompositionSceneCommand strokePathCommand)
             {
-                geometry = strokePathCommand.Command.SourcePath.ToLinearGeometry(ExtractScale(strokePathCommand.Command.Transform));
+                geometry = strokePathCommand.Command.SourcePath.ToLinearGeometry(MatrixUtilities.GetScale(strokePathCommand.Command.Transform));
                 if (!encoding.TryAppend(strokePathCommand.Command, geometry, out error))
                 {
                     return false;
@@ -426,7 +515,7 @@ internal static class WebGPUSceneEncoder
             }
             else if (sceneCommand is PolylineCompositionSceneCommand polylineCommand)
             {
-                geometry = LinearGeometry.CreateOpenPolyline(polylineCommand.Command.SourcePoints, ExtractScale(polylineCommand.Command.Transform));
+                geometry = LinearGeometry.CreateOpenPolyline(polylineCommand.Command.SourcePoints, MatrixUtilities.GetScale(polylineCommand.Command.Transform));
                 if (!encoding.TryAppend(polylineCommand.Command, geometry, out error))
                 {
                     return false;
@@ -438,6 +527,15 @@ internal static class WebGPUSceneEncoder
         return true;
     }
 
+    /// <summary>
+    /// Closes the currently open packed range, emitting it as an operation when it produced fills,
+    /// and opens the next range with the supplied clip blend mode.
+    /// </summary>
+    /// <param name="targetBounds">The bounds of the target the ranges render into.</param>
+    /// <param name="encoding">The shared mutable scene encoding.</param>
+    /// <param name="operations">Receives the closed range when it produced fills.</param>
+    /// <param name="rangeStart">The checkpoint of the open packed range; replaced with the new range's checkpoint.</param>
+    /// <param name="nextClipBlendMode">The blend mode used when the next range closes replayed clips.</param>
     private static void AddRenderRange(
         Rectangle targetBounds,
         ref SupportedSubsetSceneEncoding encoding,
@@ -455,6 +553,17 @@ internal static class WebGPUSceneEncoder
         rangeStart = encoding.BeginPackedIndependentRange(targetBounds, nextClipBlendMode, replayActiveClips: true);
     }
 
+    /// <summary>
+    /// Encodes one Apply command as an external-texture fill and wraps the pending draw range in an
+    /// Apply scene item that carries the canvas source rectangle to sample at render time.
+    /// </summary>
+    /// <param name="source">The Apply composition command.</param>
+    /// <param name="targetBounds">The bounds of the target the Apply composites into.</param>
+    /// <param name="encoding">The shared mutable scene encoding.</param>
+    /// <param name="drawStart">The checkpoint of the packed range that owns the Apply fill.</param>
+    /// <param name="operation">Receives the Apply operation, or <see langword="null"/> when the source rectangle is empty.</param>
+    /// <param name="error">Receives the failure reason when encoding fails.</param>
+    /// <returns><see langword="true"/> when the command encoded or was skipped as empty.</returns>
     private static bool TryAppendApplyCommand(
         in CompositionCommand source,
         Rectangle targetBounds,
@@ -478,7 +587,7 @@ internal static class WebGPUSceneEncoder
             sourceRect.Y - (int)MathF.Floor(rawBounds.Top));
 
         RasterizerOptions rasterizerOptions = source.RasterizerOptions;
-        LinearGeometry geometry = source.SourcePath.ToLinearGeometry(ExtractScale(source.Transform));
+        LinearGeometry geometry = source.SourcePath.ToLinearGeometry(MatrixUtilities.GetScale(source.Transform));
         if (!encoding.TryAppendExternalTextureFill(
             source.SourcePath,
             new GpuImageSource(new Size(sourceRect.Width, sourceRect.Height), brushOffset, WrapMode.Repeat, WrapMode.Repeat),
@@ -499,6 +608,15 @@ internal static class WebGPUSceneEncoder
         return true;
     }
 
+    /// <summary>
+    /// Encodes the fill that composites a scoped layer's temporary texture back into the target,
+    /// applying the layer's graphics options at composite time.
+    /// </summary>
+    /// <param name="beginCommand">The begin-layer command that opened the scoped layer.</param>
+    /// <param name="targetBounds">The bounds of the target the layer composites into.</param>
+    /// <param name="encoding">The shared mutable scene encoding.</param>
+    /// <param name="error">Receives the failure reason when encoding fails.</param>
+    /// <returns><see langword="true"/> when the composite fill encoded successfully.</returns>
     private static bool TryAppendLayerCompositeCommand(
         in CompositionCommand beginCommand,
         Rectangle targetBounds,
@@ -513,7 +631,7 @@ internal static class WebGPUSceneEncoder
 
         RasterizerOptions rasterizerOptions = CreateRasterizerOptions(destinationBounds, options);
         RectanglePolygon path = new(0, 0, destinationBounds.Width, destinationBounds.Height);
-        LinearGeometry geometry = path.ToLinearGeometry(ExtractScale(options.Transform));
+        LinearGeometry geometry = path.ToLinearGeometry(MatrixUtilities.GetScale(options.Transform));
         return encoding.TryAppendExternalTextureFill(
             path,
             new GpuImageSource(new Size(destinationBounds.Width, destinationBounds.Height), Point.Empty, WrapMode.Repeat, WrapMode.Repeat),
@@ -525,6 +643,13 @@ internal static class WebGPUSceneEncoder
             out error);
     }
 
+    /// <summary>
+    /// Finds the EndLayer command that closes the BeginLayer at <paramref name="layerBegin"/> by depth counting.
+    /// </summary>
+    /// <param name="scene">The prepared command batch.</param>
+    /// <param name="layerBegin">The command index of the BeginLayer command.</param>
+    /// <param name="commandEnd">The exclusive command index bounding the search.</param>
+    /// <returns>The matching EndLayer command index, or -1 when the scope is unbalanced within the range.</returns>
     private static int FindMatchingLayerEnd(DrawingCommandBatch scene, int layerBegin, int commandEnd)
     {
         int depth = 0;
@@ -554,6 +679,12 @@ internal static class WebGPUSceneEncoder
         return -1;
     }
 
+    /// <summary>
+    /// Creates rasterizer options for an encoder-synthesized fill from the drawing options it composites with.
+    /// </summary>
+    /// <param name="interest">The absolute raster interest bounds of the synthesized fill.</param>
+    /// <param name="options">The drawing options supplying antialiasing and intersection state.</param>
+    /// <returns>The created rasterizer options.</returns>
     private static RasterizerOptions CreateRasterizerOptions(Rectangle interest, DrawingOptions options)
     {
         GraphicsOptions graphicsOptions = options.GraphicsOptions;
@@ -568,6 +699,11 @@ internal static class WebGPUSceneEncoder
             graphicsOptions.AntialiasThreshold);
     }
 
+    /// <summary>
+    /// Rounds floating-point bounds outward to the smallest enclosing integer rectangle.
+    /// </summary>
+    /// <param name="bounds">The bounds to round.</param>
+    /// <returns>The enclosing integer rectangle.</returns>
     private static Rectangle ToConservativeBounds(RectangleF bounds)
         => Rectangle.FromLTRB(
             (int)MathF.Floor(bounds.Left),
@@ -601,6 +737,10 @@ internal static class WebGPUSceneEncoder
         return bounds;
     }
 
+    /// <summary>
+    /// Disposes ordered scene operations produced before an encoding failure.
+    /// </summary>
+    /// <param name="operations">The operations to dispose.</param>
     private static void DisposeOperations(List<WebGPUSceneOperation> operations)
     {
         for (int i = 0; i < operations.Count; i++)
@@ -609,8 +749,27 @@ internal static class WebGPUSceneEncoder
         }
     }
 
+    /// <summary>
+    /// Immutable snapshot of every scene stream length and record count, captured at a stream position
+    /// so two checkpoints delimit one renderable range.
+    /// </summary>
     private readonly struct SceneEncodingCheckpoint
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SceneEncodingCheckpoint"/> struct.
+        /// </summary>
+        /// <param name="pathTagByteCount">The path-tag stream length in bytes.</param>
+        /// <param name="pathDataWordCount">The path-data stream length in words.</param>
+        /// <param name="drawTagCount">The draw-tag stream length.</param>
+        /// <param name="drawDataWordCount">The draw-data stream length in words.</param>
+        /// <param name="transformWordCount">The transform stream length in words.</param>
+        /// <param name="styleWordCount">The style stream length in words.</param>
+        /// <param name="infoWordCount">The info-word count implied by the emitted draw tags.</param>
+        /// <param name="pathCount">The number of paths emitted so far.</param>
+        /// <param name="clipCount">The number of clip records emitted so far.</param>
+        /// <param name="fillCount">The number of fill records emitted so far.</param>
+        /// <param name="lineCount">The number of non-horizontal line segments emitted so far.</param>
+        /// <param name="estimatedPathRowCount">The accumulated sparse path-row estimate.</param>
         public SceneEncodingCheckpoint(
             int pathTagByteCount,
             int pathDataWordCount,
@@ -639,34 +798,71 @@ internal static class WebGPUSceneEncoder
             this.EstimatedPathRowCount = estimatedPathRowCount;
         }
 
+        /// <summary>
+        /// Gets the path-tag stream length in bytes.
+        /// </summary>
         public int PathTagByteCount { get; }
 
+        /// <summary>
+        /// Gets the path-data stream length in words.
+        /// </summary>
         public int PathDataWordCount { get; }
 
+        /// <summary>
+        /// Gets the draw-tag stream length.
+        /// </summary>
         public int DrawTagCount { get; }
 
+        /// <summary>
+        /// Gets the draw-data stream length in words.
+        /// </summary>
         public int DrawDataWordCount { get; }
 
+        /// <summary>
+        /// Gets the transform stream length in words.
+        /// </summary>
         public int TransformWordCount { get; }
 
+        /// <summary>
+        /// Gets the style stream length in words.
+        /// </summary>
         public int StyleWordCount { get; }
 
+        /// <summary>
+        /// Gets the info-word count implied by the draw tags emitted so far.
+        /// </summary>
         public int InfoWordCount { get; }
 
+        /// <summary>
+        /// Gets the number of paths emitted so far.
+        /// </summary>
         public int PathCount { get; }
 
+        /// <summary>
+        /// Gets the number of clip records emitted so far.
+        /// </summary>
         public int ClipCount { get; }
 
+        /// <summary>
+        /// Gets the number of fill records emitted so far.
+        /// </summary>
         public int FillCount { get; }
 
+        /// <summary>
+        /// Gets the number of non-horizontal line segments emitted so far.
+        /// </summary>
         public int LineCount { get; }
 
+        /// <summary>
+        /// Gets the accumulated sparse path-row estimate.
+        /// </summary>
         public long EstimatedPathRowCount { get; }
     }
 
     /// <summary>
     /// Disposes any partition encodings that were produced before the parallel operation completed.
     /// </summary>
+    /// <param name="partitions">The partition slots to dispose; unproduced slots are <see langword="null"/>.</param>
     private static void DisposePartitions(SceneEncodingPartition?[] partitions)
     {
         for (int i = 0; i < partitions.Length; i++)
@@ -682,6 +878,19 @@ internal static class WebGPUSceneEncoder
     {
         private readonly LinearGeometry?[]? geometries;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SceneEncodingPlan"/> struct.
+        /// </summary>
+        /// <param name="pathTagCapacity">The initial byte capacity for path tags.</param>
+        /// <param name="pathDataWordCapacity">The initial word capacity for path data.</param>
+        /// <param name="drawTagCapacity">The initial draw-tag capacity.</param>
+        /// <param name="drawDataWordCapacity">The initial word capacity for draw data.</param>
+        /// <param name="transformWordCapacity">The initial word capacity for transforms.</param>
+        /// <param name="styleWordCapacity">The initial word capacity for styles.</param>
+        /// <param name="gradientPixelCapacity">The initial gradient-pixel capacity.</param>
+        /// <param name="pathGradientDataWordCapacity">The initial path-gradient data capacity.</param>
+        /// <param name="geometries">The prepared geometry per command, or <see langword="null"/> when planning was skipped.</param>
+        /// <param name="partitionPlans">The per-partition plans, or <see langword="null"/> for single-partition encodes.</param>
         public SceneEncodingPlan(
             int pathTagCapacity,
             int pathDataWordCapacity,
@@ -822,6 +1031,12 @@ internal static class WebGPUSceneEncoder
         public readonly SceneEncodingPlan GetPartitionPlan(int partitionIndex)
             => this.PartitionPlans is null ? this : this.PartitionPlans[partitionIndex];
 
+        /// <summary>
+        /// Creates the fallback plan used when no per-command planning pass ran, sizing streams
+        /// by fixed per-command multipliers.
+        /// </summary>
+        /// <param name="commandCount">The number of commands covered by the plan.</param>
+        /// <returns>The heuristic default plan.</returns>
         public static SceneEncodingPlan CreateDefault(int commandCount)
             => new(
                 Math.Max(commandCount * 8, 256),
@@ -841,18 +1056,34 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     private struct SceneCapacityEstimate
     {
+        /// <summary>The estimated path-tag byte count.</summary>
         public long PathTagCount;
+
+        /// <summary>The estimated path-data word count.</summary>
         public long PathDataWordCount;
+
+        /// <summary>The estimated draw-tag count.</summary>
         public long DrawTagCount;
+
+        /// <summary>The estimated draw-data word count.</summary>
         public long DrawDataWordCount;
+
+        /// <summary>The estimated transform word count.</summary>
         public long TransformWordCount;
+
+        /// <summary>The estimated style word count.</summary>
         public long StyleWordCount;
+
+        /// <summary>The estimated gradient-ramp pixel count.</summary>
         public long GradientPixelCount;
+
+        /// <summary>The estimated path-gradient payload word count.</summary>
         public long PathGradientDataWordCount;
 
         /// <summary>
         /// Creates the initial estimate for the transform emitted by every scene.
         /// </summary>
+        /// <returns>The initial estimate.</returns>
         public static SceneCapacityEstimate CreateInitial()
             => new()
             {
@@ -1024,6 +1255,11 @@ internal static class WebGPUSceneEncoder
                 partitionPlans);
         }
 
+        /// <summary>
+        /// Adds capacity for the draw tag, draw data, transform, style, and brush payload shared by every draw record.
+        /// </summary>
+        /// <param name="drawTag">The draw tag selected for the brush.</param>
+        /// <param name="brush">The brush that determines auxiliary payload sizes.</param>
         private void AddDrawPayload(uint drawTag, Brush brush)
         {
             this.DrawTagCount++;
@@ -1043,6 +1279,10 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Estimates one command and stores prepared geometry for the sequential append phase.
     /// </summary>
+    /// <param name="command">The command to estimate.</param>
+    /// <param name="commandIndex">The command's index in the batch.</param>
+    /// <param name="geometries">Receives the prepared geometry at <paramref name="commandIndex"/> when the command flattens a path.</param>
+    /// <returns>The capacity estimate for the command; zero when the command is unsupported.</returns>
     private static SceneCapacityEstimate EstimateCommand(
         CompositionSceneCommand command,
         int commandIndex,
@@ -1061,7 +1301,7 @@ internal static class WebGPUSceneEncoder
                         return estimate;
                     }
 
-                    LinearGeometry fillGeometry = composition.SourcePath.ToLinearGeometry(ExtractScale(composition.Transform));
+                    LinearGeometry fillGeometry = composition.SourcePath.ToLinearGeometry(MatrixUtilities.GetScale(composition.Transform));
                     geometries[commandIndex] = fillGeometry;
                     estimate.AddFill(fillGeometry.Info, composition.Brush);
                     return estimate;
@@ -1092,7 +1332,7 @@ internal static class WebGPUSceneEncoder
                 return estimate;
             }
 
-            LinearGeometry strokeGeometry = composition.SourcePath.ToLinearGeometry(ExtractScale(composition.Transform));
+            LinearGeometry strokeGeometry = composition.SourcePath.ToLinearGeometry(MatrixUtilities.GetScale(composition.Transform));
             geometries[commandIndex] = strokeGeometry;
             estimate.AddStroke(strokeGeometry, composition.Brush);
             return estimate;
@@ -1120,7 +1360,7 @@ internal static class WebGPUSceneEncoder
             return estimate;
         }
 
-        LinearGeometry polylineGeometry = LinearGeometry.CreateOpenPolyline(polyline.SourcePoints, ExtractScale(polyline.Transform));
+        LinearGeometry polylineGeometry = LinearGeometry.CreateOpenPolyline(polyline.SourcePoints, MatrixUtilities.GetScale(polyline.Transform));
         geometries[commandIndex] = polylineGeometry;
         estimate.AddStroke(polylineGeometry, polyline.Brush);
         return estimate;
@@ -1129,6 +1369,10 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Computes the number of useful partitions using the same limits as the retained CPU scene builder.
     /// </summary>
+    /// <param name="maxDegreeOfParallelism">The configured maximum parallelism; -1 selects the processor count.</param>
+    /// <param name="workItemCount">The number of work items available to split.</param>
+    /// <param name="secondaryLimit">An additional cap, here the number of target tile rows.</param>
+    /// <returns>The partition count.</returns>
     private static int GetPartitionCount(
         int maxDegreeOfParallelism,
         int workItemCount,
@@ -1140,6 +1384,9 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Creates the parallel options for an already-sized partitioned encoder operation.
     /// </summary>
+    /// <param name="maxDegreeOfParallelism">The configured maximum parallelism.</param>
+    /// <param name="partitionCount">The number of partitions to process.</param>
+    /// <returns>The parallel options.</returns>
     private static ParallelOptions CreateParallelOptions(int maxDegreeOfParallelism, int partitionCount)
         => new() { MaxDegreeOfParallelism = Math.Min(maxDegreeOfParallelism, partitionCount) };
 
@@ -1226,6 +1473,9 @@ internal static class WebGPUSceneEncoder
         private bool gradientPixelsDetached;
         private bool pathGradientDataDetached;
         private long estimatedPathRowCount;
+
+        // Cache of the last emitted 10-word style record. Consecutive draws with identical
+        // styles share one record, so the encoder only appends a style when a word changes.
         private uint lastStyle0;
         private uint lastStyle1;
         private uint lastStyle2;
@@ -1399,6 +1649,7 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Captures the current stream offsets for a renderable range inside this scene.
         /// </summary>
+        /// <returns>The captured checkpoint.</returns>
         public readonly SceneEncodingCheckpoint CaptureCheckpoint()
             => new(
                 this.PathTags.Count,
@@ -1500,6 +1751,7 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Replays the logical active clip stack at the start of a packed independent range.
         /// </summary>
+        /// <param name="clipBlendMode">The blend mode used when the replayed clips close.</param>
         private void AppendActiveClipBegins(uint clipBlendMode)
         {
             List<CompositionCommand>? activeClips = this.activeClips;
@@ -1539,6 +1791,11 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Creates one render range from two stream checkpoints.
         /// </summary>
+        /// <remarks>
+        /// Ranges begin on the padded scan-segment boundaries produced by
+        /// <see cref="PadPathTagsToSegmentBoundary"/>, so the starting path-tag byte offset always
+        /// divides exactly into the word offset consumed by the tag-scan shaders.
+        /// </remarks>
         /// <param name="start">The checkpoint captured at the start of the range.</param>
         /// <param name="end">The checkpoint captured at the end of the range.</param>
         /// <param name="targetBounds">The target bounds for the range.</param>
@@ -1689,6 +1946,16 @@ internal static class WebGPUSceneEncoder
             return true;
         }
 
+        /// <summary>
+        /// Dispatches each command in the range to its typed append overload, reusing geometry
+        /// prepared by the planning pass when available.
+        /// </summary>
+        /// <param name="scene">The command batch to append.</param>
+        /// <param name="plan">The encoding plan carrying prepared geometry.</param>
+        /// <param name="commandStart">The inclusive command start index.</param>
+        /// <param name="commandEnd">The exclusive command end index.</param>
+        /// <param name="error">The error message when appending fails.</param>
+        /// <returns><see langword="true"/> when all supported commands were appended.</returns>
         private bool TryBuildCore(
             DrawingCommandBatch scene,
             in SceneEncodingPlan plan,
@@ -1749,7 +2016,7 @@ internal static class WebGPUSceneEncoder
             switch (command.Kind)
             {
                 case CompositionCommandKind.FillLayer:
-                    geometry ??= command.SourcePath.ToLinearGeometry(ExtractScale(command.Transform));
+                    geometry ??= command.SourcePath.ToLinearGeometry(MatrixUtilities.GetScale(command.Transform));
                     if (geometry.Info.SegmentCount == 0)
                     {
                         error = null;
@@ -1767,7 +2034,7 @@ internal static class WebGPUSceneEncoder
                         return false;
                     }
 
-                    Matrix4x4 fillResidual = ComputeResidual(ExtractScale(command.Transform), command.Transform);
+                    Matrix4x4 fillResidual = MatrixUtilities.GetResidual(MatrixUtilities.GetScale(command.Transform), command.Transform);
                     Point pathDataOffset = this.AppendTargetTransform(fillResidual, command.DestinationOffset);
 
                     this.AppendPlainFill(resolved, geometry, pathDataOffset);
@@ -1825,9 +2092,9 @@ internal static class WebGPUSceneEncoder
             LinearGeometry? geometry,
             out string? error)
         {
-            Vector2 scale = ExtractScale(options.Transform);
+            Vector2 scale = MatrixUtilities.GetScale(options.Transform);
             geometry ??= path.ToLinearGeometry(scale);
-            Matrix4x4 residual = ComputeResidual(scale, options.Transform);
+            Matrix4x4 residual = MatrixUtilities.GetResidual(scale, options.Transform);
             RectangleF geometryBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
 
             if (!TryResolveRasterization(
@@ -1875,7 +2142,7 @@ internal static class WebGPUSceneEncoder
             LinearGeometry? geometry,
             out string? error)
         {
-            geometry ??= command.SourcePath.ToLinearGeometry(ExtractScale(command.Transform));
+            geometry ??= command.SourcePath.ToLinearGeometry(MatrixUtilities.GetScale(command.Transform));
             if (geometry.Info.SegmentCount == 0)
             {
                 error = null;
@@ -1893,7 +2160,7 @@ internal static class WebGPUSceneEncoder
                 return false;
             }
 
-            Matrix4x4 strokeResidual = ComputeResidual(ExtractScale(command.Transform), command.Transform);
+            Matrix4x4 strokeResidual = MatrixUtilities.GetResidual(MatrixUtilities.GetScale(command.Transform), command.Transform);
             Point pathDataOffset = this.AppendTargetTransform(strokeResidual, command.DestinationOffset);
 
             this.AppendPlainStroke(resolved, command.Brush, command.Pen, geometry, pathDataOffset);
@@ -1920,8 +2187,8 @@ internal static class WebGPUSceneEncoder
                 return false;
             }
 
-            Vector2 segmentScale = ExtractScale(command.Transform);
-            Matrix4x4 segmentResidual = ComputeResidual(segmentScale, command.Transform);
+            Vector2 segmentScale = MatrixUtilities.GetScale(command.Transform);
+            Matrix4x4 segmentResidual = MatrixUtilities.GetResidual(segmentScale, command.Transform);
             PointF start = new(resolved.Start.X * segmentScale.X, resolved.Start.Y * segmentScale.Y);
             PointF end = new(resolved.End.X * segmentScale.X, resolved.End.Y * segmentScale.Y);
             float widthScale = GetTransformWidthScale(command.Transform);
@@ -1954,7 +2221,7 @@ internal static class WebGPUSceneEncoder
             LinearGeometry? geometry,
             out string? error)
         {
-            Vector2 polylineScale = ExtractScale(command.Transform);
+            Vector2 polylineScale = MatrixUtilities.GetScale(command.Transform);
             geometry ??= LinearGeometry.CreateOpenPolyline(command.SourcePoints, polylineScale);
             if (!TryResolveCommand(command, geometry, out ResolvedPolylineCommand resolved))
             {
@@ -1969,7 +2236,7 @@ internal static class WebGPUSceneEncoder
 
             float widthScale = GetTransformWidthScale(command.Transform);
 
-            Matrix4x4 polylineResidual = ComputeResidual(polylineScale, command.Transform);
+            Matrix4x4 polylineResidual = MatrixUtilities.GetResidual(polylineScale, command.Transform);
             Point pathDataOffset = this.AppendTargetTransform(polylineResidual, resolved.DestinationOffset);
 
             this.AppendExplicitStroke(
@@ -1985,6 +2252,13 @@ internal static class WebGPUSceneEncoder
             return true;
         }
 
+        /// <summary>
+        /// Counts one fill that passed visibility resolution. Kept as the single seam where
+        /// staged-scene validation could reject a fill before any stream bytes are written.
+        /// </summary>
+        /// <param name="options">The resolved rasterizer options for the fill.</param>
+        /// <param name="error">Always <see langword="null"/>; present for the validation contract.</param>
+        /// <returns>Always <see langword="true"/>; per-fill rasterization state imposes no flush-wide constraint.</returns>
         private bool TryRegisterVisibleFill(in RasterizerOptions options, out string? error)
         {
             this.VisibleFillCount++;
@@ -2001,6 +2275,7 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Emits a transform tag + data if the transform differs from the last one emitted.
         /// </summary>
+        /// <param name="matrix">The transform to emit.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void AppendTransformIfChanged(Matrix4x4 matrix)
         {
@@ -2018,6 +2293,10 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Emits the path transform with the canvas destination offset applied after local geometry transforms.
         /// </summary>
+        /// <param name="transform">The residual transform for the draw's geometry.</param>
+        /// <param name="destinationOffset">The absolute destination offset of the draw.</param>
+        /// <returns>The destination offset that path data should still apply directly; the root
+        /// target origin when the offset was folded into the emitted transform.</returns>
         private Point AppendTargetTransform(Matrix4x4 transform, Point destinationOffset)
         {
             float translateX = destinationOffset.X - this.rootTargetBounds.X;
@@ -2039,6 +2318,9 @@ internal static class WebGPUSceneEncoder
         /// </summary>
         private void PadPathTagsToSegmentBoundary()
         {
+            // One pathtag_reduce workgroup (WG_SIZE = 256) reduces 256 tag words of 4 tag bytes
+            // each, so a range decodes independently only when it starts on a 1024-byte boundary.
+            // Zero padding bytes are PathTag.None and contribute nothing to the tag monoid.
             const int segmentByteCount = 256 * 4;
 
             int padding = this.PathTags.Count & (segmentByteCount - 1);
@@ -2055,6 +2337,9 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Encodes one visible fill command into the path, draw, style, and auxiliary payload streams.
         /// </summary>
+        /// <param name="command">The resolved fill command.</param>
+        /// <param name="geometry">The prepared geometry, or <see langword="null"/> to flatten the command path here.</param>
+        /// <param name="pathDataOffset">The destination offset that path data applies directly.</param>
         private void AppendPlainFill(
             in ResolvedPathCommand command,
             LinearGeometry? geometry,
@@ -2081,7 +2366,7 @@ internal static class WebGPUSceneEncoder
                 style7 != this.lastStyle7 ||
                 style8 != this.lastStyle8 ||
                 style9 != this.lastStyle9;
-            Vector2 scale = ExtractScale(command.Transform);
+            Vector2 scale = MatrixUtilities.GetScale(command.Transform);
             geometry ??= command.Path.ToLinearGeometry(scale);
 
             // Reserve the exact words/tags this item can append before encoding so the
@@ -2180,6 +2465,11 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Encodes one visible stroke command into the path, draw, style, and auxiliary payload streams.
         /// </summary>
+        /// <param name="command">The resolved stroke command.</param>
+        /// <param name="brush">The stroke brush.</param>
+        /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
+        /// <param name="geometry">The prepared centerline geometry, or <see langword="null"/> to flatten the command path here.</param>
+        /// <param name="pathDataOffset">The destination offset that path data applies directly.</param>
         private void AppendPlainStroke(
             in ResolvedPathCommand command,
             Brush brush,
@@ -2187,7 +2477,7 @@ internal static class WebGPUSceneEncoder
             LinearGeometry? geometry,
             Point pathDataOffset)
         {
-            Vector2 scale = ExtractScale(command.Transform);
+            Vector2 scale = MatrixUtilities.GetScale(command.Transform);
             geometry ??= command.Path.ToLinearGeometry(scale);
             float widthScale = GetTransformWidthScale(command.Transform);
             uint drawTag = GetDrawTag(brush);
@@ -2290,6 +2580,14 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Encodes one visible explicit stroke primitive into the path, draw, style, and auxiliary payload streams.
         /// </summary>
+        /// <param name="brush">The stroke brush.</param>
+        /// <param name="graphicsOptions">The graphics options used for blending.</param>
+        /// <param name="rasterizerOptions">The resolved rasterizer options for the stroke.</param>
+        /// <param name="pathDataOffset">The destination offset that path data applies directly.</param>
+        /// <param name="brushBounds">The absolute brush sampling bounds.</param>
+        /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
+        /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+        /// <param name="geometry">The prepared open centerline geometry.</param>
         private void AppendExplicitStroke(
             Brush brush,
             GraphicsOptions graphicsOptions,
@@ -2400,6 +2698,15 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Encodes one visible explicit line-segment stroke primitive into the path, draw, style, and auxiliary payload streams.
         /// </summary>
+        /// <param name="brush">The stroke brush.</param>
+        /// <param name="graphicsOptions">The graphics options used for blending.</param>
+        /// <param name="rasterizerOptions">The resolved rasterizer options for the stroke.</param>
+        /// <param name="pathDataOffset">The destination offset that path data applies directly.</param>
+        /// <param name="brushBounds">The absolute brush sampling bounds.</param>
+        /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
+        /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+        /// <param name="start">The segment start point with the transform scale applied.</param>
+        /// <param name="end">The segment end point with the transform scale applied.</param>
         private void AppendExplicitStroke(
             Brush brush,
             GraphicsOptions graphicsOptions,
@@ -2821,6 +3128,7 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Encodes one begin-layer clip command as a rectangular clip path and draw record.
         /// </summary>
+        /// <param name="command">The begin-layer command to append.</param>
         private void AppendBeginLayer(in CompositionCommand command)
         {
             Rectangle layerBounds = ToTargetLocal(command.LayerBounds, this.rootTargetBounds);
@@ -2987,6 +3295,32 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Initializes a new instance of the <see cref="SceneEncodingPartition"/> class.
         /// </summary>
+        /// <param name="pathTagsOwner">The detached path-tag storage.</param>
+        /// <param name="pathDataOwner">The detached path-data storage.</param>
+        /// <param name="drawTagsOwner">The detached draw-tag storage.</param>
+        /// <param name="drawDataOwner">The detached draw-data storage.</param>
+        /// <param name="transformsOwner">The detached transform storage.</param>
+        /// <param name="stylesOwner">The detached style storage.</param>
+        /// <param name="gradientPixelsOwner">The detached gradient-pixel storage, or <see langword="null"/> when no gradients were emitted.</param>
+        /// <param name="pathGradientDataOwner">The detached path-gradient storage, or <see langword="null"/> when no path gradients were emitted.</param>
+        /// <param name="images">The deferred image descriptors recorded by the partition.</param>
+        /// <param name="fillCount">The number of emitted fill records.</param>
+        /// <param name="visibleFillCount">The number of visible fills accepted by staged-scene validation.</param>
+        /// <param name="pathCount">The number of emitted paths.</param>
+        /// <param name="lineCount">The number of emitted non-horizontal lines.</param>
+        /// <param name="infoWordCount">The total info-word count implied by the emitted draw tags.</param>
+        /// <param name="clipCount">The number of emitted clip records.</param>
+        /// <param name="gradientRowCount">The number of emitted gradient-ramp rows.</param>
+        /// <param name="estimatedPathRowCount">The CPU-side estimate of active tile rows.</param>
+        /// <param name="pathTagByteCount">The unpadded path-tag byte count.</param>
+        /// <param name="pathDataWordCount">The path-data word count.</param>
+        /// <param name="drawTagCount">The draw-tag count.</param>
+        /// <param name="drawDataWordCount">The draw-data word count.</param>
+        /// <param name="transformWordCount">The transform word count.</param>
+        /// <param name="styleWordCount">The style word count.</param>
+        /// <param name="pathGradientDataWordCount">The path-gradient payload word count.</param>
+        /// <param name="fineRasterizationMode">The fine-pass rasterization mode selected by the partition.</param>
+        /// <param name="fineCoverageThreshold">The aliased coverage threshold selected by the partition.</param>
         private SceneEncodingPartition(
             IMemoryOwner<byte> pathTagsOwner,
             IMemoryOwner<uint> pathDataOwner,
@@ -3282,6 +3616,9 @@ internal static class WebGPUSceneEncoder
             WebGPUSceneOperation[]? operations = null)
         {
             int pathTagByteCount = encoding.PathTags.Count;
+
+            // Path tags are reduced in 256-word scan segments (pathtag_reduce WG_SIZE), so the
+            // word count is padded up to a whole segment before the path-data stream begins.
             int pathTagWordCount = AlignUp(DivideRoundUp(pathTagByteCount, 4), 256);
             int pathDataWordCount = encoding.PathData.Count;
             int drawTagCount = encoding.DrawTags.Count;
@@ -3411,6 +3748,8 @@ internal static class WebGPUSceneEncoder
                 estimatedPathRowCount = Math.Min(estimatedPathRowCount + partition.EstimatedPathRowCount, int.MaxValue);
             }
 
+            // Path tags are reduced in 256-word scan segments (pathtag_reduce WG_SIZE), so the
+            // word count is padded up to a whole segment before the path-data stream begins.
             int pathTagWordCount = AlignUp(DivideRoundUp(pathTagByteCount, 4), 256);
             int drawTagBase = pathTagWordCount + pathDataWordCount;
             int drawDataBase = drawTagBase + drawTagCount;
@@ -3542,6 +3881,10 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Copies draw-data while rebasing partition-local auxiliary payload offsets into final scene offsets.
         /// </summary>
+        /// <param name="partition">The partition supplying draw tags and draw data.</param>
+        /// <param name="destination">The destination slice in the packed scene buffer.</param>
+        /// <param name="gradientRowOffset">The number of gradient rows emitted by earlier partitions.</param>
+        /// <param name="pathGradientDataOffset">The number of path-gradient words emitted by earlier partitions.</param>
         private static void CopyDrawDataWithOffsets(
             SceneEncodingPartition partition,
             Span<uint> destination,
@@ -3561,6 +3904,8 @@ internal static class WebGPUSceneEncoder
 
                 if (DrawTagUsesGradientRamp(drawTag))
                 {
+                    // The gradient index_mode word packs (ramp row << 2) | extend mode, so the
+                    // row rebase is shifted past the two extend-mode bits.
                     destination[destinationOffset] += (uint)(gradientRowOffset << 2);
                 }
                 else if (drawTag == GpuSceneDrawTag.FillPathGradient)
@@ -3576,6 +3921,8 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Detaches the gradient pixel payload when gradients were emitted for the flush.
         /// </summary>
+        /// <param name="encoding">The mutable scene encoding.</param>
+        /// <returns>The detached storage, or <see langword="null"/> when no gradients were emitted.</returns>
         private static IMemoryOwner<uint>? DetachGradientPixels(ref SupportedSubsetSceneEncoding encoding)
         {
             if (encoding.GradientRowCount == 0)
@@ -3587,6 +3934,11 @@ internal static class WebGPUSceneEncoder
             return encoding.GradientPixels.DetachOwner();
         }
 
+        /// <summary>
+        /// Detaches the path-gradient payload when path gradients were emitted for the flush.
+        /// </summary>
+        /// <param name="encoding">The mutable scene encoding.</param>
+        /// <returns>The detached storage, or <see langword="null"/> when no path gradients were emitted.</returns>
         private static IMemoryOwner<uint>? DetachPathGradientData(ref SupportedSubsetSceneEncoding encoding)
         {
             if (encoding.PathGradientData.Count == 0)
@@ -3602,6 +3954,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Returns whether the staged scene encoder knows how to lower the supplied brush type.
     /// </summary>
+    /// <param name="brush">The brush to test.</param>
+    /// <returns><see langword="true"/> when the brush type has a draw-tag lowering.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsSupportedBrush(Brush brush)
         => brush is SolidBrush
@@ -3615,8 +3969,13 @@ internal static class WebGPUSceneEncoder
             or ImageBrush;
 
     /// <summary>
-    /// Maps one prepared fill command to the draw-tag consumed by the staged scene pipeline.
+    /// Resolves one prepared fill command's raster bounds against its target and captures the
+    /// state the encoder needs to emit it.
     /// </summary>
+    /// <param name="command">The fill command to resolve.</param>
+    /// <param name="geometry">The prepared geometry for the command.</param>
+    /// <param name="resolved">Receives the resolved command state.</param>
+    /// <returns><see langword="true"/> when the command is a fill that intersects its target.</returns>
     private static bool TryResolveCommand(
         in CompositionCommand command,
         LinearGeometry geometry,
@@ -3629,8 +3988,8 @@ internal static class WebGPUSceneEncoder
         }
 
         Matrix4x4 transform = command.Transform;
-        Vector2 scale = ExtractScale(transform);
-        Matrix4x4 residual = ComputeResidual(scale, transform);
+        Vector2 scale = MatrixUtilities.GetScale(transform);
+        Matrix4x4 residual = MatrixUtilities.GetResidual(scale, transform);
         RectangleF geometryBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
 
         if (!TryResolveRasterization(
@@ -3656,14 +4015,22 @@ internal static class WebGPUSceneEncoder
         return true;
     }
 
+    /// <summary>
+    /// Resolves one prepared stroked-path command's stroke-inflated raster bounds against its
+    /// target and captures the state the encoder needs to emit it.
+    /// </summary>
+    /// <param name="command">The stroke command to resolve.</param>
+    /// <param name="geometry">The prepared centerline geometry for the command.</param>
+    /// <param name="resolved">Receives the resolved command state.</param>
+    /// <returns><see langword="true"/> when the stroke intersects its target.</returns>
     private static bool TryResolveCommand(
         in StrokePathCommand command,
         LinearGeometry geometry,
         out ResolvedPathCommand resolved)
     {
         Matrix4x4 transform = command.Transform;
-        Vector2 scale = ExtractScale(transform);
-        Matrix4x4 residual = ComputeResidual(scale, transform);
+        Vector2 scale = MatrixUtilities.GetScale(transform);
+        Matrix4x4 residual = MatrixUtilities.GetResidual(scale, transform);
         float widthScale = GetTransformWidthScale(transform);
         RectangleF geometryBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
         RectangleF strokeBounds = GetStrokeBounds(geometryBounds, command.Pen, widthScale);
@@ -3691,6 +4058,13 @@ internal static class WebGPUSceneEncoder
         return true;
     }
 
+    /// <summary>
+    /// Resolves one explicit line-segment stroke's stroke-inflated raster bounds against its
+    /// target and captures the state the encoder needs to emit it.
+    /// </summary>
+    /// <param name="command">The line-segment stroke command to resolve.</param>
+    /// <param name="resolved">Receives the resolved command state.</param>
+    /// <returns><see langword="true"/> when the stroke intersects its target.</returns>
     private static bool TryResolveCommand(in StrokeLineSegmentCommand command, out ResolvedLineSegmentCommand resolved)
     {
         Matrix4x4 transform = command.Transform;
@@ -3728,14 +4102,22 @@ internal static class WebGPUSceneEncoder
         return true;
     }
 
+    /// <summary>
+    /// Resolves one explicit polyline stroke's stroke-inflated raster bounds against its target
+    /// and captures the state the encoder needs to emit it.
+    /// </summary>
+    /// <param name="command">The polyline stroke command to resolve.</param>
+    /// <param name="geometry">The prepared open polyline geometry for the command.</param>
+    /// <param name="resolved">Receives the resolved command state.</param>
+    /// <returns><see langword="true"/> when the stroke intersects its target.</returns>
     private static bool TryResolveCommand(
         in StrokePolylineCommand command,
         LinearGeometry geometry,
         out ResolvedPolylineCommand resolved)
     {
         Matrix4x4 transform = command.Transform;
-        Vector2 scale = ExtractScale(transform);
-        Matrix4x4 residual = ComputeResidual(scale, transform);
+        Vector2 scale = MatrixUtilities.GetScale(transform);
+        Matrix4x4 residual = MatrixUtilities.GetResidual(scale, transform);
         float widthScale = GetTransformWidthScale(transform);
         RectangleF geometryBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
         RectangleF strokeBounds = GetStrokeBounds(geometryBounds, command.Pen, widthScale);
@@ -3812,8 +4194,22 @@ internal static class WebGPUSceneEncoder
         return true;
     }
 
+    /// <summary>
+    /// Target-resolved state for one fill or stroked-path command, painted by either a brush
+    /// or an external WebGPU texture.
+    /// </summary>
     private readonly struct ResolvedPathCommand
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ResolvedPathCommand"/> struct for a brush-painted command.
+        /// </summary>
+        /// <param name="path">The source path.</param>
+        /// <param name="brush">The paint brush.</param>
+        /// <param name="graphicsOptions">The graphics options used for blending.</param>
+        /// <param name="rasterizerOptions">The rasterizer options clipped to the owning target.</param>
+        /// <param name="destinationOffset">The absolute destination offset for the command.</param>
+        /// <param name="brushBounds">The absolute brush sampling bounds; default unless the brush is an image brush.</param>
+        /// <param name="transform">The full command transform.</param>
         public ResolvedPathCommand(
             IPath path,
             Brush brush,
@@ -3833,6 +4229,17 @@ internal static class WebGPUSceneEncoder
             this.Transform = transform;
         }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ResolvedPathCommand"/> struct for a fill
+        /// sampled from an external render-time texture instead of a brush.
+        /// </summary>
+        /// <param name="path">The source path.</param>
+        /// <param name="imageSource">The external texture source metadata.</param>
+        /// <param name="graphicsOptions">The graphics options used for blending.</param>
+        /// <param name="rasterizerOptions">The rasterizer options clipped to the owning target.</param>
+        /// <param name="destinationOffset">The absolute destination offset for the command.</param>
+        /// <param name="brushBounds">The absolute texture sampling bounds.</param>
+        /// <param name="transform">The full command transform.</param>
         public ResolvedPathCommand(
             IPath path,
             in GpuImageSource imageSource,
@@ -3852,25 +4259,63 @@ internal static class WebGPUSceneEncoder
             this.Transform = transform;
         }
 
+        /// <summary>
+        /// Gets the source path.
+        /// </summary>
         public IPath Path { get; }
 
+        /// <summary>
+        /// Gets the paint brush, or <see langword="null"/> when the fill samples an external texture.
+        /// </summary>
         public Brush? Brush { get; }
 
+        /// <summary>
+        /// Gets the image source metadata for image-painted fills.
+        /// </summary>
         public GpuImageSource ImageSource { get; }
 
+        /// <summary>
+        /// Gets the graphics options used for blending.
+        /// </summary>
         public GraphicsOptions GraphicsOptions { get; }
 
+        /// <summary>
+        /// Gets the rasterizer options clipped to the owning target.
+        /// </summary>
         public RasterizerOptions RasterizerOptions { get; }
 
+        /// <summary>
+        /// Gets the absolute destination offset for the command.
+        /// </summary>
         public Point DestinationOffset { get; }
 
+        /// <summary>
+        /// Gets the absolute brush or texture sampling bounds.
+        /// </summary>
         public Rectangle BrushBounds { get; }
 
+        /// <summary>
+        /// Gets the full command transform.
+        /// </summary>
         public Matrix4x4 Transform { get; }
     }
 
+    /// <summary>
+    /// Target-resolved state for one explicit two-point line-segment stroke.
+    /// </summary>
     private readonly struct ResolvedLineSegmentCommand
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ResolvedLineSegmentCommand"/> struct.
+        /// </summary>
+        /// <param name="start">The untransformed segment start point.</param>
+        /// <param name="end">The untransformed segment end point.</param>
+        /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
+        /// <param name="brush">The stroke brush.</param>
+        /// <param name="graphicsOptions">The graphics options used for blending.</param>
+        /// <param name="rasterizerOptions">The rasterizer options clipped to the owning target.</param>
+        /// <param name="destinationOffset">The absolute destination offset for the command.</param>
+        /// <param name="brushBounds">The absolute brush sampling bounds; default unless the brush is an image brush.</param>
         public ResolvedLineSegmentCommand(
             PointF start,
             PointF end,
@@ -3891,25 +4336,62 @@ internal static class WebGPUSceneEncoder
             this.BrushBounds = brushBounds;
         }
 
+        /// <summary>
+        /// Gets the untransformed segment start point.
+        /// </summary>
         public PointF Start { get; }
 
+        /// <summary>
+        /// Gets the untransformed segment end point.
+        /// </summary>
         public PointF End { get; }
 
+        /// <summary>
+        /// Gets the pen that defines stroke width, joins, and caps.
+        /// </summary>
         public Pen Pen { get; }
 
+        /// <summary>
+        /// Gets the stroke brush.
+        /// </summary>
         public Brush Brush { get; }
 
+        /// <summary>
+        /// Gets the graphics options used for blending.
+        /// </summary>
         public GraphicsOptions GraphicsOptions { get; }
 
+        /// <summary>
+        /// Gets the rasterizer options clipped to the owning target.
+        /// </summary>
         public RasterizerOptions RasterizerOptions { get; }
 
+        /// <summary>
+        /// Gets the absolute destination offset for the command.
+        /// </summary>
         public Point DestinationOffset { get; }
 
+        /// <summary>
+        /// Gets the absolute brush sampling bounds.
+        /// </summary>
         public Rectangle BrushBounds { get; }
     }
 
+    /// <summary>
+    /// Target-resolved state for one explicit open polyline stroke.
+    /// </summary>
     private readonly struct ResolvedPolylineCommand
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ResolvedPolylineCommand"/> struct.
+        /// </summary>
+        /// <param name="points">The untransformed polyline points.</param>
+        /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
+        /// <param name="brush">The stroke brush.</param>
+        /// <param name="graphicsOptions">The graphics options used for blending.</param>
+        /// <param name="rasterizerOptions">The rasterizer options clipped to the owning target.</param>
+        /// <param name="destinationOffset">The absolute destination offset for the command.</param>
+        /// <param name="brushBounds">The absolute brush sampling bounds; default unless the brush is an image brush.</param>
         public ResolvedPolylineCommand(
             PointF[] points,
             Pen pen,
@@ -3928,24 +4410,47 @@ internal static class WebGPUSceneEncoder
             this.BrushBounds = brushBounds;
         }
 
+        /// <summary>
+        /// Gets the untransformed polyline points.
+        /// </summary>
         public PointF[] Points { get; }
 
+        /// <summary>
+        /// Gets the pen that defines stroke width, joins, and caps.
+        /// </summary>
         public Pen Pen { get; }
 
+        /// <summary>
+        /// Gets the stroke brush.
+        /// </summary>
         public Brush Brush { get; }
 
+        /// <summary>
+        /// Gets the graphics options used for blending.
+        /// </summary>
         public GraphicsOptions GraphicsOptions { get; }
 
+        /// <summary>
+        /// Gets the rasterizer options clipped to the owning target.
+        /// </summary>
         public RasterizerOptions RasterizerOptions { get; }
 
+        /// <summary>
+        /// Gets the absolute destination offset for the command.
+        /// </summary>
         public Point DestinationOffset { get; }
 
+        /// <summary>
+        /// Gets the absolute brush sampling bounds.
+        /// </summary>
         public Rectangle BrushBounds { get; }
     }
 
     /// <summary>
     /// Maps one prepared brush to the draw-tag consumed by the staged scene pipeline.
     /// </summary>
+    /// <param name="brush">The brush to map.</param>
+    /// <returns>The draw tag.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint GetDrawTag(Brush brush)
         => brush switch
@@ -3965,6 +4470,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Maps one resolved fill source to the draw-tag consumed by the staged scene pipeline.
     /// </summary>
+    /// <param name="command">The resolved command; brushless commands sample an external texture.</param>
+    /// <returns>The draw tag.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint GetDrawTag(in ResolvedPathCommand command)
         => command.Brush is not null ? GetDrawTag(command.Brush) : GpuSceneDrawTag.FillImage;
@@ -3972,6 +4479,13 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Encodes a lowered path into path-tag and path-data streams in target-local space.
     /// </summary>
+    /// <param name="destinationOffset">The absolute destination offset applied to every point.</param>
+    /// <param name="geometry">The flattened geometry to encode.</param>
+    /// <param name="rootTargetBounds">The root target bounds used for target-local conversion.</param>
+    /// <param name="pathTags">The path-tag stream.</param>
+    /// <param name="pathData">The path-data stream.</param>
+    /// <param name="lineCount">Receives the number of non-horizontal line segments encoded.</param>
+    /// <returns>The number of encoded path objects: 1, or 0 when the geometry has no segments.</returns>
     private static int EncodePath(
         Point destinationOffset,
         LinearGeometry geometry,
@@ -4053,6 +4567,15 @@ internal static class WebGPUSceneEncoder
     /// normalization) to encode time. The GPU shader then expands clean segments with the ported
     /// CPU join and cap geometry; it never sees a degenerate-tangent segment.
     /// </remarks>
+    /// <param name="geometry">The flattened centerline geometry to encode.</param>
+    /// <param name="destinationOffset">The absolute destination offset applied to every point.</param>
+    /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
+    /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+    /// <param name="rootTargetBounds">The root target bounds used for target-local conversion.</param>
+    /// <param name="pathTags">The path-tag stream.</param>
+    /// <param name="pathData">The path-data stream.</param>
+    /// <param name="lineCount">Receives the estimated flattened line workload for the stroke.</param>
+    /// <returns>The number of encoded path objects: 1, or 0 when no contour survived preprocessing.</returns>
     private static int EncodeStrokePath(
         LinearGeometry geometry,
         Point destinationOffset,
@@ -4203,6 +4726,11 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Encodes one open (capped) stroke centerline contour from preprocessed points.
     /// </summary>
+    /// <param name="points">The preprocessed contour points; at least two.</param>
+    /// <param name="pointTranslateX">The x translation to target-local space.</param>
+    /// <param name="pointTranslateY">The y translation to target-local space.</param>
+    /// <param name="pathTags">The path-tag stream.</param>
+    /// <param name="pathData">The path-data stream.</param>
     private static void EncodeOpenStrokeContour(
         scoped ReadOnlySpan<PointF> points,
         float pointTranslateX,
@@ -4240,6 +4768,11 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Encodes one point-like stroke contour as a tiny centered open segment.
     /// </summary>
+    /// <param name="point">The point the contour collapsed to.</param>
+    /// <param name="pointTranslateX">The x translation to target-local space.</param>
+    /// <param name="pointTranslateY">The y translation to target-local space.</param>
+    /// <param name="pathTags">The path-tag stream.</param>
+    /// <param name="pathData">The path-data stream.</param>
     private static void EncodePointStrokeContour(
         PointF point,
         float pointTranslateX,
@@ -4270,6 +4803,16 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Encodes one explicit open two-point stroke centerline into Vello-style path tags and path data in target-local space.
     /// </summary>
+    /// <param name="start">The segment start point with the transform scale applied.</param>
+    /// <param name="end">The segment end point with the transform scale applied.</param>
+    /// <param name="destinationOffset">The absolute destination offset applied to every point.</param>
+    /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
+    /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+    /// <param name="rootTargetBounds">The root target bounds used for target-local conversion.</param>
+    /// <param name="pathTags">The path-tag stream.</param>
+    /// <param name="pathData">The path-data stream.</param>
+    /// <param name="lineCount">Receives the estimated flattened line workload for the stroke.</param>
+    /// <returns>The number of encoded path objects; always 1.</returns>
     private static int EncodeOpenSegmentStrokePath(
         PointF start,
         PointF end,
@@ -4294,6 +4837,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Replaces a point-like explicit stroke segment with the tiny tangent segment used for point strokes.
     /// </summary>
+    /// <param name="start">The segment start point; replaced when the segment is point-like.</param>
+    /// <param name="end">The segment end point; replaced when the segment is point-like.</param>
     private static void NormalizePointStrokeSegment(ref PointF start, ref PointF end)
     {
         if (Vector2.DistanceSquared(start, end) > StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon)
@@ -4309,6 +4854,11 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Encodes a rectangle as a fixed-size closed path.
     /// </summary>
+    /// <param name="rectangle">The rectangle to encode.</param>
+    /// <param name="pathTags">The path-tag stream.</param>
+    /// <param name="pathData">The path-data stream.</param>
+    /// <param name="lineCount">Receives the number of non-horizontal line segments encoded.</param>
+    /// <returns>The number of encoded path objects: 1, or 0 when the rectangle is degenerate.</returns>
     private static int EncodeRectanglePath(
         in Rectangle rectangle,
         ref OwnedStream<byte> pathTags,
@@ -4319,6 +4869,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Encodes the Vello empty path shape required by begin-clip records with no drawable geometry.
     /// </summary>
+    /// <param name="pathTags">The path-tag stream.</param>
+    /// <param name="pathData">The path-data stream.</param>
     private static void EncodeEmptyBeginClipPath(
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData)
@@ -4339,6 +4891,11 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Encodes a floating-point rectangle as a fixed-size closed path.
     /// </summary>
+    /// <param name="rectangle">The rectangle to encode.</param>
+    /// <param name="pathTags">The path-tag stream.</param>
+    /// <param name="pathData">The path-data stream.</param>
+    /// <param name="lineCount">Receives the number of non-horizontal line segments encoded.</param>
+    /// <returns>The number of encoded path objects: 1, or 0 when the rectangle is degenerate.</returns>
     private static int EncodeRectanglePath(
         in RectangleF rectangle,
         ref OwnedStream<byte> pathTags,
@@ -4388,6 +4945,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Gets the number of rectangle contours represented by a normalized clip descriptor.
     /// </summary>
+    /// <param name="descriptor">The clip descriptor to inspect.</param>
+    /// <returns>The non-degenerate rectangle count; 0 for non-rectangular descriptors.</returns>
     private static int GetRectangleClipCount(in DrawingClipDescriptor descriptor)
         => descriptor.Kind switch
         {
@@ -4400,6 +4959,13 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Encodes a rectangle or rectangle-set clip descriptor as one path with multiple contours.
     /// </summary>
+    /// <param name="descriptor">The rectangular clip descriptor to encode.</param>
+    /// <param name="destinationOffset">The absolute destination offset applied to every rectangle.</param>
+    /// <param name="rootTargetBounds">The root target bounds used for target-local conversion.</param>
+    /// <param name="pathTags">The path-tag stream.</param>
+    /// <param name="pathData">The path-data stream.</param>
+    /// <param name="lineCount">Receives the number of non-horizontal line segments encoded.</param>
+    /// <returns>The number of encoded path objects: 1, or 0 when every rectangle is degenerate.</returns>
     private static int EncodeRectangleClipPath(
         in DrawingClipDescriptor descriptor,
         Point destinationOffset,
@@ -4474,6 +5040,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Counts region rectangles that can produce non-degenerate GPU path contours.
     /// </summary>
+    /// <param name="rectangles">The region rectangles to count.</param>
+    /// <returns>The number of rectangles with positive width and height.</returns>
     private static int GetPositiveIntegerRectangleCount(IReadOnlyList<Rectangle> rectangles)
     {
         int count = 0;
@@ -4492,6 +5060,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Counts region rectangles that can produce non-degenerate GPU path contours.
     /// </summary>
+    /// <param name="rectangles">The region rectangles to count.</param>
+    /// <returns>The number of rectangles with positive width and height.</returns>
     private static int GetPositiveRectangleCount(IReadOnlyList<RectangleF> rectangles)
     {
         int count = 0;
@@ -4510,6 +5080,11 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Appends one rectangle contour to a pending path without terminating the path.
     /// </summary>
+    /// <param name="rectangle">The rectangle to append.</param>
+    /// <param name="translateX">The x translation to target-local space.</param>
+    /// <param name="translateY">The y translation to target-local space.</param>
+    /// <param name="pathTags">The path-tag stream.</param>
+    /// <param name="pathData">The path-data stream.</param>
     private static void AppendRectangleContour(
         RectangleF rectangle,
         float translateX,
@@ -4550,6 +5125,18 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Reserves the exact stream growth needed for one plain fill item.
     /// </summary>
+    /// <param name="contourCount">The number of geometry contours.</param>
+    /// <param name="segmentCount">The number of geometry segments.</param>
+    /// <param name="drawTag">The draw tag selected for the item.</param>
+    /// <param name="appendStyle">Whether a new style record will be emitted.</param>
+    /// <param name="pathGradientDataWordCount">The path-gradient payload word count for the item's brush.</param>
+    /// <param name="pathTags">The path-tag stream.</param>
+    /// <param name="pathData">The path-data stream.</param>
+    /// <param name="drawTags">The draw-tag stream.</param>
+    /// <param name="drawData">The draw-data stream.</param>
+    /// <param name="styles">The style stream.</param>
+    /// <param name="gradientPixels">The gradient-pixel stream.</param>
+    /// <param name="pathGradientData">The path-gradient payload stream.</param>
     private static void ReservePlainFillCapacity(
         int contourCount,
         int segmentCount,
@@ -4591,6 +5178,17 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Reserves the exact stream growth needed for one plain fill item.
     /// </summary>
+    /// <param name="geometryInfo">The geometry information supplying contour and segment counts.</param>
+    /// <param name="drawTag">The draw tag selected for the item.</param>
+    /// <param name="appendStyle">Whether a new style record will be emitted.</param>
+    /// <param name="pathGradientDataWordCount">The path-gradient payload word count for the item's brush.</param>
+    /// <param name="pathTags">The path-tag stream.</param>
+    /// <param name="pathData">The path-data stream.</param>
+    /// <param name="drawTags">The draw-tag stream.</param>
+    /// <param name="drawData">The draw-data stream.</param>
+    /// <param name="styles">The style stream.</param>
+    /// <param name="gradientPixels">The gradient-pixel stream.</param>
+    /// <param name="pathGradientData">The path-gradient payload stream.</param>
     private static void ReservePlainFillCapacity(
         LinearGeometryInfo geometryInfo,
         uint drawTag,
@@ -4620,6 +5218,17 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Reserves the exact stream growth needed for one stroke item.
     /// </summary>
+    /// <param name="geometry">The centerline geometry supplying contour and segment counts.</param>
+    /// <param name="drawTag">The draw tag selected for the item.</param>
+    /// <param name="appendStyle">Whether a new style record will be emitted.</param>
+    /// <param name="pathGradientDataWordCount">The path-gradient payload word count for the item's brush.</param>
+    /// <param name="pathTags">The path-tag stream.</param>
+    /// <param name="pathData">The path-data stream.</param>
+    /// <param name="drawTags">The draw-tag stream.</param>
+    /// <param name="drawData">The draw-data stream.</param>
+    /// <param name="styles">The style stream.</param>
+    /// <param name="gradientPixels">The gradient-pixel stream.</param>
+    /// <param name="pathGradientData">The path-gradient payload stream.</param>
     private static void ReservePlainStrokeCapacity(
         LinearGeometry geometry,
         uint drawTag,
@@ -4667,6 +5276,16 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Reserves the exact stream growth needed for one explicit open line segment stroke.
     /// </summary>
+    /// <param name="drawTag">The draw tag selected for the item.</param>
+    /// <param name="appendStyle">Whether a new style record will be emitted.</param>
+    /// <param name="pathGradientDataWordCount">The path-gradient payload word count for the item's brush.</param>
+    /// <param name="pathTags">The path-tag stream.</param>
+    /// <param name="pathData">The path-data stream.</param>
+    /// <param name="drawTags">The draw-tag stream.</param>
+    /// <param name="drawData">The draw-data stream.</param>
+    /// <param name="styles">The style stream.</param>
+    /// <param name="gradientPixels">The gradient-pixel stream.</param>
+    /// <param name="pathGradientData">The path-gradient payload stream.</param>
     private static void ReservePlainStrokeCapacityForOpenSegment(
         uint drawTag,
         bool appendStyle,
@@ -4703,6 +5322,10 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Estimates the flattened line workload for one stroke.
     /// </summary>
+    /// <param name="geometry">The centerline geometry to estimate.</param>
+    /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
+    /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+    /// <returns>The conservative line count; at least 1.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int EstimateStrokeLineCount(LinearGeometry geometry, Pen pen, float widthScale)
     {
@@ -4732,6 +5355,9 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Estimates the flattened line workload for one explicit open two-point stroke segment.
     /// </summary>
+    /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
+    /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+    /// <returns>The conservative line count; at least 1.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int EstimateStrokeLineCountForOpenSegment(Pen pen, float widthScale)
         => Math.Max(2 + (GetStrokeCapLineCost(pen, widthScale) * 2), 1);
@@ -4739,6 +5365,9 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Returns the conservative flattened line cost of one stroke join.
     /// </summary>
+    /// <param name="pen">The pen that defines the join style.</param>
+    /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+    /// <returns>The line cost of one join.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int GetStrokeJoinLineCost(Pen pen, float widthScale)
     {
@@ -4757,6 +5386,9 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Returns the conservative flattened line cost of one stroke cap.
     /// </summary>
+    /// <param name="pen">The pen that defines the cap style.</param>
+    /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+    /// <returns>The line cost of one cap.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int GetStrokeCapLineCost(Pen pen, float widthScale)
     {
@@ -4772,6 +5404,10 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Returns the conservative flattened line cost of one round arc in the stroke shaders.
     /// </summary>
+    /// <param name="radius">The arc radius in pixels.</param>
+    /// <param name="angle">The swept angle in radians.</param>
+    /// <param name="arcDetailScale">The pen's arc detail scale.</param>
+    /// <returns>The line cost of the arc; at least 1.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int GetStrokeArcLineCost(float radius, float angle, double arcDetailScale)
     {
@@ -4785,6 +5421,9 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Returns the encoded tangent point used by the staged stroker's cap marker segment for one explicit open line segment.
     /// </summary>
+    /// <param name="start">The subpath start point.</param>
+    /// <param name="end">The first segment end point.</param>
+    /// <returns>The tangent point, one third of the way from <paramref name="start"/> to <paramref name="end"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static PointF GetStrokeMarkerTangentPoint(PointF start, PointF end)
         => new(
@@ -4794,6 +5433,12 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Reserves the exact stream growth needed for one begin-layer clip item.
     /// </summary>
+    /// <param name="appendStyle">Whether a new style record will be emitted.</param>
+    /// <param name="pathTags">The path-tag stream.</param>
+    /// <param name="pathData">The path-data stream.</param>
+    /// <param name="drawTags">The draw-tag stream.</param>
+    /// <param name="drawData">The draw-data stream.</param>
+    /// <param name="styles">The style stream.</param>
     private static void ReserveBeginLayerCapacity(
         bool appendStyle,
         ref OwnedStream<byte> pathTags,
@@ -4809,7 +5454,7 @@ internal static class WebGPUSceneEncoder
         pathTags.EnsureAdditionalCapacity((appendStyle ? 1 : 0) + 5);
 
         // Rectangles write five points total:
-        // bottom-left, bottom-right, top-right, top-left, then bottom-left again.
+        // top-left, top-right, bottom-right, bottom-left, then top-left again.
         // Each point is two uint words, so 5 * 2 = 10 words.
         pathData.EnsureAdditionalCapacity(10);
         drawTags.EnsureAdditionalCapacity(1);
@@ -4826,6 +5471,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Reserves the exact stream growth needed for one end-layer item.
     /// </summary>
+    /// <param name="pathTags">The path-tag stream.</param>
+    /// <param name="drawTags">The draw-tag stream.</param>
     private static void ReserveEndLayerCapacity(
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> drawTags)
@@ -4840,6 +5487,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Gets the exact draw-data word count emitted for one draw tag.
     /// </summary>
+    /// <param name="drawTag">The draw tag to size.</param>
+    /// <returns>The draw-data word count.</returns>
     private static int GetDrawDataWordCount(uint drawTag)
         => drawTag switch
         {
@@ -4860,6 +5509,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Gets the exact path-gradient payload word count emitted for one brush.
     /// </summary>
+    /// <param name="brush">The brush to size.</param>
+    /// <returns>The payload word count; 0 for non-path-gradient brushes.</returns>
     private static int GetPathGradientDataWordCount(Brush brush)
         => brush is PathGradientBrush pathGradientBrush
             ? PathGradientHeaderWordCount + (pathGradientBrush.Points.Length * PathGradientEdgeWordCount)
@@ -4868,12 +5519,16 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Gets the exact path-gradient payload word count emitted for one resolved fill source.
     /// </summary>
+    /// <param name="command">The resolved command to size.</param>
+    /// <returns>The payload word count; 0 for brushless or non-path-gradient sources.</returns>
     private static int GetPathGradientDataWordCount(in ResolvedPathCommand command)
         => command.Brush is not null ? GetPathGradientDataWordCount(command.Brush) : 0;
 
     /// <summary>
     /// Returns a value indicating whether the draw tag emits one gradient ramp row.
     /// </summary>
+    /// <param name="drawTag">The draw tag to test.</param>
+    /// <returns><see langword="true"/> when the tag samples a gradient ramp.</returns>
     private static bool DrawTagUsesGradientRamp(uint drawTag)
         => drawTag is GpuSceneDrawTag.FillLinGradient
             or GpuSceneDrawTag.FillRadGradient
@@ -4883,6 +5538,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Appends one 2x3 affine transform to the packed transform stream.
     /// </summary>
+    /// <param name="transform">The transform to append.</param>
+    /// <param name="transforms">The transform stream.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void AppendTransform(GpuSceneTransform transform, ref OwnedStream<uint> transforms)
     {
@@ -4900,6 +5557,7 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Appends the identity transform to the packed transform stream.
     /// </summary>
+    /// <param name="transforms">The transform stream.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void AppendIdentityTransform(ref OwnedStream<uint> transforms)
         => AppendTransform(GpuSceneTransform.Identity, ref transforms);
@@ -4907,6 +5565,16 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Packs the style words that describe stroke behavior for one draw record.
     /// </summary>
+    /// <remarks>
+    /// Word layout consumed by flatten.wgsl: 0 = style flags, 1 = device-space stroke width,
+    /// 2 = packed draw flags, 3 = miter limit, 4 = arc detail scale, 5 = antialias threshold,
+    /// 6-9 = target-local interest rectangle as left, top, right, bottom.
+    /// </remarks>
+    /// <param name="options">The graphics options used for blending.</param>
+    /// <param name="pen">The pen that defines stroke width, joins, caps, and miter limit.</param>
+    /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+    /// <param name="interestBounds">The target-local raster interest bounds.</param>
+    /// <returns>The ten packed style words.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static (
         uint Style0,
@@ -4962,19 +5630,11 @@ internal static class WebGPUSceneEncoder
         return MathF.Sqrt(MathF.Abs(det));
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Vector2 ExtractScale(Matrix4x4 matrix)
-        => new(
-            MathF.Sqrt((matrix.M11 * matrix.M11) + (matrix.M12 * matrix.M12)),
-            MathF.Sqrt((matrix.M21 * matrix.M21) + (matrix.M22 * matrix.M22)));
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Matrix4x4 ComputeResidual(Vector2 scale, Matrix4x4 matrix)
-        => Matrix4x4.CreateScale(1F / scale.X, 1F / scale.Y, 1F) * matrix;
-
     /// <summary>
     /// Packs the stroke join flags consumed by the staged flatten shader.
     /// </summary>
+    /// <param name="lineJoin">The pen join style.</param>
+    /// <returns>The join style flags.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static StyleFlags EncodeStrokeJoinFlags(LineJoin lineJoin)
         => lineJoin switch
@@ -4989,6 +5649,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Packs the start and end cap flags consumed by the staged flatten shader.
     /// </summary>
+    /// <param name="lineCap">The pen cap style, applied to both segment ends.</param>
+    /// <returns>The cap style flags.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static StyleFlags EncodeStrokeCapFlags(LineCap lineCap)
         => lineCap switch
@@ -5001,6 +5663,15 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Packs the style words that describe fill behavior for one draw record.
     /// </summary>
+    /// <remarks>
+    /// Shares the stroke style word layout with the stroke-only words zeroed: 0 = style flags
+    /// (the fill bit selects even-odd), 2 = packed draw flags, 5 = antialias threshold,
+    /// 6-9 = target-local interest rectangle as left, top, right, bottom.
+    /// </remarks>
+    /// <param name="options">The graphics options used for blending.</param>
+    /// <param name="intersectionRule">The fill rule for self-intersecting geometry.</param>
+    /// <param name="interestBounds">The target-local raster interest bounds.</param>
+    /// <returns>The ten packed style words.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static (
         uint Style0,
@@ -5034,6 +5705,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Packs the draw-flags word carried through flatten into coarse and fine.
     /// </summary>
+    /// <param name="options">The graphics options supplying blend mode, blend percentage, and antialiasing.</param>
+    /// <returns>The packed draw-flags word: blend mode in bits 1-13, alpha in bits 14-29, and the aliased bit.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint PackStyleDrawFlags(GraphicsOptions options)
         => (PackBlendMode(options) << 1)
@@ -5043,6 +5716,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Packs the blend percentage into the shader draw-flags alpha field.
     /// </summary>
+    /// <param name="blendPercentage">The blend percentage in the range [0, 1].</param>
+    /// <returns>The alpha value quantized to 16 bits.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint PackBlendAlpha(float blendPercentage)
         => (uint)Math.Clamp((int)MathF.Round(Math.Clamp(blendPercentage, 0F, 1F) * 65535F), 0, 65535);
@@ -5050,6 +5725,15 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Packs the individual scene streams into one final scene-word buffer using the resolved layout.
     /// </summary>
+    /// <param name="layout">The resolved scene layout supplying each stream's base offset.</param>
+    /// <param name="pathTagWordCount">The padded path-tag word count.</param>
+    /// <param name="pathTags">The path-tag bytes.</param>
+    /// <param name="pathData">The path-data words.</param>
+    /// <param name="drawTags">The draw tags.</param>
+    /// <param name="drawData">The draw-data words.</param>
+    /// <param name="transforms">The transform words.</param>
+    /// <param name="styles">The style words.</param>
+    /// <param name="sceneWords">The destination scene-word buffer.</param>
     private static void PackSceneData(
         GpuSceneLayout layout,
         int pathTagWordCount,
@@ -5078,6 +5762,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Reinterprets one single-precision float as its raw IEEE 754 bit pattern.
     /// </summary>
+    /// <param name="value">The value to reinterpret.</param>
+    /// <returns>The raw bit pattern.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint BitcastSingle(float value)
         => unchecked((uint)BitConverter.SingleToInt32Bits(value));
@@ -5085,6 +5771,9 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Rounds up integer division for tile and buffer planning.
     /// </summary>
+    /// <param name="value">The dividend.</param>
+    /// <param name="divisor">The divisor.</param>
+    /// <returns>The quotient rounded toward positive infinity.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int DivideRoundUp(int value, int divisor)
         => (value + divisor - 1) / divisor;
@@ -5092,6 +5781,9 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Rounds <paramref name="value"/> up to the next multiple of <paramref name="alignment"/>.
     /// </summary>
+    /// <param name="value">The value to align.</param>
+    /// <param name="alignment">The alignment granularity.</param>
+    /// <returns>The aligned value.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int AlignUp(int value, int alignment)
         => value + ((alignment - (value % alignment)) % alignment);
@@ -5099,6 +5791,9 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Converts an absolute scene rectangle into root-target-local coordinates.
     /// </summary>
+    /// <param name="absoluteBounds">The absolute rectangle.</param>
+    /// <param name="rootTargetBounds">The root target bounds supplying the local origin.</param>
+    /// <returns>The target-local rectangle.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Rectangle ToTargetLocal(in Rectangle absoluteBounds, in Rectangle rootTargetBounds)
         => new(
@@ -5110,6 +5805,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Packs one solid brush color into the staged scene's premultiplied RGBA8 payload format.
     /// </summary>
+    /// <param name="solidBrush">The solid brush to pack.</param>
+    /// <returns>The packed premultiplied RGBA8 word.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint PackSolidColor(SolidBrush solidBrush)
         => PackPremultipliedColor(solidBrush.Color);
@@ -5117,6 +5814,16 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Appends the draw-data payload for one encoded draw tag.
     /// </summary>
+    /// <param name="brush">The brush selected by the draw tag.</param>
+    /// <param name="brushBounds">The absolute brush sampling bounds.</param>
+    /// <param name="graphicsOptions">The graphics options used for blending.</param>
+    /// <param name="drawTag">The draw tag that selects the payload layout.</param>
+    /// <param name="rootTargetBounds">The root target bounds used for target-local conversion.</param>
+    /// <param name="drawData">The draw-data stream.</param>
+    /// <param name="gradientPixels">The gradient-pixel stream.</param>
+    /// <param name="pathGradientData">The path-gradient payload stream.</param>
+    /// <param name="images">Receives deferred image patch sites.</param>
+    /// <param name="gradientRowCount">The gradient row counter, advanced when a ramp is emitted.</param>
     private static void AppendDrawData(
         Brush brush,
         Rectangle brushBounds,
@@ -5172,6 +5879,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Appends the draw-data payload for a begin-clip record.
     /// </summary>
+    /// <param name="options">The graphics options applied when the clip group composites.</param>
+    /// <param name="drawData">The draw-data stream.</param>
     private static void AppendBeginClipData(GraphicsOptions options, ref OwnedStream<uint> drawData)
     {
         drawData.Add(PackBlendMode(options));
@@ -5181,6 +5890,11 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Appends the draw-data payload for an ordinary clip record.
     /// </summary>
+    /// <param name="operation">The clip set operation; Difference sets the mask-inversion bit.</param>
+    /// <param name="edgeMode">The clip edge mode; hard edges set the hard-mask bit.</param>
+    /// <param name="antialiasThreshold">The coverage threshold used for hard-edge clips.</param>
+    /// <param name="clipBlendMode">The base clip blend word.</param>
+    /// <param name="drawData">The draw-data stream.</param>
     private static void AppendClipBeginData(
         ClipOperation operation,
         DrawingClipEdgeMode edgeMode,
@@ -5206,6 +5920,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Packs the color and alpha composition modes into the draw-data layout consumed by the shaders.
     /// </summary>
+    /// <param name="options">The graphics options supplying the blend and composition modes.</param>
+    /// <returns>The packed blend word: color mix mode in bits 8-15, compose mode in bits 0-7.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static uint PackBlendMode(GraphicsOptions options)
         => (MapColorBlendMode(options.ColorBlendingMode) << 8) | MapAlphaCompositionMode(options.AlphaCompositionMode);
@@ -5213,6 +5929,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Maps ImageSharp's color blend mode enum to the staged-scene shader contract.
     /// </summary>
+    /// <param name="mode">The color blend mode to map.</param>
+    /// <returns>The MIX_* constant declared in blend.wgsl.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint MapColorBlendMode(PixelColorBlendingMode mode)
         => mode switch
@@ -5232,6 +5950,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Maps ImageSharp's alpha composition mode enum to the staged-scene shader contract.
     /// </summary>
+    /// <param name="mode">The alpha composition mode to map.</param>
+    /// <returns>The COMPOSE_* constant declared in blend.wgsl.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint MapAlphaCompositionMode(PixelAlphaCompositionMode mode)
         => mode switch
@@ -5254,6 +5974,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Appends the recolor brush payload.
     /// </summary>
+    /// <param name="brush">The recolor brush.</param>
+    /// <param name="drawData">The draw-data stream.</param>
     private static void AppendRecolorData(RecolorBrush brush, ref OwnedStream<uint> drawData)
     {
         drawData.Add(PackPremultipliedColor(brush.SourceColor));
@@ -5264,6 +5986,10 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Appends the deferred image payload and records the patch site.
     /// </summary>
+    /// <param name="source">The image source metadata.</param>
+    /// <param name="brushBounds">The target-local texture sampling bounds.</param>
+    /// <param name="drawData">The draw-data stream.</param>
+    /// <param name="images">Receives the patch site descriptor.</param>
     private static void AppendImageData(
         in GpuImageSource source,
         Rectangle brushBounds,
@@ -5298,6 +6024,10 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Appends the linear gradient payload and its packed ramp row.
     /// </summary>
+    /// <param name="brush">The linear gradient brush.</param>
+    /// <param name="drawData">The draw-data stream.</param>
+    /// <param name="gradientPixels">The gradient-pixel stream.</param>
+    /// <param name="gradientRowCount">The gradient row counter, advanced by one.</param>
     private static void AppendLinearGradientData(
         LinearGradientBrush brush,
         ref OwnedStream<uint> drawData,
@@ -5318,6 +6048,10 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Appends the radial gradient payload and its packed ramp row.
     /// </summary>
+    /// <param name="brush">The radial gradient brush.</param>
+    /// <param name="drawData">The draw-data stream.</param>
+    /// <param name="gradientPixels">The gradient-pixel stream.</param>
+    /// <param name="gradientRowCount">The gradient row counter, advanced by one.</param>
     private static void AppendRadialGradientData(
         RadialGradientBrush brush,
         ref OwnedStream<uint> drawData,
@@ -5360,6 +6094,10 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Appends the elliptic gradient payload and its packed ramp row.
     /// </summary>
+    /// <param name="brush">The elliptic gradient brush.</param>
+    /// <param name="drawData">The draw-data stream.</param>
+    /// <param name="gradientPixels">The gradient-pixel stream.</param>
+    /// <param name="gradientRowCount">The gradient row counter, advanced by one.</param>
     private static void AppendEllipticGradientData(
         EllipticGradientBrush brush,
         ref OwnedStream<uint> drawData,
@@ -5391,6 +6129,10 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Appends the sweep gradient payload and its packed ramp row.
     /// </summary>
+    /// <param name="brush">The sweep gradient brush.</param>
+    /// <param name="drawData">The draw-data stream.</param>
+    /// <param name="gradientPixels">The gradient-pixel stream.</param>
+    /// <param name="gradientRowCount">The gradient row counter, advanced by one.</param>
     private static void AppendSweepGradientData(
         SweepGradientBrush brush,
         ref OwnedStream<uint> drawData,
@@ -5418,6 +6160,10 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Appends the path-gradient payload in target-local coordinates.
     /// </summary>
+    /// <param name="brush">The path gradient brush.</param>
+    /// <param name="rootTargetBounds">The root target bounds used for target-local conversion.</param>
+    /// <param name="drawData">The draw-data stream.</param>
+    /// <param name="pathGradientData">The path-gradient payload stream.</param>
     private static void AppendPathGradientData(
         PathGradientBrush brush,
         Rectangle rootTargetBounds,
@@ -5479,6 +6225,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Appends one packed gradient ramp row sampled across the fixed gradient width.
     /// </summary>
+    /// <param name="colorStops">The gradient color stops, ordered by ratio.</param>
+    /// <param name="gradientPixels">The gradient-pixel stream.</param>
     private static void AppendGradientRamp(ReadOnlySpan<ColorStop> colorStops, ref OwnedStream<uint> gradientPixels)
     {
         for (int x = 0; x < GradientWidth; x++)
@@ -5491,6 +6239,9 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Evaluates the packed premultiplied gradient color at the normalized parameter.
     /// </summary>
+    /// <param name="colorStops">The gradient color stops, ordered by ratio.</param>
+    /// <param name="t">The normalized sample position in the range [0, 1].</param>
+    /// <returns>The packed premultiplied RGBA8 sample.</returns>
     private static uint EvaluateGradientColor(ReadOnlySpan<ColorStop> colorStops, float t)
     {
         // Walk the stop list once to find the enclosing interval, then interpolate within it.
@@ -5520,6 +6271,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Packs one premultiplied color into the staged scene's RGBA8 payload format.
     /// </summary>
+    /// <param name="color">The straight-alpha color to premultiply and pack.</param>
+    /// <returns>The packed premultiplied RGBA8 word.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint PackPremultipliedColor(in Color color)
     {
@@ -5534,6 +6287,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Packs one straight-alpha color into RGBA8 payload format.
     /// </summary>
+    /// <param name="color">The color to pack.</param>
+    /// <returns>The packed straight-alpha RGBA8 word.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint PackUnpremultipliedColor(in Color color)
         => color.ToPixel<Rgba32>().Rgba;
@@ -5541,6 +6296,7 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Premultiplies the RGB channels of a normalized RGBA vector by its alpha channel.
     /// </summary>
+    /// <param name="source">The vector to premultiply in place.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void Premultiply(ref Vector4 source)
     {
@@ -5553,6 +6309,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Broadcasts the W component of <paramref name="value"/> into every lane.
     /// </summary>
+    /// <param name="value">The source vector.</param>
+    /// <returns>The broadcast vector.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector4 PermuteW(Vector4 value)
     {
@@ -5567,6 +6325,9 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Replaces the W component of <paramref name="value"/> with the supplied broadcast vector.
     /// </summary>
+    /// <param name="value">The vector whose XYZ components are kept.</param>
+    /// <param name="w">The broadcast vector supplying the replacement W component.</param>
+    /// <returns>The combined vector.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector4 WithW(Vector4 value, Vector4 w)
     {
@@ -5590,6 +6351,8 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Maps ImageSharp's gradient repetition mode to the staged-scene shader contract.
     /// </summary>
+    /// <param name="repetitionMode">The gradient repetition mode to map.</param>
+    /// <returns>The extend-mode value stored in the low two bits of the gradient index word.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint MapExtendMode(GradientRepetitionMode repetitionMode)
         => repetitionMode switch
@@ -5747,10 +6510,11 @@ internal sealed class WebGPUEncodedScene : IDisposable
         => this.sceneDataOwner is null ? ReadOnlyMemory<uint>.Empty : this.sceneDataOwner.Memory[..this.SceneWordCount];
 
     /// <summary>
-    /// Gets the packed gradient-ramp pixels.
+    /// Gets the packed gradient-ramp pixels. Rows are <see cref="WebGPUSceneEncoder.GradientWidth"/>
+    /// pixels wide, matching the encoder's fixed gradient ramp width.
     /// </summary>
     public ReadOnlyMemory<uint> GradientPixels
-        => this.gradientPixelsOwner is null ? ReadOnlyMemory<uint>.Empty : this.gradientPixelsOwner.Memory[..(this.GradientRowCount * 512)];
+        => this.gradientPixelsOwner is null ? ReadOnlyMemory<uint>.Empty : this.gradientPixelsOwner.Memory[..(this.GradientRowCount * WebGPUSceneEncoder.GradientWidth)];
 
     /// <summary>
     /// Gets the encoded path-gradient payload stream.
@@ -6068,16 +6832,34 @@ internal readonly struct GpuSceneTransform : IEquatable<GpuSceneTransform>
     public static GpuSceneTransform FromMatrix4x4(Matrix4x4 m)
         => new(m.M11, m.M12, m.M21, m.M22, m.M41, m.M42, m.M14, m.M24, m.M44);
 
+    /// <summary>
+    /// Gets the row 1, column 1 linear element.
+    /// </summary>
     public float M11 { get; }
 
+    /// <summary>
+    /// Gets the row 1, column 2 linear element.
+    /// </summary>
     public float M12 { get; }
 
+    /// <summary>
+    /// Gets the row 2, column 1 linear element.
+    /// </summary>
     public float M21 { get; }
 
+    /// <summary>
+    /// Gets the row 2, column 2 linear element.
+    /// </summary>
     public float M22 { get; }
 
+    /// <summary>
+    /// Gets the x translation element.
+    /// </summary>
     public float Tx { get; }
 
+    /// <summary>
+    /// Gets the y translation element.
+    /// </summary>
     public float Ty { get; }
 
     /// <summary>
@@ -6095,6 +6877,12 @@ internal readonly struct GpuSceneTransform : IEquatable<GpuSceneTransform>
     /// </summary>
     public float M44 { get; }
 
+    /// <summary>
+    /// Compares components with exact float equality; the encoder only uses this to skip
+    /// re-emitting a transform identical to the last one written.
+    /// </summary>
+    /// <param name="other">The transform to compare against.</param>
+    /// <returns><see langword="true"/> when every component matches exactly.</returns>
     public bool Equals(GpuSceneTransform other)
         => this.M11 == other.M11
         && this.M12 == other.M12
@@ -6129,6 +6917,7 @@ internal readonly struct GpuSceneTransform : IEquatable<GpuSceneTransform>
 /// <summary>
 /// Owns one growable contiguous stream backed by allocator storage.
 /// </summary>
+/// <typeparam name="T">The unmanaged element type of the stream.</typeparam>
 internal ref struct OwnedStream<T>
     where T : unmanaged
 {

@@ -13,10 +13,22 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Base retained stroke linearizer that expands stroked centerlines once into row-local line storage.
     /// </summary>
+    /// <remarks>
+    /// The stroke expansion below is a port of AGG's <c>PolygonStroker</c> and is the reference
+    /// implementation for the GPU stroker: <c>flatten.wgsl</c>'s <c>stroke_side_join</c>,
+    /// <c>stroke_calc_miter</c>, <c>stroke_calc_arc</c>, and <c>stroke_chain_point</c> are direct
+    /// ports of the corresponding members here, and <c>WebGPUSceneEncoder.EncodeStrokePath</c>
+    /// ports the contour preprocessing. Any behavioral change here must be mirrored there.
+    /// </remarks>
     /// <typeparam name="TL">The mutable per-row retained line collector type.</typeparam>
     private abstract class StrokeLinearizer<TL> : Linearizer<TL>
         where TL : class
     {
+        /// <summary>
+        /// The 1/64 px length below which a contour segment is collapsed forward onto the last
+        /// kept point so every surviving segment carries a well conditioned tangent. Mirrored by
+        /// the GPU encoder's <c>WebGPUSceneEncoder.StrokeMicroSegmentEpsilon</c>.
+        /// </summary>
         private const float StrokeMicroSegmentEpsilon = 1F / 64F;
 
         private readonly StrokeStyle stroke;
@@ -52,10 +64,24 @@ internal static partial class DefaultRasterizer
             : base(geometry, residual, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, allocator)
             => this.stroke = stroke;
 
+        /// <summary>
+        /// Classifies one stroked contour's inflated bounds against the clipped interest bounds.
+        /// </summary>
         private enum ContourInterest
         {
+            /// <summary>
+            /// The stroked contour cannot touch the interest bounds and is skipped entirely.
+            /// </summary>
             Outside,
+
+            /// <summary>
+            /// The stroked contour straddles the interest bounds; emitted lines require clipping.
+            /// </summary>
             Clipped,
+
+            /// <summary>
+            /// The stroked contour lies fully inside the interest bounds; lines are emitted unclipped.
+            /// </summary>
             Contained
         }
 
@@ -123,12 +149,16 @@ internal static partial class DefaultRasterizer
 
         /// <summary>
         /// Returns whether a contour should be treated as closed when emitting stroke geometry.
+        /// A contour is closed when it is declared closed, its first and last points coincide, or
+        /// the endpoint gap is at most max(strokeWidth, 1e-3). Mirrored at encode time by
+        /// <c>WebGPUSceneEncoder.EncodeStrokePath</c>; both must stay in lockstep.
         /// </summary>
         /// <param name="contourPoints">The contour points.</param>
         /// <param name="isDeclaredClosed">Indicates whether the contour is explicitly closed.</param>
         /// <returns><see langword="true"/> when the contour should be stroked as closed; otherwise <see langword="false"/>.</returns>
         private bool IsContourClosedForEmission(ReadOnlySpan<PointF> contourPoints, bool isDeclaredClosed)
         {
+            // Fewer than three points cannot enclose area, so such contours always stroke open.
             if (contourPoints.Length < 3)
             {
                 return false;
@@ -142,11 +172,18 @@ internal static partial class DefaultRasterizer
                 return true;
             }
 
+            // Near-closure: a gap no wider than the stroke itself is visually sealed by the
+            // stroke body, so emit a wrap join instead of two caps facing across a slit.
             Vector2 delta = first - last;
             float closeThreshold = MathF.Max(this.stroke.Width, 1E-3F);
             return delta.LengthSquared() <= closeThreshold * closeThreshold;
         }
 
+        /// <summary>
+        /// Applies the residual transform to one source point when one is present.
+        /// </summary>
+        /// <param name="point">The source point.</param>
+        /// <returns>The transformed point.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private PointF TransformPoint(PointF point)
             => this.HasResidual ? PointF.Transform(point, this.Residual) : point;
@@ -193,6 +230,12 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Builds one contour-local stroke segment array while collapsing immediate duplicate points.
         /// </summary>
+        /// <remarks>
+        /// Exact duplicates are skipped outright and sub-1/64 px micro-segments are collapsed
+        /// forward onto the last kept point so every surviving segment carries a well conditioned
+        /// tangent for join math. Ported to encode time on the GPU path by
+        /// <c>WebGPUSceneEncoder.EncodeStrokePath</c>; both must stay in lockstep.
+        /// </remarks>
         /// <param name="contourPoints">The contiguous contour points.</param>
         /// <param name="isClosed">Indicates whether the contour is closed.</param>
         /// <param name="segments">The destination segment buffer.</param>
@@ -229,6 +272,9 @@ internal static partial class DefaultRasterizer
                     continue;
                 }
 
+                // When the candidate segment is rejected as a micro-segment, previousPoint stays
+                // anchored on the last kept point so the run collapses forward; pointLike still
+                // tracks the newest source point so a fully degenerate contour falls back to it.
                 if (TryCreateStrokeContourSegment(previousPoint, point, out StrokeContourSegment segment))
                 {
                     distinctPointCount++;
@@ -239,6 +285,8 @@ internal static partial class DefaultRasterizer
                 pointLike = point;
             }
 
+            // A closed contour that repeats its first point as its last would otherwise count
+            // the shared vertex twice.
             if (isClosed &&
                 distinctPointCount > 1 &&
                 previousPoint == firstPoint)
@@ -246,6 +294,9 @@ internal static partial class DefaultRasterizer
                 distinctPointCount--;
             }
 
+            // Bridge back to the first point when a closed contour does not already end on it.
+            // A sub-1/64 px gap fails TryCreateStrokeContourSegment and is bridged by the wrap
+            // join instead, matching the GPU encoder.
             if (isClosed &&
                 segmentCount > 1 &&
                 previousPoint != firstPoint &&
@@ -266,6 +317,8 @@ internal static partial class DefaultRasterizer
         /// <returns><see langword="true"/> when a non-degenerate segment exists.</returns>
         private static bool TryCreateStrokeContourSegment(PointF start, PointF end, out StrokeContourSegment segment)
         {
+            // Segments shorter than 1/64 px cannot produce a numerically stable tangent, so
+            // they are rejected here and collapsed forward by the caller.
             if (Vector2.DistanceSquared(start, end) <= StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon)
             {
                 segment = default;
@@ -359,6 +412,13 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits one stroked open multi-segment contour from precomputed contour-local segments.
         /// </summary>
+        /// <remarks>
+        /// Two-pass outline: the forward pass walks the segments emitting one offset side and its
+        /// joins followed by the end cap, then the reverse pass walks back emitting the opposite
+        /// side followed by the start cap, producing a single closed outline. Join overshoots
+        /// retrace shared offset lines in opposite directions, so they cancel in the signed
+        /// winding sum under the non-zero fill rule.
+        /// </remarks>
         /// <param name="segments">The precomputed contour-local segments.</param>
         /// <param name="contained">Indicates whether the contour is fully contained within the interest.</param>
         private void EmitOpenStrokeContour(ReadOnlySpan<StrokeContourSegment> segments, bool contained)
@@ -432,6 +492,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits the two stroked contours for a closed contour from precomputed contour-local segments.
         /// </summary>
+        /// <remarks>
+        /// A closed centerline strokes to a ring: the forward pass emits one boundary and the
+        /// reversed pass emits the other with opposite winding, so the ring interior fills and
+        /// the centerline hole cancels in the winding sum.
+        /// </remarks>
         /// <param name="segments">The precomputed contour-local segments.</param>
         /// <param name="contained">Indicates whether the contour is fully contained within the interest.</param>
         private void EmitClosedStrokeContour(ReadOnlySpan<StrokeContourSegment> segments, bool contained)
@@ -484,12 +549,15 @@ internal static partial class DefaultRasterizer
             float halfWidth = this.stroke.HalfWidth;
             if (this.stroke.LineCap == LineCap.Round)
             {
+                // A round-capped point is a full circle emitted as two half arcs.
                 Vector2 startOffset = new(halfWidth, 0F);
                 this.EmitDirectedArcContour(center, startOffset, -startOffset, contained);
                 this.EmitDirectedArcContour(center, -startOffset, startOffset, contained);
                 return;
             }
 
+            // Butt and square caps have no tangent to orient by, so the footprint degenerates
+            // to an axis-aligned halfWidth square around the point.
             PointF p0 = center + new Vector2(-halfWidth, -halfWidth);
             PointF p1 = center + new Vector2(halfWidth, -halfWidth);
             PointF p2 = center + new Vector2(halfWidth, halfWidth);
@@ -545,7 +613,8 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
-        /// Appends a contour arc directly to the active stroke contour.
+        /// Appends a contour arc directly to the active stroke contour. Ported to the GPU as
+        /// <c>stroke_chain_arc</c> in <c>flatten.wgsl</c>; changes here must be mirrored there.
         /// </summary>
         /// <param name="contour">The active contour state.</param>
         /// <param name="center">The arc center.</param>
@@ -597,7 +666,8 @@ internal static partial class DefaultRasterizer
         /// Direct port of <c>PolygonStroker.CalcJoin</c> so the rasterizer emits the same
         /// join geometry as the reference CPU stroker. Each side of the outline calls this
         /// once per source vertex; the reverse side reverses the vertex order exactly
-        /// like PolygonStroker's Outline2 state.
+        /// like PolygonStroker's Outline2 state. Ported to the GPU as <c>stroke_side_join</c>
+        /// in <c>flatten.wgsl</c>; changes here must be mirrored there.
         /// </remarks>
         /// <param name="contour">The active contour state.</param>
         /// <param name="v0">Previous source vertex in the emission's traversal order.</param>
@@ -654,6 +724,10 @@ internal static partial class DefaultRasterizer
 
             if (MathF.Abs(cp) > float.Epsilon && cp > 0F)
             {
+                // Inner corner: always miter to the offset-line intersection, reverting past a
+                // limit derived from the local segment lengths. The reverted points overshoot
+                // along the shared offset lines and are retraced by the opposite pass, so the
+                // excess cancels in the signed winding sum under the non-zero fill rule.
                 float limit = MathF.Min(len1, len2) / widthAbs;
                 if (limit < 1.01F)
                 {
@@ -668,6 +742,9 @@ internal static partial class DefaultRasterizer
             Vector2 averageOffset = new Vector2(dx1 + dx2, dy1 + dy2) * 0.5F;
             float bevelDistance = averageOffset.Length();
 
+            // Nearly straight corner: when the round/bevel join would deviate from a straight
+            // offset edge by less than halfWidth / 1024 (scaled by the arc detail), a single
+            // offset-line intersection point is indistinguishable from the full join.
             float widthEps = widthAbs / 1024F;
             if ((this.stroke.LineJoin is LineJoin.Round or LineJoin.Bevel) &&
                 ((float)this.stroke.ArcDetailScale * (widthAbs - bevelDistance)) < widthEps)
@@ -707,8 +784,21 @@ internal static partial class DefaultRasterizer
 
         /// <summary>
         /// Direct port of <c>PolygonStroker.CalcMiter</c>. Emits the miter apex (or the
-        /// configured overflow fallback) at the join vertex.
+        /// configured overflow fallback) at the join vertex. Ported to the GPU as
+        /// <c>stroke_calc_miter</c> in <c>flatten.wgsl</c>; changes here must be mirrored there.
         /// </summary>
+        /// <param name="contour">The active contour state.</param>
+        /// <param name="v0">Previous source vertex in the emission's traversal order.</param>
+        /// <param name="v1">Current source vertex (the corner).</param>
+        /// <param name="v2">Next source vertex in the emission's traversal order.</param>
+        /// <param name="dx1">The X component of the scaled offset for segment v0-v1; the offset vector is (dx1, -dy1).</param>
+        /// <param name="dy1">The negated Y component of the scaled offset for segment v0-v1.</param>
+        /// <param name="dx2">The X component of the scaled offset for segment v1-v2; the offset vector is (dx2, -dy2).</param>
+        /// <param name="dy2">The negated Y component of the scaled offset for segment v1-v2.</param>
+        /// <param name="lineJoin">The overflow behavior applied when the miter limit is exceeded.</param>
+        /// <param name="miterLimit">The miter limit expressed in half-width units.</param>
+        /// <param name="bevelDistance">The distance from the corner to the bevel midpoint, used to interpolate the clipped miter.</param>
+        /// <param name="contained">Indicates whether the join is fully contained within the interest.</param>
         private void CalcMiter(
             ref ContourState contour,
             Vector2 v0,
@@ -806,8 +896,17 @@ internal static partial class DefaultRasterizer
 
         /// <summary>
         /// Direct port of <c>PolygonStroker.CalcArc</c>. Emits intermediate arc vertices
-        /// around a join center between two offset vectors.
+        /// around a join center between two offset vectors. Ported to the GPU as
+        /// <c>stroke_calc_arc</c> in <c>flatten.wgsl</c>; changes here must be mirrored there.
         /// </summary>
+        /// <param name="contour">The active contour state.</param>
+        /// <param name="x">The join center X coordinate.</param>
+        /// <param name="y">The join center Y coordinate.</param>
+        /// <param name="dx1">The X component of the arc start offset from the center.</param>
+        /// <param name="dy1">The Y component of the arc start offset from the center.</param>
+        /// <param name="dx2">The X component of the arc end offset from the center.</param>
+        /// <param name="dy2">The Y component of the arc end offset from the center.</param>
+        /// <param name="contained">Indicates whether the arc is fully contained within the interest.</param>
         private void CalcArc(
             ref ContourState contour,
             float x,
@@ -822,15 +921,20 @@ internal static partial class DefaultRasterizer
             double a1 = Math.Atan2(dy1, dx1);
             double a2 = Math.Atan2(dy2, dx2);
 
+            // AGG's chordal-error step: da is the largest angular step whose chord stays within
+            // 0.125 / arc-detail-scale pixels of the true arc.
             double widthAbs = strokeWidth;
             double da = Math.Acos(widthAbs / (widthAbs + (0.125D / this.stroke.ArcDetailScale))) * 2D;
             this.AppendContourPoint(ref contour, new Vector2(x + dx1, y + dy1), contained);
 
+            // Wrap the end angle forward so the sweep is always positive.
             if (a1 > a2)
             {
                 a2 += Math.PI * 2D;
             }
 
+            // Distribute the sweep evenly over n interior points so the last step lands exactly
+            // on the end offset.
             int n = (int)((a2 - a1) / da);
             da = (a2 - a1) / (n + 1);
             a1 += da;
@@ -847,16 +951,30 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
-        /// Signed area of triangle (a, b, point), matching <c>PolygonStroker.CrossProduct</c>.
+        /// Signed area of triangle (a, b, point), matching <c>PolygonStroker.CrossProduct</c>;
+        /// used as a side-of-line test for <paramref name="point"/> against the line through
+        /// <paramref name="a"/> and <paramref name="b"/>. Ported to the GPU as
+        /// <c>stroke_cross_product</c> in <c>flatten.wgsl</c>.
         /// </summary>
+        /// <param name="a">The first line point.</param>
+        /// <param name="b">The second line point.</param>
+        /// <param name="point">The point to test.</param>
+        /// <returns>The signed triangle area scalar.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static float CrossProduct(Vector2 a, Vector2 b, Vector2 point)
             => ((point.X - b.X) * (b.Y - a.Y)) - ((point.Y - b.Y) * (b.X - a.X));
 
         /// <summary>
         /// Intersects two infinite lines defined by point pairs (a, b) and (c, d),
-        /// matching <c>PolygonStroker.TryCalcIntersection</c>.
+        /// matching <c>PolygonStroker.TryCalcIntersection</c>. Ported to the GPU as
+        /// <c>stroke_try_intersect</c> in <c>flatten.wgsl</c>.
         /// </summary>
+        /// <param name="a">The first point on the first line.</param>
+        /// <param name="b">The second point on the first line.</param>
+        /// <param name="c">The first point on the second line.</param>
+        /// <param name="d">The second point on the second line.</param>
+        /// <param name="intersection">Receives the intersection when the lines are not near-parallel.</param>
+        /// <returns><see langword="true"/> when the lines intersect; otherwise <see langword="false"/>.</returns>
         private static bool TryCalcIntersection(Vector2 a, Vector2 b, Vector2 c, Vector2 d, out Vector2 intersection)
         {
             const float eps = 1e-7F;
@@ -875,7 +993,9 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
-        /// Appends one point to the active contour.
+        /// Appends one point to the active contour, emitting a line from the previously appended
+        /// point. Ported to the GPU as <c>stroke_chain_point</c> in <c>flatten.wgsl</c>; changes
+        /// here must be mirrored there.
         /// </summary>
         /// <param name="state">The active contour state.</param>
         /// <param name="point">The point to append.</param>
@@ -890,6 +1010,7 @@ internal static partial class DefaultRasterizer
                 return;
             }
 
+            // Coincident points are skipped so the chain never emits zero-length lines.
             if (state.PreviousPoint == point)
             {
                 return;
@@ -947,8 +1068,18 @@ internal static partial class DefaultRasterizer
         /// <returns>The stroke-side offset normal.</returns>
         private static Vector2 GetStrokeOffsetNormal(Vector2 tangent) => new(tangent.Y, -tangent.X);
 
+        /// <summary>
+        /// One preprocessed centerline segment with its cached tangent, offset normal, and length.
+        /// </summary>
         private readonly struct StrokeContourSegment
         {
+            /// <summary>
+            /// Initializes a new instance of the <see cref="StrokeContourSegment"/> struct.
+            /// </summary>
+            /// <param name="start">The segment start point.</param>
+            /// <param name="end">The segment end point.</param>
+            /// <param name="tangent">The normalized segment tangent.</param>
+            /// <param name="length">The segment length.</param>
             public StrokeContourSegment(PointF start, PointF end, Vector2 tangent, float length)
             {
                 this.Start = start;
@@ -958,21 +1089,50 @@ internal static partial class DefaultRasterizer
                 this.Length = length;
             }
 
+            /// <summary>
+            /// Gets the segment start point.
+            /// </summary>
             public PointF Start { get; }
 
+            /// <summary>
+            /// Gets the segment end point.
+            /// </summary>
             public PointF End { get; }
 
+            /// <summary>
+            /// Gets the normalized segment tangent.
+            /// </summary>
             public Vector2 Tangent { get; }
 
+            /// <summary>
+            /// Gets the unit offset normal following PolygonStroker's (tangent.Y, -tangent.X) convention.
+            /// </summary>
             public Vector2 Normal { get; }
 
+            /// <summary>
+            /// Gets the segment length.
+            /// </summary>
             public float Length { get; }
         }
 
+        /// <summary>
+        /// Mutable chain state for one emitted stroke outline contour.
+        /// </summary>
         private struct ContourState
         {
+            /// <summary>
+            /// Indicates whether any point has been appended to the contour yet.
+            /// </summary>
             public bool HasPoint;
+
+            /// <summary>
+            /// The first appended point, used to close the contour.
+            /// </summary>
             public PointF FirstPoint;
+
+            /// <summary>
+            /// The most recently appended point; the start of the next emitted line.
+            /// </summary>
             public PointF PreviousPoint;
         }
     }

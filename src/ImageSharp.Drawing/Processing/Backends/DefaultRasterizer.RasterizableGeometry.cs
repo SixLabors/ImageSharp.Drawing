@@ -106,6 +106,7 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Gets the retained narrow line block chain for one local row.
         /// </summary>
+        /// <remarks>Valid only when <see cref="IsX16"/> is <see langword="true"/>; the narrow table is not allocated otherwise.</remarks>
         /// <param name="localRowIndex">The local row band index.</param>
         /// <returns>The retained narrow line chain for the row.</returns>
         public LineArrayX16Y16Block? GetLinesX16ForRow(int localRowIndex) => this.linesX16![localRowIndex];
@@ -113,6 +114,7 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Gets the retained wide line block chain for one local row.
         /// </summary>
+        /// <remarks>Valid only when <see cref="IsX16"/> is <see langword="false"/>; the wide table is not allocated otherwise.</remarks>
         /// <param name="localRowIndex">The local row band index.</param>
         /// <returns>The retained wide line chain for the row.</returns>
         public LineArrayX32Y16Block? GetLinesX32ForRow(int localRowIndex) => this.linesX32![localRowIndex];
@@ -154,6 +156,8 @@ internal static partial class DefaultRasterizer
         /// </summary>
         public void Dispose()
         {
+            // Line blocks are plain managed objects; clearing the tables drops the references so
+            // the chains become collectable even while this instance itself remains reachable.
             if (this.linesX16 is not null)
             {
                 Array.Clear(this.linesX16);

@@ -71,22 +71,26 @@ internal sealed class WebGPUSceneOperation : IDisposable
 
     /// <summary>
     /// Gets the encoded draw range for a render operation.
+    /// Only meaningful when <see cref="Kind"/> is <see cref="WebGPUSceneOperationKind.RenderRange"/>; default otherwise.
     /// </summary>
     public WebGPUSceneRange Range { get; }
 
     /// <summary>
     /// Gets the retained Apply data for an Apply operation.
+    /// Non-null only when <see cref="Kind"/> is <see cref="WebGPUSceneOperationKind.Apply"/>.
     /// </summary>
     public WebGPUApplySceneItem? Apply { get; }
 
     /// <summary>
     /// Gets the retained layer data for a scoped-layer operation.
+    /// Non-null only when <see cref="Kind"/> is <see cref="WebGPUSceneOperationKind.ScopedLayer"/>.
     /// </summary>
     public WebGPUScopedLayerSceneItem? Layer { get; }
 
     /// <inheritdoc />
     public void Dispose()
     {
+        // At most one payload is non-null; disposing both unconditionally keeps the owner kind-agnostic.
         this.Apply?.Dispose();
         this.Layer?.Dispose();
     }
@@ -100,6 +104,25 @@ internal readonly struct WebGPUSceneRange
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUSceneRange"/> struct.
     /// </summary>
+    /// <param name="targetBounds">The target bounds used when this range was lowered.</param>
+    /// <param name="pathTagWordStart">The word offset of the range's path tags in the packed scene buffer.</param>
+    /// <param name="pathTagByteCount">The byte count of the range's path tags.</param>
+    /// <param name="pathDataWordStart">The word offset of the range's path data in the packed scene buffer.</param>
+    /// <param name="pathDataWordCount">The word count of the range's path data.</param>
+    /// <param name="drawTagStart">The draw-tag offset of the range.</param>
+    /// <param name="drawTagCount">The draw-tag count of the range.</param>
+    /// <param name="drawDataWordStart">The draw-data word offset of the range.</param>
+    /// <param name="drawDataWordCount">The draw-data word count of the range.</param>
+    /// <param name="transformWordStart">The transform word offset of the range.</param>
+    /// <param name="transformWordCount">The transform word count of the range.</param>
+    /// <param name="styleWordStart">The style word offset of the range.</param>
+    /// <param name="styleWordCount">The style word count of the range.</param>
+    /// <param name="infoWordCount">The range-local info word count.</param>
+    /// <param name="pathCount">The path count in the range.</param>
+    /// <param name="clipCount">The clip count in the range.</param>
+    /// <param name="fillCount">The visible fill count in the range.</param>
+    /// <param name="lineCount">The line count in the range.</param>
+    /// <param name="totalPathRowCount">The estimated sparse row count for the range.</param>
     public WebGPUSceneRange(
         Rectangle targetBounds,
         int pathTagWordStart,
@@ -277,6 +300,7 @@ internal sealed class WebGPUApplySceneItem : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        // No native resources are retained; kept so WebGPUSceneOperation can dispose payloads uniformly.
     }
 }
 
@@ -304,17 +328,20 @@ internal sealed class WebGPUScopedLayerSceneItem : IDisposable
 
     /// <summary>
     /// Gets the number of operations rendered into the temporary layer target.
+    /// Populated by <see cref="SetComposite"/> once the child operations have been lowered.
     /// </summary>
     public int OperationCount { get; private set; }
 
     /// <summary>
     /// Gets the encoded image-fill draw range that composites the layer texture into the parent target.
+    /// Populated by <see cref="SetComposite"/> once the child operations have been lowered.
     /// </summary>
     public WebGPUSceneRange CompositeRange { get; private set; }
 
     /// <inheritdoc />
     public void Dispose()
     {
+        // No native resources are retained; kept so WebGPUSceneOperation can dispose payloads uniformly.
     }
 
     /// <summary>

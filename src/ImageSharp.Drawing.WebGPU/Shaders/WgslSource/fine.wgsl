@@ -1,51 +1,80 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// Fine rasterizer.
-
-struct Tile {
-    backdrop: i32,
-    segments: u32,
-}
+// Fine rasterizer: the final stage of the pipeline. Each workgroup shades one
+// 16x16 tile by interpreting the tile's command list (PTCL) written by
+// coarse.wgsl. Coverage is computed analytically from the tile's line segments
+// plus backdrop winding, then brushes (solid color, recolor, linear/radial/
+// elliptic/sweep/path gradients, images) are evaluated and composited,
+// including clip mask begin/end handling.
+//
+// Inputs: config uniform, segment buffer, ptcl and info streams, gradient ramp
+// texture, image atlas, and a backdrop texture holding the existing target
+// contents. Output: the rgba8unorm storage texture, written with straight
+// (unpremultiplied) alpha. blend_spill provides scratch for clip stacks deeper
+// than BLEND_STACK_SPLIT.
+//
+// Ported from Vello's fine.wgsl (vello_shaders/shader/fine.wgsl). Local
+// divergences from upstream: per-fill aliased coverage thresholds, extra PTCL
+// commands (CMD_RECOLOR, CMD_ELLIPTIC_GRAD, CMD_PATH_GRAD), clip difference and
+// hard mask bits, per-command raster interest rectangles, backdrop texture
+// seeding, tile-row chunking via config.chunk_tile_y_start, and gradient extend
+// behavior deliberately matched to the CPU brushes.
 
 #import segment
 #import config
 #import drawtag
 
+// Scene configuration: target dimensions, tile counts, and the chunk window.
 @group(0) @binding(0)
 var<uniform> config: Config;
 
+// Tile-relative line segments referenced by CMD_FILL commands.
 @group(0) @binding(1)
 var<storage> segments: array<Segment>;
 
 #import blend
 #import ptcl
 
+// Width in texels of each gradient ramp row.
 const GRADIENT_WIDTH = 512;
 
+// Sentinel end-clip blend value: the layer is applied to its backdrop as a
+// luminance mask rather than composited with a regular blend mode.
 const LUMINANCE_MASK_LAYER = 0x10000u;
 
+// Per-tile command lists written by coarse.wgsl.
 @group(0) @binding(2)
 var<storage> ptcl: array<u32>;
 
+// Draw info stream: per-draw flags followed by brush payload words.
 @group(0) @binding(3)
 var<storage> info: array<u32>;
 
+// Scratch for clip/blend stack entries deeper than BLEND_STACK_SPLIT.
 @group(0) @binding(4)
 var<storage, read_write> blend_spill: array<u32>;
 
+// Final render target; written with straight (unpremultiplied) alpha.
 @group(0) @binding(5)
 var output: texture_storage_2d<rgba8unorm, write>;
 
+// Gradient ramp texture: one GRADIENT_WIDTH-texel row per gradient.
 @group(0) @binding(6)
 var gradients: texture_2d<f32>;
 
+// Atlas holding image brush sources.
 @group(0) @binding(7)
 var image_atlas: texture_2d<f32>;
 
+// Existing target contents used to seed each pixel (straight alpha).
 @group(0) @binding(8)
 var backdrop_texture: texture_2d<f32>;
 
+// Decodes a CMD_FILL payload: packed segment-count/fill-rule word, segment
+// base index, backdrop winding, per-fill aliased coverage threshold, and the
+// raster interest rectangle. As for all read_* decoders, cmd_ix addresses the
+// command tag and the payload words follow it.
 fn read_fill(cmd_ix: u32) -> CmdFill {
     let size_and_rule = ptcl[cmd_ix + 1u];
     let seg_data = ptcl[cmd_ix + 2u];
@@ -59,12 +88,15 @@ fn read_fill(cmd_ix: u32) -> CmdFill {
     return CmdFill(size_and_rule, seg_data, backdrop, coverage_threshold, interest);
 }
 
+// Decodes a CMD_COLOR payload: packed rgba8 color and draw flags.
 fn read_color(cmd_ix: u32) -> CmdColor {
     let rgba_color = ptcl[cmd_ix + 1u];
     let draw_flags = ptcl[cmd_ix + 2u];
     return CmdColor(rgba_color, draw_flags);
 }
 
+// Decodes a CMD_RECOLOR payload: source key color, replacement target color,
+// match threshold (compared against squared RGBA distance), and draw flags.
 fn read_recolor(cmd_ix: u32) -> CmdRecolor {
     let source_color = ptcl[cmd_ix + 1u];
     let target_color = ptcl[cmd_ix + 2u];
@@ -73,6 +105,9 @@ fn read_recolor(cmd_ix: u32) -> CmdRecolor {
     return CmdRecolor(source_color, target_color, threshold, draw_flags);
 }
 
+// Decodes a CMD_LIN_GRAD payload. The first word packs the gradient ramp index
+// (high bits) with the extend mode (low two bits); the implicit line equation
+// coefficients are read from the info stream.
 fn read_lin_grad(cmd_ix: u32) -> CmdLinGrad {
     let index_mode = ptcl[cmd_ix + 1u];
     let index = index_mode >> 2u;
@@ -84,6 +119,9 @@ fn read_lin_grad(cmd_ix: u32) -> CmdLinGrad {
     return CmdLinGrad(index, extend_mode, line_x, line_y, line_c);
 }
 
+// Decodes a CMD_RAD_GRAD payload. The info stream supplies a 2x2 matrix plus
+// translation mapping pixels into gradient space, the focal parameters, and a
+// word packing the gradient kind (low three bits) with the flags above them.
 fn read_rad_grad(cmd_ix: u32) -> CmdRadGrad {
     let index_mode = ptcl[cmd_ix + 1u];
     let index = index_mode >> 2u;
@@ -103,6 +141,9 @@ fn read_rad_grad(cmd_ix: u32) -> CmdRadGrad {
     return CmdRadGrad(index, extend_mode, matrx, xlat, focal_x, radius, kind, flags);
 }
 
+// Decodes a CMD_ELLIPTIC_GRAD payload: ramp index and extend mode, plus a 2x2
+// matrix and translation (from the info stream) mapping pixels into a space
+// where distance from the origin is the gradient parameter.
 fn read_elliptic_grad(cmd_ix: u32) -> CmdEllipticGrad {
     let index_mode = ptcl[cmd_ix + 1u];
     let index = index_mode >> 2u;
@@ -117,6 +158,9 @@ fn read_elliptic_grad(cmd_ix: u32) -> CmdEllipticGrad {
     return CmdEllipticGrad(index, extend_mode, matrx, xlat);
 }
 
+// Decodes a CMD_SWEEP_GRAD payload: ramp index and extend mode, matrix and
+// translation from the info stream, and the t0/t1 angular range expressed in
+// normalized turns.
 fn read_sweep_grad(cmd_ix: u32) -> CmdSweepGrad {
     let index_mode = ptcl[cmd_ix + 1u];
     let index = index_mode >> 2u;
@@ -133,6 +177,8 @@ fn read_sweep_grad(cmd_ix: u32) -> CmdSweepGrad {
     return CmdSweepGrad(index, extend_mode, matrx, xlat, t0, t1);
 }
 
+// Decodes a CMD_PATH_GRAD payload: info-stream offset of the gradient data,
+// edge count, gradient flags, and draw flags.
 fn read_path_grad(cmd_ix: u32) -> CmdPathGrad {
     let data_offset = ptcl[cmd_ix + 1u];
     let edge_count = ptcl[cmd_ix + 2u];
@@ -141,6 +187,9 @@ fn read_path_grad(cmd_ix: u32) -> CmdPathGrad {
     return CmdPathGrad(data_offset, edge_count, flags, draw_flags);
 }
 
+// Decodes a CMD_IMAGE payload from the info stream: inverse transform (matrix
+// plus translation), atlas placement and extents, and a packed word carrying
+// alpha, pixel format, alpha type, and per-axis extend modes.
 fn read_image(cmd_ix: u32) -> CmdImage {
     let info_offset = ptcl[cmd_ix + 1u];
     let m0 = bitcast<f32>(info[info_offset]);
@@ -157,7 +206,8 @@ fn read_image(cmd_ix: u32) -> CmdImage {
     let alpha_type = (sample_alpha >> 14u) & 0x1u;
     let x_extend = (sample_alpha >> 10u) & 0x3u;
     let y_extend = (sample_alpha >> 8u) & 0x3u;
-    // The following are not intended to be bitcasts
+    // xy and width_height each pack two u16 values; these are numeric
+    // conversions, not bitcasts.
     let x = f32(xy >> 16u);
     let y = f32(xy & 0xffffu);
     let width = f32(width_height >> 16u);
@@ -165,34 +215,49 @@ fn read_image(cmd_ix: u32) -> CmdImage {
     return CmdImage(matrx, xlat, vec2(x, y), vec2(width, height), format, x_extend, y_extend, alpha, alpha_type);
 }
 
+// Decodes a CMD_END_CLIP payload: the packed blend mode (which may carry the
+// clip difference/hard mask bits) and the layer alpha, which doubles as the
+// coverage threshold for hard mask clips.
 fn read_end_clip(cmd_ix: u32) -> CmdEndClip {
     let blend = ptcl[cmd_ix + 1u];
     let alpha = bitcast<f32>(ptcl[cmd_ix + 2u]);
     return CmdEndClip(blend, alpha);
 }
 
+// Extracts the packed blend mode ((mix << 8) | compose) from a draw-flags word.
 fn read_draw_blend_mode(draw_flags: u32) -> u32 {
     return (draw_flags & DRAW_FLAGS_BLEND_MODE_MASK) >> DRAW_FLAGS_BLEND_MODE_SHIFT;
 }
 
+// Extracts the mix (blending) mode from a draw-flags word.
 fn read_draw_mix_mode(draw_flags: u32) -> u32 {
     return read_draw_blend_mode(draw_flags) >> 8u;
 }
 
+// Extracts the Porter-Duff compose mode from a draw-flags word.
 fn read_draw_compose_mode(draw_flags: u32) -> u32 {
     return read_draw_blend_mode(draw_flags) & 0xffu;
 }
 
+// Extracts the layer alpha from a draw-flags word, stored as a 16-bit
+// normalized value.
 fn read_draw_blend_alpha(draw_flags: u32) -> f32 {
     let packed = (draw_flags & DRAW_FLAGS_BLEND_ALPHA_MASK) >> DRAW_FLAGS_BLEND_ALPHA_SHIFT;
     return f32(packed) / 65535.0;
 }
 
+// True when the flags encode plain source-over at full layer alpha, which
+// allows compose_draw to take the fast path.
 fn is_default_draw_blend(draw_flags: u32) -> bool {
     return read_draw_blend_mode(draw_flags) == ((MIX_NORMAL << 8u) | COMPOSE_SRC_OVER)
         && (draw_flags & DRAW_FLAGS_BLEND_ALPHA_MASK) == DRAW_FLAGS_BLEND_ALPHA_MASK;
 }
 
+// Composites a premultiplied source over a premultiplied backdrop using the
+// mix/compose modes and layer alpha packed in draw_flags. Plain source-over at
+// full alpha takes a fast path. The common Porter-Duff compose operators are
+// expanded inline with the mix result weighted by the shared-alpha region;
+// anything else falls back to blend_mix_compose.
 fn compose_draw(backdrop: vec4<f32>, source: vec4<f32>, draw_flags: u32) -> vec4<f32> {
     let effective_alpha = source.a * read_draw_blend_alpha(draw_flags);
 
@@ -271,6 +336,9 @@ fn compose_draw(backdrop: vec4<f32>, source: vec4<f32>, draw_flags: u32) -> vec4
     }
 }
 
+// Applies compose_draw, then lerps between the backdrop and the composed
+// result by coverage so partial coverage attenuates the whole composite
+// (including destructive compose modes), not just the source alpha.
 fn compose_draw_with_coverage(backdrop: vec4<f32>, source: vec4<f32>, coverage: f32, draw_flags: u32) -> vec4<f32> {
     let composed = compose_draw(backdrop, source, draw_flags);
     return backdrop + ((composed - backdrop) * coverage);
@@ -278,7 +346,8 @@ fn compose_draw_with_coverage(backdrop: vec4<f32>, source: vec4<f32>, coverage: 
 
 const PIXEL_FORMAT_RGBA: u32 = 0u;
 const PIXEL_FORMAT_BGRA: u32 = 1u;
-// Normalises subpixel order loaded from an image, based on the image's format.
+// Normalises the channel order of a pixel loaded from an image, based on the
+// image's declared format.
 fn pixel_format(pixel: vec4f, format: u32) -> vec4f {
     switch format {
         case PIXEL_FORMAT_BGRA: {
@@ -293,7 +362,8 @@ fn pixel_format(pixel: vec4f, format: u32) -> vec4f {
 
 const ALPHA: u32 = 0u;
 const PREMULTIPLIED_ALPHA: u32 = 1u;
-// Premultiplies alpha if not already
+// Premultiplies the pixel's alpha unless the image already stores
+// premultiplied values.
 fn maybe_premul_alpha(pixel: vec4f, alpha_type: u32) -> vec4f {
     switch alpha_type {
         case PREMULTIPLIED_ALPHA: {
@@ -305,10 +375,14 @@ fn maybe_premul_alpha(pixel: vec4f, alpha_type: u32) -> vec4f {
     }
 }
 
+// Extend (wrap) modes for gradient parameters and image sampling.
 const EXTEND_PAD: u32 = 0u;
 const EXTEND_REPEAT: u32 = 1u;
 const EXTEND_REFLECT: u32 = 2u;
 const EXTEND_DECAL: u32 = 3u;
+// Maps a gradient parameter t into [0, 1] according to the extend mode.
+// Negative-t handling deliberately matches the CPU gradient brushes; see the
+// per-case notes.
 fn extend_mode_normalized(t: f32, mode: u32) -> f32 {
     switch mode {
         case EXTEND_PAD: {
@@ -328,20 +402,7 @@ fn extend_mode_normalized(t: f32, mode: u32) -> f32 {
     }
 }
 
-fn extend_mode(t: f32, mode: u32, max: f32) -> f32 {
-    switch mode {
-        case EXTEND_PAD: {
-            return clamp(t, 0.0, max);
-        }
-        case EXTEND_REPEAT: {
-            return extend_mode_normalized(t / max, mode) * max;
-        }
-        case EXTEND_REFLECT, default: {
-            return extend_mode_normalized(t / max, mode) * max;
-        }
-    }
-}
-
+// Wraps an integer sample coordinate into [0, max) for repeat tiling.
 fn image_repeat_mode_i32(t: f32, max: i32) -> i32 {
     let value = i32(t);
     let magnitude = select(value, -value, value < 0);
@@ -352,6 +413,8 @@ fn image_repeat_mode_i32(t: f32, max: i32) -> i32 {
     return (signed_remainder + max) % max;
 }
 
+// Reflects an integer sample coordinate into [0, max), mirroring every other
+// tile.
 fn image_reflect_mode_i32(t: f32, max: i32) -> i32 {
     // Reflect in pixel space with period 2*max, mirroring once per tile.
     // Matches the CPU ImageBrush: wrap into [0, 2*max) then fold the back half.
@@ -367,6 +430,8 @@ fn image_reflect_mode_i32(t: f32, max: i32) -> i32 {
     return m;
 }
 
+// Converts a continuous sample coordinate to a texel index under the given
+// wrap mode. Decal returns -1 for samples outside the source region.
 fn image_extend_mode_i32(t: f32, mode: u32, max: i32) -> i32 {
     switch mode {
         case EXTEND_PAD: {
@@ -388,26 +453,41 @@ fn image_extend_mode_i32(t: f32, mode: u32, max: i32) -> i32 {
     }
 }
 
+// Flag bit indicating the gradient carries an explicit center color, which
+// disables the single-triangle barycentric shortcut.
 const PATH_GRAD_HAS_EXPLICIT_CENTER_COLOR = 1u;
+// Info-stream layout: a 4-word header (center point, max ray distance, packed
+// center color) followed by 6-word edge records (start point, end point,
+// start color, end color).
 const PATH_GRAD_HEADER_WORD_COUNT = 4u;
 const PATH_GRAD_EDGE_WORD_COUNT = 6u;
 
+// Returns the info-stream offset of edge record edge_ix, past the gradient's
+// 4-word header.
 fn path_grad_edge_offset(path_grad: CmdPathGrad, edge_ix: u32) -> u32 {
     return path_grad.data_offset + PATH_GRAD_HEADER_WORD_COUNT + edge_ix * PATH_GRAD_EDGE_WORD_COUNT;
 }
 
+// Loads a point stored as two f32 words in the info stream.
 fn path_grad_load_point(offset: u32) -> vec2<f32> {
     return vec2<f32>(bitcast<f32>(info[offset]), bitcast<f32>(info[offset + 1u]));
 }
 
+// Loads a color stored as one packed rgba8 word in the info stream.
 fn path_grad_load_color(offset: u32) -> vec4<f32> {
     return unpack4x8unorm(info[offset]);
 }
 
+// 2D cross product (the z component of the 3D cross product).
 fn cross2(a: vec2<f32>, b: vec2<f32>) -> f32 {
     return a.x * b.y - a.y * b.x;
 }
 
+// Intersects the segment p + t*r (t in [0, 1]) with the segment q + u*s
+// (u in [0, 1]). Returns (1, x, y, u) on a hit, where (x, y) is the
+// intersection point and u the parameter along the second segment; returns
+// all zeros when the segments are near-parallel or the intersection falls
+// outside either parameter range.
 fn path_grad_line_intersection(p: vec2<f32>, r: vec2<f32>, q: vec2<f32>, s: vec2<f32>) -> vec4<f32> {
     let denominator = cross2(r, s);
     if abs(denominator) <= 1.0e-6 {
@@ -425,6 +505,10 @@ fn path_grad_line_intersection(p: vec2<f32>, r: vec2<f32>, q: vec2<f32>, s: vec2
     return vec4<f32>(1.0, point.x, point.y, u);
 }
 
+// Point-in-triangle test with barycentric output. Returns (1, u, v) when the
+// point lies inside triangle v1-v2-v3, where u and v weight v2 and v3 and
+// (1 - u - v) weights v1; returns all zeros when the point is outside or the
+// triangle is degenerate.
 fn path_grad_point_on_triangle(v1: vec2<f32>, v2: vec2<f32>, v3: vec2<f32>, point: vec2<f32>) -> vec3<f32> {
     let e1 = v2 - v1;
     let e2 = v3 - v2;
@@ -456,6 +540,13 @@ fn path_grad_point_on_triangle(v1: vec2<f32>, v2: vec2<f32>, v3: vec2<f32>, poin
     return vec3<f32>(1.0, u, v);
 }
 
+// Evaluates the path gradient brush at a point, returning a premultiplied
+// color. A three-edge gradient without an explicit center color interpolates
+// its vertex colors barycentrically. Otherwise a ray is cast from the point
+// away from the gradient center to find the nearest edge intersection; the
+// interpolated edge color is then mixed toward the center color by the ratio
+// of the point's distance from the edge to the center's distance from the
+// edge. Returns transparent when the point is not covered by any edge.
 fn evaluate_path_gradient(path_grad: CmdPathGrad, point: vec2<f32>) -> vec4<f32> {
     let center = path_grad_load_point(path_grad.data_offset);
     let center_color = path_grad_load_color(path_grad.data_offset + 3u);
@@ -523,9 +614,17 @@ fn evaluate_path_gradient(path_grad: CmdPathGrad, point: vec2<f32>) -> vec4<f32>
     return premul_alpha(mix(closest_color, center_color, ratio));
 }
 
+// Number of horizontally adjacent pixels shaded by each thread.
 const PIXELS_PER_THREAD = 4u;
 
-// Analytic area anti-aliasing.
+// Computes per-pixel coverage for a CMD_FILL using analytic area
+// anti-aliasing. Signed winding is accumulated from the backdrop and every
+// segment in the tile, the fill rule is applied, aliased fills are quantized
+// against their per-fill threshold, and coverage outside the fill's raster
+// interest rectangle is zeroed. xy is the thread's first pixel in tile-local
+// space (segments are tile-relative); global_xy is the same pixel in
+// full-target space. result receives coverage for PIXELS_PER_THREAD adjacent
+// pixels.
 //
 // FIXME: This should return an array when https://github.com/gfx-rs/naga/issues/1930 is fixed.
 fn fill_path(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result: ptr<function, array<f32, PIXELS_PER_THREAD>>) {
@@ -546,6 +645,8 @@ fn fill_path(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result: ptr<fun
         let y0 = clamp(y, 0.0, 1.0);
         let y1 = clamp(y + delta.y, 0.0, 1.0);
         let dy = y0 - y1;
+        // dy is the segment's signed vertical extent clipped to this pixel
+        // row; zero means the segment does not cross the row.
         if dy != 0.0 {
             let vec_y_recip = 1.0 / delta.y;
             let t0 = (y0 - y) * vec_y_recip;
@@ -566,6 +667,7 @@ fn fill_path(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result: ptr<fun
                 area[i] += a * dy;
             }
         }
+        // Winding contribution from segments crossing the tile's left edge.
         let y_edge = sign(delta.x) * clamp(xy.y - segment.y_edge + 1.0, 0.0, 1.0);
         for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
             area[i] += y_edge;
@@ -591,6 +693,8 @@ fn fill_path(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result: ptr<fun
             area[i] = select(0.0, 1.0, area[i] >= threshold);
         }
     }
+    // Discard coverage outside the fill's raster interest rectangle
+    // (expressed in full-target coordinates).
     for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
         let pixel = global_xy + vec2<f32>(f32(i), 0.0);
         if pixel.x < fill.interest.x || pixel.y < fill.interest.y || pixel.x >= fill.interest.z || pixel.y >= fill.interest.w {
@@ -601,7 +705,12 @@ fn fill_path(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result: ptr<fun
     *result = area;
 }
 
-// The X size should be 16 / PIXELS_PER_THREAD
+// Entry point: one workgroup per tile, each thread shading PIXELS_PER_THREAD
+// horizontally adjacent pixels. Seeds pixel state from the backdrop texture,
+// interprets the tile's PTCL commands until CMD_END, and writes the result to
+// the output texture with straight alpha.
+//
+// The X workgroup size should be TILE_WIDTH / PIXELS_PER_THREAD.
 @compute @workgroup_size(4, 16)
 fn main(
     @builtin(global_invocation_id) global_id: vec3<u32>,
@@ -614,10 +723,14 @@ fn main(
         return;
     }
     let tile_ix = wg_id.y * config.width_in_tiles + wg_id.x;
+    // Full-target pixel position; y is offset by the chunk's starting tile row
+    // so oversized scenes render correctly in tile-row windows.
     let xy = vec2(f32(global_id.x * PIXELS_PER_THREAD), f32(config.chunk_tile_y_start * TILE_HEIGHT + global_id.y));
     let xy_uint = vec2<u32>(xy);
     let local_xy = vec2(f32(local_id.x * PIXELS_PER_THREAD), f32(local_id.y));
     var rgba: array<vec4<f32>, PIXELS_PER_THREAD>;
+    // Seed each pixel from the existing target contents, converting the
+    // straight-alpha backdrop to the premultiplied form used internally.
     for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
         let coords = vec2<i32>(xy_uint + vec2(i, 0u));
         let backdrop_raw = textureLoad(backdrop_texture, coords, 0);
@@ -627,6 +740,7 @@ fn main(
     var clip_depth = 0u;
     var area: array<f32, PIXELS_PER_THREAD>;
     var cmd_ix = tile_ix * PTCL_INITIAL_ALLOC;
+    // The first word of each tile's PTCL slot is its blend spill offset.
     let blend_offset = ptcl[cmd_ix];
     cmd_ix += 1u;
     // main interpretation loop
@@ -642,6 +756,8 @@ fn main(
                 cmd_ix += 9u;
             }
             case CMD_SOLID: {
+                // Full coverage, restricted to the command's raster interest
+                // rectangle.
                 let interest = vec4<f32>(
                     bitcast<f32>(ptcl[cmd_ix + 1u]),
                     bitcast<f32>(ptcl[cmd_ix + 2u]),
@@ -670,10 +786,14 @@ fn main(
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
                     if area[i] != 0.0 {
                         let bg = rgba[i];
+                        // Compare in straight-alpha space against the source
+                        // key color, using squared RGBA distance.
                         let bg_sep = vec4(bg.rgb / max(bg.a, 1e-6), bg.a);
                         let delta = bg_sep - source;
                         let distance = dot(delta, delta);
                         if distance <= recolor.threshold {
+                            // Blend strength ramps from 1 at an exact match to
+                            // 0 at the threshold boundary.
                             let t = (recolor.threshold - distance) / recolor.threshold;
                             let target_premul = premul_alpha(target_color);
                             let recolored = target_premul * t + bg * (1.0 - target_color.a * t);
@@ -684,6 +804,9 @@ fn main(
                 cmd_ix += 5u;
             }
             case CMD_BEGIN_CLIP: {
+                // Save the current layer color and start a fresh transparent
+                // layer. Shallow stack entries live in registers; deeper ones
+                // spill to the blend buffer.
                 if clip_depth < BLEND_STACK_SPLIT {
                     for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
                         blend_stack[clip_depth][i] = pack4x8unorm(rgba[i]);
@@ -717,12 +840,15 @@ fn main(
                     // Difference clips reuse the same clip path but invert the mask at the
                     // point where the saved backdrop is restored. This keeps clip operation
                     // semantics in the clip stack instead of fabricating inverse path geometry.
+                    // Hard mask clips binarize coverage against the stored alpha
+                    // threshold instead of scaling the layer by it.
                     let is_hard_clip = (end_clip.blend & CLIP_HARD_MASK_BIT) != 0u;
                     var source_clip_area = area[i];
                     if is_hard_clip {
                         source_clip_area = select(0.0, 1.0, source_clip_area > end_clip.alpha);
                     }
 
+                    // Strip the local mask bits so only the packed blend mode remains.
                     let clip_area = select(source_clip_area, 1.0 - source_clip_area, (end_clip.blend & CLIP_DIFFERENCE_MASK_BIT) != 0u);
                     var clip_blend = end_clip.blend & ~CLIP_DIFFERENCE_MASK_BIT;
                     if is_hard_clip {
@@ -754,10 +880,13 @@ fn main(
                 cmd_ix += 3u;
             }
             case CMD_JUMP: {
+                // Continue interpretation in the tile's next PTCL block.
                 cmd_ix = ptcl[cmd_ix + 1u];
             }
             case CMD_LIN_GRAD: {
                 let lin = read_lin_grad(cmd_ix);
+                // The draw-flags word sits immediately before the brush data
+                // in the info stream (same layout for all gradient commands).
                 let draw_flags = info[ptcl[cmd_ix + 2u] - 1u];
                 let d = lin.line_x * (xy.x + 0.5) + lin.line_y * (xy.y + 0.5) + lin.line_c;
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
@@ -773,6 +902,9 @@ fn main(
             case CMD_RAD_GRAD: {
                 let rad = read_rad_grad(cmd_ix);
                 let draw_flags = info[ptcl[cmd_ix + 2u] - 1u];
+                // Two-point conical gradient. The kind, focal parameters, and
+                // flags are precomputed by draw_leaf; the parameter t is
+                // evaluated per kind below.
                 let focal_x = rad.focal_x;
                 let radius = rad.radius;
                 let is_strip = rad.kind == RAD_GRAD_KIND_STRIP;
@@ -823,6 +955,7 @@ fn main(
                         let my_xy = vec2(xy.x + f32(i) + 0.5, xy.y + 0.5);
                         let local_xy = elliptic.matrx.xy * my_xy.x + elliptic.matrx.zw * my_xy.y + elliptic.xlat;
                         let radius = length(local_xy);
+                        // radius == radius rejects NaN from degenerate transforms.
                         if radius == radius {
                             let t = extend_mode_normalized(radius, elliptic.extend_mode);
                             let ramp_x = i32(round(t * f32(GRADIENT_WIDTH - 1)));
@@ -909,8 +1042,8 @@ fn main(
         let coords = xy_uint + vec2(i, 0u);
         if coords.x < config.target_width && coords.y < config.target_height {
             let fg = rgba[i];
-            // let fg = base_color * (1.0 - foreground.a) + foreground;
-            // Max with a small epsilon to avoid NaNs
+            // Convert to straight alpha for the output; the epsilon avoids
+            // NaN when alpha is zero.
             let a_inv = 1.0 / max(fg.a, 1e-6);
             let rgba_sep = vec4(fg.rgb * a_inv, fg.a);
             textureStore(output, vec2<i32>(coords), rgba_sep);
@@ -918,6 +1051,7 @@ fn main(
     }
 }
 
+// Converts a straight-alpha color to premultiplied form.
 fn premul_alpha(rgba: vec4<f32>) -> vec4<f32> {
     return vec4(rgba.rgb * rgba.a, rgba.a);
 }

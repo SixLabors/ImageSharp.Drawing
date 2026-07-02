@@ -67,6 +67,8 @@ public sealed class WebGPUWindow : IDisposable
         }
         catch
         {
+            // The platform window is the only resource acquired before the WebGPU stack;
+            // release it when surface bootstrap fails so the constructor leaks nothing.
             this.window.Dispose();
             throw;
         }
@@ -163,6 +165,8 @@ public sealed class WebGPUWindow : IDisposable
                 return 1F;
             }
 
+            // The per-axis ratios can differ when the platform rounds the two sizes
+            // independently; report the larger so content is never rendered undersized.
             return MathF.Max(
                 (float)framebufferSize.Width / clientSize.Width,
                 (float)framebufferSize.Height / clientSize.Height);
@@ -349,6 +353,9 @@ public sealed class WebGPUWindow : IDisposable
         this.window.Render += OnRender;
         try
         {
+            // Pump events, update, and render explicitly instead of using the default loop so a
+            // close request raised during DoEvents or DoUpdate skips the remaining stages of that
+            // iteration and never renders into a window that is tearing down.
             this.window.Run(() =>
             {
                 this.window.DoEvents();
@@ -411,7 +418,11 @@ public sealed class WebGPUWindow : IDisposable
     /// <summary>
     /// Requests that the window close.
     /// </summary>
-    public void RequestClose() => this.window.IsClosing = true;
+    public void RequestClose()
+    {
+        this.ThrowIfDisposed();
+        this.window.IsClosing = true;
+    }
 
     /// <summary>
     /// Closes the window immediately.
@@ -475,11 +486,18 @@ public sealed class WebGPUWindow : IDisposable
             return;
         }
 
+        // The WebGPU surface attaches to the native window, so release the GPU stack first.
         this.resources.Dispose();
         this.window.Dispose();
         this.isDisposed = true;
     }
 
+    /// <summary>
+    /// Acquires the next drawable frame from the shared surface resources using the window's current framebuffer size.
+    /// </summary>
+    /// <param name="options">The drawing options for the acquired frame.</param>
+    /// <param name="frame">Receives the acquired frame on success.</param>
+    /// <returns><see langword="true"/> when a frame is available; otherwise <see langword="false"/>.</returns>
     private bool TryAcquireFrameCore(
         DrawingOptions options,
         [NotNullWhen(true)] out WebGPUSurfaceFrame? frame)
@@ -492,8 +510,15 @@ public sealed class WebGPUWindow : IDisposable
             out frame);
     }
 
+    /// <summary>
+    /// Handles native framebuffer resize notifications, reconfiguring the swapchain and raising
+    /// <see cref="FramebufferResized"/>.
+    /// </summary>
+    /// <param name="size">The new framebuffer size in pixels.</param>
     private void OnFramebufferResize(Vector2D<int> size)
     {
+        // A zero-area framebuffer (minimize, mid-layout) must not reconfigure the swapchain,
+        // but the managed event is still raised so listeners can observe the transition.
         if (size.X > 0 && size.Y > 0)
         {
             this.resources.ConfigureSurface(this.presentMode, ToSize(size));
@@ -502,12 +527,23 @@ public sealed class WebGPUWindow : IDisposable
         this.FramebufferResized?.Invoke(ToSize(size));
     }
 
+    /// <summary>
+    /// Throws when this window has been disposed.
+    /// </summary>
     private void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
 
+    /// <summary>
+    /// Maps the public window options to the native Silk.NET window options.
+    /// </summary>
+    /// <param name="options">The window creation options.</param>
+    /// <returns>The native window options.</returns>
     private static WindowOptions CreateSilkOptions(WebGPUWindowOptions options)
     {
         WindowOptions silkOptions = WindowOptions.Default;
+
+        // WebGPU owns the device and presentation, so the window must not create a GL
+        // context, swap buffers, or apply vsync itself; the swapchain present mode does that.
         silkOptions.API = GraphicsAPI.None;
         silkOptions.ShouldSwapAutomatically = false;
         silkOptions.IsContextControlDisabled = true;
@@ -525,14 +561,39 @@ public sealed class WebGPUWindow : IDisposable
         return silkOptions;
     }
 
+    /// <summary>
+    /// Converts a size to a native vector.
+    /// </summary>
+    /// <param name="size">The size to convert.</param>
+    /// <returns>The converted vector.</returns>
     private static Vector2D<int> ToVector(Size size) => new(size.Width, size.Height);
 
+    /// <summary>
+    /// Converts a point to a native vector.
+    /// </summary>
+    /// <param name="point">The point to convert.</param>
+    /// <returns>The converted vector.</returns>
     private static Vector2D<int> ToVector(Point point) => new(point.X, point.Y);
 
+    /// <summary>
+    /// Converts a native vector to a size.
+    /// </summary>
+    /// <param name="value">The vector to convert.</param>
+    /// <returns>The converted size.</returns>
     private static Size ToSize(Vector2D<int> value) => new(value.X, value.Y);
 
+    /// <summary>
+    /// Converts a native vector to a point.
+    /// </summary>
+    /// <param name="value">The vector to convert.</param>
+    /// <returns>The converted point.</returns>
     private static Point ToPoint(Vector2D<int> value) => new(value.X, value.Y);
 
+    /// <summary>
+    /// Maps the public window state to the native Silk.NET value.
+    /// </summary>
+    /// <param name="state">The window state to map.</param>
+    /// <returns>The native window state.</returns>
     private static NativeWindowState ToNative(WebGPUWindowState state)
         => state switch
         {
@@ -543,6 +604,11 @@ public sealed class WebGPUWindow : IDisposable
             _ => throw new InvalidOperationException("The WebGPU window state mapping is incomplete.")
         };
 
+    /// <summary>
+    /// Maps the native Silk.NET window state to the public value.
+    /// </summary>
+    /// <param name="state">The native window state to map.</param>
+    /// <returns>The public window state.</returns>
     private static WebGPUWindowState FromNative(NativeWindowState state)
         => state switch
         {
@@ -553,6 +619,11 @@ public sealed class WebGPUWindow : IDisposable
             _ => throw new InvalidOperationException("The native window state mapping is incomplete.")
         };
 
+    /// <summary>
+    /// Maps the public window border mode to the native Silk.NET value.
+    /// </summary>
+    /// <param name="border">The window border mode to map.</param>
+    /// <returns>The native window border mode.</returns>
     private static NativeWindowBorder ToNative(WebGPUWindowBorder border)
         => border switch
         {
@@ -562,6 +633,11 @@ public sealed class WebGPUWindow : IDisposable
             _ => throw new InvalidOperationException("The WebGPU window border mapping is incomplete.")
         };
 
+    /// <summary>
+    /// Maps the native Silk.NET window border mode to the public value.
+    /// </summary>
+    /// <param name="border">The native window border mode to map.</param>
+    /// <returns>The public window border mode.</returns>
     private static WebGPUWindowBorder FromNative(NativeWindowBorder border)
         => border switch
         {

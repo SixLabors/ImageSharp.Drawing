@@ -43,6 +43,11 @@ internal sealed class WebGPUDeviceContext : IDisposable
             this.DeviceHandle = deviceHandle;
             this.QueueHandle = queueHandle;
             this.Configuration = configuration;
+
+            // Device-scoped shared state owns the uncaptured-error callback. Install it now,
+            // matching the wrapped-handle constructor, so GPU errors raised before the first
+            // flush or readback are still reported instead of silently dropped.
+            _ = WebGPURuntime.GetOrCreateDeviceState(WebGPURuntime.GetApi(), deviceHandle);
         }
         catch
         {
@@ -91,11 +96,15 @@ internal sealed class WebGPUDeviceContext : IDisposable
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUDeviceContext"/> class over externally-owned device and queue handles.
+    /// Initializes a new instance of the <see cref="WebGPUDeviceContext"/> class over already-wrapped device and queue handles.
     /// </summary>
     /// <param name="configuration">The configuration instance to bind to the created backend.</param>
     /// <param name="deviceHandle">The wrapped WebGPU device handle.</param>
     /// <param name="queueHandle">The wrapped WebGPU queue handle.</param>
+    /// <remarks>
+    /// The context stores the handles without taking ownership; native lifetime is controlled
+    /// by the handle wrappers themselves.
+    /// </remarks>
     internal WebGPUDeviceContext(Configuration configuration, WebGPUDeviceHandle deviceHandle, WebGPUQueueHandle queueHandle)
     {
         Guard.NotNull(configuration, nameof(configuration));
@@ -234,6 +243,13 @@ internal sealed class WebGPUDeviceContext : IDisposable
     /// <summary>
     /// Creates a drawing canvas over wrapped texture handles that are already in this assembly's ownership model.
     /// </summary>
+    /// <param name="options">The initial drawing options.</param>
+    /// <param name="textureHandle">The wrapped WebGPU texture handle.</param>
+    /// <param name="textureViewHandle">The wrapped WebGPU texture-view handle.</param>
+    /// <param name="format">The texture format.</param>
+    /// <param name="width">The frame width in pixels.</param>
+    /// <param name="height">The frame height in pixels.</param>
+    /// <returns>A drawing canvas targeting the wrapped texture.</returns>
     internal DrawingCanvas CreateCanvas(
         DrawingOptions options,
         WebGPUTextureHandle textureHandle,
@@ -251,6 +267,12 @@ internal sealed class WebGPUDeviceContext : IDisposable
     /// <summary>
     /// Creates the wrapped native surface over the supplied texture handles.
     /// </summary>
+    /// <param name="textureHandle">The wrapped WebGPU texture handle.</param>
+    /// <param name="textureViewHandle">The wrapped WebGPU texture-view handle.</param>
+    /// <param name="format">The texture format.</param>
+    /// <param name="width">The surface width in pixels.</param>
+    /// <param name="height">The surface height in pixels.</param>
+    /// <returns>The native surface bound to this context's device and queue.</returns>
     private WebGPUNativeSurface CreateSurface(
         WebGPUTextureHandle textureHandle,
         WebGPUTextureViewHandle textureViewHandle,
@@ -275,24 +297,32 @@ internal sealed class WebGPUDeviceContext : IDisposable
     /// <summary>
     /// Wraps one externally-owned device handle without taking ownership.
     /// </summary>
+    /// <param name="deviceHandle">The raw external device handle.</param>
+    /// <returns>A non-owning safe-handle wrapper.</returns>
     private static WebGPUDeviceHandle CreateExternalDeviceHandle(nint deviceHandle)
         => new(deviceHandle, ownsHandle: false);
 
     /// <summary>
     /// Wraps one externally-owned queue handle without taking ownership.
     /// </summary>
+    /// <param name="queueHandle">The raw external queue handle.</param>
+    /// <returns>A non-owning safe-handle wrapper.</returns>
     private static WebGPUQueueHandle CreateExternalQueueHandle(nint queueHandle)
         => new(queueHandle, ownsHandle: false);
 
     /// <summary>
     /// Wraps one externally-owned texture handle without taking ownership.
     /// </summary>
+    /// <param name="textureHandle">The raw external texture handle.</param>
+    /// <returns>A non-owning safe-handle wrapper.</returns>
     private static WebGPUTextureHandle CreateExternalTextureHandle(nint textureHandle)
         => new(textureHandle, ownsHandle: false);
 
     /// <summary>
     /// Wraps one externally-owned texture-view handle without taking ownership.
     /// </summary>
+    /// <param name="textureViewHandle">The raw external texture-view handle.</param>
+    /// <returns>A non-owning safe-handle wrapper.</returns>
     private static WebGPUTextureViewHandle CreateExternalTextureViewHandle(nint textureViewHandle)
         => new(textureViewHandle, ownsHandle: false);
 }

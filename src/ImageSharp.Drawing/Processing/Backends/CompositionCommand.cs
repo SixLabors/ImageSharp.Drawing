@@ -56,6 +56,21 @@ public readonly struct CompositionCommand
     private readonly DrawingClipDescriptor? clipDescriptor;
     private readonly ApplyBarrier? applyBarrier;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CompositionCommand"/> struct.
+    /// </summary>
+    /// <param name="kind">The command kind.</param>
+    /// <param name="sourcePath">The source path, or <see langword="null"/> for commands without geometry.</param>
+    /// <param name="brush">The composition brush, or <see langword="null"/> for commands without a brush.</param>
+    /// <param name="drawingOptions">The drawing options, or <see langword="null"/> for commands without them.</param>
+    /// <param name="layer">The shared layer state, or <see langword="null"/> for non-layer commands.</param>
+    /// <param name="rasterizerOptions">The rasterizer options used to generate coverage.</param>
+    /// <param name="targetBounds">The absolute bounds of the logical target.</param>
+    /// <param name="layerBounds">The absolute layer bounds for begin/end-layer commands.</param>
+    /// <param name="destinationOffset">The absolute destination offset for composited coverage.</param>
+    /// <param name="clipDescriptor">The clip descriptor, or <see langword="null"/> for non begin-clip commands.</param>
+    /// <param name="isInsideLayer">True if the command was recorded inside a layer.</param>
+    /// <param name="applyBarrier">The apply barrier, or <see langword="null"/> for non-apply commands.</param>
     private CompositionCommand(
         CompositionCommandKind kind,
         IPath? sourcePath,
@@ -116,6 +131,9 @@ public readonly struct CompositionCommand
     /// <summary>
     /// Gets graphics options used by layer compositing commands.
     /// </summary>
+    /// <remarks>
+    /// Only valid for commands that carry layer state; accessing it on other commands throws.
+    /// </remarks>
     public GraphicsOptions LayerOptions => this.Layer.Options;
 
     /// <summary>
@@ -345,12 +363,22 @@ public readonly struct CompositionCommand
         return CreateApply(barrier, barrier.Path, barrier.Options, in rasterizerOptions);
     }
 
+    /// <summary>
+    /// Creates an apply composition command from precomputed rasterizer options.
+    /// </summary>
+    /// <param name="barrier">The apply barrier to execute.</param>
+    /// <param name="path">The closed path defining the processed region.</param>
+    /// <param name="drawingOptions">The drawing options captured when the barrier was recorded.</param>
+    /// <param name="rasterizerOptions">The rasterizer options used to generate coverage.</param>
+    /// <returns>The apply command.</returns>
     private static CompositionCommand CreateApply(
         ApplyBarrier barrier,
         IPath path,
         DrawingOptions drawingOptions,
         in RasterizerOptions rasterizerOptions)
     {
+        // Apply replaces the processed region rather than blending over it, so the command
+        // carries options forced to Src alpha composition at full blend percentage.
         DrawingOptions applyOptions = drawingOptions.CloneForClearOperation();
 
         return new CompositionCommand(
@@ -368,6 +396,12 @@ public readonly struct CompositionCommand
             barrier);
     }
 
+    /// <summary>
+    /// Creates the rasterizer options used to generate coverage for an apply command region.
+    /// </summary>
+    /// <param name="path">The closed path defining the processed region.</param>
+    /// <param name="options">The drawing options captured when the barrier was recorded.</param>
+    /// <returns>The rasterizer options.</returns>
     private static RasterizerOptions CreateApplyRasterizerOptions(
         IPath path,
         DrawingOptions options)
@@ -376,6 +410,8 @@ public readonly struct CompositionCommand
         RasterizationMode rasterizationMode = graphicsOptions.Antialias
             ? RasterizationMode.Antialiased
             : RasterizationMode.Aliased;
+
+        // Snap the interest outward to whole pixels so fractional path bounds never crop coverage.
         RectangleF pathBounds = path.Bounds;
         Rectangle interest = Rectangle.FromLTRB(
             (int)MathF.Floor(pathBounds.Left),

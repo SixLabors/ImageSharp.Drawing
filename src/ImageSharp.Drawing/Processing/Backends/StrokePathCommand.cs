@@ -8,6 +8,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// One stroked path command queued by the canvas batcher.
 /// </summary>
+/// <remarks>
+/// Stroke commands carry pen geometry only; they do not carry clip state. Backends resolve
+/// the active clip stack from the begin/end-clip commands surrounding each draw in the stream.
+/// </remarks>
 public readonly struct StrokePathCommand
 {
     private readonly IPath sourcePath;

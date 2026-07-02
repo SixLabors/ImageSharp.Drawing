@@ -6,7 +6,10 @@ using Silk.NET.WebGPU;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// GPU stage that derives sparse per-row x spans from the flattened line stream.
+/// GPU stage that derives sparse per-row tile column spans from the flattened line stream:
+/// one thread per line replays the tile-crossing traversal, atomically growing each touched
+/// row's span and accumulating per-row winding backdrops for tile-alloc. Wraps
+/// <c>path_row_span.wgsl</c>.
 /// </summary>
 internal static unsafe class PathRowSpanComputeShader
 {
@@ -34,6 +37,12 @@ internal static unsafe class PathRowSpanComputeShader
         out BindGroupLayout* layout,
         out string? error)
     {
+        // Bindings match path_row_span.wgsl:
+        //   0 config uniform
+        //   1 bump allocators (read-write because the buffer is atomic; this stage only reads the lines counter)
+        //   2 lines (read-only LineSoup from flatten)
+        //   3 paths (read-only Path records from path_row_alloc)
+        //   4 rows (read-write; spans, backdrops and flags accumulated atomically)
         BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[5];
         entries[0] = SceneShaderBindingLayoutHelper.CreateUniformEntry(0, (nuint)sizeof(GpuSceneConfig));
         entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, BufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));

@@ -14,6 +14,12 @@ public static unsafe class WebGPUEnvironment
 {
     // Rooted so the native wgpu log callback is not collected while wgpu holds it.
     private static PfnLogCallback nativeLogCallback;
+
+    // The native callback is registered at most once per process; later sink changes only
+    // swap the managed sink field the callback reads.
+    private static bool nativeLogCallbackRegistered;
+
+    // Read on the native log-callback thread; a null sink turns each log line into a no-op.
     private static Action<string>? nativeLogSink;
 
     /// <summary>
@@ -40,6 +46,11 @@ public static unsafe class WebGPUEnvironment
     /// that abort the process through the binding's submit panic before the uncaptured callback runs.
     /// </summary>
     /// <param name="sink">The managed sink invoked for each native log line, or <see langword="null"/> to disable.</param>
+    /// <remarks>
+    /// The sink can be invoked from native wgpu threads; keep it short and non-blocking.
+    /// Passing <see langword="null"/> only mutes the managed sink; a previously registered
+    /// native callback stays installed and simply drops its messages.
+    /// </remarks>
     public static void EnableNativeLogging(Action<string>? sink)
     {
         nativeLogSink = sink;
@@ -48,12 +59,27 @@ public static unsafe class WebGPUEnvironment
             return;
         }
 
+        // Register the native callback once. HandleNativeLog reads the sink field on every
+        // invocation, so swapping the sink needs no re-registration; re-creating the thunk
+        // here would leak the previous one, which must stay rooted while wgpu holds it.
+        if (nativeLogCallbackRegistered)
+        {
+            return;
+        }
+
         Wgpu wgpu = WebGPURuntime.GetWgpuExtension();
         nativeLogCallback = PfnLogCallback.From(HandleNativeLog);
         wgpu.SetLogCallback(nativeLogCallback, null);
         wgpu.SetLogLevel(LogLevel.Warn);
+        nativeLogCallbackRegistered = true;
     }
 
+    /// <summary>
+    /// Marshals one native wgpu log line to the managed sink.
+    /// </summary>
+    /// <param name="level">The native log level.</param>
+    /// <param name="message">The native UTF-8 log message, or <see langword="null"/>.</param>
+    /// <param name="userData">Unused native user-data pointer.</param>
     private static void HandleNativeLog(LogLevel level, byte* message, void* userData)
     {
         Action<string>? sink = nativeLogSink;
@@ -96,6 +122,8 @@ public static unsafe class WebGPUEnvironment
     /// <summary>
     /// Reports one uncaptured native WebGPU error to the configured public callback.
     /// </summary>
+    /// <param name="errorType">The public error classification.</param>
+    /// <param name="message">The error message reported by the native runtime.</param>
     internal static void ReportUncapturedError(WebGPUErrorType errorType, string message)
     {
         Action<WebGPUErrorType, string>? callback = UncapturedError;

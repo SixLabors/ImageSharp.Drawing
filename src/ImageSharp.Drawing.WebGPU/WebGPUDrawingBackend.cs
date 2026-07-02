@@ -88,6 +88,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     {
         this.ThrowIfDisposed();
 
+        // Batches containing Apply need the ordered encoder: Apply reads pixels back mid-scene,
+        // so the operations before and after it must stay in submission order.
         bool encoded = commandBatch.HasApply
             ? WebGPUSceneEncoder.TryEncodeOrdered(
                 commandBatch,
@@ -162,6 +164,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         try
         {
+            // Ordered scenes (Apply/scoped layers) walk an operation list; plain scenes take the
+            // single staged-dispatch path below.
             WebGPUEncodedScene encodedScene = webGPUScene.EncodedScene;
             if (encodedScene.HasOperations)
             {
@@ -283,6 +287,23 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         }
     }
 
+    /// <summary>
+    /// Executes an ordered slice of scene operations against the given target, recursing into
+    /// scoped layers. Render ranges and Apply results draw directly onto <paramref name="target"/>;
+    /// scoped layers render into an offscreen texture first and are composited back by the parent.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="flushContext">The flush-scoped WebGPU device, queue, and encoder state.</param>
+    /// <param name="target">The scene target the operations draw onto.</param>
+    /// <param name="encodedScene">The encoded scene that owns the operation list.</param>
+    /// <param name="operations">The full ordered operation list.</param>
+    /// <param name="operationStart">The inclusive index of the first operation to execute.</param>
+    /// <param name="operationEnd">The exclusive index at which execution stops.</param>
+    /// <param name="requiredFeature">The device feature required by the target format, or <see cref="FeatureName.Undefined"/>.</param>
+    /// <param name="currentBumpSizes">The scratch capacities carried across dispatches.</param>
+    /// <param name="resourceArena">The rented scene resource arena, allocated on first use.</param>
+    /// <param name="schedulingArena">The rented scheduling arena, allocated on first use.</param>
     private void RenderOperations<TPixel>(
         Configuration configuration,
         WebGPUFlushContext flushContext,
@@ -330,6 +351,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                     break;
 
                 case WebGPUSceneOperationKind.ScopedLayer:
+                    // Child operations are stored inline immediately after the layer marker.
                     int childOperationStart = i + 1;
 
                     this.ExecuteScopedLayerOperation<TPixel>(
@@ -345,12 +367,29 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                         ref resourceArena,
                         ref schedulingArena);
 
+                    // Skip past the child operations; the scoped-layer call above already ran them.
                     i += operation.Layer!.OperationCount;
                     break;
             }
         }
     }
 
+    /// <summary>
+    /// Renders a scoped layer's child operations into a transient offscreen texture and then
+    /// composites that texture back onto the parent target using the layer's composite range.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="flushContext">The flush-scoped WebGPU device, queue, and encoder state.</param>
+    /// <param name="parentTarget">The target that receives the composited layer.</param>
+    /// <param name="encodedScene">The encoded scene that owns the operation list.</param>
+    /// <param name="operations">The full ordered operation list.</param>
+    /// <param name="childOperationStart">The index of the layer's first child operation.</param>
+    /// <param name="layer">The scoped-layer scene item describing bounds, child count, and composite range.</param>
+    /// <param name="requiredFeature">The device feature required by the target format, or <see cref="FeatureName.Undefined"/>.</param>
+    /// <param name="currentBumpSizes">The scratch capacities carried across dispatches.</param>
+    /// <param name="resourceArena">The rented scene resource arena, allocated on first use.</param>
+    /// <param name="schedulingArena">The rented scheduling arena, allocated on first use.</param>
     private void ExecuteScopedLayerOperation<TPixel>(
         Configuration configuration,
         WebGPUFlushContext flushContext,
@@ -370,8 +409,11 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             throw new InvalidOperationException(error);
         }
 
+        // Layers composite over transparent black, so the fresh texture must start cleared.
         ClearTarget(flushContext, layerTextureView);
 
+        // The layer texture is sized to the layer bounds with its own origin at (0, 0).
+        // The negated bounds origin translates scene-space coordinates into texture space.
         WebGPUSceneTarget layerTarget = new(
             layerTexture,
             layerTextureView,
@@ -391,6 +433,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             ref resourceArena,
             ref schedulingArena);
 
+        // Composite the finished layer onto the parent. The composite range samples the layer
+        // texture through the external texture-view binding.
         this.RenderEncodedRange<TPixel>(
             configuration,
             flushContext,
@@ -404,6 +448,21 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             ref schedulingArena);
     }
 
+    /// <summary>
+    /// Executes an Apply operation: reads the source region back to the CPU, runs the user's
+    /// image mutation, uploads the result into a transient texture, and draws it via the
+    /// operation's draw range.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="flushContext">The flush-scoped WebGPU device, queue, and encoder state.</param>
+    /// <param name="target">The scene target read from and drawn onto.</param>
+    /// <param name="encodedScene">The encoded scene that owns the operation list.</param>
+    /// <param name="apply">The Apply scene item describing the source rectangle, mutation, and draw range.</param>
+    /// <param name="requiredFeature">The device feature required by the target format, or <see cref="FeatureName.Undefined"/>.</param>
+    /// <param name="currentBumpSizes">The scratch capacities carried across dispatches.</param>
+    /// <param name="resourceArena">The rented scene resource arena, allocated on first use.</param>
+    /// <param name="schedulingArena">The rented scheduling arena, allocated on first use.</param>
     private void ExecuteApplyOperation<TPixel>(
         Configuration configuration,
         WebGPUFlushContext flushContext,
@@ -416,6 +475,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         ref WebGPUSceneSchedulingArena? schedulingArena)
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        // All previously recorded GPU work must be submitted before readback, otherwise the
+        // CPU would observe stale pixels for draws that have not executed yet.
         if (!TrySubmit(flushContext))
         {
             throw new InvalidOperationException("Failed to submit WebGPU work before Apply readback.");
@@ -453,6 +514,23 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             ref schedulingArena);
     }
 
+    /// <summary>
+    /// Stages and dispatches one encoded fill range against the given target, growing scratch
+    /// capacities and retrying until the GPU-reported demand converges. When
+    /// <paramref name="externalTextureView"/> is non-null the range samples that texture
+    /// (layer composition or Apply results).
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="flushContext">The flush-scoped WebGPU device, queue, and encoder state.</param>
+    /// <param name="target">The scene target the range draws onto.</param>
+    /// <param name="encodedScene">The encoded scene that owns the fill range.</param>
+    /// <param name="range">The encoded fill range to dispatch.</param>
+    /// <param name="requiredFeature">The device feature required by the target format, or <see cref="FeatureName.Undefined"/>.</param>
+    /// <param name="externalTextureView">An optional texture view sampled by the range, or null.</param>
+    /// <param name="currentBumpSizes">The scratch capacities carried across dispatches.</param>
+    /// <param name="resourceArena">The rented scene resource arena, allocated on first use.</param>
+    /// <param name="schedulingArena">The rented scheduling arena, allocated on first use.</param>
     private void RenderEncodedRange<TPixel>(
         Configuration configuration,
         WebGPUFlushContext flushContext,
@@ -472,6 +550,9 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         }
 
         bool renderCompleted = false;
+
+        // Retry loop: scratch allocators start small and the GPU reports actual demand.
+        // Each failed pass carries the grown capacities forward into the next attempt.
         for (int attempt = 0; attempt < MaxDynamicGrowthAttempts; attempt++)
         {
             WebGPUStagedScene stagedScene = WebGPUSceneDispatch.CreateStagedScene<TPixel>(
@@ -537,6 +618,12 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         }
     }
 
+    /// <summary>
+    /// Clears the given render target to transparent black by opening a render pass with a
+    /// clear load action and immediately ending it.
+    /// </summary>
+    /// <param name="flushContext">The flush-scoped WebGPU device, queue, and encoder state.</param>
+    /// <param name="targetView">The texture view to clear.</param>
     private static void ClearTarget(WebGPUFlushContext flushContext, TextureView* targetView)
     {
         if (!flushContext.EnsureCommandEncoder() || !flushContext.BeginRenderPass(targetView, loadExisting: false))
@@ -613,18 +700,22 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// <summary>
     /// Rents the cached scene resource arena for a render, leaving the backend cache empty.
     /// </summary>
+    /// <returns>The cached arena, or <see langword="null"/> when the cache slot is empty.</returns>
     internal WebGPUSceneResourceArena? RentResourceArena()
         => Interlocked.Exchange(ref this.cachedResourceArena, null);
 
     /// <summary>
     /// Rents the cached scheduling arena for a render, leaving the backend cache empty.
     /// </summary>
+    /// <returns>The cached arena, or <see langword="null"/> when the cache slot is empty.</returns>
     internal WebGPUSceneSchedulingArena? RentSchedulingArena()
         => Interlocked.Exchange(ref this.cachedSchedulingArena, null);
 
     /// <summary>
     /// Returns reusable arenas to this backend cache.
     /// </summary>
+    /// <param name="resourceArena">The scene resource arena to cache, or <see langword="null"/> when none was rented.</param>
+    /// <param name="schedulingArena">The scheduling arena to cache, or <see langword="null"/> when none was rented.</param>
     internal void ReturnArenas(
         WebGPUSceneResourceArena? resourceArena,
         WebGPUSceneSchedulingArena? schedulingArena)
@@ -654,8 +745,16 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     }
 
     /// <summary>
-    /// Creates one transient composition texture that can be rendered to, sampled from, and copied.
+    /// Creates one transient composition texture that can be sampled from, storage-bound, and copied.
+    /// The texture and view are tracked by the flush context, which owns their release.
     /// </summary>
+    /// <param name="flushContext">The flush-scoped WebGPU device, queue, and encoder state.</param>
+    /// <param name="width">The texture width in pixels.</param>
+    /// <param name="height">The texture height in pixels.</param>
+    /// <param name="texture">Receives the created texture on success.</param>
+    /// <param name="textureView">Receives the created texture view on success.</param>
+    /// <param name="error">Receives the failure reason when creation fails.</param>
+    /// <returns><see langword="true"/> when the texture and view were created; otherwise <see langword="false"/>.</returns>
     internal static bool TryCreateCompositionTexture(
         WebGPUFlushContext flushContext,
         int width,
@@ -666,8 +765,19 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         => TryCreateCompositionTexture(flushContext, width, height, renderAttachment: false, out texture, out textureView, out error);
 
     /// <summary>
-    /// Creates one transient composition texture that can be rendered to, sampled from, and copied.
+    /// Creates one transient composition texture that can be sampled from, storage-bound, and copied.
+    /// When <paramref name="renderAttachment"/> is <see langword="true"/> the texture can also be used
+    /// as a render-pass target, which scoped layers require for clearing. The texture and view are
+    /// tracked by the flush context, which owns their release.
     /// </summary>
+    /// <param name="flushContext">The flush-scoped WebGPU device, queue, and encoder state.</param>
+    /// <param name="width">The texture width in pixels.</param>
+    /// <param name="height">The texture height in pixels.</param>
+    /// <param name="renderAttachment">Whether the texture also needs render-attachment usage.</param>
+    /// <param name="texture">Receives the created texture on success.</param>
+    /// <param name="textureView">Receives the created texture view on success.</param>
+    /// <param name="error">Receives the failure reason when creation fails.</param>
+    /// <returns><see langword="true"/> when the texture and view were created; otherwise <see langword="false"/>.</returns>
     private static bool TryCreateCompositionTexture(
         WebGPUFlushContext flushContext,
         int width,
@@ -726,6 +836,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             return false;
         }
 
+        // Ownership transfers to the flush context here; it releases both handles when disposed.
         flushContext.TrackTexture(texture);
         flushContext.TrackTextureView(textureView);
         error = null;
@@ -733,8 +844,18 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     }
 
     /// <summary>
-    /// Copies one texture region from source to destination texture.
+    /// Records one texture-to-texture region copy on the flush context's current command encoder.
+    /// The copy executes when that encoder is next submitted.
     /// </summary>
+    /// <param name="flushContext">The flush-scoped WebGPU device, queue, and encoder state.</param>
+    /// <param name="sourceTexture">The texture copied from.</param>
+    /// <param name="sourceOriginX">The source origin X in texels.</param>
+    /// <param name="sourceOriginY">The source origin Y in texels.</param>
+    /// <param name="destinationTexture">The texture copied to.</param>
+    /// <param name="destinationOriginX">The destination origin X in texels.</param>
+    /// <param name="destinationOriginY">The destination origin Y in texels.</param>
+    /// <param name="width">The copy width in texels.</param>
+    /// <param name="height">The copy height in texels.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void CopyTextureRegion(
         WebGPUFlushContext flushContext,
@@ -768,8 +889,12 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     }
 
     /// <summary>
-    /// Submits the current command encoder, if any.
+    /// Finishes and submits the flush context's current command encoder, if any.
     /// </summary>
+    /// <param name="flushContext">The flush-scoped WebGPU device, queue, and encoder state.</param>
+    /// <returns>
+    /// <see langword="true"/> when there was nothing to submit or the submit succeeded; otherwise <see langword="false"/>.
+    /// </returns>
     internal static bool TrySubmit(WebGPUFlushContext flushContext)
     {
         CommandEncoder* commandEncoder = flushContext.CommandEncoder;
@@ -778,6 +903,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             return true;
         }
 
+        // An encoder cannot be finished while a pass is still recording.
         flushContext.EndComputePassIfOpen();
         flushContext.EndRenderPassIfOpen();
 

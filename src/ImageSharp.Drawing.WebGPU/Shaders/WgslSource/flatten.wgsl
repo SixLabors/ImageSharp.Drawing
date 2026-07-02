@@ -1,13 +1,22 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// Flatten curves to lines
+// Flatten stage: converts encoded path segments into a device-space "line soup" and accumulates
+// per-path bounding boxes for the downstream draw_leaf/binning/coarse/fine stages. Inputs are the
+// scene stream (path tags, points, styles, transforms) at binding 1, the config uniform at
+// binding 0, and the pathtag prefix sums at binding 2; outputs are the atomic path bboxes
+// (binding 3), the bump allocators (binding 4), and the LineSoup buffer (binding 5). Ported from
+// Vello's flatten.wgsl. Fills of every segment type route through flatten_euler exactly as in
+// upstream Vello: read_path_segment lowers lines to degenerate cubics and the Euler-spiral math
+// resolves them through its low-curvature path. The C# encoder currently pre-flattens fill curves
+// on the CPU, so in practice only line segments arrive for fills. Stroke expansion diverges from
+// upstream: it is a port of the CPU PolygonStroker (chained joins, miters, arcs, and caps) with
+// quadto tags reused as stroke tangent markers rather than curves.
 
 #import config
 #import drawtag
 #import pathtag
 #import segment
-#import cubic
 #import bump
 
 @group(0) @binding(0)
@@ -19,6 +28,8 @@ var<storage> scene: array<u32>;
 @group(0) @binding(2)
 var<storage> tag_monoids: array<TagMonoid>;
 
+// Per-path device-space bounding box plus draw metadata copied from the style stream. The extents
+// are atomic so the many invocations flattening segments of the same path can merge their results.
 struct AtomicPathBbox {
     x0: atomic<i32>,
     y0: atomic<i32>,
@@ -41,24 +52,10 @@ var<storage, read_write> bump: BumpAllocators;
 @group(0) @binding(5)
 var<storage, read_write> lines: array<LineSoup>;
 
-struct SubdivResult {
-    val: f32,
-    a0: f32,
-    a2: f32,
-}
-
-const D = 0.67;
-fn approx_parabola_integral(x: f32) -> f32 {
-    return x * inverseSqrt(sqrt(1.0 - D + (D * D * D * D + 0.25 * x * x)));
-}
-
-const B = 0.39;
-fn approx_parabola_inv_integral(x: f32) -> f32 {
-    return x * sqrt(1.0 - B + (B * B + 0.5 * x * x));
-}
-
 // Functions for Euler spirals
 
+// Geometric Hermite parameters of a curve segment: tangent angles at each endpoint measured
+// relative to the chord, the chord length, and an estimate of the Euler-spiral fit error.
 struct CubicParams {
     th0: f32,
     th1: f32,
@@ -66,6 +63,8 @@ struct CubicParams {
     err: f32,
 }
 
+// Normalized Euler spiral parameters: th0 is the start tangent angle relative to the chord,
+// k0 and k1 the curvature and its derivative, ch the chord length of the unit-arclength spiral.
 struct EulerParams {
     th0: f32,
     // th1 need not be explicitly stored, as it can be derived from k0 - th0
@@ -74,6 +73,7 @@ struct EulerParams {
     ch: f32,
 }
 
+// An Euler spiral segment between two endpoints with its normalized spiral parameters.
 struct EulerSeg {
     p0: vec2f,
     p1: vec2f,
@@ -85,7 +85,7 @@ const DERIV_THRESH: f32 = 1e-6;
 const DERIV_THRESH_SQUARED: f32 = DERIV_THRESH * DERIV_THRESH;
 // Amount to nudge t when derivative is near-zero.
 const DERIV_EPS: f32 = 1e-6;
-// Limit for subdivision of cubic BÃ©ziers.
+// Limit for subdivision of cubic Beziers.
 const SUBDIV_LIMIT: f32 = 1.0 / 65536.0;
 // Robust ESPC computation: below this value, treat curve as circular arc
 const K1_THRESH: f32 = 1e-3;
@@ -94,7 +94,9 @@ const DIST_THRESH: f32 = 1e-3;
 // Threshold for tangents to be considered near zero length
 const TANGENT_THRESH: f32 = 1e-6;
 
-/// Compute cubic parameters from endpoints and derivatives.
+// Computes geometric Hermite parameters for a curve piece from its endpoints (p0, p1) and
+// endpoint derivatives (q0, q1) over parameter width dt, including an error estimate for
+// approximating the piece with a single Euler spiral segment.
 fn cubic_from_points_derivs(p0: vec2f, p1: vec2f, q0: vec2f, q1: vec2f, dt: f32) -> CubicParams {
     let chord = p1 - p0;
     let chord_squared = dot(chord, chord);
@@ -136,6 +138,8 @@ fn cubic_from_points_derivs(p0: vec2f, p1: vec2f, q0: vec2f, q1: vec2f, dt: f32)
     return CubicParams(th0, th1, chord_len, err);
 }
 
+// Solves for the Euler spiral whose endpoint tangent angles (relative to the chord) are th0 and
+// th1, using polynomial approximations for the curvature terms and the normalized chord length.
 fn es_params_from_angles(th0: f32, th1: f32) -> EulerParams {
     let k0 = th0 + th1;
     let dth = th1 - th0;
@@ -161,11 +165,13 @@ fn es_params_from_angles(th0: f32, th1: f32) -> EulerParams {
     return EulerParams(th0, k0, k1, ch);
 }
 
+// Evaluates the tangent angle of the Euler spiral at parameter t, relative to the chord.
 fn es_params_eval_th(params: EulerParams, t: f32) -> f32 {
     return (params.k0 + 0.5 * params.k1 * (t - 1.0)) * t - params.th0;
 }
 
-// Integrate Euler spiral.
+// Integrates the Euler spiral with curvature k0 and curvature derivative k1 over unit arclength,
+// using a degree-10 polynomial expansion. Returns the endpoint displacement as (u, v).
 fn integ_euler_10(k0: f32, k1: f32) -> vec2f {
     let t1_1 = k0;
     let t1_2 = 0.5 * k1;
@@ -198,6 +204,8 @@ fn integ_euler_10(k0: f32, k1: f32) -> vec2f {
     return vec2(u, v);
 }
 
+// Evaluates the Euler spiral point at parameter t in chord-relative coordinates, where the
+// segment endpoints map to (0, 0) at t = 0 and (1, 0) at t = 1.
 fn es_params_eval(params: EulerParams, t: f32) -> vec2f {
     let thm = es_params_eval_th(params, t * 0.5);
     let k0 = params.k0;
@@ -211,27 +219,33 @@ fn es_params_eval(params: EulerParams, t: f32) -> vec2f {
     return vec2(x, y);
 }
 
+// Evaluates the parallel curve of the Euler spiral at parameter t, displaced along the spiral
+// normal by `offset` (in chord-relative units).
 fn es_params_eval_with_offset(params: EulerParams, t: f32, offset: f32) -> vec2f {
     let th = es_params_eval_th(params, t);
     let v = offset * vec2f(sin(th), cos(th));
     return es_params_eval(params, t) + v;
 }
 
+// Constructs an Euler spiral segment from its endpoints and normalized spiral parameters.
 fn es_seg_from_params(p0: vec2f, p1: vec2f, params: EulerParams) -> EulerSeg {
     return EulerSeg(p0, p1, params);
 }
 
-// Note: offset provided is scaled so that 1 = chord length
+// Evaluates the parallel curve of an Euler spiral segment at parameter t, mapped back into the
+// coordinate space of the segment endpoints. Note: the offset is normalized so 1 = chord length.
 fn es_seg_eval_with_offset(es: EulerSeg, t: f32, normalized_offset: f32) -> vec2f {
     let chord = es.p1 - es.p0;
     let xy = es_params_eval_with_offset(es.params, t, normalized_offset);
     return es.p0 + vec2f(chord.x * xy.x - chord.y * xy.y, chord.x * xy.y + chord.y * xy.x);
 }
 
+// Computes sign(x) * |x|^1.5, used by the ESPC subdivision integrals.
 fn pow_1_5_signed(x: f32) -> f32 {
     return x * sqrt(abs(x));
 }
 
+// Breakpoints and fitted coefficients for the piecewise ESPC integral approximation below.
 const BREAK1: f32 = 0.8;
 const BREAK2: f32 = 1.25;
 const BREAK3: f32 = 2.1;
@@ -251,6 +265,8 @@ const QUAD_U2: f32 = QUAD_W2 * QUAD_W2 - QUAD_C2 / QUAD_A2;
 const FRAC_PI_4: f32 = 0.7853981633974483;
 const CBRT_9_8: f32 = 1.040041911525952;
 
+// Piecewise approximation of the ESPC (Euler spiral parallel curve) subdivision density
+// integral. Odd in x: the sign of the input is preserved.
 fn espc_int_approx(x: f32) -> f32 {
     let y = abs(x);
     var a: f32;
@@ -265,6 +281,8 @@ fn espc_int_approx(x: f32) -> f32 {
     return a * sign(x);
 }
 
+// Piecewise approximation of the inverse of espc_int_approx, used to map evenly spaced
+// subdivision fractions back to spiral parameters. Odd in x.
 fn espc_int_inv_approx(x: f32) -> f32 {
     let y = abs(x);
     var a: f32;
@@ -281,11 +299,14 @@ fn espc_int_inv_approx(x: f32) -> f32 {
     return a * sign(x);
 }
 
+// A point on a curve together with its first derivative at the same parameter.
 struct PointDeriv {
     point: vec2f,
     deriv: vec2f,
 }
 
+// Evaluates a cubic Bezier and its first derivative at parameter t. The returned derivative is
+// scaled by 1/3 relative to the true derivative.
 fn eval_cubic_and_deriv(p0: vec2f, p1: vec2f, p2: vec2f, p3: vec2f, t: f32) -> PointDeriv {
     let m = 1.0 - t;
     let mm = m * m;
@@ -296,6 +317,8 @@ fn eval_cubic_and_deriv(p0: vec2f, p1: vec2f, p2: vec2f, p3: vec2f, t: f32) -> P
     return PointDeriv(p, q);
 }
 
+// Returns the start tangent of a cubic Bezier, falling back to later control points when the
+// leading ones are coincident so degenerate segments still yield a usable direction.
 fn cubic_start_tangent(p0: vec2f, p1: vec2f, p2: vec2f, p3: vec2f) -> vec2f {
     let EPS = 1e-12;
     let d01 = p1 - p0;
@@ -304,31 +327,19 @@ fn cubic_start_tangent(p0: vec2f, p1: vec2f, p2: vec2f, p3: vec2f) -> vec2f {
     return select(select(d03, d02, dot(d02, d02) > EPS), d01, dot(d01, d01) > EPS);
 }
 
-fn cubic_end_tangent(p0: vec2f, p1: vec2f, p2: vec2f, p3: vec2f) -> vec2f {
-    let EPS = 1e-12;
-    let d23 = p3 - p2;
-    let d13 = p3 - p1;
-    let d03 = p3 - p0;
-    return select(select(d03, d13, dot(d13, d13) > EPS), d23, dot(d23, d23) > EPS);
-}
-
-fn cubic_start_normal(p0: vec2f, p1: vec2f, p2: vec2f, p3: vec2f) -> vec2f {
-    let tangent = normalize(cubic_start_tangent(p0, p1, p2, p3));
-    return vec2(-tangent.y, tangent.x);
-}
-
-fn cubic_end_normal(p0: vec2f, p1: vec2f, p2: vec2f, p3: vec2f) -> vec2f {
-    let tangent = normalize(cubic_end_tangent(p0, p1, p2, p3));
-    return vec2(-tangent.y, tangent.x);
-}
-
+// Robustness regimes for the ESPC subdivision integral in flatten_euler: near-zero curvature
+// derivative and near-zero offset each get a numerically stable specialization.
 const ESPC_ROBUST_NORMAL = 0;
 const ESPC_ROBUST_LOW_K1 = 1;
 const ESPC_ROBUST_LOW_DIST = 2;
 
-// This function flattens a cubic BÃ©zier by first converting it into Euler spiral
-// segments, and then computes a near-optimal flattening of the parallel curves of
-// the Euler spiral segments.
+// Flattens a cubic Bezier by first converting it into Euler spiral segments, then computing a
+// near-optimal flattening of the parallel curves of the Euler spiral segments. With offset == 0
+// the curve itself is flattened in device space; a non-zero offset flattens the parallel curve in
+// local space and transforms each emitted line. `start_p`/`end_p` pin the exact endpoints so
+// adjacent segments stay watertight. Retained from Vello: the C# encoder currently pre-flattens
+// fill curves to lines (degree-raised to cubics), so this path sees no true curves today, but the
+// capability is kept intact.
 fn flatten_euler(
     cubic: CubicPoints,
     path_ix: u32,
@@ -473,11 +484,14 @@ fn flatten_euler(
             last_p = this_pq1.point;
             last_q = this_pq1.deriv;
             last_t = t1;
+            // Dyadic bookkeeping: advance to the next interval, then merge fully consumed
+            // sibling intervals back into a coarser dt so the walk stays O(log) deep.
             t0_u += 1u;
             let shift = countTrailingZeros(t0_u);
             t0_u >>= shift;
             dt *= f32(1u << shift);
         } else {
+            // Fit error too large for one Euler segment: halve the interval and retry.
             t0_u = t0_u * 2u;
             dt *= 0.5;
         }
@@ -493,7 +507,8 @@ fn flatten_euler(
 // connectors splice exactly into the per-segment offset edges. Overshoots along a shared offset
 // line cancel in the signed winding sum, reproducing the CPU's trimmed outline coverage.
 
-// Appends `p` to the outline chain, writing a line from the previous chain point.
+// Appends `p` to the outline chain, writing a line from the previous chain point (`last`) and
+// advancing it. Coincident points are skipped so the chain never emits zero-length lines.
 fn stroke_chain_point(path_ix: u32, last: ptr<function, vec2f>, p: vec2f, transform: Transform) {
     if all(*last == p) {
         return;
@@ -515,7 +530,8 @@ fn stroke_normalize_positive_angle(angle: f32) -> f32 {
     return a;
 }
 
-// Port of the CPU stroker's GetArcSubdivisionCount (round cap tessellation).
+// Port of the CPU stroker's GetArcSubdivisionCount (round cap tessellation): returns the number
+// of interior vertices needed to keep the arc's chordal error within the arc detail scale.
 fn stroke_arc_subdivision_count(radius: f32, sweep: f32, arc_detail_scale: f32) -> u32 {
     let safe_radius = max(radius, TANGENT_THRESH);
     let safe_scale = max(arc_detail_scale, 0.01);
@@ -528,8 +544,9 @@ fn stroke_arc_subdivision_count(radius: f32, sweep: f32, arc_detail_scale: f32) 
     return min(u32(max(sweep / theta, 0.0)), 1024u);
 }
 
-// Port of the CPU stroker's AppendDirectedArcContour (round caps). The chain is assumed to sit
-// at center + from_offset; interior and end points are appended.
+// Port of the CPU stroker's AppendDirectedArcContour (round caps): steps through the positive
+// angular sweep from center + from_offset to center + to_offset. The chain is assumed to already
+// sit at center + from_offset; only interior and end points are appended.
 fn stroke_chain_arc(
     path_ix: u32, last: ptr<function, vec2f>,
     center: vec2f, from_offset: vec2f, to_offset: vec2f,
@@ -552,7 +569,9 @@ fn stroke_chain_arc(
     stroke_chain_point(path_ix, last, center + to_offset, transform);
 }
 
-// Port of PolygonStroker.CalcArc (round joins): fixed angular step from the arc detail scale.
+// Port of PolygonStroker.CalcArc (round joins): sweeps from offset o1 to offset o2 around corner
+// v1 with a fixed angular step derived from the arc detail scale. Both endpoints are appended,
+// so the caller's chain need not already sit on the arc.
 fn stroke_calc_arc(
     path_ix: u32, last: ptr<function, vec2f>,
     v1: vec2f, o1: vec2f, o2: vec2f,
@@ -576,12 +595,14 @@ fn stroke_calc_arc(
     stroke_chain_point(path_ix, last, v1 + o2, transform);
 }
 
-// Port of PolygonStroker.CrossProduct: signed area of triangle (a, b, p).
+// Port of PolygonStroker.CrossProduct: signed area of triangle (a, b, p), used as a
+// side-of-line test for p against the line through a and b.
 fn stroke_cross_product(a: vec2f, b: vec2f, p: vec2f) -> f32 {
     return ((p.x - b.x) * (b.y - a.y)) - ((p.y - b.y) * (b.x - a.x));
 }
 
 // Port of PolygonStroker.TryCalcIntersection: infinite line intersection of (a, b) and (c, d).
+// Returns false for near-parallel lines; `hit` is written only on success.
 fn stroke_try_intersect(a: vec2f, b: vec2f, c: vec2f, d: vec2f, hit: ptr<function, vec2f>) -> bool {
     let ab = b - a;
     let cd = d - c;
@@ -595,7 +616,11 @@ fn stroke_try_intersect(a: vec2f, b: vec2f, c: vec2f, d: vec2f, hit: ptr<functio
     return true;
 }
 
-// Port of PolygonStroker.CalcMiter. `overflow_mode`: 0 = clip, 1 = revert, 2 = round.
+// Port of PolygonStroker.CalcMiter: appends the miter apex at corner v1 between segments
+// (v0 -> v1) and (v1 -> v2) with offset vectors o1/o2, or the configured fallback when the apex
+// exceeds half_width * miter_limit. `overflow_mode`: 0 = clip, 1 = revert, 2 = round.
+// `bevel_distance` is the distance from v1 to the bevel midpoint, used to interpolate the
+// clipped miter.
 fn stroke_calc_miter(
     path_ix: u32, last: ptr<function, vec2f>,
     v0: vec2f, v1: vec2f, v2: vec2f,
@@ -769,12 +794,15 @@ fn draw_join(
     stroke_chain_point(path_ix, &last, v1 - n_prev, transform);
 }
 
+// Reads a point stored as two f32 words at offset `ix` in the path data stream.
 fn read_f32_point(ix: u32) -> vec2f {
     let x = bitcast<f32>(scene[pathdata_base + ix]);
     let y = bitcast<f32>(scene[pathdata_base + ix + 1u]);
     return vec2(x, y);
 }
 
+// Reads a point packed as two signed 16-bit values in a single word at offset `ix` in the path
+// data stream (x in the low half, y in the high half).
 fn read_i16_point(ix: u32) -> vec2f {
     let raw = scene[pathdata_base + ix];
     let x = f32(i32(raw << 16u) >> 16u);
@@ -782,16 +810,22 @@ fn read_i16_point(ix: u32) -> vec2f {
     return vec2(x, y);
 }
 
+// A 2D transform: 2x2 matrix (columns (mat.x, mat.y) and (mat.z, mat.w)) plus translation,
+// extended with a perspective row to support projective transforms. Local divergence from Vello,
+// whose transforms are affine only.
 struct Transform {
     mat: vec4f,
     translate: vec2f,
     perspective: vec3f,
 }
 
+// Returns the identity transform: unit matrix, zero translation, trivial perspective row.
 fn transform_identity() -> Transform {
     return Transform(vec4(1., 0., 0., 1.), vec2(0.), vec3(0., 0., 1.));
 }
 
+// Reads transform `ix` from the scene stream: 9 words covering the 2x2 matrix, translation, and
+// perspective row. Local divergence: Vello stores 6-word affine transforms.
 fn read_transform(transform_base: u32, ix: u32) -> Transform {
     let base = transform_base + ix * 9u;
     let mat = vec4(
@@ -809,6 +843,8 @@ fn read_transform(transform_base: u32, ix: u32) -> Transform {
     return Transform(mat, translate, perspective);
 }
 
+// Applies the projective transform to point p. The homogeneous divisor is clamped away from
+// zero so points at or behind the horizon cannot produce infinities or NaNs.
 fn transform_apply(transform: Transform, p: vec2f) -> vec2f {
     let px = fma(transform.mat.x, p.x, fma(transform.mat.z, p.y, transform.translate.x));
     let py = fma(transform.mat.y, p.x, fma(transform.mat.w, p.y, transform.translate.y));
@@ -816,19 +852,25 @@ fn transform_apply(transform: Transform, p: vec2f) -> vec2f {
     return vec2(px, py) / max(w, 0.0000001);
 }
 
+// Floors to i32; used for the conservative lower bounds of the path bbox.
 fn round_down(x: f32) -> i32 {
     return i32(floor(x));
 }
 
+// Ceils to i32; used for the conservative upper bounds of the path bbox.
 fn round_up(x: f32) -> i32 {
     return i32(ceil(x));
 }
 
+// A path tag byte paired with its exclusive-prefix tag monoid (running stream offsets).
 struct PathTagData {
     tag_byte: u32,
     monoid: TagMonoid,
 }
 
+// Computes the exclusive-prefix tag monoid for path tag index `ix` by combining the workgroup
+// prefix from tag_monoids (produced by pathtag_reduce/scan) with a local reduction of the
+// preceding bytes in the same tag word.
 fn compute_tag_monoid(ix: u32) -> PathTagData {
     let tag_word = scene[config.pathtag_base + (ix >> 2u)];
     let shift = (ix & 3u) * 8u;
@@ -843,6 +885,7 @@ fn compute_tag_monoid(ix: u32) -> PathTagData {
     return PathTagData(tag_byte, tm);
 }
 
+// Control points of a cubic Bezier; lines and quads are degree-raised to this common form.
 struct CubicPoints {
     p0: vec2f,
     p1: vec2f,
@@ -850,6 +893,9 @@ struct CubicPoints {
     p3: vec2f,
 }
 
+// Decodes the control points of the segment described by `tag`, reading f32 or packed i16 points
+// as indicated by the tag, translating stroke cap markers (quadto-encoded tangents) into lines,
+// and degree-raising lines and quads so downstream code handles a single cubic form.
 fn read_path_segment(tag: PathTagData, is_stroke: bool) -> CubicPoints {
     var p0: vec2f;
     var p1: vec2f;
@@ -908,7 +954,9 @@ fn read_path_segment(tag: PathTagData, is_stroke: bool) -> CubicPoints {
     return CubicPoints(p0, p1, p2, p3);
 }
 
-// Writes a line into a the `lines` buffer at a pre-allocated location designated by `line_ix`.
+// Writes a line into the `lines` buffer at the pre-allocated slot `line_ix` and grows this
+// invocation's running bbox. Out-of-range writes are dropped (the bump counter may legitimately
+// exceed the buffer size).
 fn write_line(line_ix: u32, path_ix: u32, p0: vec2f, p1: vec2f) {
     bbox = vec4(min(bbox.xy, min(p0, p1)), max(bbox.zw, max(p0, p1)));
     if line_ix < config.lines_size {
@@ -916,22 +964,20 @@ fn write_line(line_ix: u32, path_ix: u32, p0: vec2f, p1: vec2f) {
     }
 }
 
+// Transforms both endpoints into device space and writes the line at slot `line_ix`.
 fn write_line_with_transform(line_ix: u32, path_ix: u32, p0: vec2f, p1: vec2f, t: Transform) {
     let tp0 = transform_apply(t, p0);
     let tp1 = transform_apply(t, p1);
     write_line(line_ix, path_ix, tp0, tp1);
 }
 
-fn output_line(path_ix: u32, p0: vec2f, p1: vec2f) {
-    let line_ix = atomicAdd(&bump.lines, 1u);
-    write_line(line_ix, path_ix, p0, p1);
-}
-
+// Bump-allocates one slot in the lines buffer and writes the transformed line into it.
 fn output_line_with_transform(path_ix: u32, p0: vec2f, p1: vec2f, transform: Transform) {
     let line_ix = atomicAdd(&bump.lines, 1u);
     write_line_with_transform(line_ix, path_ix, p0, p1, transform);
 }
 
+// Bump-allocates two consecutive slots in the lines buffer and writes both transformed lines.
 fn output_two_lines_with_transform(
     path_ix: u32,
     p00: vec2f, p01: vec2f,
@@ -943,6 +989,9 @@ fn output_two_lines_with_transform(
     write_line_with_transform(line_ix + 1u, path_ix, p10, p11, transform);
 }
 
+// Join information for the segment following the current one: whether to draw a join (versus an
+// end cap), its chord length, and its start tangent. The `length` field is a local addition for
+// the CPU stroker port, which needs neighbor segment lengths for the inner-corner miter limit.
 struct NeighboringSegment {
     do_join: bool,
 
@@ -950,6 +999,9 @@ struct NeighboringSegment {
     tangent: vec2f,
 }
 
+// Reads the segment at tag index `ix` (the segment following the current one) and derives its
+// join information. A cap marker encoding a closed subpath still joins back to the start; only
+// open subpath cap markers suppress the join in favor of an end cap.
 fn read_neighboring_segment(ix: u32) -> NeighboringSegment {
     let tag = compute_tag_monoid(ix);
     let pts = read_path_segment(tag, true);
@@ -971,6 +1023,10 @@ var<private> pathdata_base: u32;
 // during LineSoup generation.
 var<private> bbox: vec4f;
 
+// Entry point: one invocation per path tag. Decodes the tag's style, transform, and control
+// points; records per-path draw metadata on PATH tags; emits fill geometry via flatten_euler or
+// stroke outline geometry via the CPU stroker port; then merges this invocation's device-space
+// extents into the path's atomic bbox.
 @compute @workgroup_size(256)
 fn main(
     @builtin(global_invocation_id) global_id: vec3<u32>,
@@ -986,6 +1042,8 @@ fn main(
     let trans_ix = tag.monoid.trans_ix;
 
     let out = &path_bboxes[path_ix];
+    // Style stream layout (words): 0 flags, 1 line width, 2 draw flags, 3 miter limit,
+    // 4 arc detail scale, 5 coverage threshold, 6..9 interest rect.
     let style_flags = scene[config.style_base + style_ix];
     let style_draw_flags = scene[config.style_base + style_ix + 2u];
     let coverage_threshold = bitcast<f32>(scene[config.style_base + style_ix + 5u]);
@@ -994,6 +1052,7 @@ fn main(
         bitcast<f32>(scene[config.style_base + style_ix + 7u]),
         bitcast<f32>(scene[config.style_base + style_ix + 8u]),
         bitcast<f32>(scene[config.style_base + style_ix + 9u]));
+    // The fill bit is always zero for strokes, which selects the non-zero fill rule.
     let fill_rule = select(DRAW_INFO_FLAGS_FILL_RULE_BIT, 0u, (style_flags & STYLE_FLAGS_FILL) == 0u);
     let draw_flags = style_draw_flags | fill_rule;
     if (tag.tag_byte & PATH_TAG_PATH) != 0u {

@@ -8,6 +8,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// One explicit stroked two-point line-segment command queued by the canvas batcher.
 /// </summary>
+/// <remarks>
+/// Stroke commands carry pen geometry only; they do not carry clip state. Backends resolve
+/// the active clip stack from the begin/end-clip commands surrounding each draw in the stream.
+/// </remarks>
 public readonly struct StrokeLineSegmentCommand
 {
     private readonly PointF sourceStart;
@@ -165,9 +169,18 @@ public readonly struct StrokeLineSegmentCommand
         return InflateBounds(bounds, pen);
     }
 
+    /// <summary>
+    /// Inflates point bounds by the maximum distance the stroke outline can extend past the centerline.
+    /// </summary>
+    /// <param name="bounds">The tight bounds of the source points.</param>
+    /// <param name="pen">The stroke metadata.</param>
+    /// <returns>The inflated bounds.</returns>
     private static RectangleF InflateBounds(RectangleF bounds, Pen pen)
     {
         float halfWidth = pen.StrokeWidth * 0.5F;
+
+        // Miter joins can extend up to halfWidth * miterLimit beyond the centerline; the limit is
+        // clamped to at least 1 so the inflation never falls below the plain half stroke width.
         float inflate = pen.StrokeOptions.LineJoin switch
         {
             LineJoin.Miter or LineJoin.MiterRevert or LineJoin.MiterRound => (float)(halfWidth * Math.Max(pen.StrokeOptions.MiterLimit, 1D)),

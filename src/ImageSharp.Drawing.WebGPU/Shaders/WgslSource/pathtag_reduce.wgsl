@@ -1,6 +1,18 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+// First stage of the multi-level parallel prefix scan over the packed path
+// tag stream. Each workgroup reduces WG_SIZE consecutive tag words from the
+// scene buffer into a single TagMonoid (running counts of transforms, path
+// segments, segment data words, styles and paths) and writes one element
+// per workgroup to the reduced buffer. The scan stages (pathtag_scan /
+// pathtag_scan1) later turn these partials into exclusive prefixes.
+//
+// Inputs: config uniform, scene buffer (tag words at config.pathtag_base).
+// Outputs: reduced (one TagMonoid per workgroup).
+//
+// Ported from Vello's pathtag_reduce.wgsl.
+
 #import config
 #import pathtag
 
@@ -18,6 +30,11 @@ const WG_SIZE = 256u;
 
 var<workgroup> sh_scratch: array<TagMonoid, WG_SIZE>;
 
+// Reduces one WG_SIZE slice of the tag stream to a single TagMonoid.
+// Each thread reduces its own tag word, then a log2(WG_SIZE) shared-memory
+// tree folds in partials from threads to the right, so after the loop
+// thread 0 holds the reduction of the whole slice and writes it to
+// reduced[workgroup index].
 @compute @workgroup_size(256)
 fn main(
     @builtin(global_invocation_id) global_id: vec3<u32>,

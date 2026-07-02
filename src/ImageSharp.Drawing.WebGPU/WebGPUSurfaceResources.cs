@@ -15,7 +15,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <remarks>
 /// <para>
 /// Provides a single static <see cref="Create"/> factory that bootstraps every handle in order and leaves the surface
-/// initially configured against <paramref>initialPresentMode</paramref> and <paramref>initialFramebufferSize</paramref>.
+/// initially configured against the requested present mode and framebuffer size.
 /// Callers hold the returned instance for the lifetime of the rendering surface and dispose it when the surface tears down.
 /// </para>
 /// <para>
@@ -35,9 +35,14 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     private const int CallbackTimeoutMilliseconds = 10_000;
 
     private bool isDisposed;
+
+    // True while an acquired WebGPUSurfaceFrame has not yet been disposed. Guards TryAcquireFrame
+    // against overlapping acquires; cleared by the frame's onDisposed callback.
     private bool frameInFlight;
     private readonly FeatureName requiredFeature;
     private readonly Configuration configuration;
+
+    // Mutable because the device-owned portion of the stack is replaced on device-loss recovery.
     private WebGPUDeviceContext deviceContext;
 
     // Rooted so the native callbacks are not collected while wgpu holds them.
@@ -193,6 +198,8 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
             surfaceHandle?.Dispose();
             instanceHandle?.Dispose();
 
+            // Once a raw pointer has been wrapped in an owning handle the disposal above releases it.
+            // The direct releases below only cover the window where creation succeeded but wrapping did not.
             if (surfaceHandle is null && surface is not null)
             {
                 api.SurfaceRelease(surface);
@@ -252,6 +259,11 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         this.Api.SurfaceConfigure((Surface*)surfaceReference.Handle, ref surfaceConfiguration);
     }
 
+    /// <summary>
+    /// Maps the public present-mode enumeration to the native Silk.NET value.
+    /// </summary>
+    /// <param name="presentMode">The present mode to map.</param>
+    /// <returns>The native present mode.</returns>
     private static SilkPresentMode ToNative(WebGPUPresentMode presentMode)
         => presentMode switch
         {
@@ -355,7 +367,6 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
                 framebufferSize.Width,
                 framebufferSize.Height);
 
-            this.frameInFlight = true;
             frame = new WebGPUSurfaceFrame(
                 this.Api,
                 this.deviceContext,
@@ -366,6 +377,10 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
                 canvas,
                 onDisposed: () => this.frameInFlight = false);
 
+            // Mark in-flight only once the frame exists. Setting the guard before construction
+            // would leave it stuck on a constructor throw, wedging every subsequent acquire.
+            this.frameInFlight = true;
+
             return true;
         }
         catch
@@ -373,6 +388,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
             textureViewHandle?.Dispose();
             textureHandle?.Dispose();
 
+            // Raw pointers are released directly only when wrapping into an owning handle never happened.
             if (textureViewHandle is null)
             {
                 this.Api.TextureViewRelease(textureView);
@@ -491,6 +507,8 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
 
             this.ConfigureSurfaceCore(presentMode, framebufferSize, deviceResources.DeviceHandle);
 
+            // Publish the new stack before disposing the old one so the fields never point at
+            // disposed handles, even if releasing the old resources throws.
             WebGPUDeviceContext oldDeviceContext = this.deviceContext;
             WebGPUQueueHandle oldQueueHandle = this.QueueHandle;
             WebGPUDeviceHandle oldDeviceHandle = this.DeviceHandle;
@@ -563,6 +581,9 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     /// <summary>
     /// Reports a native device-lost callback through the managed WebGPU error callback.
     /// </summary>
+    /// <param name="reason">The native device-lost reason.</param>
+    /// <param name="message">The optional UTF-8 message supplied by the runtime; may be null.</param>
+    /// <param name="userData">Unused native user data.</param>
     private static void HandleDeviceLost(DeviceLostReason reason, byte* message, void* userData)
     {
         string text = message is null
@@ -574,6 +595,9 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     /// <summary>
     /// Reports a native uncaptured-error callback through the managed WebGPU error callback.
     /// </summary>
+    /// <param name="type">The native error type.</param>
+    /// <param name="message">The optional UTF-8 message supplied by the runtime; may be null.</param>
+    /// <param name="userData">Unused native user data.</param>
     private static void HandleUncapturedError(ErrorType type, byte* message, void* userData)
     {
         string text = message is null
@@ -651,6 +675,13 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     /// </summary>
     private sealed class DeviceResources : IDisposable
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DeviceResources"/> class taking ownership of the supplied handles.
+        /// </summary>
+        /// <param name="adapterHandle">The owned adapter handle.</param>
+        /// <param name="deviceHandle">The owned device handle.</param>
+        /// <param name="queueHandle">The owned queue handle.</param>
+        /// <param name="deviceContext">The owned device context.</param>
         public DeviceResources(
             WebGPUAdapterHandle adapterHandle,
             WebGPUDeviceHandle deviceHandle,
@@ -663,14 +694,30 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
             this.DeviceContext = deviceContext;
         }
 
+        /// <summary>
+        /// Gets the owned adapter handle.
+        /// </summary>
         public WebGPUAdapterHandle AdapterHandle { get; }
 
+        /// <summary>
+        /// Gets the owned device handle.
+        /// </summary>
         public WebGPUDeviceHandle DeviceHandle { get; }
 
+        /// <summary>
+        /// Gets the owned queue handle.
+        /// </summary>
         public WebGPUQueueHandle QueueHandle { get; }
 
+        /// <summary>
+        /// Gets the owned device context bound to <see cref="DeviceHandle"/> and <see cref="QueueHandle"/>.
+        /// </summary>
         internal WebGPUDeviceContext DeviceContext { get; }
 
+        /// <summary>
+        /// Releases the owned resources in reverse acquisition order. Only invoked when the transfer
+        /// into the surface resources did not complete.
+        /// </summary>
         public void Dispose()
         {
             this.DeviceContext.Dispose();

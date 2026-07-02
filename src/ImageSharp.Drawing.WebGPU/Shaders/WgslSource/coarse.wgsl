@@ -2,6 +2,26 @@
 // Licensed under the Six Labors Split License.
 
 // The coarse rasterization stage.
+//
+// One workgroup per 16x16-tile bin (wg x = bin column, wg y = bin row within
+// the current chunk); each of the 256 threads owns one tile. The stage
+// streams the per-partition bin element lists written by binning, merges
+// them back into draw order, marks which draw objects touch which tiles via
+// shared bitmaps, and then each thread serializes its own tile's per-tile
+// command list (PTCL) for the fine stage: fill/solid coverage, paint,
+// and clip/blend commands.
+//
+// Inputs: scene (drawtags and drawdata), draw_monoids, info_bin_data (draw
+// info, bin headers, and bin element lists), paths and rows (sparse
+// tile-grid lookup), tiles (per-tile segment counts and backdrops).
+// Outputs: ptcl (command lists), tiles (segment_count_or_ix rewritten to the
+// allocated segment index), bump (ptcl, segments, blend_spill, failed).
+//
+// Derived from Vello's coarse.wgsl. Local divergences: sparse row-based tile
+// lookup instead of dense per-path tile grids, per-draw coverage thresholds
+// and interest rectangles, aliased-coverage fills, difference/hard clip
+// bits, extra draw tags (recolor, elliptic/sweep/path gradients), and
+// chunked rendering via config.chunk_tile_y_start.
 
 #import config
 #import bump
@@ -39,6 +59,8 @@ var<storage, read_write> ptcl: array<u32>;
 // Much of this code assumes WG_SIZE == N_TILE. If these diverge, then
 // a fair amount of fixup is needed.
 const WG_SIZE = 256u;
+// Packed blend word (mix 128 = clip, compose 3 = src-over) identifying a
+// plain clip layer with no custom blending.
 const BLEND_CLIP = (128u << 8u) | 3u;
 const N_SLICE = WG_SIZE / 32u;
 
@@ -48,6 +70,9 @@ var<workgroup> sh_part_offsets: array<u32, WG_SIZE>;
 var<workgroup> sh_drawobj_ix: array<u32, WG_SIZE>;
 var<workgroup> sh_tile_count: array<u32, WG_SIZE>;
 
+// Result of decode_bin_tile: a tile located by its bin-relative coordinates
+// (x, y) plus its global storage index. valid is 0 when the sequential index
+// fell outside the path's sparse rows.
 struct SparseBinTileRef {
     valid: u32,
     x: u32,
@@ -55,11 +80,14 @@ struct SparseBinTileRef {
     tile_ix: u32,
 }
 
+// Result of lookup_tile: valid is 0 when the queried tile coordinates lie
+// outside the path's sparse coverage.
 struct SparseTileRef {
     valid: u32,
     tile_ix: u32,
 }
 
+// Per-partition, per-bin header written by the binning stage.
 struct BinHeader {
     element_count: u32,
     chunk_offset: u32,
@@ -70,7 +98,10 @@ struct BinHeader {
 var<private> cmd_offset: u32;
 var<private> cmd_limit: u32;
 
-// Make sure there is space for a command of given size, plus a jump if needed
+// Ensures the current PTCL chunk has room for a command of the given size
+// plus jump headroom. When the chunk is exhausted, bump-allocates a new one
+// from bump.ptcl and links it with a CMD_JUMP; on overflow the coarse
+// failure flag is raised and writes are redirected to the buffer start.
 fn alloc_cmd(size: u32) {
     if cmd_offset + size >= cmd_limit {
         var new_cmd = atomicAdd(&bump.ptcl, PTCL_INCREMENT);
@@ -89,6 +120,11 @@ fn alloc_cmd(size: u32) {
     }
 }
 
+// Determines whether a tile with no crossing segments produces any visible
+// coverage. The backdrop winding is resolved through the fill rule (even-odd
+// folds the winding, non-zero saturates it) and, for aliased fills,
+// quantized against the coverage threshold. Returns true when the resulting
+// coverage is non-zero.
 fn solid_tile_has_coverage(draw_flags: u32, backdrop: i32, coverage_threshold: f32) -> bool {
     let even_odd = (draw_flags & DRAW_INFO_FLAGS_FILL_RULE_BIT) != 0u;
     let aliased = (draw_flags & DRAW_INFO_FLAGS_ALIASED_BIT) != 0u;
@@ -107,6 +143,12 @@ fn solid_tile_has_coverage(draw_flags: u32, backdrop: i32, coverage_threshold: f
     return coverage != 0.0;
 }
 
+// Writes the coverage command for a tile: CMD_FILL when line segments cross
+// it (also reserving the tile's segment allocation and storing the inverted
+// index back into the tile so path_tiling can find it), otherwise CMD_SOLID.
+// When emit_empty_solid is false, solid tiles whose backdrop resolves to
+// zero coverage are skipped entirely. Returns true when a command was
+// written, meaning the caller should emit the matching paint command.
 fn write_path(tile: Tile, tile_ix: u32, draw_flags: u32, coverage_threshold: f32, interest: vec4<f32>, emit_empty_solid: bool) -> bool {
     // We overload the "segments" field to store both count (written by
     // path_count stage) and segment allocation (used by path_tiling and
@@ -148,6 +190,7 @@ fn write_path(tile: Tile, tile_ix: u32, draw_flags: u32, coverage_threshold: f32
     }
 }
 
+// Emits a CMD_COLOR paint command (packed RGBA color plus draw flags).
 fn write_color(color: CmdColor) {
     alloc_cmd(3u);
     ptcl[cmd_offset] = CMD_COLOR;
@@ -156,6 +199,8 @@ fn write_color(color: CmdColor) {
     cmd_offset += 3u;
 }
 
+// Emits a CMD_RECOLOR paint command that replaces pixels matching
+// source_color (within the given threshold) with target_color.
 fn write_recolor(source_color: u32, target_color: u32, threshold: u32, draw_flags: u32) {
     alloc_cmd(5u);
     ptcl[cmd_offset] = CMD_RECOLOR;
@@ -166,6 +211,9 @@ fn write_recolor(source_color: u32, target_color: u32, threshold: u32, draw_flag
     cmd_offset += 5u;
 }
 
+// Emits a gradient paint command. ty selects the CMD_*_GRAD opcode, index is
+// the packed gradient index word from the scene, and info_offset points at
+// the gradient parameters computed by draw_leaf.
 fn write_grad(ty: u32, index: u32, info_offset: u32) {
     alloc_cmd(3u);
     ptcl[cmd_offset] = ty;
@@ -174,6 +222,8 @@ fn write_grad(ty: u32, index: u32, info_offset: u32) {
     cmd_offset += 3u;
 }
 
+// Emits a CMD_PATH_GRAD paint command. data_offset points at the packed edge
+// data in the combined info/bin-data buffer; edge_count edges follow.
 fn write_path_grad(data_offset: u32, edge_count: u32, flags: u32, draw_flags: u32) {
     alloc_cmd(5u);
     ptcl[cmd_offset] = CMD_PATH_GRAD;
@@ -184,6 +234,8 @@ fn write_path_grad(data_offset: u32, edge_count: u32, flags: u32, draw_flags: u3
     cmd_offset += 5u;
 }
 
+// Emits a CMD_IMAGE paint command; info_offset points at the image draw info
+// (transform, extents, and atlas placement) written by draw_leaf.
 fn write_image(info_offset: u32) {
     alloc_cmd(2u);
     ptcl[cmd_offset] = CMD_IMAGE;
@@ -191,12 +243,15 @@ fn write_image(info_offset: u32) {
     cmd_offset += 2u;
 }
 
+// Emits CMD_BEGIN_CLIP, which pushes a new blend layer in the fine stage.
 fn write_begin_clip() {
     alloc_cmd(1u);
     ptcl[cmd_offset] = CMD_BEGIN_CLIP;
     cmd_offset += 1u;
 }
 
+// Emits CMD_END_CLIP with the blend word and alpha used to composite the
+// layer back onto its parent.
 fn write_end_clip(end_clip: CmdEndClip) {
     alloc_cmd(3u);
     ptcl[cmd_offset] = CMD_END_CLIP;
@@ -205,6 +260,9 @@ fn write_end_clip(end_clip: CmdEndClip) {
     cmd_offset += 3u;
 }
 
+// Counts how many of the path's sparse tiles fall inside the bin whose
+// top-left tile is (bin_tile_x, bin_tile_y), by clipping each row span to
+// the bin's horizontal range.
 fn get_bin_tile_count(path: Path, bin_tile_x: u32, bin_tile_y: u32) -> u32 {
     let y0 = max(path.bbox.y, bin_tile_y);
     let y1 = min(path.bbox.w, bin_tile_y + N_TILE_Y);
@@ -221,6 +279,10 @@ fn get_bin_tile_count(path: Path, bin_tile_x: u32, bin_tile_y: u32) -> u32 {
     return count;
 }
 
+// Maps a sequential tile index within this bin (seq_ix, in the same
+// row-major order counted by get_bin_tile_count) back to a concrete tile.
+// Returns bin-relative coordinates plus the global tile index, or valid = 0
+// when seq_ix falls outside the path's coverage of the bin.
 fn decode_bin_tile(path: Path, bin_tile_x: u32, bin_tile_y: u32, seq_ix: u32) -> SparseBinTileRef {
     let y0 = max(path.bbox.y, bin_tile_y);
     let y1 = min(path.bbox.w, bin_tile_y + N_TILE_Y);
@@ -244,6 +306,9 @@ fn decode_bin_tile(path: Path, bin_tile_x: u32, bin_tile_y: u32, seq_ix: u32) ->
     return SparseBinTileRef(0u, 0u, 0u, 0u);
 }
 
+// Resolves the tile storage index for global tile coordinates through the
+// path's sparse rows. Returns valid = 0 when the coordinates fall outside
+// the path's row coverage.
 fn lookup_tile(path: Path, global_x: u32, global_y: u32) -> SparseTileRef {
     if global_y < path.bbox.y || global_y >= path.bbox.w {
         return SparseTileRef(0u, 0u);
@@ -257,19 +322,31 @@ fn lookup_tile(path: Path, global_x: u32, global_y: u32) -> SparseTileRef {
     return SparseTileRef(1u, row.tiles + global_x - row.x0);
 }
 
+// Reads the (element count, chunk offset) bin header written by the binning
+// stage. bin_ix is the flat header slot index, already including the
+// per-partition stride; headers live after the binning_size element-list
+// region of info_bin_data.
 fn load_bin_header(bin_ix: u32) -> BinHeader {
     let base = config.bin_data_start + config.binning_size + (bin_ix * 2u);
     return BinHeader(info_bin_data[base], info_bin_data[base + 1u]);
 }
 
+// One workgroup per bin; each thread owns one tile. The outer loop batches
+// up to N_TILE draw objects at a time: bin element lists from successive
+// partitions are prefix-summed and binary-searched into a contiguous,
+// draw-ordered window (sh_drawobj_ix), each object's bin tiles are scattered
+// into per-tile bitmaps, and finally every thread walks its own tile's
+// bitmap in draw order to emit PTCL commands, tracking clip and blend depth
+// as it goes.
 @compute @workgroup_size(256)
 fn main(
     @builtin(local_invocation_id) local_id: vec3<u32>,
     @builtin(workgroup_id) wg_id: vec3<u32>,
 ) {
     // Exit early if prior stages failed, as we can't run this stage.
-    // We need to check only prior stages, as if this stage has failed in another workgroup, 
-    // we still want to know this workgroup's memory requirement.   
+    // We need to check only prior stages, as if this stage has failed in
+    // another workgroup, we still want to know this workgroup's memory
+    // requirement.
     if local_id.x == 0u {
         var failed = atomicLoad(&bump.failed) & (STAGE_BINNING | STAGE_TILE_ALLOC | STAGE_FLATTEN);
         if atomicLoad(&bump.seg_counts) > config.seg_counts_size {
@@ -320,6 +397,8 @@ fn main(
     var render_blend_depth = 0u;
     var max_blend_depth = 0u;
 
+    // The first word of each tile's PTCL is reserved for the blend-spill
+    // offset and patched in after the command list is complete.
     let blend_offset = cmd_offset;
     cmd_offset += 1u;
 
@@ -423,6 +502,7 @@ fn main(
             let y = tile_ref.y;
             let tile_ix = tile_ref.tile_ix;
             let tile = tiles[tile_ix];
+            // Bit 0 of the draw tag marks clip operations (begin and end).
             let is_clip = (tag & 1u) != 0u;
             var is_blend = false;
             var is_difference_clip = false;
@@ -449,7 +529,7 @@ fn main(
             let n_segs = tile.segment_count_or_ix;
 
             // If this draw object represents an even-odd fill and we know that no line segment
-            // crosses this tile and then this draw object should not contribute to the tile if its
+            // crosses this tile, then this draw object should not contribute to the tile if its
             // backdrop (i.e. the winding number of its top-left corner) is even.
             let backdrop_clear = select(tile.backdrop, abs(tile.backdrop) & 1, even_odd) == 0;
             let include_clip_tile = select(backdrop_clear, !backdrop_clear, is_difference_clip);
@@ -491,6 +571,8 @@ fn main(
             let draw_flags = info_bin_data[di];
             var coverage_threshold = -1.0;
             var interest = vec4<f32>(0.0, 0.0, f32(config.target_width), f32(config.target_height));
+            // Draw tags whose info block spans at least five words append a
+            // coverage threshold plus interest rectangle at the end of it.
             let drawtag_info_size = (drawtag >> 6u) & 0xfu;
             if drawtag_info_size >= 5u {
                 let interest_offset = di + drawtag_info_size - 5u;
@@ -610,6 +692,10 @@ fn main(
         }
         workgroupBarrier();
     }
+    // Only tiles inside the real viewport finalize their command list: write
+    // CMD_END and, when the clip stack ran deeper than the in-register blend
+    // stack, reserve blend-spill scratch and patch its offset into the
+    // reserved first word.
     if bin_tile_x + tile_x < config.width_in_tiles && bin_tile_y + tile_y < config.height_in_tiles {
         ptcl[cmd_offset] = CMD_END;
         var blend_ix = 0u;

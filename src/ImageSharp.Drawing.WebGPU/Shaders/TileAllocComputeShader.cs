@@ -7,7 +7,9 @@ using Silk.NET.WebGPU;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// GPU stage that allocates and zeroes sparse per-path tile ranges after the row spans are known.
+/// GPU stage that finalizes the horizontal extent of every sparse path row (widening for
+/// backdrop seeds and right-boundary touches), bump-allocates the backing tile storage, and
+/// zeroes the allocated tiles. Wraps <c>tile_alloc.wgsl</c>.
 /// </summary>
 internal static unsafe class TileAllocComputeShader
 {
@@ -23,7 +25,11 @@ internal static unsafe class TileAllocComputeShader
 
     /// <summary>
     /// Gets the X workgroup count required to process every path.
+    /// The shader runs one thread per path at a workgroup size of 256, so this is
+    /// ceil(<paramref name="pathCount"/> / 256).
     /// </summary>
+    /// <param name="pathCount">The number of paths (draw objects) in the scene.</param>
+    /// <returns>The X dispatch dimension in workgroups.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static uint GetDispatchX(uint pathCount)
         => (pathCount + 255U) / 256U;
@@ -42,6 +48,12 @@ internal static unsafe class TileAllocComputeShader
         out BindGroupLayout* layout,
         out string? error)
     {
+        // Bindings match tile_alloc.wgsl:
+        //   0 config uniform
+        //   1 bump allocators (read-write; tile counter bump-allocated, failure bit set on overflow)
+        //   2 paths (read-only Path records from path_row_alloc)
+        //   3 rows (read-write; final x0/x1 and base tile index written)
+        //   4 tiles (read-write; allocated tiles zeroed)
         BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[5];
         entries[0] = SceneShaderBindingLayoutHelper.CreateUniformEntry(0, (nuint)sizeof(GpuSceneConfig));
         entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, BufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));

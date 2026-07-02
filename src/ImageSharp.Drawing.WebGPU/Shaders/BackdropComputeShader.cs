@@ -7,7 +7,9 @@ using Silk.NET.WebGPU;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// GPU stage that prefix-sums dynamically allocated per-path tile backdrops.
+/// GPU stage that converts per-tile backdrop deltas into absolute winding numbers by
+/// prefix-summing each sparse path row left to right, seeded with the row's own backdrop.
+/// Wraps <c>backdrop_dyn.wgsl</c>.
 /// </summary>
 internal static unsafe class BackdropComputeShader
 {
@@ -23,7 +25,11 @@ internal static unsafe class BackdropComputeShader
 
     /// <summary>
     /// Gets the X workgroup count required to process every path in the scene.
+    /// The shader runs one thread per path at a workgroup size of 256, so this is
+    /// ceil(<paramref name="pathCount"/> / 256).
     /// </summary>
+    /// <param name="pathCount">The number of paths (draw objects) in the scene.</param>
+    /// <returns>The X dispatch dimension in workgroups.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static uint GetDispatchX(uint pathCount)
         => (pathCount + 255U) / 256U;
@@ -42,6 +48,12 @@ internal static unsafe class BackdropComputeShader
         out BindGroupLayout* layout,
         out string? error)
     {
+        // Bindings match backdrop_dyn.wgsl:
+        //   0 config uniform
+        //   1 bump allocators (read-write because the buffer is atomic; this stage only reads the failure mask)
+        //   2 paths (read-only Path records)
+        //   3 rows (read-only sparse PathRow records)
+        //   4 tiles (read-write; backdrop rewritten in place as absolute winding)
         BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[5];
         entries[0] = SceneShaderBindingLayoutHelper.CreateUniformEntry(0, (nuint)sizeof(GpuSceneConfig));
         entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, BufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));

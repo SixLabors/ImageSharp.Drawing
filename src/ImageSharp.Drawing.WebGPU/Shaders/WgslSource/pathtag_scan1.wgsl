@@ -1,8 +1,17 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// This shader computes the scan of reduced tag monoids given
-// two levels of reduction.
+// Middle stage of the large path tag scan: computes the exclusive prefix
+// of the first-level partials given two levels of reduction. Only
+// dispatched when the tag stream exceeds the single-level scan capacity.
+//
+// Inputs: reduced (first-level partials from pathtag_reduce), reduced2
+// (second-level partials from pathtag_reduce2).
+// Outputs: tag_monoids, here holding one exclusive prefix per first-level
+// partial (granularity of 4 tag bytes * workgroup size); consumed as the
+// per-workgroup carry-in by the large variant of pathtag_scan.
+//
+// Ported from Vello's pathtag_scan1.wgsl.
 
 #import config
 #import pathtag
@@ -20,9 +29,14 @@ const LG_WG_SIZE = 8u;
 const WG_SIZE = 256u;
 
 var<workgroup> sh_parent: array<TagMonoid, WG_SIZE>;
-// These could be combined?
+// Note: sh_parent and sh_monoid could potentially share storage.
 var<workgroup> sh_monoid: array<TagMonoid, WG_SIZE>;
 
+// Computes the exclusive prefix for each first-level partial. First
+// suffix-reduces the second-level totals of all preceding workgroups into
+// sh_parent[0] to form the carry-in, then performs an inclusive
+// Hillis-Steele scan of this workgroup's first-level partials and combines
+// carry-in with the preceding thread's inclusive value.
 @compute @workgroup_size(256)
 fn main(
     @builtin(global_invocation_id) global_id: vec3<u32>,

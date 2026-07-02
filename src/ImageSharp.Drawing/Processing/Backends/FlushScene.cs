@@ -4,6 +4,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using SixLabors.ImageSharp.Drawing.Helpers;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -33,6 +34,21 @@ internal sealed partial class FlushScene : IDisposable
     /// <summary>
     /// Initializes a new instance of the <see cref="FlushScene"/> class.
     /// </summary>
+    /// <param name="fillItemCount">The number of visible fill items retained by the scene.</param>
+    /// <param name="strokeItemCount">The number of visible stroke items retained by the scene.</param>
+    /// <param name="rowCount">The number of scene rows containing executable work.</param>
+    /// <param name="rowItemCount">The total number of row items retained by the scene.</param>
+    /// <param name="totalEdgeCount">The total number of encoded raster edges retained by the scene.</param>
+    /// <param name="singleBandItemCount">The number of items that occupy a single row band.</param>
+    /// <param name="smallEdgeItemCount">The number of items whose retained edge count is small.</param>
+    /// <param name="maxLayerDepth">The maximum retained layer nesting depth.</param>
+    /// <param name="fillItems">The retained fill items indexed by original command index.</param>
+    /// <param name="strokeItems">The retained stroke items indexed by original command index.</param>
+    /// <param name="layers">The retained layer state indexed by begin-layer command index.</param>
+    /// <param name="controlItems">The layer and apply control operations indexed by original command index.</param>
+    /// <param name="hasApply">Whether the scene contains apply barriers.</param>
+    /// <param name="rows">The retained row lists.</param>
+    /// <param name="segments">The retained target-wide execution segments for scenes containing apply barriers.</param>
     private FlushScene(
         int fillItemCount,
         int strokeItemCount,
@@ -229,6 +245,8 @@ internal sealed partial class FlushScene : IDisposable
         int currentLayerDepth = 0;
         int maxLayerDepth = 0;
 
+        // Merge partitions in ascending index order. Partitions cover contiguous ascending command
+        // ranges, so appending their row builders in this order preserves painter's order per row.
         for (int i = 0; i < partitionCount; i++)
         {
             PartitionState partition = partitions[i];
@@ -237,6 +255,9 @@ internal sealed partial class FlushScene : IDisposable
             totalEdgeCount += partition.TotalEdgeCount;
             singleBandItemCount += partition.SingleBandItemCount;
             smallEdgeItemCount += partition.SmallEdgeItemCount;
+
+            // Partition layer depths are relative to their own command start; offsetting by the
+            // depth accumulated across earlier partitions recovers the absolute nesting depth.
             maxLayerDepth = Math.Max(maxLayerDepth, currentLayerDepth + partition.MaxLayerDepth);
             currentLayerDepth += partition.LayerDepthDelta;
 
@@ -259,6 +280,8 @@ internal sealed partial class FlushScene : IDisposable
             rowItemCount += rowBuilders[i].Count;
         }
 
+        // Apply barriers execute even when no draw work survived clipping, so a scene that
+        // contains them can never collapse to the empty singleton.
         if (((fillItemCount + strokeItemCount) == 0 || rowItemCount == 0) && !scene.HasApply)
         {
             DisposeRows(rowBuilders);
@@ -282,6 +305,9 @@ internal sealed partial class FlushScene : IDisposable
                 out rowCount,
                 out rowItemCount);
 
+            // Segment building copied every row operation into per-segment storage, so the merged
+            // rows are redundant. Apply item ownership also moved into the segments; clearing the
+            // control items prevents Dispose from double-disposing those apply items.
             for (int i = 0; i < sceneRows.Length; i++)
             {
                 sceneRows[i].Dispose();
@@ -345,13 +371,16 @@ internal sealed partial class FlushScene : IDisposable
     }
 
     /// <summary>
-    /// Creates an empty scene instance.
+    /// Gets the shared empty scene instance.
     /// </summary>
+    /// <returns>The cached empty scene singleton.</returns>
     private static FlushScene Empty() => EmptyScene;
 
     /// <summary>
     /// Identifies whether a path-backed command contributes executable retained raster work to the scene.
     /// </summary>
+    /// <param name="command">The command to inspect.</param>
+    /// <returns><see langword="true"/> when the command retains raster work; otherwise <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsSceneDrawable(in CompositionCommand command)
         => command.Kind == CompositionCommandKind.FillLayer;
@@ -359,6 +388,10 @@ internal sealed partial class FlushScene : IDisposable
     /// <summary>
     /// Accumulates retained fill statistics used for scene heuristics.
     /// </summary>
+    /// <param name="rasterizable">The retained rasterizable fill geometry to measure.</param>
+    /// <param name="totalEdgeCount">The running total of encoded raster edges.</param>
+    /// <param name="smallEdgeItemCount">The running count of covered bands with a small edge count.</param>
+    /// <param name="singleBandItemCount">The running count of items that occupy a single row band.</param>
     private static void AccumulateFillItemStats(
         DefaultRasterizer.RasterizableGeometry rasterizable,
         ref long totalEdgeCount,
@@ -389,6 +422,10 @@ internal sealed partial class FlushScene : IDisposable
     /// <summary>
     /// Accumulates retained stroke statistics used for scene heuristics.
     /// </summary>
+    /// <param name="rasterizable">The retained rasterizable stroke geometry to measure.</param>
+    /// <param name="totalEdgeCount">The running total of encoded raster edges.</param>
+    /// <param name="smallEdgeItemCount">The running count of covered bands with a small edge count.</param>
+    /// <param name="singleBandItemCount">The running count of items that occupy a single row band.</param>
     private static void AccumulateStrokeItemStats(
         DefaultRasterizer.StrokeRasterizableGeometry rasterizable,
         ref long totalEdgeCount,
@@ -419,6 +456,13 @@ internal sealed partial class FlushScene : IDisposable
     /// <summary>
     /// Appends retained fill row operations for one item into the row builders owned by the current partition.
     /// </summary>
+    /// <param name="rowBuilders">The partition-owned row builders, one slot per target row band.</param>
+    /// <param name="rowStart">The first row slot the item may write to.</param>
+    /// <param name="rowEnd">The exclusive end row slot the item may write to.</param>
+    /// <param name="firstTargetRowBandIndex">The first row-band index covered by the target.</param>
+    /// <param name="itemIndex">The retained scene item index; equals the original command index.</param>
+    /// <param name="rasterizable">The retained rasterizable fill geometry.</param>
+    /// <param name="allocator">The allocator used for row-block storage.</param>
     private static void AppendFillRowOperations(
         RowBuilder[] rowBuilders,
         int rowStart,
@@ -451,6 +495,13 @@ internal sealed partial class FlushScene : IDisposable
     /// <summary>
     /// Appends retained stroke row operations for one item into the row builders owned by the current partition.
     /// </summary>
+    /// <param name="rowBuilders">The partition-owned row builders, one slot per target row band.</param>
+    /// <param name="rowStart">The first row slot the item may write to.</param>
+    /// <param name="rowEnd">The exclusive end row slot the item may write to.</param>
+    /// <param name="firstTargetRowBandIndex">The first row-band index covered by the target.</param>
+    /// <param name="itemIndex">The retained scene item index; equals the original command index.</param>
+    /// <param name="rasterizable">The retained rasterizable stroke geometry.</param>
+    /// <param name="allocator">The allocator used for row-block storage.</param>
     private static void AppendStrokeRowOperations(
         RowBuilder[] rowBuilders,
         int rowStart,
@@ -489,8 +540,8 @@ internal sealed partial class FlushScene : IDisposable
     /// region's bounds would change long-standing rendering behaviour for region-only paths.
     /// </summary>
     /// <param name="commandTargetBounds">The command's absolute target bounds.</param>
-    /// <param name="firstTargetRowBandIndex">The first row-band index covered by the partition.</param>
-    /// <param name="totalRowSlots">The total number of row slots owned by the partition.</param>
+    /// <param name="firstTargetRowBandIndex">The first row-band index covered by the target.</param>
+    /// <param name="totalRowSlots">The total number of target row slots.</param>
     /// <param name="isInsideLayer">True if the command was recorded inside a SaveLayer scope.</param>
     /// <param name="rowStart">The first row slot the command may write to.</param>
     /// <param name="rowEnd">The exclusive end row slot the command may write to.</param>
@@ -518,6 +569,14 @@ internal sealed partial class FlushScene : IDisposable
     /// <summary>
     /// Identifies whether a command contributes retained per-row layer control operations.
     /// </summary>
+    /// <param name="command">The command to inspect.</param>
+    /// <param name="targetBounds">The destination bounds of the flush.</param>
+    /// <param name="firstTargetRowBandIndex">The first row-band index covered by the target.</param>
+    /// <param name="operationKind">The resolved begin or end layer operation kind.</param>
+    /// <param name="layerBounds">The layer bounds intersected with the target bounds.</param>
+    /// <param name="firstRowSlot">The first row slot touched by the layer.</param>
+    /// <param name="lastRowSlot">The last row slot touched by the layer, inclusive.</param>
+    /// <returns><see langword="true"/> when the command is a layer operation visible within the target; otherwise <see langword="false"/>.</returns>
     private static bool TryGetLayerOperation(
         in CompositionCommand command,
         in Rectangle targetBounds,
@@ -563,6 +622,10 @@ internal sealed partial class FlushScene : IDisposable
     /// <summary>
     /// Finalizes row-owned append builders into immutable scene rows.
     /// </summary>
+    /// <param name="builders">The row builders to finalize, one slot per target row band.</param>
+    /// <param name="firstTargetRowBandIndex">The first row-band index covered by the target.</param>
+    /// <param name="rowCount">The number of initialized builders; sizes the resulting array.</param>
+    /// <returns>The finalized scene rows in ascending row-band order.</returns>
     private static SceneRow[] FinalizeRows(RowBuilder[] builders, int firstTargetRowBandIndex, int rowCount)
     {
         SceneRow[] rows = new SceneRow[rowCount];
@@ -583,6 +646,7 @@ internal sealed partial class FlushScene : IDisposable
     /// <summary>
     /// Disposes partially created row builders.
     /// </summary>
+    /// <param name="builders">The row builders to dispose.</param>
     private static void DisposeRows(RowBuilder[] builders)
     {
         for (int i = 0; i < builders.Length; i++)
@@ -594,6 +658,15 @@ internal sealed partial class FlushScene : IDisposable
     /// <summary>
     /// Builds target-wide execution segments for a scene containing apply barriers.
     /// </summary>
+    /// <param name="commandCount">The number of commands in the source batch.</param>
+    /// <param name="rows">The merged scene rows whose operations are redistributed into segments.</param>
+    /// <param name="controlItems">The layer and apply control operations indexed by original command index.</param>
+    /// <param name="allocator">The allocator used for retained row storage.</param>
+    /// <param name="firstTargetRowBandIndex">The first row-band index covered by the target.</param>
+    /// <param name="targetRowCount">The number of row bands covered by the target.</param>
+    /// <param name="rowCount">The total retained row count across all segments.</param>
+    /// <param name="rowItemCount">The total retained row operation count across all segments.</param>
+    /// <returns>The finalized target-wide execution segments.</returns>
     private static SceneSegment[] CreateApplySegments(
         int commandCount,
         SceneRow[] rows,
@@ -666,6 +739,10 @@ internal sealed partial class FlushScene : IDisposable
             {
                 foreach (SceneOperation operation in block.Items)
                 {
+                    // ItemIndex always equals the original command index, so it selects the segment
+                    // that was current when the command was recorded. Scoped-layer begin/end markers
+                    // have no segment and are dropped; the scoped layer item composites its content
+                    // as a whole instead of replaying inline layer markers.
                     commandSegments[operation.ItemIndex]?.Append(rowSlot, operation);
                 }
             }
@@ -678,6 +755,10 @@ internal sealed partial class FlushScene : IDisposable
     /// Computes, for each partition's command start, the clip scopes opened by earlier partitions,
     /// outermost first, resolved from the ordered begin/end-clip command stream.
     /// </summary>
+    /// <param name="commands">The ordered retained command stream.</param>
+    /// <param name="commandCount">The number of commands in the stream.</param>
+    /// <param name="partitionCount">The number of partitions the commands are split into.</param>
+    /// <returns>Per-partition arrays of the clip scopes open at each partition boundary, outermost first.</returns>
     private static (DrawingClipDescriptor Descriptor, Point Anchor)[][] CreatePartitionClipSeeds(
         IReadOnlyList<CompositionSceneCommand> commands,
         int commandCount,
@@ -689,6 +770,8 @@ internal sealed partial class FlushScene : IDisposable
 
         for (int partitionIndex = 0; partitionIndex < partitionCount; partitionIndex++)
         {
+            // Partition boundaries are non-decreasing, so a single forward cursor visits each
+            // command exactly once even though every partition boundary is snapshotted.
             int boundary = (partitionIndex * commandCount) / partitionCount;
             for (; cursor < boundary; cursor++)
             {
@@ -714,6 +797,24 @@ internal sealed partial class FlushScene : IDisposable
         return seeds;
     }
 
+    /// <summary>
+    /// Prepares one contiguous command range into retained scene items and partition-local row builders.
+    /// Partitions may run in parallel; each writes only to its own command indices in the shared item
+    /// arrays and to its own row builders, so no synchronization is required.
+    /// </summary>
+    /// <param name="commands">The ordered retained command stream.</param>
+    /// <param name="commandStart">The first command index owned by this partition.</param>
+    /// <param name="commandEnd">The exclusive end command index owned by this partition.</param>
+    /// <param name="clipSeed">The clip scopes opened by earlier partitions, outermost first, or <see langword="null"/> when the batch has no clip controls.</param>
+    /// <param name="targetBounds">The destination bounds of the flush.</param>
+    /// <param name="firstTargetRowBandIndex">The first row-band index covered by the target.</param>
+    /// <param name="targetRowCount">The number of row bands covered by the target.</param>
+    /// <param name="allocator">The allocator used for retained row storage.</param>
+    /// <param name="fillItems">The shared retained fill items indexed by original command index.</param>
+    /// <param name="strokeItems">The shared retained stroke items indexed by original command index.</param>
+    /// <param name="layers">The shared retained layer state indexed by begin-layer command index.</param>
+    /// <param name="controlItems">The shared layer and apply control operations indexed by original command index; empty when the batch has no apply barriers.</param>
+    /// <returns>The partition-local counts and row builders to merge after all partitions complete.</returns>
     private static PartitionState ProcessPartition(
         IReadOnlyList<CompositionSceneCommand> commands,
         int commandStart,
@@ -744,6 +845,10 @@ internal sealed partial class FlushScene : IDisposable
             if (command is PathCompositionSceneCommand pathCommand)
             {
                 CompositionCommand composition = pathCommand.Command;
+
+                // Clip commands only mutate the tracker; they retain no scene items. Every draw
+                // command that follows captures the composed clip state and anchor from the tracker,
+                // keeping the ordered clip stream the single source of truth for clipping.
                 if (composition.Kind == CompositionCommandKind.BeginClip)
                 {
                     clipTracker.Push(composition.ClipDescriptor, composition.DestinationOffset);
@@ -841,6 +946,29 @@ internal sealed partial class FlushScene : IDisposable
             rowBuilders);
     }
 
+    /// <summary>
+    /// Prepares one path-backed composition command, retaining an apply, layer, or fill scene item
+    /// and distributing its row operations into the partition-local row builders.
+    /// </summary>
+    /// <param name="command">The composition command to prepare.</param>
+    /// <param name="commandIndex">The original command index; the retained item is stored at this index.</param>
+    /// <param name="clipState">The composed clip state resolved from the clip stream at this command.</param>
+    /// <param name="clipAnchor">The destination offset the open clip scopes are anchored at.</param>
+    /// <param name="targetBounds">The destination bounds of the flush.</param>
+    /// <param name="firstTargetRowBandIndex">The first row-band index covered by the target.</param>
+    /// <param name="rowBuilders">The partition-owned row builders, one slot per target row band.</param>
+    /// <param name="allocator">The allocator used for retained row storage.</param>
+    /// <param name="fillItems">The shared retained fill items indexed by original command index.</param>
+    /// <param name="strokeItems">The shared retained stroke items indexed by original command index.</param>
+    /// <param name="layers">The shared retained layer state indexed by begin-layer command index.</param>
+    /// <param name="controlItems">The shared layer and apply control operations; empty when the batch has no apply barriers.</param>
+    /// <param name="fillItemCount">The running partition fill item count.</param>
+    /// <param name="strokeItemCount">The running partition stroke item count.</param>
+    /// <param name="totalEdgeCount">The running total of encoded raster edges.</param>
+    /// <param name="singleBandItemCount">The running count of items that occupy a single row band.</param>
+    /// <param name="smallEdgeItemCount">The running count of covered bands with a small edge count.</param>
+    /// <param name="currentLayerDepth">The running layer depth relative to the partition start.</param>
+    /// <param name="maxLayerDepth">The maximum layer depth observed relative to the partition start.</param>
     private static void ProcessPathCommand(
         in CompositionCommand command,
         int commandIndex,
@@ -987,6 +1115,23 @@ internal sealed partial class FlushScene : IDisposable
         AppendFillRowOperations(rowBuilders, rowStart, rowEnd, firstTargetRowBandIndex, commandIndex, preparedFill.Rasterizable, allocator);
     }
 
+    /// <summary>
+    /// Prepares one stroked path command, retaining a stroke scene item and distributing its row
+    /// operations into the partition-local row builders.
+    /// </summary>
+    /// <param name="command">The stroke path command to prepare.</param>
+    /// <param name="commandIndex">The original command index; the retained item is stored at this index.</param>
+    /// <param name="clipState">The composed clip state resolved from the clip stream at this command.</param>
+    /// <param name="clipAnchor">The destination offset the open clip scopes are anchored at.</param>
+    /// <param name="targetRowCount">The number of row bands covered by the target.</param>
+    /// <param name="firstTargetRowBandIndex">The first row-band index covered by the target.</param>
+    /// <param name="rowBuilders">The partition-owned row builders, one slot per target row band.</param>
+    /// <param name="allocator">The allocator used for retained row storage.</param>
+    /// <param name="strokeItems">The shared retained stroke items indexed by original command index.</param>
+    /// <param name="strokeItemCount">The running partition stroke item count.</param>
+    /// <param name="totalEdgeCount">The running total of encoded raster edges.</param>
+    /// <param name="singleBandItemCount">The running count of items that occupy a single row band.</param>
+    /// <param name="smallEdgeItemCount">The running count of covered bands with a small edge count.</param>
     private static void ProcessStrokePathCommand(
         in StrokePathCommand command,
         int commandIndex,
@@ -1034,6 +1179,23 @@ internal sealed partial class FlushScene : IDisposable
         AppendStrokeRowOperations(rowBuilders, rowStart, rowEnd, firstTargetRowBandIndex, commandIndex, preparedStroke.Rasterizable, allocator);
     }
 
+    /// <summary>
+    /// Prepares one stroked line segment command, retaining a stroke scene item and distributing its
+    /// row operations into the partition-local row builders.
+    /// </summary>
+    /// <param name="command">The line segment stroke command to prepare.</param>
+    /// <param name="commandIndex">The original command index; the retained item is stored at this index.</param>
+    /// <param name="clipState">The composed clip state resolved from the clip stream at this command.</param>
+    /// <param name="clipAnchor">The destination offset the open clip scopes are anchored at.</param>
+    /// <param name="targetRowCount">The number of row bands covered by the target.</param>
+    /// <param name="firstTargetRowBandIndex">The first row-band index covered by the target.</param>
+    /// <param name="rowBuilders">The partition-owned row builders, one slot per target row band.</param>
+    /// <param name="allocator">The allocator used for retained row storage.</param>
+    /// <param name="strokeItems">The shared retained stroke items indexed by original command index.</param>
+    /// <param name="strokeItemCount">The running partition stroke item count.</param>
+    /// <param name="totalEdgeCount">The running total of encoded raster edges.</param>
+    /// <param name="singleBandItemCount">The running count of items that occupy a single row band.</param>
+    /// <param name="smallEdgeItemCount">The running count of covered bands with a small edge count.</param>
     private static void ProcessLineSegmentCommand(
         in StrokeLineSegmentCommand command,
         int commandIndex,
@@ -1081,6 +1243,23 @@ internal sealed partial class FlushScene : IDisposable
         AppendStrokeRowOperations(rowBuilders, rowStart, rowEnd, firstTargetRowBandIndex, commandIndex, preparedStroke.Rasterizable, allocator);
     }
 
+    /// <summary>
+    /// Prepares one stroked polyline command, retaining a stroke scene item and distributing its row
+    /// operations into the partition-local row builders.
+    /// </summary>
+    /// <param name="command">The polyline stroke command to prepare.</param>
+    /// <param name="commandIndex">The original command index; the retained item is stored at this index.</param>
+    /// <param name="clipState">The composed clip state resolved from the clip stream at this command.</param>
+    /// <param name="clipAnchor">The destination offset the open clip scopes are anchored at.</param>
+    /// <param name="targetRowCount">The number of row bands covered by the target.</param>
+    /// <param name="firstTargetRowBandIndex">The first row-band index covered by the target.</param>
+    /// <param name="rowBuilders">The partition-owned row builders, one slot per target row band.</param>
+    /// <param name="allocator">The allocator used for retained row storage.</param>
+    /// <param name="strokeItems">The shared retained stroke items indexed by original command index.</param>
+    /// <param name="strokeItemCount">The running partition stroke item count.</param>
+    /// <param name="totalEdgeCount">The running total of encoded raster edges.</param>
+    /// <param name="singleBandItemCount">The running count of items that occupy a single row band.</param>
+    /// <param name="smallEdgeItemCount">The running count of covered bands with a small edge count.</param>
     private static void ProcessPolylineCommand(
         in StrokePolylineCommand command,
         int commandIndex,
@@ -1128,6 +1307,18 @@ internal sealed partial class FlushScene : IDisposable
         AppendStrokeRowOperations(rowBuilders, rowStart, rowEnd, firstTargetRowBandIndex, commandIndex, preparedStroke.Rasterizable, allocator);
     }
 
+    /// <summary>
+    /// Appends one begin or end layer operation into every row builder the layer touches so that
+    /// per-row rendering can open and close the layer at the correct point in row order.
+    /// </summary>
+    /// <param name="rowBuilders">The partition-owned row builders, one slot per target row band.</param>
+    /// <param name="firstRowSlot">The first row slot touched by the layer.</param>
+    /// <param name="lastRowSlot">The last row slot touched by the layer, inclusive.</param>
+    /// <param name="layerBandBounds">The layer bounds intersected with the target bounds.</param>
+    /// <param name="operationKind">The begin or end layer operation kind.</param>
+    /// <param name="layerOptionsIndex">The command index where the shared layer state is stored.</param>
+    /// <param name="targetBounds">The destination bounds of the flush.</param>
+    /// <param name="allocator">The allocator used for row-block storage.</param>
     private static void AppendLayerOperations(
         RowBuilder[] rowBuilders,
         int firstRowSlot,
@@ -1153,6 +1344,13 @@ internal sealed partial class FlushScene : IDisposable
         }
     }
 
+    /// <summary>
+    /// Prepares the retained fill payload for one fill-layer composition command.
+    /// </summary>
+    /// <param name="command">The command supplying the path, brush, and options.</param>
+    /// <param name="allocator">The allocator used for retained raster storage.</param>
+    /// <param name="prepared">The prepared fill payload when successful.</param>
+    /// <returns><see langword="true"/> when the fill intersects the target and rasterizable geometry was created; otherwise <see langword="false"/>.</returns>
     private static bool TryPrepareFillPath(
         in CompositionCommand command,
         MemoryAllocator allocator,
@@ -1167,6 +1365,20 @@ internal sealed partial class FlushScene : IDisposable
             allocator,
             out prepared);
 
+    /// <summary>
+    /// Prepares the retained fill payload for a path. The transform is split into an axis-aligned
+    /// scale, applied while flattening so curve tolerance tracks the device resolution, and a
+    /// residual matrix applied during rasterization.
+    /// </summary>
+    /// <param name="path">The source path to fill.</param>
+    /// <param name="sourceBrush">The brush recorded with the command.</param>
+    /// <param name="drawingOptions">The drawing options supplying the transform and graphics options.</param>
+    /// <param name="sourceRasterizerOptions">The rasterizer options recorded with the command.</param>
+    /// <param name="targetBounds">The destination bounds of the flush.</param>
+    /// <param name="destinationOffset">The offset from path-local to destination coordinates.</param>
+    /// <param name="allocator">The allocator used for retained raster storage.</param>
+    /// <param name="prepared">The prepared fill payload when successful.</param>
+    /// <returns><see langword="true"/> when the fill intersects the target and rasterizable geometry was created; otherwise <see langword="false"/>.</returns>
     internal static bool TryPrepareFillPath(
         IPath path,
         Brush sourceBrush,
@@ -1178,8 +1390,8 @@ internal sealed partial class FlushScene : IDisposable
         out PreparedFillItem prepared)
     {
         Matrix4x4 transform = drawingOptions.Transform;
-        Vector2 scale = ExtractScale(transform);
-        Matrix4x4 residual = ComputeResidual(scale, transform);
+        Vector2 scale = MatrixUtilities.GetScale(transform);
+        Matrix4x4 residual = MatrixUtilities.GetResidual(scale, transform);
         LinearGeometry geometry = path.ToLinearGeometry(scale);
         RectangleF geometryBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
 
@@ -1215,6 +1427,15 @@ internal sealed partial class FlushScene : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Prepares the retained stroke payload for a stroked path. The transform is split into an
+    /// axis-aligned scale, applied while flattening, and a residual matrix applied during
+    /// rasterization; the stroke width is scaled separately by the transform's determinant scale.
+    /// </summary>
+    /// <param name="command">The command supplying the path, pen, brush, and options.</param>
+    /// <param name="allocator">The allocator used for retained raster storage.</param>
+    /// <param name="prepared">The prepared stroke payload when successful.</param>
+    /// <returns><see langword="true"/> when the stroke intersects the target and rasterizable geometry was created; otherwise <see langword="false"/>.</returns>
     private static bool TryPrepareStrokePath(
         in StrokePathCommand command,
         MemoryAllocator allocator,
@@ -1222,8 +1443,8 @@ internal sealed partial class FlushScene : IDisposable
     {
         IPath path = command.SourcePath;
         Matrix4x4 transform = command.Transform;
-        Vector2 scale = ExtractScale(transform);
-        Matrix4x4 residual = ComputeResidual(scale, transform);
+        Vector2 scale = MatrixUtilities.GetScale(transform);
+        Matrix4x4 residual = MatrixUtilities.GetResidual(scale, transform);
         LinearGeometry geometry = path.ToLinearGeometry(scale);
         float widthScale = GetTransformWidthScale(transform);
         RectangleF geometryBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
@@ -1263,6 +1484,14 @@ internal sealed partial class FlushScene : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Prepares the retained stroke payload for a single line segment. The endpoints are fully
+    /// transformed up front, so no residual matrix is needed at rasterization time.
+    /// </summary>
+    /// <param name="command">The command supplying the endpoints, pen, brush, and options.</param>
+    /// <param name="allocator">The allocator used for retained raster storage.</param>
+    /// <param name="prepared">The prepared stroke payload when successful.</param>
+    /// <returns><see langword="true"/> when the stroke intersects the target and rasterizable geometry was created; otherwise <see langword="false"/>.</returns>
     private static bool TryPrepareLineSegmentStroke(
         in StrokeLineSegmentCommand command,
         MemoryAllocator allocator,
@@ -1315,14 +1544,22 @@ internal sealed partial class FlushScene : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Prepares the retained stroke payload for an open polyline using the same scale and residual
+    /// transform split as stroked paths.
+    /// </summary>
+    /// <param name="command">The command supplying the points, pen, brush, and options.</param>
+    /// <param name="allocator">The allocator used for retained raster storage.</param>
+    /// <param name="prepared">The prepared stroke payload when successful.</param>
+    /// <returns><see langword="true"/> when the stroke intersects the target and rasterizable geometry was created; otherwise <see langword="false"/>.</returns>
     private static bool TryPreparePolylineStroke(
         in StrokePolylineCommand command,
         MemoryAllocator allocator,
         out PreparedStrokeItem prepared)
     {
         Matrix4x4 transform = command.Transform;
-        Vector2 scale = ExtractScale(transform);
-        Matrix4x4 residual = ComputeResidual(scale, transform);
+        Vector2 scale = MatrixUtilities.GetScale(transform);
+        Matrix4x4 residual = MatrixUtilities.GetResidual(scale, transform);
         LinearGeometry geometry = LinearGeometry.CreateOpenPolyline(command.SourcePoints, scale);
         float widthScale = GetTransformWidthScale(transform);
         RectangleF geometryBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
@@ -1363,6 +1600,19 @@ internal sealed partial class FlushScene : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Resolves the destination-clipped rasterizer options and brush bounds for a draw operation,
+    /// rejecting operations whose interest area does not intersect the target.
+    /// </summary>
+    /// <param name="brush">The source brush.</param>
+    /// <param name="bounds">The path-local geometry bounds after stroke and residual expansion.</param>
+    /// <param name="options">The rasterizer options recorded with the command.</param>
+    /// <param name="destinationOffset">The offset from path-local to destination coordinates.</param>
+    /// <param name="targetBounds">The destination bounds of the flush.</param>
+    /// <param name="resolvedBrush">The brush to use for rendering.</param>
+    /// <param name="resolvedOptions">The rasterizer options clipped to the visible destination.</param>
+    /// <param name="brushBounds">The unclipped absolute interest area used for applicator creation.</param>
+    /// <returns><see langword="true"/> when the operation is visible within the target; otherwise <see langword="false"/>.</returns>
     private static bool TryResolveRasterization(
         Brush brush,
         RectangleF bounds,
@@ -1406,6 +1656,11 @@ internal sealed partial class FlushScene : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Rounds fractional bounds outward to the smallest enclosing integer rectangle.
+    /// </summary>
+    /// <param name="bounds">The fractional bounds.</param>
+    /// <returns>The enclosing integer rectangle.</returns>
     private static Rectangle ToConservativeBounds(RectangleF bounds)
         => Rectangle.FromLTRB(
             (int)MathF.Floor(bounds.Left),
@@ -1459,16 +1714,18 @@ internal sealed partial class FlushScene : IDisposable
         return MathF.Sqrt(MathF.Abs(det));
     }
 
-    private static Vector2 ExtractScale(Matrix4x4 matrix)
-        => new(
-            MathF.Sqrt((matrix.M11 * matrix.M11) + (matrix.M12 * matrix.M12)),
-            MathF.Sqrt((matrix.M21 * matrix.M21) + (matrix.M22 * matrix.M22)));
-
-    private static Matrix4x4 ComputeResidual(Vector2 scale, Matrix4x4 matrix)
-        => Matrix4x4.CreateScale(1F / scale.X, 1F / scale.Y, 1F) * matrix;
-
+    /// <summary>
+    /// Holds the prepared payload for a fill operation before it is committed to a scene item.
+    /// </summary>
     internal readonly struct PreparedFillItem
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PreparedFillItem"/> struct.
+        /// </summary>
+        /// <param name="brush">The resolved brush.</param>
+        /// <param name="graphicsOptions">The graphics options for the fill.</param>
+        /// <param name="brushBounds">The absolute brush bounds used for applicator creation.</param>
+        /// <param name="rasterizable">The retained rasterizable geometry.</param>
         public PreparedFillItem(
             Brush brush,
             GraphicsOptions graphicsOptions,
@@ -1481,17 +1738,39 @@ internal sealed partial class FlushScene : IDisposable
             this.Rasterizable = rasterizable;
         }
 
+        /// <summary>
+        /// Gets the resolved brush.
+        /// </summary>
         public Brush Brush { get; }
 
+        /// <summary>
+        /// Gets the graphics options for the fill.
+        /// </summary>
         public GraphicsOptions GraphicsOptions { get; }
 
+        /// <summary>
+        /// Gets the absolute brush bounds used for applicator creation.
+        /// </summary>
         public Rectangle BrushBounds { get; }
 
+        /// <summary>
+        /// Gets the retained rasterizable geometry.
+        /// </summary>
         public DefaultRasterizer.RasterizableGeometry Rasterizable { get; }
     }
 
+    /// <summary>
+    /// Holds the prepared payload for a stroke operation before it is committed to a scene item.
+    /// </summary>
     private readonly struct PreparedStrokeItem
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PreparedStrokeItem"/> struct.
+        /// </summary>
+        /// <param name="brush">The resolved brush.</param>
+        /// <param name="graphicsOptions">The graphics options for the stroke.</param>
+        /// <param name="brushBounds">The absolute brush bounds used for applicator creation.</param>
+        /// <param name="rasterizable">The retained stroke rasterizable geometry.</param>
         public PreparedStrokeItem(
             Brush brush,
             GraphicsOptions graphicsOptions,
@@ -1504,17 +1783,45 @@ internal sealed partial class FlushScene : IDisposable
             this.Rasterizable = rasterizable;
         }
 
+        /// <summary>
+        /// Gets the resolved brush.
+        /// </summary>
         public Brush Brush { get; }
 
+        /// <summary>
+        /// Gets the graphics options for the stroke.
+        /// </summary>
         public GraphicsOptions GraphicsOptions { get; }
 
+        /// <summary>
+        /// Gets the absolute brush bounds used for applicator creation.
+        /// </summary>
         public Rectangle BrushBounds { get; }
 
+        /// <summary>
+        /// Gets the retained stroke rasterizable geometry.
+        /// </summary>
         public DefaultRasterizer.StrokeRasterizableGeometry Rasterizable { get; }
     }
 
+    /// <summary>
+    /// Holds the counts and row builders produced by one partition, merged sequentially after all
+    /// partitions complete. Layer depths are relative to the partition start; the merge composes
+    /// them using the running depth carried across partitions.
+    /// </summary>
     private readonly struct PartitionState
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PartitionState"/> struct.
+        /// </summary>
+        /// <param name="fillItemCount">The number of fill items retained by the partition.</param>
+        /// <param name="strokeItemCount">The number of stroke items retained by the partition.</param>
+        /// <param name="totalEdgeCount">The total number of encoded raster edges retained by the partition.</param>
+        /// <param name="singleBandItemCount">The number of items that occupy a single row band.</param>
+        /// <param name="smallEdgeItemCount">The number of covered bands with a small edge count.</param>
+        /// <param name="layerDepthDelta">The net begin minus end layer count across the partition.</param>
+        /// <param name="maxLayerDepth">The maximum layer depth reached, relative to the partition start.</param>
+        /// <param name="rowBuilders">The partition-owned row builders, one slot per target row band.</param>
         public PartitionState(
             int fillItemCount,
             int strokeItemCount,
@@ -1535,20 +1842,44 @@ internal sealed partial class FlushScene : IDisposable
             this.RowBuilders = rowBuilders;
         }
 
+        /// <summary>
+        /// Gets the number of fill items retained by the partition.
+        /// </summary>
         public int FillItemCount { get; }
 
+        /// <summary>
+        /// Gets the number of stroke items retained by the partition.
+        /// </summary>
         public int StrokeItemCount { get; }
 
+        /// <summary>
+        /// Gets the total number of encoded raster edges retained by the partition.
+        /// </summary>
         public long TotalEdgeCount { get; }
 
+        /// <summary>
+        /// Gets the number of items that occupy a single row band.
+        /// </summary>
         public int SingleBandItemCount { get; }
 
+        /// <summary>
+        /// Gets the number of covered bands with a small edge count.
+        /// </summary>
         public int SmallEdgeItemCount { get; }
 
+        /// <summary>
+        /// Gets the net begin minus end layer count across the partition.
+        /// </summary>
         public int LayerDepthDelta { get; }
 
+        /// <summary>
+        /// Gets the maximum layer depth reached, relative to the partition start.
+        /// </summary>
         public int MaxLayerDepth { get; }
 
+        /// <summary>
+        /// Gets the partition-owned row builders, one slot per target row band.
+        /// </summary>
         public RowBuilder[] RowBuilders { get; }
     }
 

@@ -8,6 +8,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// WebGPU native drawing surface exposed through the backend-agnostic <see cref="NativeSurface"/> base type.
 /// </summary>
+/// <remarks>
+/// The surface never releases the wrapped handles; its creator (for example <see cref="WebGPURenderTarget"/> or a
+/// surface frame) owns them and must keep them valid for the lifetime of the surface.
+/// </remarks>
 internal sealed class WebGPUNativeSurface : NativeSurface
 {
     /// <summary>
@@ -18,9 +22,9 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     /// <param name="targetTextureHandle">The wrapped target texture handle.</param>
     /// <param name="targetTextureViewHandle">The wrapped target texture-view handle.</param>
     /// <param name="targetFormat">The target texture format.</param>
-    /// <param name="width">The surface width in pixels.</param>
-    /// <param name="height">The surface height in pixels.</param>
-    /// <param name="textureCoordinateOffset">The offset applied when mapping logical target coordinates to texture coordinates.</param>
+    /// <param name="width">The full backing texture width in pixels.</param>
+    /// <param name="height">The full backing texture height in pixels.</param>
+    /// <param name="textureCoordinateOffset">The offset added when converting canvas-local coordinates to absolute texture coordinates.</param>
     public WebGPUNativeSurface(
         WebGPUDeviceHandle deviceHandle,
         WebGPUQueueHandle queueHandle,
@@ -72,17 +76,22 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     public WebGPUTextureFormat TargetFormat { get; }
 
     /// <summary>
-    /// Gets the surface width in pixels.
+    /// Gets the full backing texture width in pixels. Absolute texture coordinates are clipped against
+    /// (0, 0, <see cref="Width"/>, <see cref="Height"/>).
     /// </summary>
     public int Width { get; }
 
     /// <summary>
-    /// Gets the surface height in pixels.
+    /// Gets the full backing texture height in pixels. Absolute texture coordinates are clipped against
+    /// (0, 0, <see cref="Width"/>, <see cref="Height"/>).
     /// </summary>
     public int Height { get; }
 
     /// <summary>
-    /// Gets the offset applied when mapping logical target coordinates to texture coordinates.
+    /// Gets the offset added when converting canvas-local coordinates to absolute texture coordinates:
+    /// absolute texel = frame bounds origin + this offset + canvas-local coordinate.
+    /// Non-zero when the canvas addresses a sub-region of the <see cref="Width"/> x <see cref="Height"/> texture
+    /// rather than starting at its origin.
     /// </summary>
     public Point TextureCoordinateOffset { get; }
 
@@ -95,9 +104,9 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     /// <param name="format">The target texture format.</param>
     /// <param name="width">The texture width in pixels.</param>
     /// <param name="height">The texture height in pixels.</param>
-    /// <param name="textureHandle">Receives the allocated wrapped <c>WGPUTexture*</c> handle.</param>
-    /// <param name="textureViewHandle">Receives the allocated wrapped <c>WGPUTextureView*</c> handle.</param>
-    /// <param name="textureCoordinateOffset">The offset applied when mapping logical target coordinates to texture coordinates.</param>
+    /// <param name="textureHandle">Receives the allocated wrapped <c>WGPUTexture*</c> handle. The caller owns it and must dispose it.</param>
+    /// <param name="textureViewHandle">Receives the allocated wrapped <c>WGPUTextureView*</c> handle. The caller owns it and must dispose it.</param>
+    /// <param name="textureCoordinateOffset">The offset added when converting canvas-local coordinates to absolute texture coordinates.</param>
     /// <returns>The native surface wrapping the allocated texture.</returns>
     internal static unsafe WebGPUNativeSurface Create(
         WebGPU api,
@@ -193,6 +202,7 @@ internal sealed class WebGPUNativeSurface : NativeSurface
             createdTextureViewHandle?.Dispose();
             createdTextureHandle?.Dispose();
 
+            // Raw pointers are released directly only when wrapping into an owning handle never happened.
             if (createdTextureViewHandle is null)
             {
                 api.TextureViewRelease(textureView);
@@ -208,8 +218,18 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     }
 
     /// <summary>
-    /// Creates a native surface over wrapped WebGPU texture handles.
+    /// Creates a native surface over wrapped WebGPU texture handles after validating them.
+    /// The caller retains ownership of every handle.
     /// </summary>
+    /// <param name="deviceHandle">The wrapped device handle that owns the target texture.</param>
+    /// <param name="queueHandle">The wrapped queue handle used to submit work against the target texture.</param>
+    /// <param name="targetTextureHandle">The wrapped target texture handle.</param>
+    /// <param name="targetTextureViewHandle">The wrapped target texture-view handle.</param>
+    /// <param name="targetFormat">The target texture format.</param>
+    /// <param name="width">The full backing texture width in pixels.</param>
+    /// <param name="height">The full backing texture height in pixels.</param>
+    /// <param name="textureCoordinateOffset">The offset added when converting canvas-local coordinates to absolute texture coordinates.</param>
+    /// <returns>The native surface wrapping the supplied handles.</returns>
     internal static WebGPUNativeSurface Create(
         WebGPUDeviceHandle deviceHandle,
         WebGPUQueueHandle queueHandle,

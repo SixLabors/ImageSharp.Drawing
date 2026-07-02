@@ -18,6 +18,20 @@ internal static partial class DefaultRasterizer
     {
         private bool hasAnyCoverage;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Linearizer{TL}"/> class.
+        /// </summary>
+        /// <param name="geometry">The source geometry to lower.</param>
+        /// <param name="residual">The residual transform applied to each source point during emission.</param>
+        /// <param name="translateX">The whole-pixel X translation applied to the geometry.</param>
+        /// <param name="translateY">The whole-pixel Y translation applied to the geometry.</param>
+        /// <param name="minX">The minimum destination X bound of the clipped interest region.</param>
+        /// <param name="minY">The minimum destination Y bound of the clipped interest region.</param>
+        /// <param name="width">The visible destination width in pixels.</param>
+        /// <param name="height">The visible destination height in pixels.</param>
+        /// <param name="firstBandIndex">The first retained row-band index touched by the geometry.</param>
+        /// <param name="rowBandCount">The number of retained row bands owned by the geometry.</param>
+        /// <param name="allocator">The allocator used for retained start-cover storage.</param>
         protected Linearizer(
             LinearGeometry geometry,
             Matrix4x4 residual,
@@ -235,12 +249,18 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Clips one geometry line against the destination interest and adds the retained result.
         /// </summary>
+        /// <remarks>
+        /// The interest region is the local rectangle [0, <see cref="Width"/>] x [0, <see cref="Height"/>].
+        /// Segments above, below, or right of the interest are discarded outright, but segments left of
+        /// it must be retained as start covers because winding accumulates left to right across a scanline.
+        /// </remarks>
         /// <param name="x0">The starting X coordinate in translated float space.</param>
         /// <param name="y0">The starting Y coordinate in translated float space.</param>
         /// <param name="x1">The ending X coordinate in translated float space.</param>
         /// <param name="y1">The ending Y coordinate in translated float space.</param>
         protected void AddUncontainedLine(float x0, float y0, float x1, float y1)
         {
+            // Horizontal segments never change scanline winding.
             if (y0 == y1)
             {
                 return;
@@ -256,6 +276,8 @@ internal static partial class DefaultRasterizer
                 return;
             }
 
+            // Fully right of the interest cannot affect any visible pixel; fully left would,
+            // via winding, so that case is handled further down rather than rejected here.
             if (x0 >= this.Width && x1 >= this.Width)
             {
                 return;
@@ -282,6 +304,8 @@ internal static partial class DefaultRasterizer
                 return;
             }
 
+            // Vertical clipping first: intersections with y == 0 and y == Height are computed
+            // parametrically in double precision so the clipped endpoints stay on the original line.
             double deltayV = Math.Abs(y1 - y0);
             double deltaxV = x1 - x0;
             double rx0 = x0;
@@ -322,11 +346,13 @@ internal static partial class DefaultRasterizer
                 }
             }
 
+            // Vertical clipping can reveal that the surviving portion lies fully right of the interest.
             if (rx0 >= this.Width && rx1 >= this.Width)
             {
                 return;
             }
 
+            // Fully inside horizontally: emit directly without edge splitting.
             if (rx0 > 0D && rx1 > 0D && rx0 < this.Width && rx1 < this.Width)
             {
                 this.AddContainedLineF24Dot8(
@@ -350,6 +376,8 @@ internal static partial class DefaultRasterizer
             double deltayH = ry1 - ry0;
             double deltaxH = Math.Abs(rx1 - rx0);
 
+            // Horizontal clipping, split by travel direction so the right-edge clip is always
+            // applied to the far endpoint and the left-edge clip to the near one.
             if (rx1 > rx0)
             {
                 double bx1 = rx1;
@@ -431,6 +459,7 @@ internal static partial class DefaultRasterizer
         /// <param name="y1">The ending Y coordinate.</param>
         protected void AddContainedLineF24Dot8(int x0, int y0, int x1, int y1)
         {
+            // Horizontal segments never change scanline winding.
             if (y0 == y1)
             {
                 return;
@@ -438,15 +467,9 @@ internal static partial class DefaultRasterizer
 
             if (x0 == x1)
             {
-                if (y0 < y1)
-                {
-                    this.VerticalDown(x0, y0, y1);
-                }
-                else
-                {
-                    this.VerticalUp(x0, y0, y1);
-                }
-
+                // Winding direction is carried by the y endpoint order itself, so both the
+                // downward and upward cases hand the endpoints to the band splitter as-is.
+                this.SplitAcrossBands(x0, y0, x0, y1);
                 return;
             }
 
@@ -454,6 +477,8 @@ internal static partial class DefaultRasterizer
             int dy = Math.Abs(y1 - y0);
             if (dx > MaximumDelta || dy > MaximumDelta)
             {
+                // Halve overlong segments recursively so downstream fixed-point
+                // interpolation always operates on bounded deltas.
                 int mx = (x0 + x1) >> 1;
                 int my = (y0 + y1) >> 1;
                 this.AddContainedLineF24Dot8(x0, y0, mx, my);
@@ -461,6 +486,8 @@ internal static partial class DefaultRasterizer
                 return;
             }
 
+            // Band indices treat the larger Y endpoint as exclusive (hence the -1) so a
+            // segment ending exactly on a band boundary does not spill into the next band.
             int rowIndex0;
             int rowIndex1;
             int bandTopStart = this.BandTopStart * FixedOne;
@@ -476,6 +503,8 @@ internal static partial class DefaultRasterizer
                 rowIndex1 = (y1 - bandTopStart) / bandHeight;
             }
 
+            // Bounds guard: never write outside the retained band range. The contained path
+            // trusts the caller's bounds, so float-to-fixed rounding may land a hair outside.
             if ((uint)rowIndex0 >= (uint)this.RowBandCount || (uint)rowIndex1 >= (uint)this.RowBandCount)
             {
                 return;
@@ -533,22 +562,6 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
-        /// Adds a downward vertical segment by delegating to the shared band-splitting path.
-        /// </summary>
-        /// <param name="x">The fixed-point X coordinate.</param>
-        /// <param name="y0">The starting fixed-point Y coordinate.</param>
-        /// <param name="y1">The ending fixed-point Y coordinate.</param>
-        private void VerticalDown(int x, int y0, int y1) => this.SplitAcrossBands(x, y0, x, y1);
-
-        /// <summary>
-        /// Adds an upward vertical segment by delegating to the shared band-splitting path.
-        /// </summary>
-        /// <param name="x">The fixed-point X coordinate.</param>
-        /// <param name="y0">The starting fixed-point Y coordinate.</param>
-        /// <param name="y1">The ending fixed-point Y coordinate.</param>
-        private void VerticalUp(int x, int y0, int y1) => this.SplitAcrossBands(x, y0, x, y1);
-
-        /// <summary>
         /// Splits a contained line segment at row-band boundaries and appends each retained piece.
         /// </summary>
         /// <param name="x0">The starting X coordinate.</param>
@@ -570,6 +583,8 @@ internal static partial class DefaultRasterizer
 
             while (currentBand != endBand)
             {
+                // Walk to the band boundary in the direction of travel, interpolating X in
+                // 64-bit so the dx * deltaY product cannot overflow 32-bit fixed point.
                 int bandBoundaryY = dy > 0 ? bandTopStart + ((currentBand + 1) * bandHeight) : bandTopStart + (currentBand * bandHeight);
                 int deltaY = bandBoundaryY - currentY;
                 int nextX = currentX + (int)(((long)dx * deltaY) / dy);
@@ -583,6 +598,7 @@ internal static partial class DefaultRasterizer
                 currentY = bandBoundaryY;
                 currentBand += step;
 
+                // Bounds guard: stop rather than write outside the retained band range.
                 if ((uint)currentBand >= (uint)this.RowBandCount)
                 {
                     return;
@@ -598,6 +614,10 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Updates retained start-cover rows for a line that has been clipped against the visible band.
         /// </summary>
+        /// <remarks>
+        /// Travel direction encodes winding sign: downward segments subtract cover and upward
+        /// segments add it, matching the accumulation performed by the scanline rasterizer.
+        /// </remarks>
         /// <param name="y0">The clipped starting Y coordinate.</param>
         /// <param name="y1">The clipped ending Y coordinate.</param>
         private void UpdateStartCoversClipped(int y0, int y1)
@@ -767,6 +787,17 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Initializes a new instance of the <see cref="LinearizerX32Y16"/> class.
         /// </summary>
+        /// <param name="geometry">The source geometry to lower.</param>
+        /// <param name="residual">The residual transform applied to each source point during emission.</param>
+        /// <param name="translateX">The whole-pixel X translation applied to the geometry.</param>
+        /// <param name="translateY">The whole-pixel Y translation applied to the geometry.</param>
+        /// <param name="minX">The minimum destination X bound of the clipped interest region.</param>
+        /// <param name="minY">The minimum destination Y bound of the clipped interest region.</param>
+        /// <param name="width">The visible destination width in pixels.</param>
+        /// <param name="height">The visible destination height in pixels.</param>
+        /// <param name="firstBandIndex">The first retained row-band index touched by the geometry.</param>
+        /// <param name="rowBandCount">The number of retained row bands owned by the geometry.</param>
+        /// <param name="allocator">The allocator used for retained start-cover storage.</param>
         public LinearizerX32Y16(
             LinearGeometry geometry,
             Matrix4x4 residual,
@@ -837,6 +868,17 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Initializes a new instance of the <see cref="LinearizerX16Y16"/> class.
         /// </summary>
+        /// <param name="geometry">The source geometry to lower.</param>
+        /// <param name="residual">The residual transform applied to each source point during emission.</param>
+        /// <param name="translateX">The whole-pixel X translation applied to the geometry.</param>
+        /// <param name="translateY">The whole-pixel Y translation applied to the geometry.</param>
+        /// <param name="minX">The minimum destination X bound of the clipped interest region.</param>
+        /// <param name="minY">The minimum destination Y bound of the clipped interest region.</param>
+        /// <param name="width">The visible destination width in pixels.</param>
+        /// <param name="height">The visible destination height in pixels.</param>
+        /// <param name="firstBandIndex">The first retained row-band index touched by the geometry.</param>
+        /// <param name="rowBandCount">The number of retained row bands owned by the geometry.</param>
+        /// <param name="allocator">The allocator used for retained start-cover storage.</param>
         public LinearizerX16Y16(
             LinearGeometry geometry,
             Matrix4x4 residual,

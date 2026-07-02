@@ -1,7 +1,21 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// Allocate sparse per-path row metadata after draw reduction has produced final path bounds.
+// Allocates sparse per-path tile-row metadata after draw reduction has
+// produced final draw object bounds. One thread per draw object: converts
+// the pixel-space draw bbox to a tile-space bbox clamped to the current
+// chunk's tile-row window, bump-allocates one PathRow record per covered
+// row, writes the Path record (tile bbox plus row base offset) and resets
+// each row to an empty span (x0 = u32 max, x1 = 0, no backdrop, no flags).
+//
+// Inputs: config uniform (chunk window, buffer limits), scene (draw tags),
+// draw_bboxes (from draw_leaf).
+// Outputs: paths (Path records), rows (initialized AtomicPathRow records),
+// bump.path_rows; sets the STAGE_TILE_ALLOC failure bit on overflow.
+//
+// Local addition for the sparse tile-row model; no Vello counterpart
+// (it takes over the per-path setup half of Vello's tile_alloc, which
+// allocates a dense tile grid instead).
 
 #import config
 #import bump
@@ -26,6 +40,9 @@ var<storage, read_write> paths: array<Path>;
 @group(0) @binding(5)
 var<storage, read_write> rows: array<AtomicPathRow>;
 
+// Allocates and initializes the row records for one draw object. NOP and
+// end-clip objects, and objects with an empty bbox, keep an all-zero tile
+// bbox and therefore allocate no rows.
 @compute @workgroup_size(256)
 fn main(
     @builtin(global_invocation_id) global_id: vec3<u32>,
@@ -63,6 +80,9 @@ fn main(
     let row_base = atomicAdd(&bump.path_rows, row_count);
     let row_limit_exceeded = row_base + row_count > config.path_rows_size;
 
+    // On overflow still write a Path record (with row base 0) so the
+    // buffer holds no uninitialized data; the failure bit makes the later
+    // setup stages dispatch zero work, and the CPU resizes and retries.
     if row_limit_exceeded {
         atomicOr(&bump.failed, STAGE_TILE_ALLOC);
         paths[drawobj_ix] = Path(bbox, 0u);
@@ -71,6 +91,9 @@ fn main(
 
     paths[drawobj_ix] = Path(bbox, row_base);
 
+    // Empty-span sentinel: x0 at u32 max and x1 at 0 so the atomicMin/Max
+    // updates in path_row_span establish the true span; a row with
+    // x0 >= x1 after that stage covers no tiles.
     for (var i = 0u; i < row_count; i += 1u) {
         let row_ix = row_base + i;
         atomicStore(&rows[row_ix].x0, 0xffffffffu);

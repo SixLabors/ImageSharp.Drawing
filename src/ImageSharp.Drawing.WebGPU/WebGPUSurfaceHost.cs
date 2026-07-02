@@ -8,16 +8,66 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </summary>
 internal enum WebGPUSurfaceHostKind
 {
+    /// <summary>
+    /// A GLFW-owned window (<c>GLFWwindow*</c> in <see cref="WebGPUSurfaceHost.Handle0"/>).
+    /// </summary>
     Glfw,
+
+    /// <summary>
+    /// An SDL-owned window (<c>SDL_Window*</c> in <see cref="WebGPUSurfaceHost.Handle0"/>).
+    /// </summary>
     Sdl,
+
+    /// <summary>
+    /// A Win32 window (<c>HWND</c> in <see cref="WebGPUSurfaceHost.Handle0"/>, <c>HDC</c> in
+    /// <see cref="WebGPUSurfaceHost.Handle1"/>, <c>HINSTANCE</c> in <see cref="WebGPUSurfaceHost.Handle2"/>).
+    /// </summary>
     Win32,
+
+    /// <summary>
+    /// An X11 window (<c>Display*</c> in <see cref="WebGPUSurfaceHost.Handle0"/>, window id in
+    /// <see cref="WebGPUSurfaceHost.Number0"/>).
+    /// </summary>
     X11,
+
+    /// <summary>
+    /// A Cocoa window (<c>NSWindow*</c> in <see cref="WebGPUSurfaceHost.Handle0"/>).
+    /// </summary>
     Cocoa,
+
+    /// <summary>
+    /// A UIKit window (<c>UIWindow*</c> in <see cref="WebGPUSurfaceHost.Handle0"/>, framebuffer, color buffer,
+    /// and resolve framebuffer ids in <see cref="WebGPUSurfaceHost.Number1"/> through <see cref="WebGPUSurfaceHost.Number3"/>).
+    /// </summary>
     UIKit,
+
+    /// <summary>
+    /// A Wayland surface (<c>wl_display*</c> in <see cref="WebGPUSurfaceHost.Handle0"/>, <c>wl_surface*</c> in
+    /// <see cref="WebGPUSurfaceHost.Handle1"/>).
+    /// </summary>
     Wayland,
+
+    /// <summary>
+    /// A WinRT window (<c>IInspectable*</c> in <see cref="WebGPUSurfaceHost.Handle0"/>).
+    /// </summary>
     WinRT,
+
+    /// <summary>
+    /// An Android native window (<c>ANativeWindow*</c> in <see cref="WebGPUSurfaceHost.Handle0"/>, optional EGL
+    /// surface in <see cref="WebGPUSurfaceHost.Handle1"/>).
+    /// </summary>
     Android,
+
+    /// <summary>
+    /// A Vivante-backed window (EGL display in <see cref="WebGPUSurfaceHost.Handle0"/>, EGL window in
+    /// <see cref="WebGPUSurfaceHost.Handle1"/>).
+    /// </summary>
     Vivante,
+
+    /// <summary>
+    /// An EGL display and surface pair (display in <see cref="WebGPUSurfaceHost.Handle0"/>, surface in
+    /// <see cref="WebGPUSurfaceHost.Handle1"/>).
+    /// </summary>
     EGL,
 }
 
@@ -41,6 +91,18 @@ public readonly struct WebGPUSurfaceHost
     private readonly uint number2;
     private readonly uint number3;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUSurfaceHost"/> struct. Only the slots meaningful
+    /// for <paramref name="kind"/> are populated; see the public factory methods for the per-platform mapping.
+    /// </summary>
+    /// <param name="kind">The native platform surface kind.</param>
+    /// <param name="handle0">The first pointer-sized handle slot.</param>
+    /// <param name="handle1">The second pointer-sized handle slot.</param>
+    /// <param name="handle2">The third pointer-sized handle slot.</param>
+    /// <param name="number0">The pointer-sized numeric slot.</param>
+    /// <param name="number1">The first 32-bit numeric slot.</param>
+    /// <param name="number2">The second 32-bit numeric slot.</param>
+    /// <param name="number3">The third 32-bit numeric slot.</param>
     private WebGPUSurfaceHost(
         WebGPUSurfaceHostKind kind,
         nint handle0 = 0,
@@ -61,20 +123,44 @@ public readonly struct WebGPUSurfaceHost
         this.number3 = number3;
     }
 
+    /// <summary>
+    /// Gets the native platform surface kind that defines how the handle and number slots are interpreted.
+    /// </summary>
     internal WebGPUSurfaceHostKind Kind { get; }
 
+    /// <summary>
+    /// Gets the first pointer-sized handle slot; its meaning depends on <see cref="Kind"/>.
+    /// </summary>
     internal nint Handle0 => this.handle0;
 
+    /// <summary>
+    /// Gets the second pointer-sized handle slot; its meaning depends on <see cref="Kind"/>.
+    /// </summary>
     internal nint Handle1 => this.handle1;
 
+    /// <summary>
+    /// Gets the third pointer-sized handle slot; its meaning depends on <see cref="Kind"/>.
+    /// </summary>
     internal nint Handle2 => this.handle2;
 
+    /// <summary>
+    /// Gets the pointer-sized numeric slot; its meaning depends on <see cref="Kind"/>.
+    /// </summary>
     internal nuint Number0 => this.number0;
 
+    /// <summary>
+    /// Gets the first 32-bit numeric slot; its meaning depends on <see cref="Kind"/>.
+    /// </summary>
     internal uint Number1 => this.number1;
 
+    /// <summary>
+    /// Gets the second 32-bit numeric slot; its meaning depends on <see cref="Kind"/>.
+    /// </summary>
     internal uint Number2 => this.number2;
 
+    /// <summary>
+    /// Gets the third 32-bit numeric slot; its meaning depends on <see cref="Kind"/>.
+    /// </summary>
     internal uint Number3 => this.number3;
 
     /// <summary>

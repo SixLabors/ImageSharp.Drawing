@@ -1,7 +1,25 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// Finish prefix sum of drawtags, decode draw objects.
+// Draw-tag scan stage. Finishes the prefix sum of draw tags started by
+// draw_reduce, producing an exclusive DrawMonoid for every draw object, then
+// decodes each draw object: brush parameters are materialized into the
+// per-draw info stream and BeginClip/EndClip records are emitted as ClipInp
+// entries for the clip stack stages.
+//
+// Inputs: config uniform; scene stream; reduced (per-workgroup DrawMonoid
+// aggregates from draw_reduce); path_bbox (per-path bounds, draw flags,
+// coverage threshold and raster interest from the path bbox stages).
+// Outputs: draw_monoid (exclusive prefix per draw object); info (per-draw
+// brush info words consumed by coarse and fine); clip_inp (ClipInp records
+// consumed by clip_reduce and clip_leaf).
+//
+// Ported from Vello's draw_leaf.wgsl (linebender/vello,
+// vello_shaders/shader). Local divergences: extra draw tags (recolor,
+// elliptic and path gradients), 9-word transforms carrying a perspective
+// row, coverage-threshold plus raster-interest words appended to
+// visible-fill info entries, and a clip operation (intersection or
+// difference) carried in each ClipInp record.
 
 #import config
 #import clip
@@ -32,6 +50,10 @@ var<storage, read_write> clip_inp: array<ClipInp>;
 
 #import util
 
+// Reads one transform from the scene stream. ImageSharp encodes 9 words per
+// transform (2x2 matrix, translation, perspective row) where Vello encodes
+// 6 affine words. transform_base is the u32 offset of the transform stream
+// within the scene; ix is the transform index.
 fn read_transform(transform_base: u32, ix: u32) -> Transform {
     let base = transform_base + ix * 9u;
     let matrx = vec4<f32>(
@@ -53,6 +75,13 @@ const WG_SIZE = 256u;
 
 var<workgroup> sh_scratch: array<DrawMonoid, WG_SIZE>;
 
+// Completes the draw-monoid prefix sum and decodes draw objects.
+// First the aggregates of all preceding workgroups (reduced) are scanned to
+// obtain this workgroup's starting prefix. Then, for each of this
+// workgroup's blocks: an intra-workgroup scan yields the exclusive prefix m
+// for each draw object, draw_monoid[ix] is written, the brush payload is
+// decoded into info[m.info_offset..], and ClipInp records are emitted for
+// BeginClip/EndClip objects.
 @compute @workgroup_size(256)
 fn main(
     @builtin(local_invocation_id) local_id: vec3<u32>,
@@ -132,6 +161,8 @@ fn main(
                     info[di] = draw_flags;
                     let p0 = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
                     let p1 = bitcast<vec2<f32>>(vec2(scene[dd + 3u], scene[dd + 4u]));
+                    // Encode the gradient as a line equation so fine can
+                    // evaluate the parameter as t = dot(p, line_xy) + line_c.
                     let dxy = p1 - p0;
                     let scale = 1.0 / dot(dxy, dxy);
                     let line_xy = dxy * scale;
@@ -274,7 +305,9 @@ fn main(
             }
 
             // Visible fills and begin clips carry raster interest in the info stream so coarse can
-            // read it without another storage-buffer binding.
+            // read it without another storage-buffer binding. Bits 6..9 of the tag give the info
+            // word count (matching map_draw_tag); the threshold plus interest block occupies the
+            // final five words of the entry.
             let tag_info_size = (tag_word >> 6u) & 0xfu;
             if tag_info_size >= 5u {
                 let interest_offset = di + tag_info_size - 5u;
@@ -286,6 +319,8 @@ fn main(
             }
         }
         if tag_word == DRAWTAG_BEGIN_CLIP || tag_word == DRAWTAG_END_CLIP {
+            // EndClip records carry ~ix, matching ClipInp.path_ix's sign-tagged
+            // encoding; clip_leaf recovers ix to rewrite the draw monoid.
             var path_ix = ~ix;
             var operation = CLIP_OPERATION_INTERSECTION;
             if tag_word == DRAWTAG_BEGIN_CLIP {
@@ -307,6 +342,8 @@ fn main(
     }
 }
 
+// Builds the transform that maps p0 to (0, 0) and p1 to (1, 0). Used to
+// canonicalize two-point conical gradients onto the unit line.
 fn two_point_to_unit_line(p0: vec2<f32>, p1: vec2<f32>) -> Transform {
     let tmp1 = from_poly2(p0, p1);
     let inv = transform_inverse(tmp1);
@@ -314,6 +351,8 @@ fn two_point_to_unit_line(p0: vec2<f32>, p1: vec2<f32>) -> Transform {
     return transform_mul(tmp2, inv);
 }
 
+// Builds the similarity transform that maps (0, 0) to p0 and (0, 1) to p1,
+// with an identity perspective row (Skia-style two-point poly transform).
 fn from_poly2(p0: vec2<f32>, p1: vec2<f32>) -> Transform {
     return Transform(
         vec4(p1.y - p0.y, p0.x - p1.x, p1.x - p0.x, p1.y - p0.y),

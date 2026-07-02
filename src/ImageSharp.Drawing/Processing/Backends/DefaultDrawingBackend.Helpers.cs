@@ -155,6 +155,8 @@ public sealed partial class DefaultDrawingBackend
             Span<TPixel> destination,
             Span<float> coverage)
         {
+            // Clip descriptors are recorded in canvas space; the item's destination offset
+            // anchors them into the space the rasterizer emits so clips track the drawn geometry.
             RectangleF rectangle = descriptor.Rectangle;
             rectangle.Offset(this.destinationOffset.X, this.destinationOffset.Y);
 
@@ -496,6 +498,9 @@ public sealed partial class DefaultDrawingBackend
             Span<TPixel> destination,
             Span<float> coverage)
         {
+            // A missing or empty clip raster means the clip path contributes no coverage here:
+            // a Difference clip removes nothing so the subject span passes through unchanged,
+            // while an intersecting clip keeps nothing so the span is dropped entirely.
             DefaultRasterizer.RasterizableGeometry? rasterizable = this.pathClipState?.GetRasterizable(clipIndex);
             if (rasterizable is null)
             {
@@ -712,6 +717,7 @@ public sealed partial class DefaultDrawingBackend
     /// <summary>
     /// Writes retained path clip coverage into a worker-local span for one subject row.
     /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
     private readonly struct PathClipCoverageRowHandler<TPixel> : IRasterizerCoverageRowHandler
         where TPixel : unmanaged, IPixel<TPixel>
     {

@@ -308,8 +308,8 @@ public sealed class DrawingClipDescriptor
                 // Rebuilding transformed paths here would discard the scale used for curve
                 // subdivision and force the backends back into Vector2.One lowering.
                 Matrix4x4 translated = this.GetPathMatrix() * Matrix4x4.CreateTranslation(offset.X, offset.Y, 0);
-                Vector2 scale = MatrixUtilities.ExtractScale(translated);
-                Matrix4x4 residual = MatrixUtilities.ComputeResidual(scale, translated);
+                Vector2 scale = MatrixUtilities.GetScale(translated);
+                Matrix4x4 residual = MatrixUtilities.GetResidual(scale, translated);
 
                 return CreatePath(this.Paths, scale, residual, this.Operation, this.IntersectionRule, this.EdgeMode, this.AntialiasThreshold);
             }
@@ -368,8 +368,8 @@ public sealed class DrawingClipDescriptor
         // For arbitrary path clips, preserve the same scale/residual split used by fill and
         // stroke commands: curve subdivision sees the scale, while backends apply the residual.
         Matrix4x4 pathMatrix = this.Kind == DrawingClipKind.Path ? this.GetPathMatrix() * matrix : matrix;
-        Vector2 scale = MatrixUtilities.ExtractScale(pathMatrix);
-        Matrix4x4 residual = MatrixUtilities.ComputeResidual(scale, pathMatrix);
+        Vector2 scale = MatrixUtilities.GetScale(pathMatrix);
+        Matrix4x4 residual = MatrixUtilities.GetResidual(scale, pathMatrix);
         IReadOnlyList<IPath> sourcePaths = this.Kind == DrawingClipKind.Path ? this.Paths : [this.ToPath()];
 
         return CreatePath(sourcePaths, scale, residual, this.Operation, this.IntersectionRule, this.EdgeMode, this.AntialiasThreshold);

@@ -7,7 +7,9 @@ using Silk.NET.WebGPU;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// GPU stage that preserves chunk-invariant scheduling state while clearing the per-chunk allocators before the next oversized-scene tile window.
+/// GPU stage that preserves chunk-invariant scheduling state (the shared-stage counters and
+/// failure bits) while clearing the per-chunk allocators before the next oversized-scene
+/// tile-row window. Wraps <c>chunk_reset.wgsl</c>.
 /// </summary>
 internal static unsafe class ChunkResetComputeShader
 {
@@ -23,7 +25,9 @@ internal static unsafe class ChunkResetComputeShader
 
     /// <summary>
     /// Gets the fixed X workgroup count required by the chunk-reset stage.
+    /// The stage runs as a single workgroup of one thread, so the count is always 1.
     /// </summary>
+    /// <returns>The X dispatch dimension in workgroups; always 1.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static uint GetDispatchX() => 1;
 
@@ -41,6 +45,8 @@ internal static unsafe class ChunkResetComputeShader
         out BindGroupLayout* layout,
         out string? error)
     {
+        // Bindings match chunk_reset.wgsl:
+        //   0 bump allocators (read-write; chunk-local counters zeroed, shared-stage state retained)
         BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[1];
         entries[0] = SceneShaderBindingLayoutHelper.CreateStorageEntry(0, BufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));
 

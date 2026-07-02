@@ -1,8 +1,16 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// This shader is the second stage of reduction for the pathtag
-// monoid scan, needed when the number of tags is large.
+// Second-level reduction for the path tag monoid scan, dispatched only
+// when the tag stream is too large for a single level of workgroup
+// partials (the "large" scan variant). Reduces the first-level partials
+// produced by pathtag_reduce by another factor of WG_SIZE.
+//
+// Inputs: reduced_in (first-level partials from pathtag_reduce).
+// Outputs: reduced (one TagMonoid per WG_SIZE input partials), consumed
+// by pathtag_scan1.
+//
+// Ported from Vello's pathtag_reduce2.wgsl.
 
 #import config
 #import pathtag
@@ -18,6 +26,9 @@ const WG_SIZE = 256u;
 
 var<workgroup> sh_scratch: array<TagMonoid, WG_SIZE>;
 
+// Reduces WG_SIZE first-level partials to a single TagMonoid using the
+// same rightward shared-memory tree as pathtag_reduce; thread 0 writes
+// the workgroup total to reduced[workgroup index].
 @compute @workgroup_size(256)
 fn main(
     @builtin(global_invocation_id) global_id: vec3<u32>,
