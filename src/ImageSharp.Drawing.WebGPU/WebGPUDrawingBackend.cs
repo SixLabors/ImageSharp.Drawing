@@ -44,6 +44,22 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     private WebGPUSceneSchedulingArena? cachedSchedulingArena;
     private WebGPUSceneResourceArena? cachedResourceArena;
 
+    // Deferred scheduling-status readbacks from recent flushes. The backend is the owner
+    // because it outlives the per-frame canvases and scenes: parking a pending map on a
+    // per-frame scene would force a blocking resolve at that scene's disposal, putting the
+    // CPU-GPU sync right back into the frame. The queue is harvested wait-free at the start
+    // of each flush; entries are only force-resolved when the queue exceeds its bound.
+    // Offscreen entries carry the context for a corrective re-render on overflow and hold a
+    // deferred-render reference that keeps their scene's GPU payload alive until harvested.
+    private readonly object pendingStatusSync = new();
+    private readonly List<PendingSchedulingStatusEntry> pendingSchedulingStatuses = [];
+
+    // Bounds the deferred-readback queue. The GPU typically completes a frame's map by the
+    // next flush, so the queue holds roughly one entry per flush in the current frame; the
+    // bound only bites when the GPU falls several frames behind, where a blocking resolve
+    // doubles as backpressure.
+    private const int MaxPendingSchedulingStatuses = 8;
+
     // Advisory first-guess state for repeated oversized eager scenes. Parallel renders may
     // race to update it; every hinted chunk is still validated before dispatch, so a stale
     // or cross-scene value can only affect the first shrink attempt, not correctness.
@@ -158,6 +174,11 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         this.DiagnosticLastFlushUsedChunking = false;
         this.lastChunkingBindingFailure = WebGPUSceneDispatch.BindingLimitBuffer.None;
 
+        // Harvest deferred overflow readbacks from earlier presentation flushes before reading
+        // capacities: completed maps resolve wait-free, and any observed overflow grows the
+        // sizes this render is about to use.
+        this.HarvestPendingSchedulingStatuses(webGPUScene, drainAll: false);
+
         WebGPUSceneBumpSizes currentBumpSizes = webGPUScene.BumpSizes;
         WebGPUSceneResourceArena? resourceArena = null;
         WebGPUSceneSchedulingArena? schedulingArena = null;
@@ -209,73 +230,17 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 resourceArena ??= webGPUScene.RentResourceArena() ?? this.RentResourceArena();
                 schedulingArena ??= webGPUScene.RentSchedulingArena() ?? this.RentSchedulingArena();
 
-                bool renderCompleted = false;
-
-                // Retry loop: scratch allocators start small and the GPU reports actual demand.
-                // The retained scene keeps the largest observed size so later renders avoid
-                // rediscovering the same growth.
-                for (int attempt = 0; attempt < MaxDynamicGrowthAttempts; attempt++)
-                {
-                    WebGPUStagedScene stagedScene = WebGPUSceneDispatch.CreateStagedScene(
-                        configuration,
-                        nativeTarget,
-                        encodedScene,
-                        textureFormat,
-                        requiredFeature,
-                        currentBumpSizes,
-                        ref resourceArena);
-
-                    try
-                    {
-                        if (stagedScene.BindingLimitFailure.Buffer != WebGPUSceneDispatch.BindingLimitBuffer.None)
-                        {
-                            this.DiagnosticLastFlushUsedChunking = true;
-                            this.lastChunkingBindingFailure = stagedScene.BindingLimitFailure.Buffer;
-                        }
-
-                        bool renderSucceeded = WebGPUSceneDispatch.TryRenderStagedScene(
-                            ref stagedScene,
-                            ref schedulingArena,
-                            this.GetChunkTileHeightHint(stagedScene.BindingLimitFailure.Buffer, encodedScene.TargetSize),
-                            out bool requiresGrowth,
-                            out WebGPUSceneBumpSizes grownBumpSizes,
-                            out uint successfulChunkTileHeight,
-                            out string? error);
-
-                        if (renderSucceeded)
-                        {
-                            currentBumpSizes = MaxBumpSizes(currentBumpSizes, grownBumpSizes);
-
-                            if (successfulChunkTileHeight != 0)
-                            {
-                                this.UpdateChunkTileHeightHint(
-                                    stagedScene.BindingLimitFailure.Buffer,
-                                    encodedScene.TargetSize,
-                                    successfulChunkTileHeight);
-                            }
-
-                            renderCompleted = true;
-                            break;
-                        }
-
-                        if (requiresGrowth)
-                        {
-                            currentBumpSizes = MaxBumpSizes(currentBumpSizes, grownBumpSizes);
-                            continue;
-                        }
-
-                        throw new InvalidOperationException(error ?? "The staged WebGPU scene dispatch failed.");
-                    }
-                    finally
-                    {
-                        stagedScene.Dispose();
-                    }
-                }
-
-                if (!renderCompleted)
-                {
-                    throw new InvalidOperationException("The staged WebGPU scene exceeded the current dynamic growth retry budget.");
-                }
+                this.RenderEncodedSceneWithGrowth<TPixel>(
+                    configuration,
+                    webGPUTarget,
+                    nativeTarget.Bounds,
+                    textureFormat,
+                    requiredFeature,
+                    webGPUScene,
+                    deferOverflowCheck: true,
+                    ref currentBumpSizes,
+                    ref resourceArena,
+                    ref schedulingArena);
             }
 
             webGPUScene.UpdateBumpSizes(currentBumpSizes);
@@ -284,6 +249,123 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         finally
         {
             webGPUScene.ReturnArenas(resourceArena, schedulingArena, this);
+        }
+    }
+
+    /// <summary>
+    /// Renders a plain (non-ordered) encoded scene through the staged pipeline with the dynamic
+    /// scratch-growth retry loop. All texture targets defer the scratch-overflow readback so the
+    /// flush never blocks on the GPU: presentation surfaces are corrected by the next frame's
+    /// redraw, while offscreen targets park a corrective re-render that a later harvest invokes
+    /// on the rare overflow, so no incomplete content can persist.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format of the flush target.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="webGPUTarget">The native surface holding the target texture handles.</param>
+    /// <param name="targetBounds">The target bounds for the flush.</param>
+    /// <param name="textureFormat">The target texture format.</param>
+    /// <param name="requiredFeature">The device feature required by the target format, or <see cref="FeatureName.Undefined"/>.</param>
+    /// <param name="webGPUScene">The retained scene being rendered.</param>
+    /// <param name="deferOverflowCheck">Whether the overflow readback may be deferred; corrective re-renders pass <see langword="false"/>.</param>
+    /// <param name="currentBumpSizes">The scratch capacities carried across attempts.</param>
+    /// <param name="resourceArena">The rented scene resource arena.</param>
+    /// <param name="schedulingArena">The rented scheduling arena.</param>
+    private void RenderEncodedSceneWithGrowth<TPixel>(
+        Configuration configuration,
+        WebGPUNativeSurface webGPUTarget,
+        Rectangle targetBounds,
+        TextureFormat textureFormat,
+        FeatureName requiredFeature,
+        WebGPUDrawingBackendScene webGPUScene,
+        bool deferOverflowCheck,
+        ref WebGPUSceneBumpSizes currentBumpSizes,
+        ref WebGPUSceneResourceArena? resourceArena,
+        ref WebGPUSceneSchedulingArena? schedulingArena)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        WebGPUEncodedScene encodedScene = webGPUScene.EncodedScene;
+        bool renderCompleted = false;
+
+        // Retry loop: scratch allocators start small and the GPU reports actual demand.
+        // The retained scene keeps the largest observed size so later renders avoid
+        // rediscovering the same growth.
+        for (int attempt = 0; attempt < MaxDynamicGrowthAttempts; attempt++)
+        {
+            WebGPUStagedScene stagedScene = WebGPUSceneDispatch.CreateStagedScene<TPixel>(
+                configuration,
+                webGPUTarget,
+                targetBounds,
+                encodedScene,
+                textureFormat,
+                requiredFeature,
+                currentBumpSizes,
+                ref resourceArena);
+
+            try
+            {
+                if (stagedScene.BindingLimitFailure.Buffer != WebGPUSceneDispatch.BindingLimitBuffer.None)
+                {
+                    this.DiagnosticLastFlushUsedChunking = true;
+                    this.lastChunkingBindingFailure = stagedScene.BindingLimitFailure.Buffer;
+                }
+
+                bool renderSucceeded = WebGPUSceneDispatch.TryRenderStagedScene(
+                    ref stagedScene,
+                    ref schedulingArena,
+                    this.GetChunkTileHeightHint(stagedScene.BindingLimitFailure.Buffer, encodedScene.TargetSize),
+                    deferOverflowCheck,
+                    out bool requiresGrowth,
+                    out WebGPUSceneBumpSizes grownBumpSizes,
+                    out uint successfulChunkTileHeight,
+                    out WebGPUPendingSchedulingStatus? pendingStatus,
+                    out string? error);
+
+                if (renderSucceeded)
+                {
+                    currentBumpSizes = MaxBumpSizes(currentBumpSizes, grownBumpSizes);
+
+                    // A deferred render parks its readback on the backend, which outlives
+                    // per-frame scenes; a later flush harvests it and applies any observed
+                    // growth. Offscreen targets additionally park a corrective re-render:
+                    // their content is not redrawn every frame, so a rare overflow must be
+                    // repaired rather than waiting for the next redraw.
+                    if (pendingStatus is not null)
+                    {
+                        Action? correctiveRender = webGPUTarget.IsPresentationSurface
+                            ? null
+                            : () => this.RenderCorrective<TPixel>(configuration, webGPUTarget, targetBounds, textureFormat, requiredFeature, webGPUScene);
+                        this.EnqueuePendingSchedulingStatus(pendingStatus, webGPUScene, correctiveRender);
+                    }
+
+                    if (successfulChunkTileHeight != 0)
+                    {
+                        this.UpdateChunkTileHeightHint(
+                            stagedScene.BindingLimitFailure.Buffer,
+                            encodedScene.TargetSize,
+                            successfulChunkTileHeight);
+                    }
+
+                    renderCompleted = true;
+                    break;
+                }
+
+                if (requiresGrowth)
+                {
+                    currentBumpSizes = MaxBumpSizes(currentBumpSizes, grownBumpSizes);
+                    continue;
+                }
+
+                throw new InvalidOperationException(error ?? "The staged WebGPU scene dispatch failed.");
+            }
+            finally
+            {
+                stagedScene.Dispose();
+            }
+        }
+
+        if (!renderCompleted)
+        {
+            throw new InvalidOperationException("The staged WebGPU scene exceeded the current dynamic growth retry budget.");
         }
     }
 
@@ -572,14 +654,18 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                     this.lastChunkingBindingFailure = stagedScene.BindingLimitFailure.Buffer;
                 }
 
+                // Ordered scenes interleave draws with reads of the target (Apply, layer
+                // composition), so every pass keeps the synchronous overflow check.
                 bool renderSucceeded = WebGPUSceneDispatch.TryRenderStagedScene(
                     ref stagedScene,
                     target,
                     ref schedulingArena,
                     this.GetChunkTileHeightHint(stagedScene.BindingLimitFailure.Buffer, target.Bounds.Size),
+                    deferOverflowCheck: false,
                     out bool requiresGrowth,
                     out WebGPUSceneBumpSizes grownBumpSizes,
                     out uint successfulChunkTileHeight,
+                    out WebGPUPendingSchedulingStatus? _,
                     out string? error);
 
                 if (renderSucceeded)
@@ -951,8 +1037,166 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         this.lastChunkingBindingFailure = WebGPUSceneDispatch.BindingLimitBuffer.None;
         this.isDisposed = true;
 
+        // Retire any deferred readbacks first: their native map callbacks must fire (or time
+        // out) before the pinned thunks and readback buffers can be released safely.
+        this.HarvestPendingSchedulingStatuses(scene: null, drainAll: true);
+
         WebGPUSceneSchedulingArena.Dispose(Interlocked.Exchange(ref this.cachedSchedulingArena, null));
         WebGPUSceneResourceArena.Dispose(Interlocked.Exchange(ref this.cachedResourceArena, null));
+    }
+
+    /// <summary>
+    /// Parks the deferred scheduling-status readback of a just-submitted flush on this backend
+    /// for a later flush to harvest. Offscreen targets pass a corrective re-render and hold a
+    /// deferred-render reference on their scene so the correction remains possible until the
+    /// readback resolves; presentation surfaces are corrected by their next redraw and pass
+    /// <see langword="null"/>.
+    /// </summary>
+    /// <param name="pendingStatus">The pending readback to park.</param>
+    /// <param name="scene">The retained scene the flush rendered.</param>
+    /// <param name="correctiveRender">The corrective re-render to invoke on overflow, or <see langword="null"/> for presentation flushes.</param>
+    private void EnqueuePendingSchedulingStatus(
+        WebGPUPendingSchedulingStatus pendingStatus,
+        WebGPUDrawingBackendScene scene,
+        Action? correctiveRender)
+    {
+        if (correctiveRender is not null)
+        {
+            scene.AddDeferredRenderReference();
+        }
+
+        PendingSchedulingStatusEntry entry = new(
+            pendingStatus,
+            correctiveRender is null ? null : scene,
+            correctiveRender);
+
+        lock (this.pendingStatusSync)
+        {
+            this.pendingSchedulingStatuses.Add(entry);
+        }
+    }
+
+    /// <summary>
+    /// Resolves parked deferred readbacks. Completed maps resolve wait-free; unfinished maps
+    /// stay parked unless the queue exceeds its bound (or <paramref name="drainAll"/> is set),
+    /// where the oldest entries are resolved blocking as GPU backpressure. Observed demand is
+    /// merged into the backend capacities and the scene about to render, and offscreen entries
+    /// that overflowed are re-rendered with the grown capacities so no incomplete content can
+    /// persist in a texture the app may cache.
+    /// </summary>
+    /// <param name="scene">The scene about to render, or <see langword="null"/> during teardown or readback drains.</param>
+    /// <param name="drainAll">Whether to resolve every parked entry regardless of readiness.</param>
+    private void HarvestPendingSchedulingStatuses(WebGPUDrawingBackendScene? scene, bool drainAll)
+    {
+        List<PendingSchedulingStatusEntry>? due = null;
+        lock (this.pendingStatusSync)
+        {
+            if (this.pendingSchedulingStatuses.Count == 0)
+            {
+                return;
+            }
+
+            // Map callbacks only advance while the device is pumped; one non-blocking poll
+            // delivers every callback that has already completed on the GPU timeline.
+            this.pendingSchedulingStatuses[0].Status.PollDevice();
+
+            int overflow = this.pendingSchedulingStatuses.Count - MaxPendingSchedulingStatuses;
+            for (int i = this.pendingSchedulingStatuses.Count - 1; i >= 0; i--)
+            {
+                PendingSchedulingStatusEntry entry = this.pendingSchedulingStatuses[i];
+
+                // Entries are ordered oldest-first, so indexes below the overflow count are
+                // exactly the oldest entries beyond the queue bound.
+                if (drainAll || entry.Status.IsReady || i < overflow)
+                {
+                    (due ??= []).Add(entry);
+                    this.pendingSchedulingStatuses.RemoveAt(i);
+                }
+            }
+        }
+
+        if (due is null)
+        {
+            return;
+        }
+
+        foreach (PendingSchedulingStatusEntry entry in due)
+        {
+            try
+            {
+                bool overflowed = WebGPUSceneDispatch.ResolveDeferredSchedulingStatus(entry.Status, out WebGPUSceneBumpSizes resolvedBumpSizes);
+                scene?.UpdateBumpSizes(resolvedBumpSizes);
+                entry.Scene?.UpdateBumpSizes(resolvedBumpSizes);
+                this.bumpSizes = MaxBumpSizes(this.bumpSizes, resolvedBumpSizes);
+
+                if (overflowed)
+                {
+                    entry.CorrectiveRender?.Invoke();
+                }
+            }
+            finally
+            {
+                entry.Scene?.ReleaseDeferredRenderReference();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Re-renders an offscreen flush whose deferred readback reported a scratch overflow.
+    /// Runs the staged pipeline synchronously with the grown capacities so the corrected
+    /// content replaces the incomplete render before anything can observe it as final. A
+    /// target whose owner was disposed in the meantime is skipped: its content is gone too.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format of the flush target.</typeparam>
+    /// <param name="configuration">The processing configuration of the original flush.</param>
+    /// <param name="webGPUTarget">The native surface holding the target texture handles.</param>
+    /// <param name="targetBounds">The target bounds of the original flush.</param>
+    /// <param name="textureFormat">The target texture format.</param>
+    /// <param name="requiredFeature">The device feature required by the target format, or <see cref="FeatureName.Undefined"/>.</param>
+    /// <param name="webGPUScene">The retained scene to replay, kept alive by a deferred-render reference.</param>
+    private void RenderCorrective<TPixel>(
+        Configuration configuration,
+        WebGPUNativeSurface webGPUTarget,
+        Rectangle targetBounds,
+        TextureFormat textureFormat,
+        FeatureName requiredFeature,
+        WebGPUDrawingBackendScene webGPUScene)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        WebGPUSceneBumpSizes currentBumpSizes = webGPUScene.BumpSizes;
+        WebGPUSceneResourceArena? resourceArena = webGPUScene.RentResourceArena() ?? this.RentResourceArena();
+        WebGPUSceneSchedulingArena? schedulingArena = webGPUScene.RentSchedulingArena() ?? this.RentSchedulingArena();
+
+        try
+        {
+            this.RenderEncodedSceneWithGrowth<TPixel>(
+                configuration,
+                webGPUTarget,
+                targetBounds,
+                textureFormat,
+                requiredFeature,
+                webGPUScene,
+                deferOverflowCheck: false,
+                ref currentBumpSizes,
+                ref resourceArena,
+                ref schedulingArena);
+
+            webGPUScene.UpdateBumpSizes(currentBumpSizes);
+            this.bumpSizes = MaxBumpSizes(this.bumpSizes, currentBumpSizes);
+        }
+        catch (ObjectDisposedException)
+        {
+            // The target texture handles were released between the flush and the harvest;
+            // the content the correction would repaint no longer exists.
+        }
+        catch (InvalidOperationException)
+        {
+            // Handle acquisition or device validation failed for the retired target; skip.
+        }
+        finally
+        {
+            webGPUScene.ReturnArenas(resourceArena, schedulingArena, this);
+        }
     }
 
     /// <summary>
@@ -961,4 +1205,15 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
+
+    /// <summary>
+    /// One parked deferred readback and the corrective context for its flush.
+    /// </summary>
+    /// <param name="Status">The deferred scheduling-status readback.</param>
+    /// <param name="Scene">The rendered scene, held alive via a deferred-render reference; <see langword="null"/> for presentation flushes.</param>
+    /// <param name="CorrectiveRender">The corrective re-render invoked when the readback reports overflow; <see langword="null"/> for presentation flushes.</param>
+    private readonly record struct PendingSchedulingStatusEntry(
+        WebGPUPendingSchedulingStatus Status,
+        WebGPUDrawingBackendScene? Scene,
+        Action? CorrectiveRender);
 }

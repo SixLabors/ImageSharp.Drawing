@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -317,20 +318,29 @@ public sealed class DrawingTextCache
     internal readonly struct RunPathCacheEntry : IEquatable<RunPathCacheEntry>
     {
         /// <summary>
+        /// The reciprocal of the quantization step applied to <see cref="RelativeLocation"/>
+        /// for key comparison. The exact value is used when baking geometry; quantizing only
+        /// the comparison absorbs the float noise that absolute-position subtraction introduces,
+        /// so rigidly moved runs keep matching. Runs whose exact relative layouts differ by
+        /// less than half a step share the first occurrence's geometry.
+        /// </summary>
+        private const float RelativeLocationAccuracyMultiple = 8F;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="RunPathCacheEntry"/> struct.
         /// </summary>
         /// <param name="path">The local glyph path.</param>
-        /// <param name="renderLocation">The pixel-snapped render location.</param>
+        /// <param name="relativeLocation">The exact location relative to the run origin, including the fractional component.</param>
         /// <param name="glyphKey">The stable glyph cache key.</param>
         /// <param name="hasGlyphKey">A value indicating whether <paramref name="glyphKey"/> is valid.</param>
         public RunPathCacheEntry(
             IPath path,
-            Point renderLocation,
+            Vector2 relativeLocation,
             RichTextGlyphRenderer.CacheKey glyphKey,
             bool hasGlyphKey)
         {
             this.Path = path;
-            this.RenderLocation = renderLocation;
+            this.RelativeLocation = relativeLocation;
             this.GlyphKey = glyphKey;
             this.HasGlyphKey = hasGlyphKey;
         }
@@ -341,9 +351,12 @@ public sealed class DrawingTextCache
         public IPath Path { get; }
 
         /// <summary>
-        /// Gets the pixel-snapped render location.
+        /// Gets the exact location relative to the run origin, including the fractional
+        /// component. Run-relative locations make the cache key position independent: the same
+        /// run content drawn at a different absolute location, even a fractionally scrolled one,
+        /// produces the same key.
         /// </summary>
-        public Point RenderLocation { get; }
+        public Vector2 RelativeLocation { get; }
 
         /// <summary>
         /// Gets the stable glyph cache key.
@@ -388,17 +401,29 @@ public sealed class DrawingTextCache
             // within the same render.
             if (this.HasGlyphKey && other.HasGlyphKey)
             {
-                return this.GlyphKey.Equals(other.GlyphKey) && this.RenderLocation.Equals(other.RenderLocation);
+                return this.GlyphKey.Equals(other.GlyphKey)
+                    && QuantizeRelativeLocation(this.RelativeLocation) == QuantizeRelativeLocation(other.RelativeLocation);
             }
 
-            return ReferenceEquals(this.Path, other.Path) && this.RenderLocation.Equals(other.RenderLocation);
+            return ReferenceEquals(this.Path, other.Path)
+                && QuantizeRelativeLocation(this.RelativeLocation) == QuantizeRelativeLocation(other.RelativeLocation);
         }
 
         /// <inheritdoc/>
         public override int GetHashCode()
             => this.HasGlyphKey
-                ? HashCode.Combine(this.GlyphKey, this.RenderLocation)
-                : HashCode.Combine(this.Path, this.RenderLocation);
+                ? HashCode.Combine(this.GlyphKey, QuantizeRelativeLocation(this.RelativeLocation))
+                : HashCode.Combine(this.Path, QuantizeRelativeLocation(this.RelativeLocation));
+
+        /// <summary>
+        /// Quantizes a run-relative location to the key comparison grid.
+        /// </summary>
+        /// <param name="relativeLocation">The exact run-relative location.</param>
+        /// <returns>The location rounded to the comparison grid.</returns>
+        private static Vector2 QuantizeRelativeLocation(Vector2 relativeLocation)
+            => new(
+                MathF.Round(relativeLocation.X * RelativeLocationAccuracyMultiple) / RelativeLocationAccuracyMultiple,
+                MathF.Round(relativeLocation.Y * RelativeLocationAccuracyMultiple) / RelativeLocationAccuracyMultiple);
     }
 
     /// <summary>

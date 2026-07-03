@@ -20,6 +20,14 @@ public sealed class WebGPUDrawingBackendScene : DrawingBackendScene
     private WebGPUSceneResourceArena? resourceArena;
     private WebGPUSceneSchedulingArena? schedulingArena;
 
+    // Deferred-render references keep the encoded GPU payload alive past user disposal while
+    // the backend may still need it for a corrective re-render (a deferred overflow readback
+    // is outstanding). Teardown runs when disposal has been requested and the last reference
+    // releases; the tornDown guard makes the actual teardown single-shot under races.
+    private int deferredRenderReferences;
+    private int teardownRequested;
+    private int tornDown;
+
     // Volatile works on int, so the uint scratch capacities are stored bit-for-bit in
     // signed fields. The values are compared and restored as uint in the accessors.
     // Each counter is monotonic: concurrent renders may race to report usage, but the
@@ -93,6 +101,27 @@ public sealed class WebGPUDrawingBackendScene : DrawingBackendScene
     }
 
     /// <summary>
+    /// Adds a deferred-render reference that keeps this scene's encoded GPU payload alive past
+    /// user disposal, so a corrective re-render for an outstanding deferred overflow readback
+    /// can still replay it.
+    /// </summary>
+    internal void AddDeferredRenderReference()
+        => Interlocked.Increment(ref this.deferredRenderReferences);
+
+    /// <summary>
+    /// Releases a deferred-render reference. When disposal has already been requested and this
+    /// was the last reference, the actual teardown runs now.
+    /// </summary>
+    internal void ReleaseDeferredRenderReference()
+    {
+        if (Interlocked.Decrement(ref this.deferredRenderReferences) == 0
+            && Volatile.Read(ref this.teardownRequested) == 1)
+        {
+            this.TeardownCore();
+        }
+    }
+
+    /// <summary>
     /// Rents reusable scene resource buffers for one render, leaving the scene slot empty.
     /// </summary>
     /// <returns>The cached arena, or <see langword="null"/> when the slot is empty.</returns>
@@ -143,6 +172,14 @@ public sealed class WebGPUDrawingBackendScene : DrawingBackendScene
         {
             arenaOwner.ReturnArenas(displacedResourceArena, displacedSchedulingArena);
         }
+
+        // A return that races scene disposal would strand the arenas on a dead scene and
+        // starve the backend cache into recreating GPU buffers every flush; pull them back
+        // out and hand them to the backend instead.
+        if (Volatile.Read(ref this.teardownRequested) == 1)
+        {
+            this.ReleaseCachedArenas();
+        }
     }
 
     /// <summary>
@@ -178,18 +215,36 @@ public sealed class WebGPUDrawingBackendScene : DrawingBackendScene
     /// <inheritdoc />
     protected override void DisposeCore()
     {
-        if (!ReferenceEquals(this.EncodedScene, WebGPUEncodedScene.Empty))
-        {
-            this.EncodedScene.Dispose();
-        }
+        Volatile.Write(ref this.teardownRequested, 1);
 
-        // Disposal uses the same rent path as rendering so it cannot release an arena
-        // currently rented by another render. A scene should still not be disposed while
-        // user code intends to keep rendering it, but this prevents cached arena slots
-        // from being shared or double-released during ordinary teardown races.
+        // Cached arenas return to the backend immediately even when encoded-payload teardown
+        // is deferred: corrective re-renders rent fresh arenas, and keeping these parked on a
+        // disposed scene starves the backend cache into recreating GPU buffers every flush.
+        this.ReleaseCachedArenas();
+
+        // Encoded-payload teardown is deferred while the backend still holds deferred-render
+        // references for outstanding overflow readbacks; the last release runs it instead.
+        if (Volatile.Read(ref this.deferredRenderReferences) == 0)
+        {
+            this.TeardownCore();
+        }
+    }
+
+    /// <summary>
+    /// Returns any cached arenas to the backend cache, or disposes them when no backend has
+    /// been recorded. Uses the same rent path as rendering so it cannot release an arena
+    /// currently rented by another render, and is safe to call repeatedly.
+    /// </summary>
+    private void ReleaseCachedArenas()
+    {
         WebGPUDrawingBackend? arenaOwner = this.ArenaOwner;
         WebGPUSceneResourceArena? resourceArena = this.RentResourceArena();
         WebGPUSceneSchedulingArena? schedulingArena = this.RentSchedulingArena();
+
+        if (resourceArena is null && schedulingArena is null)
+        {
+            return;
+        }
 
         if (arenaOwner is not null)
         {
@@ -200,7 +255,27 @@ public sealed class WebGPUDrawingBackendScene : DrawingBackendScene
             WebGPUSceneSchedulingArena.Dispose(schedulingArena);
             WebGPUSceneResourceArena.Dispose(resourceArena);
         }
+    }
 
+    /// <summary>
+    /// Releases the encoded GPU payload exactly once, after both disposal has been requested
+    /// and no deferred-render references remain. Also sweeps arenas a corrective re-render
+    /// may have parked after disposal returned the original set.
+    /// </summary>
+    private void TeardownCore()
+    {
+        // Disposal request and reference release can race to this point; only one wins.
+        if (Interlocked.Exchange(ref this.tornDown, 1) == 1)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(this.EncodedScene, WebGPUEncodedScene.Empty))
+        {
+            this.EncodedScene.Dispose();
+        }
+
+        this.ReleaseCachedArenas();
         this.ArenaOwner = null;
     }
 }

@@ -32,6 +32,18 @@ public static class MatrixUtilities
     }
 
     /// <summary>
+    /// Returns a value indicating whether the matrix is affine in 2D: no perspective terms,
+    /// so every position is transformed by the same linear part and shapes are mapped
+    /// identically wherever they sit. Projective matrices fail this test because their
+    /// perspective divisor varies with the input position.
+    /// </summary>
+    /// <param name="matrix">The transformation matrix.</param>
+    /// <returns><see langword="true"/> when the matrix contains no perspective terms; otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsAffine(in Matrix4x4 matrix)
+        => matrix.M14 == 0F && matrix.M24 == 0F && matrix.M34 == 0F && matrix.M44 == 1F;
+
+    /// <summary>
     /// Returns a value indicating whether the matrix maps axis-aligned rectangles to axis-aligned rectangles.
     /// </summary>
     /// <remarks>

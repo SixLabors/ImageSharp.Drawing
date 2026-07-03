@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Silk.NET.Core.Contexts;
 using Silk.NET.WebGPU;
@@ -39,6 +40,12 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     // True while an acquired WebGPUSurfaceFrame has not yet been disposed. Guards TryAcquireFrame
     // against overlapping acquires; cleared by the frame's onDisposed callback.
     private bool frameInFlight;
+
+    // Work-done signal registered when a frame is presented. Waiting on it at the next acquire
+    // caps the CPU at one frame in flight: without a governor the CPU submits ahead until the
+    // driver throttles it inside queue submit at unpredictable mid-frame points, which paces
+    // worse than one deliberate wait at the frame boundary.
+    private FramePacingSignal? previousFrameWorkDone;
     private readonly FeatureName requiredFeature;
     private readonly Configuration configuration;
 
@@ -309,6 +316,11 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
             return false;
         }
 
+        // Frame pacing: block here until the previously presented frame's GPU work completes.
+        // This is the one deliberate CPU-GPU synchronization point per frame; every flush-side
+        // readback is deferred, so this wait alone bounds how far the CPU runs ahead.
+        this.WaitForPreviousFrameWorkDone();
+
         SurfaceTexture surfaceTexture = default;
         using (WebGPUHandle.HandleReference surfaceReference = this.SurfaceHandle.AcquireReference())
         {
@@ -375,7 +387,13 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
                 textureHandle,
                 textureViewHandle,
                 canvas,
-                onDisposed: () => this.frameInFlight = false);
+                onDisposed: () =>
+                {
+                    // The frame has just been submitted and presented; register the pacing
+                    // signal its successor will wait on, then allow the next acquire.
+                    this.RegisterFramePacingSignal();
+                    this.frameInFlight = false;
+                });
 
             // Mark in-flight only once the frame exists. Setting the guard before construction
             // would leave it stuck on a constructor throw, wedging every subsequent acquire.
@@ -404,6 +422,54 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     }
 
     /// <summary>
+    /// Waits (bounded) for the previously presented frame's GPU work to complete, then retires
+    /// the signal. No-op when no frame has been presented since the last wait.
+    /// </summary>
+    private void WaitForPreviousFrameWorkDone()
+    {
+        FramePacingSignal? signal = this.previousFrameWorkDone;
+        if (signal is null)
+        {
+            return;
+        }
+
+        this.previousFrameWorkDone = null;
+        using (WebGPUHandle.HandleReference deviceReference = this.DeviceHandle.AcquireReference())
+        {
+            _ = signal.Wait(WebGPURuntime.GetWgpuExtension(), (Device*)deviceReference.Handle);
+        }
+
+        signal.Dispose();
+    }
+
+    /// <summary>
+    /// Registers a queue work-done signal covering everything submitted for the frame that was
+    /// just presented. The next acquire waits on it. Failure to register (for example during
+    /// device loss) simply skips pacing for one frame.
+    /// </summary>
+    private void RegisterFramePacingSignal()
+    {
+        if (this.isDisposed || this.QueueHandle.IsInvalid)
+        {
+            return;
+        }
+
+        // A previous signal should already have been consumed at acquire; retire a leftover
+        // (an acquire that never happened) before installing the new one.
+        this.WaitForPreviousFrameWorkDone();
+
+        try
+        {
+            using WebGPUHandle.HandleReference queueReference = this.QueueHandle.AcquireReference();
+            this.previousFrameWorkDone = new FramePacingSignal(this.Api, (Queue*)queueReference.Handle);
+        }
+        catch (ObjectDisposedException)
+        {
+            // The queue was torn down between the check and the acquire; skip pacing.
+        }
+    }
+
+    /// <summary>
     /// Releases every owned handle in reverse acquisition order (device context, queue, device, adapter, surface, instance).
     /// Idempotent; subsequent calls are no-ops.
     /// </summary>
@@ -413,6 +479,10 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         {
             return;
         }
+
+        // Retire the pacing signal before the device goes away so its pinned callback thunk
+        // is never freed while the native side could still invoke it.
+        this.WaitForPreviousFrameWorkDone();
 
         this.deviceContext.Dispose();
         this.QueueHandle.Dispose();
@@ -668,6 +738,78 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         api.DeviceSetUncapturedErrorCallback(callbackDevice, UncapturedErrorCallbackRoot, null);
 
         return callbackDevice;
+    }
+
+    /// <summary>
+    /// A pinned queue work-done callback and its completion event for one presented frame.
+    /// The pinned thunk stays alive until the callback fires (or the bounded wait gives up),
+    /// mirroring the deferred readback's callback lifetime rules.
+    /// </summary>
+    private sealed class FramePacingSignal : IDisposable
+    {
+        /// <summary>
+        /// Set by the work-done callback once the frame's submissions have completed.
+        /// </summary>
+        private readonly ManualResetEventSlim workDone = new(false);
+
+        /// <summary>
+        /// The pinned work-done callback thunk; must stay alive until the callback fires.
+        /// </summary>
+        private readonly PfnQueueWorkDoneCallback callback;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="FramePacingSignal"/> class and registers
+        /// the work-done callback for everything submitted to the queue so far.
+        /// </summary>
+        /// <param name="api">The WebGPU API used to register the callback.</param>
+        /// <param name="queue">The queue whose submitted work the signal covers.</param>
+        public FramePacingSignal(WebGPU api, Queue* queue)
+        {
+            this.callback = PfnQueueWorkDoneCallback.From(this.OnWorkDone);
+            api.QueueOnSubmittedWorkDone(queue, this.callback, null);
+        }
+
+        /// <summary>
+        /// Waits (bounded) for the work-done callback, pumping the device when the native wgpu
+        /// extension requires explicit polling for callback delivery.
+        /// </summary>
+        /// <param name="extension">The optional native WGPU extension used to pump callbacks.</param>
+        /// <param name="device">The device that owns the queue.</param>
+        /// <returns><see langword="true"/> when the callback completed before the timeout; otherwise, <see langword="false"/>.</returns>
+        public bool Wait(Silk.NET.WebGPU.Extensions.WGPU.Wgpu? extension, Device* device)
+        {
+            if (extension is null)
+            {
+                return this.workDone.Wait(CallbackTimeoutMilliseconds);
+            }
+
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            while (!this.workDone.IsSet && stopwatch.ElapsedMilliseconds < CallbackTimeoutMilliseconds)
+            {
+                _ = extension.DevicePoll(device, true, (Silk.NET.WebGPU.Extensions.WGPU.WrappedSubmissionIndex*)null);
+            }
+
+            return this.workDone.IsSet;
+        }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            this.callback.Dispose();
+            this.workDone.Dispose();
+        }
+
+        /// <summary>
+        /// The queue work-done callback; any status counts as completion for pacing purposes.
+        /// </summary>
+        /// <param name="status">The completion status reported by the implementation.</param>
+        /// <param name="userData">Unused user data pointer.</param>
+        private void OnWorkDone(QueueWorkDoneStatus status, void* userData)
+        {
+            _ = status;
+            _ = userData;
+            this.workDone.Set();
+        }
     }
 
     /// <summary>

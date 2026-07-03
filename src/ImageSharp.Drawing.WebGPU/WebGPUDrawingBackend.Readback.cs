@@ -37,6 +37,11 @@ public sealed unsafe partial class WebGPUDrawingBackend
         Guard.NotNull(target, nameof(target));
         Guard.NotNull(destination.Buffer, nameof(destination));
 
+        // CPU reads observe content as final, so every deferred overflow readback must be
+        // resolved first: an overflowed offscreen flush is corrected by its parked re-render
+        // before the copy below is recorded, and queue ordering makes the copy see the fix.
+        this.HarvestPendingSchedulingStatuses(scene: null, drainAll: true);
+
         // Readback is only available for native WebGPU targets with valid interop handles.
         if (!target.TryGetNativeSurface(out NativeSurface? nativeSurface) || nativeSurface is not WebGPUNativeSurface nativeTarget)
         {

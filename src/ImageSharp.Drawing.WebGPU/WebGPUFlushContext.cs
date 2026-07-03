@@ -199,10 +199,32 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         // The native-frame overload is used after WebGPU target selection has already succeeded,
         // so this casts once at the backend boundary and keeps the concrete target data together.
         _ = frame.TryGetNativeSurface(out NativeSurface? nativeSurface);
-        WebGPUNativeSurface nativeTarget = (WebGPUNativeSurface)nativeSurface!;
+        return Create((WebGPUNativeSurface)nativeSurface!, frame.Bounds, expectedTextureFormat, requiredFeature, memoryAllocator);
+    }
+
+    /// <summary>
+    /// Creates a flush context directly over a native WebGPU surface and target bounds. Used by
+    /// corrective re-renders, which outlive the per-flush canvas frame and therefore cannot go
+    /// through the frame overload.
+    /// </summary>
+    /// <param name="nativeTarget">The native surface holding the target texture handles.</param>
+    /// <param name="bounds">The target bounds for the flush.</param>
+    /// <param name="expectedTextureFormat">The expected GPU texture format.</param>
+    /// <param name="requiredFeature">
+    /// A device feature required by the pixel type for storage binding, or
+    /// <see cref="FeatureName.Undefined"/> when no special feature is needed.
+    /// </param>
+    /// <param name="memoryAllocator">The memory allocator for staging buffers.</param>
+    /// <returns>The flush context.</returns>
+    public static WebGPUFlushContext Create(
+        WebGPUNativeSurface nativeTarget,
+        Rectangle bounds,
+        TextureFormat expectedTextureFormat,
+        FeatureName requiredFeature,
+        MemoryAllocator memoryAllocator)
+    {
         WebGPU api = WebGPURuntime.GetApi();
         TextureFormat textureFormat = WebGPUTextureFormatMapper.ToNative(nativeTarget.TargetFormat);
-        Rectangle bounds = frame.Bounds;
         Rectangle nativeBounds = new(0, 0, nativeTarget.Width, nativeTarget.Height);
         Point targetTextureOffset = nativeTarget.TextureCoordinateOffset;
         Rectangle textureBounds = new(

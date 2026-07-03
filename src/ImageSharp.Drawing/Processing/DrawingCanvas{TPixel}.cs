@@ -1459,7 +1459,20 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                         return operations;
                     }
 
-                    fillEntries[fillCount++] = new DrawingTextCache.RunPathCacheEntry(operation.Path, operation.RenderLocation, operation.GlyphKey, operation.HasGlyphKey);
+                    // Entries are keyed relative to the run origin (the first operation's exact
+                    // location including its fraction) so the cached combined path is position
+                    // independent: the same run content drawn at a different location, even a
+                    // fractionally scrolled one, reuses the cached geometry. The origin's snapped
+                    // location and fraction stay on the combined operation.
+                    Vector2 fillRelativeLocation = new Vector2(
+                        operation.RenderLocation.X - fillOperation.RenderLocation.X,
+                        operation.RenderLocation.Y - fillOperation.RenderLocation.Y)
+                        + operation.SubPixelOffset - fillOperation.SubPixelOffset;
+                    fillEntries[fillCount++] = new DrawingTextCache.RunPathCacheEntry(
+                        operation.Path,
+                        fillRelativeLocation,
+                        operation.GlyphKey,
+                        operation.HasGlyphKey);
                     break;
 
                 case DrawingOperationKind.Draw:
@@ -1475,7 +1488,15 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                         return operations;
                     }
 
-                    drawEntries[drawCount++] = new DrawingTextCache.RunPathCacheEntry(operation.Path, operation.RenderLocation, operation.GlyphKey, operation.HasGlyphKey);
+                    Vector2 drawRelativeLocation = new Vector2(
+                        operation.RenderLocation.X - drawOperation.RenderLocation.X,
+                        operation.RenderLocation.Y - drawOperation.RenderLocation.Y)
+                        + operation.SubPixelOffset - drawOperation.SubPixelOffset;
+                    drawEntries[drawCount++] = new DrawingTextCache.RunPathCacheEntry(
+                        operation.Path,
+                        drawRelativeLocation,
+                        operation.GlyphKey,
+                        operation.HasGlyphKey);
                     break;
             }
         }
@@ -1483,17 +1504,19 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         int capacity = (fillEntries is null ? 0 : 1) + (drawEntries is null ? 0 : 1);
         List<DrawingOperation> batched = new(capacity);
 
+        // The combined path is built in run-local space; the operations keep their original
+        // (first-glyph) RenderLocation and SubPixelOffset so command creation positions the
+        // shared geometry via the destination offset plus the sub-pixel transform, without a
+        // per-position copy of the run geometry.
         if (fillEntries is not null)
         {
             fillOperation.Path = this.GetPositionedGlyphRunPath(fillEntries, fillCount);
-            fillOperation.RenderLocation = default;
             batched.Add(fillOperation);
         }
 
         if (drawEntries is not null)
         {
             drawOperation.Path = this.GetPositionedGlyphRunPath(drawEntries, drawCount);
-            drawOperation.RenderLocation = default;
             batched.Add(drawOperation);
         }
 
@@ -1516,11 +1539,13 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             && left.PixelColorBlendingMode == right.PixelColorBlendingMode;
 
     /// <summary>
-    /// Gets a stable positioned path for a uniform glyph-run operation group.
+    /// Gets a stable combined path for a uniform glyph-run operation group. Entries carry
+    /// run-relative locations, so the returned path is in run-local space and one cache
+    /// entry serves the same run content at every draw position.
     /// </summary>
-    /// <param name="entries">The positioned glyph path entries.</param>
+    /// <param name="entries">The run-relative glyph path entries.</param>
     /// <param name="count">The number of entries to include in the path.</param>
-    /// <returns>The positioned glyph-run path.</returns>
+    /// <returns>The combined glyph-run path in run-local space.</returns>
     private IPath GetPositionedGlyphRunPath(DrawingTextCache.RunPathCacheEntry[] entries, int count)
     {
         DrawingTextCache.RunPathCacheKey key = new(entries, count);
@@ -1550,16 +1575,17 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     }
 
     /// <summary>
-    /// Gets a glyph path in canvas-local coordinates.
+    /// Gets a glyph path translated to the entry's exact run-relative location, including the
+    /// fractional component so relative sub-pixel spacing inside the run is preserved.
     /// </summary>
-    /// <param name="entry">The positioned glyph path entry.</param>
-    /// <returns>The positioned path.</returns>
+    /// <param name="entry">The run-relative glyph path entry.</param>
+    /// <returns>The translated path.</returns>
     private static IPath GetPositionedGlyphPath(DrawingTextCache.RunPathCacheEntry entry)
     {
-        Point renderLocation = entry.RenderLocation;
-        return renderLocation.X == 0 && renderLocation.Y == 0
+        Vector2 relativeLocation = entry.RelativeLocation;
+        return relativeLocation == Vector2.Zero
             ? entry.Path
-            : entry.Path.Translate(renderLocation.X, renderLocation.Y);
+            : entry.Path.Translate(relativeLocation.X, relativeLocation.Y);
     }
 
     /// <summary>
@@ -1881,9 +1907,20 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             state.DestinationOffset.X + operation.RenderLocation.X,
             state.DestinationOffset.Y + operation.RenderLocation.Y);
 
+        // The whole-pixel part of the glyph position rides the integer destination offset;
+        // the fractional remainder becomes the command transform. A translation-only
+        // transform has unit scale, so the backends reuse the scale-keyed flattened
+        // geometry and apply the fraction as a residual, rendering the glyph at its exact
+        // sub-pixel position with one cached path per glyph.
+        Vector2 subPixelOffset = operation.SubPixelOffset;
+        Matrix4x4 glyphTransform = subPixelOffset == Vector2.Zero
+            ? Matrix4x4.Identity
+            : Matrix4x4.CreateTranslation(subPixelOffset.X, subPixelOffset.Y, 0F);
+
         Pen? pen = operation.Kind == DrawingOperationKind.Draw ? operation.Pen : null;
 
         RectangleF bounds = operation.Path.Bounds;
+        bounds.Offset(subPixelOffset.X, subPixelOffset.Y);
         if (pen is not null)
         {
             float halfWidth = pen.StrokeWidth * 0.5F;
@@ -1910,14 +1947,15 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             rasterizationMode,
             graphicsOptions.AntialiasThreshold);
 
-        // Glyph paths arrive pre-laid-out, so the queued command must report identity transform and the
-        // GraphicsOptions/IntersectionRule produced above. Reuse the caller's instance only when graphics
+        // Glyph paths arrive pre-laid-out, so the queued command reports only the sub-pixel
+        // translation (identity when the fraction is zero) and the GraphicsOptions/
+        // IntersectionRule produced above. Reuse the caller's instance only when graphics
         // options, the forced non-zero rule and transform all already match.
         DrawingOptions effectiveOptions = ReferenceEquals(graphicsOptions, drawingOptions.GraphicsOptions)
             && drawingOptions.IntersectionRule == intersectionRule
-            && drawingOptions.Transform == Matrix4x4.Identity
+            && drawingOptions.Transform == glyphTransform
             ? drawingOptions
-            : new DrawingOptions(graphicsOptions, intersectionRule, Matrix4x4.Identity);
+            : new DrawingOptions(graphicsOptions, intersectionRule, glyphTransform);
 
         // Clipping is resolved from the ordered begin/end-clip stream, which the canvas anchors
         // at the state's destination offset. Glyph render locations only move the glyph geometry;

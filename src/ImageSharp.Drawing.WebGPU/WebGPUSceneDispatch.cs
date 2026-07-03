@@ -164,7 +164,8 @@ internal static class WebGPUSceneDispatch
     /// </remarks>
     /// <typeparam name="TPixel">The pixel format of the flush target.</typeparam>
     /// <param name="configuration">The library configuration providing the memory allocator.</param>
-    /// <param name="target">The native canvas frame that receives the rendered scene.</param>
+    /// <param name="target">The native surface holding the target texture handles.</param>
+    /// <param name="targetBounds">The target bounds for the flush.</param>
     /// <param name="encodedScene">The retained encoded scene to stage.</param>
     /// <param name="textureFormat">The texture format of the flush target.</param>
     /// <param name="requiredFeature">The device feature required by the target format, if any.</param>
@@ -173,7 +174,8 @@ internal static class WebGPUSceneDispatch
     /// <returns>The staged scene holding the flush context, config, and GPU resources.</returns>
     public static WebGPUStagedScene CreateStagedScene<TPixel>(
         Configuration configuration,
-        NativeCanvasFrame<TPixel> target,
+        WebGPUNativeSurface target,
+        Rectangle targetBounds,
         WebGPUEncodedScene encodedScene,
         TextureFormat textureFormat,
         FeatureName requiredFeature,
@@ -183,6 +185,7 @@ internal static class WebGPUSceneDispatch
     {
         WebGPUFlushContext flushContext = WebGPUFlushContext.Create(
             target,
+            targetBounds,
             textureFormat,
             requiredFeature,
             configuration.MemoryAllocator);
@@ -1214,18 +1217,28 @@ internal static class WebGPUSceneDispatch
     /// <param name="stagedScene">The staged scene to render.</param>
     /// <param name="schedulingArena">The reusable scheduling arena slot for this render.</param>
     /// <param name="initialChunkTileHeightHint">The advisory chunk height to try first when this scene requires chunking.</param>
+    /// <param name="deferOverflowCheck">
+    /// Whether to defer the scratch-overflow readback instead of blocking on the GPU. Only the
+    /// single-pass staged path honors deferral; chunked scenes always check synchronously.
+    /// </param>
     /// <param name="requiresGrowth">Receives whether the caller should retry with larger scratch capacities.</param>
     /// <param name="grownBumpSizes">Receives the scratch capacities reported by the render attempt.</param>
     /// <param name="successfulChunkTileHeight">Receives the largest chunk height that rendered successfully.</param>
+    /// <param name="pendingStatus">
+    /// Receives the deferred scheduling-status readback when the render deferred its overflow
+    /// check; the caller must resolve it before its next flush of the same scene.
+    /// </param>
     /// <param name="error">Receives the failure reason when the staged scene cannot be rendered.</param>
     /// <returns><see langword="true"/> when the staged scene rendered successfully; otherwise, <see langword="false"/>.</returns>
     public static unsafe bool TryRenderStagedScene(
         ref WebGPUStagedScene stagedScene,
         ref WebGPUSceneSchedulingArena? schedulingArena,
         uint initialChunkTileHeightHint,
+        bool deferOverflowCheck,
         out bool requiresGrowth,
         out WebGPUSceneBumpSizes grownBumpSizes,
         out uint successfulChunkTileHeight,
+        out WebGPUPendingSchedulingStatus? pendingStatus,
         out string? error)
     {
         WebGPUFlushContext flushContext = stagedScene.FlushContext;
@@ -1243,9 +1256,11 @@ internal static class WebGPUSceneDispatch
             target,
             ref schedulingArena,
             initialChunkTileHeightHint,
+            deferOverflowCheck,
             out requiresGrowth,
             out grownBumpSizes,
             out successfulChunkTileHeight,
+            out pendingStatus,
             out error);
     }
 
@@ -1256,9 +1271,17 @@ internal static class WebGPUSceneDispatch
     /// <param name="target">The render-time target receiving the staged scene output.</param>
     /// <param name="schedulingArena">The reusable scheduling arena slot for this render.</param>
     /// <param name="initialChunkTileHeightHint">The advisory chunk height to try first when this scene requires chunking.</param>
+    /// <param name="deferOverflowCheck">
+    /// Whether to defer the scratch-overflow readback instead of blocking on the GPU. Only the
+    /// single-pass staged path honors deferral; chunked scenes always check synchronously.
+    /// </param>
     /// <param name="requiresGrowth">Receives whether the caller should retry with larger scratch capacities.</param>
     /// <param name="grownBumpSizes">Receives the scratch capacities reported by the render attempt.</param>
     /// <param name="successfulChunkTileHeight">Receives the largest chunk height that rendered successfully.</param>
+    /// <param name="pendingStatus">
+    /// Receives the deferred scheduling-status readback when the render deferred its overflow
+    /// check; the caller must resolve it before its next flush of the same scene.
+    /// </param>
     /// <param name="error">Receives the failure reason when the staged scene cannot be rendered.</param>
     /// <returns><see langword="true"/> when the staged scene rendered successfully; otherwise, <see langword="false"/>.</returns>
     public static unsafe bool TryRenderStagedScene(
@@ -1266,14 +1289,17 @@ internal static class WebGPUSceneDispatch
         WebGPUSceneTarget target,
         ref WebGPUSceneSchedulingArena? schedulingArena,
         uint initialChunkTileHeightHint,
+        bool deferOverflowCheck,
         out bool requiresGrowth,
         out WebGPUSceneBumpSizes grownBumpSizes,
         out uint successfulChunkTileHeight,
+        out WebGPUPendingSchedulingStatus? pendingStatus,
         out string? error)
     {
         requiresGrowth = false;
         grownBumpSizes = stagedScene.Config.BumpSizes;
         successfulChunkTileHeight = 0;
+        pendingStatus = null;
         error = null;
 
         WebGPUEncodedScene encodedScene = stagedScene.EncodedScene;
@@ -1335,6 +1361,25 @@ internal static class WebGPUSceneDispatch
                 out error))
         {
             return false;
+        }
+
+        if (deferOverflowCheck)
+        {
+            // Deferred (presentation) path: the frame is submitted whole - scheduling, fine,
+            // status copy, and target copy in one submission - and the status map is started
+            // without waiting for the GPU. The caller resolves the pending status before its
+            // next flush; a rare overflowed frame presents once with incomplete coverage
+            // (the never-cancel protocol keeps under-provisioned stages well-defined) and the
+            // grown capacities apply from the following frame.
+            return TryDeferSchedulingStatus(
+                ref stagedScene,
+                target,
+                scheduling.BumpBuffer,
+                outputTexture,
+                targetWidth,
+                targetHeight,
+                out pendingStatus,
+                out error);
         }
 
         // Single submit: scheduling + fine + readback all in one command encoder.
@@ -2633,6 +2678,126 @@ internal static class WebGPUSceneDispatch
             (nuint)sizeof(GpuSceneBumpAllocators));
         error = null;
         return true;
+    }
+
+    /// <summary>
+    /// Completes a presentation flush without waiting for the GPU: records the scheduling-status
+    /// copy into a dedicated map-readable buffer, records the final target copy into the same
+    /// command encoder, submits everything as one submission, and starts the asynchronous status
+    /// map. The returned pending status owns the buffer and is resolved by the caller before its
+    /// next flush of the same scene.
+    /// </summary>
+    /// <param name="stagedScene">The staged scene whose flush context records the copies.</param>
+    /// <param name="target">The render-time target receiving the composition result.</param>
+    /// <param name="bumpBuffer">The scheduling bump allocator buffer to copy from.</param>
+    /// <param name="outputTexture">The composition texture holding the rendered output.</param>
+    /// <param name="targetWidth">The width of the copied region in pixels.</param>
+    /// <param name="targetHeight">The height of the copied region in pixels.</param>
+    /// <param name="pendingStatus">Receives the deferred scheduling-status readback on success.</param>
+    /// <param name="error">Receives the failure reason when the deferral cannot be recorded or submitted.</param>
+    /// <returns><see langword="true"/> when the frame was submitted and the map started; otherwise, <see langword="false"/>.</returns>
+    private static unsafe bool TryDeferSchedulingStatus(
+        ref WebGPUStagedScene stagedScene,
+        WebGPUSceneTarget target,
+        WgpuBuffer* bumpBuffer,
+        Texture* outputTexture,
+        int targetWidth,
+        int targetHeight,
+        out WebGPUPendingSchedulingStatus? pendingStatus,
+        out string? error)
+    {
+        pendingStatus = null;
+        WebGPUFlushContext flushContext = stagedScene.FlushContext;
+
+        // The pending map outlives this flush, so it gets its own tiny buffer instead of the
+        // pooled arena's readback buffer: the arena returns to its pool when the flush ends and
+        // must never be handed out with a map still pending. The buffer itself comes from the
+        // device-scoped pool because one is needed per flush and creation is a driver call.
+        WgpuBuffer* readbackBuffer = flushContext.DeviceState.RentStatusReadbackBuffer((nuint)sizeof(GpuSceneBumpAllocators));
+        if (readbackBuffer is null)
+        {
+            error = "Failed to create the deferred scheduling-status readback buffer.";
+            return false;
+        }
+
+        if (!TryEnqueueSchedulingStatusReadback(flushContext, bumpBuffer, readbackBuffer, 0, out error))
+        {
+            // The map was never started, so the buffer is clean and can be recycled.
+            flushContext.DeviceState.ReturnStatusReadbackBuffer(readbackBuffer);
+            return false;
+        }
+
+        // The target copy rides the same submission; WebGPU queue ordering guarantees the fine
+        // output is complete before the copy executes, no CPU-side wait required.
+        CopyToTarget(ref stagedScene, target, outputTexture, targetWidth, targetHeight);
+
+        if (!WebGPUDrawingBackend.TrySubmit(flushContext))
+        {
+            // The submit failed after the copy into the buffer was recorded but never executed;
+            // the map was not started, so recycling stays safe.
+            flushContext.DeviceState.ReturnStatusReadbackBuffer(readbackBuffer);
+            error = "Failed to submit the deferred staged-scene frame.";
+            return false;
+        }
+
+        pendingStatus = new WebGPUPendingSchedulingStatus(
+            flushContext.Api,
+            flushContext.WgpuExtension,
+            flushContext.DeviceHandle,
+            flushContext.DeviceState,
+            readbackBuffer,
+            stagedScene.Config.BumpSizes);
+        return true;
+    }
+
+    /// <summary>
+    /// Resolves a deferred scheduling-status readback from an earlier presentation flush and
+    /// folds the observed GPU demand into scratch capacities for subsequent frames, mirroring
+    /// both the overflow-growth and the known-good-usage merges of the synchronous path.
+    /// </summary>
+    /// <param name="pendingStatus">The deferred readback to resolve; always disposed by this call.</param>
+    /// <param name="grownBumpSizes">
+    /// Receives the capacities subsequent frames should render with: grown when the deferred
+    /// frame overflowed, otherwise the frame's sizes merged with its actual usage. Falls back to
+    /// the submitted sizes when the readback cannot be resolved.
+    /// </param>
+    /// <returns><see langword="true"/> when the deferred frame overflowed and was rendered with incomplete coverage; otherwise, <see langword="false"/>.</returns>
+    public static bool ResolveDeferredSchedulingStatus(
+        WebGPUPendingSchedulingStatus pendingStatus,
+        out WebGPUSceneBumpSizes grownBumpSizes)
+    {
+        WebGPUSceneBumpSizes submittedSizes = pendingStatus.SubmittedBumpSizes;
+        try
+        {
+            if (!pendingStatus.TryResolve(out GpuSceneBumpAllocators bumpAllocators))
+            {
+                grownBumpSizes = submittedSizes;
+                return false;
+            }
+
+            if (RequiresScratchReallocation(in bumpAllocators, submittedSizes))
+            {
+                grownBumpSizes = GrowBumpSizes(submittedSizes, in bumpAllocators);
+                return true;
+            }
+
+            // No overflow: keep the larger of the submitted capacity and the actual usage so
+            // later renders start from known-good sizes, matching the synchronous success path.
+            grownBumpSizes = new WebGPUSceneBumpSizes(
+                Math.Max(bumpAllocators.Lines, submittedSizes.Lines),
+                Math.Max(bumpAllocators.Binning, submittedSizes.Binning),
+                Math.Max(bumpAllocators.PathRows, 1U),
+                Math.Max(bumpAllocators.Tile, 1U),
+                Math.Max(bumpAllocators.SegCounts, submittedSizes.SegCounts),
+                Math.Max(bumpAllocators.Segments, submittedSizes.Segments),
+                Math.Max(bumpAllocators.BlendSpill, submittedSizes.BlendSpill),
+                Math.Max(bumpAllocators.Ptcl, submittedSizes.Ptcl));
+            return false;
+        }
+        finally
+        {
+            pendingStatus.Dispose();
+        }
     }
 
     /// <summary>

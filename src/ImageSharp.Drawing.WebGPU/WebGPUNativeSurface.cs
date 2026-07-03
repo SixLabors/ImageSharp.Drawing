@@ -25,6 +25,7 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     /// <param name="width">The full backing texture width in pixels.</param>
     /// <param name="height">The full backing texture height in pixels.</param>
     /// <param name="textureCoordinateOffset">The offset added when converting canvas-local coordinates to absolute texture coordinates.</param>
+    /// <param name="isPresentationSurface">Whether the target texture is presented to screen after the flush that renders it.</param>
     public WebGPUNativeSurface(
         WebGPUDeviceHandle deviceHandle,
         WebGPUQueueHandle queueHandle,
@@ -33,7 +34,8 @@ internal sealed class WebGPUNativeSurface : NativeSurface
         WebGPUTextureFormat targetFormat,
         int width,
         int height,
-        Point textureCoordinateOffset = default)
+        Point textureCoordinateOffset = default,
+        bool isPresentationSurface = false)
     {
         Guard.NotNull(deviceHandle, nameof(deviceHandle));
         Guard.NotNull(queueHandle, nameof(queueHandle));
@@ -48,6 +50,7 @@ internal sealed class WebGPUNativeSurface : NativeSurface
         this.Width = width;
         this.Height = height;
         this.TextureCoordinateOffset = textureCoordinateOffset;
+        this.IsPresentationSurface = isPresentationSurface;
     }
 
     /// <summary>
@@ -94,6 +97,16 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     /// rather than starting at its origin.
     /// </summary>
     public Point TextureCoordinateOffset { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the target texture is presented to screen after the flush
+    /// that renders it. Presentation targets are re-rendered every frame, so the backend may defer
+    /// the scratch-overflow check for the flush instead of blocking on the GPU: a rare overflowed
+    /// frame presents once with incomplete coverage and the next frame renders with grown buffers.
+    /// Non-presentation targets (offscreen render targets, image readback) keep the synchronous
+    /// check so their output is always complete when the flush returns.
+    /// </summary>
+    public bool IsPresentationSurface { get; }
 
     /// <summary>
     /// Allocates a WebGPU render target and creates a native surface over the owned texture handles.
@@ -229,6 +242,7 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     /// <param name="width">The full backing texture width in pixels.</param>
     /// <param name="height">The full backing texture height in pixels.</param>
     /// <param name="textureCoordinateOffset">The offset added when converting canvas-local coordinates to absolute texture coordinates.</param>
+    /// <param name="isPresentationSurface">Whether the target texture is presented to screen after the flush that renders it.</param>
     /// <returns>The native surface wrapping the supplied handles.</returns>
     internal static WebGPUNativeSurface Create(
         WebGPUDeviceHandle deviceHandle,
@@ -238,7 +252,8 @@ internal sealed class WebGPUNativeSurface : NativeSurface
         WebGPUTextureFormat targetFormat,
         int width,
         int height,
-        Point textureCoordinateOffset = default)
+        Point textureCoordinateOffset = default,
+        bool isPresentationSurface = false)
     {
         Guard.NotNull(deviceHandle, nameof(deviceHandle));
         Guard.NotNull(queueHandle, nameof(queueHandle));
@@ -256,6 +271,7 @@ internal sealed class WebGPUNativeSurface : NativeSurface
             targetFormat,
             width,
             height,
-            textureCoordinateOffset);
+            textureCoordinateOffset,
+            isPresentationSurface);
     }
 }

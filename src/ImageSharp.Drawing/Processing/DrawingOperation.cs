@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -42,6 +43,15 @@ internal struct DrawingOperation
     /// Gets or sets the pixel-clamped target location at which <see cref="Path"/> is rendered.
     /// </summary>
     public Point RenderLocation { get; set; }
+
+    /// <summary>
+    /// Gets or sets the fractional-pixel remainder of the target location, in the range [0, 1).
+    /// Cached glyph paths are anchored at their exact outline origin so one cache entry serves
+    /// every position; the backends apply this remainder as a residual translation, which reuses
+    /// the scale-keyed flattened geometry while rendering the glyph at its exact sub-pixel
+    /// position. Zero for uncached operations whose paths bake their own fraction.
+    /// </summary>
+    public Vector2 SubPixelOffset { get; set; }
 
     /// <summary>
     /// Gets or sets the cache key identifying the glyph path in the text cache.

@@ -265,7 +265,10 @@ internal sealed class WebGPUDeviceContext : IDisposable
     }
 
     /// <summary>
-    /// Creates the wrapped native surface over the supplied texture handles.
+    /// Creates the wrapped native surface over the supplied texture handles. Every canvas created
+    /// through this context targets a texture that its host presents after the canvas flush
+    /// (a surface-frame swapchain texture or an externally-owned presented texture), so the
+    /// surface is marked as a presentation target.
     /// </summary>
     /// <param name="textureHandle">The wrapped WebGPU texture handle.</param>
     /// <param name="textureViewHandle">The wrapped WebGPU texture-view handle.</param>
@@ -291,7 +294,8 @@ internal sealed class WebGPUDeviceContext : IDisposable
             textureViewHandle,
             format,
             width,
-            height);
+            height,
+            isPresentationSurface: true);
     }
 
     /// <summary>

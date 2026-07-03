@@ -86,6 +86,25 @@ internal static unsafe partial class WebGPURuntime
         private readonly ConcurrentDictionary<string, CompositeComputePipelineInfrastructure> compositeComputePipelines = new(StringComparer.Ordinal);
 
         /// <summary>
+        /// Pool of small map-readable status buffers reused by deferred overflow readbacks.
+        /// One tiny buffer is needed per flush; creating it fresh each time is a measurable
+        /// per-frame driver cost, so retired buffers are recycled here. All pooled buffers
+        /// share the fixed scheduling-status size, so rent and return need no size checks.
+        /// </summary>
+        private readonly Stack<nint> statusReadbackBuffers = new();
+
+        /// <summary>
+        /// Guards <see cref="statusReadbackBuffers"/>; flushes on different threads can rent
+        /// and return concurrently.
+        /// </summary>
+        private readonly object statusReadbackSync = new();
+
+        /// <summary>
+        /// Upper bound on pooled status readback buffers; returns beyond it release instead.
+        /// </summary>
+        private const int MaxPooledStatusReadbackBuffers = 16;
+
+        /// <summary>
         /// Snapshot of the device features taken at construction time.
         /// </summary>
         private readonly HashSet<FeatureName> deviceFeatures;
@@ -173,6 +192,56 @@ internal static unsafe partial class WebGPURuntime
         /// <returns><see langword="true"/> when the device has the feature; otherwise <see langword="false"/>.</returns>
         public bool HasFeature(FeatureName feature)
             => this.deviceFeatures.Contains(feature);
+
+        /// <summary>
+        /// Rents a pooled map-readable status buffer, or creates one when the pool is empty.
+        /// Every buffer rented through this method must use the same fixed byte length.
+        /// </summary>
+        /// <param name="byteLength">The fixed scheduling-status byte length.</param>
+        /// <returns>The rented buffer, or <see langword="null"/> when creation failed.</returns>
+        public Silk.NET.WebGPU.Buffer* RentStatusReadbackBuffer(nuint byteLength)
+        {
+            lock (this.statusReadbackSync)
+            {
+                if (this.statusReadbackBuffers.Count > 0)
+                {
+                    return (Silk.NET.WebGPU.Buffer*)this.statusReadbackBuffers.Pop();
+                }
+            }
+
+            BufferDescriptor descriptor = new()
+            {
+                Usage = BufferUsage.CopyDst | BufferUsage.MapRead,
+                Size = byteLength,
+                MappedAtCreation = false
+            };
+
+            return this.Api.DeviceCreateBuffer(this.Device, in descriptor);
+        }
+
+        /// <summary>
+        /// Returns a status readback buffer to the pool. The buffer must be unmapped with no
+        /// map pending; a buffer whose map state is unknown must be released, not returned.
+        /// </summary>
+        /// <param name="buffer">The buffer to recycle.</param>
+        public void ReturnStatusReadbackBuffer(Silk.NET.WebGPU.Buffer* buffer)
+        {
+            if (buffer is null)
+            {
+                return;
+            }
+
+            lock (this.statusReadbackSync)
+            {
+                if (!this.disposed && this.statusReadbackBuffers.Count < MaxPooledStatusReadbackBuffers)
+                {
+                    this.statusReadbackBuffers.Push((nint)buffer);
+                    return;
+                }
+            }
+
+            this.Api.BufferRelease(buffer);
+        }
 
         /// <summary>
         /// Forwards uncaptured native WebGPU errors through the public environment callback.
@@ -452,6 +521,14 @@ internal static unsafe partial class WebGPURuntime
             }
 
             this.compositeComputePipelines.Clear();
+
+            lock (this.statusReadbackSync)
+            {
+                while (this.statusReadbackBuffers.Count > 0)
+                {
+                    this.Api.BufferRelease((Silk.NET.WebGPU.Buffer*)this.statusReadbackBuffers.Pop());
+                }
+            }
 
             // Clear the native callback slot before freeing Silk's delegate thunk; otherwise the
             // device could still invoke a callback whose managed thunk has been reclaimed.
