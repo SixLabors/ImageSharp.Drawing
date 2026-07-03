@@ -930,11 +930,35 @@ public sealed partial class DefaultDrawingBackend
     private sealed class WorkerState<TPixel> : IDisposable
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        // Worker states hold only allocator-owned buffers (brush workspace, raster scratch,
+        // clip coverage), never scene references, so instances can be pooled across flushes
+        // exactly like the WebGPU backend's scheduling arenas. One Parallel.For's worth of
+        // states covers steady-state rendering; anything beyond the cap is released.
+        //
+        // The pool trims itself on Gen2 collections, mirroring the memory allocator's own
+        // trimming: when a Gen2 GC arrives and nothing rented since the previous one, the
+        // renderer is idle and every pooled state is disposed, returning its buffers to the
+        // allocator. Active rendering keeps the pool untouched. This bounds idle retention
+        // without an explicit lifetime or shutdown hook.
+        private static readonly Stack<WorkerState<TPixel>> Pool = new();
+        private static readonly object PoolSync = new();
+        private static readonly int MaxPooledStates = Environment.ProcessorCount;
+
+        // 1 when Rent ran since the last Gen2 trim check; the sentinel resets it each Gen2.
+        private static int rentedSinceLastGen2;
+
         private readonly MemoryAllocator allocator;
         private DefaultRasterizer.WorkerScratch? scratch;
         private DefaultRasterizer.WorkerScratch? pathClipScratch;
         private IMemoryOwner<float>? pathClipCoverageOwner;
         private int pathClipCoverageLength;
+
+        /// <summary>
+        /// Initializes static members of the <see cref="WorkerState{TPixel}"/> class,
+        /// arming the Gen2 trim sentinel. The instance is intentionally dropped: it lives
+        /// on the finalizer queue and resurrects itself after every collection.
+        /// </summary>
+        static WorkerState() => _ = new Gen2TrimSentinel();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WorkerState{TPixel}"/> class.
@@ -946,8 +970,15 @@ public sealed partial class DefaultDrawingBackend
             int destinationWidth)
         {
             this.allocator = allocator;
+            this.DestinationWidth = destinationWidth;
             this.BrushWorkspace = new BrushWorkspace<TPixel>(allocator, destinationWidth);
         }
+
+        /// <summary>
+        /// Gets the destination width the brush workspace was sized for. A wider state can
+        /// service any narrower target, so pooling reuses states whose width is sufficient.
+        /// </summary>
+        public int DestinationWidth { get; }
 
         /// <summary>
         /// Gets the reusable brush workspace for the worker.
@@ -963,6 +994,89 @@ public sealed partial class DefaultDrawingBackend
             {
                 IMemoryOwner<float>? owner = this.pathClipCoverageOwner;
                 return owner is null ? [] : owner.Memory.Span[..this.pathClipCoverageLength];
+            }
+        }
+
+        /// <summary>
+        /// Rents a pooled worker state sized for at least the requested width, or creates one.
+        /// A popped state with a different allocator or an insufficient width is released and
+        /// replaced, so the pool converges to full-width states for the active allocator.
+        /// </summary>
+        /// <param name="allocator">The memory allocator that must own the state's buffers.</param>
+        /// <param name="destinationWidth">The minimum destination width the state must service.</param>
+        /// <returns>A worker state ready for one worker's row execution.</returns>
+        public static WorkerState<TPixel> Rent(MemoryAllocator allocator, int destinationWidth)
+        {
+            Volatile.Write(ref rentedSinceLastGen2, 1);
+
+            WorkerState<TPixel>? pooled = null;
+            lock (PoolSync)
+            {
+                if (Pool.Count > 0)
+                {
+                    pooled = Pool.Pop();
+                }
+            }
+
+            if (pooled is not null)
+            {
+                if (ReferenceEquals(pooled.allocator, allocator) && pooled.DestinationWidth >= destinationWidth)
+                {
+                    return pooled;
+                }
+
+                pooled.Dispose();
+            }
+
+            return new WorkerState<TPixel>(allocator, destinationWidth);
+        }
+
+        /// <summary>
+        /// Returns a worker state to the pool for a later flush, or releases it when the pool
+        /// is already holding one full set of worker states.
+        /// </summary>
+        /// <param name="state">The state to recycle.</param>
+        public static void Return(WorkerState<TPixel> state)
+        {
+            lock (PoolSync)
+            {
+                if (Pool.Count < MaxPooledStates)
+                {
+                    Pool.Push(state);
+                    return;
+                }
+            }
+
+            state.Dispose();
+        }
+
+        /// <summary>
+        /// Disposes every pooled state when no rent occurred since the previous Gen2
+        /// collection, returning all held buffers to the memory allocator while the
+        /// renderer is idle. Invoked from the trim sentinel's finalizer.
+        /// </summary>
+        private static void TrimPoolIfIdle()
+        {
+            if (Interlocked.Exchange(ref rentedSinceLastGen2, 0) == 1)
+            {
+                return;
+            }
+
+            WorkerState<TPixel>[] trimmed;
+            lock (PoolSync)
+            {
+                if (Pool.Count == 0)
+                {
+                    return;
+                }
+
+                trimmed = Pool.ToArray();
+                Pool.Clear();
+            }
+
+            foreach (WorkerState<TPixel> state in trimmed)
+            {
+                state.Dispose();
             }
         }
 
@@ -1029,6 +1143,32 @@ public sealed partial class DefaultDrawingBackend
             this.pathClipScratch?.Dispose();
             this.pathClipCoverageOwner?.Dispose();
             this.BrushWorkspace.Dispose();
+        }
+
+        /// <summary>
+        /// A finalization-resurrected sentinel that runs one pool trim check per garbage
+        /// collection of its generation. After the first resurrection the instance is
+        /// tenured, so in steady state the check runs once per Gen2 collection, matching
+        /// the trimming cadence of the pooled memory allocator itself.
+        /// </summary>
+        private sealed class Gen2TrimSentinel
+        {
+            /// <summary>
+            /// Finalizes an instance of the <see cref="Gen2TrimSentinel"/> class.
+            /// Runs the idle trim and resurrects the sentinel for the next collection.
+            /// </summary>
+            ~Gen2TrimSentinel()
+            {
+                // Never resurrect during teardown: the runtime is finalizing for exit and
+                // the pool's buffers are reclaimed with the process.
+                if (Environment.HasShutdownStarted || AppDomain.CurrentDomain.IsFinalizingForUnload())
+                {
+                    return;
+                }
+
+                TrimPoolIfIdle();
+                GC.ReRegisterForFinalize(this);
+            }
         }
     }
 }

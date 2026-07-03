@@ -205,7 +205,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             fromInclusive: 0,
             toExclusive: rows.Length,
             parallelOptions: ParallelExecutionHelper.CreateParallelOptions(requestedParallelism, rows.Length),
-            localInit: () => new WorkerState<TPixel>(configuration.MemoryAllocator, target.Region.Width),
+            localInit: () => WorkerState<TPixel>.Rent(configuration.MemoryAllocator, target.Region.Width),
             body: (rowIndex, _, state) =>
             {
                 ExecuteSceneRow(
@@ -218,7 +218,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
 
                 return state;
             },
-            localFinally: static state => state.Dispose());
+            localFinally: static state => WorkerState<TPixel>.Return(state));
     }
 
     /// <summary>
@@ -408,7 +408,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             fromInclusive: 0,
             toExclusive: rowBandCount,
             parallelOptions: ParallelExecutionHelper.CreateParallelOptions(configuration.MaxDegreeOfParallelism, rowBandCount),
-            localInit: () => new WorkerState<TPixel>(configuration.MemoryAllocator, target.Region.Width),
+            localInit: () => WorkerState<TPixel>.Rent(configuration.MemoryAllocator, target.Region.Width),
             body: (localRowIndex, _, state) =>
             {
                 if (item.Rasterizable.HasCoverage(localRowIndex))
@@ -427,7 +427,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
 
                 return state;
             },
-            localFinally: static state => state.Dispose());
+            localFinally: static state => WorkerState<TPixel>.Return(state));
     }
 
     /// <summary>
@@ -631,7 +631,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             fromInclusive: 0,
             toExclusive: rowBandCount,
             parallelOptions: ParallelExecutionHelper.CreateParallelOptions(configuration.MaxDegreeOfParallelism, rowBandCount),
-            localInit: () => new WorkerState<TPixel>(configuration.MemoryAllocator, overlap.Width),
+            localInit: () => WorkerState<TPixel>.Rent(configuration.MemoryAllocator, overlap.Width),
             body: (rowSlot, _, state) =>
             {
                 int bandTop = (firstRowBandIndex + rowSlot) * DefaultRasterizer.DefaultTileHeight;
@@ -657,7 +657,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
 
                 return state;
             },
-            localFinally: static state => state.Dispose());
+            localFinally: static state => WorkerState<TPixel>.Return(state));
     }
 
     /// <summary>
