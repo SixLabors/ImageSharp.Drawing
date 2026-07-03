@@ -18,11 +18,19 @@ public sealed class BrushWorkspace<TPixel> : IDisposable
     private readonly IMemoryOwner<TPixel> overlaysOwner;
     private readonly IMemoryOwner<Vector4> blendScratchOwner;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BrushWorkspace{TPixel}"/> class.
+    /// </summary>
+    /// <param name="allocator">The memory allocator used to rent the pooled buffers.</param>
+    /// <param name="rowWidth">The maximum row width, in pixels, the workspace must be able to service.</param>
     internal BrushWorkspace(MemoryAllocator allocator, int rowWidth)
     {
         int capacity = Math.Max(1, rowWidth);
         this.amountsOwner = allocator.Allocate<float>(capacity);
         this.overlaysOwner = allocator.Allocate<TPixel>(capacity);
+
+        // Callers request at most three vector rows per pixel (see GetBlendScratch),
+        // so reserve the worst case once instead of reallocating per request.
         this.blendScratchOwner = allocator.Allocate<Vector4>(capacity * 3);
     }
 

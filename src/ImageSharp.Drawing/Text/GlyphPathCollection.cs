@@ -12,9 +12,24 @@ namespace SixLabors.ImageSharp.Drawing.Text;
 /// </summary>
 public sealed class GlyphPathCollection
 {
+    /// <summary>
+    /// All paths emitted for the glyph in z-order; layer descriptors index into this list.
+    /// </summary>
     private readonly List<IPath> paths;
+
+    /// <summary>
+    /// Cached read-only wrapper for <see cref="paths"/> exposed via <see cref="PathList"/>.
+    /// </summary>
     private readonly ReadOnlyCollection<IPath> readOnlyPaths;
+
+    /// <summary>
+    /// Layer descriptors referring to spans within <see cref="paths"/>.
+    /// </summary>
     private readonly List<GlyphLayerInfo> layers;
+
+    /// <summary>
+    /// Cached read-only wrapper for <see cref="layers"/> exposed via <see cref="Layers"/>.
+    /// </summary>
     private readonly ReadOnlyCollection<GlyphLayerInfo> readOnlyLayers;
 
     /// <summary>
@@ -91,7 +106,9 @@ public sealed class GlyphPathCollection
     /// satisfy <paramref name="predicate"/>. Useful to project to monochrome.
     /// </summary>
     /// <param name="predicate">A filter deciding whether to keep a layer.</param>
-    /// <returns>A new <see cref="PathCollection"/> with the selected paths.</returns>
+    /// <returns>
+    /// A new <see cref="PathCollection"/> with the selected paths.
+    /// </returns>
     public PathCollection ToPathCollection(Func<GlyphLayerInfo, bool>? predicate = null)
     {
         List<IPath> kept = [];
@@ -117,7 +134,9 @@ public sealed class GlyphPathCollection
     /// Gets a <see cref="PathCollection"/> view of a single layer's geometry.
     /// </summary>
     /// <param name="layerIndex">The zero-based layer index.</param>
-    /// <returns>A path collection comprising only that layer's span.</returns>
+    /// <returns>
+    /// A path collection comprising only that layer's span.
+    /// </returns>
     public PathCollection GetLayerPaths(int layerIndex)
     {
         Guard.MustBeLessThan(layerIndex, this.layers.Count, nameof(layerIndex));
@@ -138,7 +157,14 @@ public sealed class GlyphPathCollection
     /// </summary>
     internal sealed class Builder
     {
+        /// <summary>
+        /// Paths accumulated so far, in z-order.
+        /// </summary>
         private readonly List<IPath> paths = [];
+
+        /// <summary>
+        /// Layer descriptors accumulated so far, each spanning a range of <see cref="paths"/>.
+        /// </summary>
         private readonly List<GlyphLayerInfo> layers = [];
 
         /// <summary>
@@ -154,8 +180,8 @@ public sealed class GlyphPathCollection
         /// <param name="count">Number of paths belonging to this layer.</param>
         /// <param name="paint">The paint for this layer (may be null for default).</param>
         /// <param name="fillRule">The fill rule for this layer.</param>
-        /// <param name="bounds">Optional cached bounds for this layer.</param>
-        /// <param name="kind">Optional semantic kind (eg. Decoration).</param>
+        /// <param name="bounds">Cached axis-aligned bounds for this layer.</param>
+        /// <param name="kind">Optional semantic kind (e.g. Decoration).</param>
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown if the specified span is out of range of the current path list.
         /// </exception>
@@ -178,7 +204,9 @@ public sealed class GlyphPathCollection
         /// <summary>
         /// Builds the immutable <see cref="GlyphPathCollection"/>.
         /// </summary>
-        /// <returns>The collection.</returns>
+        /// <returns>
+        /// The collection.
+        /// </returns>
         public GlyphPathCollection Build() => new(this.paths, this.layers);
     }
 }

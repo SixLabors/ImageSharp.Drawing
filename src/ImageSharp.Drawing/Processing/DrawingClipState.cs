@@ -26,6 +26,10 @@ public readonly struct DrawingClipState
     private readonly DrawingClipDescriptor descriptor3;
     private readonly DrawingClipDescriptor[]? overflowDescriptors;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingClipState"/> struct with one inline descriptor.
+    /// </summary>
+    /// <param name="descriptor0">The first descriptor in stack order.</param>
     private DrawingClipState(DrawingClipDescriptor descriptor0)
     {
         this.descriptor0 = descriptor0;
@@ -36,6 +40,11 @@ public readonly struct DrawingClipState
         this.Count = 1;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingClipState"/> struct with two inline descriptors.
+    /// </summary>
+    /// <param name="descriptor0">The first descriptor in stack order.</param>
+    /// <param name="descriptor1">The second descriptor in stack order.</param>
     private DrawingClipState(DrawingClipDescriptor descriptor0, DrawingClipDescriptor descriptor1)
     {
         this.descriptor0 = descriptor0;
@@ -46,6 +55,12 @@ public readonly struct DrawingClipState
         this.Count = 2;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingClipState"/> struct with three inline descriptors.
+    /// </summary>
+    /// <param name="descriptor0">The first descriptor in stack order.</param>
+    /// <param name="descriptor1">The second descriptor in stack order.</param>
+    /// <param name="descriptor2">The third descriptor in stack order.</param>
     private DrawingClipState(DrawingClipDescriptor descriptor0, DrawingClipDescriptor descriptor1, DrawingClipDescriptor descriptor2)
     {
         this.descriptor0 = descriptor0;
@@ -56,6 +71,13 @@ public readonly struct DrawingClipState
         this.Count = 3;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingClipState"/> struct with four inline descriptors.
+    /// </summary>
+    /// <param name="descriptor0">The first descriptor in stack order.</param>
+    /// <param name="descriptor1">The second descriptor in stack order.</param>
+    /// <param name="descriptor2">The third descriptor in stack order.</param>
+    /// <param name="descriptor3">The fourth descriptor in stack order.</param>
     private DrawingClipState(
         DrawingClipDescriptor descriptor0,
         DrawingClipDescriptor descriptor1,
@@ -70,6 +92,10 @@ public readonly struct DrawingClipState
         this.Count = 4;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingClipState"/> struct from an overflow array.
+    /// </summary>
+    /// <param name="overflowDescriptors">All descriptors in stack order; the inline slots are unused.</param>
     private DrawingClipState(DrawingClipDescriptor[] overflowDescriptors)
     {
         this.descriptor0 = EmptyDescriptor;
@@ -413,6 +439,9 @@ public readonly struct DrawingClipState
         int integerTop = (int)top;
         int integerRight = (int)right;
         int integerBottom = (int)bottom;
+
+        // Target-bounds clipping is exact pixel rejection. Any fractional edge needs
+        // coverage-based clipping, so it cannot be folded into target bounds.
         if (left != integerLeft || top != integerTop || right != integerRight || bottom != integerBottom)
         {
             return false;

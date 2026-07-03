@@ -106,6 +106,11 @@ public sealed class RoundedRectanglePolygon : Polygon
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RoundedRectanglePolygon"/> class.
+    /// Used by <see cref="Transform(Matrix4x4)"/> to wrap already-transformed segments.
+    /// </summary>
+    /// <param name="segments">The transformed segments; ownership passes to the new instance.</param>
     private RoundedRectanglePolygon(ILineSegment[] segments)
         : base(segments, true)
     {
@@ -129,6 +134,20 @@ public sealed class RoundedRectanglePolygon : Polygon
         return new RoundedRectanglePolygon(segments);
     }
 
+    /// <summary>
+    /// Builds the clockwise contour of alternating edges and 90 degree corner arcs. Corners with a
+    /// non-positive radius component are emitted square, and radii too large for the rectangle are
+    /// scaled down uniformly so opposing corners never overlap.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the rectangle.</param>
+    /// <param name="y">The y-coordinate of the rectangle.</param>
+    /// <param name="width">The rectangle width.</param>
+    /// <param name="height">The rectangle height.</param>
+    /// <param name="topLeftRadius">The x and y radii of the top-left corner.</param>
+    /// <param name="topRightRadius">The x and y radii of the top-right corner.</param>
+    /// <param name="bottomRightRadius">The x and y radii of the bottom-right corner.</param>
+    /// <param name="bottomLeftRadius">The x and y radii of the bottom-left corner.</param>
+    /// <returns>The segments describing the rounded rectangle, or an empty array for a degenerate rectangle.</returns>
     private static ILineSegment[] CreateSegments(
         float x,
         float y,

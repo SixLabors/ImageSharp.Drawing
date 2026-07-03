@@ -6,7 +6,7 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
-/// A shape made up of a single closed path made up of one of more <see cref="ILineSegment"/>s
+/// A shape made up of a single closed path made up of one or more <see cref="ILineSegment"/>s.
 /// </summary>
 public class Polygon : Path
 {

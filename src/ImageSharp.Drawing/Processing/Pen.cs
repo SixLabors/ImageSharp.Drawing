@@ -7,11 +7,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// The base class for pens that can apply a pattern to a line with a set brush and thickness
 /// </summary>
 /// <remarks>
-/// The pattern will be in to the form of
+/// The pattern is expressed in the form
 /// <code>
-/// new float[]{ 1f, 2f, 0.5f}
+/// [1f, 2f, 0.5f]
 /// </code>
-/// this will be converted into a pattern that is 3.5 times longer that the width with 3 sections.
+/// this will be converted into a pattern that is 3.5 times longer than the width with 3 sections.
 /// <list type="bullet">
 /// <item>Section 1 will be width long (making a square) and will be filled by the brush.</item>
 /// <item>Section 2 will be width * 2 long and will be empty.</item>
@@ -21,6 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// </remarks>
 public abstract class Pen : IEquatable<Pen>
 {
+    // Dash pattern segment lengths, expressed as multiples of the stroke width.
     private readonly float[] pattern;
 
     /// <summary>
@@ -91,17 +92,17 @@ public abstract class Pen : IEquatable<Pen>
     public StrokeOptions StrokeOptions { get; }
 
     /// <summary>
-    /// Applies the styling from the pen to a path and generate a new path with the final vector.
+    /// Applies the styling from the pen to a path and generates a new path with the final vector.
     /// </summary>
-    /// <param name="path">The source path</param>
+    /// <param name="path">The source path.</param>
     /// <returns>The <see cref="IPath"/> with the pen styling applied.</returns>
     public IPath GeneratePath(IPath path)
         => this.GeneratePath(path, this.StrokeWidth);
 
     /// <summary>
-    /// Applies the styling from the pen to a path and generate a new path with the final vector.
+    /// Applies the styling from the pen to a path and generates a new path with the final vector.
     /// </summary>
-    /// <param name="path">The source path</param>
+    /// <param name="path">The source path.</param>
     /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
     /// <returns>The <see cref="IPath"/> with the pen styling applied.</returns>
     public abstract IPath GeneratePath(IPath path, float strokeWidth);

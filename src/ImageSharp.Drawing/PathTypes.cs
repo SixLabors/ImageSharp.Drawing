@@ -9,12 +9,12 @@ namespace SixLabors.ImageSharp.Drawing;
 public enum PathTypes
 {
     /// <summary>
-    /// Denotes a path containing a single simple open path
+    /// Denotes a path containing a single simple open path.
     /// </summary>
     Open,
 
     /// <summary>
-    /// Denotes a path describing a single simple closed shape
+    /// Denotes a path describing a single simple closed shape.
     /// </summary>
     Closed,
 

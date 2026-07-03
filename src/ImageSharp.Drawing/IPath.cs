@@ -107,6 +107,6 @@ public interface IPath
     /// <summary>
     /// Returns this path with all figures closed.
     /// </summary>
-    /// <returns>A new close <see cref="IPath"/>.</returns>
+    /// <returns>A new closed <see cref="IPath"/>.</returns>
     public IPath AsClosedPath();
 }

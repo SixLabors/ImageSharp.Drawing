@@ -22,12 +22,12 @@ public enum GradientRepetitionMode
     /// <summary>
     /// Reflect the gradient.
     /// Similar to <see cref="Repeat"/>, but each other repetition uses inverse order of <see cref="ColorStop"/>s.
-    /// Used on a Black-White gradient, Reflect leads to Black->{gray}->White->{gray}->White...
+    /// Used on a Black-White gradient, Reflect leads to Black->{gray}->White->{gray}->Black...
     /// </summary>
     Reflect,
 
     /// <summary>
-    /// With DontFill a gradient does not touch any pixel beyond it's borders.
+    /// With DontFill a gradient does not touch any pixel beyond its borders.
     /// For the <see cref="LinearGradientBrush"/> this is beyond the orthogonal through start and end,
     /// For <see cref="RadialGradientBrush" /> and <see cref="EllipticGradientBrush" /> it's beyond 1.0.
     /// </summary>

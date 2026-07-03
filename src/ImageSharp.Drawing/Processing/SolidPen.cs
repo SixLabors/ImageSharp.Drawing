@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Defines a pen that can apply a pattern to a line with a set brush and thickness.
+/// Defines a pen that draws a continuous, unpatterned stroke with a set brush and thickness.
 /// </summary>
 public class SolidPen : Pen
 {

@@ -8,22 +8,41 @@ namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
 /// Represents a complex polygon made up of one or more shapes overlayed on each other,
-/// where overlaps causes holes.
+/// where overlaps cause holes.
 /// </summary>
 /// <seealso cref="IPath" />
 public sealed class ComplexPolygon : IPath, IInternalPathOwner
 {
+    /// <summary>
+    /// The child paths that make up the shape.
+    /// </summary>
     private readonly IPath[] paths;
+
+    /// <summary>
+    /// The lazily initialized internal representation of each flattened ring.
+    /// </summary>
     private List<InternalPath>? internalPaths;
+
+    /// <summary>
+    /// The lazily computed union of the child path bounds.
+    /// </summary>
     private RectangleF? bounds;
+
+    /// <summary>
+    /// The cached result of <see cref="AsClosedPath"/>.
+    /// </summary>
     private IPath? closedPath;
+
+    /// <summary>
+    /// The per-scale cache of retained linear geometry.
+    /// </summary>
     private LinearGeometryCache geometryCache;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ComplexPolygon"/> class.
     /// </summary>
-    /// <param name="contour">The contour path.</param>
-    /// <param name="hole">The hole path.</param>
+    /// <param name="contour">The points defining the outer contour.</param>
+    /// <param name="hole">The points defining the hole.</param>
     public ComplexPolygon(PointF[] contour, PointF[] hole)
         : this(new Path(new LinearLineSegment(contour)), new Path(new LinearLineSegment(hole)))
     {
@@ -120,6 +139,12 @@ public sealed class ComplexPolygon : IPath, IInternalPathOwner
         return this.ToLinearGeometry(scale).Contains(scaledPoint, intersectionRule);
     }
 
+    /// <summary>
+    /// Concatenates the child path geometries into a single retained geometry, rebasing each
+    /// child's point, contour and segment indices onto the combined arrays.
+    /// </summary>
+    /// <param name="scale">The X/Y scale at which curves are flattened.</param>
+    /// <returns>The combined linear geometry.</returns>
     private LinearGeometry BuildLinearGeometry(Vector2 scale)
     {
         int pointCount = 0;
@@ -247,6 +272,9 @@ public sealed class ComplexPolygon : IPath, IInternalPathOwner
         return this.internalPaths;
     }
 
+    /// <summary>
+    /// Ensures <see cref="internalPaths"/> is initialized.
+    /// </summary>
     [MemberNotNull(nameof(internalPaths))]
     private void EnsureInternalPaths()
     {
@@ -276,6 +304,10 @@ public sealed class ComplexPolygon : IPath, IInternalPathOwner
         }
     }
 
+    /// <summary>
+    /// Computes the union of the child path bounds.
+    /// </summary>
+    /// <returns>The axis-aligned bounds enclosing all child paths.</returns>
     private RectangleF CalcBounds()
     {
         float minX = float.MaxValue;

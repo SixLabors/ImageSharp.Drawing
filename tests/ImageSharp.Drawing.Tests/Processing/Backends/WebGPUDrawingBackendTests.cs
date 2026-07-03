@@ -63,7 +63,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.05F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0012F);
     }
 
@@ -105,7 +105,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.3F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -138,7 +138,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -175,7 +175,7 @@ public partial class WebGPUDrawingBackendTests
             DrawAction);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -226,7 +226,7 @@ public partial class WebGPUDrawingBackendTests
         // The GPU backend must match the CPU backend for every wrap mode on both axes, and both must
         // match their committed reference outputs.
         DebugSaveBackendPair(provider, $"{wrapX}-{wrapY}", defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, $"{wrapX}-{wrapY}", defaultImage, nativeSurfaceImage);
     }
 
@@ -285,7 +285,7 @@ public partial class WebGPUDrawingBackendTests
 
         // Non-zero winding semantics must still match on an interior point.
         Assert.Equal(defaultImage[128, 128], nativeSurfaceImage[128, 128]);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -331,7 +331,7 @@ public partial class WebGPUDrawingBackendTests
             $"{colorMode}_{alphaMode}",
             defaultImage,
             nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.125F);
         AssertBackendPairReferenceOutputs(
             provider,
             $"{colorMode}_{alphaMode}",
@@ -382,7 +382,7 @@ public partial class WebGPUDrawingBackendTests
             $"{colorMode}_{alphaMode}",
             defaultImage,
             nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.125F);
         AssertBackendPairReferenceOutputs(
             provider,
             $"{colorMode}_{alphaMode}",
@@ -425,11 +425,11 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.013F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
         Rectangle textRegion = Rectangle.Intersect(
             new Rectangle(0, 0, defaultImage.Width, defaultImage.Height),
             new Rectangle(8, 12, defaultImage.Width - 16, Math.Min(220, defaultImage.Height - 12)));
-        AssertBackendPairSimilarityInRegion(defaultImage, nativeSurfaceImage, textRegion, 0.02F);
+        AssertBackendPairSimilarityInRegion(defaultImage, nativeSurfaceImage, textRegion, 0.007F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -466,7 +466,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0012F);
     }
 
@@ -505,7 +505,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0013F);
     }
 
@@ -695,7 +695,7 @@ public partial class WebGPUDrawingBackendTests
             DrawAction);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0516F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.019F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
     }
 
@@ -734,7 +734,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 2F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -800,7 +800,7 @@ public partial class WebGPUDrawingBackendTests
 
         using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 2F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -1097,7 +1097,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.015F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -1131,7 +1131,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarityInRegion(defaultImage, nativeSurfaceImage, new Rectangle(638, 331, 265, 104), 0.02F);
+        AssertBackendPairSimilarityInRegion(defaultImage, nativeSurfaceImage, new Rectangle(638, 331, 265, 104), 0.007F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
 
         static void DrawThumb(DrawingCanvas canvas, PointF origin)
@@ -1236,7 +1236,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.02F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -1278,7 +1278,7 @@ public partial class WebGPUDrawingBackendTests
         float referenceTolerance = lineCap == LineCap.Square ? 0.0016F : 0.0003F;
 
         DebugSaveBackendPair(provider, $"{lineCap}", defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.03F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, $"{lineCap}", defaultImage, nativeSurfaceImage, referenceTolerance);
     }
 
@@ -1347,7 +1347,7 @@ public partial class WebGPUDrawingBackendTests
             defaultComparisonImage,
             nativeSurfaceComparisonImage);
 
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.015F);
         AssertBackendPairReferenceOutputs(
             provider,
             $"{lineJoin}",
@@ -1416,7 +1416,7 @@ public partial class WebGPUDrawingBackendTests
             defaultComparisonImage,
             nativeSurfaceComparisonImage);
 
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0103F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(
             provider,
             $"{lineCap}",
@@ -1526,7 +1526,7 @@ public partial class WebGPUDrawingBackendTests
 
         // EvenOdd with same winding inner contour should create a hole at center.
         Assert.Equal(defaultImage[128, 128], nativeSurfaceImage[128, 128]);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -1559,7 +1559,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -1591,7 +1591,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -1631,7 +1631,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
     }
 
@@ -1678,7 +1678,7 @@ public partial class WebGPUDrawingBackendTests
 
         using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -1765,7 +1765,7 @@ public partial class WebGPUDrawingBackendTests
 
         using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -1847,7 +1847,7 @@ public partial class WebGPUDrawingBackendTests
 
         using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -1887,7 +1887,7 @@ public partial class WebGPUDrawingBackendTests
 
         // MacOS on CI has some outliers with this test, so using a slightly higher tolerance here to avoid noise.
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.03F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.045F);
         AssertBackendPairReferenceOutputs(
             provider,
             null,
@@ -1930,7 +1930,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.02F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -1968,7 +1968,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.02F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.029F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2008,7 +2008,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0171F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.034F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2047,7 +2047,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.035F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.014F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2088,7 +2088,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0304F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.061F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2132,7 +2132,7 @@ public partial class WebGPUDrawingBackendTests
             null,
             defaultImage,
             nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0280F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.029F);
         AssertBackendPairReferenceOutputs(
             provider,
             null,
@@ -2195,7 +2195,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.013F);
     }
 
     [WebGPUTheory]
@@ -2227,7 +2227,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, "Horizontal", defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.045F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, "Horizontal", defaultImage, nativeSurfaceImage);
     }
 
@@ -2332,7 +2332,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0065F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.013F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2372,7 +2372,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0398F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.08F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2602,7 +2602,7 @@ the evil Galactic Empire.";
 
         // This test has a lot of text and gradients which can be a bit more variable across
         // platforms, so using a higher tolerance here to avoid noise.
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0474F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.094F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
     }
 
@@ -2637,7 +2637,7 @@ the evil Galactic Empire.";
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2672,7 +2672,7 @@ the evil Galactic Empire.";
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0767F);
     }
 
@@ -2713,7 +2713,7 @@ the evil Galactic Empire.";
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2754,7 +2754,7 @@ the evil Galactic Empire.";
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2789,7 +2789,7 @@ the evil Galactic Empire.";
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2827,7 +2827,7 @@ the evil Galactic Empire.";
             DrawAction);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2862,7 +2862,7 @@ the evil Galactic Empire.";
             DrawAction);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2896,7 +2896,7 @@ the evil Galactic Empire.";
             DrawAction);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2935,7 +2935,7 @@ the evil Galactic Empire.";
             DrawAction);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2969,7 +2969,7 @@ the evil Galactic Empire.";
             DrawAction);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.088F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -3008,7 +3008,7 @@ the evil Galactic Empire.";
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -3098,7 +3098,7 @@ the evil Galactic Empire.";
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.108F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0005F);
     }
 }

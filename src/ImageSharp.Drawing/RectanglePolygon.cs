@@ -11,9 +11,24 @@ namespace SixLabors.ImageSharp.Drawing;
 /// </summary>
 public sealed class RectanglePolygon : IPath, ISimplePath
 {
+    /// <summary>
+    /// The top-left corner of the rectangle.
+    /// </summary>
     private readonly Vector2 topLeft;
+
+    /// <summary>
+    /// The bottom-right corner of the rectangle.
+    /// </summary>
     private readonly Vector2 bottomRight;
+
+    /// <summary>
+    /// The four corner points in clockwise order starting at the top-left.
+    /// </summary>
     private readonly PointF[] points;
+
+    /// <summary>
+    /// The per-scale cache of retained linear geometry.
+    /// </summary>
     private LinearGeometryCache geometryCache;
 
     /// <summary>
@@ -79,7 +94,7 @@ public sealed class RectanglePolygon : IPath, ISimplePath
     }
 
     /// <summary>
-    /// Gets the location.
+    /// Gets the top-left location of the rectangle.
     /// </summary>
     public PointF Location { get; }
 
@@ -89,7 +104,7 @@ public sealed class RectanglePolygon : IPath, ISimplePath
     public float Left => this.X;
 
     /// <summary>
-    /// Gets the x-coordinate.
+    /// Gets the x-coordinate of the top-left corner.
     /// </summary>
     public float X => this.topLeft.X;
 
@@ -104,7 +119,7 @@ public sealed class RectanglePolygon : IPath, ISimplePath
     public float Top => this.Y;
 
     /// <summary>
-    /// Gets the y-coordinate.
+    /// Gets the y-coordinate of the top-left corner.
     /// </summary>
     public float Y => this.topLeft.Y;
 
@@ -149,6 +164,7 @@ public sealed class RectanglePolygon : IPath, ISimplePath
     /// Converts a polygon to a rectangle polygon from its bounds.
     /// </summary>
     /// <param name="polygon">The polygon to convert.</param>
+    /// <returns>The rectangle polygon covering the source polygon's bounds.</returns>
     public static explicit operator RectanglePolygon(Polygon polygon)
         => new(polygon.Bounds.X, polygon.Bounds.Y, polygon.Bounds.Width, polygon.Bounds.Height);
 
@@ -226,6 +242,11 @@ public sealed class RectanglePolygon : IPath, ISimplePath
     public bool TryGetSegment(float startDistance, float stopDistance, bool startOnBeginFigure, Vector2 scale, out IPath path)
         => this.ToLinearGeometry(scale).TryGetSegment(startDistance, stopDistance, startOnBeginFigure, out path);
 
+    /// <summary>
+    /// Builds the retained four-point closed contour, scaling each corner by <paramref name="scale"/>.
+    /// </summary>
+    /// <param name="scale">The X/Y scale applied to the corner points.</param>
+    /// <returns>The retained linear geometry.</returns>
     private LinearGeometry BuildLinearGeometry(Vector2 scale)
     {
         PointF p0 = new(this.points[0].X * scale.X, this.points[0].Y * scale.Y);

@@ -261,9 +261,12 @@ fn main(
                     let cos_theta = dxy.x * inv_axis;
                     let sin_theta = dxy.y * inv_axis;
                     // Map the ellipse to the unit circle so the fill parameter is length(local_xy).
+                    // The rotation must be by the NEGATED axis angle (rotate the sample onto the
+                    // reference axis); fine evaluates local = (m0, m1) * x + (m2, m3) * y + xlat.
+                    // Mirrors the CPU EllipticGradientBrush renderer; keep the two in lockstep.
                     let m0 = cos_theta * inv_axis;
-                    let m1 = sin_theta * inv_second_axis;
-                    let m2 = -sin_theta * inv_axis;
+                    let m1 = -sin_theta * inv_second_axis;
+                    let m2 = sin_theta * inv_axis;
                     let m3 = cos_theta * inv_second_axis;
                     let xlat_x = -(m0 * center.x + m2 * center.y);
                     let xlat_y = -(m1 * center.x + m3 * center.y);

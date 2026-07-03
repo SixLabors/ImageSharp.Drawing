@@ -24,7 +24,8 @@ internal static class StrokedShapeGenerator
     /// </returns>
     public static ComplexPolygon GenerateStrokedShapes(IPath path, float width, StrokeOptions options)
     {
-        // 1) Stroke the input path as open or closed.
+        // Convert the flattened contours to clipper rings first; the stroker handles
+        // open and closed contours differently, so closedness must be preserved.
         PCPolygon rings = [];
 
         foreach (ISimplePath sp in path.Flatten())
@@ -43,6 +44,7 @@ internal static class StrokedShapeGenerator
                 ring.Add(new Vertex(p.X, p.Y));
             }
 
+            // PolygonClipper expects closed rings to repeat their start point.
             if (sp.IsClosed)
             {
                 ring.Add(ring[0]);
@@ -69,6 +71,11 @@ internal static class StrokedShapeGenerator
         return new(shapes);
     }
 
+    /// <summary>
+    /// Maps the ImageSharp <see cref="StrokeOptions"/> to the equivalent PolygonClipper options.
+    /// </summary>
+    /// <param name="options">The ImageSharp stroke geometry options.</param>
+    /// <returns>The equivalent <see cref="PolygonClipper.StrokeOptions"/>.</returns>
     private static PolygonClipper.StrokeOptions CreateStrokeOptions(StrokeOptions options)
     {
         PolygonClipper.StrokeOptions o = new()

@@ -18,7 +18,9 @@ public static class TextBuilder
     /// </summary>
     /// <param name="text">The text to shape and render.</param>
     /// <param name="textOptions">The text rendering and layout options.</param>
-    /// <returns>The combined <see cref="IPathCollection"/> for the rendered glyphs.</returns>
+    /// <returns>
+    /// The combined <see cref="IPathCollection"/> for the rendered glyphs.
+    /// </returns>
     public static IPathCollection GeneratePaths(string text, TextOptions textOptions)
     {
         GlyphBuilder glyphBuilder = new();
@@ -35,7 +37,9 @@ public static class TextBuilder
     /// </summary>
     /// <param name="glyphRun">The positioned glyph run to render.</param>
     /// <param name="glyphOptions">The glyph rendering options.</param>
-    /// <returns>The combined <see cref="IPathCollection"/> for the rendered glyphs.</returns>
+    /// <returns>
+    /// The combined <see cref="IPathCollection"/> for the rendered glyphs.
+    /// </returns>
     public static IPathCollection GeneratePaths(GlyphRun glyphRun, GlyphOptions glyphOptions)
     {
         GlyphBuilder glyphBuilder = new();
@@ -52,7 +56,9 @@ public static class TextBuilder
     /// </summary>
     /// <param name="glyphRun">The positioned glyph run to render.</param>
     /// <param name="glyphOptions">The glyph rendering options.</param>
-    /// <returns>A read-only list of <see cref="GlyphPathCollection"/> entries, one for each rendered glyph.</returns>
+    /// <returns>
+    /// A read-only list of <see cref="GlyphPathCollection"/> entries, one for each rendered glyph.
+    /// </returns>
     public static IReadOnlyList<GlyphPathCollection> GenerateGlyphs(GlyphRun glyphRun, GlyphOptions glyphOptions)
     {
         GlyphBuilder glyphBuilder = new();
@@ -69,7 +75,9 @@ public static class TextBuilder
     /// </summary>
     /// <param name="text">The text to shape and render.</param>
     /// <param name="textOptions">The text rendering and layout options.</param>
-    /// <returns>A read-only list of <see cref="GlyphPathCollection"/> entries, one for each rendered glyph.</returns>
+    /// <returns>
+    /// A read-only list of <see cref="GlyphPathCollection"/> entries, one for each rendered glyph.
+    /// </returns>
     public static IReadOnlyList<GlyphPathCollection> GenerateGlyphs(string text, TextOptions textOptions)
     {
         GlyphBuilder glyphBuilder = new();
@@ -88,7 +96,9 @@ public static class TextBuilder
     /// <param name="text">The text to shape and render.</param>
     /// <param name="path">The path that defines the text baseline.</param>
     /// <param name="textOptions">The text rendering and layout options.</param>
-    /// <returns>The combined <see cref="IPathCollection"/> for the rendered glyphs.</returns>
+    /// <returns>
+    /// The combined <see cref="IPathCollection"/> for the rendered glyphs.
+    /// </returns>
     public static IPathCollection GeneratePaths(string text, IPath path, TextOptions textOptions)
     {
         (IPath Path, TextOptions TextOptions) transformed = ConfigureOptions(textOptions, path);
@@ -108,7 +118,9 @@ public static class TextBuilder
     /// <param name="text">The text to shape and render.</param>
     /// <param name="path">The path that defines the text baseline.</param>
     /// <param name="textOptions">The text rendering and layout options.</param>
-    /// <returns>A read-only list of <see cref="GlyphPathCollection"/> entries, one for each rendered glyph.</returns>
+    /// <returns>
+    /// A read-only list of <see cref="GlyphPathCollection"/> entries, one for each rendered glyph.
+    /// </returns>
     public static IReadOnlyList<GlyphPathCollection> GenerateGlyphs(string text, IPath path, TextOptions textOptions)
     {
         (IPath Path, TextOptions TextOptions) transformed = ConfigureOptions(textOptions, path);
@@ -120,6 +132,16 @@ public static class TextBuilder
         return glyphBuilder.Glyphs;
     }
 
+    /// <summary>
+    /// Normalizes options for path-based layout by moving any origin offset from the
+    /// text options onto the path itself.
+    /// </summary>
+    /// <param name="options">The source text options.</param>
+    /// <param name="path">The layout path.</param>
+    /// <returns>
+    /// The (possibly translated) path and matching options with a zero origin. When the
+    /// origin is already zero the original instances are returned unchanged.
+    /// </returns>
     private static (IPath Path, TextOptions TextOptions) ConfigureOptions(TextOptions options, IPath path)
     {
         // When a path is specified we should explicitly follow that path

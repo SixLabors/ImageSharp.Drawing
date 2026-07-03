@@ -239,8 +239,15 @@ public static class SplitPathExtensions
         return new ComplexPolygon(segments);
     }
 
+    /// <summary>
+    /// Emits the buffered dash span as an open sub-path.
+    /// </summary>
+    /// <param name="buffer">The accumulated dash span points.</param>
+    /// <param name="segments">The list receiving the emitted sub-paths.</param>
     private static void FlushBuffer(List<PointF> buffer, List<IPath> segments)
     {
+        // Spans whose first and last points coincide have no drawable extent
+        // (or would form a degenerate loop), so they are dropped.
         if (buffer.Count >= 2 && buffer[0] != buffer[^1])
         {
             segments.Add(new Path(new LinearLineSegment([.. buffer])));

@@ -26,6 +26,8 @@ public class RichTextOptions : TextOptions
     public RichTextOptions(RichTextOptions options)
         : base(options)
     {
+        // Copy each run into a fresh instance so later mutation of the source runs
+        // cannot leak into this options instance (and vice versa).
         List<RichTextRun> runs = new(options.TextRuns.Count);
         foreach (RichTextRun run in options.TextRuns)
         {

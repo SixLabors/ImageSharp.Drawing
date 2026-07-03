@@ -16,13 +16,39 @@ public sealed class DrawingTextCache
     /// </summary>
     public const int DefaultCapacity = 16384;
 
-    // Run paths can retain large combined geometry, so keep fewer of them than individual glyph entries.
+    /// <summary>
+    /// Divisor applied to <see cref="Capacity"/> to derive the run-path capacity.
+    /// Run paths can retain large combined geometry, so keep fewer of them than
+    /// individual glyph entries.
+    /// </summary>
     private const int RunPathCapacityDivisor = 4;
 
+    // Both caches are LRU: the dictionary provides O(1) lookup while the linked list
+    // tracks usage order (most recently used at the head, eviction from the tail).
+
+    /// <summary>
+    /// Glyph entry lookup keyed by <see cref="RichTextGlyphRenderer.CacheKey"/>.
+    /// </summary>
     private readonly Dictionary<RichTextGlyphRenderer.CacheKey, LinkedListNode<Entry>> entries = [];
+
+    /// <summary>
+    /// Usage-ordered list of glyph entries; least recently used at the tail.
+    /// </summary>
     private readonly LinkedList<Entry> usage = new();
+
+    /// <summary>
+    /// Positioned glyph-run path lookup keyed by <see cref="RunPathCacheKey"/>.
+    /// </summary>
     private readonly Dictionary<RunPathCacheKey, LinkedListNode<RunPathEntry>> runPathEntries = [];
+
+    /// <summary>
+    /// Usage-ordered list of run-path entries; least recently used at the tail.
+    /// </summary>
     private readonly LinkedList<RunPathEntry> runPathUsage = new();
+
+    /// <summary>
+    /// Maximum number of run-path entries, derived from <see cref="Capacity"/>.
+    /// </summary>
     private readonly int runPathCapacity;
 
     /// <summary>
@@ -46,12 +72,13 @@ public sealed class DrawingTextCache
     }
 
     /// <summary>
-    /// Gets the maximum number of text cache entries.
+    /// Gets the maximum number of glyph cache entries. The smaller run-path cache
+    /// capacity is derived from this value.
     /// </summary>
     public int Capacity { get; }
 
     /// <summary>
-    /// Gets the number of text cache entries.
+    /// Gets the number of glyph cache entries. Run-path entries are not included.
     /// </summary>
     public int Count => this.entries.Count;
 
@@ -71,7 +98,9 @@ public sealed class DrawingTextCache
     /// </summary>
     /// <param name="key">The glyph cache key.</param>
     /// <param name="value">The cached glyph drawing data when available.</param>
-    /// <returns><see langword="true"/> when cached data exists; otherwise, <see langword="false"/>.</returns>
+    /// <returns>
+    /// <see langword="true"/> when cached data exists; otherwise, <see langword="false"/>.
+    /// </returns>
     internal bool TryGetValue(RichTextGlyphRenderer.CacheKey key, [NotNullWhen(true)] out List<RichTextGlyphRenderer.GlyphRenderData>? value)
     {
         if (!this.entries.TryGetValue(key, out LinkedListNode<Entry>? node))
@@ -80,6 +109,7 @@ public sealed class DrawingTextCache
             return false;
         }
 
+        // Move the hit to the head so the least recently used entry stays at the tail.
         this.usage.Remove(node);
         this.usage.AddFirst(node);
         value = node.Value.Value;
@@ -90,7 +120,9 @@ public sealed class DrawingTextCache
     /// Gets existing glyph drawing data for the specified key, or creates a new cache entry.
     /// </summary>
     /// <param name="key">The glyph cache key.</param>
-    /// <returns>The glyph drawing data associated with <paramref name="key"/>.</returns>
+    /// <returns>
+    /// The glyph drawing data associated with <paramref name="key"/>.
+    /// </returns>
     internal List<RichTextGlyphRenderer.GlyphRenderData> GetOrAdd(RichTextGlyphRenderer.CacheKey key)
     {
         if (this.TryGetValue(key, out List<RichTextGlyphRenderer.GlyphRenderData>? value))
@@ -103,6 +135,7 @@ public sealed class DrawingTextCache
         this.usage.AddFirst(node);
         this.entries.Add(key, node);
 
+        // Evict the least recently used entry once over capacity.
         if (this.entries.Count > this.Capacity)
         {
             LinkedListNode<Entry> last = this.usage.Last!;
@@ -118,7 +151,9 @@ public sealed class DrawingTextCache
     /// </summary>
     /// <param name="key">The positioned run path key.</param>
     /// <param name="path">The cached positioned path when available.</param>
-    /// <returns><see langword="true"/> when cached data exists; otherwise, <see langword="false"/>.</returns>
+    /// <returns>
+    /// <see langword="true"/> when cached data exists; otherwise, <see langword="false"/>.
+    /// </returns>
     internal bool TryGetRunPath(RunPathCacheKey key, [NotNullWhen(true)] out IPath? path)
     {
         if (!this.runPathEntries.TryGetValue(key, out LinkedListNode<RunPathEntry>? node))
@@ -127,6 +162,7 @@ public sealed class DrawingTextCache
             return false;
         }
 
+        // Move the hit to the head so the least recently used entry stays at the tail.
         this.runPathUsage.Remove(node);
         this.runPathUsage.AddFirst(node);
         path = node.Value.Path;
@@ -144,6 +180,7 @@ public sealed class DrawingTextCache
         this.runPathUsage.AddFirst(node);
         this.runPathEntries.Add(key, node);
 
+        // Evict the least recently used entry once over capacity.
         if (this.runPathEntries.Count > this.runPathCapacity)
         {
             LinkedListNode<RunPathEntry> last = this.runPathUsage.Last!;
@@ -152,16 +189,31 @@ public sealed class DrawingTextCache
         }
     }
 
+    /// <summary>
+    /// A glyph cache entry pairing the key with its render data. The key is stored so
+    /// that eviction from the usage list can also remove the dictionary entry.
+    /// </summary>
     private readonly struct Entry
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Entry"/> struct.
+        /// </summary>
+        /// <param name="key">The glyph cache key.</param>
+        /// <param name="value">The glyph render data list.</param>
         public Entry(RichTextGlyphRenderer.CacheKey key, List<RichTextGlyphRenderer.GlyphRenderData> value)
         {
             this.Key = key;
             this.Value = value;
         }
 
+        /// <summary>
+        /// Gets the glyph cache key.
+        /// </summary>
         public RichTextGlyphRenderer.CacheKey Key { get; }
 
+        /// <summary>
+        /// Gets the glyph render data list (one entry per glyph layer).
+        /// </summary>
         public List<RichTextGlyphRenderer.GlyphRenderData> Value { get; }
     }
 
@@ -170,8 +222,19 @@ public sealed class DrawingTextCache
     /// </summary>
     internal readonly struct RunPathCacheKey : IEquatable<RunPathCacheKey>
     {
+        /// <summary>
+        /// The positioned glyph path entries; only the first <see cref="count"/> items belong to the key.
+        /// </summary>
         private readonly RunPathCacheEntry[] entries;
+
+        /// <summary>
+        /// The number of valid entries in <see cref="entries"/>.
+        /// </summary>
         private readonly int count;
+
+        /// <summary>
+        /// The precomputed hash of all valid entries.
+        /// </summary>
         private readonly int hashCode;
 
         /// <summary>
@@ -184,6 +247,9 @@ public sealed class DrawingTextCache
             this.entries = entries;
             this.count = count;
 
+            // Precompute the hash once: keys are immutable and hashed on every
+            // dictionary lookup, and the cheap hash comparison in Equals lets us
+            // skip the per-entry comparison loop for non-matching keys.
             HashCode hash = default;
             for (int i = 0; i < count; i++)
             {
@@ -198,8 +264,24 @@ public sealed class DrawingTextCache
         /// </summary>
         public int Count => this.count;
 
+        /// <summary>
+        /// Determines whether two <see cref="RunPathCacheKey"/> instances are equal.
+        /// </summary>
+        /// <param name="left">The first key to compare.</param>
+        /// <param name="right">The second key to compare.</param>
+        /// <returns>
+        /// <see langword="true"/> if the keys are equal; otherwise, <see langword="false"/>.
+        /// </returns>
         public static bool operator ==(RunPathCacheKey left, RunPathCacheKey right) => left.Equals(right);
 
+        /// <summary>
+        /// Determines whether two <see cref="RunPathCacheKey"/> instances are not equal.
+        /// </summary>
+        /// <param name="left">The first key to compare.</param>
+        /// <param name="right">The second key to compare.</param>
+        /// <returns>
+        /// <see langword="true"/> if the keys differ; otherwise, <see langword="false"/>.
+        /// </returns>
         public static bool operator !=(RunPathCacheKey left, RunPathCacheKey right) => !(left == right);
 
         /// <inheritdoc/>
@@ -273,8 +355,24 @@ public sealed class DrawingTextCache
         /// </summary>
         public bool HasGlyphKey { get; }
 
+        /// <summary>
+        /// Determines whether two <see cref="RunPathCacheEntry"/> instances are equal.
+        /// </summary>
+        /// <param name="left">The first entry to compare.</param>
+        /// <param name="right">The second entry to compare.</param>
+        /// <returns>
+        /// <see langword="true"/> if the entries are equal; otherwise, <see langword="false"/>.
+        /// </returns>
         public static bool operator ==(RunPathCacheEntry left, RunPathCacheEntry right) => left.Equals(right);
 
+        /// <summary>
+        /// Determines whether two <see cref="RunPathCacheEntry"/> instances are not equal.
+        /// </summary>
+        /// <param name="left">The first entry to compare.</param>
+        /// <param name="right">The second entry to compare.</param>
+        /// <returns>
+        /// <see langword="true"/> if the entries differ; otherwise, <see langword="false"/>.
+        /// </returns>
         public static bool operator !=(RunPathCacheEntry left, RunPathCacheEntry right) => !(left == right);
 
         /// <inheritdoc/>
@@ -284,6 +382,10 @@ public sealed class DrawingTextCache
         /// <inheritdoc/>
         public bool Equals(RunPathCacheEntry other)
         {
+            // Prefer the stable glyph key: it matches identical glyphs across separate
+            // renders where the IPath instances differ. Without a key (e.g. uncached
+            // path-based text) fall back to path reference identity, which only matches
+            // within the same render.
             if (this.HasGlyphKey && other.HasGlyphKey)
             {
                 return this.GlyphKey.Equals(other.GlyphKey) && this.RenderLocation.Equals(other.RenderLocation);
@@ -299,16 +401,31 @@ public sealed class DrawingTextCache
                 : HashCode.Combine(this.Path, this.RenderLocation);
     }
 
+    /// <summary>
+    /// A run-path cache entry pairing the key with the combined positioned path. The key
+    /// is stored so that eviction from the usage list can also remove the dictionary entry.
+    /// </summary>
     private readonly struct RunPathEntry
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="RunPathEntry"/> struct.
+        /// </summary>
+        /// <param name="key">The positioned run path key.</param>
+        /// <param name="path">The combined positioned path.</param>
         public RunPathEntry(RunPathCacheKey key, IPath path)
         {
             this.Key = key;
             this.Path = path;
         }
 
+        /// <summary>
+        /// Gets the positioned run path key.
+        /// </summary>
         public RunPathCacheKey Key { get; }
 
+        /// <summary>
+        /// Gets the combined positioned path.
+        /// </summary>
         public IPath Path { get; }
     }
 }

@@ -17,8 +17,25 @@ public sealed class DrawingClipDescriptor
     private readonly IReadOnlyList<Rectangle>? integerRectangles;
     private readonly IReadOnlyList<RectangleF>? rectangles;
     private readonly IReadOnlyList<IPath>? paths;
+
+    // Lazily cached linearization of the path operands at PathScale. Safe to cache because
+    // every mutation (Translate/Transform) produces a new descriptor instance.
     private LinearGeometry? pathGeometry;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingClipDescriptor"/> class.
+    /// </summary>
+    /// <param name="kind">The clip primitive kind.</param>
+    /// <param name="rectangle">The rectangle for rectangle clips.</param>
+    /// <param name="integerRectangles">The rectangles for integer region clips.</param>
+    /// <param name="rectangles">The rectangles for floating-point region clips.</param>
+    /// <param name="paths">The path operands for path clips.</param>
+    /// <param name="pathScale">The path-space scale seen by curve subdivision.</param>
+    /// <param name="pathTransform">The residual transform mapping scaled path geometry into descriptor coordinates.</param>
+    /// <param name="operation">The operation used to combine this descriptor with the existing clip.</param>
+    /// <param name="intersectionRule">The fill rule used for path geometry.</param>
+    /// <param name="edgeMode">The clip edge mode.</param>
+    /// <param name="antialiasThreshold">The coverage threshold used for hard clip edges.</param>
     private DrawingClipDescriptor(
         DrawingClipKind kind,
         RectangleF rectangle,
@@ -194,6 +211,14 @@ public sealed class DrawingClipDescriptor
     /// <summary>
     /// Creates a path descriptor from operands plus the transform split used by path lowering.
     /// </summary>
+    /// <param name="paths">The path operands interpreted as one clip region.</param>
+    /// <param name="scale">The path-space scale seen by curve subdivision.</param>
+    /// <param name="transform">The residual transform mapping scaled path geometry into descriptor coordinates.</param>
+    /// <param name="operation">The operation used to combine the paths with the existing clip.</param>
+    /// <param name="intersectionRule">The fill rule used for the path geometry.</param>
+    /// <param name="edgeMode">The clip edge mode.</param>
+    /// <param name="antialiasThreshold">The coverage threshold used for hard clip edges.</param>
+    /// <returns>The descriptor.</returns>
     private static DrawingClipDescriptor CreatePath(
         IReadOnlyList<IPath> paths,
         Vector2 scale,
@@ -380,6 +405,7 @@ public sealed class DrawingClipDescriptor
     /// </summary>
     /// <param name="transform">The transform that maps the returned geometry into descriptor coordinates.</param>
     /// <returns>The scaled linear geometry for the path clip.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when this descriptor is not a path clip.</exception>
     public LinearGeometry ToLinearGeometry(out Matrix4x4 transform)
     {
         if (this.Kind != DrawingClipKind.Path)
@@ -466,6 +492,7 @@ public sealed class DrawingClipDescriptor
     /// <summary>
     /// Gets the full path transform represented by the stored scale and residual transform.
     /// </summary>
+    /// <returns>The combined scale and residual transform.</returns>
     private Matrix4x4 GetPathMatrix()
         => Matrix4x4.CreateScale(this.PathScale.X, this.PathScale.Y, 1F) * this.PathTransform;
 
@@ -487,6 +514,12 @@ public sealed class DrawingClipDescriptor
         return false;
     }
 
+    /// <summary>
+    /// Transforms a rectangle and returns the axis-aligned bounds of its transformed corners.
+    /// </summary>
+    /// <param name="rectangle">The rectangle to transform.</param>
+    /// <param name="matrix">The transform matrix.</param>
+    /// <returns>The axis-aligned bounds of the transformed rectangle.</returns>
     private static RectangleF TransformRectangle(RectangleF rectangle, Matrix4x4 matrix)
     {
         Vector2 p0 = Vector2.Transform(new Vector2(rectangle.Left, rectangle.Top), matrix);
@@ -502,6 +535,11 @@ public sealed class DrawingClipDescriptor
         return RectangleF.FromLTRB(left, top, right, bottom);
     }
 
+    /// <summary>
+    /// Gets the union bounds of an integer region.
+    /// </summary>
+    /// <param name="rectangles">The region rectangles.</param>
+    /// <returns>The union bounds.</returns>
     private static RectangleF GetIntegerRegionBounds(IReadOnlyList<Rectangle> rectangles)
     {
         Rectangle bounds = rectangles[0];
@@ -513,6 +551,11 @@ public sealed class DrawingClipDescriptor
         return bounds;
     }
 
+    /// <summary>
+    /// Gets the union bounds of a floating-point region.
+    /// </summary>
+    /// <param name="rectangles">The region rectangles.</param>
+    /// <returns>The union bounds.</returns>
     private static RectangleF GetRegionBounds(IReadOnlyList<RectangleF> rectangles)
     {
         RectangleF bounds = rectangles[0];
@@ -524,6 +567,11 @@ public sealed class DrawingClipDescriptor
         return bounds;
     }
 
+    /// <summary>
+    /// Gets the union bounds of the path operands in path space.
+    /// </summary>
+    /// <param name="paths">The path operands.</param>
+    /// <returns>The union bounds.</returns>
     private static RectangleF GetPathBounds(IReadOnlyList<IPath> paths)
     {
         RectangleF bounds = paths[0].Bounds;
@@ -535,6 +583,13 @@ public sealed class DrawingClipDescriptor
         return bounds;
     }
 
+    /// <summary>
+    /// Gets the union bounds of the path operands mapped through the scale and residual transform.
+    /// </summary>
+    /// <param name="paths">The path operands.</param>
+    /// <param name="scale">The path-space scale.</param>
+    /// <param name="transform">The residual transform mapping scaled geometry into descriptor coordinates.</param>
+    /// <returns>The union bounds in descriptor coordinates.</returns>
     private static RectangleF GetPathBounds(IReadOnlyList<IPath> paths, Vector2 scale, Matrix4x4 transform)
     {
         RectangleF bounds = GetPathBounds(paths);
@@ -543,6 +598,11 @@ public sealed class DrawingClipDescriptor
         return transform.IsIdentity ? scaled : RectangleF.Transform(scaled, transform);
     }
 
+    /// <summary>
+    /// Sorts region rectangles into the top-to-bottom, left-to-right order used by the
+    /// canonical region model.
+    /// </summary>
+    /// <param name="rectangles">The rectangles to sort in place.</param>
     private static void SortRegionRectangles(RectangleF[] rectangles)
         => Array.Sort(
             rectangles,

@@ -275,6 +275,78 @@ public partial class ProcessWithDrawingCanvasTests
     }
 
     [Theory]
+    [WithBlankImage(200, 200, PixelTypes.Rgba32, 30f)]
+    [WithBlankImage(200, 200, PixelTypes.Rgba32, 45f)]
+    [WithBlankImage(200, 200, PixelTypes.Rgba32, 120f)]
+    public void FillEllipticGradientBrush_RotatedAxis_MatchesAxisAlignedGradient<TPixel>(TestImageProvider<TPixel> provider, float degrees)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        // The elliptic gradient must be rotation-covariant: sampling a rotated ellipse at the
+        // rotated location of a point must produce the same value the axis-aligned ellipse
+        // produces at the original point. A mirrored (sign-flipped) rotation breaks this for
+        // every angle that is not a multiple of 90 degrees.
+        const float majorRadius = 60F;
+        const float axisRatio = 0.4F;
+        PointF center = new(100, 100);
+        float radians = GeometryUtilities.DegreeToRadian(degrees);
+        float cos = MathF.Cos(radians);
+        float sin = MathF.Sin(radians);
+
+        EllipticGradientBrush axisAlignedBrush = new(
+            center,
+            new PointF(center.X + majorRadius, center.Y),
+            axisRatio,
+            GradientRepetitionMode.None,
+            new ColorStop(0, Color.Yellow),
+            new ColorStop(1, Color.Black));
+
+        EllipticGradientBrush rotatedBrush = new(
+            center,
+            new PointF(center.X + (majorRadius * cos), center.Y + (majorRadius * sin)),
+            axisRatio,
+            GradientRepetitionMode.None,
+            new ColorStop(0, Color.Yellow),
+            new ColorStop(1, Color.Black));
+
+        using Image<TPixel> axisAlignedImage = provider.GetImage();
+        using Image<TPixel> rotatedImage = provider.GetImage();
+        axisAlignedImage.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(axisAlignedBrush)));
+        rotatedImage.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(rotatedBrush)));
+
+        // Sample fractions along both ellipse axes. Rotated sample points land between pixel
+        // centers, so allow a small per-channel tolerance for the sub-pixel rounding; the
+        // mirror bug produces differences an order of magnitude larger at 30/45/120 degrees.
+        const int channelTolerance = 24;
+        foreach (float fraction in new[] { 0.25F, 0.5F, 0.75F })
+        {
+            // Major axis: axis-aligned sample at (f * a, 0); rotated sample at the rotated point.
+            AssertRotatedSampleMatches(fraction * majorRadius, 0F);
+
+            // Minor axis: axis-aligned sample at (0, f * b); rotated sample at the rotated point.
+            AssertRotatedSampleMatches(0F, fraction * majorRadius * axisRatio);
+        }
+
+        void AssertRotatedSampleMatches(float localX, float localY)
+        {
+            Point axisAlignedPoint = new(
+                (int)MathF.Round(center.X + localX),
+                (int)MathF.Round(center.Y + localY));
+            Point rotatedPoint = new(
+                (int)MathF.Round(center.X + (localX * cos) - (localY * sin)),
+                (int)MathF.Round(center.Y + (localX * sin) + (localY * cos)));
+
+            Rgba32 expected = axisAlignedImage[axisAlignedPoint.X, axisAlignedPoint.Y].ToRgba32();
+            Rgba32 actual = rotatedImage[rotatedPoint.X, rotatedPoint.Y].ToRgba32();
+
+            Assert.True(
+                Math.Abs(expected.R - actual.R) <= channelTolerance &&
+                Math.Abs(expected.G - actual.G) <= channelTolerance &&
+                Math.Abs(expected.B - actual.B) <= channelTolerance,
+                $"Rotated elliptic gradient diverged at local ({localX}, {localY}) for {degrees} degrees: expected {expected}, actual {actual}.");
+        }
+    }
+
+    [Theory]
     [WithBlankImage(200, 200, PixelTypes.Rgba32, 0.1, 0)]
     [WithBlankImage(200, 200, PixelTypes.Rgba32, 0.4, 0)]
     [WithBlankImage(200, 200, PixelTypes.Rgba32, 0.8, 0)]

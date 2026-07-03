@@ -11,58 +11,58 @@ namespace SixLabors.ImageSharp.Drawing;
 public static partial class PathExtensions
 {
     /// <summary>
-    /// Creates a path rotated by the specified radians around its center.
+    /// Creates a path collection rotated by the specified radians around its center.
     /// </summary>
-    /// <param name="path">The path to rotate.</param>
-    /// <param name="radians">The radians to rotate the path.</param>
-    /// <returns>A <see cref="IPath"/> with a rotate transform applied.</returns>
+    /// <param name="path">The path collection to rotate.</param>
+    /// <param name="radians">The radians to rotate the paths.</param>
+    /// <returns>An <see cref="IPathCollection"/> with a rotate transform applied.</returns>
     public static IPathCollection Rotate(this IPathCollection path, float radians)
         => path.Transform(new Matrix4x4(Matrix3x2.CreateRotation(radians, RectangleF.Center(path.Bounds))));
 
     /// <summary>
-    /// Creates a path rotated by the specified degrees around its center.
+    /// Creates a path collection rotated by the specified degrees around its center.
     /// </summary>
-    /// <param name="shape">The path to rotate.</param>
-    /// <param name="degree">The degree to rotate the path.</param>
-    /// <returns>A <see cref="IPath"/> with a rotate transform applied.</returns>
+    /// <param name="shape">The path collection to rotate.</param>
+    /// <param name="degree">The degree to rotate the paths.</param>
+    /// <returns>An <see cref="IPathCollection"/> with a rotate transform applied.</returns>
     public static IPathCollection RotateDegree(this IPathCollection shape, float degree)
         => shape.Rotate(GeometryUtilities.DegreeToRadian(degree));
 
     /// <summary>
-    /// Creates a path translated by the supplied position
+    /// Creates a path collection translated by the supplied position.
     /// </summary>
-    /// <param name="path">The path to translate.</param>
+    /// <param name="path">The path collection to translate.</param>
     /// <param name="position">The translation position.</param>
-    /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
+    /// <returns>An <see cref="IPathCollection"/> with a translate transform applied.</returns>
     public static IPathCollection Translate(this IPathCollection path, PointF position)
         => path.Transform(Matrix4x4.CreateTranslation(position.X, position.Y, 0));
 
     /// <summary>
-    /// Creates a path translated by the supplied position
+    /// Creates a path collection translated by the supplied position.
     /// </summary>
-    /// <param name="path">The path to translate.</param>
+    /// <param name="path">The path collection to translate.</param>
     /// <param name="x">The amount to translate along the X axis.</param>
     /// <param name="y">The amount to translate along the Y axis.</param>
-    /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
+    /// <returns>An <see cref="IPathCollection"/> with a translate transform applied.</returns>
     public static IPathCollection Translate(this IPathCollection path, float x, float y)
         => path.Translate(new PointF(x, y));
 
     /// <summary>
-    /// Creates a path translated by the supplied position
+    /// Creates a path collection scaled by the supplied amounts around its center.
     /// </summary>
-    /// <param name="path">The path to translate.</param>
+    /// <param name="path">The path collection to scale.</param>
     /// <param name="scaleX">The amount to scale along the X axis.</param>
     /// <param name="scaleY">The amount to scale along the Y axis.</param>
-    /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
+    /// <returns>An <see cref="IPathCollection"/> with a scale transform applied.</returns>
     public static IPathCollection Scale(this IPathCollection path, float scaleX, float scaleY)
         => path.Transform(Matrix4x4.CreateScale(scaleX, scaleY, 1, new Vector3(RectangleF.Center(path.Bounds), 0)));
 
     /// <summary>
-    /// Creates a path translated by the supplied position
+    /// Creates a path collection scaled by the supplied amount around its center.
     /// </summary>
-    /// <param name="path">The path to translate.</param>
+    /// <param name="path">The path collection to scale.</param>
     /// <param name="scale">The amount to scale along both the x and y axis.</param>
-    /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
+    /// <returns>An <see cref="IPathCollection"/> with a scale transform applied.</returns>
     public static IPathCollection Scale(this IPathCollection path, float scale)
         => path.Transform(Matrix4x4.CreateScale(scale, scale, 1, new Vector3(RectangleF.Center(path.Bounds), 0)));
 
@@ -71,7 +71,7 @@ public static partial class PathExtensions
     /// </summary>
     /// <param name="path">The path to rotate.</param>
     /// <param name="radians">The radians to rotate the path.</param>
-    /// <returns>A <see cref="IPath"/> with a rotate transform applied.</returns>
+    /// <returns>An <see cref="IPath"/> with a rotate transform applied.</returns>
     public static IPath Rotate(this IPath path, float radians)
         => path.Transform(new Matrix4x4(Matrix3x2.CreateRotation(radians, RectangleF.Center(path.Bounds))));
 
@@ -80,45 +80,45 @@ public static partial class PathExtensions
     /// </summary>
     /// <param name="shape">The path to rotate.</param>
     /// <param name="degree">The degree to rotate the path.</param>
-    /// <returns>A <see cref="IPath"/> with a rotate transform applied.</returns>
+    /// <returns>An <see cref="IPath"/> with a rotate transform applied.</returns>
     public static IPath RotateDegree(this IPath shape, float degree)
         => shape.Rotate(GeometryUtilities.DegreeToRadian(degree));
 
     /// <summary>
-    /// Creates a path translated by the supplied position
+    /// Creates a path translated by the supplied position.
     /// </summary>
     /// <param name="path">The path to translate.</param>
     /// <param name="position">The translation position.</param>
-    /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
+    /// <returns>An <see cref="IPath"/> with a translate transform applied.</returns>
     public static IPath Translate(this IPath path, PointF position)
         => path.Transform(Matrix4x4.CreateTranslation(position.X, position.Y, 0));
 
     /// <summary>
-    /// Creates a path translated by the supplied position
+    /// Creates a path translated by the supplied position.
     /// </summary>
     /// <param name="path">The path to translate.</param>
     /// <param name="x">The amount to translate along the X axis.</param>
     /// <param name="y">The amount to translate along the Y axis.</param>
-    /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
+    /// <returns>An <see cref="IPath"/> with a translate transform applied.</returns>
     public static IPath Translate(this IPath path, float x, float y)
         => path.Translate(new Vector2(x, y));
 
     /// <summary>
-    /// Creates a path translated by the supplied position
+    /// Creates a path scaled by the supplied amounts around its center.
     /// </summary>
-    /// <param name="path">The path to translate.</param>
+    /// <param name="path">The path to scale.</param>
     /// <param name="scaleX">The amount to scale along the X axis.</param>
     /// <param name="scaleY">The amount to scale along the Y axis.</param>
-    /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
+    /// <returns>An <see cref="IPath"/> with a scale transform applied.</returns>
     public static IPath Scale(this IPath path, float scaleX, float scaleY)
         => path.Transform(Matrix4x4.CreateScale(scaleX, scaleY, 1, new Vector3(RectangleF.Center(path.Bounds), 0)));
 
     /// <summary>
-    /// Creates a path translated by the supplied position
+    /// Creates a path scaled by the supplied amount around its center.
     /// </summary>
-    /// <param name="path">The path to translate.</param>
+    /// <param name="path">The path to scale.</param>
     /// <param name="scale">The amount to scale along both the x and y axis.</param>
-    /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
+    /// <returns>An <see cref="IPath"/> with a scale transform applied.</returns>
     public static IPath Scale(this IPath path, float scale)
         => path.Transform(Matrix4x4.CreateScale(scale, scale, 1, new Vector3(RectangleF.Center(path.Bounds), 0)));
 

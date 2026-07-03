@@ -63,6 +63,12 @@ const DRAW_FLAGS_BLEND_ALPHA_MASK = 0x3fffc000u;
 // here because every consumer (draw_leaf, coarse, fine) imports this module.
 const CLIP_DIFFERENCE_MASK_BIT = 0x80000000u;
 const CLIP_HARD_MASK_BIT = 0x40000000u;
+// Marks an ISOLATED group (a layer). Isolated groups seed with transparent content and
+// composite back with blend_mix_compose, matching the CPU backend's clean layer targets.
+// Non-isolated groups (canvas clips) seed with a copy of the current tile content and pop
+// with a coverage lerp, matching the CPU backend's per-draw clip masking so composition
+// modes such as Src behave identically whether or not a tile goes through the clip group.
+const CLIP_ISOLATED_MASK_BIT = 0x20000000u;
 
 // The scan identity: all counters zero.
 fn draw_monoid_identity() -> DrawMonoid {

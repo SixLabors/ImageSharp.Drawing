@@ -17,6 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// separately and referenced by timeline entry index. During disposal replay, command ranges are
 /// lowered to short-lived backend scenes at the position where the canvas recorded the range.
 /// </remarks>
+/// <typeparam name="TPixel">The pixel format.</typeparam>
 internal sealed class DrawingCanvasBatcher<TPixel>
     where TPixel : unmanaged, IPixel<TPixel>
 {
@@ -56,6 +57,10 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     private DrawingBackendScene[] insertedScenes;
     private int insertedSceneCount;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingCanvasBatcher{TPixel}"/> class.
+    /// </summary>
+    /// <param name="configuration">The configuration providing parallelism settings for command preparation.</param>
     internal DrawingCanvasBatcher(Configuration configuration)
     {
         this.configuration = configuration;
@@ -316,6 +321,15 @@ internal sealed class DrawingCanvasBatcher<TPixel>
             entry.HasApply,
             entry.HasClipControls);
 
+    /// <summary>
+    /// Creates a command batch over a contiguous range of the shared command buffer.
+    /// </summary>
+    /// <param name="startIndex">The first command index.</param>
+    /// <param name="commandCount">The command count.</param>
+    /// <param name="hasLayers">Indicates whether the range contains layer boundary commands.</param>
+    /// <param name="hasApply">Indicates whether the range contains apply barriers.</param>
+    /// <param name="hasClipControls">Indicates whether the range contains ordered clip-control commands.</param>
+    /// <returns>The command batch.</returns>
     private DrawingCommandBatch CreatePreparedCommandBatch(
         int startIndex,
         int commandCount,
@@ -426,6 +440,9 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         Array.Resize(ref this.insertedScenes, nextCapacity);
     }
 
+    /// <summary>
+    /// Expands dashed strokes and normalizes brush transforms across the whole command buffer.
+    /// </summary>
     private void PrepareCommands()
     {
         if (!this.hasDashes && !this.hasBrushTransforms)
@@ -473,6 +490,11 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         this.hasBrushTransforms = false;
     }
 
+    /// <summary>
+    /// Prepares one queued command in place: expands dashed stroke geometry and bakes
+    /// non-identity transforms into brush coordinates.
+    /// </summary>
+    /// <param name="command">The command slot to prepare.</param>
     private static void PrepareCommand(ref CompositionSceneCommand command)
     {
         if (command is PathCompositionSceneCommand pathCommand)

@@ -33,6 +33,8 @@ public readonly struct GlyphLayerInfo
         this.Paint = paint;
         this.IntersectionRule = TextUtilities.MapFillRule(fillRule);
 
+        // Map the font composite mode to ImageSharp blend/composition modes once at
+        // construction so consumers can render the layer without re-mapping per use.
         CompositeMode compositeMode = paint?.CompositeMode ?? CompositeMode.SrcOver;
         this.PixelAlphaCompositionMode = TextUtilities.MapCompositionMode(compositeMode);
         this.PixelColorBlendingMode = TextUtilities.MapBlendingMode(compositeMode);
@@ -40,6 +42,19 @@ public readonly struct GlyphLayerInfo
         this.Kind = kind;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GlyphLayerInfo"/> struct from
+    /// already-mapped rendering modes. Used by <see cref="Transform"/> to copy a layer
+    /// without re-mapping the paint's composite mode.
+    /// </summary>
+    /// <param name="startIndex">Start index (inclusive) of the layer's paths within the glyph's path list.</param>
+    /// <param name="count">Number of paths in this layer.</param>
+    /// <param name="paint">The layer paint (null means use renderer default).</param>
+    /// <param name="intersectionRule">The pre-mapped fill rule.</param>
+    /// <param name="compositionMode">The pre-mapped pixel alpha composition mode.</param>
+    /// <param name="colorBlendingMode">The pre-mapped pixel color blending mode.</param>
+    /// <param name="bounds">Axis-aligned bounds of the layer geometry.</param>
+    /// <param name="kind">An optional semantic hint for the layer type.</param>
     private GlyphLayerInfo(
         int startIndex,
         int count,
@@ -100,6 +115,16 @@ public readonly struct GlyphLayerInfo
     /// </summary>
     public GlyphLayerKind Kind { get; }
 
+    /// <summary>
+    /// Returns a copy of <paramref name="info"/> with its cached bounds transformed by
+    /// <paramref name="matrix"/>. The path indices, paint, and rendering modes are
+    /// unchanged; the caller is responsible for transforming the paths themselves.
+    /// </summary>
+    /// <param name="info">The layer descriptor to transform.</param>
+    /// <param name="matrix">The transform matrix to apply to the bounds.</param>
+    /// <returns>
+    /// The transformed layer descriptor.
+    /// </returns>
     internal static GlyphLayerInfo Transform(in GlyphLayerInfo info, Matrix4x4 matrix)
         => new(
             info.StartIndex,

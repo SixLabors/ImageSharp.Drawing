@@ -6,12 +6,17 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Base class for Gradient brushes
+/// Base class for gradient brushes.
+/// Derived brushes define a parameterization that maps each point to a scalar gradient
+/// position; this base class maps that position to a color via the sorted color stops
+/// and the <see cref="GradientRepetitionMode"/>.
 /// </summary>
 public abstract class GradientBrush : Brush
 {
-    /// <inheritdoc cref="Brush"/>
-    /// <param name="repetitionMode">Defines how the colors are repeated beyond the interval [0..1]</param>
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GradientBrush"/> class.
+    /// </summary>
+    /// <param name="repetitionMode">Defines how the colors are repeated beyond the interval [0..1].</param>
     /// <param name="colorStops">The gradient colors.</param>
     protected GradientBrush(GradientRepetitionMode repetitionMode, params ColorStop[] colorStops)
     {
@@ -57,6 +62,9 @@ public abstract class GradientBrush : Brush
     /// <see cref="Array.Sort{T}(T[], Comparison{T})"/> is not stable and can reorder
     /// equal-ratio color stops, producing non-deterministic gradient results.
     /// </summary>
+    /// <typeparam name="T">The element type of the collection.</typeparam>
+    /// <param name="collection">The array to sort in place.</param>
+    /// <param name="comparison">The comparison used to order the elements.</param>
     private static void InsertionSort<T>(T[] collection, Comparison<T> comparison)
     {
         int count = collection.Length;
@@ -75,7 +83,7 @@ public abstract class GradientBrush : Brush
     }
 
     /// <summary>
-    /// Base class for gradient brush applicators
+    /// Base class for gradient brush applicators.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     internal abstract class GradientBrushRenderer<TPixel> : BrushRenderer<TPixel>
@@ -107,13 +115,23 @@ public abstract class GradientBrush : Brush
             this.repetitionMode = repetitionMode;
         }
 
+        /// <summary>
+        /// Gets the gradient color for the pixel at the given device coordinate.
+        /// </summary>
+        /// <param name="x">The x-coordinate of the pixel in device space.</param>
+        /// <param name="y">The y-coordinate of the pixel in device space.</param>
+        /// <returns>The blended gradient color converted to <typeparamref name="TPixel"/>.</returns>
         internal TPixel this[int x, int y]
         {
             get
             {
+                // Evaluate at pixel centers so gradient sampling lines up with the
+                // rasterized coverage positions.
                 float fx = x + 0.5f;
                 float fy = y + 0.5f;
 
+                // NaN signals that the parameterization is undefined at this point
+                // (e.g. outside the valid branch of a conic); such pixels stay transparent.
                 float positionOnCompleteGradient = this.PositionOnGradient(fx, fy);
                 if (float.IsNaN(positionOnCompleteGradient))
                 {
@@ -126,6 +144,8 @@ public abstract class GradientBrush : Brush
                         positionOnCompleteGradient %= 1;
                         break;
                     case GradientRepetitionMode.Reflect:
+                        // Fold every second period back on itself so alternating
+                        // repetitions run the stops in reverse order.
                         positionOnCompleteGradient %= 2;
                         if (positionOnCompleteGradient > 1)
                         {
@@ -193,7 +213,7 @@ public abstract class GradientBrush : Brush
 
         /// <summary>
         /// Calculates the position on the gradient for a given point.
-        /// This method is abstract as it's content depends on the shape of the gradient.
+        /// This method is abstract as its content depends on the shape of the gradient.
         /// </summary>
         /// <param name="x">The x-coordinate of the point.</param>
         /// <param name="y">The y-coordinate of the point.</param>
@@ -205,8 +225,17 @@ public abstract class GradientBrush : Brush
         /// </returns>
         protected abstract float PositionOnGradient(float x, float y);
 
+        /// <summary>
+        /// Finds the pair of adjacent color stops bracketing the given gradient position.
+        /// Positions before the first stop return the first stop twice; positions after the
+        /// last stop return the last stop twice, which yields the stable edge colors used
+        /// by <see cref="GradientRepetitionMode.None"/>.
+        /// </summary>
+        /// <param name="positionOnCompleteGradient">The position on the gradient, after repetition handling.</param>
+        /// <returns>The bracketing stops; equal when the position lies outside the stop range.</returns>
         private (ColorStop From, ColorStop To) GetGradientSegment(float positionOnCompleteGradient)
         {
+            // Stop counts are tiny, so a linear scan over the sorted stops beats a binary search.
             ColorStop localGradientFrom = this.colorStops[0];
             ColorStop localGradientTo = default;
 

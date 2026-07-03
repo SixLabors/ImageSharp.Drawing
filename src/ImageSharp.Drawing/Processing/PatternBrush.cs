@@ -29,9 +29,9 @@ public sealed class PatternBrush : Brush
     /// <summary>
     /// Initializes a new instance of the <see cref="PatternBrush"/> class.
     /// </summary>
-    /// <param name="foreColor">Color of the fore.</param>
-    /// <param name="backColor">Color of the back.</param>
-    /// <param name="pattern">The pattern.</param>
+    /// <param name="foreColor">The color used where the pattern flag is <see langword="true"/>.</param>
+    /// <param name="backColor">The color used where the pattern flag is <see langword="false"/>.</param>
+    /// <param name="pattern">The pattern flags, indexed [row, column].</param>
     public PatternBrush(Color foreColor, Color backColor, bool[,] pattern)
         : this(foreColor, backColor, new DenseMatrix<bool>(pattern))
     {
@@ -40,9 +40,9 @@ public sealed class PatternBrush : Brush
     /// <summary>
     /// Initializes a new instance of the <see cref="PatternBrush"/> class.
     /// </summary>
-    /// <param name="foreColor">Color of the fore.</param>
-    /// <param name="backColor">Color of the back.</param>
-    /// <param name="pattern">The pattern.</param>
+    /// <param name="foreColor">The color used where the pattern flag is <see langword="true"/>.</param>
+    /// <param name="backColor">The color used where the pattern flag is <see langword="false"/>.</param>
+    /// <param name="pattern">The pattern flags, indexed [row, column].</param>
     internal PatternBrush(Color foreColor, Color backColor, in DenseMatrix<bool> pattern)
     {
         this.Pattern = new DenseMatrix<Color>(pattern.Columns, pattern.Rows);
@@ -60,9 +60,10 @@ public sealed class PatternBrush : Brush
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="PatternBrush"/> class.
+    /// Initializes a new instance of the <see cref="PatternBrush"/> class,
+    /// sharing the pattern matrix of an existing brush.
     /// </summary>
-    /// <param name="brush">The brush.</param>
+    /// <param name="brush">The brush to copy the pattern from.</param>
     internal PatternBrush(PatternBrush brush) => this.Pattern = brush.Pattern;
 
     /// <summary>
@@ -122,10 +123,18 @@ public sealed class PatternBrush : Brush
             : base(configuration, options, canvasWidth)
             => this.pattern = pattern;
 
+        /// <summary>
+        /// Gets the pattern pixel for the given device coordinate.
+        /// </summary>
+        /// <param name="x">The x-coordinate of the pixel in device space.</param>
+        /// <param name="y">The y-coordinate of the pixel in device space.</param>
+        /// <returns>The pattern pixel at the tiled position.</returns>
         internal TPixel this[int x, int y]
         {
             get
             {
+                // The pattern tiles from the canvas origin (not the shape), so
+                // adjacent fills line up seamlessly.
                 x %= this.pattern.Columns;
                 y %= this.pattern.Rows;
 

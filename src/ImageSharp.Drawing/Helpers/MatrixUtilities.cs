@@ -7,8 +7,13 @@ using System.Runtime.CompilerServices;
 namespace SixLabors.ImageSharp.Drawing.Helpers;
 
 /// <summary>
-/// Provides helper methods for extracting properties from transformation matrices.
+/// Provides helper methods for extracting scale properties from transformation matrices.
 /// </summary>
+/// <remarks>
+/// Scale extraction operates on the 2D linear part of the matrix (M11, M12, M21, M22).
+/// Scale magnitudes are the lengths of the transformed X and Y basis vectors, so they are
+/// rotation-invariant and always non-negative. Translation does not affect any result.
+/// </remarks>
 public static class MatrixUtilities
 {
     /// <summary>
@@ -29,6 +34,10 @@ public static class MatrixUtilities
     /// <summary>
     /// Returns a value indicating whether the matrix maps axis-aligned rectangles to axis-aligned rectangles.
     /// </summary>
+    /// <remarks>
+    /// Translation, scaling, reflection, and 90 degree rotations (axis swaps) preserve axis
+    /// alignment. Skew and free rotation do not.
+    /// </remarks>
     /// <param name="matrix">The transformation matrix.</param>
     /// <returns><see langword="true"/> when axis-aligned rectangles remain axis-aligned; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -41,6 +50,10 @@ public static class MatrixUtilities
     /// <summary>
     /// Extracts the X and Y scale magnitudes from a 2D transform matrix.
     /// </summary>
+    /// <remarks>
+    /// The magnitudes are the lengths of the transformed X and Y basis vectors. They are
+    /// always non-negative; reflection and rotation are not represented in the result.
+    /// </remarks>
     /// <param name="matrix">The transformation matrix.</param>
     /// <returns>The X and Y scale magnitudes.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -52,7 +65,12 @@ public static class MatrixUtilities
     /// <summary>
     /// Computes the transform remaining after the X and Y scale magnitudes have been baked into geometry.
     /// </summary>
-    /// <param name="scale">The scale magnitudes baked into geometry.</param>
+    /// <remarks>
+    /// The invariant is <c>Matrix4x4.CreateScale(scale.X, scale.Y, 1) * residual == matrix</c>:
+    /// applying the residual to geometry that has already been scaled reproduces the original
+    /// transform. Rotation, reflection, skew, and translation all remain in the residual.
+    /// </remarks>
+    /// <param name="scale">The scale magnitudes baked into geometry. Components must be non-zero.</param>
     /// <param name="matrix">The original transformation matrix.</param>
     /// <returns>The residual transform.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

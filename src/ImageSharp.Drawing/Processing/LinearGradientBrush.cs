@@ -186,9 +186,13 @@ public sealed class LinearGradientBrush : GradientBrush
         {
             if (this.alongsSquared == 0f)
             {
+                // Degenerate zero-length axis: treat every point as sitting at the gradient end.
                 return 1f;
             }
 
+            // Scalar projection onto the gradient axis:
+            // t = dot(p - start, axis) / |axis|^2, giving 0 at the start point and 1 at the
+            // end point. Values outside [0..1] are handled by the repetition mode.
             float deltaX = x - this.start.X;
             float deltaY = y - this.start.Y;
             return ((deltaX * this.alongX) + (deltaY * this.alongY)) / this.alongsSquared;

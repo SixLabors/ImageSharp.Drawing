@@ -26,6 +26,11 @@ public static partial class PathExtensions
         return closed ? new Polygon(segments) : new Path(segments);
     }
 
+    /// <summary>
+    /// Copies the supplied points into a new array in reverse order.
+    /// </summary>
+    /// <param name="points">The points to reverse.</param>
+    /// <returns>The reversed point array.</returns>
     private static PointF[] ReversePoints(ReadOnlySpan<PointF> points)
     {
         PointF[] reversed = new PointF[points.Length];

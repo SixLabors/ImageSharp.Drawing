@@ -19,16 +19,35 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     // --- Render-pass ordering constants ---
     // Within DrawTextOperations, operations are sorted first by RenderPass so that
     // fills paint beneath outlines, and outlines beneath decorations.
+
+    /// <summary>
+    /// Render pass for glyph fills; painted first (bottom).
+    /// </summary>
     private const byte RenderOrderFill = 0;
+
+    /// <summary>
+    /// Render pass for glyph outlines; painted above fills.
+    /// </summary>
     private const byte RenderOrderOutline = 1;
+
+    /// <summary>
+    /// Render pass for text decorations; painted last (top).
+    /// </summary>
     private const byte RenderOrderDecoration = 2;
 
+    /// <summary>
+    /// The drawing options (transform, graphics options) supplied by the caller.
+    /// </summary>
     private readonly DrawingOptions drawingOptions;
 
-    /// <summary>The default pen supplied by the caller (e.g. from <c>DrawText(..., pen)</c>).</summary>
+    /// <summary>
+    /// The default pen supplied by the caller (e.g. from <c>DrawText(..., pen)</c>).
+    /// </summary>
     private readonly Pen? defaultPen;
 
-    /// <summary>The default brush supplied by the caller (e.g. from <c>DrawText(..., brush)</c>).</summary>
+    /// <summary>
+    /// The default brush supplied by the caller (e.g. from <c>DrawText(..., brush)</c>).
+    /// </summary>
     private readonly Brush? defaultBrush;
 
     /// <summary>
@@ -36,32 +55,52 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// for point-along-path queries. <see langword="null"/> for normal (linear) text.
     /// </summary>
     private readonly IPath? path;
+
+    /// <summary>
+    /// Set once <see cref="Dispose()"/> has run; guards against double disposal.
+    /// </summary>
     private bool isDisposed;
 
     // --- Per-glyph mutable state reset in BeginGlyph ---
 
-    /// <summary>The <see cref="TextRun"/> (or <see cref="RichTextRun"/>) governing the current glyph.</summary>
+    /// <summary>
+    /// The <see cref="TextRun"/> (or <see cref="RichTextRun"/>) governing the current glyph.
+    /// </summary>
     private TextRun? currentTextRun;
 
-    /// <summary>Brush resolved from the current <see cref="RichTextRun"/>, or <see langword="null"/>.</summary>
+    /// <summary>
+    /// Brush resolved from the current <see cref="RichTextRun"/>, or <see langword="null"/>.
+    /// </summary>
     private Brush? currentBrush;
 
-    /// <summary>Pen resolved from the current <see cref="RichTextRun"/>, or <see langword="null"/>.</summary>
+    /// <summary>
+    /// Pen resolved from the current <see cref="RichTextRun"/>, or <see langword="null"/>.
+    /// </summary>
     private Pen? currentPen;
 
-    /// <summary>The fill rule for the current color layer (COLR).</summary>
+    /// <summary>
+    /// The fill rule for the current color layer (COLR).
+    /// </summary>
     private FillRule currentFillRule;
 
-    /// <summary>Alpha composition mode active for the current glyph/layer.</summary>
+    /// <summary>
+    /// Alpha composition mode active for the current glyph/layer.
+    /// </summary>
     private PixelAlphaCompositionMode currentCompositionMode;
 
-    /// <summary>Color blending mode active for the current glyph/layer.</summary>
+    /// <summary>
+    /// Color blending mode active for the current glyph/layer.
+    /// </summary>
     private PixelColorBlendingMode currentBlendingMode;
 
-    /// <summary>Whether the current glyph uses vertical layout (affects decoration orientation).</summary>
+    /// <summary>
+    /// Whether the current glyph uses vertical layout (affects decoration orientation).
+    /// </summary>
     private bool currentDecorationIsVertical;
 
-    /// <summary>Set to <see langword="true"/> when <see cref="BeginLayer"/> is called, cleared in <see cref="EndGlyph"/>.</summary>
+    /// <summary>
+    /// Set to <see langword="true"/> when <see cref="BeginLayer"/> is called, cleared in <see cref="EndGlyph"/>.
+    /// </summary>
     private bool hasLayer;
 
     // --- Glyph outline cache ---
@@ -71,12 +110,20 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     //
     // AccuracyMultiple = 8 means sub-pixel positions are quantized to 1/8 px steps.
     // Benchmarked to give <0.2% image difference vs. uncached, with >60% cache hit ratio.
+
+    /// <summary>
+    /// The reciprocal of the sub-pixel quantization step used for cache keys.
+    /// </summary>
     private const float AccuracyMultiple = 8;
 
-    /// <summary>Cache storing reusable glyph outline entries.</summary>
+    /// <summary>
+    /// Cache storing reusable glyph outline entries.
+    /// </summary>
     private readonly DrawingTextCache glyphCache;
 
-    /// <summary>Read cursor into the cached layer list for layered cache hits.</summary>
+    /// <summary>
+    /// Read cursor into the cached layer list for layered cache hits.
+    /// </summary>
     private int cacheReadIndex;
 
     /// <summary>
@@ -91,10 +138,14 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// </summary>
     private readonly bool noCache;
 
-    /// <summary>The cache key computed for the current glyph in <see cref="BeginGlyph"/>.</summary>
+    /// <summary>
+    /// The cache key computed for the current glyph in <see cref="BeginGlyph"/>.
+    /// </summary>
     private CacheKey currentCacheKey;
 
-    /// <summary>The cache entries for the current glyph key.</summary>
+    /// <summary>
+    /// The cache entries for the current glyph key.
+    /// </summary>
     private List<GlyphRenderData> currentCacheEntries = [];
 
     /// <summary>
@@ -579,12 +630,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
 
             renderLocation = ClampToPixel(currentLocation);
 
-            if (renderFill && renderData.FillPath is not null)
-            {
-                glyphPath = renderData.FillPath;
-            }
-
-            if (renderOutline && renderData.FillPath is not null)
+            if ((renderFill || renderOutline) && renderData.FillPath is not null)
             {
                 glyphPath = renderData.FillPath;
             }
@@ -704,7 +750,9 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// </summary>
     /// <param name="pathLocation">The estimated outline bounds origin for the current glyph.</param>
     /// <param name="previousDelta">The sub-pixel delta recorded when the path was first cached.</param>
-    /// <returns>A pixel-snapped render location.</returns>
+    /// <returns>
+    /// A pixel-snapped render location.
+    /// </returns>
     private static Point ComputeCacheHitRenderLocation(PointF pathLocation, Vector2 previousDelta)
     {
         Vector2 currentLocation = (Vector2)pathLocation;
@@ -734,6 +782,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// Stores a <see cref="GlyphRenderData"/> entry in the glyph cache under the
     /// current key. Creates the cache list on first insertion for a given key.
     /// </summary>
+    /// <param name="renderData">The render data to append to the current key's entry list.</param>
     private void UpdateCache(GlyphRenderData renderData)
     {
         this.glyphCache.GetOrAdd(this.currentCacheKey).Add(renderData);
@@ -753,6 +802,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// for the current glyph, positioning it along the text path (if any) or
     /// leaving the identity transform for linear text.
     /// </summary>
+    /// <param name="bounds">The font-metric bounding rectangle of the glyph.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void TransformGlyph(in FontRectangle bounds)
         => this.Builder.SetTransform(this.ComputeTransform(in bounds));
@@ -761,6 +811,10 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// Computes the combined translation + rotation matrix that places a glyph
     /// along the text path. For linear text (no path), returns <see cref="Matrix4x4.Identity"/>.
     /// </summary>
+    /// <param name="bounds">The font-metric bounding rectangle of the glyph.</param>
+    /// <returns>
+    /// The glyph placement matrix.
+    /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private Matrix4x4 ComputeTransform(in FontRectangle bounds)
     {
@@ -851,43 +905,69 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// </summary>
     internal readonly struct CacheKey : IEquatable<CacheKey>
     {
-        /// <summary>Gets the font family name.</summary>
+        /// <summary>
+        /// Gets the font family name.
+        /// </summary>
         public string Font { get; init; }
 
-        /// <summary>Gets the glyph color variant (normal, COLR, etc.).</summary>
+        /// <summary>
+        /// Gets the glyph color variant (normal, COLR, etc.).
+        /// </summary>
         public GlyphColor GlyphColor { get; init; }
 
-        /// <summary>Gets the glyph type (simple, composite, etc.).</summary>
+        /// <summary>
+        /// Gets the glyph type (simple, composite, etc.).
+        /// </summary>
         public GlyphType GlyphType { get; init; }
 
-        /// <summary>Gets the font style (regular, bold, italic, etc.).</summary>
+        /// <summary>
+        /// Gets the font style (regular, bold, italic, etc.).
+        /// </summary>
         public FontStyle FontStyle { get; init; }
 
-        /// <summary>Gets the glyph index within the font.</summary>
+        /// <summary>
+        /// Gets the glyph index within the font.
+        /// </summary>
         public ushort GlyphId { get; init; }
 
-        /// <summary>Gets the composite glyph parent index (0 for non-composite).</summary>
+        /// <summary>
+        /// Gets the composite glyph parent index (0 for non-composite).
+        /// </summary>
         public ushort CompositeGlyphId { get; init; }
 
-        /// <summary>Gets the Unicode code point this glyph represents.</summary>
+        /// <summary>
+        /// Gets the Unicode code point this glyph represents.
+        /// </summary>
         public CodePoint CodePoint { get; init; }
 
-        /// <summary>Gets the em-size at which the glyph is rendered.</summary>
+        /// <summary>
+        /// Gets the em-size at which the glyph is rendered.
+        /// </summary>
         public float PointSize { get; init; }
 
-        /// <summary>Gets the DPI used for rendering.</summary>
+        /// <summary>
+        /// Gets the DPI used for rendering.
+        /// </summary>
         public float Dpi { get; init; }
 
-        /// <summary>Gets the layout mode (horizontal, vertical, vertical-rotated).</summary>
+        /// <summary>
+        /// Gets the layout mode (horizontal, vertical, vertical-rotated).
+        /// </summary>
         public GlyphLayoutMode LayoutMode { get; init; }
 
-        /// <summary>Gets any text attributes (e.g. superscript/subscript) that affect rendering.</summary>
+        /// <summary>
+        /// Gets any text attributes (e.g. superscript/subscript) that affect rendering.
+        /// </summary>
         public TextAttributes TextAttributes { get; init; }
 
-        /// <summary>Gets text decorations that may influence outline geometry.</summary>
+        /// <summary>
+        /// Gets text decorations that may influence outline geometry.
+        /// </summary>
         public TextDecorations TextDecorations { get; init; }
 
-        /// <summary>Gets the quantized sub-pixel bounds used for position-sensitive cache lookup.</summary>
+        /// <summary>
+        /// Gets the quantized sub-pixel bounds used for position-sensitive cache lookup.
+        /// </summary>
         public RectangleF Bounds { get; init; }
 
         /// <summary>
@@ -898,8 +978,24 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         /// </summary>
         public Pen? PenReference { get; init; }
 
+        /// <summary>
+        /// Determines whether two <see cref="CacheKey"/> instances are equal.
+        /// </summary>
+        /// <param name="left">The first key to compare.</param>
+        /// <param name="right">The second key to compare.</param>
+        /// <returns>
+        /// <see langword="true"/> if the keys are equal; otherwise, <see langword="false"/>.
+        /// </returns>
         public static bool operator ==(CacheKey left, CacheKey right) => left.Equals(right);
 
+        /// <summary>
+        /// Determines whether two <see cref="CacheKey"/> instances are not equal.
+        /// </summary>
+        /// <param name="left">The first key to compare.</param>
+        /// <param name="right">The second key to compare.</param>
+        /// <returns>
+        /// <see langword="true"/> if the keys differ; otherwise, <see langword="false"/>.
+        /// </returns>
         public static bool operator !=(CacheKey left, CacheKey right) => !(left == right);
 
         /// <summary>
@@ -910,7 +1006,9 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         /// <param name="parameters">The glyph renderer parameters from the font engine.</param>
         /// <param name="bounds">Quantized sub-pixel bounds for position-sensitive lookup.</param>
         /// <param name="penReference">The pen reference for outlined text, or <see langword="null"/>.</param>
-        /// <returns>A new cache key.</returns>
+        /// <returns>
+        /// A new cache key.
+        /// </returns>
         public static CacheKey FromParameters(
             in GlyphRendererParameters parameters,
             RectangleF bounds,
@@ -934,9 +1032,11 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 PenReference = penReference
             };
 
+        /// <inheritdoc/>
         public override bool Equals(object? obj)
             => obj is CacheKey key && this.Equals(key);
 
+        /// <inheritdoc/>
         public bool Equals(CacheKey other)
             => this.Font == other.Font &&
             this.GlyphColor.Equals(other.GlyphColor) &&
@@ -953,8 +1053,10 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             this.Bounds.Equals(other.Bounds) &&
             ReferenceEquals(this.PenReference, other.PenReference);
 
+        /// <inheritdoc/>
         public override int GetHashCode()
         {
+            // Must match Equals: the pen is hashed by reference identity, not value.
             HashCode hash = default;
             hash.Add(this.Font);
             hash.Add(this.GlyphColor);

@@ -10,6 +10,9 @@ namespace SixLabors.ImageSharp.Drawing;
 /// </summary>
 public sealed class EmptyPath : IPath
 {
+    /// <summary>
+    /// The shared zero-content geometry returned for every scale.
+    /// </summary>
     private static readonly LinearGeometry EmptyGeometry = new(
         new LinearGeometryInfo
         {
@@ -21,15 +24,19 @@ public sealed class EmptyPath : IPath
         [],
         []);
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="EmptyPath"/> class.
+    /// </summary>
+    /// <param name="pathType">The path type the empty path reports.</param>
     private EmptyPath(PathTypes pathType) => this.PathType = pathType;
 
     /// <summary>
-    /// Gets the closed path instance of the empty path
+    /// Gets the closed path instance of the empty path.
     /// </summary>
     public static EmptyPath ClosedPath { get; } = new(PathTypes.Closed);
 
     /// <summary>
-    /// Gets the open path instance of the empty path
+    /// Gets the open path instance of the empty path.
     /// </summary>
     public static EmptyPath OpenPath { get; } = new(PathTypes.Open);
 

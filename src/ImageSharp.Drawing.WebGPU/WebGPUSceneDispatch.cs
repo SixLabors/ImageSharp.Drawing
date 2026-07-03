@@ -4258,73 +4258,119 @@ internal readonly unsafe struct WebGPUSceneComputeCommand
 /// </summary>
 internal enum WebGPUSceneShaderId
 {
-    /// <summary>prepare.wgsl: zeroes the bump counters and failure mask before a scheduling run.</summary>
+    /// <summary>
+    /// prepare.wgsl: zeroes the bump counters and failure mask before a scheduling run.
+    /// </summary>
     Prepare = 0,
 
-    /// <summary>pathtag_reduce.wgsl: first-level reduction of path tags into workgroup monoids.</summary>
+    /// <summary>
+    /// pathtag_reduce.wgsl: first-level reduction of path tags into workgroup monoids.
+    /// </summary>
     PathtagReduce = 1,
 
-    /// <summary>pathtag_reduce2.wgsl: second-level reduction used by the large scan variant.</summary>
+    /// <summary>
+    /// pathtag_reduce2.wgsl: second-level reduction used by the large scan variant.
+    /// </summary>
     PathtagReduce2 = 2,
 
-    /// <summary>pathtag_scan1.wgsl: middle scan pass of the large pathtag scan.</summary>
+    /// <summary>
+    /// pathtag_scan1.wgsl: middle scan pass of the large pathtag scan.
+    /// </summary>
     PathtagScan1 = 3,
 
-    /// <summary>pathtag_scan.wgsl (large variant): final per-tag-word exclusive prefix scan.</summary>
+    /// <summary>
+    /// pathtag_scan.wgsl (large variant): final per-tag-word exclusive prefix scan.
+    /// </summary>
     PathtagScan = 4,
 
-    /// <summary>pathtag_scan.wgsl (small variant): single-level scan for small tag streams.</summary>
+    /// <summary>
+    /// pathtag_scan.wgsl (small variant): single-level scan for small tag streams.
+    /// </summary>
     PathtagScanSmall = 5,
 
-    /// <summary>bbox_clear.wgsl: resets per-path bboxes to inverted empty boxes.</summary>
+    /// <summary>
+    /// bbox_clear.wgsl: resets per-path bboxes to inverted empty boxes.
+    /// </summary>
     BboxClear = 6,
 
-    /// <summary>flatten.wgsl: lowers encoded path segments into the device-space line soup.</summary>
+    /// <summary>
+    /// flatten.wgsl: lowers encoded path segments into the device-space line soup.
+    /// </summary>
     Flatten = 7,
 
-    /// <summary>draw_reduce.wgsl: first pass of the draw-tag prefix sum.</summary>
+    /// <summary>
+    /// draw_reduce.wgsl: first pass of the draw-tag prefix sum.
+    /// </summary>
     DrawReduce = 8,
 
-    /// <summary>draw_leaf.wgsl: finalizes draw monoids, brush info, and clip inputs.</summary>
+    /// <summary>
+    /// draw_leaf.wgsl: finalizes draw monoids, brush info, and clip inputs.
+    /// </summary>
     DrawLeaf = 9,
 
-    /// <summary>clip_reduce.wgsl: first pass of the clip stack-monoid scan.</summary>
+    /// <summary>
+    /// clip_reduce.wgsl: first pass of the clip stack-monoid scan.
+    /// </summary>
     ClipReduce = 10,
 
-    /// <summary>clip_leaf.wgsl: resolves the clip stack and conservative clip bboxes.</summary>
+    /// <summary>
+    /// clip_leaf.wgsl: resolves the clip stack and conservative clip bboxes.
+    /// </summary>
     ClipLeaf = 11,
 
-    /// <summary>binning.wgsl: assigns draw objects to 16x16-tile bins.</summary>
+    /// <summary>
+    /// binning.wgsl: assigns draw objects to 16x16-tile bins.
+    /// </summary>
     Binning = 12,
 
-    /// <summary>path_row_alloc.wgsl: allocates sparse per-path tile-row records.</summary>
+    /// <summary>
+    /// path_row_alloc.wgsl: allocates sparse per-path tile-row records.
+    /// </summary>
     PathRowAlloc = 13,
 
-    /// <summary>path_row_span.wgsl: derives each sparse row's active column span from the lines.</summary>
+    /// <summary>
+    /// path_row_span.wgsl: derives each sparse row's active column span from the lines.
+    /// </summary>
     PathRowSpan = 14,
 
-    /// <summary>tile_alloc.wgsl: finalizes row spans and allocates the backing tile storage.</summary>
+    /// <summary>
+    /// tile_alloc.wgsl: finalizes row spans and allocates the backing tile storage.
+    /// </summary>
     TileAlloc = 15,
 
-    /// <summary>backdrop_dyn.wgsl: propagates winding backdrops along each sparse row.</summary>
+    /// <summary>
+    /// backdrop_dyn.wgsl: propagates winding backdrops along each sparse row.
+    /// </summary>
     Backdrop = 16,
 
-    /// <summary>path_count_setup.wgsl: sizes the indirect dispatch for the per-line stages.</summary>
+    /// <summary>
+    /// path_count_setup.wgsl: sizes the indirect dispatch for the per-line stages.
+    /// </summary>
     PathCountSetup = 17,
 
-    /// <summary>path_count.wgsl: counts per-tile segment crossings and emits SegmentCount records.</summary>
+    /// <summary>
+    /// path_count.wgsl: counts per-tile segment crossings and emits SegmentCount records.
+    /// </summary>
     PathCount = 18,
 
-    /// <summary>coarse.wgsl: serializes each tile's PTCL command list.</summary>
+    /// <summary>
+    /// coarse.wgsl: serializes each tile's PTCL command list.
+    /// </summary>
     Coarse = 19,
 
-    /// <summary>path_tiling_setup.wgsl: sizes the indirect path_tiling dispatch and checks seg-count overflow.</summary>
+    /// <summary>
+    /// path_tiling_setup.wgsl: sizes the indirect path_tiling dispatch and checks seg-count overflow.
+    /// </summary>
     PathTilingSetup = 20,
 
-    /// <summary>path_tiling.wgsl: writes the final clipped tile-relative segments.</summary>
+    /// <summary>
+    /// path_tiling.wgsl: writes the final clipped tile-relative segments.
+    /// </summary>
     PathTiling = 21,
 
-    /// <summary>chunk_reset.wgsl: clears the chunk-local bump counters between tile windows.</summary>
+    /// <summary>
+    /// chunk_reset.wgsl: clears the chunk-local bump counters between tile windows.
+    /// </summary>
     ChunkReset = 22
 }
 
@@ -4406,10 +4452,14 @@ internal readonly struct WebGPUSceneResourceProxy
 /// </summary>
 internal enum WebGPUSceneResourceProxyKind
 {
-    /// <summary>The proxy resolves to a storage or uniform buffer.</summary>
+    /// <summary>
+    /// The proxy resolves to a storage or uniform buffer.
+    /// </summary>
     Buffer = 0,
 
-    /// <summary>The proxy resolves to a texture view.</summary>
+    /// <summary>
+    /// The proxy resolves to a texture view.
+    /// </summary>
     TextureView = 1
 }
 

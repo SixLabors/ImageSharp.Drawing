@@ -7,22 +7,39 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
-/// Represents a line segment that contains a lists of control points that will be rendered as a cubic bezier curve
+/// Represents a line segment that contains a list of control points that will be rendered as a cubic bezier curve.
 /// </summary>
 /// <seealso cref="ILineSegment" />
 public sealed class CubicBezierLineSegment : ILineSegment
 {
     // Code for this taken from <see href="http://devmag.org.za/2011/04/05/bzier-curves-a-tutorial/"/>
+
+    /// <summary>
+    /// The squared distance between span endpoints below which subdivision stops.
+    /// </summary>
     private const float MinimumSqrDistance = 1.75f;
+
+    /// <summary>
+    /// The dot-product threshold used to decide whether a span is flat enough. Directions from the
+    /// midpoint to each endpoint are nearly opposite (dot close to -1) when the span is straight;
+    /// values above this threshold indicate curvature that requires further subdivision.
+    /// </summary>
     private const float DivisionThreshold = -.9995f;
 
+    /// <summary>
+    /// The bezier control points; the length is a multiple of 3 plus 1.
+    /// </summary>
     private readonly PointF[] controlPoints;
+
+    /// <summary>
+    /// The most recently flattened point run, keyed by the scale it was baked at.
+    /// </summary>
     private FlattenedCache? flattenedCache;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CubicBezierLineSegment"/> class.
     /// </summary>
-    /// <param name="points">The points.</param>
+    /// <param name="points">The control points. The length must be a multiple of 3 plus 1 (4, 7, 10...).</param>
     public CubicBezierLineSegment(PointF[] points)
     {
         Guard.NotNull(points, nameof(points));
@@ -34,11 +51,14 @@ public sealed class CubicBezierLineSegment : ILineSegment
     /// <summary>
     /// Initializes a new instance of the <see cref="CubicBezierLineSegment"/> class.
     /// </summary>
-    /// <param name="start">The start.</param>
-    /// <param name="controlPoint1">The control point1.</param>
-    /// <param name="controlPoint2">The control point2.</param>
-    /// <param name="end">The end.</param>
-    /// <param name="additionalPoints">The additional points.</param>
+    /// <param name="start">The start point of the curve.</param>
+    /// <param name="controlPoint1">The first control point.</param>
+    /// <param name="controlPoint2">The second control point.</param>
+    /// <param name="end">The end point of the curve.</param>
+    /// <param name="additionalPoints">
+    /// Additional points appended after <paramref name="end"/>; each group of three
+    /// (two control points and an end point) defines a further cubic span.
+    /// </param>
     public CubicBezierLineSegment(PointF start, PointF controlPoint1, PointF controlPoint2, PointF end, params PointF[] additionalPoints)
         : this(new[] { start, controlPoint1, controlPoint2, end }.Concat(additionalPoints))
     {
@@ -83,6 +103,8 @@ public sealed class CubicBezierLineSegment : ILineSegment
     /// Publication uses <see cref="Volatile.Write{T}(ref T, T)"/> so a concurrent reader either observes
     /// <see langword="null"/> or a fully-constructed entry.
     /// </remarks>
+    /// <param name="scale">The X/Y scale at which the curve is flattened.</param>
+    /// <returns>The flattened points at the requested scale.</returns>
     private PointF[] GetFlattenedPoints(Vector2 scale)
     {
         FlattenedCache? hit = Volatile.Read(ref this.flattenedCache);
@@ -133,6 +155,9 @@ public sealed class CubicBezierLineSegment : ILineSegment
     /// <paramref name="scale"/> into a single contiguous point run. Subdivision density is evaluated
     /// against the scaled control points so the polyline adapts to rendering scale.
     /// </summary>
+    /// <param name="controlPoints">The bezier control points; the length is a multiple of 3 plus 1.</param>
+    /// <param name="scale">The X/Y scale at which the curve is flattened.</param>
+    /// <returns>The flattened points.</returns>
     private static PointF[] FlattenCurve(PointF[] controlPoints, Vector2 scale)
     {
         int curveCount = (controlPoints.Length - 1) / 3;
@@ -164,6 +189,14 @@ public sealed class CubicBezierLineSegment : ILineSegment
     /// <summary>
     /// Recursively subdivides the scaled cubic segment, appending midpoints in left-to-right order.
     /// </summary>
+    /// <param name="t0">The curve parameter at the start of the span.</param>
+    /// <param name="t1">The curve parameter at the end of the span.</param>
+    /// <param name="p0">The start point of the cubic.</param>
+    /// <param name="p1">The first control point of the cubic.</param>
+    /// <param name="p2">The second control point of the cubic.</param>
+    /// <param name="p3">The end point of the cubic.</param>
+    /// <param name="output">The builder receiving the appended points.</param>
+    /// <param name="depth">The current recursion depth; used to bound the subdivision.</param>
     private static void SubdivideAndAppend(
         float t0,
         float t1,
@@ -205,10 +238,10 @@ public sealed class CubicBezierLineSegment : ILineSegment
     /// Calculates the bezier point along the line.
     /// </summary>
     /// <param name="t">The position within the line.</param>
-    /// <param name="p0">The p 0.</param>
-    /// <param name="p1">The p 1.</param>
-    /// <param name="p2">The p 2.</param>
-    /// <param name="p3">The p 3.</param>
+    /// <param name="p0">The start point of the cubic.</param>
+    /// <param name="p1">The first control point of the cubic.</param>
+    /// <param name="p2">The second control point of the cubic.</param>
+    /// <param name="p3">The end point of the cubic.</param>
     /// <returns>
     /// The <see cref="Vector2"/>.
     /// </returns>
@@ -232,6 +265,8 @@ public sealed class CubicBezierLineSegment : ILineSegment
     /// <summary>
     /// Computes the bounds for the cached linearized bezier points.
     /// </summary>
+    /// <param name="points">The linearized bezier points.</param>
+    /// <returns>The axis-aligned bounds enclosing the points.</returns>
     private static RectangleF CalculateBounds(ReadOnlySpan<PointF> points)
     {
         float minX = float.MaxValue;
@@ -251,10 +286,21 @@ public sealed class CubicBezierLineSegment : ILineSegment
         return RectangleF.FromLTRB(minX, minY, maxX, maxY);
     }
 
+    /// <summary>
+    /// An immutable pairing of a flatten scale with the point run baked at that scale.
+    /// </summary>
+    /// <param name="scale">The scale the points were baked at.</param>
+    /// <param name="points">The baked points.</param>
     private sealed class FlattenedCache(Vector2 scale, PointF[] points)
     {
+        /// <summary>
+        /// Gets the scale the points were baked at.
+        /// </summary>
         public Vector2 Scale { get; } = scale;
 
+        /// <summary>
+        /// Gets the baked points.
+        /// </summary>
         public PointF[] Points { get; } = points;
     }
 }

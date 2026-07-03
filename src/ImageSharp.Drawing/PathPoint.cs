@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
-/// Returns metadata about the point along a path.
+/// Represents metadata about a point along a path.
 /// </summary>
 public readonly struct PathPoint
 {

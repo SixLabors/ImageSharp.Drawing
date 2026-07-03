@@ -22,6 +22,12 @@ public class DrawingOptions
         this.Transform = Matrix4x4.Identity;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingOptions"/> class with explicit values.
+    /// </summary>
+    /// <param name="graphicsOptions">The graphics rendering options.</param>
+    /// <param name="intersectionRule">The fill rule used to determine the interior of paths.</param>
+    /// <param name="transform">The transform matrix applied to vector output before rasterization.</param>
     internal DrawingOptions(
         GraphicsOptions graphicsOptions,
         IntersectionRule intersectionRule,

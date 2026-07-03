@@ -39,13 +39,13 @@ That one decision explains most of the surrounding design.
 
 The canvas is a deferred renderer.
 
-Drawing calls do not rasterize immediately. They create `CompositionCommand` records and queue them into `DrawingCanvasBatcher<TPixel>`. The expensive normalization work happens later, during replay, when the batcher prepares those commands and hands `DrawingCommandBatch` ranges to the backend.
+Drawing calls do not rasterize immediately. They create command records and queue them into `DrawingCanvasBatcher<TPixel>`. The expensive normalization work happens later, during replay, when the batcher prepares those commands and hands `DrawingCommandBatch` ranges to the backend.
 
 That gives the architecture three important benefits.
 
 First, the public API stays backend-agnostic. A fill is a fill, whether the target is CPU memory or a GPU surface.
 
-Second, the expensive shared command work can happen once, in one shared place. Transform application, stroke expansion, clip application, and dash expansion are not reimplemented independently by every backend.
+Second, the expensive shared command work can happen once, in one shared place. Dash expansion and brush-coordinate normalization are not reimplemented independently by every backend.
 
 Third, the backend receives a much more stable handoff. Instead of reacting to a long stream of public API calls, it receives prepared command batches with consistent semantics.
 
@@ -67,29 +67,50 @@ When callers already have an `ImageFrame` or `ImageFrame<TPixel>`, the public `C
 readback, and backend execution. Factory methods return `DrawingCanvas` so CPU and GPU entry points expose the same
 canvas-facing API while still constructing the typed implementation internally.
 
+### Options
+
+`DrawingOptions` is the per-state option bundle. It carries three things:
+
+- `GraphicsOptions` for blending, antialiasing, and composition
+- `IntersectionRule` selecting non-zero or even-odd filling
+- `Transform`, a `Matrix4x4` applied to subject geometry and brushes
+
+There is no separate shape-options type; the fill rule and transform live directly on `DrawingOptions`. Explicit path boolean operations (`BooleanOperation`) exist only on the `IPath` `Clip(...)` geometry extensions, not in the drawing options.
+
 ### Batcher
 
-`DrawingCanvasBatcher<TPixel>` is the deferred command queue. It stores pending `CompositionCommand` values, records the canvas replay timeline, prepares commands during replay, and creates `DrawingCommandBatch` values for command-range entries.
+`DrawingCanvasBatcher<TPixel>` is the deferred command queue. It stores pending `CompositionSceneCommand` values, records the canvas replay timeline, prepares commands during replay, and creates `DrawingCommandBatch` values for command-range entries.
 
 It is the bridge between the immediate-looking public API and the deferred backend handoff.
 
 ### Command
 
-`CompositionCommand` is the recorded unit of drawing intent. In the common case it means "fill this path with this brush under this state". The command stream also carries explicit layer boundaries through `BeginLayer` and `EndLayer`.
+`CompositionCommand` is the recorded unit of drawing intent for fills. In the common case it means "fill this path with this brush under these options". The same command stream also carries:
 
-The command remains relatively close to the original user request. It may hold the original path, pen, brush, transform, and clip state.
+- explicit layer boundaries through `BeginLayer` and `EndLayer`
+- explicit clip scopes through `BeginClip` and `EndClip`, where each begin-clip carries a `DrawingClipDescriptor`
+- `Apply` barriers that run an image processor over a path region
+
+Stroked geometry is recorded through dedicated command types (`StrokePathCommand`, `StrokeLineSegmentCommand`, `StrokePolylineCommand`). The batcher stores all of these behind the shared `CompositionSceneCommand` wrapper so the stream stays ordered.
+
+The command remains relatively close to the original user request. It may hold the original path, pen, brush, and drawing options including the transform.
 
 ### Preparation
 
 Preparation is the normalization step that turns recorded intent into backend-ready commands.
 
-`DrawingCanvasBatcher<TPixel>.PrepareCommands(...)` runs only when needed. It applies command transforms, expands strokes to fill paths, preserves clip state for backend lowering, and expands dashed strokes when a stroke pattern is present.
+`DrawingCanvasBatcher<TPixel>.PrepareCommands(...)` runs only when needed. It does two things, in parallel across the command buffer when the buffer is large enough:
+
+1. expands dashed strokes into dash geometry (`GenerateDashes`), because dashing changes the subject geometry before the backend retains raster payload
+2. bakes non-identity command transforms into brush coordinates (`Brush.Transform`), so CPU and WebGPU do not each bake the transform in their own way
+
+Preparation deliberately does not transform subject geometry, expand strokes to fills, or resolve clips. Geometry keeps `DrawingOptions.Transform` so backends can flatten curves scale-aware; strokes stay stroke commands so each backend can expand them in its own execution model; and the ordered begin/end-clip command stream remains the single source of truth for clipping.
 
 Preparation stops at `DrawingCommandBatch`. Backend-specific lowering happens after that, inside `IDrawingBackend.CreateScene(...)`.
 
 ### Command Batch
 
-`DrawingCommandBatch` is the prepared command range handed to the backend. It contains the command stream for one contiguous range and scene-level facts such as whether that range contains layer boundaries.
+`DrawingCommandBatch` is the prepared command range handed to the backend. It contains the command stream for one contiguous range and scene-level facts about that range: `HasLayers`, `HasApply`, and `HasClipControls`.
 
 It is the backend handoff boundary.
 
@@ -153,18 +174,17 @@ The easiest way to understand the system is to follow one normal draw call all t
 
 ### Step 1: The canvas records intent
 
-A public method such as `Fill(...)`, `Draw(...)`, or `DrawText(...)` resolves the active state and creates one or more `CompositionCommand` values.
+A public method such as `Fill(...)`, `Draw(...)`, or `DrawText(...)` resolves the active state and creates one or more commands.
 
 At this point the canvas is mostly recording:
 
 - geometry references
 - brushes or pens
-- active transform
-- clip state
-- graphics options
-- target bounds relevant to this command
+- the active drawing options, including the transform
+- rasterizer options such as the interest rectangle and fill rule
+- target bounds and destination offset relevant to this command
 
-The canvas does not try to fully rasterize anything here.
+The canvas does not try to fully rasterize anything here. Clip changes are not attached to draw commands; they were already recorded as `BeginClip`/`EndClip` commands in the same stream when `Clip(...)` was called.
 
 ### Step 2: The batcher owns the pending work
 
@@ -175,23 +195,26 @@ The batcher exists so the canvas does not need to talk to the backend for every 
 The replay boundary usually comes from:
 
 - explicit `Flush()`, which seals the current command range
-- `Apply(...)`, which needs read-modify-write behavior
+- `CreateScene()`, which turns the recorded work into a retained backend scene
 - `RenderScene(...)`, which inserts an existing retained scene into the timeline
-- disposal of the owning canvas
+- `CopyPixelsFrom(...)`, which materializes both timelines before copying pixels
+- disposal of the root canvas
+
+`Apply(...)` is not a replay boundary. It records an apply barrier command inline in the stream; the backend orders execution around it during scene execution.
+
+Every seal boundary must leave the clip stream balanced: the canvas closes the currently open clip scopes before sealing and reopens them for subsequent commands, because a clip stream cannot span backend scene boundaries.
 
 ### Step 3: The batcher prepares commands
 
-When the root canvas is disposed, or when the caller creates a retained scene, the batcher seals any pending commands and prepares the command buffer. This is where the architecture does the heavy shared work that would otherwise be duplicated across backends.
+When the root canvas is disposed, or when the caller creates a retained scene, the batcher seals any pending commands and prepares the command buffer. This is where the shared normalization that would otherwise be duplicated across backends happens.
 
-For a typical path-based command, canvas preparation does the following in concept:
+For a typical command, canvas preparation does the following in concept:
 
-1. transform the source path into its final geometry space
-2. if a pen is present, expand the stroke to fill geometry
-3. carry the clip state with the command
-4. transform the brush into the same command space
-5. leave backend-specific retained geometry construction to `CreateScene(...)`
+1. if a pen with a stroke pattern is present, expand the dashes into the subject geometry
+2. if the command transform is not identity, bake that transform into the brush coordinates
+3. leave subject geometry transformation, stroke expansion, and clip resolution to the backend
 
-This is the architectural center of gravity. It is the shared normalization stage that makes the backends simpler. Clip state is carried as rendering state, not as a boolean operation against the subject path; explicit path boolean operations stay on the geometry APIs.
+This is the architectural center of gravity: normalization that must be identical across backends happens once here, and everything that benefits from backend-specific execution is deferred. Clipping in particular is never rewritten into the subject geometry; the ordered clip command stream is consumed by each backend directly. Explicit path boolean operations stay on the geometry APIs.
 
 ### Step 4: The backend creates and renders scenes
 
@@ -207,21 +230,44 @@ The architecture is successful if both backends can differ dramatically here wit
 
 ## Why State Is Snapshotted
 
-Drawing APIs look stateful because they are stateful. The active transform, clips, graphics options, and layer information all affect future commands.
+Drawing APIs look stateful because they are stateful. The active options, transform, clips, and layer information all affect future commands.
 
 `DrawingCanvasState` exists so that state changes are cheap to reason about and cheap to attach to commands.
 
-The state snapshot contains the active options and target information for subsequent commands, including:
+The state snapshot contains the active options and target information for subsequent commands:
 
-- `Options`
-- `ClipState`
-- `IsLayer`
-- layer-related graphics options and bounds
-- current target bounds
+- `Options`, the active `DrawingOptions` reference
+- `ClipState`, the normalized clip stack for the state
+- `TargetBounds`, the absolute target bounds for commands recorded in this state
+- `DestinationOffset`, the absolute offset for paths recorded in local coordinates
+- `IsLayer` and `Layer`, marking layer scopes
 
 The canvas treats this state as immutable snapshots on a stack. `Save()` pushes a copy. `Restore()` pops one. Drawing calls always read the current top-of-stack state.
 
 That makes save and restore semantics predictable and backend-independent.
+
+## How Clipping Works
+
+Clipping is the part of the model where the recorded command stream, not per-command state, is authoritative.
+
+`Clip(...)` narrows the active clip. It supports `ClipOperation.Intersection` and `ClipOperation.Difference`, builds one `DrawingClipDescriptor` per clip path, and does two things:
+
+1. appends `BeginClip` commands to the stream, each carrying its descriptor and the state's destination offset
+2. replaces the top-of-stack state with one whose `DrawingClipState` includes the new descriptors, so later `Save`/`Restore` and layer logic can reason about the clip stack
+
+Descriptors classify the clip so backends can pick fast paths: `Rectangle`, `IntegerRegion`, `Region`, or general `Path` geometry. Rectangle and region metadata is captured before the transform is applied so axis-aligned cases survive translation and scaling.
+
+The ordered begin/end-clip command stream is the single source of truth. Draw commands do not carry clip state; backends resolve the active clip stack from the stream commands surrounding each draw. `Restore()` closes the scopes the restored state no longer holds by appending matching `EndClip` commands.
+
+Clip descriptors are recorded in canvas-local coordinates and anchored at the recording state's destination offset. When drawing moves to a differently-offset context, for example a child region canvas inheriting parent clips, the canvas calls `DrawingCanvasBatcher<TPixel>.EnsureClipAnchors(...)` before recording draws: the open clip stack is closed and reopened anchored at the new offset. Per-glyph draw offsets do not participate; anchoring always follows the state's destination offset.
+
+## How Apply Works
+
+`Apply(...)` runs a caller-supplied `IImageProcessingContext` operation over a path region as part of the recorded timeline.
+
+The canvas records an `ApplyBarrier` command inline in the stream. When the command is lowered, its drawing options are cloned through `CloneForClearOperation`, which forces `PixelAlphaCompositionMode.Src` at full blend percentage: the processed pixels replace the covered region outright, including transparency, instead of blending over it.
+
+Because an apply must observe everything drawn beneath it, backends treat it as an ordering barrier during scene execution. If an apply is recorded inside a layer, the affected layers are marked as requiring scoped rendering so the processor sees the isolated layer content.
 
 ## How Layers Work In This Architecture
 
@@ -231,10 +277,9 @@ Layer terminology often causes confusion because different systems use it differ
 
 When `SaveLayer(...)` is called, the canvas:
 
-1. clamps the requested layer bounds to the canvas
-2. converts them into absolute target bounds
-3. records `BeginLayer`
-4. pushes a state snapshot that marks the new layer scope
+1. resolves the requested layer bounds against the active transform and target bounds
+2. records `BeginLayer` carrying the absolute layer bounds and a shared layer state object
+3. pushes a state snapshot that marks the new layer scope
 
 The layer bounds are expressed in the active local coordinate system, so the canvas
 transform in effect at `SaveLayer(...)` time is applied when resolving the layer's
@@ -280,6 +325,7 @@ The child:
 - keeps using the same backend
 - keeps using the same shared batcher
 - keeps participating in the same deferred replay model
+- inherits the parent's clip state; the shared clip stream is re-anchored at the child's destination offset before the child records draws
 
 The child canvas has local coordinates starting at `(0, 0)`, but its frame bounds resolve to the correct absolute position inside the parent target.
 
@@ -299,7 +345,7 @@ The rough flow is:
 2. if a canvas transform is active, bake that transform into the image pixels
 3. align the transformed bitmap to integer canvas bounds
 4. create an `ImageBrush`
-5. queue the final fill command using that brush
+5. queue the final fill command using that brush, with an identity transform so the canvas transform is not applied twice
 
 This design avoids applying the canvas transform twice and keeps the later command model consistent with brush-based filling.
 
@@ -312,7 +358,7 @@ Once a command batch reaches `DefaultDrawingBackend.CreateScene(...)`, the publi
 The CPU backend does not need to understand every public API call individually. It works with:
 
 - prepared commands
-- layer boundaries
+- layer boundaries, clip scopes, and apply barriers as ordered stream commands
 - target bounds during `CreateScene(...)`
 - the destination frame during `RenderScene<TPixel>(...)`
 
@@ -337,7 +383,7 @@ The WebGPU backend receives the same command batch shape, but it splits retained
 It benefits from the same canvas-level decisions:
 
 - commands are already normalized
-- layers already exist as explicit boundaries
+- layers and clips already exist as explicit ordered boundaries
 - the frame already describes whether a native surface is available
 
 The WebGPU public helpers reach this point in a target-first way:
@@ -366,7 +412,7 @@ Preparation exists so backend-agnostic normalization happens once.
 
 Frames exist so the same canvas can target memory, native surfaces, or sub-regions.
 
-Layers exist as inline composition scopes in the command stream.
+Layers and clips exist as inline ordered scopes in the command stream.
 
 Once those ideas are clear, the code stops looking like a random collection of types and starts looking like one system with a clear division of responsibility.
 
@@ -378,7 +424,7 @@ If you want to move from the architecture into the code, this is the best order.
 2. `DrawingCanvas{TPixel}.cs`
 3. `DrawingCanvasFactoryExtensions.cs` and `DrawingCanvas.Shapes.cs`
 4. `DrawingCanvasBatcher{TPixel}.cs`
-5. `CompositionCommand.cs`
+5. `CompositionCommand.cs` and `DrawingClipDescriptor.cs`
 6. `DefaultDrawingBackend.cs`
 7. `FlushScene.cs`
 8. `WebGPUEnvironment.cs`

@@ -347,8 +347,8 @@ public sealed class Region
     /// <param name="region">The region to intersect with this region.</param>
     /// <returns><see langword="true"/> when the resulting region is not empty; otherwise, <see langword="false"/>.</returns>
     /// <remarks>
-    /// The operation computes the union of every overlapping interval pair in every overlapping
-    /// Y band. This is the rect-set form of region intersection.
+    /// The operation intersects every overlapping X interval pair in every overlapping Y band
+    /// and unions the results. This is the rect-set form of region intersection.
     /// </remarks>
     public bool Intersect(Region region)
     {
@@ -536,6 +536,9 @@ public sealed class Region
         int count = 1;
         while (!ReferenceEquals(edge, first))
         {
+            // Emit the vertical remainder of the previous edge and the horizontal
+            // connector to the next edge. Collinear continuations (same X, contiguous Y)
+            // need no intermediate points.
             if (previous.X != edge.X || previous.Y1 != edge.Y0)
             {
                 _ = builder.LineTo(previous.X, previous.Y1);
@@ -929,8 +932,20 @@ public sealed class Region
         // Boundary export works by linking vertical edges into closed contours. Y0/Y1
         // preserve edge direction so the resulting path follows the outside boundary
         // rather than emitting independent rectangle outlines.
+
+        /// <summary>
+        /// Flag set when another edge has been linked into this edge's <see cref="Y0"/> endpoint.
+        /// </summary>
         public const byte Y0Linked = 0x01;
+
+        /// <summary>
+        /// Flag set when this edge's <see cref="Y1"/> endpoint has been linked to another edge.
+        /// </summary>
         public const byte Y1Linked = 0x02;
+
+        /// <summary>
+        /// Flag value indicating both endpoints are linked and the edge needs no further processing.
+        /// </summary>
         public const byte Complete = Y0Linked | Y1Linked;
 
         /// <summary>

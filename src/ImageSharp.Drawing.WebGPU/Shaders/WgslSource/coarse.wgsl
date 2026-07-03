@@ -243,11 +243,14 @@ fn write_image(info_offset: u32) {
     cmd_offset += 2u;
 }
 
-// Emits CMD_BEGIN_CLIP, which pushes a new blend layer in the fine stage.
-fn write_begin_clip() {
-    alloc_cmd(1u);
+// Emits CMD_BEGIN_CLIP, which pushes a new group in the fine stage. The payload word
+// carries bit 0 = isolated: 1 seeds the group transparent (layer semantics), 0 seeds it
+// with a copy of the current tile content (clip mask semantics).
+fn write_begin_clip(isolated: u32) {
+    alloc_cmd(2u);
     ptcl[cmd_offset] = CMD_BEGIN_CLIP;
-    cmd_offset += 1u;
+    ptcl[cmd_offset + 1u] = isolated;
+    cmd_offset += 2u;
 }
 
 // Emits CMD_END_CLIP with the blend word and alpha used to composite the
@@ -515,12 +518,16 @@ fn main(
                 let raw_blend = scene[dd];
                 is_difference_clip = (raw_blend & CLIP_DIFFERENCE_MASK_BIT) != 0u;
                 let is_hard_clip = (raw_blend & CLIP_HARD_MASK_BIT) != 0u;
-                var blend = raw_blend & ~CLIP_DIFFERENCE_MASK_BIT;
+                var blend = raw_blend & ~(CLIP_DIFFERENCE_MASK_BIT | CLIP_ISOLATED_MASK_BIT);
                 if is_hard_clip {
                     blend &= ~CLIP_HARD_MASK_BIT;
                 }
 
-                is_blend = blend != BLEND_CLIP;
+                // Isolated groups (layers) must never take the solid-tile skip below: their
+                // contents composite against a transparent seed, so skipping the group would
+                // change results for any non-src-over content inside. Treat them like blend
+                // layers so every covered tile opens the group.
+                is_blend = blend != BLEND_CLIP || (raw_blend & CLIP_ISOLATED_MASK_BIT) != 0u;
             }
 
             let di = draw_monoids[drawobj_ix].info_offset;
@@ -652,7 +659,8 @@ fn main(
                         if tile.segment_count_or_ix == 0u && retained_area_clear {
                             clip_zero_depth = clip_depth + 1u;
                         } else {
-                            write_begin_clip();
+                            let isolated = u32((raw_blend & CLIP_ISOLATED_MASK_BIT) != 0u);
+                            write_begin_clip(isolated);
                             render_blend_depth += 1u;
                             max_blend_depth = max(max_blend_depth, render_blend_depth);
                         }

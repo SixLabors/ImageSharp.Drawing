@@ -6,16 +6,19 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Provides an implementation of a brush that can recolor an image
+/// Provides an implementation of a brush that can recolor an image.
+/// Pixels within <see cref="Threshold"/> of <see cref="SourceColor"/> are blended
+/// towards <see cref="TargetColor"/>, with the blend strength falling off as the
+/// color distance approaches the threshold.
 /// </summary>
 public sealed class RecolorBrush : Brush
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="RecolorBrush" /> class.
     /// </summary>
-    /// <param name="sourceColor">Color of the source.</param>
-    /// <param name="targetColor">Color of the target.</param>
-    /// <param name="threshold">The threshold as a value between 0 and 1.</param>
+    /// <param name="sourceColor">The color to match against existing pixels.</param>
+    /// <param name="targetColor">The color to recolor matched pixels with.</param>
+    /// <param name="threshold">The color-matching threshold as a value between 0 and 1.</param>
     public RecolorBrush(Color sourceColor, Color targetColor, float threshold)
     {
         this.SourceColor = sourceColor;
@@ -24,17 +27,17 @@ public sealed class RecolorBrush : Brush
     }
 
     /// <summary>
-    /// Gets the threshold.
+    /// Gets the color-matching threshold as a value between 0 and 1.
     /// </summary>
     public float Threshold { get; }
 
     /// <summary>
-    /// Gets the source color.
+    /// Gets the color to match against existing pixels.
     /// </summary>
     public Color SourceColor { get; }
 
     /// <summary>
-    /// Gets the target color.
+    /// Gets the color to recolor matched pixels with.
     /// </summary>
     public Color TargetColor { get; }
 
@@ -84,11 +87,11 @@ public sealed class RecolorBrush : Brush
         /// Initializes a new instance of the <see cref="RecolorBrushRenderer{TPixel}" /> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
-        /// <param name="options">The options</param>
+        /// <param name="options">The graphics options.</param>
         /// <param name="canvasWidth">The canvas width for the current render pass.</param>
-        /// <param name="sourceColor">Color of the source.</param>
-        /// <param name="targetColor">Color of the target.</param>
-        /// <param name="threshold">The threshold .</param>
+        /// <param name="sourceColor">The color to match against existing pixels.</param>
+        /// <param name="targetColor">The color to recolor matched pixels with.</param>
+        /// <param name="threshold">The color-matching threshold as a value between 0 and 1.</param>
         public RecolorBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
@@ -105,6 +108,11 @@ public sealed class RecolorBrush : Brush
             // Lets hack a min max extremes for a color space by letting the IPackedPixel clamp our values to something in the correct spaces :)
             TPixel maxColor = TPixel.FromVector4(new Vector4(float.MaxValue));
             TPixel minColor = TPixel.FromVector4(new Vector4(float.MinValue));
+
+            // Matching happens in squared-distance space so no per-pixel sqrt is needed.
+            // Scale the user's [0..1] threshold by the squared distance across the pixel
+            // format's representable range; for unit-scaled RGBA vectors that factor is 4,
+            // which the GPU encoder mirrors by pre-transforming Threshold * 4 for the shader.
             this.threshold = Vector4.DistanceSquared(maxColor.ToVector4(), minColor.ToVector4()) * threshold;
         }
 
@@ -120,9 +128,14 @@ public sealed class RecolorBrush : Brush
 
             for (int i = 0; i < scanline.Length; i++)
             {
+                // The brush reads the already-composed destination pixel: recoloring is a
+                // function of what is currently on the canvas, not of a source texture.
                 TPixel result = destinationRow[i];
                 Vector4 background = result.ToVector4();
                 float distance = Vector4.DistanceSquared(background, this.sourceColor);
+
+                // Blend strength falls off linearly with squared distance: an exact match
+                // is fully recolored while a match at the threshold is left untouched.
                 overlays[i] = distance <= this.threshold
                     ? this.Blender.Blend(result, this.targetColorPixel, (this.threshold - distance) / this.threshold)
                     : result;

@@ -8,16 +8,39 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
-/// A aggregate of <see cref="ILineSegment"/>s making a single logical path.
+/// An aggregate of <see cref="ILineSegment"/>s making a single logical path.
 /// </summary>
 /// <seealso cref="IPath" />
 public class Path : IPath, ISimplePath, IInternalPathOwner
 {
+    /// <summary>
+    /// The segments that make up the path.
+    /// </summary>
     private readonly ILineSegment[] lineSegments;
+
+    /// <summary>
+    /// The lazily initialized internal representation of the path.
+    /// </summary>
     private InternalPath? innerPath;
+
+    /// <summary>
+    /// The lazily initialized single-ring list returned by <see cref="IInternalPathOwner.GetRingsAsInternalPath"/>.
+    /// </summary>
     private IReadOnlyList<InternalPath>? internalPathRings;
+
+    /// <summary>
+    /// The cached result of <see cref="AsClosedPath"/>.
+    /// </summary>
     private IPath? closedPath;
+
+    /// <summary>
+    /// The per-scale cache of retained linear geometry.
+    /// </summary>
     private LinearGeometryCache geometryCache;
+
+    /// <summary>
+    /// The lazily computed union of the segment bounds.
+    /// </summary>
     private RectangleF? bounds;
 
     /// <summary>
@@ -92,6 +115,9 @@ public class Path : IPath, ISimplePath, IInternalPathOwner
     /// </summary>
     internal bool RemoveCloseAndCollinearPoints { get; set; } = true;
 
+    /// <summary>
+    /// Gets the lazily initialized internal representation of the path.
+    /// </summary>
     private protected InternalPath InnerPath =>
         this.innerPath ??= new InternalPath(this.lineSegments, this.IsClosed, this.RemoveCloseAndCollinearPoints);
 
@@ -152,6 +178,12 @@ public class Path : IPath, ISimplePath, IInternalPathOwner
         return this.ToLinearGeometry(scale).Contains(scaledPoint, intersectionRule);
     }
 
+    /// <summary>
+    /// Flattens the segment run into a single-contour retained geometry, deduplicating the
+    /// shared vertex where one segment starts exactly where the previous one ended.
+    /// </summary>
+    /// <param name="scale">The X/Y scale at which curves are flattened.</param>
+    /// <returns>The retained linear geometry.</returns>
     private LinearGeometry BuildLinearGeometry(Vector2 scale)
     {
         if (this.lineSegments.Length == 0)
@@ -260,6 +292,7 @@ public class Path : IPath, ISimplePath, IInternalPathOwner
     /// <summary>
     /// Computes path bounds directly from segment bounds without materializing <see cref="InternalPath"/>.
     /// </summary>
+    /// <returns>The axis-aligned bounds enclosing all segments.</returns>
     private RectangleF CalculateBounds()
     {
         if (this.lineSegments.Length == 0)
@@ -535,6 +568,12 @@ public class Path : IPath, ISimplePath, IInternalPathOwner
         return true;
     }
 
+    /// <summary>
+    /// Reads a single SVG arc flag ("0" or "1") from the front of <paramref name="str"/>.
+    /// </summary>
+    /// <param name="str">The remaining path data; advanced past the flag on success.</param>
+    /// <param name="value">When this method returns, contains the parsed flag value.</param>
+    /// <returns><see langword="true"/> if a flag was read; otherwise, <see langword="false"/>.</returns>
     private static bool TryFindFlag(ref ReadOnlySpan<char> str, out bool value)
     {
         str = TrimSeparator(str);
@@ -553,6 +592,11 @@ public class Path : IPath, ISimplePath, IInternalPathOwner
         return true;
     }
 
+    /// <summary>
+    /// Trims leading separators from <paramref name="str"/>.
+    /// </summary>
+    /// <param name="str">The remaining path data; advanced past leading separators on success.</param>
+    /// <returns><see langword="true"/> if the trimmed result is a suffix of the input; otherwise, <see langword="false"/>.</returns>
     private static bool TryTrimSeparator(ref ReadOnlySpan<char> str)
     {
         // SVG separators are optional in places where the next token can be
@@ -567,6 +611,12 @@ public class Path : IPath, ISimplePath, IInternalPathOwner
         return false;
     }
 
+    /// <summary>
+    /// Reads a single finite number from the front of <paramref name="str"/>.
+    /// </summary>
+    /// <param name="str">The remaining path data; advanced past the number on success.</param>
+    /// <param name="value">When this method returns, contains the parsed number.</param>
+    /// <returns><see langword="true"/> if a finite number was read; otherwise, <see langword="false"/>.</returns>
     private static bool TryFindScaler(ref ReadOnlySpan<char> str, out float value)
     {
         ReadOnlySpan<char> source = TrimSeparator(str);
@@ -580,6 +630,15 @@ public class Path : IPath, ISimplePath, IInternalPathOwner
         return false;
     }
 
+    /// <summary>
+    /// Reads a coordinate pair from the front of <paramref name="str"/>, resolving relative
+    /// coordinates against <paramref name="current"/>.
+    /// </summary>
+    /// <param name="str">The remaining path data; advanced past the coordinates on success.</param>
+    /// <param name="relative">Whether the coordinates are relative to the current point.</param>
+    /// <param name="current">The current point used to resolve relative coordinates.</param>
+    /// <param name="value">When this method returns, contains the absolute point.</param>
+    /// <returns><see langword="true"/> if a finite point was read; otherwise, <see langword="false"/>.</returns>
     private static bool TryFindPoint(ref ReadOnlySpan<char> str, bool relative, PointF current, out PointF value)
     {
         if (TryFindScaler(ref str, out float x) && TryFindScaler(ref str, out float y))
@@ -606,6 +665,13 @@ public class Path : IPath, ISimplePath, IInternalPathOwner
         return false;
     }
 
+    /// <summary>
+    /// Scans the length of the leading number token and parses it.
+    /// </summary>
+    /// <param name="str">The character data starting at the number.</param>
+    /// <param name="scaler">When this method returns, contains the parsed number.</param>
+    /// <param name="length">When this method returns, contains the number of characters consumed.</param>
+    /// <returns><see langword="true"/> if a finite number was parsed; otherwise, <see langword="false"/>.</returns>
     private static bool TryReadScalar(ReadOnlySpan<char> str, out float scaler, out int length)
     {
         // SVG path numbers can be tightly packed: "10-20" is two numbers, as is
@@ -655,9 +721,19 @@ public class Path : IPath, ISimplePath, IInternalPathOwner
         return TryParseFloat(str, out scaler);
     }
 
+    /// <summary>
+    /// Returns whether the character is an SVG token separator (whitespace or comma).
+    /// </summary>
+    /// <param name="ch">The character to test.</param>
+    /// <returns><see langword="true"/> if the character is a separator; otherwise, <see langword="false"/>.</returns>
     private static bool IsSeparator(char ch)
         => char.IsWhiteSpace(ch) || ch == ',';
 
+    /// <summary>
+    /// Returns <paramref name="data"/> with all leading separators removed.
+    /// </summary>
+    /// <param name="data">The character data to trim.</param>
+    /// <returns>The trimmed data.</returns>
     private static ReadOnlySpan<char> TrimSeparator(ReadOnlySpan<char> data)
     {
         if (data.Length == 0)
@@ -677,6 +753,12 @@ public class Path : IPath, ISimplePath, IInternalPathOwner
         return data[idx..];
     }
 
+    /// <summary>
+    /// Parses a culture-invariant float, rejecting non-finite values.
+    /// </summary>
+    /// <param name="str">The character data to parse.</param>
+    /// <param name="value">When this method returns, contains the parsed value.</param>
+    /// <returns><see langword="true"/> if a finite value was parsed; otherwise, <see langword="false"/>.</returns>
     private static bool TryParseFloat(ReadOnlySpan<char> str, out float value)
         => float.TryParse(str, CultureInfo.InvariantCulture, out value) && float.IsFinite(value);
 }

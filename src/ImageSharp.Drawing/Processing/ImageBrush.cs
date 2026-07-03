@@ -103,6 +103,9 @@ public sealed class ImageBrush<TPixel> : ImageBrush
     /// <inheritdoc />
     public override Brush Transform(Matrix4x4 matrix, Rectangle sourceInterest, Rectangle preparedInterest)
     {
+        // The texture pixels are not transformed by the matrix; the brush anchors to the
+        // interest region origin, so when preparation moves that origin the offset must
+        // shift by the same delta to stop the texture visually sliding.
         int offsetX = sourceInterest.X - preparedInterest.X;
         int offsetY = sourceInterest.Y - preparedInterest.Y;
         if (offsetX == 0 && offsetY == 0)
@@ -138,7 +141,7 @@ public abstract class ImageBrush : Brush
     /// </summary>
     /// <param name="image">The image.</param>
     /// <param name="offset">
-    /// An offset to apply the to image image while drawing apply the texture.
+    /// An offset to apply to the image while drawing the texture.
     /// </param>
     protected ImageBrush(Image image, Point offset)
         : this(image, image.Bounds, offset)
@@ -167,7 +170,7 @@ public abstract class ImageBrush : Brush
     /// This overrides any region used to initialize the brush applicator.
     /// </param>
     /// <param name="offset">
-    /// An offset to apply the to image image while drawing apply the texture.
+    /// An offset to apply to the image while drawing the texture.
     /// </param>
     protected ImageBrush(Image image, RectangleF region, Point offset)
         : this(image, region, offset, WrapMode.Repeat, WrapMode.Repeat)
@@ -221,7 +224,7 @@ public abstract class ImageBrush : Brush
     /// This overrides any region used to initialize the brush applicator.
     /// </param>
     /// <param name="offset">
-    /// An offset to apply the to image image while drawing apply the texture.
+    /// An offset to apply to the image while drawing the texture.
     /// </param>
     /// <param name="wrapX">The wrap mode used when sampling horizontally beyond the source region.</param>
     /// <param name="wrapY">The wrap mode used when sampling vertically beyond the source region.</param>
@@ -314,9 +317,13 @@ public abstract class ImageBrush : Brush
         private readonly Rectangle sourceRegion;
 
         /// <summary>
-        /// The wrap mode applied along each axis when sampling beyond the source region.
+        /// The wrap mode applied horizontally when sampling beyond the source region.
         /// </summary>
         private readonly WrapMode wrapX;
+
+        /// <summary>
+        /// The wrap mode applied vertically when sampling beyond the source region.
+        /// </summary>
         private readonly WrapMode wrapY;
 
         /// <summary>
@@ -362,6 +369,13 @@ public abstract class ImageBrush : Brush
             this.offsetX = (int)MathF.Floor(targetRegion.Left) + offset.X;
         }
 
+        /// <summary>
+        /// Gets the texture pixel for the given device coordinate after applying the
+        /// brush origin offset and the per-axis wrap modes.
+        /// </summary>
+        /// <param name="x">The x-coordinate of the pixel in device space.</param>
+        /// <param name="y">The y-coordinate of the pixel in device space.</param>
+        /// <returns>The sampled pixel, or transparent when outside an unwrapped region.</returns>
         internal TPixel this[int x, int y]
         {
             get
@@ -424,6 +438,12 @@ public abstract class ImageBrush : Brush
         /// region, applying the per-axis wrap mode. Returns <see langword="false"/> for
         /// <see cref="WrapMode.None"/> when the coordinate falls outside the region.
         /// </summary>
+        /// <param name="coordinate">The brush-origin-relative coordinate to map.</param>
+        /// <param name="size">The size of the source region along this axis.</param>
+        /// <param name="regionStart">The start of the source region along this axis, in source image space.</param>
+        /// <param name="mode">The wrap mode to apply along this axis.</param>
+        /// <param name="source">Receives the mapped coordinate in source image space.</param>
+        /// <returns><see langword="true"/> if the coordinate maps to a source pixel; otherwise <see langword="false"/>.</returns>
         private static bool TryWrap(int coordinate, int size, int regionStart, WrapMode mode, out int source)
         {
             if (size <= 0)
@@ -445,6 +465,8 @@ public abstract class ImageBrush : Brush
                     return true;
 
                 case WrapMode.Mirror:
+                    // Wrap into a double period using a true (non-negative) modulo, then
+                    // reflect the second half so adjacent tiles are mirror images.
                     int period = size * 2;
                     int mirrored = ((coordinate % period) + period) % period;
                     if (mirrored >= size)
@@ -460,6 +482,7 @@ public abstract class ImageBrush : Brush
                     return true;
 
                 default: // Repeat
+                    // True modulo so negative coordinates tile correctly.
                     source = (((coordinate % size) + size) % size) + regionStart;
                     return true;
             }

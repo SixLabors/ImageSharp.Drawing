@@ -20,7 +20,9 @@ internal sealed partial class RichTextGlyphRenderer
     /// <param name="paint">The paint definition coming from the interpreter.</param>
     /// <param name="transform">A transform to apply to the brush coordinates.</param>
     /// <param name="brush">The resulting brush, or <see langword="null"/> if the paint is unsupported.</param>
-    /// <returns><see langword="true"/> if a brush could be created; otherwise, <see langword="false"/>.</returns>
+    /// <returns>
+    /// <see langword="true"/> if a brush could be created; otherwise, <see langword="false"/>.
+    /// </returns>
     public static bool TryCreateBrush([NotNullWhen(true)] Paint? paint, Matrix4x4 transform, [NotNullWhen(true)] out Brush? brush)
     {
         brush = null;
@@ -53,7 +55,9 @@ internal sealed partial class RichTextGlyphRenderer
     /// <param name="paint">The linear gradient paint.</param>
     /// <param name="transform">The transform to apply to the gradient points.</param>
     /// <param name="brush">The resulting brush.</param>
-    /// <returns><see langword="true"/> if created; otherwise, <see langword="false"/>.</returns>
+    /// <returns>
+    /// <see langword="true"/> if created; otherwise, <see langword="false"/>.
+    /// </returns>
     private static bool TryCreateLinearGradientBrush(LinearGradientPaint paint, Matrix4x4 transform, out Brush? brush)
     {
         // Map gradient stops (apply paint opacity multiplier to each stop's alpha).
@@ -94,7 +98,9 @@ internal sealed partial class RichTextGlyphRenderer
     /// <param name="paint">The radial gradient paint.</param>
     /// <param name="transform">The transform to apply to the gradient center point.</param>
     /// <param name="brush">The resulting brush.</param>
-    /// <returns><see langword="true"/> if created; otherwise, <see langword="false"/>.</returns>
+    /// <returns>
+    /// <see langword="true"/> if created; otherwise, <see langword="false"/>.
+    /// </returns>
     private static bool TryCreateRadialGradientBrush(RadialGradientPaint paint, Matrix4x4 transform, out Brush? brush)
     {
         // Map gradient stops (apply paint opacity multiplier to each stop's alpha).
@@ -127,7 +133,9 @@ internal sealed partial class RichTextGlyphRenderer
     /// <param name="paint">The sweep gradient paint.</param>
     /// <param name="transform">The transform to apply to the gradient center point.</param>
     /// <param name="brush">The resulting brush.</param>
-    /// <returns><see langword="true"/> if created; otherwise, <see langword="false"/>.</returns>
+    /// <returns>
+    /// <see langword="true"/> if created; otherwise, <see langword="false"/>.
+    /// </returns>
     private static bool TryCreateSweepGradientBrush(SweepGradientPaint paint, Matrix4x4 transform, out Brush? brush)
     {
         // Map gradient stops (apply paint opacity multiplier to each stop's alpha).
@@ -151,7 +159,9 @@ internal sealed partial class RichTextGlyphRenderer
     /// Maps an <see cref="SpreadMethod"/> to <see cref="GradientRepetitionMode"/>.
     /// </summary>
     /// <param name="spread">The spread method.</param>
-    /// <returns>The repetition mode.</returns>
+    /// <returns>
+    /// The repetition mode.
+    /// </returns>
     private static GradientRepetitionMode MapSpread(SpreadMethod spread)
         => spread switch
         {
@@ -167,7 +177,9 @@ internal sealed partial class RichTextGlyphRenderer
     /// </summary>
     /// <param name="stops">The source stops.</param>
     /// <param name="paintOpacity">The paint opacity in range [0,1].</param>
-    /// <returns>An array of <see cref="ColorStop"/>.</returns>
+    /// <returns>
+    /// An array of <see cref="ColorStop"/>.
+    /// </returns>
     private static ColorStop[] ToColorStops(ReadOnlySpan<GradientStop> stops, float paintOpacity)
     {
         if (stops.Length == 0)
@@ -192,7 +204,9 @@ internal sealed partial class RichTextGlyphRenderer
     /// </summary>
     /// <param name="c">The glyph color.</param>
     /// <param name="opacity">The opacity multiplier in range [0,1].</param>
-    /// <returns>The ImageSharp color.</returns>
+    /// <returns>
+    /// The ImageSharp color.
+    /// </returns>
     private static Color ToColor(in GlyphColor c, float opacity)
     {
         float a = Math.Clamp(c.A / 255f * Math.Clamp(opacity, 0f, 1f), 0f, 1f);

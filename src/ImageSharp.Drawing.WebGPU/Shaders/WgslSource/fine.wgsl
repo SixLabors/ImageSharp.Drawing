@@ -804,13 +804,18 @@ fn main(
                 cmd_ix += 5u;
             }
             case CMD_BEGIN_CLIP: {
-                // Save the current layer color and start a fresh transparent
-                // layer. Shallow stack entries live in registers; deeper ones
-                // spill to the blend buffer.
+                // Save the current tile content, then seed the new group. Isolated groups
+                // (layers) start transparent so their contents composite as a unit; clip
+                // groups keep the current content so composition modes inside the clip see
+                // the same destination the CPU backend's per-draw masking sees. Shallow
+                // stack entries live in registers; deeper ones spill to the blend buffer.
+                let isolated = ptcl[cmd_ix + 1u] != 0u;
                 if clip_depth < BLEND_STACK_SPLIT {
                     for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
                         blend_stack[clip_depth][i] = pack4x8unorm(rgba[i]);
-                        rgba[i] = vec4(0.0);
+                        if isolated {
+                            rgba[i] = vec4(0.0);
+                        }
                     }
                 } else {
                     let blend_in_scratch = clip_depth - BLEND_STACK_SPLIT;
@@ -818,11 +823,13 @@ fn main(
                     let local_blend_start = blend_offset + blend_in_scratch * TILE_WIDTH * TILE_HEIGHT + local_tile_ix;
                     for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
                         blend_spill[local_blend_start + i] = pack4x8unorm(rgba[i]);
-                        rgba[i] = vec4(0.0);
+                        if isolated {
+                            rgba[i] = vec4(0.0);
+                        }
                     }
                 }
                 clip_depth += 1u;
-                cmd_ix += 1u;
+                cmd_ix += 2u;
             }
             case CMD_END_CLIP: {
                 let end_clip = read_end_clip(cmd_ix);
@@ -850,12 +857,24 @@ fn main(
 
                     // Strip the local mask bits so only the packed blend mode remains.
                     let clip_area = select(source_clip_area, 1.0 - source_clip_area, (end_clip.blend & CLIP_DIFFERENCE_MASK_BIT) != 0u);
-                    var clip_blend = end_clip.blend & ~CLIP_DIFFERENCE_MASK_BIT;
+                    let isolated = (end_clip.blend & CLIP_ISOLATED_MASK_BIT) != 0u;
+                    var clip_blend = end_clip.blend & ~(CLIP_DIFFERENCE_MASK_BIT | CLIP_ISOLATED_MASK_BIT);
                     if is_hard_clip {
                         clip_blend &= ~CLIP_HARD_MASK_BIT;
                     }
 
                     let bg = unpack4x8unorm(bg_rgba);
+
+                    // Non-isolated groups (clip masks) already contain the saved content, so
+                    // the pop is a pure coverage lerp between the saved backdrop and the group.
+                    // This matches the CPU backend, which applies clip coverage per draw against
+                    // the real target, and keeps solid-tile skipped clips and grouped clips
+                    // producing identical results for every composition mode.
+                    if !isolated {
+                        rgba[i] = bg + ((rgba[i] - bg) * clip_area);
+                        continue;
+                    }
+
                     let clip_alpha = select(end_clip.alpha, 1.0, is_hard_clip);
                     let fg = rgba[i] * clip_alpha;
 

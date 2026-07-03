@@ -175,6 +175,16 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class,
+    /// resolving the drawing backend from the configuration.
+    /// </summary>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="options">Initial drawing options for this canvas instance.</param>
+    /// <param name="textCache">The text drawing cache used by this canvas instance.</param>
+    /// <param name="ownsTextCache">Whether this canvas owns clearing the text drawing cache.</param>
+    /// <param name="targetFrame">The destination frame.</param>
+    /// <param name="clipPaths">Initial clip paths for this canvas instance.</param>
     private DrawingCanvas(
         Configuration configuration,
         DrawingOptions options,
@@ -186,6 +196,21 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class as a root canvas,
+    /// creating a fresh batcher and building the default state from the supplied options and clip paths.
+    /// </summary>
+    /// <remarks>
+    /// The initial clip state combines <paramref name="clipPaths"/> as an intersection, with the clip
+    /// edge mode derived from the antialiasing settings in <paramref name="options"/>.
+    /// </remarks>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="options">Initial drawing options for this canvas instance.</param>
+    /// <param name="textCache">The text drawing cache used by this canvas instance.</param>
+    /// <param name="ownsTextCache">Whether this canvas owns clearing the text drawing cache.</param>
+    /// <param name="backend">The drawing backend implementation.</param>
+    /// <param name="targetFrame">The destination frame.</param>
+    /// <param name="clipPaths">Initial clip paths for this canvas instance.</param>
     private DrawingCanvas(
         Configuration configuration,
         DrawingOptions options,
@@ -297,6 +322,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         this.EnsureNotDisposed();
         Guard.NotNull(options, nameof(options));
 
+        // Reuse Save() to push the snapshot frame, then swap the top frame for one carrying
+        // the caller's options while keeping clip, bounds and layer linkage identical.
         _ = this.Save();
         DrawingCanvasState current = this.ResolveState();
         DrawingCanvasState state = new(options, current.ClipState, current.TargetBounds, current.DestinationOffset)
@@ -560,6 +587,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
+        // The dedicated stroke-segment command is a fast path for solid, unclipped strokes only.
+        // Dash patterns and active clips route through the general stroked-path pipeline.
         if (state.ClipState.HasClips || !pen.StrokePattern.IsEmpty)
         {
             this.PrepareCompositionCore(
@@ -590,6 +619,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
+        // The dedicated polyline command is a fast path for solid, unclipped strokes only.
+        // Dash patterns and active clips route through the general stroked-path pipeline.
         if (state.ClipState.HasClips || !pen.StrokePattern.IsEmpty)
         {
             this.PrepareCompositionCore(
@@ -639,6 +670,14 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         this.DrawTextCore(textOptions, text, path, brush, pen);
     }
 
+    /// <summary>
+    /// Lays out and renders text, converting the produced glyph operations to queued commands.
+    /// </summary>
+    /// <param name="textOptions">The text rendering options.</param>
+    /// <param name="text">The text to draw.</param>
+    /// <param name="path">Optional path used as the text baseline; <see langword="null"/> for straight-line layout.</param>
+    /// <param name="brush">Optional brush used to fill glyphs.</param>
+    /// <param name="pen">Optional pen used to outline glyphs.</param>
     private void DrawTextCore(
         RichTextOptions textOptions,
         ReadOnlySpan<char> text,
@@ -868,6 +907,9 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 }
                 else
                 {
+                    // Color layers covering half or more of the glyph cell are treated as the
+                    // dominant painted layer and outlined with the pen; only smaller detail
+                    // layers are filled with the brush.
                     float layerArea = layerPaths.ComputeArea();
                     shouldFill = layerArea > 0F && glyphArea > 0F && (layerArea / glyphArea) < 0.50F;
                 }
@@ -967,6 +1009,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         {
             this.batcher.ClearCommandBatch();
 
+            // The sealed range consumed the balanced clip stream; reopen the active clip
+            // stack so later commands keep recording under the same clip state.
             DrawingCanvasState state = this.ResolveState();
             this.AppendBeginClips(state.ClipState, state.DestinationOffset);
         }
@@ -1020,6 +1064,20 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             targetPoint);
     }
 
+    /// <summary>
+    /// Normalizes an image draw into an image-brush fill: source pixels are cropped/scaled,
+    /// then baked through the canvas transform, and the result is queued as a rectangle fill.
+    /// </summary>
+    /// <param name="image">The source image in the target pixel format.</param>
+    /// <param name="sourceRect">The source rectangle within <paramref name="image"/>.</param>
+    /// <param name="destinationRect">The destination rectangle in local canvas coordinates.</param>
+    /// <param name="sampler">Optional resampler used when scaling or transforming the image.</param>
+    /// <param name="wrapX">The horizontal wrap mode applied when sampling beyond the destination rectangle.</param>
+    /// <param name="wrapY">The vertical wrap mode applied when sampling beyond the destination rectangle.</param>
+    /// <param name="ownsSourceImage">
+    /// Whether this method owns <paramref name="image"/> and must dispose it or transfer its
+    /// lifetime to the deferred command batch.
+    /// </param>
     private void DrawImageCore(
         Image<TPixel> image,
         Rectangle sourceRect,
@@ -1235,6 +1293,11 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// <summary>
     /// Enqueues one explicit two-point stroke line-segment command using the current canvas state.
     /// </summary>
+    /// <param name="start">Line start point in local coordinates.</param>
+    /// <param name="end">Line end point in local coordinates.</param>
+    /// <param name="brush">Brush used for shading the stroke.</param>
+    /// <param name="options">Effective drawing options.</param>
+    /// <param name="pen">Pen defining the stroke geometry.</param>
     private void PrepareStrokeLineSegmentCompositionCore(
         PointF start,
         PointF end,
@@ -1278,6 +1341,10 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// <summary>
     /// Enqueues one explicit stroked open polyline command using the current canvas state.
     /// </summary>
+    /// <param name="points">Polyline points in local coordinates.</param>
+    /// <param name="brush">Brush used for shading the stroke.</param>
+    /// <param name="options">Effective drawing options.</param>
+    /// <param name="pen">Pen defining the stroke geometry.</param>
     private void PrepareStrokePolylineCompositionCore(
         PointF[] points,
         Brush brush,
@@ -1805,8 +1872,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             : RasterizationMode.Aliased;
 
         // Glyph outlines (fills and strokes) are always non-zero winding; even-odd punches holes where a
-        // glyph's contours overlap. Force non-zero on both rule carriers - the rasterizer rule and the
-        // shape options - so neither the per-operation rule nor the canvas's even-odd default applies.
+        // glyph's contours overlap. Force non-zero on both rule carriers - the rasterizer options and the
+        // drawing options - so neither the per-operation rule nor the canvas's even-odd default applies.
         const IntersectionRule intersectionRule = IntersectionRule.NonZero;
 
         DrawingCanvasState state = this.ResolveState();

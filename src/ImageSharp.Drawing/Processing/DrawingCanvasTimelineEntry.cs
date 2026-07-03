@@ -29,6 +29,15 @@ internal enum DrawingCanvasTimelineEntryKind
 /// </remarks>
 internal readonly struct DrawingCanvasTimelineEntry
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingCanvasTimelineEntry"/> struct.
+    /// </summary>
+    /// <param name="kind">The kind of replay item.</param>
+    /// <param name="index">The command start index for command ranges, or the retained-scene buffer index for scene entries.</param>
+    /// <param name="count">The number of commands for command-range entries.</param>
+    /// <param name="hasLayers">Indicates whether the command range contains layer boundary commands.</param>
+    /// <param name="hasApply">Indicates whether the command range contains apply barriers.</param>
+    /// <param name="hasClipControls">Indicates whether the command range contains ordered clip-control commands.</param>
     private DrawingCanvasTimelineEntry(
         DrawingCanvasTimelineEntryKind kind,
         int index,
@@ -51,7 +60,7 @@ internal readonly struct DrawingCanvasTimelineEntry
     public DrawingCanvasTimelineEntryKind Kind { get; }
 
     /// <summary>
-    /// Gets the command start index for command ranges, or the side-buffer index for barriers and scenes.
+    /// Gets the command start index for command ranges, or the retained-scene buffer index for scene entries.
     /// </summary>
     public int Index { get; }
 

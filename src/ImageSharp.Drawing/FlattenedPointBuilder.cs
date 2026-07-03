@@ -12,7 +12,14 @@ namespace SixLabors.ImageSharp.Drawing;
 /// </remarks>
 internal struct FlattenedPointBuilder
 {
+    /// <summary>
+    /// The owned backing array. Grows geometrically; trimmed to <see cref="count"/> by <see cref="Detach"/>.
+    /// </summary>
     private PointF[] points;
+
+    /// <summary>
+    /// The number of points appended so far.
+    /// </summary>
     private int count;
 
     /// <summary>
@@ -53,8 +60,12 @@ internal struct FlattenedPointBuilder
     public void Advance(int length) => this.count += length;
 
     /// <summary>
-    /// Returns the owned point array.
+    /// Returns the owned point array, trimmed to the appended count.
     /// </summary>
+    /// <remarks>
+    /// Ownership of the array transfers to the caller. The builder must not be appended to afterwards as further
+    /// writes could mutate the detached array.
+    /// </remarks>
     /// <returns>The tightly-sized retained point array.</returns>
     public PointF[] Detach()
     {

@@ -16,7 +16,7 @@ internal static class ArrayExtensions
     /// <param name="source2">The second source array.</param>
     /// <returns>
     /// A new array containing the elements of both source arrays, or <paramref name="source1"/>
-    /// when <paramref name="source2"/> is empty.
+    /// when <paramref name="source2"/> is <see langword="null"/> or empty.
     /// </returns>
     public static T[] Concat<T>(this T[] source1, T[] source2)
     {

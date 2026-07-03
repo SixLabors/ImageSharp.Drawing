@@ -19,10 +19,14 @@ public static class DrawingOptionsDefaultsExtensions
         => new(context.GetGraphicsOptions(), IntersectionRule.NonZero, Matrix4x4.Identity);
 
     /// <summary>
-    /// Clones the path graphic options and applies changes required to force clearing.
+    /// Clones the drawing options and applies changes required to force clearing.
     /// </summary>
-    /// <param name="drawingOptions">The drawing options to clone</param>
-    /// <returns>A clone of shapeOptions with ColorBlendingMode, AlphaCompositionMode, and BlendPercentage set</returns>
+    /// <param name="drawingOptions">The drawing options to clone.</param>
+    /// <returns>
+    /// A clone of <paramref name="drawingOptions"/> with <see cref="GraphicsOptions.ColorBlendingMode"/>,
+    /// <see cref="GraphicsOptions.AlphaCompositionMode"/>, and <see cref="GraphicsOptions.BlendPercentage"/>
+    /// forced so the source replaces the destination.
+    /// </returns>
     internal static DrawingOptions CloneForClearOperation(this DrawingOptions drawingOptions)
     {
         GraphicsOptions options = drawingOptions.GraphicsOptions.DeepClone();

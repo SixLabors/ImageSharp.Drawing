@@ -93,9 +93,17 @@ internal static class WebGPUSceneEncoder
 
     /// <summary>
     /// Bit of the clip blend word marking a hard-edge (aliased) clip mask.
-    /// Must match CLIP_HARD_MASK_BIT in ptcl.wgsl.
+    /// Must match CLIP_HARD_MASK_BIT in drawtag.wgsl.
     /// </summary>
     private const uint ClipHardMaskBit = 0x40000000U;
+
+    /// <summary>
+    /// Bit of the clip blend word marking an isolated group (a layer). Isolated groups seed
+    /// transparent on the GPU and composite back as a unit; canvas clips leave this clear and
+    /// render as coverage masks over the live tile content, matching the CPU backend's
+    /// per-draw clip masking. Must match CLIP_ISOLATED_MASK_BIT in drawtag.wgsl.
+    /// </summary>
+    private const uint ClipIsolatedMaskBit = 0x20000000U;
 
     /// <summary>
     /// Default options used when encoding a layer's bounding-rectangle clip mask. The layer's real
@@ -1056,28 +1064,44 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     private struct SceneCapacityEstimate
     {
-        /// <summary>The estimated path-tag byte count.</summary>
+        /// <summary>
+        /// The estimated path-tag byte count.
+        /// </summary>
         public long PathTagCount;
 
-        /// <summary>The estimated path-data word count.</summary>
+        /// <summary>
+        /// The estimated path-data word count.
+        /// </summary>
         public long PathDataWordCount;
 
-        /// <summary>The estimated draw-tag count.</summary>
+        /// <summary>
+        /// The estimated draw-tag count.
+        /// </summary>
         public long DrawTagCount;
 
-        /// <summary>The estimated draw-data word count.</summary>
+        /// <summary>
+        /// The estimated draw-data word count.
+        /// </summary>
         public long DrawDataWordCount;
 
-        /// <summary>The estimated transform word count.</summary>
+        /// <summary>
+        /// The estimated transform word count.
+        /// </summary>
         public long TransformWordCount;
 
-        /// <summary>The estimated style word count.</summary>
+        /// <summary>
+        /// The estimated style word count.
+        /// </summary>
         public long StyleWordCount;
 
-        /// <summary>The estimated gradient-ramp pixel count.</summary>
+        /// <summary>
+        /// The estimated gradient-ramp pixel count.
+        /// </summary>
         public long GradientPixelCount;
 
-        /// <summary>The estimated path-gradient payload word count.</summary>
+        /// <summary>
+        /// The estimated path-gradient payload word count.
+        /// </summary>
         public long PathGradientDataWordCount;
 
         /// <summary>
@@ -5883,7 +5907,10 @@ internal static class WebGPUSceneEncoder
     /// <param name="drawData">The draw-data stream.</param>
     private static void AppendBeginClipData(GraphicsOptions options, ref OwnedStream<uint> drawData)
     {
-        drawData.Add(PackBlendMode(options));
+        // Layers are ISOLATED groups: they seed transparent on the GPU and composite back as a
+        // unit, matching the CPU backend's clean layer targets. Canvas clips never set this bit;
+        // they seed with the current content and pop with a coverage lerp (see drawtag.wgsl).
+        drawData.Add(PackBlendMode(options) | ClipIsolatedMaskBit);
         drawData.Add(BitcastSingle(Math.Clamp(options.BlendPercentage, 0F, 1F)));
     }
 

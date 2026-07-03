@@ -23,6 +23,6 @@ internal class GlyphBuilder : BaseGlyphBuilder
     /// <summary>
     /// Initializes a new instance of the <see cref="GlyphBuilder"/> class.
     /// </summary>
-    /// <param name="origin">The origin.</param>
+    /// <param name="origin">The origin offset applied to all captured glyph geometry.</param>
     public GlyphBuilder(Vector2 origin) => this.Builder.SetOrigin(origin);
 }

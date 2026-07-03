@@ -9,8 +9,14 @@ using SixLabors.ImageSharp.Processing.Processors.Transforms;
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Represents a drawing canvas over a frame target.
+/// Represents a stateful, retained-mode drawing canvas over a frame target.
 /// </summary>
+/// <remarks>
+/// Draw calls are recorded into an ordered command stream rather than rasterized immediately;
+/// the root canvas replays the recorded timeline when it is disposed. Drawing state (options,
+/// transform, clip and layer scope) is managed through the <see cref="Save()"/>/<see cref="Restore"/>
+/// state stack.
+/// </remarks>
 public abstract partial class DrawingCanvas : IDisposable
 {
     /// <summary>
@@ -125,7 +131,7 @@ public abstract partial class DrawingCanvas : IDisposable
     /// </summary>
     /// <remarks>
     /// The clip paths are transformed by the active transform at the point this is called, then
-    /// intersected with the existing clip — clipping only ever narrows. The resulting clip is part of
+    /// intersected with the existing clip; clipping only ever narrows. The resulting clip is part of
     /// the current saved state and is restored by <see cref="Restore"/>. Multiple paths combine as a
     /// union before intersecting (e.g. a region built from several rectangles).
     /// </remarks>

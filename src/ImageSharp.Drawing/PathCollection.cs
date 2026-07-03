@@ -7,18 +7,25 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
-/// A aggregate of <see cref="IPath"/>s to apply common operations to them.
+/// An aggregate of <see cref="IPath"/>s to apply common operations to them.
 /// </summary>
 /// <seealso cref="IPath" />
 public class PathCollection : IPathCollection
 {
+    /// <summary>
+    /// The paths in the collection.
+    /// </summary>
     private readonly IPath[] paths;
+
+    /// <summary>
+    /// The lazily computed union of the path bounds.
+    /// </summary>
     private RectangleF? bounds;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PathCollection"/> class.
     /// </summary>
-    /// <param name="paths">The collection of paths</param>
+    /// <param name="paths">The collection of paths.</param>
     public PathCollection(IEnumerable<IPath> paths)
         : this(GetPathArray(paths))
     {
@@ -27,7 +34,7 @@ public class PathCollection : IPathCollection
     /// <summary>
     /// Initializes a new instance of the <see cref="PathCollection"/> class.
     /// </summary>
-    /// <param name="paths">The collection of paths</param>
+    /// <param name="paths">The collection of paths.</param>
     public PathCollection(params IPath[] paths)
     {
         Guard.NotNull(paths, nameof(paths));
@@ -42,6 +49,10 @@ public class PathCollection : IPathCollection
     /// <inheritdoc />
     public RectangleF Bounds => this.bounds ??= this.CalcBounds();
 
+    /// <summary>
+    /// Computes the union of the contained path bounds.
+    /// </summary>
+    /// <returns>The axis-aligned bounds enclosing all paths.</returns>
     private RectangleF CalcBounds()
     {
         float minX, minY, maxX, maxY;
@@ -79,6 +90,11 @@ public class PathCollection : IPathCollection
     /// <inheritdoc />
     IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable<IPath>)this.paths).GetEnumerator();
 
+    /// <summary>
+    /// Materializes the path sequence into the retained array used by the collection.
+    /// </summary>
+    /// <param name="paths">The path sequence to materialize.</param>
+    /// <returns>The retained path array.</returns>
     private static IPath[] GetPathArray(IEnumerable<IPath> paths)
     {
         Guard.NotNull(paths, nameof(paths));

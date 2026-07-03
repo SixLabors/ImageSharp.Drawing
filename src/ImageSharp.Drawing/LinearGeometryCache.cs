@@ -8,17 +8,27 @@ namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
 /// Single-entry memoization slot for a scale-baked <see cref="LinearGeometry"/> derived from an <see cref="IPath"/>.
-/// Entries are keyed on the X/Y scale so text and panning workloads — which re-render the same shapes at a fixed
-/// zoom level while their rotation/translation/perspective drift — hit a stable cached bake.
+/// Entries are keyed on the X/Y scale so text and panning workloads, which re-render the same shapes at a fixed
+/// zoom level while their rotation/translation/perspective drift, hit a stable cached bake.
 /// </summary>
 /// <remarks>
 /// Safe for concurrent readers and writers. Publication uses <see cref="Volatile.Write{T}(ref T, T)"/> so a reader
-/// either observes <see langword="null"/> or a fully-constructed entry.
+/// either observes <see langword="null"/> or a fully-constructed entry. Storing a new scale replaces the previous
+/// entry; last writer wins.
 /// </remarks>
 internal struct LinearGeometryCache
 {
+    /// <summary>
+    /// The single cached entry, or <see langword="null"/> when nothing has been baked yet.
+    /// </summary>
     private Entry? entry;
 
+    /// <summary>
+    /// Attempts to get the cached geometry baked at the supplied scale.
+    /// </summary>
+    /// <param name="scale">The X/Y scale key.</param>
+    /// <param name="value">When this method returns, contains the cached geometry if the scale matched; otherwise, <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when a geometry baked at <paramref name="scale"/> was cached.</returns>
     public bool TryGet(Vector2 scale, [NotNullWhen(true)] out LinearGeometry? value)
     {
         Entry? hit = Volatile.Read(ref this.entry);
@@ -32,16 +42,34 @@ internal struct LinearGeometryCache
         return false;
     }
 
+    /// <summary>
+    /// Stores geometry baked at the supplied scale, replacing any previous entry.
+    /// </summary>
+    /// <param name="scale">The X/Y scale key.</param>
+    /// <param name="value">The baked geometry to cache.</param>
+    /// <returns>The cached <paramref name="value"/>, returned for caller convenience.</returns>
     public LinearGeometry Store(Vector2 scale, LinearGeometry value)
     {
         Volatile.Write(ref this.entry, new Entry(scale, value));
         return value;
     }
 
+    /// <summary>
+    /// An immutable scale/geometry pair. A class (not a struct) so the pair publishes atomically via a single
+    /// reference write.
+    /// </summary>
+    /// <param name="scale">The X/Y scale key.</param>
+    /// <param name="value">The baked geometry.</param>
     private sealed class Entry(Vector2 scale, LinearGeometry value)
     {
+        /// <summary>
+        /// Gets the X/Y scale the geometry was baked at.
+        /// </summary>
         public Vector2 Scale { get; } = scale;
 
+        /// <summary>
+        /// Gets the baked geometry.
+        /// </summary>
         public LinearGeometry Value { get; } = value;
     }
 }

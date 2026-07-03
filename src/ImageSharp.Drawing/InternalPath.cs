@@ -8,18 +8,24 @@ using System.Runtime.InteropServices;
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
-/// Internal logic for integrating linear paths.
+/// The legacy path simplification engine. Reduces a segment or point sequence to a simplified vertex list
+/// (removing coincident and collinear vertices while preserving user-intended direction reversals) and
+/// computes the bounds and total length of the result.
 /// </summary>
 internal class InternalPath
 {
     /// <summary>
-    /// The epsilon for float comparison
+    /// The epsilon used for orientation (collinearity) and zero-length vector tests.
     /// </summary>
     private const float Epsilon = 0.003f;
+
+    /// <summary>
+    /// The per-axis epsilon used to merge near-coincident vertices during simplification.
+    /// </summary>
     private const float Epsilon2 = 0.2f;
 
     /// <summary>
-    /// The points.
+    /// The simplified vertices together with their orientation and incoming edge length.
     /// </summary>
     private readonly PointData[] points;
 
@@ -29,16 +35,16 @@ internal class InternalPath
     private PointF[]? materializedPoints;
 
     /// <summary>
-    /// The closed path.
+    /// Whether the path is closed.
     /// </summary>
     private readonly bool closedPath;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="InternalPath"/> class.
     /// </summary>
-    /// <param name="segments">The segments.</param>
-    /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
-    /// <param name="removeCloseAndCollinear">Whether to remove close and collinear vertices</param>
+    /// <param name="segments">The segments to flatten and simplify.</param>
+    /// <param name="isClosedPath">Whether the path is closed.</param>
+    /// <param name="removeCloseAndCollinear">Whether to remove close and collinear vertices.</param>
     internal InternalPath(IReadOnlyList<ILineSegment> segments, bool isClosedPath, bool removeCloseAndCollinear = true)
         : this(Simplify(segments, isClosedPath, removeCloseAndCollinear), isClosedPath)
     {
@@ -47,8 +53,8 @@ internal class InternalPath
     /// <summary>
     /// Initializes a new instance of the <see cref="InternalPath" /> class.
     /// </summary>
-    /// <param name="points">The points.</param>
-    /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
+    /// <param name="points">The points to simplify.</param>
+    /// <param name="isClosedPath">Whether the path is closed.</param>
     internal InternalPath(ReadOnlyMemory<PointF> points, bool isClosedPath)
         : this(Simplify(points.Span, isClosedPath, true), isClosedPath)
     {
@@ -57,8 +63,8 @@ internal class InternalPath
     /// <summary>
     /// Initializes a new instance of the <see cref="InternalPath" /> class.
     /// </summary>
-    /// <param name="points">The points.</param>
-    /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
+    /// <param name="points">The simplified vertex data.</param>
+    /// <param name="isClosedPath">Whether the path is closed.</param>
     private InternalPath(PointData[] points, bool isClosedPath)
     {
         this.points = points;
@@ -91,7 +97,7 @@ internal class InternalPath
     }
 
     /// <summary>
-    /// Gets the bounds.
+    /// Gets the axis-aligned bounds of the simplified vertices.
     /// </summary>
     /// <value>
     /// The bounds.
@@ -99,7 +105,7 @@ internal class InternalPath
     public RectangleF Bounds { get; }
 
     /// <summary>
-    /// Gets the length.
+    /// Gets the total length of the simplified path.
     /// </summary>
     /// <value>
     /// The length.
@@ -107,20 +113,30 @@ internal class InternalPath
     public float Length { get; }
 
     /// <summary>
-    /// Gets the length.
+    /// Gets the number of simplified vertices.
     /// </summary>
     public int PointCount => this.points.Length;
 
     /// <summary>
-    /// Gets the points.
+    /// Gets the simplified points, materializing and caching them on first use.
     /// </summary>
-    /// <returns>The <see cref="IReadOnlyCollection{PointF}"/></returns>
+    /// <returns>The <see cref="ReadOnlyMemory{PointF}"/> of simplified points.</returns>
     internal ReadOnlyMemory<PointF> Points() => this.materializedPoints ??= this.CreatePoints();
 
+    /// <summary>
+    /// Wraps an index that is at most one length beyond the end back into array range.
+    /// </summary>
+    /// <param name="i">The candidate index. Must be less than twice <paramref name="arrayLength"/>.</param>
+    /// <param name="arrayLength">The array length.</param>
+    /// <returns>The wrapped index.</returns>
     // Modulo is a very slow operation.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int WrapArrayIndex(int i, int arrayLength) => i < arrayLength ? i : i - arrayLength;
 
+    /// <summary>
+    /// Projects the simplified vertex data to a plain point array.
+    /// </summary>
+    /// <returns>The projected points.</returns>
     private PointF[] CreatePoints()
     {
         PointF[] result = new PointF[this.points.Length];
@@ -132,6 +148,13 @@ internal class InternalPath
         return result;
     }
 
+    /// <summary>
+    /// Calculates the orientation of the ordered point triplet (p, q, r).
+    /// </summary>
+    /// <param name="p">The first point.</param>
+    /// <param name="q">The second (middle) point.</param>
+    /// <param name="r">The third point.</param>
+    /// <returns>The <see cref="PointOrientation"/> of the triplet.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static PointOrientation CalculateOrientation(Vector2 p, Vector2 q, Vector2 r)
     {
@@ -143,18 +166,18 @@ internal class InternalPath
 
         if (val is > -Epsilon and < Epsilon)
         {
-            return PointOrientation.Collinear;  // colinear
+            return PointOrientation.Collinear;  // collinear
         }
 
         return (val > 0) ? PointOrientation.Clockwise : PointOrientation.Counterclockwise; // clock or counterclock wise
     }
 
     /// <summary>
-    /// Simplifies the collection of segments.
+    /// Flattens the collection of segments and simplifies the resulting points.
     /// </summary>
-    /// <param name="segments">The segments.</param>
-    /// <param name="isClosed">Weather the path is closed or open.</param>
-    /// <param name="removeCloseAndCollinear">Whether to remove close and collinear vertices</param>
+    /// <param name="segments">The segments to flatten.</param>
+    /// <param name="isClosed">Whether the path is closed or open.</param>
+    /// <param name="removeCloseAndCollinear">Whether to remove close and collinear vertices.</param>
     /// <returns>
     /// The <see cref="T:PointData[]"/>.
     /// </returns>
@@ -171,7 +194,7 @@ internal class InternalPath
 
         // Track indices where collinear direction reversals represent user-intended
         // geometry: interior points of multi-point linear segments, and junction
-        // points between two linear segments (e.g. PathBuilder LineTo → LineTo).
+        // points between two linear segments (e.g. PathBuilder LineTo -> LineTo).
         // Reversals at all other indices (flattened curves, curve junctions) are
         // artifacts and should be removed normally.
         HashSet<int>? linearReversalIndices = null;
@@ -197,7 +220,7 @@ internal class InternalPath
                     }
                 }
 
-                // Junction between two linear segments (e.g. PathBuilder LineTo → LineTo).
+                // Junction between two linear segments (e.g. PathBuilder LineTo -> LineTo).
                 if (prevSeg is LinearLineSegment && start > 0)
                 {
                     linearReversalIndices ??= [];
@@ -211,6 +234,19 @@ internal class InternalPath
         return Simplify(CollectionsMarshal.AsSpan(simplified), isClosed, removeCloseAndCollinear, linearReversalIndices);
     }
 
+    /// <summary>
+    /// Simplifies a point sequence into vertex data annotated with orientation and incoming edge length.
+    /// </summary>
+    /// <param name="points">The points to simplify.</param>
+    /// <param name="isClosed">Whether the path is closed or open.</param>
+    /// <param name="removeCloseAndCollinear">Whether to remove close and collinear vertices.</param>
+    /// <param name="linearReversalIndices">
+    /// Indices whose collinear direction reversals are user-intended and must be preserved.
+    /// When <see langword="null"/>, reversals are preserved at every index.
+    /// </param>
+    /// <returns>
+    /// The <see cref="T:PointData[]"/>.
+    /// </returns>
     private static PointData[] Simplify(ReadOnlySpan<PointF> points, bool isClosed, bool removeCloseAndCollinear, HashSet<int>? linearReversalIndices = null)
     {
         int polyCorners = points.Length;
@@ -274,9 +310,9 @@ internal class InternalPath
             if (removeCloseAndCollinear && or == PointOrientation.Collinear && next != 0)
             {
                 // Preserve collinear points that represent a direction reversal (U-turn)
-                // within a single segment. E.g. (10,10)→(90,10)→(20,10): the middle point
+                // within a single segment. E.g. (10,10) -> (90,10) -> (20,10): the middle point
                 // is collinear but the stroker needs to see the reversal.
-                // Don't preserve reversals at segment boundaries — these arise from joining
+                // Don't preserve reversals at segment boundaries; these arise from joining
                 // different path segments (e.g. arc-to-arc) and are not user-intended.
                 bool preserve = false;
                 if (linearReversalIndices == null || linearReversalIndices.Contains(i))
@@ -332,10 +368,24 @@ internal class InternalPath
         return abs.X < threshold && abs.Y < threshold;
     }
 
+    /// <summary>
+    /// A simplified vertex together with its derived metadata.
+    /// </summary>
     private struct PointData
     {
+        /// <summary>
+        /// The vertex position.
+        /// </summary>
         public PointF Point;
+
+        /// <summary>
+        /// The orientation of the triplet formed by the previous vertex, this vertex, and the next vertex.
+        /// </summary>
         public PointOrientation Orientation;
+
+        /// <summary>
+        /// The length of the edge from the previous vertex to this vertex. Zero for the first vertex of an open path.
+        /// </summary>
         public float Length;
     }
 }

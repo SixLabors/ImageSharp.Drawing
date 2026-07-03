@@ -130,13 +130,38 @@ public static class DrawingCanvasFactoryExtensions
         return visitor.Value!;
     }
 
+    /// <summary>
+    /// Visits a non-generic <see cref="ImageFrame"/> to create a canvas over its concrete pixel type.
+    /// </summary>
     private struct CanvasFactoryVisitor : IImageFrameVisitor
     {
+        /// <summary>
+        /// The configuration to use for the created canvas.
+        /// </summary>
         private readonly Configuration configuration;
+
+        /// <summary>
+        /// Initial drawing options for the created canvas.
+        /// </summary>
         private readonly DrawingOptions options;
+
+        /// <summary>
+        /// Optional text drawing cache; when <see langword="null"/> the canvas creates and owns its own cache.
+        /// </summary>
         private readonly DrawingTextCache? textCache;
+
+        /// <summary>
+        /// Initial clip paths for the created canvas.
+        /// </summary>
         private readonly IPath[] clipPaths;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="CanvasFactoryVisitor"/> struct
+        /// creating a canvas that owns its own text drawing cache.
+        /// </summary>
+        /// <param name="configuration">The configuration to use for the created canvas.</param>
+        /// <param name="options">Initial drawing options for the created canvas.</param>
+        /// <param name="clipPaths">Initial clip paths for the created canvas.</param>
         public CanvasFactoryVisitor(Configuration configuration, DrawingOptions options, IPath[] clipPaths)
         {
             this.configuration = configuration;
@@ -145,6 +170,14 @@ public static class DrawingCanvasFactoryExtensions
             this.clipPaths = clipPaths;
         }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="CanvasFactoryVisitor"/> struct
+        /// creating a canvas that shares the supplied text drawing cache.
+        /// </summary>
+        /// <param name="configuration">The configuration to use for the created canvas.</param>
+        /// <param name="options">Initial drawing options for the created canvas.</param>
+        /// <param name="textCache">The text drawing cache used by the created canvas.</param>
+        /// <param name="clipPaths">Initial clip paths for the created canvas.</param>
         public CanvasFactoryVisitor(
             Configuration configuration,
             DrawingOptions options,
@@ -157,8 +190,12 @@ public static class DrawingCanvasFactoryExtensions
             this.clipPaths = clipPaths;
         }
 
+        /// <summary>
+        /// Gets the canvas created during the visit, or <see langword="null"/> before the visit runs.
+        /// </summary>
         public DrawingCanvas? Value { get; private set; }
 
+        /// <inheritdoc />
         void IImageFrameVisitor.Visit<TPixel>(ImageFrame<TPixel> frame)
             => this.Value = this.textCache is null
                 ? frame.CreateCanvas(this.configuration, this.options, this.clipPaths)

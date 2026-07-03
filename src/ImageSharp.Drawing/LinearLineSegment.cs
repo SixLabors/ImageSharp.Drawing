@@ -7,7 +7,7 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
-/// Represents a series of control points that will be joined by straight lines
+/// Represents a series of control points that will be joined by straight lines.
 /// </summary>
 /// <seealso cref="ILineSegment" />
 public sealed class LinearLineSegment : ILineSegment
@@ -20,8 +20,8 @@ public sealed class LinearLineSegment : ILineSegment
     /// <summary>
     /// Initializes a new instance of the <see cref="LinearLineSegment"/> class.
     /// </summary>
-    /// <param name="start">The start.</param>
-    /// <param name="end">The end.</param>
+    /// <param name="start">The start point.</param>
+    /// <param name="end">The end point.</param>
     public LinearLineSegment(PointF start, PointF end)
         : this([start, end])
     {
@@ -30,9 +30,9 @@ public sealed class LinearLineSegment : ILineSegment
     /// <summary>
     /// Initializes a new instance of the <see cref="LinearLineSegment" /> class.
     /// </summary>
-    /// <param name="point1">The point1.</param>
-    /// <param name="point2">The point2.</param>
-    /// <param name="additionalPoints">Additional points</param>
+    /// <param name="point1">The first point.</param>
+    /// <param name="point2">The second point.</param>
+    /// <param name="additionalPoints">Additional points appended after <paramref name="point2"/>.</param>
     public LinearLineSegment(PointF point1, PointF point2, params PointF[] additionalPoints)
         : this(new[] { point1, point2 }.Concat(additionalPoints))
     {
@@ -41,7 +41,7 @@ public sealed class LinearLineSegment : ILineSegment
     /// <summary>
     /// Initializes a new instance of the <see cref="LinearLineSegment"/> class.
     /// </summary>
-    /// <param name="points">The points.</param>
+    /// <param name="points">The points; at least two are required.</param>
     public LinearLineSegment(PointF[] points)
     {
         Guard.NotNull(points, nameof(points));
@@ -122,6 +122,8 @@ public sealed class LinearLineSegment : ILineSegment
     /// <summary>
     /// Computes the bounds for the retained linear point run.
     /// </summary>
+    /// <param name="points">The retained points.</param>
+    /// <returns>The axis-aligned bounds enclosing the points.</returns>
     private static RectangleF CalculateBounds(ReadOnlySpan<PointF> points)
     {
         float minX = float.MaxValue;

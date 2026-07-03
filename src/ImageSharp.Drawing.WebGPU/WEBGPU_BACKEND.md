@@ -18,7 +18,7 @@ This document explains the backend as a newcomer would need to understand it:
 
 The public WebGPU surface area around this backend is small and target-first.
 
-**Public types** — the entry points applications should use:
+**Public types**, the entry points applications should use:
 
 - `WebGPUEnvironment` exposes explicit support probes for the library-managed WebGPU environment
 - `WebGPUWindow` owns a native window and either runs a render loop or returns `WebGPUSurfaceFrame` instances through `TryAcquireFrame(...)`
@@ -135,11 +135,13 @@ The staged scene pipeline itself is described in [`WEBGPU_RASTERIZER.md`](d:/Git
 Its responsibilities are:
 
 - clear per-render diagnostics
-- encode retained WebGPU scenes from prepared command batches
+- encode retained WebGPU scenes from prepared command batches, choosing between the parallel encoder and the ordered encoder
 - create render-scoped staged scene resources
-- run the staged path
+- run the staged path inside a bounded scratch-growth retry loop
+- walk the ordered operation list (render ranges, Apply, scoped layers) when the scene retains one
 - keep explicit layer boundaries in the shared flush model until the staged scene encoder lowers them
-- retain the last successful scratch capacities and reuse backend-local GPU arenas across renders when possible
+- retain the last successful scratch capacities, chunk-height hints, and backend-local GPU arenas across renders when possible
+- serve strictly typed GPU readback through `ReadRegion<TPixel>(...)`
 
 The expensive staged work is delegated:
 
@@ -162,16 +164,16 @@ The public object graph around those responsibilities is also separate:
 `CreateScene(...)`:
 
 - receives target bounds and a prepared command batch
-- encodes the retained `WebGPUEncodedScene`
+- encodes the retained `WebGPUEncodedScene` through `WebGPUSceneEncoder.TryEncode(...)`, or through `WebGPUSceneEncoder.TryEncodeOrdered(...)` when the batch contains Apply
 - stores retained scratch-size state and reusable arena slots with the scene
 - does not need `TPixel`, the target frame, or a `WebGPUFlushContext`
 
 `RenderScene<TPixel>(...)`:
 
-- validates the retained scene type and target bounds
+- validates the retained scene type, the target texture format, and target bounds
 - resolves `TPixel` to the WebGPU texture format and required feature
 - creates the render-scoped `WebGPUFlushContext`
-- creates staged resources and dispatches the GPU pipeline
+- creates staged resources and dispatches the GPU pipeline, retrying with grown scratch capacities when the GPU reports overflow
 
 Keeping those lifetimes separate avoids duplicate target setup when the same retained scene is rendered repeatedly.
 
@@ -184,6 +186,24 @@ That step answers the first important question:
 "can these prepared commands become WebGPU encoded scene data"
 
 This is distinct from later GPU planning checks. Scene encoding uses target bounds and the allocator, but not the typed target frame.
+
+Encoding is parallel by default. `TryEncode(...)` splits large batches into contiguous command-range partitions and encodes them concurrently:
+
+- clip scopes do not serialize the scene; a cheap sequential prescan records the clip scopes open at each partition boundary, and each partition replays those seed clips before its range and closes its own, so the concatenated partitions form one balanced clip stream
+- layer scopes cannot be replayed that way because a layer composites its contents as one group when it closes, so partition boundaries snap forward to the next command index where no layer scope is open (layer depth zero)
+- the partitions are concatenated in timeline order into one packed scene buffer
+
+Batches containing Apply take `TryEncodeOrdered(...)` instead: Apply reads pixels back mid-scene, so operations before and after it must stay in submission order and encoding stays sequential.
+
+## Ordered Scenes: Apply And Scoped Layers
+
+Most scenes encode into one packed draw stream that renders as a single staged dispatch. Scenes containing Apply, and layers that require a scoped Apply, encode instead into an ordered `WebGPUSceneOperation` list retained with the scene. There are three operation kinds:
+
+- `RenderRange` renders one encoded draw range into the current target
+- `Apply` reads the source region back to the CPU, runs the user's image mutation, uploads the result into a transient texture, and draws it through the operation's draw range
+- `ScopedLayer` renders its child operations into a transient offscreen texture (cleared to transparent black) and then composites that texture back onto the parent target through a composite range that samples the layer texture via the external texture-view binding
+
+`RenderScene<TPixel>(...)` walks that list in order inside one flush context, recursing into scoped layers. Plain scenes never allocate the operation list and take the single staged-dispatch path.
 
 ## Flush Context Creation
 
@@ -202,7 +222,7 @@ The flush context is also the ownership boundary for flush-scoped GPU resources.
 
 Explicit layers are not a separate compose pass in this backend.
 
-They stay in the shared composition command stream as `BeginLayer` and `EndLayer`, then the staged scene encoder lowers those boundaries into `BeginClip` and `EndClip` records inside the encoded scene. The fine shader interprets those records directly: it pushes the current tile color to its clip stack at `BeginClip`, renders the isolated layer contents, and then blends that isolated result back into the saved backdrop at `EndClip`.
+They stay in the shared composition command stream as `BeginLayer` and `EndLayer`, then the staged scene encoder lowers those boundaries into `BeginClip` and `EndClip` records inside the encoded scene (the layer bounds become a rectangular clip path). The fine shader interprets those records directly: it pushes the current tile color to its clip stack at `BeginClip`, renders the isolated layer contents, and then blends that isolated result back into the saved backdrop at `EndClip` with the layer's stored blend mode and alpha.
 
 ```mermaid
 flowchart TD
@@ -212,6 +232,23 @@ flowchart TD
 ```
 
 That means layer semantics are part of the main staged scene pipeline rather than a second GPU composition subsystem.
+
+The one exception is a `BeginLayer` that requires a scoped Apply. The ordered encoder turns that layer into a `ScopedLayer` operation that renders into an offscreen texture and composites back onto the parent target, as described above.
+
+## Scratch Growth And Retry
+
+The staged pipeline's scratch buffers (lines, binning, path rows, path tiles, segment counts, segments, blend spill, PTCL) are sized by GPU bump allocators, not by exact CPU precomputation. The backend therefore runs each staged render inside a bounded retry loop:
+
+- the first GPU stage zeroes the bump counters on the GPU and never cancels the pipeline, so every stage reports its true scratch demand in a single pass
+- after submission the backend reads the counters back; if any counter exceeded its capacity the attempt's output is discarded and the render retries with grown sizes
+- earlier overflows can hide later-stage demand, so the retry budget allows one failed pass per tracked allocator plus a small margin (`MaxDynamicGrowthAttempts`)
+- the largest observed sizes are retained both on the scene and on the backend instance, so later flushes start at proven capacities
+
+## Typed Readback
+
+`ReadRegion<TPixel>(...)` copies a region of a native WebGPU target back into an ImageSharp pixel buffer. Readback is strictly typed to the surface format by design: the requested pixel type must match the target's native texture format exactly, otherwise the call throws. No pixel conversion happens on this path; callers that need a different layout read the native format and convert on the CPU.
+
+The canvas factory applies the same typing rule at creation time: a canvas over an `Rgba8Unorm` surface is typed `Rgba32`, and a canvas over a `Bgra8Unorm` surface is typed `Bgra32`.
 
 ## Runtime And Caching
 
@@ -230,6 +267,7 @@ They cache things such as:
 
 - the last successful staged-scene scratch capacities
 - reusable scheduling and resource arenas whose buffers can be leased by later flushes on the same backend instance
+- an advisory chunk-height hint for repeated oversized scenes, so the chunked path starts near a proven window size (every hinted chunk is still validated before dispatch)
 
 The arena contents are still per-flush; only the underlying allocations are reused.
 
@@ -246,8 +284,9 @@ The staged scene pipeline itself is described in [`WEBGPU_RASTERIZER.md`](d:/Git
 - resource creation
 - scheduling passes
 - fine rasterization
+- the scratch overflow protocol
 - chunked oversized-scene execution
-- copy and submission
+- readback, copy, and submission
 
 ## Reading Guide
 
@@ -255,12 +294,13 @@ If you want to understand the backend first, read the code in this order:
 
 1. `WebGPUEnvironment.cs`
 2. `WebGPUWindow.cs`, `WebGPUSurfaceFrame.cs`, `WebGPUExternalSurface.cs`, `WebGPUSurfaceHost.cs`, `WebGPURenderTarget.cs`, and `WebGPUDeviceContext.cs`
-3. `WebGPUDrawingBackend.cs`
-4. `WebGPUFlushContext.cs`
-5. `WebGPURuntime.cs`
-6. `WebGPURuntime.DeviceSharedState.cs`
-7. `WEBGPU_RASTERIZER.md`
-8. `GpuSceneDrawTag.cs`, `GpuSceneDrawMonoid.cs`, and the packed GPU record structs in `WebGPUSceneResources.cs` when following the shader contract
+3. `WebGPUDrawingBackend.cs` and its partials (`WebGPUDrawingBackend.Readback.cs`, `WebGPUDrawingBackend.CopyPixels.cs`, `WebGPUDrawingBackend.CompositePixels.cs`)
+4. `WebGPUSceneOperations.cs` for the ordered Apply/scoped-layer scene model
+5. `WebGPUFlushContext.cs`
+6. `WebGPURuntime.cs`
+7. `WebGPURuntime.DeviceSharedState.cs`
+8. `WEBGPU_RASTERIZER.md`
+9. `GpuSceneDrawTag.cs`, `GpuSceneDrawMonoid.cs`, and the packed GPU record structs in `WebGPUSceneResources.cs` when following the shader contract
 
 That order mirrors the newcomer view of the system:
 

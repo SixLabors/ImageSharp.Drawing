@@ -29,7 +29,14 @@ namespace SixLabors.ImageSharp.Drawing;
 /// </remarks>
 public sealed class LinearGeometry
 {
+    /// <summary>
+    /// The contour metadata partitioning <see cref="points"/>.
+    /// </summary>
     private readonly LinearContour[] contours;
+
+    /// <summary>
+    /// The concatenated point storage for every contour.
+    /// </summary>
     private readonly PointF[] points;
 
     // Computed measurements are finite; NaN keeps the memoized state in one field without nullable value-type overhead.
@@ -54,10 +61,24 @@ public sealed class LinearGeometry
         this.Points = this.points;
     }
 
+    /// <summary>
+    /// The classification of a point against a single closed contour.
+    /// </summary>
     private enum PointContainment
     {
+        /// <summary>
+        /// The point is outside the contour.
+        /// </summary>
         Outside,
+
+        /// <summary>
+        /// The point is inside the contour.
+        /// </summary>
         Inside,
+
+        /// <summary>
+        /// The point lies exactly on a contour edge.
+        /// </summary>
         OnBoundary
     }
 
@@ -100,6 +121,10 @@ public sealed class LinearGeometry
     /// <summary>
     /// Creates retained geometry for one open polyline, baked under the supplied device-space <paramref name="scale"/>.
     /// </summary>
+    /// <remarks>
+    /// When <paramref name="scale"/> is <see cref="Vector2.One"/> the input array is retained directly without
+    /// copying, so the caller must not mutate it afterwards.
+    /// </remarks>
     /// <param name="points">The polyline points.</param>
     /// <param name="scale">The X/Y scale at which the polyline is baked.</param>
     /// <returns>The retained open polyline geometry.</returns>
@@ -165,6 +190,10 @@ public sealed class LinearGeometry
     /// <summary>
     /// Calculates the total length of all derived linear segments.
     /// </summary>
+    /// <remarks>
+    /// The result is memoized. Concurrent first calls may compute it more than once, which is benign because
+    /// the computation is deterministic.
+    /// </remarks>
     /// <returns>The total segment length.</returns>
     public float ComputeLength()
     {
@@ -189,6 +218,10 @@ public sealed class LinearGeometry
     /// <summary>
     /// Calculates the total absolute area of all contour point runs.
     /// </summary>
+    /// <remarks>
+    /// Each contour with at least three points contributes the absolute value of its shoelace area, regardless of
+    /// whether it is marked closed. The result is memoized.
+    /// </remarks>
     /// <returns>The total contour area.</returns>
     public float ComputeArea()
     {
@@ -228,6 +261,10 @@ public sealed class LinearGeometry
     /// <summary>
     /// Returns whether the supplied point is inside the geometry.
     /// </summary>
+    /// <remarks>
+    /// Only closed contours participate in the test; open contours never contain points. A point lying exactly on
+    /// a closed contour edge is treated as contained under both fill rules.
+    /// </remarks>
     /// <param name="point">The point to test.</param>
     /// <param name="intersectionRule">The fill rule used for containment.</param>
     /// <returns><see langword="true"/> when the point is inside or on the geometry boundary.</returns>
@@ -288,6 +325,17 @@ public sealed class LinearGeometry
     /// <summary>
     /// Gets path information at the specified distance along the geometry.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The distance must resolve to a point on the geometry itself: negative or non-finite distances fail, and when
+    /// any contour is open a distance beyond the total length fails. When every contour is closed the distance
+    /// wraps modulo the total length instead.
+    /// </para>
+    /// <para>
+    /// At a distance that lands exactly on a shared vertex the outgoing segment wins, so the reported tangent and
+    /// angle are those of the segment leaving the vertex.
+    /// </para>
+    /// </remarks>
     /// <param name="distance">The distance along the geometry.</param>
     /// <param name="pathPoint">When this method returns, contains the path information at <paramref name="distance"/> if the distance resolves to a point on the geometry; otherwise, the default value.</param>
     /// <returns>

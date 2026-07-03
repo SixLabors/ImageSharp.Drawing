@@ -136,9 +136,12 @@ public sealed class RadialGradientBrush : GradientBrush
     /// <summary>
     /// The radial gradient brush applicator.
     /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
     private sealed class RadialGradientBrushRenderer<TPixel> : GradientBrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        // Tolerance (1/4096) for classifying near-degenerate circle configurations
+        // such as equal radii or a focal point sitting on the limiting circle.
         private const float GradientEpsilon = 1F / (1 << 12);
 
         // Single-circle fields
@@ -221,6 +224,8 @@ public sealed class RadialGradientBrush : GradientBrush
         {
             if (!this.isTwoCircle)
             {
+                // Single-circle form: the parameter is simply distance from the
+                // center divided by the radius.
                 float ux = x - this.c0x, uy = y - this.c0y;
                 return MathF.Sqrt((ux * ux) + (uy * uy)) / this.r0;
             }
@@ -297,6 +302,17 @@ public sealed class RadialGradientBrush : GradientBrush
             return this.isSwapped ? 1F - t : t;
         }
 
+        /// <summary>
+        /// Classifies the two-circle gradient into one of the canonical conic cases
+        /// (strip, focal-on-circle, wide or narrow cone) and builds the change-of-basis
+        /// transform that lets <see cref="PositionOnGradient"/> evaluate it with
+        /// closed-form expressions.
+        /// </summary>
+        /// <param name="center0">The center of the starting circle.</param>
+        /// <param name="radius0">The radius of the starting circle.</param>
+        /// <param name="center1">The center of the ending circle.</param>
+        /// <param name="radius1">The radius of the ending circle.</param>
+        /// <returns>The precomputed evaluation parameters.</returns>
         private static ConicalGradientParameters CreateConicalGradientParameters(
             PointF center0,
             float radius0,
@@ -391,8 +407,21 @@ public sealed class RadialGradientBrush : GradientBrush
                 isSwapped: isSwapped);
         }
 
+        /// <summary>
+        /// Computes the Euclidean distance between two points.
+        /// </summary>
+        /// <param name="p0">The first point.</param>
+        /// <param name="p1">The second point.</param>
+        /// <returns>The distance between the points.</returns>
         private static float Distance(Vector2 p0, Vector2 p1) => Vector2.Distance(p0, p1);
 
+        /// <summary>
+        /// Builds the transform that maps the segment from <paramref name="p0"/> to
+        /// <paramref name="p1"/> onto the unit line from (0, 0) to (1, 0).
+        /// </summary>
+        /// <param name="p0">The point mapped to the origin.</param>
+        /// <param name="p1">The point mapped to (1, 0).</param>
+        /// <returns>The change-of-basis transform.</returns>
         private static Matrix3x2 TwoPointToUnitLine(PointF p0, PointF p1)
         {
             // Build a change-of-basis that sends the segment p0->p1 to the
@@ -403,6 +432,13 @@ public sealed class RadialGradientBrush : GradientBrush
             return inverse * FromPoly2(new PointF(0F, 0F), new PointF(1F, 0F));
         }
 
+        /// <summary>
+        /// Builds an affine frame with <paramref name="p0"/> as the origin and the vector
+        /// from <paramref name="p0"/> to <paramref name="p1"/> as one axis.
+        /// </summary>
+        /// <param name="p0">The origin of the frame.</param>
+        /// <param name="p1">The point defining the primary axis direction and length.</param>
+        /// <returns>The affine frame matrix.</returns>
         private static Matrix3x2 FromPoly2(PointF p0, PointF p1)
 
             // This affine frame uses p0 as the origin and p0->p1 as one axis.
@@ -415,8 +451,21 @@ public sealed class RadialGradientBrush : GradientBrush
                 p0.X,
                 p0.Y);
 
+        /// <summary>
+        /// Precomputed parameters describing a two-circle gradient in its canonical frame.
+        /// </summary>
         private readonly struct ConicalGradientParameters
         {
+            /// <summary>
+            /// Initializes a new instance of the <see cref="ConicalGradientParameters"/> struct.
+            /// </summary>
+            /// <param name="transform">The transform mapping user space into the canonical evaluation frame.</param>
+            /// <param name="focalX">The focal point position along the start-to-end axis.</param>
+            /// <param name="radius">The end-circle radius in the canonical frame, or the squared half-width for strips.</param>
+            /// <param name="isStrip">Whether both circles share the same radius (strip case).</param>
+            /// <param name="isCircular">Whether both circles share the same center (concentric case).</param>
+            /// <param name="isFocalOnCircle">Whether the focal point lies exactly on the limiting circle.</param>
+            /// <param name="isSwapped">Whether the start and end circles were exchanged during normalization.</param>
             public ConicalGradientParameters(
                 Matrix3x2 transform,
                 float focalX,
@@ -435,18 +484,40 @@ public sealed class RadialGradientBrush : GradientBrush
                 this.IsSwapped = isSwapped;
             }
 
+            /// <summary>
+            /// Gets the transform mapping user space into the canonical evaluation frame.
+            /// </summary>
             public Matrix3x2 Transform { get; }
 
+            /// <summary>
+            /// Gets the focal point position along the start-to-end axis.
+            /// Values outside [0..1] correspond to cones whose focus lies beyond an endpoint.
+            /// </summary>
             public float FocalX { get; }
 
+            /// <summary>
+            /// Gets the end-circle radius in the canonical frame, or the squared half-width for strips.
+            /// </summary>
             public float Radius { get; }
 
+            /// <summary>
+            /// Gets a value indicating whether both circles share the same radius (strip case).
+            /// </summary>
             public bool IsStrip { get; }
 
+            /// <summary>
+            /// Gets a value indicating whether both circles share the same center (concentric case).
+            /// </summary>
             public bool IsCircular { get; }
 
+            /// <summary>
+            /// Gets a value indicating whether the focal point lies exactly on the limiting circle.
+            /// </summary>
             public bool IsFocalOnCircle { get; }
 
+            /// <summary>
+            /// Gets a value indicating whether the start and end circles were exchanged during normalization.
+            /// </summary>
             public bool IsSwapped { get; }
         }
     }

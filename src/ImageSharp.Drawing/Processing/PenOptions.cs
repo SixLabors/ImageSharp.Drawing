@@ -91,7 +91,9 @@ public struct PenOptions
     public float StrokeWidth { get; }
 
     /// <summary>
-    /// Gets the stroke pattern.
+    /// Gets the stroke pattern: alternating filled and empty segment lengths expressed as
+    /// multiples of <see cref="StrokeWidth"/>, starting with a filled segment.
+    /// An empty pattern produces a continuous stroke.
     /// </summary>
     public float[] StrokePattern { get; }
 

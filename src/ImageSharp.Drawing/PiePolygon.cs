@@ -64,6 +64,11 @@ public sealed class PiePolygon : Polygon
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PiePolygon"/> class.
+    /// Used by <see cref="Transform(Matrix4x4)"/> to wrap already-transformed segments.
+    /// </summary>
+    /// <param name="segments">The transformed segments; ownership passes to the new instance.</param>
     private PiePolygon(ILineSegment[] segments)
         : base(segments, true)
     {
@@ -87,6 +92,16 @@ public sealed class PiePolygon : Polygon
         return new PiePolygon(segments);
     }
 
+    /// <summary>
+    /// Builds the pie contour: a line from the center to the arc start, the elliptical arc,
+    /// and a line from the arc end back to the center. The polygon base closes the figure.
+    /// </summary>
+    /// <param name="center">The center point of the pie sector.</param>
+    /// <param name="radius">The x and y radii of the pie ellipse.</param>
+    /// <param name="rotation">The ellipse rotation in degrees.</param>
+    /// <param name="startAngle">The pie start angle in degrees.</param>
+    /// <param name="sweepAngle">The pie sweep angle in degrees.</param>
+    /// <returns>The segments describing the pie sector.</returns>
     private static ILineSegment[] CreateSegments(PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)
     {
         Guard.MustBeGreaterThan(radius.Width, 0, "radiusX");
@@ -103,6 +118,14 @@ public sealed class PiePolygon : Polygon
         ];
     }
 
+    /// <summary>
+    /// Evaluates the rotated ellipse parameterization at the given angle.
+    /// </summary>
+    /// <param name="center">The ellipse center.</param>
+    /// <param name="radius">The ellipse radii.</param>
+    /// <param name="rotation">The ellipse rotation in degrees.</param>
+    /// <param name="angle">The parametric angle in degrees.</param>
+    /// <returns>The point on the ellipse at the given angle.</returns>
     private static PointF GetArcPoint(PointF center, SizeF radius, float rotation, float angle)
     {
         float rotationRadians = rotation * (MathF.PI / 180F);

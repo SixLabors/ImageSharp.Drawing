@@ -83,6 +83,8 @@ public sealed class SolidBrush : Brush
                 scanline = scanline[..destinationRow.Length];
             }
 
+            // The single-color overlay overload only needs two Vector4 scratch rows,
+            // unlike the per-pixel overlay path which needs three.
             this.Blender.BlendWithCoverage(
                 this.Configuration,
                 destinationRow,

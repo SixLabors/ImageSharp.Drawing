@@ -286,7 +286,7 @@ public sealed class SweepGradientBrush : GradientBrush
             }
 
             // Convert from y-down image space back into the brush's y-up angle convention,
-            // then normalize to [0, 2π) so subtraction against the stored start angle is stable.
+            // then normalize to [0, 2*pi) so subtraction against the stored start angle is stable.
             float angle = MathF.Atan2(-dy, dx);
             if (angle < 0f)
             {
