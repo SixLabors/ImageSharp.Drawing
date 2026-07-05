@@ -473,14 +473,17 @@ internal static partial class DefaultRasterizer
                 return;
             }
 
-            int dx = Math.Abs(x1 - x0);
-            int dy = Math.Abs(y1 - y0);
+            long dx = Math.Abs((long)x1 - x0);
+            long dy = Math.Abs((long)y1 - y0);
             if (dx > MaximumDelta || dy > MaximumDelta)
             {
                 // Halve overlong segments recursively so downstream fixed-point
-                // interpolation always operates on bounded deltas.
-                int mx = (x0 + x1) >> 1;
-                int my = (y0 + y1) >> 1;
+                // interpolation always operates on bounded deltas. The midpoint must be
+                // computed in 64-bit: an int sum overflows for coordinates beyond ~4.2M
+                // pixels, placing the midpoint outside [x0, x1] so the segment never
+                // shrinks and the recursion overflows the stack (issue #403).
+                int mx = (int)(((long)x0 + x1) >> 1);
+                int my = (int)(((long)y0 + y1) >> 1);
                 this.AddContainedLineF24Dot8(x0, y0, mx, my);
                 this.AddContainedLineF24Dot8(mx, my, x1, y1);
                 return;
