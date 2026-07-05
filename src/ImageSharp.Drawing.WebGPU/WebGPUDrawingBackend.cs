@@ -1209,11 +1209,39 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// <summary>
     /// One parked deferred readback and the corrective context for its flush.
     /// </summary>
-    /// <param name="Status">The deferred scheduling-status readback.</param>
-    /// <param name="Scene">The rendered scene, held alive via a deferred-render reference; <see langword="null"/> for presentation flushes.</param>
-    /// <param name="CorrectiveRender">The corrective re-render invoked when the readback reports overflow; <see langword="null"/> for presentation flushes.</param>
-    private readonly record struct PendingSchedulingStatusEntry(
-        WebGPUPendingSchedulingStatus Status,
-        WebGPUDrawingBackendScene? Scene,
-        Action? CorrectiveRender);
+    private readonly struct PendingSchedulingStatusEntry
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PendingSchedulingStatusEntry"/> struct.
+        /// </summary>
+        /// <param name="status">The deferred scheduling-status readback.</param>
+        /// <param name="scene">The rendered scene, held alive via a deferred-render reference; <see langword="null"/> for presentation flushes.</param>
+        /// <param name="correctiveRender">The corrective re-render invoked when the readback reports overflow; <see langword="null"/> for presentation flushes.</param>
+        public PendingSchedulingStatusEntry(
+            WebGPUPendingSchedulingStatus status,
+            WebGPUDrawingBackendScene? scene,
+            Action? correctiveRender)
+        {
+            this.Status = status;
+            this.Scene = scene;
+            this.CorrectiveRender = correctiveRender;
+        }
+
+        /// <summary>
+        /// Gets the deferred scheduling-status readback.
+        /// </summary>
+        public WebGPUPendingSchedulingStatus Status { get; }
+
+        /// <summary>
+        /// Gets the rendered scene, held alive via a deferred-render reference;
+        /// <see langword="null"/> for presentation flushes.
+        /// </summary>
+        public WebGPUDrawingBackendScene? Scene { get; }
+
+        /// <summary>
+        /// Gets the corrective re-render invoked when the readback reports overflow;
+        /// <see langword="null"/> for presentation flushes.
+        /// </summary>
+        public Action? CorrectiveRender { get; }
+    }
 }

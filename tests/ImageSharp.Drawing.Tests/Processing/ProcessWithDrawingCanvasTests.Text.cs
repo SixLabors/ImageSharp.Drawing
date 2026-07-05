@@ -1088,6 +1088,81 @@ public partial class ProcessWithDrawingCanvasTests
             appendSourceFileOrDescription: false);
     }
 
+    [Theory]
+    [WithSolidFilledImages(320, 120, nameof(Color.White), PixelTypes.Rgba32)]
+    public void DrawTextUnderlineSkipsInk<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> auto = RenderDecoratedText(provider, "jogging", TextDecorationSkipInk.Auto);
+        using Image<TPixel> none = RenderDecoratedText(provider, "jogging", TextDecorationSkipInk.None);
+
+        auto.DebugSave(provider, "auto", appendSourceFileOrDescription: false);
+        none.DebugSave(provider, "none", appendSourceFileOrDescription: false);
+        auto.CompareToReferenceOutput(TextDrawingComparer, provider, "auto", appendSourceFileOrDescription: false);
+        none.CompareToReferenceOutput(TextDrawingComparer, provider, "none", appendSourceFileOrDescription: false);
+
+        // Descenders cross the underline band, so skipping must change the output.
+        Assert.Throws<ImageDifferenceIsOverThresholdException>(() => ImageComparer.Exact.VerifySimilarity(auto, none));
+    }
+
+    [Theory]
+    [WithSolidFilledImages(320, 120, nameof(Color.White), PixelTypes.Rgba32)]
+    public void DrawTextUnderlineWithoutInkDoesNotSkip<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> auto = RenderDecoratedText(provider, "HOME", TextDecorationSkipInk.Auto);
+        using Image<TPixel> none = RenderDecoratedText(provider, "HOME", TextDecorationSkipInk.None);
+
+        auto.DebugSave(provider, appendSourceFileOrDescription: false);
+        auto.CompareToReferenceOutput(TextDrawingComparer, provider, appendSourceFileOrDescription: false);
+
+        // No ink reaches the underline band, so skipping must be a no-op.
+        ImageComparer.Exact.VerifySimilarity(auto, none);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(320, 120, nameof(Color.White), PixelTypes.Rgba32)]
+    public void DrawTextStrikethroughIgnoresSkipInk<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> auto = RenderDecoratedText(provider, "jogging", TextDecorationSkipInk.Auto, TextDecorations.Strikeout);
+        using Image<TPixel> none = RenderDecoratedText(provider, "jogging", TextDecorationSkipInk.None, TextDecorations.Strikeout);
+
+        auto.DebugSave(provider, appendSourceFileOrDescription: false);
+        auto.CompareToReferenceOutput(TextDrawingComparer, provider, appendSourceFileOrDescription: false);
+
+        // Strikethrough crosses ink by definition and never skips.
+        ImageComparer.Exact.VerifySimilarity(auto, none);
+    }
+
+    private static Image<TPixel> RenderDecoratedText<TPixel>(
+        TestImageProvider<TPixel> provider,
+        string text,
+        TextDecorationSkipInk skipInk,
+        TextDecorations decorations = TextDecorations.Underline)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Font font = CreateFont(TestFonts.OpenSans, 48);
+        RichTextOptions textOptions = new(font)
+        {
+            Origin = new PointF(10, 20),
+            TextDecorationSkipInk = skipInk,
+            TextRuns =
+            [
+                new RichTextRun
+                {
+                    Start = 0,
+                    End = text.Length,
+                    TextDecorations = decorations
+                }
+            ]
+        };
+
+        Image<TPixel> image = provider.GetImage();
+        image.Mutate(context => context.Paint(canvas => canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null)));
+        return image;
+    }
+
     private static RichTextOptions CreateTextOptionsAt(Font font, PointF origin)
         => new(font) { Origin = origin };
 

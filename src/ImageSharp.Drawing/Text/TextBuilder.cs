@@ -26,7 +26,7 @@ public static class TextBuilder
         GlyphBuilder glyphBuilder = new();
         TextRenderer renderer = new(glyphBuilder);
 
-        renderer.RenderText(text, textOptions);
+        renderer.Render(text, textOptions);
 
         return glyphBuilder.Paths;
     }
@@ -45,7 +45,7 @@ public static class TextBuilder
         GlyphBuilder glyphBuilder = new();
         TextRenderer renderer = new(glyphBuilder);
 
-        renderer.RenderGlyphRun(glyphRun, glyphOptions);
+        renderer.Render(glyphRun, glyphOptions);
 
         return glyphBuilder.Paths;
     }
@@ -64,7 +64,7 @@ public static class TextBuilder
         GlyphBuilder glyphBuilder = new();
         TextRenderer renderer = new(glyphBuilder);
 
-        renderer.RenderGlyphRun(glyphRun, glyphOptions);
+        renderer.Render(glyphRun, glyphOptions);
 
         return glyphBuilder.Glyphs;
     }
@@ -83,7 +83,7 @@ public static class TextBuilder
         GlyphBuilder glyphBuilder = new();
         TextRenderer renderer = new(glyphBuilder);
 
-        renderer.RenderText(text, textOptions);
+        renderer.Render(text, textOptions);
 
         return glyphBuilder.Glyphs;
     }
@@ -105,7 +105,7 @@ public static class TextBuilder
         PathGlyphBuilder glyphBuilder = new(transformed.Path);
         TextRenderer renderer = new(glyphBuilder);
 
-        renderer.RenderText(text, transformed.TextOptions);
+        renderer.Render(text, transformed.TextOptions);
 
         return glyphBuilder.Paths;
     }
@@ -127,7 +127,7 @@ public static class TextBuilder
         PathGlyphBuilder glyphBuilder = new(transformed.Path);
         TextRenderer renderer = new(glyphBuilder);
 
-        renderer.RenderText(text, transformed.TextOptions);
+        renderer.Render(text, transformed.TextOptions);
 
         return glyphBuilder.Glyphs;
     }

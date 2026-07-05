@@ -86,6 +86,28 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     /// </summary>
     private TextDecorationDetails? previousStrikeoutTextDecoration;
 
+    // Stacked color-layer glyphs (e.g. COLR v0 components) repeat the same decorations once
+    // per component. A glyph's decorations may arrive as several skip-ink segments, so
+    // duplicate suppression compares against every decoration the previous glyph emitted,
+    // not just the last one. The lists swap on each BeginGlyph that follows an emission.
+
+    /// <summary>
+    /// The decorations emitted by the current glyph so far.
+    /// </summary>
+    private List<TextDecorationDetails> currentDecorationBatch = [];
+
+    /// <summary>
+    /// The decorations emitted by the previous decoration-emitting glyph.
+    /// </summary>
+    private List<TextDecorationDetails> previousDecorationBatch = [];
+
+    /// <summary>
+    /// Identifies the glyph the current decoration batch belongs to; incremented on each batch
+    /// rotation. Stitching only applies across glyphs: within one glyph the font engine emits
+    /// exact segments (skip-ink gaps) that must never be bridged.
+    /// </summary>
+    private int decorationBatchSequence;
+
     // Per-layer (within current grapheme) bookkeeping:
 
     /// <summary>
@@ -165,6 +187,8 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         this.previousUnderlineTextDecoration = null;
         this.previousOverlineTextDecoration = null;
         this.previousStrikeoutTextDecoration = null;
+        this.currentDecorationBatch.Clear();
+        this.previousDecorationBatch.Clear();
 
         this.EndText();
     }
@@ -212,6 +236,16 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         this.Builder.Clear();
         this.usedLayers = false;
         this.inLayer = false;
+
+        // Rotate the decoration batches so duplicate suppression compares against the
+        // decorations of the last glyph that emitted any. Glyphs that emit none (e.g. runs
+        // without decorations) leave the previous batch in place.
+        if (this.currentDecorationBatch.Count > 0)
+        {
+            (this.previousDecorationBatch, this.currentDecorationBatch) = (this.currentDecorationBatch, this.previousDecorationBatch);
+            this.currentDecorationBatch.Clear();
+            this.decorationBatchSequence++;
+        }
 
         this.layerStartIndex = this.graphemePathCount;
         this.currentLayerPaint = null;
@@ -396,6 +430,17 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         start = ClampToPixel(start, (int)thickness, rotated);
         end = ClampToPixel(end, (int)thickness, rotated);
 
+        // Stacked color-layer glyphs repeat the same decorations once per component; ignore
+        // any line the previous glyph already emitted. Skip-ink can split one glyph's
+        // decoration into several segments, so every entry in the batch is compared.
+        foreach (TextDecorationDetails emitted in this.previousDecorationBatch)
+        {
+            if (emitted.Decoration == textDecorations && emitted.Start == start && emitted.End == end)
+            {
+                return;
+            }
+        }
+
         // Sometimes the start and end points do not align properly leaving pixel sized gaps
         // so we need to adjust them. Use any previous decoration to try and continue the line.
         TextDecorationDetails? previous = textDecorations switch
@@ -406,18 +451,13 @@ internal class BaseGlyphBuilder : IGlyphRenderer
             _ => null
         };
 
-        if (previous != null)
+        // Stitching bridges pixel-snapping gaps between the decorations of adjacent glyphs.
+        // It must never apply within one glyph: the font engine emits exact segments there,
+        // and skip-ink gaps could otherwise be snapped shut.
+        if (previous != null && previous.Value.Sequence != this.decorationBatchSequence)
         {
             float prevThickness = previous.Value.Thickness;
-            Vector2 prevStart = previous.Value.Start;
             Vector2 prevEnd = previous.Value.End;
-
-            // If the previous line is identical to the new one ignore it.
-            // This can happen when multiple glyph layers are used.
-            if (prevStart == start && prevEnd == end)
-            {
-                return;
-            }
 
             // Align the new line with the previous one if they are close enough.
             // Use a 2 pixel threshold to account for anti-aliasing gaps.
@@ -440,9 +480,11 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
         TextDecorationDetails current = new()
         {
+            Decoration = textDecorations,
             Start = start,
             End = end,
-            Thickness = thickness
+            Thickness = thickness,
+            Sequence = this.decorationBatchSequence
         };
 
         switch (textDecorations)
@@ -457,6 +499,8 @@ internal class BaseGlyphBuilder : IGlyphRenderer
                 this.previousOverlineTextDecoration = current;
                 break;
         }
+
+        this.currentDecorationBatch.Add(current);
 
         Vector2 a = start - pad;
         Vector2 b = start + pad;
@@ -476,13 +520,14 @@ internal class BaseGlyphBuilder : IGlyphRenderer
             offset = rotated ? new Vector2(-(thickness * .5F), 0) : new Vector2(0, thickness * .5F);
         }
 
-        // We clamp the start and end points to the pixel grid to avoid anti-aliasing
-        // when there is no transform.
+        // Snap the corners to whole pixels on the cross axis only, keeping the stroke's edges
+        // crisp; the along-line coordinates stay exact so skip-ink gap boundaries land
+        // symmetrically around the glyph ink.
         renderer.BeginFigure();
-        renderer.MoveTo(ClampToPixel(a + offset));
-        renderer.LineTo(ClampToPixel(b + offset));
-        renderer.LineTo(ClampToPixel(c + offset));
-        renderer.LineTo(ClampToPixel(d + offset));
+        renderer.MoveTo(SnapCross(a + offset, rotated));
+        renderer.LineTo(SnapCross(b + offset, rotated));
+        renderer.LineTo(SnapCross(c + offset, rotated));
+        renderer.LineTo(SnapCross(d + offset, rotated));
         renderer.EndFigure();
 
         IPath path = this.Builder.Build();
@@ -606,9 +651,13 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     private static Point ClampToPixel(PointF point) => Point.Truncate(point);
 
     /// <summary>
-    /// Snaps a decoration endpoint to the pixel grid, taking stroke thickness and
-    /// orientation into account. Even-thickness lines snap to whole pixels; odd-thickness
-    /// lines snap to half pixels so the stroke center lands on a pixel boundary.
+    /// Snaps a decoration endpoint to the pixel grid, taking stroke thickness and orientation
+    /// into account. On the cross axis, even-thickness lines snap to whole pixels and
+    /// odd-thickness lines snap to half pixels so the 1px-wide center row/column aligns with
+    /// physical pixels. The along-line coordinate is ROUNDED to the nearest pixel rather than
+    /// floored: rounding keeps abutting segments seamless (two anti-aliased edges composited
+    /// separately do not sum to opaque) and keeps short skip-ink pieces crisp, while its
+    /// zero-mean error avoids the systematic one-directional gap bias flooring produced.
     /// </summary>
     /// <param name="point">The decoration endpoint to snap.</param>
     /// <param name="thickness">The decoration stroke thickness in whole pixels.</param>
@@ -622,28 +671,42 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static PointF ClampToPixel(PointF point, int thickness, bool rotated)
     {
-        // Even thickness: snap to whole pixels.
-        if ((thickness & 1) == 0)
-        {
-            return Point.Truncate(point);
-        }
+        float half = (thickness & 1) == 0 ? 0F : .5F;
 
-        // Odd thickness: snap to half pixels along the perpendicular axis
-        // so the 1px-wide center row/column aligns with physical pixels.
-        if (rotated)
-        {
-            return Point.Truncate(point) + new Vector2(.5F, 0);
-        }
-
-        return Point.Truncate(point) + new Vector2(0, .5F);
+        return rotated
+            ? new PointF(MathF.Floor(point.X) + half, MathF.Round(point.Y))
+            : new PointF(MathF.Round(point.X), MathF.Floor(point.Y) + half);
     }
 
     /// <summary>
-    /// Records the start, end, and thickness of a previously emitted decoration line
-    /// so that the next adjacent decoration can be stitched seamlessly.
+    /// Snaps a decoration corner to the pixel grid on the cross axis only, so the stroke's
+    /// long edges stay crisp while its ends keep their exact along-line positions.
+    /// </summary>
+    /// <param name="point">The corner to snap.</param>
+    /// <param name="rotated">
+    /// <see langword="true"/> when the glyph uses vertical layout, in which case the
+    /// cross (snap) axis is X rather than Y.
+    /// </param>
+    /// <returns>
+    /// The snapped corner.
+    /// </returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static PointF SnapCross(PointF point, bool rotated)
+        => rotated
+            ? new PointF(MathF.Floor(point.X), point.Y)
+            : new PointF(point.X, MathF.Floor(point.Y));
+
+    /// <summary>
+    /// Records a previously emitted decoration line so that the next adjacent decoration can
+    /// be stitched seamlessly and duplicate emissions from stacked color layers suppressed.
     /// </summary>
     private struct TextDecorationDetails
     {
+        /// <summary>
+        /// Gets or sets the decoration type the line was emitted for.
+        /// </summary>
+        public TextDecorations Decoration { get; set; }
+
         /// <summary>
         /// Gets or sets the start position of the decoration.
         /// </summary>
@@ -658,5 +721,11 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         /// Gets or sets the decoration thickness in pixels.
         /// </summary>
         public float Thickness { get; internal set; }
+
+        /// <summary>
+        /// Gets or sets the decoration batch sequence the line was emitted in, identifying
+        /// which glyph produced it.
+        /// </summary>
+        public int Sequence { get; set; }
     }
 }

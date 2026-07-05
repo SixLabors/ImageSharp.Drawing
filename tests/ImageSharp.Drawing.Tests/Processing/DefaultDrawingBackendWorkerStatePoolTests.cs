@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using Microsoft.DotNet.RemoteExecutor;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -15,33 +16,39 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 public class DefaultDrawingBackendWorkerStatePoolTests
 {
     /// <summary>
-    /// The worker-state pool is keyed per pixel type. Using a pixel format no other test
-    /// draws with isolates this test's pool and its rent flag from concurrently executing
-    /// tests, making the idle-trim observation deterministic.
+    /// The idle trim rides Gen2 collections observed by a finalizer sentinel, so the
+    /// observation is only deterministic when nothing else drives the GC or rents worker
+    /// states. The test therefore runs in a dedicated process via
+    /// <see cref="RemoteExecutor"/>, matching how ImageSharp hardens its pool trim tests.
     /// </summary>
     [Fact]
     public void WorkerStatePool_ReturnsAllBuffersToAllocator_WhenIdleAcrossGen2Collections()
     {
-        TestMemoryAllocator allocator = new();
-        Configuration configuration = Configuration.Default.Clone();
-        configuration.MemoryAllocator = allocator;
+        RemoteExecutor.Invoke(RunTest).Dispose();
 
-        using (Image<Rgb48> image = new(configuration, 128, 128))
+        static void RunTest()
         {
-            image.Mutate(context => context.Paint(
-                canvas => canvas.Fill(Brushes.Solid(Color.Red), new RectanglePolygon(new RectangleF(8, 8, 64, 64)))));
-        }
+            TestMemoryAllocator allocator = new();
+            Configuration configuration = Configuration.Default.Clone();
+            configuration.MemoryAllocator = allocator;
 
-        // The first collection consumes the rent flag set by the flush above; the second
-        // observes an idle Gen2 and trims the pool, disposing the retained worker states.
-        // Extra iterations keep the test robust if the finalizer thread lags.
-        for (int i = 0; i < 5 && CountOutstanding(allocator) != 0; i++)
-        {
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-        }
+            using (Image<Rgb48> image = new(configuration, 128, 128))
+            {
+                image.Mutate(context => context.Paint(
+                    canvas => canvas.Fill(Brushes.Solid(Color.Red), new RectanglePolygon(new RectangleF(8, 8, 64, 64)))));
+            }
 
-        Assert.Equal(0, CountOutstanding(allocator));
+            // The first collection consumes the rent flag set by the flush above; the second
+            // observes an idle Gen2 and trims the pool, disposing the retained worker states.
+            // Extra iterations keep the test robust if the finalizer thread lags.
+            for (int i = 0; i < 5 && CountOutstanding(allocator) != 0; i++)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
+
+            Assert.Equal(0, CountOutstanding(allocator));
+        }
     }
 
     /// <summary>

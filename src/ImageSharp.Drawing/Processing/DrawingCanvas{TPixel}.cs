@@ -700,7 +700,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         RichTextOptions configuredOptions = ConfigureTextOptions(textOptions, path, out IPath? configuredPath);
         using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, configuredPath, pen, brush, this.textCache);
         TextRenderer renderer = new(glyphRenderer);
-        renderer.RenderText(text, configuredOptions);
+        renderer.Render(text, configuredOptions);
 
         this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipState);
     }
@@ -821,7 +821,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path: null, pen, brush, this.textCache);
         TextRenderer renderer = new(glyphRenderer);
-        renderer.RenderGlyph(glyphId, options);
+        renderer.Render(glyphId, options);
 
         this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipState);
     }
@@ -849,7 +849,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path: null, pen, brush, this.textCache);
         TextRenderer renderer = new(glyphRenderer);
-        renderer.RenderGlyphRun(glyphRun, options);
+        renderer.Render(glyphRun, options);
 
         this.DrawTextOperations(
             this.BatchGlyphRunOperations(glyphRenderer.DrawingOperations),
