@@ -22,8 +22,10 @@ struct PathBbox {
     y1: i32,
     draw_flags: u32,
     trans_ix: u32, // index of the path's transform in the scene stream
-    // Per-fill aliased coverage threshold, propagated from the style record to the fine pass.
-    // A negative value means antialiased (analytic coverage); [0,1] means aliased at that cutoff.
+    // Per-fill coverage parameter, propagated from the style record to the fine pass.
+    // For aliased fills this is the quantization cutoff in [0,1]; for antialiased fills it
+    // carries the perceptual coverage boost for text (zero when disabled). The draw-flags
+    // aliased bit selects the interpretation; the two uses are mutually exclusive.
     coverage_threshold: f32,
     _padding: u32,
     interest: vec4<f32>, // raster interest rect (x0, y0, x1, y1) in pixels

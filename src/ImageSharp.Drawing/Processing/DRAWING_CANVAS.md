@@ -69,13 +69,41 @@ canvas-facing API while still constructing the typed implementation internally.
 
 ### Options
 
-`DrawingOptions` is the per-state option bundle. It carries three things:
+`DrawingOptions` is the per-state option bundle. It carries four things:
 
 - `GraphicsOptions` for blending, antialiasing, and composition
 - `IntersectionRule` selecting non-zero or even-odd filling
 - `Transform`, a `Matrix4x4` applied to subject geometry and brushes
+- `TextContrast`, the perceptual coverage boost applied only to antialiased text
 
 There is no separate shape-options type; the fill rule and transform live directly on `DrawingOptions`. Explicit path boolean operations (`BooleanOperation`) exist only on the `IPath` `Clip(...)` geometry extensions, not in the drawing options.
+
+`TextContrast` counters the soft, washed-out look of small antialiased glyphs: partial coverage is remapped after fill-rule resolution and before compositing. Only the dedicated text command path (`CreateTextCompositionCommand`) forwards it into `RasterizerOptions.CoverageBoost`; plain fills, strokes, and clips always rasterize with a zero boost, and aliased text ignores it. Both backends apply the same curve (the CPU rasterizer in `AreaToCoverage`, the WebGPU fine shader in `fill_path`), so text weight matches across backends.
+
+#### The TextContrast curve
+
+With `a` the resolved coverage in `[0, 1]` and `k` the clamped `TextContrast`:
+
+```
+f(a) = a + k · a · (1 - a) · (2a - 1)
+```
+
+The perturbation term `a(1-a)(2a-1)` is negative below half coverage and positive above it, so mostly-empty pixels lighten while mostly-covered pixels darken: glyph stems solidify and counters stay bright, which reads as sharpening rather than the uniform darkening of a weight boost. `0`, `1/2`, and `1` are exact fixed points.
+
+Expanding shows the family is a plain blend between identity and smoothstep, because `a + a(1-a)(2a-1) = 3a² - 2a³`:
+
+```
+f(a) = (1 - k) · a + k · smoothstep(a)
+```
+
+Properties that make it safe to apply per pixel:
+
+- **Range preserving.** `f([0,1]) = [0,1]`; no clamp is needed after the remap.
+- **Monotone.** `f′(a) = (1 - k) + 6k·a(1 - a)`, so the slope is smallest at the endpoints (`1 - k`) and largest at the midpoint (`1 + k/2`). For `k ≤ 1` the curve is monotone: coverage ordering is preserved and gradients cannot band or invert.
+- **Bounded shift.** The perturbation peaks at `a = 1/2 ± √3/6` with magnitude `√3/18 ≈ 0.0962`, so no pixel's coverage moves by more than `0.0962·k` (about `±0.05` at the default).
+- **Bounded erosion.** For `a → 0` the multiplicative factor tends to `(1 - k)` (the endpoint slope), so a faint antialiasing fringe keeps at least `(1 - k)` of its coverage; nothing is ever removed and no value crosses the `1/2` midpoint. At the default `k = 0.5` this gives a simple guarantee: no antialiased sample loses more than half its value. Erosion of sub-half-pixel features (hairline stems in very light faces at very small sizes) grows linearly with `k`; `k = 1` (pure smoothstep) attenuates faint fringes quadratically and is the setting to avoid if hairline preservation matters more than contrast.
+
+The darkening-only alternative `a + k·a(1-a)` (Skia's `apply_contrast` from `SkMaskGamma.cpp`) adds weight but blurs dense glyphs; Skia's full remap (that contrast term followed by sRGB linear-blend compensation) was tested and rejected because it reproduces Skia's *unhinted* rendering, which is lighter and fuzzier than its familiar hinted output. The S-curve was chosen from side-by-side comparisons against Skia across Latin and CJK samples at 8-14px.
 
 ### Batcher
 

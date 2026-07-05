@@ -16,7 +16,7 @@ public static class DrawingOptionsDefaultsExtensions
     /// <param name="context">The image processing context to retrieve defaults from.</param>
     /// <returns>The globally configured default options.</returns>
     public static DrawingOptions GetDrawingOptions(this IImageProcessingContext context)
-        => new(context.GetGraphicsOptions(), IntersectionRule.NonZero, Matrix4x4.Identity);
+        => new(context.GetGraphicsOptions(), IntersectionRule.NonZero, Matrix4x4.Identity, DrawingOptions.DefaultTextContrast);
 
     /// <summary>
     /// Clones the drawing options and applies changes required to force clearing.
@@ -34,6 +34,6 @@ public static class DrawingOptionsDefaultsExtensions
         options.AlphaCompositionMode = PixelAlphaCompositionMode.Src;
         options.BlendPercentage = 1F;
 
-        return new DrawingOptions(options, drawingOptions.IntersectionRule, drawingOptions.Transform);
+        return new DrawingOptions(options, drawingOptions.IntersectionRule, drawingOptions.Transform, drawingOptions.TextContrast);
     }
 }

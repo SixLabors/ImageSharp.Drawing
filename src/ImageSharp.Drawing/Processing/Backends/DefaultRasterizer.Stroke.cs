@@ -143,6 +143,7 @@ internal static partial class DefaultRasterizer
                 options.IntersectionRule,
                 options.RasterizationMode,
                 options.AntialiasThreshold,
+                coverageBoost: 0F,
                 hasStartCovers: false);
         }
 
@@ -318,6 +319,7 @@ internal static partial class DefaultRasterizer
                 options.IntersectionRule,
                 options.RasterizationMode,
                 options.AntialiasThreshold,
+                coverageBoost: 0F,
                 hasStartCovers);
         }
 
@@ -385,6 +387,7 @@ internal static partial class DefaultRasterizer
                 options.IntersectionRule,
                 options.RasterizationMode,
                 options.AntialiasThreshold,
+                coverageBoost: 0F,
                 hasStartCovers);
         }
 

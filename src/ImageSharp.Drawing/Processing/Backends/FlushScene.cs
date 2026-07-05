@@ -1650,7 +1650,8 @@ internal sealed partial class FlushScene : IDisposable
             clippedDestination,
             options.IntersectionRule,
             options.RasterizationMode,
-            options.AntialiasThreshold);
+            options.AntialiasThreshold,
+            options.CoverageBoost);
 
         brushBounds = absoluteInterest;
         return true;

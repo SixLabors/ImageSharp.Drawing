@@ -299,6 +299,19 @@ fills therefore coexist within one flush, matching the CPU rasterizer's per-fill
 `RasterizationMode`. Each fill also carries a raster interest rectangle; coverage outside it
 is zeroed.
 
+For antialiased fills the `CmdFill.coverage_threshold` word is reused to carry the perceptual
+coverage boost for text (the two uses are mutually exclusive, so no extra command word is
+needed). When non-zero, fine remaps partial coverage with the S-curve
+`f(a) = a + boost * a * (1 - a) * (2a - 1)`, equivalently a blend
+`(1 - boost) * a + boost * smoothstep(a)`: coverage above one half darkens and coverage below
+it lightens, so stems solidify while counters stay bright. The remap is monotone and range
+preserving, no pixel moves by more than `0.0962 * boost` coverage, and faint fringes keep at
+least `(1 - boost)` of their value, which bounds erosion of sub-half-pixel features. Only text
+fills carry a non-zero boost (`DrawingOptions.TextContrast`); plain vector fills, strokes, and
+clips always encode zero. This matches the CPU rasterizer's `AreaToCoverage` boost; the full
+derivation and the rationale versus Skia's mask-gamma remap live in
+`ImageSharp.Drawing/Processing/DRAWING_CANVAS.md` under "The TextContrast curve".
+
 The fine pass consumes data such as:
 
 - the segment buffer

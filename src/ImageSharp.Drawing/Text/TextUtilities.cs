@@ -114,7 +114,7 @@ internal static class TextUtilities
         graphicsOptions.AlphaCompositionMode = compositionMode;
         graphicsOptions.ColorBlendingMode = colorBlendingMode;
 
-        return new DrawingOptions(graphicsOptions, intersectionRule, drawingOptions.Transform);
+        return new DrawingOptions(graphicsOptions, intersectionRule, drawingOptions.Transform, drawingOptions.TextContrast);
     }
 
     /// <summary>

@@ -692,6 +692,17 @@ fn fill_path(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result: ptr<fun
         for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
             area[i] = select(0.0, 1.0, area[i] >= threshold);
         }
+    } else if fill.coverage_threshold > 0.0 {
+        // For antialiased fills the coverage_threshold word carries the perceptual coverage
+        // boost instead (the two uses are mutually exclusive). An S-curve darkens coverage
+        // above one half and lightens it below, so text stems solidify while nearly-open
+        // counters stay bright; at full strength the remap is exactly smoothstep. Matches
+        // the CPU rasterizer's AreaToCoverage boost.
+        let boost = fill.coverage_threshold;
+        for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+            let a = area[i];
+            area[i] = a + boost * a * (1.0 - a) * (2.0 * a - 1.0);
+        }
     }
     // Discard coverage outside the fill's raster interest rectangle
     // (expressed in full-target coordinates).

@@ -2373,7 +2373,7 @@ internal static class WebGPUSceneEncoder
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
             Rectangle interestBounds = ToTargetLocal(command.RasterizerOptions.Interest, this.rootTargetBounds);
             (uint style0, uint style1, uint style2, uint style3, uint style4, uint style5, uint style6, uint style7, uint style8, uint style9) =
-                GetFillStyle(command.GraphicsOptions, command.RasterizerOptions.IntersectionRule, interestBounds);
+                GetFillStyle(command.GraphicsOptions, command.RasterizerOptions.IntersectionRule, interestBounds, command.RasterizerOptions.CoverageBoost);
             int pathTagCheckpoint = this.PathTags.Count;
             int pathDataCheckpoint = this.PathData.Count;
             int transformCheckpoint = this.Transforms.Count;
@@ -4212,7 +4212,8 @@ internal static class WebGPUSceneEncoder
             clippedDestination,
             options.IntersectionRule,
             options.RasterizationMode,
-            options.AntialiasThreshold);
+            options.AntialiasThreshold,
+            options.CoverageBoost);
 
         brushBounds = absoluteInterest;
         return true;
@@ -5591,8 +5592,11 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     /// <remarks>
     /// Word layout consumed by flatten.wgsl: 0 = style flags, 1 = device-space stroke width,
-    /// 2 = packed draw flags, 3 = miter limit, 4 = arc detail scale, 5 = antialias threshold,
+    /// 2 = packed draw flags, 3 = miter limit, 4 = arc detail scale, 5 = coverage parameter,
     /// 6-9 = target-local interest rectangle as left, top, right, bottom.
+    /// The coverage parameter carries the quantization threshold for aliased strokes and zero
+    /// for antialiased strokes: fine interprets the antialiased slot as the perceptual coverage
+    /// boost, which never applies to strokes.
     /// </remarks>
     /// <param name="options">The graphics options used for blending.</param>
     /// <param name="pen">The pen that defines stroke width, joins, caps, and miter limit.</param>
@@ -5626,7 +5630,7 @@ internal static class WebGPUSceneEncoder
             PackStyleDrawFlags(options),
             BitcastSingle((float)pen.StrokeOptions.MiterLimit),
             BitcastSingle((float)pen.StrokeOptions.ArcDetailScale),
-            BitcastSingle(options.AntialiasThreshold),
+            BitcastSingle(options.Antialias ? 0F : options.AntialiasThreshold),
             BitcastSingle(interestBounds.Left),
             BitcastSingle(interestBounds.Top),
             BitcastSingle(interestBounds.Right),
@@ -5689,12 +5693,16 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     /// <remarks>
     /// Shares the stroke style word layout with the stroke-only words zeroed: 0 = style flags
-    /// (the fill bit selects even-odd), 2 = packed draw flags, 5 = antialias threshold,
+    /// (the fill bit selects even-odd), 2 = packed draw flags, 5 = coverage parameter,
     /// 6-9 = target-local interest rectangle as left, top, right, bottom.
+    /// The coverage parameter is mode-dependent because the two uses are mutually exclusive:
+    /// aliased fills carry the quantization threshold, antialiased fills carry the perceptual
+    /// coverage boost applied by fine (zero for plain fills, non-zero only for text).
     /// </remarks>
     /// <param name="options">The graphics options used for blending.</param>
     /// <param name="intersectionRule">The fill rule for self-intersecting geometry.</param>
     /// <param name="interestBounds">The target-local raster interest bounds.</param>
+    /// <param name="coverageBoost">The perceptual coverage boost applied to antialiased coverage; zero disables it.</param>
     /// <returns>The ten packed style words.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static (
@@ -5710,16 +5718,18 @@ internal static class WebGPUSceneEncoder
         uint Style9) GetFillStyle(
         GraphicsOptions options,
         IntersectionRule intersectionRule,
-        Rectangle interestBounds)
+        Rectangle interestBounds,
+        float coverageBoost = 0F)
     {
         StyleFlags styleFlags = intersectionRule == IntersectionRule.EvenOdd ? StyleFlags.Fill : StyleFlags.None;
+        float coverageParam = options.Antialias ? coverageBoost : options.AntialiasThreshold;
         return (
             (uint)styleFlags,
             0U,
             PackStyleDrawFlags(options),
             0U,
             0U,
-            BitcastSingle(options.AntialiasThreshold),
+            BitcastSingle(coverageParam),
             BitcastSingle(interestBounds.Left),
             BitcastSingle(interestBounds.Top),
             BitcastSingle(interestBounds.Right),

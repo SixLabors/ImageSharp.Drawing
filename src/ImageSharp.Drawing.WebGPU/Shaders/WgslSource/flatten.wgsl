@@ -1043,7 +1043,8 @@ fn main(
 
     let out = &path_bboxes[path_ix];
     // Style stream layout (words): 0 flags, 1 line width, 2 draw flags, 3 miter limit,
-    // 4 arc detail scale, 5 coverage threshold, 6..9 interest rect.
+    // 4 arc detail scale, 5 coverage parameter (aliased threshold or antialiased text
+    // coverage boost; the uses are mutually exclusive), 6..9 interest rect.
     let style_flags = scene[config.style_base + style_ix];
     let style_draw_flags = scene[config.style_base + style_ix + 2u];
     let coverage_threshold = bitcast<f32>(scene[config.style_base + style_ix + 5u]);

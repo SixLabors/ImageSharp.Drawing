@@ -108,7 +108,8 @@ internal static partial class DefaultRasterizer
             bandInfo.BandHeight,
             bandInfo.IntersectionRule,
             bandInfo.RasterizationMode,
-            bandInfo.AntialiasThreshold);
+            bandInfo.AntialiasThreshold,
+            bandInfo.CoverageBoost);
 
         context.SeedStartCovers(item.GetActualCovers());
         if (item.Rasterizable.IsX16)
@@ -152,7 +153,8 @@ internal static partial class DefaultRasterizer
             bandInfo.BandHeight,
             bandInfo.IntersectionRule,
             bandInfo.RasterizationMode,
-            bandInfo.AntialiasThreshold);
+            bandInfo.AntialiasThreshold,
+            bandInfo.CoverageBoost);
 
         item.Rasterizable.ExecuteBand(ref context, in bandInfo, scanline, strokeBandCoverage, ref rowHandler);
     }
@@ -305,6 +307,7 @@ internal static partial class DefaultRasterizer
                     options.IntersectionRule,
                     options.RasterizationMode,
                     options.AntialiasThreshold,
+                    options.CoverageBoost,
                     hasStartCovers);
             }
 
@@ -358,6 +361,7 @@ internal static partial class DefaultRasterizer
                     options.IntersectionRule,
                     options.RasterizationMode,
                     options.AntialiasThreshold,
+                    options.CoverageBoost,
                     hasStartCovers);
             }
 
@@ -429,6 +433,7 @@ internal static partial class DefaultRasterizer
         private IntersectionRule intersectionRule;
         private RasterizationMode rasterizationMode;
         private float antialiasThreshold;
+        private float coverageBoost;
         private int touchedRowCount;
 
         /// <summary>
@@ -473,6 +478,7 @@ internal static partial class DefaultRasterizer
             this.intersectionRule = intersectionRule;
             this.rasterizationMode = rasterizationMode;
             this.antialiasThreshold = antialiasThreshold;
+            this.coverageBoost = 0F;
             this.touchedRowCount = 0;
         }
 
@@ -486,6 +492,7 @@ internal static partial class DefaultRasterizer
         /// <param name="intersectionRule">The fill rule used when converting accumulated winding/coverage into final alpha.</param>
         /// <param name="rasterizationMode">The rasterization mode that controls how antialiasing thresholds are interpreted.</param>
         /// <param name="antialiasThreshold">The threshold used when antialiasing is conditionally reduced or disabled.</param>
+        /// <param name="coverageBoost">The perceptual coverage boost applied to antialiased coverage; zero disables it.</param>
         public void Reconfigure(
             int width,
             int wordsPerRow,
@@ -493,7 +500,8 @@ internal static partial class DefaultRasterizer
             int height,
             IntersectionRule intersectionRule,
             RasterizationMode rasterizationMode,
-            float antialiasThreshold)
+            float antialiasThreshold,
+            float coverageBoost)
         {
             this.width = width;
             this.height = height;
@@ -502,6 +510,7 @@ internal static partial class DefaultRasterizer
             this.intersectionRule = intersectionRule;
             this.rasterizationMode = rasterizationMode;
             this.antialiasThreshold = antialiasThreshold;
+            this.coverageBoost = coverageBoost;
         }
 
         /// <summary>
@@ -878,6 +887,15 @@ internal static partial class DefaultRasterizer
                 // Aliased mode quantizes final coverage to hard 0/1 per pixel
                 // using the configurable threshold from GraphicsOptions.AntialiasThreshold.
                 return coverage >= this.antialiasThreshold ? 1F : 0F;
+            }
+
+            if (this.coverageBoost != 0F)
+            {
+                // Perceptual contrast boost for text: an S-curve that darkens coverage above
+                // one half and lightens it below, so stems solidify while nearly-open counters
+                // stay bright. 0, 0.5, and 1 are fixed points; at full strength the remap is
+                // exactly smoothstep (3a^2 - 2a^3), so the boost blends identity to smoothstep.
+                coverage += this.coverageBoost * coverage * (1F - coverage) * ((2F * coverage) - 1F);
             }
 
             return coverage;

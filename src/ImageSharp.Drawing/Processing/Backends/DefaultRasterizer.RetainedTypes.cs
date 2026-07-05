@@ -103,6 +103,7 @@ internal static partial class DefaultRasterizer
         /// <param name="intersectionRule">The fill rule used when resolving accumulated winding.</param>
         /// <param name="rasterizationMode">The rasterization mode used by the band.</param>
         /// <param name="antialiasThreshold">The aliased threshold used when the band runs in aliased mode.</param>
+        /// <param name="coverageBoost">The perceptual coverage boost used when the band runs in antialiased mode.</param>
         /// <param name="hasStartCovers">Indicates whether the band has non-zero start-cover seeds.</param>
         public RasterizableBandInfo(
             int lineCount,
@@ -115,6 +116,7 @@ internal static partial class DefaultRasterizer
             IntersectionRule intersectionRule,
             RasterizationMode rasterizationMode,
             float antialiasThreshold,
+            float coverageBoost,
             bool hasStartCovers)
         {
             this.LineCount = lineCount;
@@ -127,6 +129,7 @@ internal static partial class DefaultRasterizer
             this.IntersectionRule = intersectionRule;
             this.RasterizationMode = rasterizationMode;
             this.AntialiasThreshold = antialiasThreshold;
+            this.CoverageBoost = coverageBoost;
             this.HasStartCovers = hasStartCovers;
         }
 
@@ -179,6 +182,13 @@ internal static partial class DefaultRasterizer
         /// Gets the aliased threshold used when the band runs in aliased mode.
         /// </summary>
         public float AntialiasThreshold { get; }
+
+        /// <summary>
+        /// Gets the perceptual coverage boost used when the band runs in antialiased mode.
+        /// Partial coverage is remapped by the S-curve <c>a + boost * a * (1 - a) * (2a - 1)</c>;
+        /// zero disables it.
+        /// </summary>
+        public float CoverageBoost { get; }
 
         /// <summary>
         /// Gets a value indicating whether the band has non-zero start-cover seeds.

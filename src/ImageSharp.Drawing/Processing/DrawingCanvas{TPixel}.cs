@@ -726,7 +726,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingOptions placedOptions = new(
             effectiveOptions.GraphicsOptions,
             effectiveOptions.IntersectionRule,
-            Matrix4x4.CreateTranslation(location.X, location.Y, 0) * effectiveOptions.Transform);
+            Matrix4x4.CreateTranslation(location.X, location.Y, 0) * effectiveOptions.Transform,
+            effectiveOptions.TextContrast);
 
         using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache);
         textBlock.RenderTo(glyphRenderer, wrappingLength);
@@ -776,7 +777,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingOptions placedOptions = new(
             effectiveOptions.GraphicsOptions,
             effectiveOptions.IntersectionRule,
-            Matrix4x4.CreateTranslation(location.X, location.Y, 0) * effectiveOptions.Transform);
+            Matrix4x4.CreateTranslation(location.X, location.Y, 0) * effectiveOptions.Transform,
+            effectiveOptions.TextContrast);
 
         using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache);
         lineLayout.RenderTo(glyphRenderer);
@@ -1162,7 +1164,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 commandOptions = new DrawingOptions(
                     effectiveOptions.GraphicsOptions,
                     effectiveOptions.IntersectionRule,
-                    Matrix4x4.Identity);
+                    Matrix4x4.Identity,
+                    effectiveOptions.TextContrast);
             }
 
             if (renderDestinationRect.Width <= 0 || renderDestinationRect.Height <= 0)
@@ -1941,11 +1944,18 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         Rectangle interest = ToRasterizerInterest(bounds);
 
+        // Text opts into the perceptual coverage boost here; generic vector fills and strokes
+        // never carry one. The boost only applies to antialiased coverage.
+        float coverageBoost = rasterizationMode == RasterizationMode.Antialiased
+            ? Math.Clamp(drawingOptions.TextContrast, 0F, 1F)
+            : 0F;
+
         RasterizerOptions rasterizerOptions = new(
             interest,
             intersectionRule,
             rasterizationMode,
-            graphicsOptions.AntialiasThreshold);
+            graphicsOptions.AntialiasThreshold,
+            coverageBoost);
 
         // Glyph paths arrive pre-laid-out, so the queued command reports only the sub-pixel
         // translation (identity when the fraction is zero) and the GraphicsOptions/
@@ -1955,7 +1965,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             && drawingOptions.IntersectionRule == intersectionRule
             && drawingOptions.Transform == glyphTransform
             ? drawingOptions
-            : new DrawingOptions(graphicsOptions, intersectionRule, glyphTransform);
+            : new DrawingOptions(graphicsOptions, intersectionRule, glyphTransform, drawingOptions.TextContrast);
 
         // Clipping is resolved from the ordered begin/end-clip stream, which the canvas anchors
         // at the state's destination offset. Glyph render locations only move the glyph geometry;
