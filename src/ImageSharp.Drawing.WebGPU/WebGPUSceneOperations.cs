@@ -123,6 +123,8 @@ internal readonly struct WebGPUSceneRange
     /// <param name="fillCount">The visible fill count in the range.</param>
     /// <param name="lineCount">The line count in the range.</param>
     /// <param name="totalPathRowCount">The estimated sparse row count for the range.</param>
+    /// <param name="estimatedTileCrossings">The CPU-side upper bound for the range's tile-boundary crossings.</param>
+    /// <param name="estimatedBinFootprint">The CPU-side upper bound for the range's per-(draw, bin) binning records.</param>
     public WebGPUSceneRange(
         Rectangle targetBounds,
         int pathTagWordStart,
@@ -142,7 +144,9 @@ internal readonly struct WebGPUSceneRange
         int clipCount,
         int fillCount,
         int lineCount,
-        int totalPathRowCount)
+        int totalPathRowCount,
+        long estimatedTileCrossings,
+        long estimatedBinFootprint)
     {
         this.TargetBounds = targetBounds;
         this.PathTagWordStart = pathTagWordStart;
@@ -163,6 +167,8 @@ internal readonly struct WebGPUSceneRange
         this.FillCount = fillCount;
         this.LineCount = lineCount;
         this.TotalPathRowCount = totalPathRowCount;
+        this.EstimatedTileCrossings = estimatedTileCrossings;
+        this.EstimatedBinFootprint = estimatedBinFootprint;
     }
 
     /// <summary>
@@ -259,6 +265,16 @@ internal readonly struct WebGPUSceneRange
     /// Gets the estimated sparse row count for the range.
     /// </summary>
     public int TotalPathRowCount { get; }
+
+    /// <summary>
+    /// Gets the CPU-side upper bound for the range's tile-boundary crossings.
+    /// </summary>
+    public long EstimatedTileCrossings { get; }
+
+    /// <summary>
+    /// Gets the CPU-side upper bound for the range's per-(draw, bin) binning records.
+    /// </summary>
+    public long EstimatedBinFootprint { get; }
 }
 
 /// <summary>

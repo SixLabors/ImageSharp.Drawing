@@ -69,6 +69,12 @@ internal static class WebGPUSceneDispatch
     // validation rejects deeper nesting before anything is dispatched.
     private const int MaxClipStackDepth = 256;
 
+    // The PTCL word budget attributed to each estimated tile crossing when seeding the PTCL
+    // scratch capacity. Each crossed tile costs one CMD_FILL (9 words) plus a paint command and
+    // amortized jump/end overhead; the multiplier was calibrated against measured demand
+    // (~6.5 words per crossing on stroke-heavy scenes) with headroom for paint-heavy draws.
+    private const long PtclWordsPerCrossing = 8;
+
     /// <summary>
     /// Identifies the staged-scene storage binding that exceeded the device limit for one flush attempt.
     /// </summary>
@@ -192,7 +198,7 @@ internal static class WebGPUSceneDispatch
 
         try
         {
-            WebGPUSceneBumpSizes seededBumpSizes = SeedSceneBumpSizes(bumpSizes, encodedScene);
+            WebGPUSceneBumpSizes seededBumpSizes = SeedSceneBumpSizes(bumpSizes, encodedScene, flushContext.DeviceState.MaxStorageBufferBindingSize);
             WebGPUSceneConfig config = WebGPUSceneConfig.Create(encodedScene, seededBumpSizes);
             uint baseColor = 0U;
             bool chunkingRequired = false;
@@ -276,7 +282,7 @@ internal static class WebGPUSceneDispatch
             throw new NotSupportedException($"The WebGPU device does not support required feature '{requiredFeature}'.");
         }
 
-        WebGPUSceneBumpSizes seededBumpSizes = SeedSceneBumpSizes(bumpSizes, range);
+        WebGPUSceneBumpSizes seededBumpSizes = SeedSceneBumpSizes(bumpSizes, range, flushContext.DeviceState.MaxStorageBufferBindingSize);
         WebGPUSceneConfig config = WebGPUSceneConfig.Create(encodedScene, range, seededBumpSizes);
         uint baseColor = 0U;
         bool chunkingRequired = false;
@@ -2061,46 +2067,106 @@ internal static class WebGPUSceneDispatch
     /// Raises the caller-provided scratch capacities to the scene-specific lower bounds already known on the CPU so the first GPU attempt does not waste a full-scene pass on allocations that cannot possibly fit.
     /// </summary>
     /// <param name="currentSizes">The persisted scratch capacities carried into this flush.</param>
-    /// <param name="scene">The encoded scene whose line count and path-tile estimate provide guaranteed minimum capacities.</param>
+    /// <param name="scene">The encoded scene whose CPU-side demand estimates provide minimum capacities.</param>
+    /// <param name="maxStorageBufferBindingSize">The device-reported maximum size of one storage-buffer binding, used to cap conservative estimates.</param>
     /// <returns>The retained capacities raised to the scene's known CPU-side lower bounds.</returns>
-    private static WebGPUSceneBumpSizes SeedSceneBumpSizes(WebGPUSceneBumpSizes currentSizes, WebGPUEncodedScene scene)
-    {
-        uint lineFloor = AddSizingSlack(checked((uint)Math.Max(scene.LineCount, 1)));
-        uint pathRowFloor = checked((uint)Math.Max(scene.TotalPathRowCount, scene.PathCount));
-        uint pathTileFloor = pathRowFloor;
-
-        return new WebGPUSceneBumpSizes(
-            Math.Max(currentSizes.Lines, lineFloor),
-            currentSizes.Binning,
-            Math.Max(currentSizes.PathRows, pathRowFloor),
-            Math.Max(currentSizes.PathTiles, pathTileFloor),
-            Math.Max(currentSizes.SegCounts, lineFloor),
-            Math.Max(currentSizes.Segments, lineFloor),
-            currentSizes.BlendSpill,
-            currentSizes.Ptcl);
-    }
+    private static WebGPUSceneBumpSizes SeedSceneBumpSizes(WebGPUSceneBumpSizes currentSizes, WebGPUEncodedScene scene, ulong maxStorageBufferBindingSize)
+        => SeedSceneBumpSizes(
+            currentSizes,
+            scene.LineCount,
+            scene.TotalPathRowCount,
+            scene.PathCount,
+            scene.EstimatedTileCrossings,
+            scene.EstimatedBinFootprint,
+            maxStorageBufferBindingSize);
 
     /// <summary>
     /// Raises the caller-provided scratch capacities to the range-specific lower bounds already known on the CPU.
     /// </summary>
     /// <param name="currentSizes">The persisted scratch capacities carried into this flush.</param>
-    /// <param name="range">The encoded range whose line count and path-tile estimate provide guaranteed minimum capacities.</param>
+    /// <param name="range">The encoded range whose CPU-side demand estimates provide minimum capacities.</param>
+    /// <param name="maxStorageBufferBindingSize">The device-reported maximum size of one storage-buffer binding, used to cap conservative estimates.</param>
     /// <returns>The retained capacities raised to the range's known CPU-side lower bounds.</returns>
-    private static WebGPUSceneBumpSizes SeedSceneBumpSizes(WebGPUSceneBumpSizes currentSizes, WebGPUSceneRange range)
+    private static WebGPUSceneBumpSizes SeedSceneBumpSizes(WebGPUSceneBumpSizes currentSizes, WebGPUSceneRange range, ulong maxStorageBufferBindingSize)
+        => SeedSceneBumpSizes(
+            currentSizes,
+            range.LineCount,
+            range.TotalPathRowCount,
+            range.PathCount,
+            range.EstimatedTileCrossings,
+            range.EstimatedBinFootprint,
+            maxStorageBufferBindingSize);
+
+    /// <summary>
+    /// Raises scratch capacities to CPU-side lower bounds derived from encode-time demand
+    /// estimates. Tile crossings bound the segment, segment-count, and path-tile records; the
+    /// bin footprint bounds binning records; the PTCL budget derives from crossings. Estimates
+    /// are conservative upper bounds, so each is capped at the device binding limit; the GPU
+    /// overflow protocol remains the safety net for any underestimate.
+    /// </summary>
+    /// <param name="currentSizes">The persisted scratch capacities carried into this flush.</param>
+    /// <param name="lineCount">The encoded (or GPU-expansion estimated) line count.</param>
+    /// <param name="totalPathRowCount">The estimated sparse path-row count.</param>
+    /// <param name="pathCount">The encoded path count.</param>
+    /// <param name="estimatedTileCrossings">The CPU-side upper bound for tile-boundary crossings.</param>
+    /// <param name="estimatedBinFootprint">The CPU-side upper bound for per-(draw, bin) records.</param>
+    /// <param name="maxStorageBufferBindingSize">The device-reported maximum size of one storage-buffer binding.</param>
+    /// <returns>The retained capacities raised to the known CPU-side lower bounds.</returns>
+    private static WebGPUSceneBumpSizes SeedSceneBumpSizes(
+        WebGPUSceneBumpSizes currentSizes,
+        int lineCount,
+        int totalPathRowCount,
+        int pathCount,
+        long estimatedTileCrossings,
+        long estimatedBinFootprint,
+        ulong maxStorageBufferBindingSize)
     {
-        uint lineFloor = AddSizingSlack(checked((uint)Math.Max(range.LineCount, 1)));
-        uint pathRowFloor = checked((uint)Math.Max(range.TotalPathRowCount, range.PathCount));
-        uint pathTileFloor = pathRowFloor;
+        uint lineFloor = AddSizingSlack(checked((uint)Math.Max(lineCount, 1)));
+        uint pathRowFloor = checked((uint)Math.Max(totalPathRowCount, pathCount));
+
+        uint segCountFloor = Math.Max(
+            ClampEstimate(estimatedTileCrossings, maxStorageBufferBindingSize, (uint)Unsafe.SizeOf<GpuSegmentCount>()),
+            lineFloor);
+        uint segmentFloor = Math.Max(
+            ClampEstimate(estimatedTileCrossings, maxStorageBufferBindingSize, (uint)Unsafe.SizeOf<GpuPathSegment>()),
+            lineFloor);
+        uint pathTileFloor = Math.Max(
+            ClampEstimate(estimatedTileCrossings, maxStorageBufferBindingSize, (uint)Unsafe.SizeOf<GpuPathTile>()),
+            pathRowFloor);
+        uint binningFloor = ClampEstimate(estimatedBinFootprint, maxStorageBufferBindingSize, sizeof(uint));
+        uint ptclFloor = ClampEstimate(estimatedTileCrossings * PtclWordsPerCrossing, maxStorageBufferBindingSize, sizeof(uint));
 
         return new WebGPUSceneBumpSizes(
             Math.Max(currentSizes.Lines, lineFloor),
-            currentSizes.Binning,
+            Math.Max(currentSizes.Binning, binningFloor),
             Math.Max(currentSizes.PathRows, pathRowFloor),
             Math.Max(currentSizes.PathTiles, pathTileFloor),
-            Math.Max(currentSizes.SegCounts, lineFloor),
-            Math.Max(currentSizes.Segments, lineFloor),
+            Math.Max(currentSizes.SegCounts, segCountFloor),
+            Math.Max(currentSizes.Segments, segmentFloor),
             currentSizes.BlendSpill,
-            currentSizes.Ptcl);
+            Math.Max(currentSizes.Ptcl, ptclFloor));
+    }
+
+    /// <summary>
+    /// Converts one conservative CPU-side demand estimate into a seed capacity: sizing slack is
+    /// applied, then the count is capped so the resulting buffer cannot exceed the device's
+    /// storage-buffer binding limit (an over-cap estimate must not push an otherwise-fitting
+    /// scene onto the chunked path).
+    /// </summary>
+    /// <param name="estimate">The conservative element-count estimate.</param>
+    /// <param name="maxStorageBufferBindingSize">The device-reported maximum size of one storage-buffer binding.</param>
+    /// <param name="elementByteSize">The byte size of one buffer element.</param>
+    /// <returns>The clamped seed capacity.</returns>
+    private static uint ClampEstimate(long estimate, ulong maxStorageBufferBindingSize, uint elementByteSize)
+    {
+        if (estimate <= 0)
+        {
+            return 0;
+        }
+
+        long withSlack = estimate + Math.Max(estimate / 8, 1024);
+        ulong maxElements = maxStorageBufferBindingSize / Math.Max(elementByteSize, 1U);
+        return (uint)Math.Min((ulong)withSlack, Math.Min(maxElements, uint.MaxValue));
     }
 
     /// <summary>
@@ -3740,7 +3806,7 @@ internal static class WebGPUSceneDispatch
         foreach (WebGPUSceneComputeCommand command in recording.Commands)
         {
             string shaderName = GetShaderDebugName(command.ShaderId);
-            if (!TryResolveComputeShader(flushContext, command.ShaderId, out BindGroupLayout* bindGroupLayout, out ComputePipeline* pipeline, out error))
+            if (!TryResolveComputeShader(flushContext.DeviceState, command.ShaderId, out BindGroupLayout* bindGroupLayout, out ComputePipeline* pipeline, out error))
             {
                 error = error is null ? null : $"{error} Stage: {shaderName}.";
                 return false;
@@ -3853,14 +3919,14 @@ internal static class WebGPUSceneDispatch
     /// <summary>
     /// Resolves the cached bind-group layout and compute pipeline for one staged-scene shader identifier.
     /// </summary>
-    /// <param name="flushContext">The flush context whose device state caches the compiled pipelines.</param>
+    /// <param name="deviceState">The shared device state that caches the compiled pipelines.</param>
     /// <param name="shaderId">The staged-scene shader identifier to resolve.</param>
     /// <param name="bindGroupLayout">Receives the cached bind-group layout for the shader.</param>
     /// <param name="pipeline">Receives the cached compute pipeline for the shader.</param>
     /// <param name="error">Receives the pipeline-creation failure reason.</param>
     /// <returns><see langword="true"/> when the pipeline was resolved successfully; otherwise, <see langword="false"/>.</returns>
     private static unsafe bool TryResolveComputeShader(
-        WebGPUFlushContext flushContext,
+        WebGPURuntime.DeviceSharedState deviceState,
         WebGPUSceneShaderId shaderId,
         out BindGroupLayout* bindGroupLayout,
         out ComputePipeline* pipeline,
@@ -3980,7 +4046,7 @@ internal static class WebGPUSceneDispatch
             _ => throw new UnreachableException()
         };
 
-        return flushContext.DeviceState.TryGetOrCreateCompositeComputePipeline(
+        return deviceState.TryGetOrCreateCompositeComputePipeline(
             pipelineKey,
             shaderCode,
             entryPoint,
@@ -3988,6 +4054,87 @@ internal static class WebGPUSceneDispatch
             out bindGroupLayout,
             out pipeline,
             out error);
+    }
+
+    /// <summary>
+    /// Queues a background warmup that eagerly compiles every staged-scene compute pipeline for a
+    /// newly created device, plus the fine pipeline for the common target formats. First-ever use
+    /// of the pipeline set on a machine pays multi-second driver shader compilation; warming at
+    /// device creation moves that cost off the first flush and overlaps it with application
+    /// startup. The pipeline caches are thread-safe, so a flush that arrives mid-warmup simply
+    /// blocks on the specific pipelines it needs.
+    /// </summary>
+    /// <param name="deviceState">The shared device state whose pipeline caches are warmed.</param>
+    internal static void BeginPipelineWarmup(WebGPURuntime.DeviceSharedState deviceState)
+        => ThreadPool.UnsafeQueueUserWorkItem(static state => WarmPipelines(state), deviceState, preferLocal: false);
+
+    /// <summary>
+    /// Compiles the full staged-scene pipeline set into the shared device caches. Failures are
+    /// deliberately swallowed: warmup is best-effort and the flush path re-attempts creation with
+    /// proper error reporting.
+    /// </summary>
+    /// <param name="deviceState">The shared device state whose pipeline caches are warmed.</param>
+    private static unsafe void WarmPipelines(WebGPURuntime.DeviceSharedState deviceState)
+    {
+        try
+        {
+            // Most expensive shaders first so their driver compilation starts as early as possible.
+            ReadOnlySpan<WebGPUSceneShaderId> order =
+            [
+                WebGPUSceneShaderId.Flatten,
+                WebGPUSceneShaderId.Coarse,
+                WebGPUSceneShaderId.DrawLeaf,
+                WebGPUSceneShaderId.PathCount,
+                WebGPUSceneShaderId.PathTiling,
+                WebGPUSceneShaderId.Binning,
+                WebGPUSceneShaderId.ClipLeaf,
+                WebGPUSceneShaderId.TileAlloc,
+                WebGPUSceneShaderId.PathRowAlloc,
+                WebGPUSceneShaderId.PathRowSpan,
+                WebGPUSceneShaderId.Backdrop,
+                WebGPUSceneShaderId.ClipReduce,
+                WebGPUSceneShaderId.DrawReduce,
+                WebGPUSceneShaderId.PathtagReduce,
+                WebGPUSceneShaderId.PathtagReduce2,
+                WebGPUSceneShaderId.PathtagScan1,
+                WebGPUSceneShaderId.PathtagScan,
+                WebGPUSceneShaderId.PathtagScanSmall,
+                WebGPUSceneShaderId.BboxClear,
+                WebGPUSceneShaderId.PathCountSetup,
+                WebGPUSceneShaderId.PathTilingSetup,
+                WebGPUSceneShaderId.ChunkReset,
+                WebGPUSceneShaderId.Prepare,
+            ];
+
+            // The fine pipeline is per target format; warm the two formats every render target
+            // and presentation surface in this library uses.
+            ReadOnlySpan<TextureFormat> fineFormats = [TextureFormat.Rgba8Unorm, TextureFormat.Bgra8Unorm];
+            foreach (TextureFormat format in fineFormats)
+            {
+                byte[] shaderCode = FineAreaComputeShader.GetCode(format);
+
+                bool LayoutFactory(WebGPU api, Device* device, out BindGroupLayout* layout, out string? layoutError)
+                    => FineAreaComputeShader.TryCreateBindGroupLayout(api, device, format, out layout, out layoutError);
+
+                _ = deviceState.TryGetOrCreateCompositeComputePipeline(
+                    $"{FineAreaPipelineKey}/{format}",
+                    shaderCode,
+                    FineAreaComputeShader.EntryPoint,
+                    LayoutFactory,
+                    out _,
+                    out _,
+                    out _);
+            }
+
+            foreach (WebGPUSceneShaderId shaderId in order)
+            {
+                _ = TryResolveComputeShader(deviceState, shaderId, out _, out _, out _);
+            }
+        }
+        catch
+        {
+            // Best-effort warmup only; the render path surfaces real pipeline failures.
+        }
     }
 
     /// <summary>

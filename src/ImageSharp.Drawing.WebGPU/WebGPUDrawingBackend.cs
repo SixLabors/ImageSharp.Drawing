@@ -219,7 +219,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                     ref schedulingArena);
 
                 webGPUScene.UpdateBumpSizes(currentBumpSizes);
-                this.bumpSizes = currentBumpSizes;
+
+                // Max-merge rather than assign: the backend value is a high-water mark shared by
+                // every future scene, and a small scene must not shrink it back into rediscovery.
+                this.bumpSizes = MaxBumpSizes(this.bumpSizes, currentBumpSizes);
                 return;
             }
 
@@ -244,7 +247,9 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             }
 
             webGPUScene.UpdateBumpSizes(currentBumpSizes);
-            this.bumpSizes = currentBumpSizes;
+
+            // Max-merge rather than assign; see the ordered-scene path above.
+            this.bumpSizes = MaxBumpSizes(this.bumpSizes, currentBumpSizes);
         }
         finally
         {

@@ -40,6 +40,12 @@ internal static unsafe partial class WebGPURuntime
 
             DeviceSharedState created = new(api, deviceHandle);
             DeviceStateCache[cacheKey] = created;
+
+            // First-ever compilation of the staged pipeline set costs multi-second driver work
+            // on a cold driver shader cache. Warming in the background at device creation moves
+            // that cost off the first flush; the pipeline caches are thread-safe, so an early
+            // flush simply blocks on the specific pipelines it needs.
+            WebGPUSceneDispatch.BeginPipelineWarmup(created);
             return created;
         }
     }
