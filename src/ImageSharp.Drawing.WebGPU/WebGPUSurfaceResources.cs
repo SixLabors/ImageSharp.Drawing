@@ -717,6 +717,13 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
             descriptor.RequiredFeatures = &requestedFeature;
         }
 
+        // Raise only the storage-buffer binding and total buffer-size ceilings to the adapter maximum so
+        // a large scene fits in a single storage binding instead of falling back to chunked (multi-pass)
+        // rendering; see WebGPURuntime.BuildStorageBindingLimits. Without it the device inherits the
+        // 128 MiB spec default, which a dense stroke batch's segment buffer exceeds.
+        RequiredLimits requiredLimits = WebGPURuntime.BuildStorageBindingLimits(api, adapter);
+        descriptor.RequiredLimits = &requiredLimits;
+
         // A device loss (TDR/hang/removal) is reported through this callback, NOT the uncaptured
         // error or log callbacks, so without it the loss is invisible and only surfaces later as a
         // panic on the next submit. Route the reason and message through the environment callback.

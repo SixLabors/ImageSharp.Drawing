@@ -650,23 +650,21 @@ internal static unsafe partial class WebGPURuntime
             requestedFeatures[requestedCount++] = FeatureName.Bgra8UnormStorage;
         }
 
-        DeviceDescriptor descriptor;
-        if (requestedCount > 0)
-        {
-            fixed (FeatureName* featuresPtr = requestedFeatures)
-            {
-                descriptor = new DeviceDescriptor
-                {
-                    RequiredFeatureCount = (uint)requestedCount,
-                    RequiredFeatures = featuresPtr,
-                };
+        // Raise only the storage-buffer binding and total buffer-size ceilings to the adapter maximum so
+        // a large scene fits in a single storage binding instead of falling back to chunked (multi-pass)
+        // rendering. Every other limit stays at its WebGPU default. Without this the device inherits the
+        // default 128 MiB maxStorageBufferBindingSize, which a dense stroke batch's segment buffer exceeds.
+        RequiredLimits requiredLimits = BuildStorageBindingLimits(api, adapter);
 
-                api.AdapterRequestDevice(adapter, in descriptor, callbackPtr, null);
-            }
-        }
-        else
+        fixed (FeatureName* featuresPtr = requestedFeatures)
         {
-            descriptor = default;
+            DeviceDescriptor descriptor = new()
+            {
+                RequiredLimits = &requiredLimits,
+                RequiredFeatureCount = (uint)requestedCount,
+                RequiredFeatures = requestedCount > 0 ? featuresPtr : null,
+            };
+
             api.AdapterRequestDevice(adapter, in descriptor, callbackPtr, null);
         }
 
@@ -686,5 +684,66 @@ internal static unsafe partial class WebGPURuntime
 
         errorCode = WebGPUEnvironmentError.Success;
         return true;
+    }
+
+    /// <summary>
+    /// Builds a device limit request that raises only the storage-buffer binding size and the total
+    /// buffer size to the adapter's maximum, leaving every other limit at its WebGPU default.
+    /// </summary>
+    /// <remarks>
+    /// Requesting the adapter's full limit set perturbs alignment and per-stage limits and corrupts
+    /// resource bindings, so all fields except the two storage ceilings are left at the undefined
+    /// sentinel, which instructs the implementation to keep the default value for that limit.
+    /// </remarks>
+    /// <param name="api">The WebGPU API used to query the adapter.</param>
+    /// <param name="adapter">The adapter whose maximum storage limits are requested.</param>
+    /// <returns>The populated <see cref="RequiredLimits"/> to attach to the device descriptor.</returns>
+    internal static RequiredLimits BuildStorageBindingLimits(WebGPU api, Adapter* adapter)
+    {
+        SupportedLimits adapterLimits = default;
+        _ = api.AdapterGetLimits(adapter, ref adapterLimits);
+
+        // WebGPU treats these sentinel values as "leave this limit at its default" when a required-limits
+        // block is supplied, so only the two storage ceilings below deviate from the device defaults.
+        const uint KeepU32 = uint.MaxValue;
+        const ulong KeepU64 = ulong.MaxValue;
+
+        Limits limits = new()
+        {
+            MaxTextureDimension1D = KeepU32,
+            MaxTextureDimension2D = KeepU32,
+            MaxTextureDimension3D = KeepU32,
+            MaxTextureArrayLayers = KeepU32,
+            MaxBindGroups = KeepU32,
+            MaxBindGroupsPlusVertexBuffers = KeepU32,
+            MaxBindingsPerBindGroup = KeepU32,
+            MaxDynamicUniformBuffersPerPipelineLayout = KeepU32,
+            MaxDynamicStorageBuffersPerPipelineLayout = KeepU32,
+            MaxSampledTexturesPerShaderStage = KeepU32,
+            MaxSamplersPerShaderStage = KeepU32,
+            MaxStorageBuffersPerShaderStage = KeepU32,
+            MaxStorageTexturesPerShaderStage = KeepU32,
+            MaxUniformBuffersPerShaderStage = KeepU32,
+            MaxUniformBufferBindingSize = KeepU64,
+            MaxStorageBufferBindingSize = adapterLimits.Limits.MaxStorageBufferBindingSize,
+            MinUniformBufferOffsetAlignment = KeepU32,
+            MinStorageBufferOffsetAlignment = KeepU32,
+            MaxVertexBuffers = KeepU32,
+            MaxBufferSize = adapterLimits.Limits.MaxBufferSize,
+            MaxVertexAttributes = KeepU32,
+            MaxVertexBufferArrayStride = KeepU32,
+            MaxInterStageShaderComponents = KeepU32,
+            MaxInterStageShaderVariables = KeepU32,
+            MaxColorAttachments = KeepU32,
+            MaxColorAttachmentBytesPerSample = KeepU32,
+            MaxComputeWorkgroupStorageSize = KeepU32,
+            MaxComputeInvocationsPerWorkgroup = KeepU32,
+            MaxComputeWorkgroupSizeX = KeepU32,
+            MaxComputeWorkgroupSizeY = KeepU32,
+            MaxComputeWorkgroupSizeZ = KeepU32,
+            MaxComputeWorkgroupsPerDimension = KeepU32,
+        };
+
+        return new RequiredLimits { Limits = limits };
     }
 }

@@ -2469,7 +2469,8 @@ internal static class WebGPUSceneEncoder
                 this.rootTargetBounds,
                 ref this.PathTags,
                 ref this.PathData,
-                out int geometryLineCount);
+                out int geometryLineCount,
+                out long geometryTileCrossings);
 
             if (encodedPathCount == 0)
             {
@@ -2492,7 +2493,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest, geometryLineCount);
+            this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest, geometryLineCount, geometryTileCrossings);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -2599,7 +2600,8 @@ internal static class WebGPUSceneEncoder
                 this.rootTargetBounds,
                 ref this.PathTags,
                 ref this.PathData,
-                out int geometryLineCount);
+                out int geometryLineCount,
+                out long geometryTileCrossings);
 
             if (encodedPathCount == 0)
             {
@@ -2619,7 +2621,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest, geometryLineCount);
+            this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest, geometryLineCount, geometryTileCrossings);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -2717,7 +2719,8 @@ internal static class WebGPUSceneEncoder
                 this.rootTargetBounds,
                 ref this.PathTags,
                 ref this.PathData,
-                out int geometryLineCount);
+                out int geometryLineCount,
+                out long geometryTileCrossings);
 
             if (encodedPathCount == 0)
             {
@@ -2737,7 +2740,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount);
+            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, geometryTileCrossings);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -2837,7 +2840,8 @@ internal static class WebGPUSceneEncoder
                 this.rootTargetBounds,
                 ref this.PathTags,
                 ref this.PathData,
-                out int geometryLineCount);
+                out int geometryLineCount,
+                out long geometryTileCrossings);
 
             if (encodedPathCount == 0)
             {
@@ -2857,7 +2861,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount);
+            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, geometryTileCrossings);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -3065,7 +3069,8 @@ internal static class WebGPUSceneEncoder
                         this.rootTargetBounds,
                         ref this.PathTags,
                         ref this.PathData,
-                        out clipLineCount);
+                        out clipLineCount,
+                        out _);
                 }
             }
             else if (rectangleCount > 0)
@@ -3282,8 +3287,12 @@ internal static class WebGPUSceneEncoder
         /// </summary>
         /// <param name="absoluteInterest">The draw object's absolute raster interest bounds.</param>
         /// <param name="lineCount">The draw object's flattened (or GPU-expansion estimated) line count.</param>
-        private void AccumulateDrawRowEstimate(Rectangle absoluteInterest, int lineCount)
-            => this.AccumulateDrawRowEstimateLocal(ToTargetLocal(absoluteInterest, this.rootTargetBounds), lineCount);
+        /// <param name="tileCrossings">
+        /// The exact summed per-line tile-crossing bound when the caller flattened the geometry on the CPU
+        /// (fills), or a negative value to fall back to the bounding-box diagonal bound (strokes, clips).
+        /// </param>
+        private void AccumulateDrawRowEstimate(Rectangle absoluteInterest, int lineCount, long tileCrossings = -1)
+            => this.AccumulateDrawRowEstimateLocal(ToTargetLocal(absoluteInterest, this.rootTargetBounds), lineCount, tileCrossings);
 
         /// <summary>
         /// Adds one draw object's clipped root-target-local footprint to the sparse scratch estimates:
@@ -3292,7 +3301,11 @@ internal static class WebGPUSceneEncoder
         /// </summary>
         /// <param name="localBounds">The draw object's root-target-local raster interest bounds.</param>
         /// <param name="lineCount">The draw object's flattened (or GPU-expansion estimated) line count.</param>
-        private void AccumulateDrawRowEstimateLocal(Rectangle localBounds, int lineCount)
+        /// <param name="tileCrossings">
+        /// The exact summed per-line tile-crossing bound when the caller flattened the geometry on the CPU
+        /// (fills), or a negative value to fall back to the bounding-box diagonal bound (strokes, clips).
+        /// </param>
+        private void AccumulateDrawRowEstimateLocal(Rectangle localBounds, int lineCount, long tileCrossings = -1)
         {
             Rectangle clippedBounds = Rectangle.Intersect(localBounds, new Rectangle(0, 0, this.rootTargetBounds.Width, this.rootTargetBounds.Height));
 
@@ -3320,7 +3333,9 @@ internal static class WebGPUSceneEncoder
             // under-seeding costs a full-scene GPU retry.
             long tilesWide = (clippedBounds.Width / TileWidth) + 2;
             long tilesHigh = rowCount + 1;
-            this.estimatedTileCrossings += Math.Max(lineCount, 1) * (tilesWide + tilesHigh + 2);
+            long boundingBoxCrossings = Math.Max(lineCount, 1) * (tilesWide + tilesHigh + 2);
+            long crossings = tileCrossings >= 0 ? Math.Min(tileCrossings, boundingBoxCrossings) : boundingBoxCrossings;
+            this.estimatedTileCrossings += crossings;
 
             // Binning emits one record per (draw, 16x16-tile bin) pair the draw's bounds touch.
             long binsWide = (clippedBounds.Width / (TileWidth * 16)) + 2;
@@ -4593,6 +4608,10 @@ internal static class WebGPUSceneEncoder
     /// <param name="pathTags">The path-tag stream.</param>
     /// <param name="pathData">The path-data stream.</param>
     /// <param name="lineCount">Receives the number of non-horizontal line segments encoded.</param>
+    /// <param name="tileCrossings">
+    /// Receives the summed conservative tile-crossing bound over every encoded segment, used to seed the
+    /// segment and path-tile scratch buffers far more tightly than the draw's bounding-box diagonal.
+    /// </param>
     /// <returns>The number of encoded path objects: 1, or 0 when the geometry has no segments.</returns>
     private static int EncodePath(
         Point destinationOffset,
@@ -4600,11 +4619,12 @@ internal static class WebGPUSceneEncoder
         in Rectangle rootTargetBounds,
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
-        out int lineCount)
+        out int lineCount,
+        out long tileCrossings)
     {
-        float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
-        float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
+        Vector2 translate = new(destinationOffset.X - rootTargetBounds.X, destinationOffset.Y - rootTargetBounds.Y);
         lineCount = 0;
+        tileCrossings = 0;
 
         for (int i = 0; i < geometry.Contours.Count; i++)
         {
@@ -4620,28 +4640,24 @@ internal static class WebGPUSceneEncoder
             // The tag index is just the segment index because there is exactly one emitted tag
             // for each derived segment in the contour.
             int dataIndex = 0;
-            PointF firstPoint = geometry.Points[contour.PointStart];
-            float firstX = firstPoint.X + pointTranslateX;
-            float firstY = firstPoint.Y + pointTranslateY;
-            contourData[dataIndex++] = BitcastSingle(firstX);
-            contourData[dataIndex++] = BitcastSingle(firstY);
-            float currentY = firstY;
+            Vector2 current = (Vector2)geometry.Points[contour.PointStart] + translate;
+            contourData[dataIndex++] = BitcastSingle(current.X);
+            contourData[dataIndex++] = BitcastSingle(current.Y);
 
             for (int j = 0; j < contour.SegmentCount; j++)
             {
                 int endPointIndex = contour.PointStart + ((j + 1) == contour.PointCount ? 0 : j + 1);
-                PointF endPoint = geometry.Points[endPointIndex];
-                float translatedEndX = endPoint.X + pointTranslateX;
-                float translatedEndY = endPoint.Y + pointTranslateY;
-                contourData[dataIndex++] = BitcastSingle(translatedEndX);
-                contourData[dataIndex++] = BitcastSingle(translatedEndY);
+                Vector2 end = (Vector2)geometry.Points[endPointIndex] + translate;
+                contourData[dataIndex++] = BitcastSingle(end.X);
+                contourData[dataIndex++] = BitcastSingle(end.Y);
                 contourTags[j] = PackPathTag(PathTag.LineToF32);
-                if (translatedEndY != currentY)
+                if (end.Y != current.Y)
                 {
                     lineCount++;
                 }
 
-                currentY = translatedEndY;
+                tileCrossings += CountLineTileCrossings(current, end);
+                current = end;
             }
 
             if (contour.SegmentCount > 0)
@@ -4665,6 +4681,56 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
+    /// Returns the number of 16x16 tiles a single line segment passes through: one starting tile plus the
+    /// tile column and row boundaries crossed between the two endpoints.
+    /// </summary>
+    /// <param name="start">The segment start point in pixels.</param>
+    /// <param name="end">The segment end point in pixels.</param>
+    /// <returns>The number of tiles the segment covers.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static long CountLineTileCrossings(Vector2 start, Vector2 end)
+    {
+        Vector2 tileSize = new(TileWidth, TileHeight);
+        Vector2 spanned = Vector2.Abs(Floor(end / tileSize) - Floor(start / tileSize));
+        return 1 + (long)Sum(spanned);
+    }
+
+    /// <summary>
+    /// Returns the component-wise floor of a vector.
+    /// </summary>
+    /// <param name="value">The vector to floor.</param>
+    /// <returns>The floored vector.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector2 Floor(Vector2 value)
+        => Vector128.Floor(value.AsVector128()).AsVector2();
+
+    /// <summary>
+    /// Returns the sum of a vector's two components.
+    /// </summary>
+    /// <param name="value">The vector to sum.</param>
+    /// <returns>The sum of the X and Y components.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static float Sum(Vector2 value)
+        => Vector128.Sum(value.AsVector128());
+
+    /// <summary>
+    /// Scales a stroke centerline's tile-crossing count up to a conservative bound on the tiles the GPU
+    /// stroker's emitted geometry covers. The stroker expands each centerline into two offset sides plus
+    /// joins and caps, and a stroke of the given width spreads each side across roughly one extra tile per
+    /// 16 pixels, so the centerline count alone under-seeds the segment and path-tile scratch buffers.
+    /// </summary>
+    /// <param name="centerlineCrossings">The summed centerline tile-crossing count.</param>
+    /// <param name="lineCount">The estimated emitted stroke line count, including joins, caps and arcs.</param>
+    /// <param name="strokeWidth">The transform-scaled stroke width in pixels.</param>
+    /// <returns>The conservative emitted-stroke tile-crossing bound.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static long ScaleStrokeTileCrossings(long centerlineCrossings, int lineCount, float strokeWidth)
+    {
+        long widthTiles = 1 + (long)MathF.Ceiling(MathF.Max(strokeWidth, 0F) / TileWidth);
+        return (centerlineCrossings + Math.Max(lineCount, 1)) * widthTiles;
+    }
+
+    /// <summary>
     /// Encodes a stroke centerline into Vello-style path tags and path data in target-local space,
     /// applying the CPU stroker's contour preprocessing so the GPU stroker consumes the same
     /// segment list the CPU stroker strokes.
@@ -4683,6 +4749,7 @@ internal static class WebGPUSceneEncoder
     /// <param name="pathTags">The path-tag stream.</param>
     /// <param name="pathData">The path-data stream.</param>
     /// <param name="lineCount">Receives the estimated flattened line workload for the stroke.</param>
+    /// <param name="tileCrossings">Receives the conservative emitted-stroke tile-crossing bound used to seed the scratch buffers.</param>
     /// <returns>The number of encoded path objects: 1, or 0 when no contour survived preprocessing.</returns>
     private static int EncodeStrokePath(
         LinearGeometry geometry,
@@ -4692,11 +4759,14 @@ internal static class WebGPUSceneEncoder
         in Rectangle rootTargetBounds,
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
-        out int lineCount)
+        out int lineCount,
+        out long tileCrossings)
     {
         float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
         float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
+        Vector2 translate = new(pointTranslateX, pointTranslateY);
         lineCount = EstimateStrokeLineCount(geometry, pen, widthScale);
+        tileCrossings = 0;
         float strokeWidth = pen.StrokeWidth * widthScale;
         int encodedContourCount = 0;
         IReadOnlyList<PointF> geometryPoints = geometry.Points;
@@ -4754,6 +4824,10 @@ internal static class WebGPUSceneEncoder
                 if (segmentCount == 0)
                 {
                     EncodePointStrokeContour(pointLike, pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
+                    Vector2 pointCenter = (Vector2)pointLike + translate;
+                    Vector2 pointHalf = new(PointStrokeSegmentHalfLength, 0F);
+                    tileCrossings += CountLineTileCrossings(pointCenter - pointHalf, pointCenter + pointHalf);
+
                     encodedContourCount++;
                     continue;
                 }
@@ -4762,6 +4836,8 @@ internal static class WebGPUSceneEncoder
                 {
                     // The CPU stroker emits these as one capped open segment even when declared closed.
                     EncodeOpenStrokeContour(kept.AsSpan(0, 2), pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
+                    tileCrossings += CountLineTileCrossings((Vector2)kept[0] + translate, (Vector2)kept[1] + translate);
+
                     encodedContourCount++;
                     continue;
                 }
@@ -4809,11 +4885,30 @@ internal static class WebGPUSceneEncoder
 
                     pathData.Advance(contourData.Length);
                     pathTags.Advance(contourTags.Length);
+
+                    Vector2 current = (Vector2)kept[0] + translate;
+                    for (int j = 1; j < emitCount; j++)
+                    {
+                        Vector2 next = (Vector2)kept[j] + translate;
+                        tileCrossings += CountLineTileCrossings(current, next);
+                        current = next;
+                    }
+
+                    if (closingSegment)
+                    {
+                        tileCrossings += CountLineTileCrossings(current, (Vector2)kept[0] + translate);
+                    }
+
                     encodedContourCount++;
                     continue;
                 }
 
                 EncodeOpenStrokeContour(kept.AsSpan(0, keptCount), pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
+                for (int j = 0; j < keptCount - 1; j++)
+                {
+                    tileCrossings += CountLineTileCrossings((Vector2)kept[j] + translate, (Vector2)kept[j + 1] + translate);
+                }
+
                 encodedContourCount++;
             }
             finally
@@ -4827,6 +4922,9 @@ internal static class WebGPUSceneEncoder
             return 0;
         }
 
+        // The loop counted centerline tiles; the GPU stroker emits offset sides, joins and caps, so
+        // scale the count up to the emitted geometry to avoid under-seeding the segment scratch.
+        tileCrossings = ScaleStrokeTileCrossings(tileCrossings, lineCount, strokeWidth);
         pathTags.Add(PackPathTag(PathTag.Path));
         return 1;
     }
@@ -4920,6 +5018,7 @@ internal static class WebGPUSceneEncoder
     /// <param name="pathTags">The path-tag stream.</param>
     /// <param name="pathData">The path-data stream.</param>
     /// <param name="lineCount">Receives the estimated flattened line workload for the stroke.</param>
+    /// <param name="tileCrossings">Receives the conservative emitted-stroke tile-crossing bound used to seed the scratch buffers.</param>
     /// <returns>The number of encoded path objects; always 1.</returns>
     private static int EncodeOpenSegmentStrokePath(
         PointF start,
@@ -4930,7 +5029,8 @@ internal static class WebGPUSceneEncoder
         in Rectangle rootTargetBounds,
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
-        out int lineCount)
+        out int lineCount,
+        out long tileCrossings)
     {
         float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
         float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
@@ -4939,6 +5039,12 @@ internal static class WebGPUSceneEncoder
         EncodeOpenStrokeContour(segmentPoints, pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
         pathTags.Add(PackPathTag(PathTag.Path));
         lineCount = EstimateStrokeLineCountForOpenSegment(pen, widthScale);
+        Vector2 translate = new(pointTranslateX, pointTranslateY);
+        tileCrossings = ScaleStrokeTileCrossings(
+            CountLineTileCrossings((Vector2)start + translate, (Vector2)end + translate),
+            lineCount,
+            pen.StrokeWidth * widthScale);
+
         return 1;
     }
 

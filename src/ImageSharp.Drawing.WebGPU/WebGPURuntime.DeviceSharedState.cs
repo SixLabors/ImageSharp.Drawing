@@ -92,12 +92,11 @@ internal static unsafe partial class WebGPURuntime
         private readonly ConcurrentDictionary<string, CompositeComputePipelineInfrastructure> compositeComputePipelines = new(StringComparer.Ordinal);
 
         /// <summary>
-        /// Pool of small map-readable status buffers reused by deferred overflow readbacks.
-        /// One tiny buffer is needed per flush; creating it fresh each time is a measurable
-        /// per-frame driver cost, so retired buffers are recycled here. All pooled buffers
-        /// share the fixed scheduling-status size, so rent and return need no size checks.
+        /// Pool of map-readable status buffers reused by deferred overflow readbacks. One buffer
+        /// is needed per deferred flush; creating it fresh each time is a measurable per-frame
+        /// driver cost, so retired buffers are recycled here.
         /// </summary>
-        private readonly Stack<nint> statusReadbackBuffers = new();
+        private readonly Stack<StatusReadbackBufferEntry> statusReadbackBuffers = new();
 
         /// <summary>
         /// Guards <see cref="statusReadbackBuffers"/>; flushes on different threads can rent
@@ -183,11 +182,14 @@ internal static unsafe partial class WebGPURuntime
         public Device* Device { get; }
 
         /// <summary>
-        /// Gets the maximum size, in bytes, that this device can bind as one storage buffer.
+        /// Gets the maximum size, in bytes, of one usable storage scratch buffer on this device: the
+        /// smaller of the queried maxStorageBufferBindingSize and maxBufferSize.
         /// </summary>
         /// <remarks>
-        /// The staged scene uses this queried device limit instead of WebGPU's guaranteed minimum so
-        /// large scenes are only rejected when the active device really cannot bind the requested buffer.
+        /// A scratch buffer must be both creatable (within maxBufferSize) and bindable in full (within
+        /// maxStorageBufferBindingSize), so the effective ceiling that drives the chunking decision is the
+        /// minimum of both. Using the (often larger) binding size alone lets a scene skip chunking and then
+        /// fail buffer creation, surfacing as an invalid-buffer validation error and a blank frame.
         /// </remarks>
         public nuint MaxStorageBufferBindingSize { get; }
 
@@ -200,18 +202,37 @@ internal static unsafe partial class WebGPURuntime
             => this.deviceFeatures.Contains(feature);
 
         /// <summary>
-        /// Rents a pooled map-readable status buffer, or creates one when the pool is empty.
-        /// Every buffer rented through this method must use the same fixed byte length.
+        /// Rents a pooled map-readable status buffer, or creates one when the pool has no buffer
+        /// large enough for the requested status data.
         /// </summary>
-        /// <param name="byteLength">The fixed scheduling-status byte length.</param>
+        /// <param name="byteLength">The required scheduling-status byte length.</param>
         /// <returns>The rented buffer, or <see langword="null"/> when creation failed.</returns>
         public Silk.NET.WebGPU.Buffer* RentStatusReadbackBuffer(nuint byteLength)
         {
             lock (this.statusReadbackSync)
             {
-                if (this.statusReadbackBuffers.Count > 0)
+                Span<StatusReadbackBufferEntry> retained = stackalloc StatusReadbackBufferEntry[MaxPooledStatusReadbackBuffers];
+                int retainedIndex = 0;
+
+                while (this.statusReadbackBuffers.Count > 0)
                 {
-                    return (Silk.NET.WebGPU.Buffer*)this.statusReadbackBuffers.Pop();
+                    StatusReadbackBufferEntry entry = this.statusReadbackBuffers.Pop();
+                    if (entry.ByteLength >= byteLength)
+                    {
+                        while (retainedIndex > 0)
+                        {
+                            this.statusReadbackBuffers.Push(retained[--retainedIndex]);
+                        }
+
+                        return (Silk.NET.WebGPU.Buffer*)entry.Buffer;
+                    }
+
+                    retained[retainedIndex++] = entry;
+                }
+
+                while (retainedIndex > 0)
+                {
+                    this.statusReadbackBuffers.Push(retained[--retainedIndex]);
                 }
             }
 
@@ -230,7 +251,8 @@ internal static unsafe partial class WebGPURuntime
         /// map pending; a buffer whose map state is unknown must be released, not returned.
         /// </summary>
         /// <param name="buffer">The buffer to recycle.</param>
-        public void ReturnStatusReadbackBuffer(Silk.NET.WebGPU.Buffer* buffer)
+        /// <param name="byteLength">The byte capacity of <paramref name="buffer"/>.</param>
+        public void ReturnStatusReadbackBuffer(Silk.NET.WebGPU.Buffer* buffer, nuint byteLength)
         {
             if (buffer is null)
             {
@@ -241,7 +263,7 @@ internal static unsafe partial class WebGPURuntime
             {
                 if (!this.disposed && this.statusReadbackBuffers.Count < MaxPooledStatusReadbackBuffers)
                 {
-                    this.statusReadbackBuffers.Push((nint)buffer);
+                    this.statusReadbackBuffers.Push(new StatusReadbackBufferEntry((nint)buffer, byteLength));
                     return;
                 }
             }
@@ -332,8 +354,16 @@ internal static unsafe partial class WebGPURuntime
                 return DefaultMaxStorageBufferBindingSize;
             }
 
-            ulong reported = supportedLimits.Limits.MaxStorageBufferBindingSize;
-            if (reported == 0 || reported > nuint.MaxValue)
+            // A scratch buffer must be both creatable (<= maxBufferSize) and bindable in full
+            // (<= maxStorageBufferBindingSize). maxBufferSize is frequently the smaller of the two
+            // (256 MiB by default versus a multi-gigabyte binding size), so the effective per-buffer
+            // ceiling that the chunking decision must respect is the minimum of both. Using the binding
+            // size alone lets a large scene skip chunking and then fail buffer creation, which surfaces
+            // as an invalid-buffer validation error and a blank frame.
+            ulong binding = supportedLimits.Limits.MaxStorageBufferBindingSize;
+            ulong bufferSize = supportedLimits.Limits.MaxBufferSize;
+            ulong reported = Math.Min(binding == 0 ? ulong.MaxValue : binding, bufferSize == 0 ? ulong.MaxValue : bufferSize);
+            if (reported == 0 || reported == ulong.MaxValue || reported > nuint.MaxValue)
             {
                 return DefaultMaxStorageBufferBindingSize;
             }
@@ -532,7 +562,7 @@ internal static unsafe partial class WebGPURuntime
             {
                 while (this.statusReadbackBuffers.Count > 0)
                 {
-                    this.Api.BufferRelease((Silk.NET.WebGPU.Buffer*)this.statusReadbackBuffers.Pop());
+                    this.Api.BufferRelease((Silk.NET.WebGPU.Buffer*)this.statusReadbackBuffers.Pop().Buffer);
                 }
             }
 
@@ -820,6 +850,34 @@ internal static unsafe partial class WebGPURuntime
                 this.Api.BindGroupLayoutRelease(infrastructure.BindGroupLayout);
                 infrastructure.BindGroupLayout = null;
             }
+        }
+
+        /// <summary>
+        /// Stores a pooled status-readback buffer with its byte capacity so larger chunked
+        /// readbacks never receive a smaller single-status buffer.
+        /// </summary>
+        private readonly struct StatusReadbackBufferEntry
+        {
+            /// <summary>
+            /// Initializes a new instance of the <see cref="StatusReadbackBufferEntry"/> struct.
+            /// </summary>
+            /// <param name="buffer">The native buffer pointer stored as an integer.</param>
+            /// <param name="byteLength">The byte capacity of <paramref name="buffer"/>.</param>
+            public StatusReadbackBufferEntry(nint buffer, nuint byteLength)
+            {
+                this.Buffer = buffer;
+                this.ByteLength = byteLength;
+            }
+
+            /// <summary>
+            /// Gets the native buffer pointer stored as an integer.
+            /// </summary>
+            public nint Buffer { get; }
+
+            /// <summary>
+            /// Gets the byte capacity of <see cref="Buffer"/>.
+            /// </summary>
+            public nuint ByteLength { get; }
         }
 
         /// <summary>

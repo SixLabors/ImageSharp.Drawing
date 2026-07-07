@@ -53,6 +53,11 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     private WgpuBuffer* readbackBuffer;
 
     /// <summary>
+    /// The mapped byte length requested when the asynchronous map was started.
+    /// </summary>
+    private readonly nuint readbackByteLength;
+
+    /// <summary>
     /// The pinned map callback thunk; must stay alive until the callback fires.
     /// </summary>
     private PfnBufferMapCallback callback;
@@ -89,16 +94,96 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         WebGPURuntime.DeviceSharedState deviceState,
         WgpuBuffer* readbackBuffer,
         WebGPUSceneBumpSizes submittedBumpSizes)
+        : this(
+            api,
+            wgpuExtension,
+            deviceHandle,
+            deviceState,
+            readbackBuffer,
+            (nuint)sizeof(GpuSceneBumpAllocators),
+            submittedBumpSizes,
+            null,
+            null,
+            0U)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUPendingSchedulingStatus"/> class for
+    /// a chunked staged-scene flush and starts the asynchronous map of all chunk status records.
+    /// </summary>
+    /// <param name="api">The API facade used to read and release the readback buffer.</param>
+    /// <param name="wgpuExtension">The optional native WGPU extension used to pump map callbacks.</param>
+    /// <param name="deviceHandle">The wrapped device handle that owns the readback buffer.</param>
+    /// <param name="deviceState">The device-scoped shared state whose pool recycles the buffer.</param>
+    /// <param name="readbackBuffer">The dedicated map-readable buffer; ownership transfers to this instance.</param>
+    /// <param name="submittedBumpSizes">The full-scene scratch capacities the deferred flush rendered from.</param>
+    /// <param name="chunkBumpSizes">The scratch capacities each chunk rendered with.</param>
+    /// <param name="chunkTileHeights">The tile-row height of each chunk.</param>
+    /// <param name="fullTileHeight">The full tile-row height of the chunked target range.</param>
+    public WebGPUPendingSchedulingStatus(
+        WebGPU api,
+        Wgpu? wgpuExtension,
+        WebGPUDeviceHandle deviceHandle,
+        WebGPURuntime.DeviceSharedState deviceState,
+        WgpuBuffer* readbackBuffer,
+        WebGPUSceneBumpSizes submittedBumpSizes,
+        ReadOnlySpan<WebGPUSceneBumpSizes> chunkBumpSizes,
+        ReadOnlySpan<uint> chunkTileHeights,
+        uint fullTileHeight)
+        : this(
+            api,
+            wgpuExtension,
+            deviceHandle,
+            deviceState,
+            readbackBuffer,
+            checked((nuint)chunkBumpSizes.Length * (nuint)sizeof(GpuSceneBumpAllocators)),
+            submittedBumpSizes,
+            chunkBumpSizes.ToArray(),
+            chunkTileHeights.ToArray(),
+            fullTileHeight)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUPendingSchedulingStatus"/> class and
+    /// starts the asynchronous map of the already-submitted readback copy.
+    /// </summary>
+    /// <param name="api">The API facade used to read and release the readback buffer.</param>
+    /// <param name="wgpuExtension">The optional native WGPU extension used to pump map callbacks.</param>
+    /// <param name="deviceHandle">The wrapped device handle that owns the readback buffer.</param>
+    /// <param name="deviceState">The device-scoped shared state whose pool recycles the buffer.</param>
+    /// <param name="readbackBuffer">The dedicated map-readable buffer; ownership transfers to this instance.</param>
+    /// <param name="readbackByteLength">The byte length to map from <paramref name="readbackBuffer"/>.</param>
+    /// <param name="submittedBumpSizes">The scratch capacities the deferred flush rendered with.</param>
+    /// <param name="chunkBumpSizes">The scratch capacities each chunk rendered with.</param>
+    /// <param name="chunkTileHeights">The tile-row height of each chunk.</param>
+    /// <param name="fullTileHeight">The full tile-row height of the chunked target range.</param>
+    private WebGPUPendingSchedulingStatus(
+        WebGPU api,
+        Wgpu? wgpuExtension,
+        WebGPUDeviceHandle deviceHandle,
+        WebGPURuntime.DeviceSharedState deviceState,
+        WgpuBuffer* readbackBuffer,
+        nuint readbackByteLength,
+        WebGPUSceneBumpSizes submittedBumpSizes,
+        WebGPUSceneBumpSizes[]? chunkBumpSizes,
+        uint[]? chunkTileHeights,
+        uint fullTileHeight)
     {
         this.api = api;
         this.wgpuExtension = wgpuExtension;
         this.deviceHandle = deviceHandle;
         this.deviceState = deviceState;
         this.readbackBuffer = readbackBuffer;
+        this.readbackByteLength = readbackByteLength;
         this.SubmittedBumpSizes = submittedBumpSizes;
+        this.ChunkBumpSizes = chunkBumpSizes;
+        this.ChunkTileHeights = chunkTileHeights;
+        this.FullTileHeight = fullTileHeight;
 
         this.callback = PfnBufferMapCallback.From(this.OnMapped);
-        this.api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, (nuint)sizeof(GpuSceneBumpAllocators), this.callback, null);
+        this.api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, readbackByteLength, this.callback, null);
     }
 
     /// <summary>
@@ -106,6 +191,28 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     /// counters against these sizes tells the caller whether the frame overflowed.
     /// </summary>
     public WebGPUSceneBumpSizes SubmittedBumpSizes { get; }
+
+    /// <summary>
+    /// Gets the scratch capacities each chunk rendered with, or <see langword="null"/> for a
+    /// non-chunked deferred flush.
+    /// </summary>
+    public WebGPUSceneBumpSizes[]? ChunkBumpSizes { get; }
+
+    /// <summary>
+    /// Gets the tile-row height of each chunk, or <see langword="null"/> for a non-chunked
+    /// deferred flush.
+    /// </summary>
+    public uint[]? ChunkTileHeights { get; }
+
+    /// <summary>
+    /// Gets the full tile-row height of the chunked target range.
+    /// </summary>
+    public uint FullTileHeight { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this status describes a chunked staged-scene flush.
+    /// </summary>
+    public bool IsChunked => this.ChunkBumpSizes is not null;
 
     /// <summary>
     /// Gets a value indicating whether the map callback has fired, making <see cref="TryResolve"/>
@@ -173,6 +280,51 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     }
 
     /// <summary>
+    /// Resolves the deferred chunked readback: waits (bounded) for the map callback, reads all
+    /// chunk-local bump-allocator counters, and releases the readback buffer.
+    /// </summary>
+    /// <param name="bumpAllocators">Receives the counters reported by the GPU for each chunk when successful.</param>
+    /// <returns>
+    /// <see langword="true"/> when the counters were read; <see langword="false"/> when the map
+    /// failed or timed out, in which case the caller keeps its current capacities.
+    /// </returns>
+    public bool TryResolveChunked(out GpuSceneBumpAllocators[]? bumpAllocators)
+    {
+        bumpAllocators = null;
+        if (this.resolved || this.readbackBuffer is null || this.ChunkBumpSizes is null)
+        {
+            return false;
+        }
+
+        this.resolved = true;
+
+        bool signaled;
+        using (WebGPUHandle.HandleReference deviceReference = this.deviceHandle.AcquireReference())
+        {
+            signaled = WaitForMapSignal(this.wgpuExtension, (Device*)deviceReference.Handle, this.mapReady);
+        }
+
+        if (!signaled || this.mapStatus != BufferMapAsyncStatus.Success)
+        {
+            this.ReleaseBuffer(unmap: false);
+            return false;
+        }
+
+        void* mapped = this.api.BufferGetConstMappedRange(this.readbackBuffer, 0, this.readbackByteLength);
+        if (mapped is null)
+        {
+            this.ReleaseBuffer(unmap: true);
+            return false;
+        }
+
+        bumpAllocators = new GpuSceneBumpAllocators[this.ChunkBumpSizes.Length];
+        ReadOnlySpan<GpuSceneBumpAllocators> statuses = new(mapped, bumpAllocators.Length);
+        statuses.CopyTo(bumpAllocators);
+        this.ReleaseBuffer(unmap: true);
+        return true;
+    }
+
+    /// <summary>
     /// Disposes the pending status. When still unresolved this waits (bounded) for the map
     /// callback so the pinned thunk is never freed while the native side can still invoke it,
     /// then releases the readback buffer.
@@ -219,7 +371,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         if (unmap)
         {
             this.api.BufferUnmap(this.readbackBuffer);
-            this.deviceState.ReturnStatusReadbackBuffer(this.readbackBuffer);
+            this.deviceState.ReturnStatusReadbackBuffer(this.readbackBuffer, this.readbackByteLength);
         }
         else
         {
