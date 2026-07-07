@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.PolygonClipper;
 using PCPolygon = SixLabors.PolygonClipper.Polygon;
 using PolygonClipperAction = SixLabors.PolygonClipper.PolygonClipper;

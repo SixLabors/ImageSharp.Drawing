@@ -160,8 +160,21 @@ internal static class PolygonClipperFactory
     }
 
     /// <summary>
-    /// Applies the input orientation required before polygon clipping.
+    /// Prepares a polygon so the boolean clipper reproduces the requested fill rule.
     /// </summary>
+    /// <remarks>
+    /// The clipper classifies coverage by even-odd boundary crossings, which is orientation
+    /// independent: a point is inside when an odd number of the polygon's edges lie below it,
+    /// regardless of edge direction. Even-odd input already matches that model and is returned
+    /// unchanged. Non-zero input differs from even-odd only where the outline covers a region more
+    /// than once, that is where contours self-overlap or self-intersect (winding of magnitude two
+    /// or more, common in glyph outlines with overlapping components or crossings introduced by
+    /// curve flattening). Non-zero fills such a region while even-odd punches it out as a hole,
+    /// which is what produced clipped glyphs with spurious holes. Reorienting the contours cannot
+    /// fix this, because even-odd ignores direction, so the overlapping regions must actually be
+    /// merged. <see cref="PolygonClipperAction.Normalize"/> performs that self-union and yields an
+    /// equivalent simple polygon whose even-odd boundary equals the non-zero fill.
+    /// </remarks>
     /// <param name="polygon">The polygon to prepare.</param>
     /// <param name="intersectionRule">The fill rule used to interpret the polygon.</param>
     /// <returns>A <see cref="PCPolygon"/> containing the prepared contours.</returns>
