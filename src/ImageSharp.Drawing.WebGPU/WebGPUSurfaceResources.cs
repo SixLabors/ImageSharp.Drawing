@@ -166,14 +166,12 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
 
         try
         {
-            InstanceDescriptor instanceDescriptor = default;
-            instance = api.CreateInstance(&instanceDescriptor);
-            if (instance is null)
-            {
-                throw new InvalidOperationException("WebGPU instance creation failed.");
-            }
-
-            instanceHandle = new WebGPUInstanceHandle(api, (nint)instance, ownsHandle: true);
+            // Share one process-wide instance rather than creating and destroying one per surface.
+            // wgpu-native keeps a single global registry, and churning instances per window reopen
+            // corrupts it, leaving a fresh surface invalid (a process-aborting wgpu panic). The
+            // handle is non-owning so disposing this surface never releases the shared instance.
+            instance = WebGPURuntime.GetOrCreateSharedInstance();
+            instanceHandle = new WebGPUInstanceHandle(api, (nint)instance, ownsHandle: false);
             surface = nativeSource.CreateWebGPUSurface(api, instance);
             if (surface is null)
             {
@@ -206,15 +204,12 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
             instanceHandle?.Dispose();
 
             // Once a raw pointer has been wrapped in an owning handle the disposal above releases it.
-            // The direct releases below only cover the window where creation succeeded but wrapping did not.
+            // The direct release below only covers the window where surface creation succeeded but
+            // wrapping did not. The instance is process-shared and owned by the runtime, so it is
+            // never released here.
             if (surfaceHandle is null && surface is not null)
             {
                 api.SurfaceRelease(surface);
-            }
-
-            if (instanceHandle is null && instance is not null)
-            {
-                api.InstanceRelease(instance);
             }
 
             throw;

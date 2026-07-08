@@ -63,6 +63,12 @@ internal static unsafe partial class WebGPURuntime
     private static WebGPUQueueHandle? autoQueueHandle;
 
     /// <summary>
+    /// Process-shared WebGPU instance used by every native surface. Owned by the runtime and
+    /// released during process-exit teardown; callers must never release it.
+    /// </summary>
+    private static Instance* sharedInstance;
+
+    /// <summary>
     /// Tracks whether the process-exit hook has been installed. Guarded by <see cref="Sync"/>.
     /// </summary>
     private static bool processExitHooked;
@@ -100,6 +106,44 @@ internal static unsafe partial class WebGPURuntime
             }
 
             return api;
+        }
+    }
+
+    /// <summary>
+    /// Gets the process-shared WebGPU instance, creating it on first use.
+    /// </summary>
+    /// <remarks>
+    /// wgpu-native keeps a single global backend registry, so every native surface shares one
+    /// instance for the process lifetime. Creating and destroying an instance per surface (per
+    /// window) churns that global state and, under rapid window reopen, leaves a freshly created
+    /// surface invalid, which wgpu reports by aborting the process. The runtime owns the instance
+    /// and releases it during process-exit teardown; callers must never release it.
+    /// </remarks>
+    /// <returns>The shared native instance pointer.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the WebGPU API or instance cannot be initialized.</exception>
+    public static Instance* GetOrCreateSharedInstance()
+    {
+        lock (Sync)
+        {
+            EnsureInitialized();
+            if (api is null)
+            {
+                throw new InvalidOperationException("WebGPU.GetApi returned null.");
+            }
+
+            if (sharedInstance is null)
+            {
+                InstanceDescriptor descriptor = default;
+                Instance* created = api.CreateInstance(&descriptor);
+                if (created is null)
+                {
+                    throw new InvalidOperationException("WebGPU instance creation failed.");
+                }
+
+                sharedInstance = created;
+            }
+
+            return sharedInstance;
         }
     }
 
@@ -448,10 +492,18 @@ internal static unsafe partial class WebGPURuntime
         {
             autoQueueHandle?.Dispose();
             autoDeviceHandle?.Dispose();
+
+            // Released last among GPU objects: every surface that borrowed it is disposed by now,
+            // and non-owning surface instance handles never release it.
+            if (sharedInstance is not null)
+            {
+                api.InstanceRelease(sharedInstance);
+            }
         }
 
         autoDeviceHandle = null;
         autoQueueHandle = null;
+        sharedInstance = null;
 
         lock (ProbeSync)
         {
