@@ -178,6 +178,75 @@ public partial class DrawingCanvasTests
             new RectangleF(24, 20, 260, 200),
             new Matrix4x4(Matrix3x2.CreateRotation(0.15F, new Vector2(160, 120))));
 
+    [Theory]
+    [WithBasicTestPatternImages(320, 240, PixelTypes.Rgba32)]
+    public void DrawImage_WithEmptySourceRect_IsNoOp<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => AssertDrawImageIsNoOp(
+            provider,
+            new Rectangle(40, 30, 0, 120),
+            new RectangleF(20, 20, 200, 160));
+
+    [Theory]
+    [WithBasicTestPatternImages(320, 240, PixelTypes.Rgba32)]
+    public void DrawImage_WithEmptyDestinationRect_IsNoOp<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => AssertDrawImageIsNoOp(
+            provider,
+            new Rectangle(40, 30, 180, 150),
+            new RectangleF(20, 20, 200, 0));
+
+    [Theory]
+    [WithBasicTestPatternImages(320, 240, PixelTypes.Rgba32)]
+    public void DrawImage_WithSourceRectFullyOutsideImage_IsNoOp<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => AssertDrawImageIsNoOp(
+            provider,
+            new Rectangle(400, 300, 120, 100),
+            new RectangleF(20, 20, 200, 160));
+
+    /// <summary>
+    /// A draw whose clipped source/destination region is empty must be a no-op for both the
+    /// typed <see cref="Image{TPixel}"/> overload and the foreign-pixel-format <see cref="Image"/>
+    /// overload, leaving the cleared background untouched.
+    /// </summary>
+    private static void AssertDrawImageIsNoOp<TPixel>(
+        TestImageProvider<TPixel> provider,
+        Rectangle sourceRect,
+        RectangleF destinationRect)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> source = provider.GetImage();
+
+        // A source image whose pixel format differs from the canvas, forcing the foreign-format path.
+        using Image<Rgb24> foreignSource = source.CloneAs<Rgb24>();
+
+        // The reference is the cleared background: a degenerate draw must not change any pixel.
+        using Image<TPixel> expected = new(source.Width, source.Height);
+        using (DrawingCanvas<TPixel> reference = CreateCanvas(provider, expected, new DrawingOptions()))
+        {
+            reference.Clear(Brushes.Solid(Color.White));
+        }
+
+        void AssertNoOp(Action<DrawingCanvas<TPixel>> draw)
+        {
+            using Image<TPixel> actual = new(source.Width, source.Height);
+            using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, actual, new DrawingOptions()))
+            {
+                canvas.Clear(Brushes.Solid(Color.White));
+                draw(canvas);
+            }
+
+            ImageComparer.Exact.VerifySimilarity(expected, actual);
+        }
+
+        // Typed overload -> DrawImageCore empty-region early-return.
+        AssertNoOp(canvas => canvas.DrawImage(source, sourceRect, destinationRect, KnownResamplers.Bicubic));
+
+        // Foreign-format overload -> DrawImage empty-region early-return before any conversion.
+        AssertNoOp(canvas => canvas.DrawImage((Image)foreignSource, sourceRect, destinationRect, KnownResamplers.Bicubic));
+    }
+
     /// <summary>
     /// Drawing a foreign-pixel-format image (which converts only the clipped source region) must
     /// produce pixels identical to first converting the whole image to the canvas format and drawing that.

@@ -738,31 +738,26 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingOptions commandOptions = effectiveOptions;
         IReadOnlyList<IPath> commandClipPaths = state.ClipPaths;
 
-        if (!TryGetDrawImageClip(sourceRect, destinationRect, image.Bounds, out Rectangle clippedSourceRect, out RectangleF clippedDestinationRect))
-        {
-            if (disposeSourceImage)
-            {
-                image.Dispose();
-            }
-
-            return;
-        }
-
-        Size scaledSize = new(
-            Math.Max(1, (int)MathF.Ceiling(clippedDestinationRect.Width)),
-            Math.Max(1, (int)MathF.Ceiling(clippedDestinationRect.Height)));
-
-        bool requiresScaling =
-            clippedSourceRect.Width != scaledSize.Width ||
-            clippedSourceRect.Height != scaledSize.Height;
-
-        Image<TPixel> brushImage = image;
-        RectangleF brushImageRegion = clippedSourceRect;
-        RectangleF renderDestinationRect = clippedDestinationRect;
         Image<TPixel>? ownedImage = null;
-
         try
         {
+            if (!TryGetDrawImageClip(sourceRect, destinationRect, image.Bounds, out Rectangle clippedSourceRect, out RectangleF clippedDestinationRect))
+            {
+                return;
+            }
+
+            Size scaledSize = new(
+                Math.Max(1, (int)MathF.Ceiling(clippedDestinationRect.Width)),
+                Math.Max(1, (int)MathF.Ceiling(clippedDestinationRect.Height)));
+
+            bool requiresScaling =
+                clippedSourceRect.Width != scaledSize.Width ||
+                clippedSourceRect.Height != scaledSize.Height;
+
+            Image<TPixel> brushImage = image;
+            RectangleF brushImageRegion = clippedSourceRect;
+            RectangleF renderDestinationRect = clippedDestinationRect;
+
             // Phase 1: Prepare source pixels (crop/scale) in image-local space.
             if (requiresScaling)
             {
@@ -1558,10 +1553,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         clippedSourceRect = default;
         clippedDestinationRect = default;
 
-        if (sourceRect.Width <= 0 ||
-            sourceRect.Height <= 0 ||
-            destinationRect.Width <= 0 ||
-            destinationRect.Height <= 0)
+        // A zero-area source cannot be sampled and would divide by zero when mapping to the destination.
+        if (sourceRect.Width <= 0 || sourceRect.Height <= 0)
         {
             return false;
         }
@@ -1573,6 +1566,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         }
 
         clippedDestinationRect = MapSourceClipToDestination(sourceRect, destinationRect, clippedSourceRect);
+
+        // A degenerate (empty or inverted) destination maps to nothing to draw.
         return clippedDestinationRect.Width > 0 && clippedDestinationRect.Height > 0;
     }
 
