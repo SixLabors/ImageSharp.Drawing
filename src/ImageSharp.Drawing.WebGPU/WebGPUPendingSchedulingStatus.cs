@@ -58,6 +58,14 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     private readonly nuint readbackByteLength;
 
     /// <summary>
+    /// The physical byte capacity of the rented readback buffer. The buffer is returned to the
+    /// pool under this size rather than the mapped length, which for a chunked flush is smaller
+    /// (one record per chunk versus one per tile row), so the oversized buffer is filed under its
+    /// true capacity and stays reusable for later equally large rents.
+    /// </summary>
+    private readonly nuint bufferByteCapacity;
+
+    /// <summary>
     /// The pinned map callback thunk; must stay alive until the callback fires.
     /// </summary>
     private PfnBufferMapCallback callback;
@@ -101,6 +109,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
             deviceState,
             readbackBuffer,
             (nuint)sizeof(GpuSceneBumpAllocators),
+            (nuint)sizeof(GpuSceneBumpAllocators),
             submittedBumpSizes,
             null,
             null,
@@ -117,6 +126,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     /// <param name="deviceHandle">The wrapped device handle that owns the readback buffer.</param>
     /// <param name="deviceState">The device-scoped shared state whose pool recycles the buffer.</param>
     /// <param name="readbackBuffer">The dedicated map-readable buffer; ownership transfers to this instance.</param>
+    /// <param name="bufferByteCapacity">The physical byte capacity of <paramref name="readbackBuffer"/>, used when it is returned to the pool.</param>
     /// <param name="submittedBumpSizes">The full-scene scratch capacities the deferred flush rendered from.</param>
     /// <param name="chunkBumpSizes">The scratch capacities each chunk rendered with.</param>
     /// <param name="chunkTileHeights">The tile-row height of each chunk.</param>
@@ -127,6 +137,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         WebGPUDeviceHandle deviceHandle,
         WebGPURuntime.DeviceSharedState deviceState,
         WgpuBuffer* readbackBuffer,
+        nuint bufferByteCapacity,
         WebGPUSceneBumpSizes submittedBumpSizes,
         ReadOnlySpan<WebGPUSceneBumpSizes> chunkBumpSizes,
         ReadOnlySpan<uint> chunkTileHeights,
@@ -138,6 +149,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
             deviceState,
             readbackBuffer,
             checked((nuint)chunkBumpSizes.Length * (nuint)sizeof(GpuSceneBumpAllocators)),
+            bufferByteCapacity,
             submittedBumpSizes,
             chunkBumpSizes.ToArray(),
             chunkTileHeights.ToArray(),
@@ -155,6 +167,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     /// <param name="deviceState">The device-scoped shared state whose pool recycles the buffer.</param>
     /// <param name="readbackBuffer">The dedicated map-readable buffer; ownership transfers to this instance.</param>
     /// <param name="readbackByteLength">The byte length to map from <paramref name="readbackBuffer"/>.</param>
+    /// <param name="bufferByteCapacity">The physical byte capacity of <paramref name="readbackBuffer"/>, used when it is returned to the pool.</param>
     /// <param name="submittedBumpSizes">The scratch capacities the deferred flush rendered with.</param>
     /// <param name="chunkBumpSizes">The scratch capacities each chunk rendered with.</param>
     /// <param name="chunkTileHeights">The tile-row height of each chunk.</param>
@@ -166,6 +179,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         WebGPURuntime.DeviceSharedState deviceState,
         WgpuBuffer* readbackBuffer,
         nuint readbackByteLength,
+        nuint bufferByteCapacity,
         WebGPUSceneBumpSizes submittedBumpSizes,
         WebGPUSceneBumpSizes[]? chunkBumpSizes,
         uint[]? chunkTileHeights,
@@ -177,6 +191,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         this.deviceState = deviceState;
         this.readbackBuffer = readbackBuffer;
         this.readbackByteLength = readbackByteLength;
+        this.bufferByteCapacity = bufferByteCapacity;
         this.SubmittedBumpSizes = submittedBumpSizes;
         this.ChunkBumpSizes = chunkBumpSizes;
         this.ChunkTileHeights = chunkTileHeights;
@@ -371,7 +386,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         if (unmap)
         {
             this.api.BufferUnmap(this.readbackBuffer);
-            this.deviceState.ReturnStatusReadbackBuffer(this.readbackBuffer, this.readbackByteLength);
+            this.deviceState.ReturnStatusReadbackBuffer(this.readbackBuffer, this.bufferByteCapacity);
         }
         else
         {

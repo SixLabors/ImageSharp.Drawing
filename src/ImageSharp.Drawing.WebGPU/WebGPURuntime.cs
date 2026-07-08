@@ -134,7 +134,7 @@ internal static unsafe partial class WebGPURuntime
     /// Thread safe; all provisioning happens under <see cref="Sync"/>. The returned handles stay
     /// owned by the runtime and are disposed at process exit, so callers must not dispose them.
     /// </remarks>
-    internal static bool TryGetOrCreateDevice(
+    public static bool TryGetOrCreateDevice(
         out WebGPUDeviceHandle? device,
         out WebGPUQueueHandle? queue,
         out WebGPUEnvironmentError errorCode)
@@ -257,7 +257,7 @@ internal static unsafe partial class WebGPURuntime
     /// <see cref="WebGPUEnvironment.ProbeComputePipelineSupport()"/>, because successful device acquisition does not guarantee
     /// that compute-pipeline creation is actually usable on the active runtime/driver stack.
     /// </remarks>
-    internal static WebGPUEnvironmentError ProbeAvailability()
+    public static WebGPUEnvironmentError ProbeAvailability()
     {
         lock (ProbeSync)
         {
@@ -296,7 +296,7 @@ internal static unsafe partial class WebGPURuntime
     /// validation and isolates the actual pipeline creation in a remote process when possible so a native failure becomes
     /// a probe result instead of taking down the caller.
     /// </remarks>
-    internal static WebGPUEnvironmentError ProbeComputePipelineSupport()
+    public static WebGPUEnvironmentError ProbeComputePipelineSupport()
     {
         lock (ProbeSync)
         {
@@ -339,7 +339,7 @@ internal static unsafe partial class WebGPURuntime
     /// <c>0</c> when compute-pipeline creation succeeded; <c>1</c> when the probe completed and reported failure.
     /// Any other value means the isolated probe process terminated before the probe could return normally.
     /// </returns>
-    internal static int RunComputePipelineSupportProbe()
+    public static int RunComputePipelineSupportProbe()
     {
         try
         {
@@ -533,7 +533,7 @@ internal static unsafe partial class WebGPURuntime
     /// </summary>
     /// <param name="errorCode">The environment failure code.</param>
     /// <returns>The exception message describing that failure.</returns>
-    internal static string CreateEnvironmentExceptionMessage(WebGPUEnvironmentError errorCode)
+    public static string CreateEnvironmentExceptionMessage(WebGPUEnvironmentError errorCode)
         => errorCode switch
         {
             WebGPUEnvironmentError.Success => "The WebGPU operation did not report an error.",
@@ -698,7 +698,7 @@ internal static unsafe partial class WebGPURuntime
     /// <param name="api">The WebGPU API used to query the adapter.</param>
     /// <param name="adapter">The adapter whose maximum storage limits are requested.</param>
     /// <returns>The populated <see cref="RequiredLimits"/> to attach to the device descriptor.</returns>
-    internal static RequiredLimits BuildStorageBindingLimits(WebGPU api, Adapter* adapter)
+    public static RequiredLimits BuildStorageBindingLimits(WebGPU api, Adapter* adapter)
     {
         SupportedLimits adapterLimits = default;
         _ = api.AdapterGetLimits(adapter, ref adapterLimits);

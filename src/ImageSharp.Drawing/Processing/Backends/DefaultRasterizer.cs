@@ -30,7 +30,7 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Tile height, in pixels, of one row band in the parallel row-tiling pipeline.
     /// </summary>
-    internal const int DefaultTileHeight = 16;
+    public const int DefaultTileHeight = 16;
 
     /// <summary>
     /// Number of fractional bits in the 24.8 fixed-point coordinate format.
@@ -82,7 +82,7 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Gets the preferred scene row height used by the CPU rasterizer.
     /// </summary>
-    internal static int PreferredRowHeight => DefaultTileHeight;
+    public static int PreferredRowHeight => DefaultTileHeight;
 
     /// <summary>
     /// Executes one retained rasterizable row item against a reusable scanner context.
@@ -93,7 +93,7 @@ internal static partial class DefaultRasterizer
     /// <param name="bandInfo">The retained metadata describing the destination band.</param>
     /// <param name="scanline">Reusable scanline scratch used to materialize emitted coverage spans.</param>
     /// <param name="rowHandler">The coverage callback invoked for each emitted non-zero span.</param>
-    internal static void ExecuteRasterizableItem<TRowHandler>(
+    public static void ExecuteRasterizableItem<TRowHandler>(
         ref Context context,
         in RasterizableItem item,
         in RasterizableBandInfo bandInfo,
@@ -137,7 +137,7 @@ internal static partial class DefaultRasterizer
     /// <param name="scanline">Reusable scanline scratch used to materialize emitted coverage spans.</param>
     /// <param name="strokeBandCoverage">Reusable per-band stroke coverage scratch used by the direct stroke path.</param>
     /// <param name="rowHandler">The coverage callback invoked for each emitted non-zero span.</param>
-    internal static void ExecuteStrokeRasterizableItem<TRowHandler>(
+    public static void ExecuteStrokeRasterizableItem<TRowHandler>(
         ref Context context,
         in StrokeRasterizableItem item,
         in RasterizableBandInfo bandInfo,
@@ -174,7 +174,7 @@ internal static partial class DefaultRasterizer
     /// <param name="width">The maximum band width, in pixels, the scratch must support.</param>
     /// <returns>A new <see cref="WorkerScratch"/> instance.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static WorkerScratch CreateWorkerScratch(MemoryAllocator allocator, int width)
+    public static WorkerScratch CreateWorkerScratch(MemoryAllocator allocator, int width)
         => WorkerScratch.Create(allocator, BitVectorsForMaxBitCount(width), checked(width << 1), width, PreferredRowHeight);
 
     /// <summary>
@@ -231,7 +231,7 @@ internal static partial class DefaultRasterizer
     /// <param name="options">The rasterizer options carrying interest bounds, fill rule, and antialias settings.</param>
     /// <param name="allocator">The memory allocator used for retained start-cover storage.</param>
     /// <returns>The retained geometry payload, or <see langword="null"/> when nothing is visible.</returns>
-    internal static RasterizableGeometry? CreateRasterizableGeometry(
+    public static RasterizableGeometry? CreateRasterizableGeometry(
         LinearGeometry geometry,
         Matrix4x4 residual,
         int translateX,
@@ -1894,7 +1894,7 @@ internal static partial class DefaultRasterizer
         /// <param name="requiredWidth">The band width, in pixels, the caller needs.</param>
         /// <param name="minCapacity">The minimum band height, in rows, the caller needs.</param>
         /// <returns><see langword="true"/> when reuse is safe; otherwise <see langword="false"/>.</returns>
-        internal bool CanReuse(int requiredWordsPerRow, int requiredCoverStride, int requiredWidth, int minCapacity)
+        private bool CanReuse(int requiredWordsPerRow, int requiredCoverStride, int requiredWidth, int minCapacity)
             => this.wordsPerRow >= requiredWordsPerRow
             && this.coverStride >= requiredCoverStride
             && this.width >= requiredWidth
@@ -1906,7 +1906,7 @@ internal static partial class DefaultRasterizer
         /// </summary>
         /// <param name="requiredWidth">The band width, in pixels, the caller needs.</param>
         /// <returns><see langword="true"/> when reuse is safe; otherwise <see langword="false"/>.</returns>
-        internal bool CanReuse(int requiredWidth)
+        public bool CanReuse(int requiredWidth)
             => this.CanReuse(BitVectorsForMaxBitCount(requiredWidth), checked(requiredWidth << 1), requiredWidth, PreferredRowHeight);
 
         /// <summary>

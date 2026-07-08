@@ -27,7 +27,7 @@ internal static unsafe partial class WebGPURuntime
     /// <param name="api">The WebGPU API facade used to manage native resources.</param>
     /// <param name="deviceHandle">The device key and owner for the shared state.</param>
     /// <returns>The shared device state instance for <paramref name="deviceHandle"/>.</returns>
-    internal static DeviceSharedState GetOrCreateDeviceState(WebGPU api, WebGPUDeviceHandle deviceHandle)
+    public static DeviceSharedState GetOrCreateDeviceState(WebGPU api, WebGPUDeviceHandle deviceHandle)
     {
         nint cacheKey = deviceHandle.DangerousGetHandle();
 
@@ -65,6 +65,33 @@ internal static unsafe partial class WebGPURuntime
             }
 
             DeviceStateCache.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Disposes and removes the cached shared state for a single device. Called when a device is
+    /// being torn down, such as after device-loss recovery replaces it, so the device's cached
+    /// pipelines are released and the reference the state holds on the device handle is dropped
+    /// now, instead of lingering in the pointer-keyed cache until process exit.
+    /// </summary>
+    /// <remarks>
+    /// The state must be disposed while its device is still live, because disposal releases
+    /// pipelines and unregisters the error callback through the device. The caller therefore
+    /// invokes this before disposing the device handle. No-op when the device was never flushed
+    /// and so never created a cache entry.
+    /// </remarks>
+    /// <param name="deviceKey">
+    /// The raw device pointer that keyed the entry, as returned by the device handle's
+    /// <see cref="System.Runtime.InteropServices.SafeHandle.DangerousGetHandle"/>.
+    /// </param>
+    public static void RemoveDeviceState(nint deviceKey)
+    {
+        lock (DeviceStateCacheSync)
+        {
+            if (DeviceStateCache.TryRemove(deviceKey, out DeviceSharedState? state))
+            {
+                state.Dispose();
+            }
         }
     }
 
@@ -137,7 +164,7 @@ internal static unsafe partial class WebGPURuntime
         /// </summary>
         /// <param name="api">The WebGPU API facade used to manage native resources.</param>
         /// <param name="deviceHandle">The device this state is scoped to.</param>
-        internal DeviceSharedState(WebGPU api, WebGPUDeviceHandle deviceHandle)
+        public DeviceSharedState(WebGPU api, WebGPUDeviceHandle deviceHandle)
         {
             this.Api = api;
             this.deviceReference = deviceHandle.AcquireReference();

@@ -63,7 +63,7 @@ public readonly struct RasterizerOptions
 
     /// <summary>
     /// Gets the coverage threshold used when <see cref="RasterizationMode"/> is <see cref="RasterizationMode.Aliased"/>.
-    /// Pixels with coverage above this value are rendered as fully opaque; pixels below are discarded.
+    /// Pixels whose coverage is greater than or equal to this value are rendered as fully opaque; pixels below it are discarded.
     /// </summary>
     public float AntialiasThreshold { get; }
 

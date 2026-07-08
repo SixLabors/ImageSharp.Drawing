@@ -34,7 +34,7 @@ internal static class WebGPUSceneEncoder
     /// Shared with <see cref="WebGPUEncodedScene.GradientPixels"/> so the packed buffer slice
     /// always matches the encoder's ramp stride.
     /// </summary>
-    internal const int GradientWidth = 512;
+    public const int GradientWidth = 512;
 
     /// <summary>
     /// The word count of the path-gradient payload header: center x, center y, max distance, center color.
@@ -6149,7 +6149,7 @@ internal static class WebGPUSceneEncoder
     /// <param name="options">The graphics options supplying the blend and composition modes.</param>
     /// <returns>The packed blend word: color mix mode in bits 8-15, compose mode in bits 0-7.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static uint PackBlendMode(GraphicsOptions options)
+    private static uint PackBlendMode(GraphicsOptions options)
         => (MapColorBlendMode(options.ColorBlendingMode) << 8) | MapAlphaCompositionMode(options.AlphaCompositionMode);
 
     /// <summary>

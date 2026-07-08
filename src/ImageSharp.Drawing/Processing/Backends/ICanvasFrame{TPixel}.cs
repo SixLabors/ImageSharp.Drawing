@@ -7,8 +7,16 @@ using SixLabors.ImageSharp.Memory;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Per-frame destination for <see cref="DrawingCanvas{TPixel}"/>.
+/// A render destination for <see cref="DrawingCanvas{TPixel}"/>. Implementations back the canvas
+/// with either a CPU-accessible pixel region or an opaque native surface; a usable frame must
+/// expose at least one of the two.
 /// </summary>
+/// <remarks>
+/// A backend inspects the frame through <see cref="TryGetCpuRegion"/> and
+/// <see cref="TryGetNativeSurface"/> to choose its render path. Exactly one of the two succeeds
+/// for a given frame: a CPU frame yields a <see cref="Buffer2DRegion{T}"/>, a native frame yields
+/// a <see cref="NativeSurface"/>.
+/// </remarks>
 /// <typeparam name="TPixel">The pixel format.</typeparam>
 public interface ICanvasFrame<TPixel>
     where TPixel : unmanaged, IPixel<TPixel>

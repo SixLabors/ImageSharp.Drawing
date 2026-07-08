@@ -121,7 +121,7 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     /// <param name="textureViewHandle">Receives the allocated wrapped <c>WGPUTextureView*</c> handle. The caller owns it and must dispose it.</param>
     /// <param name="textureCoordinateOffset">The offset added when converting canvas-local coordinates to absolute texture coordinates.</param>
     /// <returns>The native surface wrapping the allocated texture.</returns>
-    internal static unsafe WebGPUNativeSurface Create(
+    public static unsafe WebGPUNativeSurface Create(
         WebGPU api,
         WebGPUDeviceHandle deviceHandle,
         WebGPUQueueHandle queueHandle,
@@ -244,7 +244,7 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     /// <param name="textureCoordinateOffset">The offset added when converting canvas-local coordinates to absolute texture coordinates.</param>
     /// <param name="isPresentationSurface">Whether the target texture is presented to screen after the flush that renders it.</param>
     /// <returns>The native surface wrapping the supplied handles.</returns>
-    internal static WebGPUNativeSurface Create(
+    public static WebGPUNativeSurface Create(
         WebGPUDeviceHandle deviceHandle,
         WebGPUQueueHandle queueHandle,
         WebGPUTextureHandle targetTextureHandle,

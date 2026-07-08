@@ -6,7 +6,9 @@ using SixLabors.ImageSharp.Memory;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Defines the contract for creating and rendering drawing backend scenes for canvas targets.
+/// Defines the contract a drawing backend implements to turn recorded canvas commands into pixels:
+/// creating retained scenes from command batches, rendering those scenes into a canvas frame, and
+/// transferring pixels between frames (copy and readback).
 /// </summary>
 public interface IDrawingBackend
 {

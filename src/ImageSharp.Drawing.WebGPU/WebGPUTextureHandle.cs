@@ -20,7 +20,7 @@ internal sealed unsafe class WebGPUTextureHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the texture and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUTextureHandle(nint textureHandle, bool ownsHandle)
+    public WebGPUTextureHandle(nint textureHandle, bool ownsHandle)
         : this(ownsHandle ? WebGPURuntime.GetApi() : null, textureHandle, ownsHandle)
     {
     }
@@ -37,7 +37,7 @@ internal sealed unsafe class WebGPUTextureHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the texture and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUTextureHandle(WebGPU? api, nint textureHandle, bool ownsHandle)
+    public WebGPUTextureHandle(WebGPU? api, nint textureHandle, bool ownsHandle)
         : base(textureHandle, ownsHandle)
         => this.api = api;
 

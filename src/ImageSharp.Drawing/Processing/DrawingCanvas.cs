@@ -113,9 +113,10 @@ public abstract partial class DrawingCanvas : IDisposable
     public abstract DrawingCanvas CreateRegion(Rectangle region);
 
     /// <summary>
-    /// Clears a path region using the given brush and clear-style composition options.
+    /// Fills a path region with the given brush using replacement composition: the brush output
+    /// overwrites the covered pixels outright, including their alpha, rather than blending over them.
     /// </summary>
-    /// <param name="brush">Brush used to shade destination pixels during clear.</param>
+    /// <param name="brush">Brush used to shade destination pixels during the clear.</param>
     /// <param name="path">The path region to clear.</param>
     public abstract void Clear(Brush brush, IPath path);
 
@@ -364,22 +365,50 @@ public abstract partial class DrawingCanvas : IDisposable
     public abstract void CopyPixelsFrom(DrawingCanvas source, Rectangle sourceRectangle, Point targetPoint);
 
     /// <summary>
-    /// Creates a backend scene from the drawing commands currently queued on this canvas.
+    /// Seals the commands recorded so far into a retained backend scene and clears them from the
+    /// canvas queue.
     /// </summary>
+    /// <remarks>
+    /// The active clip range is closed before the scene is built and reopened afterwards, so this
+    /// acts as an ordering boundary in the recorded timeline. Image resources retained for the
+    /// sealed commands are transferred to the returned scene, which owns and disposes them.
+    /// </remarks>
     /// <returns>The created backend scene.</returns>
     public abstract DrawingBackendScene CreateScene();
 
     /// <summary>
-    /// Renders a backend scene into this canvas target.
+    /// Records a previously created backend scene into this canvas' command timeline.
     /// </summary>
+    /// <remarks>
+    /// The active command range is sealed before the scene is inserted so the scene renders in
+    /// submission order relative to the commands recorded around it. Like other recorded work,
+    /// the scene is replayed into the target frame when the root canvas is disposed or otherwise
+    /// flushed, not at the point of this call.
+    /// </remarks>
     /// <param name="scene">The backend scene to render.</param>
     public abstract void RenderScene(DrawingBackendScene scene);
 
     /// <summary>
-    /// Makes queued drawing commands available for rendering.
+    /// Seals the drawing commands recorded so far into an ordered range so that subsequent
+    /// commands begin a new range.
     /// </summary>
+    /// <remarks>
+    /// This does not rasterize or composite anything into the target frame. Recorded commands
+    /// are replayed into the target only when the root canvas is disposed, or when they are
+    /// lowered explicitly through <see cref="CreateScene"/>, <see cref="RenderScene"/> or
+    /// <see cref="CopyPixelsFrom"/>. Use this to establish an ordering boundary in the recorded
+    /// timeline without ending the canvas.
+    /// </remarks>
     public abstract void Flush();
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases the canvas. Disposing the root canvas closes any open layers and clips and
+    /// replays the recorded command timeline into the target frame; child region canvases
+    /// share the root's command stream and do not flush on disposal.
+    /// </summary>
+    /// <remarks>
+    /// The root canvas also releases image resources retained for deferred draws and, when it
+    /// owns the text drawing cache, clears that cache. Disposal is idempotent.
+    /// </remarks>
     public abstract void Dispose();
 }

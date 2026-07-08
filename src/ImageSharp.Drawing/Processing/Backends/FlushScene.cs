@@ -101,22 +101,22 @@ internal sealed partial class FlushScene : IDisposable
     /// <summary>
     /// Gets the retained visible scene items.
     /// </summary>
-    internal FillSceneItem?[] FillItems { get; }
+    public FillSceneItem?[] FillItems { get; }
 
     /// <summary>
     /// Gets the retained visible stroke scene items.
     /// </summary>
-    internal StrokeSceneItem?[] StrokeItems { get; }
+    public StrokeSceneItem?[] StrokeItems { get; }
 
     /// <summary>
     /// Gets the retained layer state indexed by begin-layer command index.
     /// </summary>
-    internal DrawingCanvasLayer?[] Layers { get; }
+    public DrawingCanvasLayer?[] Layers { get; }
 
     /// <summary>
     /// Gets layer and apply control operations indexed by original command index.
     /// </summary>
-    internal SceneControlItem?[] ControlItems { get; }
+    private SceneControlItem?[] ControlItems { get; }
 
     /// <summary>
     /// Gets a value indicating whether the scene contains apply barriers.
@@ -131,12 +131,12 @@ internal sealed partial class FlushScene : IDisposable
     /// <summary>
     /// Gets the retained row lists.
     /// </summary>
-    internal SceneRow[] Rows { get; }
+    public SceneRow[] Rows { get; }
 
     /// <summary>
     /// Gets retained target-wide execution segments for scenes containing apply barriers.
     /// </summary>
-    internal SceneSegment[] Segments { get; }
+    public SceneSegment[] Segments { get; }
 
     /// <summary>
     /// Gets the total number of row items retained by the scene.

@@ -36,7 +36,7 @@ internal static class WebGPUSceneDispatch
 {
     // Fixed bootstrap PTCL reservation per tile. The coarse stage writes each tile's initial
     // command list into this prefix, while dynamic PTCL growth starts after the tileCount * 64 area.
-    internal const uint PtclInitialAlloc = 64U;
+    public const uint PtclInitialAlloc = 64U;
 
     // Device pipeline-cache keys, one per staged-scene compute stage. The fine pipeline key is
     // suffixed with the texture format because its shader is generated per output format.
@@ -1745,6 +1745,7 @@ internal static class WebGPUSceneDispatch
                     flushContext.DeviceHandle,
                     flushContext.DeviceState,
                     deferredReadbackBuffer,
+                    readbackByteLength,
                     stagedScene.Config.BumpSizes,
                     chunkAttemptBumpSizes[..chunkReadbackCount],
                     chunkAttemptTileHeights[..chunkReadbackCount],
@@ -3753,7 +3754,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="groupCountZ">The Z workgroup count.</param>
     /// <param name="error">Receives the bind-group or pass failure reason.</param>
     /// <returns><see langword="true"/> when the pass was dispatched (or skipped as empty); otherwise, <see langword="false"/>.</returns>
-    internal static unsafe bool TryDispatchComputePass(
+    private static unsafe bool TryDispatchComputePass(
         WebGPUFlushContext flushContext,
         BindGroupLayout* bindGroupLayout,
         ComputePipeline* pipeline,
@@ -3809,80 +3810,6 @@ internal static class WebGPUSceneDispatch
             flushContext.Api.ComputePassEncoderSetPipeline(passEncoder, pipeline);
             flushContext.Api.ComputePassEncoderSetBindGroup(passEncoder, 0, bindGroup, 0, null);
             flushContext.Api.ComputePassEncoderDispatchWorkgroups(passEncoder, groupCountX, groupCountY, groupCountZ);
-        }
-        finally
-        {
-            if (ownsPassEncoder)
-            {
-                flushContext.EndComputePassIfOpen();
-            }
-        }
-
-        error = null;
-        return true;
-    }
-
-    /// <summary>
-    /// Creates a bind group and dispatches one indirect compute pass immediately.
-    /// </summary>
-    /// <param name="flushContext">The flush context that owns the device and compute pass encoder.</param>
-    /// <param name="bindGroupLayout">The bind-group layout matching the pipeline.</param>
-    /// <param name="pipeline">The compute pipeline to dispatch.</param>
-    /// <param name="entries">The bind-group entries for the dispatch.</param>
-    /// <param name="entryCount">The number of entries in <paramref name="entries"/>.</param>
-    /// <param name="indirectBuffer">The buffer holding the GPU-written workgroup counts.</param>
-    /// <param name="indirectOffset">The byte offset of the workgroup counts inside <paramref name="indirectBuffer"/>.</param>
-    /// <param name="error">Receives the bind-group or pass failure reason.</param>
-    /// <returns><see langword="true"/> when the pass was dispatched successfully; otherwise, <see langword="false"/>.</returns>
-    internal static unsafe bool TryDispatchComputePassIndirect(
-        WebGPUFlushContext flushContext,
-        BindGroupLayout* bindGroupLayout,
-        ComputePipeline* pipeline,
-        BindGroupEntry* entries,
-        uint entryCount,
-        WgpuBuffer* indirectBuffer,
-        ulong indirectOffset,
-        out string? error)
-    {
-        BindGroupDescriptor descriptor = new()
-        {
-            Layout = bindGroupLayout,
-            EntryCount = entryCount,
-            Entries = entries
-        };
-
-        BindGroup* bindGroup;
-        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
-        {
-            bindGroup = flushContext.Api.DeviceCreateBindGroup((Device*)deviceReference.Handle, in descriptor);
-        }
-
-        if (bindGroup is null)
-        {
-            error = "Failed to create a staged-scene compute bind group.";
-            return false;
-        }
-
-        flushContext.TrackBindGroup(bindGroup);
-        bool ownsPassEncoder = false;
-        ComputePassEncoder* passEncoder = flushContext.ComputePassEncoder;
-        if (passEncoder is null)
-        {
-            if (!flushContext.BeginComputePass())
-            {
-                error = "Failed to begin a staged-scene compute pass.";
-                return false;
-            }
-
-            passEncoder = flushContext.ComputePassEncoder;
-            ownsPassEncoder = true;
-        }
-
-        try
-        {
-            flushContext.Api.ComputePassEncoderSetPipeline(passEncoder, pipeline);
-            flushContext.Api.ComputePassEncoderSetBindGroup(passEncoder, 0, bindGroup, 0, null);
-            flushContext.Api.ComputePassEncoderDispatchWorkgroupsIndirect(passEncoder, indirectBuffer, indirectOffset);
         }
         finally
         {
@@ -4170,7 +4097,7 @@ internal static class WebGPUSceneDispatch
     /// blocks on the specific pipelines it needs.
     /// </summary>
     /// <param name="deviceState">The shared device state whose pipeline caches are warmed.</param>
-    internal static void BeginPipelineWarmup(WebGPURuntime.DeviceSharedState deviceState)
+    public static void BeginPipelineWarmup(WebGPURuntime.DeviceSharedState deviceState)
         => ThreadPool.UnsafeQueueUserWorkItem(static state => WarmPipelines(state), deviceState, preferLocal: false);
 
     /// <summary>

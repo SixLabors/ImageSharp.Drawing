@@ -1201,7 +1201,7 @@ internal static unsafe class WebGPUSceneResources
     /// <param name="count">The element count; zero is clamped to one.</param>
     /// <returns>The binding size in bytes.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static nuint GetBindingByteLength<T>(int count)
+    private static nuint GetBindingByteLength<T>(int count)
         where T : unmanaged
         => checked((nuint)Math.Max(count, 1) * (nuint)Unsafe.SizeOf<T>());
 }

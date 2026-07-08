@@ -583,6 +583,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
             WebGPUQueueHandle oldQueueHandle = this.QueueHandle;
             WebGPUDeviceHandle oldDeviceHandle = this.DeviceHandle;
             WebGPUAdapterHandle oldAdapterHandle = this.AdapterHandle;
+            nint oldDeviceKey = oldDeviceHandle.DangerousGetHandle();
 
             this.deviceContext = deviceResources.DeviceContext;
             this.QueueHandle = deviceResources.QueueHandle;
@@ -592,6 +593,13 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
 
             oldDeviceContext.Dispose();
             oldQueueHandle.Dispose();
+
+            // Evict the lost device's shared state before dropping its handle. The state holds a
+            // reference on the device handle and caches its pipelines; without eviction that entry
+            // lingers in the pointer-keyed cache, leaking the pipelines and pinning the native
+            // device alive until process exit. Disposing it here, while the device is still live,
+            // releases both.
+            WebGPURuntime.RemoveDeviceState(oldDeviceKey);
             oldDeviceHandle.Dispose();
             oldAdapterHandle.Dispose();
         }
@@ -861,7 +869,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         /// <summary>
         /// Gets the owned device context bound to <see cref="DeviceHandle"/> and <see cref="QueueHandle"/>.
         /// </summary>
-        internal WebGPUDeviceContext DeviceContext { get; }
+        public WebGPUDeviceContext DeviceContext { get; }
 
         /// <summary>
         /// Releases the owned resources in reverse acquisition order. Only invoked when the transfer

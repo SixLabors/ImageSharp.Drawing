@@ -18,7 +18,7 @@ internal sealed class ApplyBarrier
     /// <param name="destinationOffset">The absolute destination offset captured when the barrier was recorded.</param>
     /// <param name="ownerLayer">The layer that owned this barrier when it was recorded.</param>
     /// <param name="operation">The processor operation to run against the replay-time snapshot.</param>
-    internal ApplyBarrier(
+    public ApplyBarrier(
         IPath path,
         DrawingOptions options,
         Rectangle canvasBounds,

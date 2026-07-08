@@ -51,7 +51,7 @@ internal abstract class WebGPUHandle : SafeHandle
     /// Callers should keep the returned token in the narrowest possible scope and dispose it
     /// as soon as the native call sequence that uses <see cref="HandleReference.Handle"/> ends.
     /// </remarks>
-    internal HandleReference AcquireReference()
+    public HandleReference AcquireReference()
     {
         bool addRefSucceeded = false;
         this.DangerousAddRef(ref addRefSucceeded);
@@ -93,7 +93,7 @@ internal abstract class WebGPUHandle : SafeHandle
         /// </summary>
         /// <param name="owner">The safe handle whose reference count was incremented by <see cref="AcquireReference"/>.</param>
         /// <param name="handle">The raw native handle kept alive by this reference.</param>
-        internal HandleReference(WebGPUHandle owner, nint handle)
+        public HandleReference(WebGPUHandle owner, nint handle)
         {
             this.owner = owner;
             this.Handle = handle;

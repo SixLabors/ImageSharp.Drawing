@@ -13,7 +13,7 @@ internal sealed class WebGPUDeviceContext : IDisposable
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUDeviceContext"/> class over the shared process-level WebGPU device.
     /// </summary>
-    internal WebGPUDeviceContext()
+    public WebGPUDeviceContext()
         : this(Configuration.Default)
     {
     }
@@ -22,7 +22,7 @@ internal sealed class WebGPUDeviceContext : IDisposable
     /// Initializes a new instance of the <see cref="WebGPUDeviceContext"/> class over the shared process-level WebGPU device.
     /// </summary>
     /// <param name="configuration">The configuration instance to bind to the created backend.</param>
-    internal WebGPUDeviceContext(Configuration configuration)
+    public WebGPUDeviceContext(Configuration configuration)
     {
         Guard.NotNull(configuration, nameof(configuration));
 
@@ -65,7 +65,7 @@ internal sealed class WebGPUDeviceContext : IDisposable
     /// These handles must originate from the same process WebGPU runtime used by ImageSharp.Drawing.WebGPU.
     /// The context does not take ownership of them.
     /// </remarks>
-    internal WebGPUDeviceContext(nint deviceHandle, nint queueHandle)
+    public WebGPUDeviceContext(nint deviceHandle, nint queueHandle)
         : this(Configuration.Default, deviceHandle, queueHandle)
     {
     }
@@ -80,18 +80,8 @@ internal sealed class WebGPUDeviceContext : IDisposable
     /// These handles must originate from the same process WebGPU runtime used by ImageSharp.Drawing.WebGPU.
     /// The context does not take ownership of them.
     /// </remarks>
-    internal WebGPUDeviceContext(Configuration configuration, nint deviceHandle, nint queueHandle)
+    private WebGPUDeviceContext(Configuration configuration, nint deviceHandle, nint queueHandle)
         : this(configuration, CreateExternalDeviceHandle(deviceHandle), CreateExternalQueueHandle(queueHandle))
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUDeviceContext"/> class over wrapped device and queue handles using the default configuration.
-    /// </summary>
-    /// <param name="deviceHandle">The wrapped WebGPU device handle.</param>
-    /// <param name="queueHandle">The wrapped WebGPU queue handle.</param>
-    internal WebGPUDeviceContext(WebGPUDeviceHandle deviceHandle, WebGPUQueueHandle queueHandle)
-        : this(Configuration.Default, deviceHandle, queueHandle)
     {
     }
 
@@ -105,7 +95,7 @@ internal sealed class WebGPUDeviceContext : IDisposable
     /// The context stores the handles without taking ownership; native lifetime is controlled
     /// by the handle wrappers themselves.
     /// </remarks>
-    internal WebGPUDeviceContext(Configuration configuration, WebGPUDeviceHandle deviceHandle, WebGPUQueueHandle queueHandle)
+    public WebGPUDeviceContext(Configuration configuration, WebGPUDeviceHandle deviceHandle, WebGPUQueueHandle queueHandle)
     {
         Guard.NotNull(configuration, nameof(configuration));
         Guard.NotNull(deviceHandle, nameof(deviceHandle));
@@ -125,23 +115,23 @@ internal sealed class WebGPUDeviceContext : IDisposable
     /// <summary>
     /// Gets the configuration provided when the context was created.
     /// </summary>
-    internal Configuration Configuration { get; }
+    public Configuration Configuration { get; }
 
     /// <summary>
     /// Gets the WebGPU drawing backend owned by this context.
     /// Use this to inspect per-flush diagnostics for chunked rendering.
     /// </summary>
-    internal WebGPUDrawingBackend Backend { get; }
+    public WebGPUDrawingBackend Backend { get; }
 
     /// <summary>
     /// Gets the wrapped WebGPU device handle used by frames, canvases, and render-target allocation created from this context.
     /// </summary>
-    internal WebGPUDeviceHandle DeviceHandle { get; }
+    public WebGPUDeviceHandle DeviceHandle { get; }
 
     /// <summary>
     /// Gets the wrapped WebGPU queue handle paired with <see cref="DeviceHandle"/> for uploads, readback, and command submission.
     /// </summary>
-    internal WebGPUQueueHandle QueueHandle { get; }
+    public WebGPUQueueHandle QueueHandle { get; }
 
     /// <summary>
     /// Creates an owned offscreen WebGPU render target for this context.
@@ -150,7 +140,7 @@ internal sealed class WebGPUDeviceContext : IDisposable
     /// <param name="width">The target width in pixels.</param>
     /// <param name="height">The target height in pixels.</param>
     /// <returns>An owned offscreen WebGPU render target.</returns>
-    internal WebGPURenderTarget CreateRenderTarget(
+    public WebGPURenderTarget CreateRenderTarget(
         WebGPUTextureFormat format,
         int width,
         int height)
@@ -176,7 +166,7 @@ internal sealed class WebGPUDeviceContext : IDisposable
     /// The texture must have been created with <c>RenderAttachment | CopySrc | CopyDst | TextureBinding</c> usage.
     /// Dispose the returned canvas before the host calls <c>wgpuSurfacePresent</c>, then create a new canvas on the next frame.
     /// </remarks>
-    internal DrawingCanvas CreateCanvas(
+    public DrawingCanvas CreateCanvas(
         nint textureHandle,
         nint textureViewHandle,
         WebGPUTextureFormat format,
@@ -205,7 +195,7 @@ internal sealed class WebGPUDeviceContext : IDisposable
     /// The texture must have been created with <c>RenderAttachment | CopySrc | CopyDst | TextureBinding</c> usage.
     /// Dispose the returned canvas before the host calls <c>wgpuSurfacePresent</c>, then create a new canvas on the next frame.
     /// </remarks>
-    internal DrawingCanvas CreateCanvas(
+    public DrawingCanvas CreateCanvas(
         DrawingOptions options,
         nint textureHandle,
         nint textureViewHandle,
@@ -237,7 +227,7 @@ internal sealed class WebGPUDeviceContext : IDisposable
     /// <summary>
     /// Throws when the context is disposed.
     /// </summary>
-    internal void ThrowIfDisposed()
+    public void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
 
     /// <summary>
@@ -250,7 +240,7 @@ internal sealed class WebGPUDeviceContext : IDisposable
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
     /// <returns>A drawing canvas targeting the wrapped texture.</returns>
-    internal DrawingCanvas CreateCanvas(
+    public DrawingCanvas CreateCanvas(
         DrawingOptions options,
         WebGPUTextureHandle textureHandle,
         WebGPUTextureViewHandle textureViewHandle,

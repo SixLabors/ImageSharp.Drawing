@@ -39,7 +39,7 @@ internal static partial class DefaultRasterizer
     /// <param name="widthScale">The isotropic scale factor applied to the stroke width so expansion runs in device-space pixels.</param>
     /// <param name="allocator">The allocator used for retained raster storage.</param>
     /// <returns>The retained rasterizable geometry for the stroke, or <see langword="null"/> when the stroke produces no coverage.</returns>
-    internal static StrokeRasterizableGeometry? CreatePathStrokeRasterizableGeometry(
+    public static StrokeRasterizableGeometry? CreatePathStrokeRasterizableGeometry(
         LinearGeometry geometry,
         Matrix4x4 residual,
         Pen pen,
@@ -76,7 +76,7 @@ internal static partial class DefaultRasterizer
     /// <param name="widthScale">The isotropic scale factor applied to the stroke width so expansion runs in device-space pixels.</param>
     /// <param name="allocator">The allocator used for retained raster storage.</param>
     /// <returns>The retained rasterizable geometry for the stroke, or <see langword="null"/> when the stroke produces no coverage.</returns>
-    internal static StrokeRasterizableGeometry? CreateLineSegmentStrokeRasterizableGeometry(
+    public static StrokeRasterizableGeometry? CreateLineSegmentStrokeRasterizableGeometry(
         PointF start,
         PointF end,
         Pen pen,

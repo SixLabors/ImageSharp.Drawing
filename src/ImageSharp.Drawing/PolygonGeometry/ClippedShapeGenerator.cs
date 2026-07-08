@@ -271,7 +271,7 @@ internal static class ClippedShapeGenerator
     /// <param name="polygon">The polygon containing the contour hierarchy.</param>
     /// <param name="contourIndex">The contour index to convert.</param>
     /// <returns>The converted point array.</returns>
-    internal static PointF[] CreateContourPoints(PCPolygon polygon, int contourIndex)
+    public static PointF[] CreateContourPoints(PCPolygon polygon, int contourIndex)
     {
         Contour contour = polygon[contourIndex];
         PointF[] points = new PointF[contour.Count];

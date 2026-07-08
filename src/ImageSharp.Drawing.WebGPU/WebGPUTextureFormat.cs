@@ -9,7 +9,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// Supported texture format identifiers for native WebGPU targets.
 /// </summary>
 /// <remarks>
-/// Only formats with storage texture binding support are included.
+/// The compute pipeline writes its result through a storage texture binding, so a target format
+/// must be storage-bindable. Most formats here are storage-capable in core WebGPU;
+/// <see cref="Bgra8Unorm"/> is the exception and requires the optional <c>bgra8unorm-storage</c>
+/// device feature, which the backend enables when the adapter reports it.
 /// </remarks>
 public enum WebGPUTextureFormat
 {
@@ -25,6 +28,7 @@ public enum WebGPUTextureFormat
 
     /// <summary>
     /// Four-channel 8-bit normalized unsigned BGRA format, mapped to <see cref="Bgra32"/>.
+    /// Storage binding for this format requires the optional <c>bgra8unorm-storage</c> device feature.
     /// </summary>
     Bgra8Unorm,
 

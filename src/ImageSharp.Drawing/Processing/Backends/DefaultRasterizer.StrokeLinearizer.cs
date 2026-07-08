@@ -1201,7 +1201,7 @@ internal static partial class DefaultRasterizer
         /// </summary>
         /// <param name="result">The finalized retained raster data.</param>
         /// <returns><see langword="true"/> when retained coverage was produced; otherwise <see langword="false"/>.</returns>
-        internal bool TryProcess(out LinearizedRasterData<LineArrayX32Y16Block> result)
+        public bool TryProcess(out LinearizedRasterData<LineArrayX32Y16Block> result)
         {
             if (!this.ProcessCore())
             {
@@ -1284,7 +1284,7 @@ internal static partial class DefaultRasterizer
         /// </summary>
         /// <param name="result">The finalized retained raster data.</param>
         /// <returns><see langword="true"/> when retained coverage was produced; otherwise <see langword="false"/>.</returns>
-        internal bool TryProcess(out LinearizedRasterData<LineArrayX16Y16Block> result)
+        public bool TryProcess(out LinearizedRasterData<LineArrayX16Y16Block> result)
         {
             if (!this.ProcessCore())
             {

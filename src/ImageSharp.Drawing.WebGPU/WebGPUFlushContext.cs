@@ -158,9 +158,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     public nuint InstanceBufferCapacity { get; private set; }
 
     /// <summary>
-    /// Gets or sets the current write offset into <see cref="InstanceBuffer"/>.
+    /// Gets the current write offset into <see cref="InstanceBuffer"/>.
     /// </summary>
-    public nuint InstanceBufferWriteOffset { get; internal set; }
+    public nuint InstanceBufferWriteOffset { get; private set; }
 
     /// <summary>
     /// Gets or sets the active command encoder.
@@ -567,7 +567,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <param name="destinationTexture">The destination texture.</param>
     /// <param name="sourceRegion">The CPU-side source region to upload.</param>
     /// <param name="memoryAllocator">The allocator used when a packed staging copy is required.</param>
-    internal static void UploadTextureFromRegion<TPixel>(
+    public static void UploadTextureFromRegion<TPixel>(
         WebGPU api,
         Queue* queue,
         Texture* destinationTexture,
@@ -588,7 +588,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <param name="destinationX">The destination X coordinate in the texture.</param>
     /// <param name="destinationY">The destination Y coordinate in the texture.</param>
     /// <param name="destinationLayer">The destination array layer.</param>
-    internal static void UploadTextureFromRegion<TPixel>(
+    public static void UploadTextureFromRegion<TPixel>(
         WebGPU api,
         Queue* queue,
         Texture* destinationTexture,

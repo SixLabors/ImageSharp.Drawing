@@ -50,6 +50,8 @@ public static unsafe class WebGPUEnvironment
     /// The sink can be invoked from native wgpu threads; keep it short and non-blocking.
     /// Passing <see langword="null"/> only mutes the managed sink; a previously registered
     /// native callback stays installed and simply drops its messages.
+    /// The first call that installs a sink also fixes the native log level at
+    /// <see cref="LogLevel.Warn"/>; that level is not lowered again by later calls.
     /// </remarks>
     public static void EnableNativeLogging(Action<string>? sink)
     {

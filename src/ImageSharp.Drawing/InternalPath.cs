@@ -45,7 +45,7 @@ internal class InternalPath
     /// <param name="segments">The segments to flatten and simplify.</param>
     /// <param name="isClosedPath">Whether the path is closed.</param>
     /// <param name="removeCloseAndCollinear">Whether to remove close and collinear vertices.</param>
-    internal InternalPath(IReadOnlyList<ILineSegment> segments, bool isClosedPath, bool removeCloseAndCollinear = true)
+    public InternalPath(IReadOnlyList<ILineSegment> segments, bool isClosedPath, bool removeCloseAndCollinear = true)
         : this(Simplify(segments, isClosedPath, removeCloseAndCollinear), isClosedPath)
     {
     }
@@ -55,7 +55,7 @@ internal class InternalPath
     /// </summary>
     /// <param name="points">The points to simplify.</param>
     /// <param name="isClosedPath">Whether the path is closed.</param>
-    internal InternalPath(ReadOnlyMemory<PointF> points, bool isClosedPath)
+    public InternalPath(ReadOnlyMemory<PointF> points, bool isClosedPath)
         : this(Simplify(points.Span, isClosedPath, true), isClosedPath)
     {
     }
@@ -121,7 +121,7 @@ internal class InternalPath
     /// Gets the simplified points, materializing and caching them on first use.
     /// </summary>
     /// <returns>The <see cref="ReadOnlyMemory{PointF}"/> of simplified points.</returns>
-    internal ReadOnlyMemory<PointF> Points() => this.materializedPoints ??= this.CreatePoints();
+    public ReadOnlyMemory<PointF> Points() => this.materializedPoints ??= this.CreatePoints();
 
     /// <summary>
     /// Wraps an index that is at most one length beyond the end back into array range.

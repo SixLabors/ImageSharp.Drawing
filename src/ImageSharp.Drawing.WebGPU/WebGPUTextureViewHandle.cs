@@ -20,12 +20,12 @@ internal sealed unsafe class WebGPUTextureViewHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the texture view and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUTextureViewHandle(nint textureViewHandle, bool ownsHandle)
+    public WebGPUTextureViewHandle(nint textureViewHandle, bool ownsHandle)
         : this(ownsHandle ? WebGPURuntime.GetApi() : null, textureViewHandle, ownsHandle)
     {
     }
 
-    internal WebGPUTextureViewHandle(WebGPU? api, nint textureViewHandle, bool ownsHandle)
+    public WebGPUTextureViewHandle(WebGPU? api, nint textureViewHandle, bool ownsHandle)
         : base(textureViewHandle, ownsHandle)
     {
         this.api = api;

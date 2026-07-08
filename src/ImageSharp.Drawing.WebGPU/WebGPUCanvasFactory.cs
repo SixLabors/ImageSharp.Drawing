@@ -27,7 +27,7 @@ internal static class WebGPUCanvasFactory
     /// <param name="surface">The WebGPU native surface backing the canvas.</param>
     /// <param name="format">The surface texture format that selects the canvas pixel type.</param>
     /// <returns>The typed drawing canvas.</returns>
-    internal static DrawingCanvas CreateCanvas(
+    public static DrawingCanvas CreateCanvas(
         Configuration configuration,
         DrawingOptions options,
         IDrawingBackend backend,
@@ -82,7 +82,7 @@ internal static class WebGPUCanvasFactory
     /// <param name="surface">The WebGPU native surface backing the canvas.</param>
     /// <param name="format">The surface texture format that selects the canvas pixel type.</param>
     /// <returns>The typed drawing canvas.</returns>
-    internal static DrawingCanvas CreateCanvas(
+    public static DrawingCanvas CreateCanvas(
         Configuration configuration,
         DrawingOptions options,
         DrawingTextCache textCache,
@@ -136,7 +136,7 @@ internal static class WebGPUCanvasFactory
     /// <param name="bounds">The frame bounds within the surface.</param>
     /// <param name="surface">The WebGPU native surface backing the frame.</param>
     /// <returns>The typed native canvas frame.</returns>
-    internal static NativeCanvasFrame<TPixel> CreateFrame<TPixel>(
+    public static NativeCanvasFrame<TPixel> CreateFrame<TPixel>(
         Rectangle bounds,
         NativeSurface surface)
         where TPixel : unmanaged, IPixel<TPixel>

@@ -20,7 +20,7 @@ internal sealed unsafe class WebGPUDeviceHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the device and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUDeviceHandle(nint deviceHandle, bool ownsHandle)
+    public WebGPUDeviceHandle(nint deviceHandle, bool ownsHandle)
         : this(ownsHandle ? WebGPURuntime.GetApi() : null, deviceHandle, ownsHandle)
     {
     }
@@ -37,7 +37,7 @@ internal sealed unsafe class WebGPUDeviceHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the device and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUDeviceHandle(WebGPU? api, nint deviceHandle, bool ownsHandle)
+    public WebGPUDeviceHandle(WebGPU? api, nint deviceHandle, bool ownsHandle)
         : base(deviceHandle, ownsHandle)
         => this.api = api;
 

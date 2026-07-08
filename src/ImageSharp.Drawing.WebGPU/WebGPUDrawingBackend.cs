@@ -91,7 +91,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// </summary>
     /// <remarks>
     /// This value describes only the most recent flush on this backend instance. When the most recent flush did not use
-    /// chunked rendering, this property returns <c>None</c>.
+    /// chunked rendering, this property returns <c>None</c>. A corrective re-render triggered by a deferred overflow
+    /// readback also updates this value, so it can change after the originating flush call has returned.
     /// </remarks>
     internal string DiagnosticLastChunkingBindingFailure => this.lastChunkingBindingFailure.ToString();
 

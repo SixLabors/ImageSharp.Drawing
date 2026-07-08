@@ -24,7 +24,7 @@ internal sealed unsafe class WebGPUAdapterHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the adapter and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUAdapterHandle(WebGPU? api, nint adapterHandle, bool ownsHandle)
+    public WebGPUAdapterHandle(WebGPU? api, nint adapterHandle, bool ownsHandle)
         : base(adapterHandle, ownsHandle)
         => this.api = api;
 

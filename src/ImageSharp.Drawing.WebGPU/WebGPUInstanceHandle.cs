@@ -20,7 +20,7 @@ internal sealed unsafe class WebGPUInstanceHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the instance and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUInstanceHandle(nint instanceHandle, bool ownsHandle)
+    private WebGPUInstanceHandle(nint instanceHandle, bool ownsHandle)
         : this(ownsHandle ? WebGPURuntime.GetApi() : null, instanceHandle, ownsHandle)
     {
     }
@@ -37,7 +37,7 @@ internal sealed unsafe class WebGPUInstanceHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the instance and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUInstanceHandle(WebGPU? api, nint instanceHandle, bool ownsHandle)
+    public WebGPUInstanceHandle(WebGPU? api, nint instanceHandle, bool ownsHandle)
         : base(instanceHandle, ownsHandle)
         => this.api = api;
 

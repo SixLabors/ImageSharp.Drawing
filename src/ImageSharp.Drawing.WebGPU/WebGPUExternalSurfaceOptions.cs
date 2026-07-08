@@ -20,5 +20,11 @@ public sealed class WebGPUExternalSurfaceOptions
     /// <summary>
     /// Gets or sets the swapchain texture format used by acquired frames.
     /// </summary>
+    /// <remarks>
+    /// The value must be one of the <see cref="WebGPUTextureFormat"/> members the backend can render
+    /// into. <see cref="WebGPUTextureFormat.Bgra8Unorm"/> is the common swapchain format but requires
+    /// the optional <c>bgra8unorm-storage</c> device feature, which the backend enables when the
+    /// adapter reports it.
+    /// </remarks>
     public WebGPUTextureFormat Format { get; set; } = WebGPUTextureFormat.Rgba8Unorm;
 }

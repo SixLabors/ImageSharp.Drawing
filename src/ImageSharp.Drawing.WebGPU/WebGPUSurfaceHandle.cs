@@ -20,7 +20,7 @@ internal sealed unsafe class WebGPUSurfaceHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the surface and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUSurfaceHandle(nint surfaceHandle, bool ownsHandle)
+    private WebGPUSurfaceHandle(nint surfaceHandle, bool ownsHandle)
         : this(ownsHandle ? WebGPURuntime.GetApi() : null, surfaceHandle, ownsHandle)
     {
     }
@@ -37,7 +37,7 @@ internal sealed unsafe class WebGPUSurfaceHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the surface and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUSurfaceHandle(WebGPU? api, nint surfaceHandle, bool ownsHandle)
+    public WebGPUSurfaceHandle(WebGPU? api, nint surfaceHandle, bool ownsHandle)
         : base(surfaceHandle, ownsHandle)
         => this.api = api;
 

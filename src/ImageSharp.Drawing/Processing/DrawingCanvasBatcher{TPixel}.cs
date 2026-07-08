@@ -61,7 +61,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     /// Initializes a new instance of the <see cref="DrawingCanvasBatcher{TPixel}"/> class.
     /// </summary>
     /// <param name="configuration">The configuration providing parallelism settings for command preparation.</param>
-    internal DrawingCanvasBatcher(Configuration configuration)
+    public DrawingCanvasBatcher(Configuration configuration)
     {
         this.configuration = configuration;
         this.commands = [];
@@ -243,7 +243,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     /// Appends an apply barrier to the command stream.
     /// </summary>
     /// <param name="barrier">The apply barrier to append.</param>
-    internal void AddApplyBarrier(ApplyBarrier barrier)
+    public void AddApplyBarrier(ApplyBarrier barrier)
     {
         this.EnsureCommandCapacity(this.commandCount + 1);
         this.commands[this.commandCount++] = new PathCompositionSceneCommand(CompositionCommand.CreateApply(barrier));
