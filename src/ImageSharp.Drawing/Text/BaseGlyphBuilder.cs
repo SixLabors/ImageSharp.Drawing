@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Buffers;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using SixLabors.Fonts;
@@ -68,45 +69,30 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     /// </summary>
     private readonly List<GlyphPathCollection> currentGlyphs = [];
 
-    // Previous decoration details per decoration type, used to stitch adjacent
-    // decorations together and eliminate sub-pixel gaps between glyphs.
+    // Skip-ink is carved here, across glyphs, rather than in the font engine, because a gap must be
+    // widened by the drawn thickness and can extend past a glyph boundary into its neighbours. Each
+    // decoration type keeps a two-glyph window: the middle glyph is carved against both neighbours
+    // once the following glyph arrives, and the last glyph is flushed in EndText.
 
     /// <summary>
-    /// The most recently emitted underline, if any.
+    /// The underline window (previous and current glyph).
     /// </summary>
-    private TextDecorationDetails? previousUnderlineTextDecoration;
+    private DecorationLane underlineLane;
 
     /// <summary>
-    /// The most recently emitted overline, if any.
+    /// The overline window (previous and current glyph).
     /// </summary>
-    private TextDecorationDetails? previousOverlineTextDecoration;
+    private DecorationLane overlineLane;
 
     /// <summary>
-    /// The most recently emitted strikeout, if any.
+    /// The strikeout window (previous and current glyph).
     /// </summary>
-    private TextDecorationDetails? previousStrikeoutTextDecoration;
-
-    // Stacked color-layer glyphs (e.g. COLR v0 components) repeat the same decorations once
-    // per component. A glyph's decorations may arrive as several skip-ink segments, so
-    // duplicate suppression compares against every decoration the previous glyph emitted,
-    // not just the last one. The lists swap on each BeginGlyph that follows an emission.
+    private DecorationLane strikeoutLane;
 
     /// <summary>
-    /// The decorations emitted by the current glyph so far.
+    /// Reusable buffer of widened ink gaps gathered while carving one glyph's decoration.
     /// </summary>
-    private List<TextDecorationDetails> currentDecorationBatch = [];
-
-    /// <summary>
-    /// The decorations emitted by the previous decoration-emitting glyph.
-    /// </summary>
-    private List<TextDecorationDetails> previousDecorationBatch = [];
-
-    /// <summary>
-    /// Identifies the glyph the current decoration batch belongs to; incremented on each batch
-    /// rotation. Stitching only applies across glyphs: within one glyph the font engine emits
-    /// exact segments (skip-ink gaps) that must never be bridged.
-    /// </summary>
-    private int decorationBatchSequence;
+    private readonly List<(float Start, float End)> decorationGaps = [];
 
     // Per-layer (within current grapheme) bookkeeping:
 
@@ -170,11 +156,24 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     protected List<IPath> CurrentPaths { get; } = [];
 
     /// <summary>
+    /// Gets the text run of the glyph whose decoration segments are currently being emitted. Carving
+    /// happens one glyph after the run was seen, so subclasses that resolve a pen from the run must
+    /// read this rather than the live glyph's run.
+    /// </summary>
+    protected TextRun? CurrentDecorationRun { get; private set; }
+
+    /// <summary>
     /// Called by the font engine after all glyphs in the text block have been rendered.
     /// Flushes any in-progress grapheme aggregate and resets per-text-block state.
     /// </summary>
     void IGlyphRenderer.EndText()
     {
+        // Flush the last held glyph of each decoration window before the grapheme is finalized, so
+        // its carved segments are captured in the grapheme aggregate.
+        this.FlushDecorationLane(TextDecorations.Underline, ref this.underlineLane);
+        this.FlushDecorationLane(TextDecorations.Overline, ref this.overlineLane);
+        this.FlushDecorationLane(TextDecorations.Strikeout, ref this.strikeoutLane);
+
         // Finalize the last grapheme, if any:
         if (this.graphemeBuilder is not null && this.graphemePathCount > 0)
         {
@@ -184,11 +183,6 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         this.graphemeBuilder = null;
         this.graphemePathCount = 0;
         this.currentGraphemeIndex = -1;
-        this.previousUnderlineTextDecoration = null;
-        this.previousOverlineTextDecoration = null;
-        this.previousStrikeoutTextDecoration = null;
-        this.currentDecorationBatch.Clear();
-        this.previousDecorationBatch.Clear();
 
         this.EndText();
     }
@@ -236,16 +230,6 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         this.Builder.Clear();
         this.usedLayers = false;
         this.inLayer = false;
-
-        // Rotate the decoration batches so duplicate suppression compares against the
-        // decorations of the last glyph that emitted any. Glyphs that emit none (e.g. runs
-        // without decorations) leave the previous batch in place.
-        if (this.currentDecorationBatch.Count > 0)
-        {
-            (this.previousDecorationBatch, this.currentDecorationBatch) = (this.currentDecorationBatch, this.previousDecorationBatch);
-            this.currentDecorationBatch.Clear();
-            this.decorationBatchSequence++;
-        }
 
         this.layerStartIndex = this.graphemePathCount;
         this.currentLayerPaint = null;
@@ -403,104 +387,185 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     }
 
     /// <summary>
-    /// Called by the font engine to emit a text decoration (underline, strikeout, or overline)
-    /// for the current glyph. Builds a filled rectangle path from the start/end positions and
-    /// thickness, then registers it as a <see cref="GlyphLayerKind.Decoration"/> layer.
-    /// Adjacent decorations are stitched together using the previous decoration details to
-    /// eliminate sub-pixel gaps caused by font metric rounding.
+    /// Called by the font engine to report a text decoration (underline, strikeout, or overline)
+    /// for the current glyph as the full, untrimmed line plus the intervals where the glyph's ink
+    /// crosses it. The line is not drawn immediately: it enters a per-type two-glyph window so the
+    /// previous glyph can be carved around its own ink and both neighbours' ink, letting a skip-ink
+    /// gap widen by the drawn thickness and reach across a glyph boundary. The middle glyph is
+    /// emitted once the following glyph arrives; the last is flushed in <c>EndText</c>.
     /// </summary>
     /// <param name="textDecorations">The type of decoration (underline, strikeout, or overline).</param>
-    /// <param name="start">The start position of the decoration line.</param>
-    /// <param name="end">The end position of the decoration line.</param>
+    /// <param name="start">The start position of the full decoration line.</param>
+    /// <param name="end">The end position of the full decoration line.</param>
     /// <param name="thickness">The thickness of the decoration line in pixels.</param>
-    void IGlyphRenderer.SetDecoration(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness)
+    /// <param name="intersections">The along-line intervals where the glyph's ink crosses the band.</param>
+    void IGlyphRenderer.SetDecoration(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness, ReadOnlyMemory<float> intersections)
     {
         if (thickness == 0)
         {
             return;
         }
 
+        ref DecorationLane lane = ref this.LaneFor(textDecorations);
+
+        // Stacked colour-layer glyphs repeat the same decoration once per component; the window would
+        // otherwise treat the repeat as the next glyph. Ignore an exact repeat of the held line.
+        if (lane.Current.HasValue && lane.Current.Start == start && lane.Current.End == end)
+        {
+            return;
+        }
+
+        // PendingDecoration takes a pooled copy of the ink; the font engine reuses its buffer per glyph.
+        bool rotated = this.parameters.LayoutMode is GlyphLayoutMode.Vertical or GlyphLayoutMode.VerticalRotated;
+        PendingDecoration incoming = new(start, end, thickness, intersections, this.parameters.TextRun, rotated);
+
+        // The held glyph is now flanked on both sides, so carve and emit it, then retire the glyph
+        // that leaves the window and dispose its pooled buffer.
+        if (lane.Current.HasValue)
+        {
+            this.CarveDecoration(textDecorations, in lane.Previous, in lane.Current, in incoming);
+            lane.Previous.Dispose();
+            lane.Previous = lane.Current;
+        }
+
+        lane.Current = incoming;
+    }
+
+    /// <summary>
+    /// Emits the last held glyph of a decoration window, carved against its previous neighbour and
+    /// no following neighbour, then clears the window.
+    /// </summary>
+    /// <param name="textDecorations">The decoration type of the window.</param>
+    /// <param name="lane">The window to flush.</param>
+    private void FlushDecorationLane(TextDecorations textDecorations, ref DecorationLane lane)
+    {
+        if (lane.Current.HasValue)
+        {
+            this.CarveDecoration(textDecorations, in lane.Previous, in lane.Current, in PendingDecoration.None);
+            lane.Previous.Dispose();
+            lane.Current.Dispose();
+        }
+
+        lane.Previous = default;
+        lane.Current = default;
+    }
+
+    /// <summary>
+    /// Carves the middle glyph's decoration line around its own ink and the ink of its previous and
+    /// next neighbours, each widened by that glyph's thickness, and emits the pieces that survive.
+    /// </summary>
+    /// <param name="textDecorations">The decoration type.</param>
+    /// <param name="previous">The glyph before the one being carved, if any.</param>
+    /// <param name="current">The glyph being carved.</param>
+    /// <param name="next">The glyph after the one being carved, if any.</param>
+    private void CarveDecoration(
+        TextDecorations textDecorations,
+        in PendingDecoration previous,
+        in PendingDecoration current,
+        in PendingDecoration next)
+    {
+        bool rotated = current.Rotated;
+        float lineStart = rotated ? Math.Min(current.Start.Y, current.End.Y) : Math.Min(current.Start.X, current.End.X);
+        float lineEnd = rotated ? Math.Max(current.Start.Y, current.End.Y) : Math.Max(current.Start.X, current.End.X);
+
+        // Gather the widened ink gaps that fall within this glyph's extent: its own ink, plus the
+        // trailing reach of the previous glyph and the leading reach of the next, each haloed by
+        // that glyph's own thickness.
+        List<(float Start, float End)> gaps = this.decorationGaps;
+        gaps.Clear();
+        AddGaps(gaps, in current, lineStart, lineEnd);
+        if (previous.HasValue)
+        {
+            AddGaps(gaps, in previous, lineStart, lineEnd);
+        }
+
+        if (next.HasValue)
+        {
+            AddGaps(gaps, in next, lineStart, lineEnd);
+        }
+
+        gaps.Sort(static (x, y) => x.Start.CompareTo(y.Start));
+
+        // Emit the solid pieces between the merged gaps.
+        float cursor = lineStart;
+        float gapStart = 0F;
+        float gapEnd = float.MinValue;
+        bool hasGap = false;
+        for (int i = 0; i < gaps.Count; i++)
+        {
+            (float start, float end) = gaps[i];
+            if (hasGap && start <= gapEnd)
+            {
+                gapEnd = Math.Max(gapEnd, end);
+                continue;
+            }
+
+            if (hasGap)
+            {
+                this.EmitCarvedSegment(textDecorations, in current, rotated, cursor, Math.Max(cursor, gapStart));
+                cursor = Math.Max(cursor, gapEnd);
+            }
+
+            gapStart = start;
+            gapEnd = end;
+            hasGap = true;
+        }
+
+        if (hasGap)
+        {
+            this.EmitCarvedSegment(textDecorations, in current, rotated, cursor, Math.Max(cursor, gapStart));
+            cursor = Math.Max(cursor, gapEnd);
+        }
+
+        this.EmitCarvedSegment(textDecorations, in current, rotated, cursor, lineEnd);
+
+        // Widens each ink interval of a glyph by its own thickness and clips it to the carved
+        // glyph's extent, so only the parts that reach into it open a gap.
+        static void AddGaps(List<(float Start, float End)> gaps, in PendingDecoration glyph, float lineStart, float lineEnd)
+        {
+            ReadOnlySpan<float> ink = glyph.Ink;
+            float halo = glyph.Thickness;
+            for (int i = 0; i < ink.Length; i += 2)
+            {
+                float from = Math.Max(ink[i] - halo, lineStart);
+                float to = Math.Min(ink[i + 1] + halo, lineEnd);
+                if (to > from)
+                {
+                    gaps.Add((from, to));
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Maps a carved along-line piece back to line endpoints and emits it as a rectangle path.
+    /// </summary>
+    private void EmitCarvedSegment(TextDecorations textDecorations, in PendingDecoration current, bool rotated, float from, float to)
+    {
+        if (to <= from)
+        {
+            return;
+        }
+
+        Vector2 segmentStart = rotated ? new Vector2(current.Start.X, from) : new Vector2(from, current.Start.Y);
+        Vector2 segmentEnd = rotated ? new Vector2(current.End.X, to) : new Vector2(to, current.End.Y);
+        this.EmitDecorationSegment(textDecorations, segmentStart, segmentEnd, current.Thickness, rotated, current.Run);
+    }
+
+    /// <summary>
+    /// Builds a filled rectangle path for one carved decoration segment, registers it as a
+    /// <see cref="GlyphLayerKind.Decoration"/> layer, and hands it to the drawing override.
+    /// </summary>
+    private void EmitDecorationSegment(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness, bool rotated, TextRun? run)
+    {
         // Clamp the thickness to whole pixels.
         thickness = MathF.Max(1F, (float)Math.Round(thickness));
         IGlyphRenderer renderer = this;
 
-        bool rotated = this.parameters.LayoutMode is GlyphLayoutMode.Vertical or GlyphLayoutMode.VerticalRotated;
         Vector2 pad = rotated ? new Vector2(thickness * .5F, 0) : new Vector2(0, thickness * .5F);
 
         start = ClampToPixel(start, (int)thickness, rotated);
         end = ClampToPixel(end, (int)thickness, rotated);
-
-        // Stacked color-layer glyphs repeat the same decorations once per component; ignore
-        // any line the previous glyph already emitted. Skip-ink can split one glyph's
-        // decoration into several segments, so every entry in the batch is compared.
-        foreach (TextDecorationDetails emitted in this.previousDecorationBatch)
-        {
-            if (emitted.Decoration == textDecorations && emitted.Start == start && emitted.End == end)
-            {
-                return;
-            }
-        }
-
-        // Sometimes the start and end points do not align properly leaving pixel sized gaps
-        // so we need to adjust them. Use any previous decoration to try and continue the line.
-        TextDecorationDetails? previous = textDecorations switch
-        {
-            TextDecorations.Underline => this.previousUnderlineTextDecoration,
-            TextDecorations.Overline => this.previousOverlineTextDecoration,
-            TextDecorations.Strikeout => this.previousStrikeoutTextDecoration,
-            _ => null
-        };
-
-        // Stitching bridges pixel-snapping gaps between the decorations of adjacent glyphs.
-        // It must never apply within one glyph: the font engine emits exact segments there,
-        // and skip-ink gaps could otherwise be snapped shut.
-        if (previous != null && previous.Value.Sequence != this.decorationBatchSequence)
-        {
-            float prevThickness = previous.Value.Thickness;
-            Vector2 prevEnd = previous.Value.End;
-
-            // Align the new line with the previous one if they are close enough.
-            // Use a 2 pixel threshold to account for anti-aliasing gaps.
-            if (rotated)
-            {
-                if (thickness == prevThickness
-                && prevEnd.Y + 2 >= start.Y
-                && prevEnd.X == start.X)
-                {
-                    start = prevEnd;
-                }
-            }
-            else if (thickness == prevThickness
-                 && prevEnd.Y == start.Y
-                 && prevEnd.X + 2 >= start.X)
-            {
-                start = prevEnd;
-            }
-        }
-
-        TextDecorationDetails current = new()
-        {
-            Decoration = textDecorations,
-            Start = start,
-            End = end,
-            Thickness = thickness,
-            Sequence = this.decorationBatchSequence
-        };
-
-        switch (textDecorations)
-        {
-            case TextDecorations.Underline:
-                this.previousUnderlineTextDecoration = current;
-                break;
-            case TextDecorations.Strikeout:
-                this.previousStrikeoutTextDecoration = current;
-                break;
-            case TextDecorations.Overline:
-                this.previousOverlineTextDecoration = current;
-                break;
-        }
-
-        this.currentDecorationBatch.Add(current);
 
         Vector2 a = start - pad;
         Vector2 b = start + pad;
@@ -520,9 +585,8 @@ internal class BaseGlyphBuilder : IGlyphRenderer
             offset = rotated ? new Vector2(-(thickness * .5F), 0) : new Vector2(0, thickness * .5F);
         }
 
-        // Snap the corners to whole pixels on the cross axis only, keeping the stroke's edges
-        // crisp; the along-line coordinates stay exact so skip-ink gap boundaries land
-        // symmetrically around the glyph ink.
+        // Snap the corners to whole pixels on the cross axis only, keeping the stroke's edges crisp;
+        // the along-line coordinates stay exact so skip-ink gap boundaries land symmetrically.
         renderer.BeginFigure();
         renderer.MoveTo(SnapCross(a + offset, rotated));
         renderer.LineTo(SnapCross(b + offset, rotated));
@@ -558,7 +622,28 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         }
 
         this.Builder.Clear();
+        this.CurrentDecorationRun = run;
         this.SetDecoration(textDecorations, start, end, thickness);
+    }
+
+    /// <summary>
+    /// Returns the carving window for the given decoration type by reference.
+    /// </summary>
+    /// <param name="textDecorations">The decoration type.</param>
+    /// <returns>The window for the type.</returns>
+    private ref DecorationLane LaneFor(TextDecorations textDecorations)
+    {
+        if (textDecorations == TextDecorations.Underline)
+        {
+            return ref this.underlineLane;
+        }
+
+        if (textDecorations == TextDecorations.Overline)
+        {
+            return ref this.overlineLane;
+        }
+
+        return ref this.strikeoutLane;
     }
 
     /// <inheritdoc cref="IGlyphRenderer.BeginText(in FontRectangle)"/>
@@ -641,16 +726,6 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     }
 
     /// <summary>
-    /// Truncates a floating-point position to the nearest whole pixel toward negative infinity.
-    /// </summary>
-    /// <param name="point">The position to truncate.</param>
-    /// <returns>
-    /// The truncated pixel position.
-    /// </returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Point ClampToPixel(PointF point) => Point.Truncate(point);
-
-    /// <summary>
     /// Snaps a decoration endpoint to the pixel grid, taking stroke thickness and orientation
     /// into account. On the cross axis, even-thickness lines snap to whole pixels and
     /// odd-thickness lines snap to half pixels so the 1px-wide center row/column aligns with
@@ -697,35 +772,123 @@ internal class BaseGlyphBuilder : IGlyphRenderer
             : new PointF(point.X, MathF.Floor(point.Y));
 
     /// <summary>
-    /// Records a previously emitted decoration line so that the next adjacent decoration can
-    /// be stitched seamlessly and duplicate emissions from stacked color layers suppressed.
+    /// One glyph's untrimmed decoration line and the ink it must skip, held in the carving window
+    /// until its neighbours are known.
     /// </summary>
-    private struct TextDecorationDetails
+    private readonly struct PendingDecoration : IDisposable
     {
         /// <summary>
-        /// Gets or sets the decoration type the line was emitted for.
+        /// A pending decoration that is not present (an absent neighbour at a line end).
         /// </summary>
-        public TextDecorations Decoration { get; set; }
+        public static readonly PendingDecoration None;
 
         /// <summary>
-        /// Gets or sets the start position of the decoration.
+        /// The pooled buffer holding the ink, owned by this instance and handed back by
+        /// <see cref="Dispose"/>. Null when the glyph has no ink.
         /// </summary>
-        public Vector2 Start { get; set; }
+        private readonly float[]? rented;
 
         /// <summary>
-        /// Gets or sets the end position of the decoration.
+        /// The number of valid entries in <see cref="rented"/>.
         /// </summary>
-        public Vector2 End { get; set; }
+        private readonly int count;
 
         /// <summary>
-        /// Gets or sets the decoration thickness in pixels.
+        /// Initializes a new instance of the <see cref="PendingDecoration"/> struct, taking a pooled
+        /// copy of the ink so it survives after the font engine reuses its per-glyph buffer.
         /// </summary>
-        public float Thickness { get; internal set; }
+        /// <param name="start">The start of the full, untrimmed decoration line.</param>
+        /// <param name="end">The end of the full, untrimmed decoration line.</param>
+        /// <param name="thickness">The decoration thickness in pixels (drawn width and skip-ink halo).</param>
+        /// <param name="intersections">The along-line ink intervals to copy, as <c>[start, end]</c> pairs.</param>
+        /// <param name="run">The text run styling the glyph, captured while it was live.</param>
+        /// <param name="rotated">Whether the glyph uses vertical layout.</param>
+        public PendingDecoration(Vector2 start, Vector2 end, float thickness, ReadOnlyMemory<float> intersections, TextRun? run, bool rotated)
+        {
+            this.HasValue = true;
+            this.Start = start;
+            this.End = end;
+            this.Thickness = thickness;
+            this.Run = run;
+            this.Rotated = rotated;
+
+            if (intersections.IsEmpty)
+            {
+                this.rented = null;
+                this.count = 0;
+            }
+            else
+            {
+                // Favor ArrayPool over MemoryAllocator here, as it's faster and the buffers are small and short-lived.
+                // The font engine reuses its own buffer per glyph, so we must take a copy to survive until the glyph is carved.
+                this.rented = ArrayPool<float>.Shared.Rent(intersections.Length);
+                intersections.Span.CopyTo(this.rented);
+                this.count = intersections.Length;
+            }
+        }
 
         /// <summary>
-        /// Gets or sets the decoration batch sequence the line was emitted in, identifying
-        /// which glyph produced it.
+        /// Gets a value indicating whether this slot holds a glyph.
         /// </summary>
-        public int Sequence { get; set; }
+        public bool HasValue { get; }
+
+        /// <summary>
+        /// Gets the start of the full, untrimmed decoration line.
+        /// </summary>
+        public Vector2 Start { get; }
+
+        /// <summary>
+        /// Gets the end of the full, untrimmed decoration line.
+        /// </summary>
+        public Vector2 End { get; }
+
+        /// <summary>
+        /// Gets the decoration thickness in pixels, used both as the drawn width and as the
+        /// skip-ink halo.
+        /// </summary>
+        public float Thickness { get; }
+
+        /// <summary>
+        /// Gets the along-line ink intervals for this glyph, as <c>[start, end]</c> pairs.
+        /// </summary>
+        public ReadOnlySpan<float> Ink => new(this.rented, 0, this.count);
+
+        /// <summary>
+        /// Gets the text run styling this glyph, captured while it was live so the pen can still be
+        /// resolved when the glyph is carved a step later.
+        /// </summary>
+        public TextRun? Run { get; }
+
+        /// <summary>
+        /// Gets a value indicating whether the glyph uses vertical layout.
+        /// </summary>
+        public bool Rotated { get; }
+
+        /// <summary>
+        /// Returns the pooled ink buffer this decoration owns, if any, to the shared pool.
+        /// </summary>
+        public void Dispose()
+        {
+            if (this.rented != null)
+            {
+                ArrayPool<float>.Shared.Return(this.rented);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A two-glyph carving window for one decoration type.
+    /// </summary>
+    private struct DecorationLane
+    {
+        /// <summary>
+        /// The glyph before the one currently held.
+        /// </summary>
+        public PendingDecoration Previous;
+
+        /// <summary>
+        /// The most recently reported glyph, awaiting its following neighbour before it is carved.
+        /// </summary>
+        public PendingDecoration Current;
     }
 }

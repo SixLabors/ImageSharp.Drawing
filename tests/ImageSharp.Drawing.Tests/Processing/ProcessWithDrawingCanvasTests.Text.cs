@@ -1135,6 +1135,23 @@ public partial class ProcessWithDrawingCanvasTests
         ImageComparer.Exact.VerifySimilarity(auto, none);
     }
 
+    [Theory]
+    [WithSolidFilledImages(320, 120, nameof(Color.White), PixelTypes.Rgba32)]
+    public void DrawTextUnderlinePenSkipsInk<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        // A thick underline pen must still be broken by skip-ink where the descenders cross it.
+        // The gap is sized from the pen's stroke width, so it clears the width that is drawn.
+        using Image<TPixel> auto = RenderPennedUnderline(provider, "jogging", TextDecorationSkipInk.Auto, 8F);
+        using Image<TPixel> none = RenderPennedUnderline(provider, "jogging", TextDecorationSkipInk.None, 8F);
+
+        auto.DebugSave(provider, "auto", appendSourceFileOrDescription: false);
+        none.DebugSave(provider, "none", appendSourceFileOrDescription: false);
+
+        // Descenders cross the thick underline, so skipping ink must change the output.
+        Assert.Throws<ImageDifferenceIsOverThresholdException>(() => ImageComparer.Exact.VerifySimilarity(auto, none));
+    }
+
     private static Image<TPixel> RenderDecoratedText<TPixel>(
         TestImageProvider<TPixel> provider,
         string text,
@@ -1154,6 +1171,35 @@ public partial class ProcessWithDrawingCanvasTests
                     Start = 0,
                     End = text.Length,
                     TextDecorations = decorations
+                }
+            ]
+        };
+
+        Image<TPixel> image = provider.GetImage();
+        image.Mutate(context => context.Paint(canvas => canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null)));
+        return image;
+    }
+
+    private static Image<TPixel> RenderPennedUnderline<TPixel>(
+        TestImageProvider<TPixel> provider,
+        string text,
+        TextDecorationSkipInk skipInk,
+        float penWidth)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Font font = CreateFont(TestFonts.OpenSans, 48);
+        RichTextOptions textOptions = new(font)
+        {
+            Origin = new PointF(10, 20),
+            TextDecorationSkipInk = skipInk,
+            TextRuns =
+            [
+                new RichTextRun
+                {
+                    Start = 0,
+                    End = text.Length,
+                    TextDecorations = TextDecorations.Underline,
+                    UnderlinePen = Pens.Solid(Color.Black, penWidth)
                 }
             ]
         };

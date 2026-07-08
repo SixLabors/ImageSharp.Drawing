@@ -702,7 +702,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         TextRenderer renderer = new(glyphRenderer);
         renderer.Render(text, configuredOptions);
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipState);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions);
     }
 
     /// <inheritdoc />
@@ -732,7 +732,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache);
         textBlock.RenderTo(glyphRenderer, wrappingLength);
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions, state.ClipState);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions);
     }
 
     /// <inheritdoc />
@@ -754,7 +754,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.textCache);
         textBlock.RenderTo(glyphRenderer, wrappingLength);
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipState);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions);
     }
 
     /// <inheritdoc />
@@ -783,7 +783,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache);
         lineLayout.RenderTo(glyphRenderer);
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions, state.ClipState);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions);
     }
 
     /// <inheritdoc />
@@ -804,7 +804,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.textCache);
         lineLayout.RenderTo(glyphRenderer);
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipState);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions);
     }
 
     /// <inheritdoc />
@@ -825,7 +825,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         TextRenderer renderer = new(glyphRenderer);
         renderer.Render(glyphId, options);
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipState);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions);
     }
 
     /// <inheritdoc />
@@ -853,10 +853,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         TextRenderer renderer = new(glyphRenderer);
         renderer.Render(glyphRun, options);
 
-        this.DrawTextOperations(
-            this.BatchGlyphRunOperations(glyphRenderer.DrawingOperations),
-            effectiveOptions,
-            state.ClipState);
+        this.DrawTextOperations(this.BatchGlyphRunOperations(glyphRenderer.DrawingOperations), effectiveOptions);
     }
 
     /// <inheritdoc />
@@ -1428,6 +1425,18 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// <summary>
     /// Combines a uniform glyph run into one fill operation and one draw operation.
     /// </summary>
+    /// <remarks>
+    /// The text renderer emits one operation per glyph. Merging the glyphs of a uniform run (same
+    /// brush, pen, blend and render pass) into a single fill path and a single stroke path replaces
+    /// N composition commands with one or two, which dominates when the same run is redrawn every
+    /// frame. The merged path is built and cached in run-local space (relative to the first glyph,
+    /// whose snapped location and sub-pixel fraction ride the combined operation), so a repeat at any
+    /// position reuses it without a re-merge or a per-position geometry copy. The run is left as its
+    /// per-glyph operations when it is not uniform (for example colour layers or per-glyph paint),
+    /// because those depend on the exact per-operation order and paint. The alternative of always
+    /// emitting the per-glyph operations would cut the merged-path memory and share glyphs across
+    /// runs, at the cost of N commands per run; that trade favours this batching for the redraw case.
+    /// </remarks>
     /// <param name="operations">Glyph operations produced by the text renderer.</param>
     /// <returns>The original operations when they cannot be combined; otherwise the combined operations.</returns>
     private List<DrawingOperation> BatchGlyphRunOperations(List<DrawingOperation> operations)
@@ -1596,11 +1605,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// </summary>
     /// <param name="operations">Text drawing operations produced by glyph layout/rendering.</param>
     /// <param name="drawingOptions">Drawing options applied to each operation.</param>
-    /// <param name="clipState">The normalized clip state resolved from effective canvas state.</param>
-    private void DrawTextOperations(
-        List<DrawingOperation> operations,
-        DrawingOptions drawingOptions,
-        DrawingClipState clipState)
+    private void DrawTextOperations(List<DrawingOperation> operations, DrawingOptions drawingOptions)
     {
         // Build composition commands and enforce render-pass ordering while preserving
         // original emission order inside each pass. This preserves overlapping color-font
@@ -1609,7 +1614,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         for (int i = 0; i < operations.Count; i++)
         {
             DrawingOperation operation = operations[i];
-            entries.Add((operation.RenderPass, i, this.CreateTextCompositionCommand(operation, drawingOptions, clipState)));
+            entries.Add((operation.RenderPass, i, this.CreateTextCompositionCommand(operation, drawingOptions)));
         }
 
         entries.Sort(static (a, b) =>
@@ -1880,12 +1885,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// </summary>
     /// <param name="operation">The source drawing operation.</param>
     /// <param name="drawingOptions">Drawing options applied to the operation.</param>
-    /// <param name="clipState">Optional normalized clip state to apply during preparation.</param>
     /// <returns>A composition scene command ready for batching.</returns>
-    private CompositionSceneCommand CreateTextCompositionCommand(
-        DrawingOperation operation,
-        DrawingOptions drawingOptions,
-        DrawingClipState? clipState = null)
+    private CompositionSceneCommand CreateTextCompositionCommand(DrawingOperation operation, DrawingOptions drawingOptions)
     {
         Brush compositeBrush = operation.Kind == DrawingOperationKind.Fill
             ? operation.Brush!

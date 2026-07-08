@@ -10,6 +10,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// <summary>
 /// Stores reusable text drawing data shared by one or more drawing canvases.
 /// </summary>
+/// <remarks>
+/// Two tiers are cached. The glyph cache holds one flattened outline per glyph, keyed by glyph id,
+/// size and pen; it is the base layer that avoids re-flattening the same glyph and is shared by
+/// every run. The run-path cache is derived from it: the glyphs of a whole uniform run merged into a
+/// single positioned path, so that redrawing the run collapses to one composition command instead of
+/// one per glyph. The run path is keyed in run-local space, so the same run content drawn at any
+/// position, including a fractionally scrolled one, is a hit. The cost is memory, because the merged
+/// path holds a copy of each glyph's geometry; far fewer run paths than glyph entries are kept, only
+/// whole-run repeats benefit, and a run that differs by a single glyph misses and falls back to the
+/// per-glyph commands.
+/// </remarks>
 public sealed class DrawingTextCache
 {
     /// <summary>
@@ -28,7 +39,9 @@ public sealed class DrawingTextCache
     // tracks usage order (most recently used at the head, eviction from the tail).
 
     /// <summary>
-    /// Glyph entry lookup keyed by <see cref="RichTextGlyphRenderer.CacheKey"/>.
+    /// The base glyph cache: one flattened glyph outline per key, keyed by
+    /// <see cref="RichTextGlyphRenderer.CacheKey"/> (glyph id, size and pen) and shared across all
+    /// runs. The run-path cache is assembled from these entries.
     /// </summary>
     private readonly Dictionary<RichTextGlyphRenderer.CacheKey, LinkedListNode<Entry>> entries = [];
 
@@ -38,7 +51,9 @@ public sealed class DrawingTextCache
     private readonly LinkedList<Entry> usage = new();
 
     /// <summary>
-    /// Positioned glyph-run path lookup keyed by <see cref="RunPathCacheKey"/>.
+    /// The derived run-path cache: a whole uniform run's glyphs merged into one positioned path,
+    /// keyed run-locally by <see cref="RunPathCacheKey"/> so a repeat at any position hits. This
+    /// collapses a run to a single composition command at the cost of storing the merged geometry.
     /// </summary>
     private readonly Dictionary<RunPathCacheKey, LinkedListNode<RunPathEntry>> runPathEntries = [];
 

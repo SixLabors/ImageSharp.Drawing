@@ -95,11 +95,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     private PixelColorBlendingMode currentBlendingMode;
 
     /// <summary>
-    /// Whether the current glyph uses vertical layout (affects decoration orientation).
-    /// </summary>
-    private bool currentDecorationIsVertical;
-
-    /// <summary>
     /// Set to <see langword="true"/> when <see cref="BeginLayer"/> is called, cleared in <see cref="EndGlyph"/>.
     /// </summary>
     private bool hasLayer;
@@ -229,7 +224,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         //   3. Cache miss: rasterize from scratch.
         this.cacheReadIndex = 0;
         this.currentCacheEntries = [];
-        this.currentDecorationIsVertical = parameters.LayoutMode is GlyphLayoutMode.Vertical or GlyphLayoutMode.VerticalRotated;
         this.currentTextRun = parameters.TextRun;
         if (parameters.TextRun is RichTextRun drawingRun)
         {
@@ -419,11 +413,10 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// <inheritdoc/>
     public override void SetDecoration(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness)
     {
-        // Emits a DrawingOperation for a text decoration. Resolves the decoration pen
-        // from the current RichTextRun, re-scales the base-class path when the pen's
-        // stroke width differs from the font-metric thickness, and anchors the scaling
-        // per decoration type (overline to bottom edge, underline to top edge, strikeout to center).
-        // Decorations are not cached.
+        // Emits a DrawingOperation for one carved decoration segment. The base class has already
+        // built the rectangle path at the drawn thickness; here we resolve the pen from the run
+        // that was captured while the glyph was live (carving happens a glyph later) and fill the
+        // path. Decorations are not cached.
         if (thickness == 0)
         {
             return;
@@ -431,17 +424,17 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
 
         Brush? brush = null;
         Pen? pen = null;
-        if (this.currentTextRun is RichTextRun drawingRun)
+        if (this.CurrentDecorationRun is RichTextRun drawingRun)
         {
             brush = drawingRun.Brush;
 
             if (textDecorations == TextDecorations.Strikeout)
             {
-                pen = drawingRun.StrikeoutPen ?? pen;
+                pen = drawingRun.StrikeoutPen;
             }
             else if (textDecorations == TextDecorations.Underline)
             {
-                pen = drawingRun.UnderlinePen ?? pen;
+                pen = drawingRun.UnderlinePen;
             }
             else if (textDecorations == TextDecorations.Overline)
             {
@@ -449,69 +442,20 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             }
         }
 
-        // Always respect the pen stroke width if explicitly set.
-        float originalThickness = thickness;
-        if (pen is not null)
-        {
-            // Clamp the thickness to whole pixels.
-            thickness = MathF.Max(1F, (float)Math.Round(pen.StrokeWidth));
-        }
-        else
-        {
-            // The thickness of the line has already been clamped in the base class.
-            pen = new SolidPen((brush ?? this.defaultBrush)!, thickness);
-        }
+        // The stroke width is already reflected in the built path; only the fill is taken from the pen.
+        pen ??= new SolidPen((brush ?? this.defaultBrush)!, thickness);
 
         // Path has already been added to the collection via the base class.
         IPath path = this.CurrentPaths[^1];
-        IPath outline = path;
-
-        if (originalThickness != thickness)
-        {
-            // Respect edge anchoring per decoration type:
-            // - Overline: keep the base edge fixed (bottom in horizontal; left in vertical)
-            // - Underline: keep the top edge fixed (top in horizontal; right in vertical)
-            // - Strikeout: keep the center fixed (default behavior)
-            float ratio = thickness / originalThickness;
-            if (ratio != 1f)
-            {
-                Vector2 scale = this.currentDecorationIsVertical
-                    ? new Vector2(ratio, 1f)
-                    : new Vector2(1f, ratio);
-
-                RectangleF b = path.Bounds;
-                Vector2 center = new(b.Left + (b.Width * 0.5f), b.Top + (b.Height * 0.5f));
-                Vector2 anchor = center;
-
-                if (textDecorations == TextDecorations.Overline)
-                {
-                    anchor = this.currentDecorationIsVertical
-                        ? new Vector2(b.Left, center.Y) // vertical: anchor left edge
-                        : new Vector2(center.X, b.Bottom); // horizontal: anchor bottom edge
-                }
-                else if (textDecorations == TextDecorations.Underline)
-                {
-                    anchor = this.currentDecorationIsVertical
-                        ? new Vector2(b.Right, center.Y) // vertical: anchor right edge
-                        : new Vector2(center.X, b.Top);  // horizontal: anchor top edge
-                }
-
-                // Scale about the chosen anchor so the fixed edge stays in place.
-                outline = outline.Transform(Matrix4x4.CreateScale(scale.X, scale.Y, 1, new Vector3(anchor, 0)));
-            }
-        }
-
-        // Render the path here. Decorations are un-cached.
-        Point renderLocation = ClampToPixel(outline.Bounds.Location);
-        IPath decorationPath = outline.Translate(-renderLocation);
-        Brush decorationBrush = pen.StrokeFill;
+        Point renderLocation = ClampToPixel(path.Bounds.Location);
+        IPath decorationPath = path.Translate(-renderLocation);
         this.DrawingOperations.Add(new DrawingOperation
         {
             Kind = DrawingOperationKind.Fill,
             Path = decorationPath,
             RenderLocation = renderLocation,
             IntersectionRule = IntersectionRule.NonZero,
-            Brush = decorationBrush,
+            Brush = pen.StrokeFill,
             RenderPass = RenderOrderDecoration
         });
     }

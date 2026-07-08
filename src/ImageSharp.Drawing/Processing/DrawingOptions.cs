@@ -14,7 +14,7 @@ public class DrawingOptions
     /// <summary>
     /// The default perceptual contrast boost applied to antialiased text rendering.
     /// </summary>
-    public const float DefaultTextContrast = 0.1F;
+    public const float DefaultTextContrast = 0.5F;
 
     private GraphicsOptions graphicsOptions;
 
