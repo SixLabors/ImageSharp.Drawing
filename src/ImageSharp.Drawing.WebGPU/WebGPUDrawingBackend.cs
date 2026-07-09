@@ -570,8 +570,13 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             throw new InvalidOperationException("Failed to submit WebGPU work before Apply readback.");
         }
 
+        // The source pixels are read from the pre-offset region; the processed result draws back
+        // at SourceRect, which already carries any write-back offset.
+        Rectangle readRect = apply.SourceRect;
+        readRect.Offset(-apply.ReadOffset.X, -apply.ReadOffset.Y);
+
         using Image<TPixel> sourceImage = new(configuration, apply.SourceRect.Width, apply.SourceRect.Height);
-        ReadTextureRegion(flushContext, target, apply.SourceRect, sourceImage.Frames.RootFrame.PixelBuffer.GetRegion());
+        ReadTextureRegion(flushContext, target, readRect, sourceImage.Frames.RootFrame.PixelBuffer.GetRegion());
         sourceImage.Mutate(apply.Operation);
 
         if (!TryCreateCompositionTexture(flushContext, apply.SourceRect.Width, apply.SourceRect.Height, out Texture* texture, out TextureView* textureView, out string? error))

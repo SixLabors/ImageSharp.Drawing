@@ -85,6 +85,70 @@ public abstract partial class DrawingCanvas : IDisposable
     public abstract int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds, DrawingOptions options);
 
     /// <summary>
+    /// Saves the current drawing state and begins an isolated compositing layer whose content is
+    /// transformed by an effect when the layer is restored.
+    /// </summary>
+    /// <remarks>
+    /// The layer isolates the content, so the effect operates on exactly what is drawn between
+    /// this call and the matching <see cref="Restore"/>, against transparency; a
+    /// <see cref="DropShadowLayerEffect"/>, for example, slots its shadow beneath that content
+    /// before the layer composites onto the canvas. The bounds are expanded internally by the
+    /// effect's reach so blurred or offset output is not cut off.
+    /// </remarks>
+    /// <param name="layerOptions">
+    /// Graphics options controlling how the closed layer is composited against the parent canvas.
+    /// </param>
+    /// <param name="bounds">The content bounds in local canvas coordinates.</param>
+    /// <param name="effect">The effect applied to the layer content on restore.</param>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    public abstract int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds, LayerEffect effect);
+
+    /// <summary>
+    /// Saves the current drawing state and begins an isolated compositing layer whose content is
+    /// transformed by an effect when the layer is restored, using the supplied drawing options for
+    /// commands recorded into the layer.
+    /// </summary>
+    /// <param name="layerOptions">
+    /// Graphics options controlling how the closed layer is composited against the parent canvas.
+    /// </param>
+    /// <param name="bounds">The content bounds in local canvas coordinates.</param>
+    /// <param name="effect">The effect applied to the layer content on restore.</param>
+    /// <param name="options">Drawing options for the layer contents.</param>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    public abstract int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds, LayerEffect effect, DrawingOptions options);
+
+    /// <summary>
+    /// Saves the current drawing state and begins an isolated compositing layer whose content is
+    /// transformed by an effect confined to a path region when the layer is restored.
+    /// </summary>
+    /// <remarks>
+    /// The effect processes only pixels covered by the supplied path; its output lands on the path
+    /// translated by the effect's offset. The layer bounds are derived from the path and expanded
+    /// by the effect's reach.
+    /// </remarks>
+    /// <param name="layerOptions">
+    /// Graphics options controlling how the closed layer is composited against the parent canvas.
+    /// </param>
+    /// <param name="region">The path region the effect processes, in local coordinates.</param>
+    /// <param name="effect">The effect applied to the layer content on restore.</param>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    public abstract int SaveLayer(GraphicsOptions layerOptions, IPath region, LayerEffect effect);
+
+    /// <summary>
+    /// Saves the current drawing state and begins an isolated compositing layer whose content is
+    /// transformed by an effect confined to a path region when the layer is restored, using the
+    /// supplied drawing options for commands recorded into the layer.
+    /// </summary>
+    /// <param name="layerOptions">
+    /// Graphics options controlling how the closed layer is composited against the parent canvas.
+    /// </param>
+    /// <param name="region">The path region the effect processes, in local coordinates.</param>
+    /// <param name="effect">The effect applied to the layer content on restore.</param>
+    /// <param name="options">Drawing options for the layer contents.</param>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    public abstract int SaveLayer(GraphicsOptions layerOptions, IPath region, LayerEffect effect, DrawingOptions options);
+
+    /// <summary>
     /// Restores the most recently saved state.
     /// </summary>
     /// <remarks>
@@ -172,6 +236,32 @@ public abstract partial class DrawingCanvas : IDisposable
     /// <param name="path">The path region to process.</param>
     /// <param name="operation">The image-processing operation to apply to the region.</param>
     public abstract void Apply(IPath path, Action<IImageProcessingContext> operation);
+
+    /// <summary>
+    /// Applies an image-processing operation to a local region and composites the processed pixels
+    /// back with explicit options, optionally offset from where they were read. The target region
+    /// is untouched while the operation runs, so the processed pixels can be blended against the
+    /// original content; for example a drop shadow composites the tinted, blurred region back
+    /// beneath the content with <see cref="PixelAlphaCompositionMode.DestOver"/> at the shadow offset.
+    /// </summary>
+    /// <param name="region">The local region to process.</param>
+    /// <param name="operation">The image-processing operation to apply to the region.</param>
+    /// <param name="writeBackOptions">The graphics options used to composite the processed pixels back.</param>
+    /// <param name="writeBackOffset">The offset at which the processed pixels are written back.</param>
+    public abstract void Apply(Rectangle region, Action<IImageProcessingContext> operation, GraphicsOptions writeBackOptions, Point writeBackOffset);
+
+    /// <summary>
+    /// Applies an image-processing operation to a path region and composites the processed pixels
+    /// back with explicit options, optionally offset from where they were read.
+    /// </summary>
+    /// <remarks>
+    /// The write-back affects only pixels covered by the supplied path translated by the offset.
+    /// </remarks>
+    /// <param name="path">The path region to process.</param>
+    /// <param name="operation">The image-processing operation to apply to the region.</param>
+    /// <param name="writeBackOptions">The graphics options used to composite the processed pixels back.</param>
+    /// <param name="writeBackOffset">The offset at which the processed pixels are written back.</param>
+    public abstract void Apply(IPath path, Action<IImageProcessingContext> operation, GraphicsOptions writeBackOptions, Point writeBackOffset);
 
     /// <summary>
     /// Draws a polyline outline using the provided pen and drawing options.

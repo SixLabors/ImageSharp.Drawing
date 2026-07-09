@@ -18,6 +18,11 @@ internal sealed class ApplyBarrier
     /// <param name="destinationOffset">The absolute destination offset captured when the barrier was recorded.</param>
     /// <param name="ownerLayer">The layer that owned this barrier when it was recorded.</param>
     /// <param name="operation">The processor operation to run against the replay-time snapshot.</param>
+    /// <param name="writeBackOptions">
+    /// The graphics options used to composite the processed pixels back onto the target, or
+    /// <see langword="null"/> to replace the region outright.
+    /// </param>
+    /// <param name="writeBackOffset">The offset at which the processed pixels are written back.</param>
     public ApplyBarrier(
         IPath path,
         DrawingOptions options,
@@ -25,7 +30,9 @@ internal sealed class ApplyBarrier
         Rectangle targetBounds,
         Point destinationOffset,
         DrawingCanvasLayer? ownerLayer,
-        Action<IImageProcessingContext> operation)
+        Action<IImageProcessingContext> operation,
+        GraphicsOptions? writeBackOptions = null,
+        Point writeBackOffset = default)
     {
         this.Path = path;
         this.Options = options;
@@ -34,6 +41,8 @@ internal sealed class ApplyBarrier
         this.DestinationOffset = destinationOffset;
         this.OwnerLayer = ownerLayer;
         this.Operation = operation;
+        this.WriteBackOptions = writeBackOptions;
+        this.WriteBackOffset = writeBackOffset;
     }
 
     /// <summary>
@@ -75,4 +84,16 @@ internal sealed class ApplyBarrier
     /// Gets the processor operation to run against the replay-time snapshot.
     /// </summary>
     public Action<IImageProcessingContext> Operation { get; }
+
+    /// <summary>
+    /// Gets the graphics options used to composite the processed pixels back onto the target.
+    /// When <see langword="null"/> the processed pixels replace the region outright.
+    /// </summary>
+    public GraphicsOptions? WriteBackOptions { get; }
+
+    /// <summary>
+    /// Gets the offset, in device pixels, at which the processed pixels are written back relative
+    /// to the region they were read from.
+    /// </summary>
+    public Point WriteBackOffset { get; }
 }

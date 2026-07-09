@@ -445,16 +445,20 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         BandTarget<TPixel> target)
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        // The source pixels are read from the pre-offset region; the processed result is written
+        // back at SourceRect, which already carries any write-back offset.
+        Rectangle readRect = item.SourceRect;
+        readRect.Offset(-item.ReadOffset.X, -item.ReadOffset.Y);
+
         // Layer targets store their pixels at a layer-local origin, so the absolute source
         // rectangle must be translated before reading; the root target already reads absolute.
-        Rectangle readRect = item.SourceRect;
         if (item.OwnerLayer is not null)
         {
             readRect = new Rectangle(
-                item.SourceRect.X - target.AbsoluteLeft,
-                item.SourceRect.Y - target.AbsoluteTop,
-                item.SourceRect.Width,
-                item.SourceRect.Height);
+                readRect.X - target.AbsoluteLeft,
+                readRect.Y - target.AbsoluteTop,
+                readRect.Width,
+                readRect.Height);
         }
 
         using Image<TPixel> sourceImage = new(configuration, item.SourceRect.Width, item.SourceRect.Height);

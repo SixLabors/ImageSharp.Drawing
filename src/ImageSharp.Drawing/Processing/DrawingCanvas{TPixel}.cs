@@ -362,6 +362,103 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         return this.SaveLayerCore(layerOptions, bounds, options, currentState.ClipState);
     }
 
+    /// <inheritdoc />
+    public override int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds, LayerEffect effect)
+        => this.SaveEffectLayerCore(layerOptions, bounds, effect, options: null);
+
+    /// <inheritdoc />
+    public override int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds, LayerEffect effect, DrawingOptions options)
+    {
+        Guard.NotNull(options, nameof(options));
+        return this.SaveEffectLayerCore(layerOptions, bounds, effect, options);
+    }
+
+    /// <inheritdoc />
+    public override int SaveLayer(GraphicsOptions layerOptions, IPath region, LayerEffect effect)
+        => this.SaveEffectLayerCore(layerOptions, region, effect, options: null);
+
+    /// <inheritdoc />
+    public override int SaveLayer(GraphicsOptions layerOptions, IPath region, LayerEffect effect, DrawingOptions options)
+    {
+        Guard.NotNull(options, nameof(options));
+        return this.SaveEffectLayerCore(layerOptions, region, effect, options);
+    }
+
+    /// <summary>
+    /// Pushes an effect layer for rectangular content bounds: the effect region is the bounds
+    /// expanded by the effect's reach, so blurred and offset output spills naturally around the
+    /// content instead of being cut at its edge.
+    /// </summary>
+    /// <param name="layerOptions">The compositing options used when the layer closes.</param>
+    /// <param name="bounds">The content bounds in local canvas coordinates.</param>
+    /// <param name="effect">The effect applied to the layer content on restore.</param>
+    /// <param name="options">Drawing options for the layer contents, or <see langword="null"/> to inherit.</param>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    private int SaveEffectLayerCore(GraphicsOptions layerOptions, Rectangle bounds, LayerEffect effect, DrawingOptions? options)
+    {
+        Guard.NotNull(effect, nameof(effect));
+        bounds.Inflate(effect.Reach, effect.Reach);
+        return this.SaveEffectLayerCore(layerOptions, new RectanglePolygon(bounds), effect, options);
+    }
+
+    /// <summary>
+    /// Pushes a layer carrying a pending effect. The effect is recorded as an apply barrier over
+    /// the region when the layer is restored, so it transforms exactly the content drawn into the
+    /// layer before the layer composites.
+    /// </summary>
+    /// <param name="layerOptions">The compositing options used when the layer closes.</param>
+    /// <param name="region">The path region the effect processes, in local coordinates.</param>
+    /// <param name="effect">The effect applied to the layer content on restore.</param>
+    /// <param name="options">Drawing options for the layer contents, or <see langword="null"/> to inherit.</param>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    private int SaveEffectLayerCore(GraphicsOptions layerOptions, IPath region, LayerEffect effect, DrawingOptions? options)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(layerOptions, nameof(layerOptions));
+        Guard.NotNull(region, nameof(region));
+        Guard.NotNull(effect, nameof(effect));
+
+        // The layer must contain the effect output, including pixels the write-back lands beyond
+        // the region when the effect carries an offset.
+        RectangleF regionBounds = region.Bounds;
+        int reach = Math.Max(effect.Reach, 1);
+        Rectangle layerBounds = Rectangle.FromLTRB(
+            (int)MathF.Floor(regionBounds.Left) - reach,
+            (int)MathF.Floor(regionBounds.Top) - reach,
+            (int)MathF.Ceiling(regionBounds.Right) + reach,
+            (int)MathF.Ceiling(regionBounds.Bottom) + reach);
+
+        DrawingCanvasState currentState = this.ResolveState();
+
+        // Backdrop effects filter the pixels already beneath the layer, clipped to the region,
+        // before the layer opens; the layer content then renders above the filtered backdrop and
+        // nothing remains pending for the restore. The apply is recorded under the supplied
+        // drawing options so the region honours the caller's transform.
+        if (effect is BackdropLayerEffect)
+        {
+            if (!effect.IsPassThrough)
+            {
+                bool pushed = options is not null;
+                if (pushed)
+                {
+                    this.Save(options!);
+                }
+
+                this.ApplyCore(region, effect.CreateOperation(), effect.WriteBackOptions, effect.WriteBackOffset);
+                if (pushed)
+                {
+                    this.Restore();
+                }
+            }
+
+            return this.SaveLayerCore(layerOptions, layerBounds, options ?? currentState.Options, currentState.ClipState);
+        }
+
+        int saveCount = this.SaveLayerCore(layerOptions, layerBounds, options ?? currentState.Options, currentState.ClipState);
+        this.ResolveState().LayerEffect = new DrawingCanvasLayerEffect(region, effect);
+        return saveCount;
+    }
+
     /// <summary>
     /// Pushes a layer state with already-resolved drawing options and clip paths.
     /// </summary>
@@ -404,6 +501,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             return;
         }
 
+        this.FlushLayerEffect();
         DrawingCanvasState popped = this.savedStates.Pop();
         DrawingCanvasState current = this.ResolveState();
         this.AppendEndClips(popped.ClipState.Count - current.ClipState.Count);
@@ -541,6 +639,30 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
     /// <inheritdoc />
     public override void Apply(IPath path, Action<IImageProcessingContext> operation)
+        => this.ApplyCore(path, operation, writeBackOptions: null, writeBackOffset: default);
+
+    /// <inheritdoc />
+    public override void Apply(Rectangle region, Action<IImageProcessingContext> operation, GraphicsOptions writeBackOptions, Point writeBackOffset)
+        => this.Apply(new RectanglePolygon(region), operation, writeBackOptions, writeBackOffset);
+
+    /// <inheritdoc />
+    public override void Apply(IPath path, Action<IImageProcessingContext> operation, GraphicsOptions writeBackOptions, Point writeBackOffset)
+    {
+        Guard.NotNull(writeBackOptions, nameof(writeBackOptions));
+        this.ApplyCore(path, operation, writeBackOptions, writeBackOffset);
+    }
+
+    /// <summary>
+    /// Records an apply barrier for a path region with optional write-back compositing options.
+    /// </summary>
+    /// <param name="path">The path region to process.</param>
+    /// <param name="operation">The image-processing operation to apply to the region.</param>
+    /// <param name="writeBackOptions">
+    /// The graphics options used to composite the processed pixels back, or <see langword="null"/>
+    /// to replace the region outright.
+    /// </param>
+    /// <param name="writeBackOffset">The offset at which the processed pixels are written back.</param>
+    private void ApplyCore(IPath path, Action<IImageProcessingContext> operation, GraphicsOptions? writeBackOptions, Point writeBackOffset)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(path, nameof(path));
@@ -567,7 +689,9 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             state.TargetBounds,
             state.DestinationOffset,
             state.Layer,
-            operation);
+            operation,
+            writeBackOptions,
+            writeBackOffset);
 
         this.batcher.EnsureClipAnchors(state.DestinationOffset);
         this.batcher.AddApplyBarrier(barrier);
@@ -1803,6 +1927,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     {
         while (this.savedStates.Count > saveCount)
         {
+            this.FlushLayerEffect();
             DrawingCanvasState popped = this.savedStates.Pop();
             DrawingCanvasState current = this.ResolveState();
             this.AppendEndClips(popped.ClipState.Count - current.ClipState.Count);
@@ -1812,6 +1937,30 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 // Restore and Dispose unwind layers through the same command stream path.
                 this.batcher.AddComposition(CompositionCommand.CreateEndLayer(popped.TargetBounds, popped.Layer!));
             }
+        }
+    }
+
+    /// <summary>
+    /// Records the current state's pending layer effect, if any, as an apply barrier while the
+    /// layer is still receiving commands, so the effect transforms the layer's content just before
+    /// the layer is composited.
+    /// </summary>
+    private void FlushLayerEffect()
+    {
+        DrawingCanvasState current = this.ResolveState();
+        if (current.LayerEffect is DrawingCanvasLayerEffect pending)
+        {
+            current.LayerEffect = null;
+            if (pending.Effect.IsPassThrough)
+            {
+                return;
+            }
+
+            this.ApplyCore(
+                pending.Region,
+                pending.Effect.CreateOperation(),
+                pending.Effect.WriteBackOptions,
+                pending.Effect.WriteBackOffset);
         }
     }
 

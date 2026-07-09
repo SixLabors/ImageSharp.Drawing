@@ -700,6 +700,316 @@ public partial class WebGPUDrawingBackendTests
     }
 
     [WebGPUTheory]
+    [WithSolidFilledImages(420, 160, "White", PixelTypes.Rgba32)]
+    public void DrawText_WithDropShadowWriteBack_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 60);
+        RichTextOptions textOptions = new(font)
+        {
+            Origin = new PointF(24, 30)
+        };
+
+        DrawingOptions drawingOptions = new();
+        string text = "Shadow";
+        Brush brush = Brushes.Solid(Color.Black);
+
+        // Content draws into an effect layer; on restore the canvas slots the tinted, blurred
+        // silhouette beneath the untouched content at the shadow offset, then composites text plus
+        // shadow onto the white background.
+        DropShadowLayerEffect shadow = new(new Point(10, 10), 4F, Color.Firebrick);
+
+        Rectangle region = new(0, 0, 420, 160);
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.SaveLayer(new GraphicsOptions(), region, shadow);
+            canvas.DrawText(textOptions, text, brush, null);
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(420, 200, "White", PixelTypes.Rgba32)]
+    public void DrawText_WithBlurLayerEffect_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 48);
+        DrawingOptions drawingOptions = new();
+        Brush brush = Brushes.Solid(Color.Black);
+
+        // The layer isolates the blur: the text inside the effect layer softens on restore while
+        // the text outside it stays sharp.
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.DrawText(new RichTextOptions(font) { Origin = new PointF(24, 20) }, "Sharp", brush, null);
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 90, 420, 100), new BlurLayerEffect(4F));
+            canvas.DrawText(new RichTextOptions(font) { Origin = new PointF(24, 100) }, "Blurred", brush, null);
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(420, 160, "White", PixelTypes.Rgba32)]
+    public void DrawText_WithPolygonLayerEffectRegion_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 54);
+        DrawingOptions drawingOptions = new();
+        Brush brush = Brushes.Solid(Color.Black);
+
+        // A polygon region confines the effect: the text crosses the triangle boundary, so the
+        // glyphs inside the triangle blur on restore while the rest stay sharp.
+        PathBuilder pathBuilder = new();
+        pathBuilder.AddLine(210, 10, 400, 150);
+        pathBuilder.AddLine(400, 150, 20, 150);
+        pathBuilder.AddLine(20, 150, 210, 10);
+        pathBuilder.CloseAllFigures();
+        IPath triangle = pathBuilder.Build();
+
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.SaveLayer(new GraphicsOptions(), triangle, new BlurLayerEffect(4F));
+            canvas.DrawText(new RichTextOptions(font) { Origin = new PointF(24, 40) }, "Blurred middle", brush, null);
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(420, 160, "White", PixelTypes.Rgba32)]
+    public void DrawText_WithInnerShadowLayerEffect_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 84);
+        DrawingOptions drawingOptions = new();
+        Brush brush = Brushes.Solid(Color.Gold);
+
+        // The shadow hugs the glyphs' top and left inside edges, clipped to the content itself.
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 0, 420, 160), new InnerShadowLayerEffect(new Point(4, 4), 3F, Color.Black));
+            canvas.DrawText(new RichTextOptions(font) { Origin = new PointF(24, 20) }, "Inset", brush, null);
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(420, 160, "White", PixelTypes.Rgba32)]
+    public void DrawText_WithGlowLayerEffect_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 72);
+        DrawingOptions drawingOptions = new();
+        Brush brush = Brushes.Solid(Color.Black);
+
+        // The glow spreads evenly beneath the glyphs in all directions.
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 0, 420, 160), new GlowLayerEffect(6F, Color.Red));
+            canvas.DrawText(new RichTextOptions(font) { Origin = new PointF(24, 30) }, "Glow", brush, null);
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
+    }
+
+    [WebGPUTheory]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "blur")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "brightness")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "contrast")]
+    [WithFile(TestImages.Png.Ducky, PixelTypes.Rgba32, "drop-shadow")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "grayscale")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "hue-rotate")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "invert")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "opacity")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "sepia")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "saturate")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "acrylic")]
+    public void DrawText_WithBackdropFilterLayerEffects_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider, string filter)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        // The CSS cases mirror the MDN backdrop-filter examples, with percentages as fractions and
+        // blur radii as Gaussian sigma, on the same balloon photograph MDN uses. Drop-shadow runs
+        // on the duck instead: the backdrop's silhouette needs transparency to cast into, and an
+        // opaque photograph has none. Acrylic is the non-CSS frosted-glass material.
+        BackdropLayerEffect effect = filter switch
+        {
+            "blur" => new BackdropBlurLayerEffect(2F),
+            "brightness" => new BackdropBrightnessLayerEffect(0.6F),
+            "contrast" => new BackdropContrastLayerEffect(0.4F),
+            "drop-shadow" => new BackdropDropShadowLayerEffect(new Point(4, 4), 5F, Color.Black.WithAlpha(.7F)),
+            "grayscale" => new BackdropGrayscaleLayerEffect(0.3F),
+            "hue-rotate" => new BackdropHueRotateLayerEffect(120F),
+            "invert" => new BackdropInvertLayerEffect(0.7F),
+            "opacity" => new BackdropOpacityLayerEffect(0.2F),
+            "sepia" => new BackdropSepiaLayerEffect(0.9F),
+            "saturate" => new BackdropSaturateLayerEffect(0.8F),
+            "acrylic" => new BackdropAcrylicLayerEffect(2F, Color.PeachPuff.WithAlpha(0.35F)),
+            _ => throw new ArgumentOutOfRangeException(nameof(filter)),
+        };
+
+        DrawingOptions drawingOptions = new();
+        Brush brush = Brushes.Solid(Color.Black);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+
+        // The layout scales with the source image so the balloon and duck images share one scene:
+        // a caption behind the panel, a rounded-rectangle panel through the IPath overload, and the
+        // filter's own name as the label rendered sharp above the filtered backdrop.
+        int width = defaultImage.Width;
+        int height = defaultImage.Height;
+        Font captionFont = TestFontUtilities.GetFont(TestFonts.OpenSans, height / 6F);
+        Font labelFont = TestFontUtilities.GetFont(TestFonts.OpenSans, height / 11F);
+        RectangleF panelBounds = new(width / 10F, height / 5F, width * 4F / 5F, height * 11F / 20F);
+        RoundedRectanglePolygon panel = new(panelBounds, panelBounds.Height / 10F);
+
+        // The backdrop effect filters whatever is already on the canvas beneath the panel region -
+        // the photograph and the caption glyphs the panel overlaps - then the panel's label renders
+        // sharp above the filtered result.
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.DrawText(new RichTextOptions(captionFont) { Origin = new PointF(width / 20F, height / 15F) }, "Backdrop", brush, null);
+            canvas.SaveLayer(new GraphicsOptions(), panel, effect);
+            canvas.DrawText(new RichTextOptions(labelFont) { Origin = new PointF(panelBounds.X + 15F, panelBounds.Y + (panelBounds.Height / 2F)) }, filter, brush, null);
+            canvas.Restore();
+        }
+
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, filter, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
+        AssertBackendPairReferenceOutputs(provider, filter, defaultImage, nativeSurfaceImage, 0.0006F);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(420, 160, "White", PixelTypes.Rgba32)]
+    public void DrawText_WithColorMatrixLayerEffect_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 72);
+        DrawingOptions drawingOptions = new();
+        Brush brush = Brushes.Solid(Color.Red);
+
+        // The hue rotation recolours the layer's text; content outside the layer would keep its
+        // original colour.
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 0, 420, 160), new ColorMatrixLayerEffect(KnownFilterMatrices.CreateHueFilter(180F)));
+            canvas.DrawText(new RichTextOptions(font) { Origin = new PointF(24, 30) }, "Recoloured", brush, null);
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
+    }
+
+    [WebGPUTheory]
     [WithBasicTestPatternImages(420, 220, PixelTypes.Rgba32)]
     public void DrawText_WithRepeatedGlyphs_UsesCoverageCache<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>

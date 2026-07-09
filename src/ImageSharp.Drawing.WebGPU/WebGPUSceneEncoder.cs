@@ -611,7 +611,7 @@ internal static class WebGPUSceneEncoder
         }
 
         WebGPUSceneRange drawRange = encoding.EndPackedIndependentRange(targetBounds, drawStart, closeActiveClips: true);
-        operation = new WebGPUSceneOperation(new WebGPUApplySceneItem(source.ApplyOperation, sourceRect, drawRange));
+        operation = new WebGPUSceneOperation(new WebGPUApplySceneItem(source.ApplyOperation, sourceRect, source.ApplyWriteBackOffset, drawRange));
         error = null;
         return true;
     }

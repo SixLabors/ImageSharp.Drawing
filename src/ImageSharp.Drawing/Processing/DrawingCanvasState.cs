@@ -60,6 +60,40 @@ internal sealed class DrawingCanvasState
     /// Gets the layer currently receiving commands for this state.
     /// </summary>
     public DrawingCanvasLayer? Layer { get; init; }
+
+    /// <summary>
+    /// Gets or sets the pending effect applied to the layer's content when the state is restored,
+    /// together with the region it processes.
+    /// </summary>
+    public DrawingCanvasLayerEffect? LayerEffect { get; set; }
+}
+
+/// <summary>
+/// A pending <see cref="Processing.LayerEffect"/> attached to a layer state, applied to the layer's
+/// content when the layer is restored.
+/// </summary>
+internal sealed class DrawingCanvasLayerEffect
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingCanvasLayerEffect"/> class.
+    /// </summary>
+    /// <param name="region">The region of the layer the effect processes, in local coordinates.</param>
+    /// <param name="effect">The effect to apply.</param>
+    public DrawingCanvasLayerEffect(IPath region, LayerEffect effect)
+    {
+        this.Region = region;
+        this.Effect = effect;
+    }
+
+    /// <summary>
+    /// Gets the region of the layer the effect processes, in local coordinates.
+    /// </summary>
+    public IPath Region { get; }
+
+    /// <summary>
+    /// Gets the effect to apply.
+    /// </summary>
+    public LayerEffect Effect { get; }
 }
 
 /// <summary>

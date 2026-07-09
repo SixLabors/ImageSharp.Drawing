@@ -187,6 +187,12 @@ public readonly struct CompositionCommand
     public Action<IImageProcessingContext> ApplyOperation => this.applyBarrier?.Operation ?? throw new InvalidOperationException("Only apply commands carry an apply operation.");
 
     /// <summary>
+    /// Gets the offset subtracted from an Apply command's write rectangle when reading the source
+    /// pixels, so a write-back recorded at an offset still reads the pre-offset region.
+    /// </summary>
+    public Point ApplyWriteBackOffset => this.applyBarrier?.WriteBackOffset ?? throw new InvalidOperationException("Only apply commands carry an apply write-back offset.");
+
+    /// <summary>
     /// Gets the apply barrier carried by an <see cref="CompositionCommandKind.Apply"/> command.
     /// </summary>
     internal ApplyBarrier ApplyBarrier => this.applyBarrier ?? throw new InvalidOperationException("Only apply commands carry an apply barrier.");
@@ -377,9 +383,22 @@ public readonly struct CompositionCommand
         DrawingOptions drawingOptions,
         in RasterizerOptions rasterizerOptions)
     {
-        // Apply replaces the processed region rather than blending over it, so the command
-        // carries options forced to Src alpha composition at full blend percentage.
-        DrawingOptions applyOptions = drawingOptions.CloneForClearOperation();
+        // By default Apply replaces the processed region rather than blending over it, so the
+        // command carries options forced to Src alpha composition at full blend percentage. A
+        // barrier recorded with explicit write-back options composites the processed pixels back
+        // through those options instead, against the still-untouched region content.
+        DrawingOptions applyOptions = barrier.WriteBackOptions is null
+            ? drawingOptions.CloneForClearOperation()
+            : new DrawingOptions(barrier.WriteBackOptions.DeepClone(), drawingOptions.IntersectionRule, drawingOptions.Transform, drawingOptions.TextContrast);
+
+        // The write-back offset translates in device space, after the recorded transform, so the
+        // processed pixels land offset from where they were read; the read side subtracts the same
+        // offset when snapshotting the source region.
+        if (barrier.WriteBackOffset != default)
+        {
+            Matrix4x4 translated = applyOptions.Transform * Matrix4x4.CreateTranslation(barrier.WriteBackOffset.X, barrier.WriteBackOffset.Y, 0F);
+            applyOptions = new DrawingOptions(applyOptions.GraphicsOptions, applyOptions.IntersectionRule, translated, applyOptions.TextContrast);
+        }
 
         return new CompositionCommand(
             CompositionCommandKind.Apply,

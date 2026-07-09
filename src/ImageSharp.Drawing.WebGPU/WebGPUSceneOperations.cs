@@ -286,15 +286,18 @@ internal sealed class WebGPUApplySceneItem : IDisposable
     /// Initializes a new instance of the <see cref="WebGPUApplySceneItem"/> class.
     /// </summary>
     /// <param name="operation">The ImageSharp processor operation.</param>
-    /// <param name="sourceRect">The source rectangle copied from the current target.</param>
+    /// <param name="sourceRect">The rectangle the processed pixels are drawn back to.</param>
+    /// <param name="readOffset">The offset subtracted from <paramref name="sourceRect"/> when reading the source pixels.</param>
     /// <param name="drawRange">The encoded image-fill draw range inside the retained scene.</param>
     public WebGPUApplySceneItem(
         Action<IImageProcessingContext> operation,
         Rectangle sourceRect,
+        Point readOffset,
         WebGPUSceneRange drawRange)
     {
         this.Operation = operation;
         this.SourceRect = sourceRect;
+        this.ReadOffset = readOffset;
         this.DrawRange = drawRange;
     }
 
@@ -304,9 +307,15 @@ internal sealed class WebGPUApplySceneItem : IDisposable
     public Action<IImageProcessingContext> Operation { get; }
 
     /// <summary>
-    /// Gets the source rectangle copied from the current target.
+    /// Gets the rectangle the processed pixels are drawn back to.
     /// </summary>
     public Rectangle SourceRect { get; }
+
+    /// <summary>
+    /// Gets the offset subtracted from <see cref="SourceRect"/> when reading the source pixels, so
+    /// a write-back recorded at an offset still reads the pre-offset region.
+    /// </summary>
+    public Point ReadOffset { get; }
 
     /// <summary>
     /// Gets the encoded image-fill draw range inside the retained scene.

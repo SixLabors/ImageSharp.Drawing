@@ -820,10 +820,14 @@ fn main(
                 // groups keep the current content so composition modes inside the clip see
                 // the same destination the CPU backend's per-draw masking sees. Shallow
                 // stack entries live in registers; deeper ones spill to the blend buffer.
+                // Entries are packed with STRAIGHT alpha: quantizing the premultiplied form
+                // to eight bits loses colour precision wherever alpha is low, while the
+                // straight form quantizes in the same space as the backdrop texture and the
+                // CPU backend, so a pushed-and-popped pixel round-trips exactly.
                 let isolated = ptcl[cmd_ix + 1u] != 0u;
                 if clip_depth < BLEND_STACK_SPLIT {
                     for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                        blend_stack[clip_depth][i] = pack4x8unorm(rgba[i]);
+                        blend_stack[clip_depth][i] = pack4x8unorm(vec4(unpremultiply(rgba[i]), rgba[i].a));
                         if isolated {
                             rgba[i] = vec4(0.0);
                         }
@@ -833,7 +837,7 @@ fn main(
                     let local_tile_ix = local_id.x * PIXELS_PER_THREAD + local_id.y * TILE_WIDTH;
                     let local_blend_start = blend_offset + blend_in_scratch * TILE_WIDTH * TILE_HEIGHT + local_tile_ix;
                     for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                        blend_spill[local_blend_start + i] = pack4x8unorm(rgba[i]);
+                        blend_spill[local_blend_start + i] = pack4x8unorm(vec4(unpremultiply(rgba[i]), rgba[i].a));
                         if isolated {
                             rgba[i] = vec4(0.0);
                         }
@@ -874,7 +878,8 @@ fn main(
                         clip_blend &= ~CLIP_HARD_MASK_BIT;
                     }
 
-                    let bg = unpack4x8unorm(bg_rgba);
+                    let bg_saved = unpack4x8unorm(bg_rgba);
+                    let bg = vec4(bg_saved.rgb * bg_saved.a, bg_saved.a);
 
                     // Non-isolated groups (clip masks) already contain the saved content, so
                     // the pop is a pure coverage lerp between the saved backdrop and the group.

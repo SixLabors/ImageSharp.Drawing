@@ -1031,6 +1031,7 @@ internal sealed partial class FlushScene : IDisposable
                 new ApplySceneItem(
                     command.ApplyBarrier.Operation,
                     sourceRect,
+                    command.ApplyBarrier.WriteBackOffset,
                     brushOffset,
                     preparedApply.GraphicsOptions,
                     preparedApply.BrushBounds,
