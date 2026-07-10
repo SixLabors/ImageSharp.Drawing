@@ -1008,7 +1008,22 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 continue;
             }
 
-            float glyphArea = glyph.Bounds.Width * glyph.Bounds.Height;
+            // The fill-versus-outline heuristic measures color layers against the glyph cell.
+            // Decoration lanes ride the same collection but extend beyond the glyph, so the
+            // cell is the union of the non-decoration layers only.
+            RectangleF glyphCell = default;
+            bool hasGlyphCell = false;
+            for (int layerIndex = 0; layerIndex < glyph.LayerCount; layerIndex++)
+            {
+                GlyphLayerInfo layer = glyph.Layers[layerIndex];
+                if (layer.Kind != GlyphLayerKind.Decoration)
+                {
+                    glyphCell = hasGlyphCell ? RectangleF.Union(glyphCell, layer.Bounds) : layer.Bounds;
+                    hasGlyphCell = true;
+                }
+            }
+
+            float glyphArea = glyphCell.Width * glyphCell.Height;
             for (int layerIndex = 0; layerIndex < glyph.LayerCount; layerIndex++)
             {
                 GlyphLayerInfo layer = glyph.Layers[layerIndex];
