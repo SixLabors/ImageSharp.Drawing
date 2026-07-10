@@ -430,8 +430,13 @@ public readonly struct CompositionCommand
             ? RasterizationMode.Antialiased
             : RasterizationMode.Aliased;
 
-        // Snap the interest outward to whole pixels so fractional path bounds never crop coverage.
-        RectangleF pathBounds = path.Bounds;
+        // Interest rectangles are transform-baked and destination-offset-relative, matching the
+        // fill and stroke producers. Snap outward to whole pixels so fractional path bounds
+        // never crop coverage.
+        RectangleF pathBounds = options.Transform == Matrix4x4.Identity
+            ? path.Bounds
+            : RectangleF.Transform(path.Bounds, options.Transform);
+
         Rectangle interest = Rectangle.FromLTRB(
             (int)MathF.Floor(pathBounds.Left),
             (int)MathF.Floor(pathBounds.Top),
