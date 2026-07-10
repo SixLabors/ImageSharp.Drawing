@@ -117,6 +117,14 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     private ClipQuad? currentClipBounds;
 
     /// <summary>
+    /// Dedicated builder for carved decoration segments. The sliding window emits a glyph's
+    /// segments after the next glyph has already retargeted <see cref="Builder"/> (path text
+    /// sets a per-glyph transform), so decoration geometry is built here under the transform
+    /// captured with the owning glyph instead of whatever <see cref="Builder"/> currently holds.
+    /// </summary>
+    private readonly PathBuilder decorationBuilder = new();
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="BaseGlyphBuilder"/> class
     /// with an identity transform.
     /// </summary>
@@ -415,9 +423,11 @@ internal class BaseGlyphBuilder : IGlyphRenderer
             return;
         }
 
-        // PendingDecoration takes a pooled copy of the ink; the font engine reuses its buffer per glyph.
+        // PendingDecoration takes a pooled copy of the ink; the font engine reuses its buffer per
+        // glyph. The composed builder transform is captured now because path text retargets the
+        // builder per glyph and this decoration is not emitted until the window advances.
         bool rotated = this.parameters.LayoutMode is GlyphLayoutMode.Vertical or GlyphLayoutMode.VerticalRotated;
-        PendingDecoration incoming = new(start, end, thickness, intersections, this.parameters.TextRun, rotated);
+        PendingDecoration incoming = new(start, end, thickness, intersections, this.parameters.TextRun, rotated, this.Builder.Transform);
 
         // The held glyph is now flanked on both sides, so carve and emit it, then retire the glyph
         // that leaves the window and dispose its pooled buffer.
@@ -549,18 +559,20 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
         Vector2 segmentStart = rotated ? new Vector2(current.Start.X, from) : new Vector2(from, current.Start.Y);
         Vector2 segmentEnd = rotated ? new Vector2(current.End.X, to) : new Vector2(to, current.End.Y);
-        this.EmitDecorationSegment(textDecorations, segmentStart, segmentEnd, current.Thickness, rotated, current.Run);
+        this.EmitDecorationSegment(textDecorations, segmentStart, segmentEnd, current.Thickness, rotated, current.Run, in current);
     }
 
     /// <summary>
     /// Builds a filled rectangle path for one carved decoration segment, registers it as a
     /// <see cref="GlyphLayerKind.Decoration"/> layer, and hands it to the drawing override.
+    /// The path is built on the dedicated decoration builder under the owning glyph's captured
+    /// transform: the window emits a glyph's segments after the shared builder has already been
+    /// retargeted to the next glyph, which rotates per glyph when text follows a path.
     /// </summary>
-    private void EmitDecorationSegment(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness, bool rotated, TextRun? run)
+    private void EmitDecorationSegment(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness, bool rotated, TextRun? run, in PendingDecoration owner)
     {
         // Clamp the thickness to whole pixels.
         thickness = MathF.Max(1F, (float)Math.Round(thickness));
-        IGlyphRenderer renderer = this;
 
         Vector2 pad = rotated ? new Vector2(thickness * .5F, 0) : new Vector2(0, thickness * .5F);
 
@@ -587,20 +599,21 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
         // Snap the corners to whole pixels on the cross axis only, keeping the stroke's edges crisp;
         // the along-line coordinates stay exact so skip-ink gap boundaries land symmetrically.
-        renderer.BeginFigure();
-        renderer.MoveTo(SnapCross(a + offset, rotated));
-        renderer.LineTo(SnapCross(b + offset, rotated));
-        renderer.LineTo(SnapCross(c + offset, rotated));
-        renderer.LineTo(SnapCross(d + offset, rotated));
-        renderer.EndFigure();
+        this.decorationBuilder.Clear();
+        this.decorationBuilder.SetTransform(owner.Transform);
+        this.decorationBuilder.StartFigure();
+        this.decorationBuilder.AddLine(SnapCross(a + offset, rotated), SnapCross(b + offset, rotated));
+        this.decorationBuilder.AddLine(SnapCross(b + offset, rotated), SnapCross(c + offset, rotated));
+        this.decorationBuilder.AddLine(SnapCross(c + offset, rotated), SnapCross(d + offset, rotated));
+        this.decorationBuilder.CloseFigure();
 
-        IPath path = this.Builder.Build();
+        IPath path = this.decorationBuilder.Build();
 
         // If the path is degenerate (e.g. zero width line) we just skip it
         // and return. This might happen when clamping moves the points.
         if (path.Bounds.IsEmpty)
         {
-            this.Builder.Clear();
+            this.decorationBuilder.Clear();
             return;
         }
 
@@ -621,7 +634,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
             this.graphemePathCount++;
         }
 
-        this.Builder.Clear();
+        this.decorationBuilder.Clear();
         this.CurrentDecorationRun = run;
         this.SetDecoration(textDecorations, start, end, thickness);
     }
@@ -803,7 +816,8 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         /// <param name="intersections">The along-line ink intervals to copy, as <c>[start, end]</c> pairs.</param>
         /// <param name="run">The text run styling the glyph, captured while it was live.</param>
         /// <param name="rotated">Whether the glyph uses vertical layout.</param>
-        public PendingDecoration(Vector2 start, Vector2 end, float thickness, ReadOnlyMemory<float> intersections, TextRun? run, bool rotated)
+        /// <param name="transform">The composed builder transform of the owning glyph, captured while it was live.</param>
+        public PendingDecoration(Vector2 start, Vector2 end, float thickness, ReadOnlyMemory<float> intersections, TextRun? run, bool rotated, Matrix4x4 transform)
         {
             this.HasValue = true;
             this.Start = start;
@@ -811,6 +825,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
             this.Thickness = thickness;
             this.Run = run;
             this.Rotated = rotated;
+            this.Transform = transform;
 
             if (intersections.IsEmpty)
             {
@@ -863,6 +878,13 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         /// Gets a value indicating whether the glyph uses vertical layout.
         /// </summary>
         public bool Rotated { get; }
+
+        /// <summary>
+        /// Gets the composed builder transform of the owning glyph. Carved segments are emitted
+        /// a window step later, after the shared builder has been retargeted to the next glyph,
+        /// so each glyph's decoration geometry must be built under this captured value.
+        /// </summary>
+        public Matrix4x4 Transform { get; }
 
         /// <summary>
         /// Returns the pooled ink buffer this decoration owns, if any, to the shared pool.
