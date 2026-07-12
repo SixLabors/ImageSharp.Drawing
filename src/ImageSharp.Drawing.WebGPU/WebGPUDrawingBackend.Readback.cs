@@ -156,7 +156,11 @@ public sealed unsafe partial class WebGPUDrawingBackend
                 throw new InvalidOperationException("The WebGPU device could not finalize the readback command buffer.");
             }
 
-            api.QueueSubmit(queue, 1, ref commandBuffer);
+            WrappedSubmissionIndex readbackSubmissionIndex = default;
+            ulong submissionId = wgpuExtension.QueueSubmitForIndex(queue, 1, ref commandBuffer);
+            readbackSubmissionIndex.Queue = queue;
+            readbackSubmissionIndex.SubmissionIndex = submissionId;
+
             api.CommandBufferRelease(commandBuffer);
             commandBuffer = null;
             api.CommandEncoderRelease(commandEncoder);
@@ -174,7 +178,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
             using PfnBufferMapCallback callback = PfnBufferMapCallback.From(Callback);
             api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, (nuint)readbackByteCount, callback, null);
-            if (!WaitForMapSignal(wgpuExtension, device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
+            if (!WaitForMapSignal(wgpuExtension, device, mapReady, readbackSubmissionIndex) || mapStatus != BufferMapAsyncStatus.Success)
             {
                 throw new InvalidOperationException($"The WebGPU device could not map the readback buffer. Status: '{mapStatus}'.");
             }
@@ -253,7 +257,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
         ulong readbackByteCount = checked((ulong)readbackRowBytes * (ulong)source.Height);
 
         WebGPU api = flushContext.Api;
-        Wgpu wgpuExtension = WebGPURuntime.GetWgpuExtension();
+        Wgpu wgpuExtension = flushContext.WgpuExtension;
         using WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference();
         using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
 
@@ -314,7 +318,11 @@ public sealed unsafe partial class WebGPUDrawingBackend
                 throw new InvalidOperationException("The WebGPU device could not finalize the readback command buffer.");
             }
 
-            api.QueueSubmit(queue, 1, ref commandBuffer);
+            WrappedSubmissionIndex submissionIndex = default;
+            ulong submissionId = wgpuExtension.QueueSubmitForIndex(queue, 1, ref commandBuffer);
+            submissionIndex.Queue = queue;
+            submissionIndex.SubmissionIndex = submissionId;
+
             api.CommandBufferRelease(commandBuffer);
             commandBuffer = null;
             api.CommandEncoderRelease(commandEncoder);
@@ -332,7 +340,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
             using PfnBufferMapCallback callback = PfnBufferMapCallback.From(Callback);
             api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, (nuint)readbackByteCount, callback, null);
-            if (!WaitForMapSignal(wgpuExtension, device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
+            if (!WaitForMapSignal(wgpuExtension, device, mapReady, submissionIndex) || mapStatus != BufferMapAsyncStatus.Success)
             {
                 throw new InvalidOperationException($"The WebGPU device could not map the readback buffer. Status: '{mapStatus}'.");
             }
@@ -397,29 +405,25 @@ public sealed unsafe partial class WebGPUDrawingBackend
         => ((value + alignment - 1) / alignment) * alignment;
 
     /// <summary>
-    /// Waits for the asynchronous readback map callback, pumping the native device when available.
+    /// Waits for the asynchronous readback map callback while pumping the native device.
     /// </summary>
-    /// <param name="extension">The optional native WGPU extension used for device polling.</param>
+    /// <param name="extension">The native WGPU extension used for device polling.</param>
     /// <param name="device">The device that owns the mapped buffer.</param>
     /// <param name="signal">The event signaled by the map callback.</param>
+    /// <param name="submissionIndex">The queue submission index for this map attempt.</param>
     /// <returns><see langword="true"/> when the callback completed before the timeout; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool WaitForMapSignal(Wgpu? extension, Device* device, ManualResetEventSlim signal)
+    private static bool WaitForMapSignal(Wgpu extension, Device* device, ManualResetEventSlim signal, WrappedSubmissionIndex submissionIndex)
     {
-        // Without the wgpu-native extension there is no manual poll entry point; assume the
-        // implementation dispatches map callbacks on its own and block on the signal alone.
-        if (extension is null)
-        {
-            return signal.Wait(ReadbackCallbackTimeoutMilliseconds);
-        }
-
         // wgpu-native only dispatches map-async callbacks while the device is polled, so a
         // plain blocking wait would deadlock. DevicePoll(wait: true) blocks until the queue
-        // makes progress, driving callback delivery on this thread.
+        // reaches this operation's submission, driving callback delivery on this thread without
+        // allowing a later queue submission to broaden the wait target.
         Stopwatch stopwatch = Stopwatch.StartNew();
+
         while (!signal.IsSet && stopwatch.ElapsedMilliseconds < ReadbackCallbackTimeoutMilliseconds)
         {
-            _ = extension.DevicePoll(device, true, (WrappedSubmissionIndex*)null);
+            _ = extension.DevicePoll(device, true, ref submissionIndex);
         }
 
         return signal.IsSet;

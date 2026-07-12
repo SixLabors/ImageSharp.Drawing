@@ -102,12 +102,17 @@ public static unsafe class WebGPUEnvironment
     }
 
     /// <summary>
-    /// Probes whether the library-managed WebGPU device and queue are available.
+    /// Probes whether the required WGPU extension and the library-managed WebGPU device and queue are available.
     /// </summary>
     /// <returns>
-    /// <see cref="WebGPUEnvironmentError.Success"/> when the library-managed WebGPU device and queue are available;
+    /// <see cref="WebGPUEnvironmentError.Success"/> when the required WGPU extension and the library-managed
+    /// WebGPU device and queue are available;
     /// otherwise, the stable failure code describing why the probe failed.
     /// </returns>
+    /// <remarks>
+    /// Returns <see cref="WebGPUEnvironmentError.WgpuExtensionUnavailable"/> when the core WebGPU API loads
+    /// but the WGPU extension required by the backend cannot be acquired.
+    /// </remarks>
     public static WebGPUEnvironmentError ProbeAvailability()
         => WebGPURuntime.ProbeAvailability();
 

@@ -3,6 +3,7 @@
 
 using System.Runtime.CompilerServices;
 using Silk.NET.WebGPU;
+using Silk.NET.WebGPU.Extensions.WGPU;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -565,7 +566,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     {
         // All previously recorded GPU work must be submitted before readback, otherwise the
         // CPU would observe stale pixels for draws that have not executed yet.
-        if (!TrySubmit(flushContext))
+        if (!TrySubmitPendingCommands(flushContext))
         {
             throw new InvalidOperationException("Failed to submit WebGPU work before Apply readback.");
         }
@@ -577,6 +578,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         using Image<TPixel> sourceImage = new(configuration, apply.SourceRect.Width, apply.SourceRect.Height);
         ReadTextureRegion(flushContext, target, readRect, sourceImage.Frames.RootFrame.PixelBuffer.GetRegion());
+
         sourceImage.Mutate(apply.Operation);
 
         if (!TryCreateCompositionTexture(flushContext, apply.SourceRect.Width, apply.SourceRect.Height, out Texture* texture, out TextureView* textureView, out string? error))
@@ -992,12 +994,32 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// <returns>
     /// <see langword="true"/> when there was nothing to submit or the submit succeeded; otherwise <see langword="false"/>.
     /// </returns>
-    internal static bool TrySubmit(WebGPUFlushContext flushContext)
+    internal static bool TrySubmitPendingCommands(WebGPUFlushContext flushContext)
     {
-        CommandEncoder* commandEncoder = flushContext.CommandEncoder;
-        if (commandEncoder is null)
+        if (flushContext.CommandEncoder is null)
         {
             return true;
+        }
+
+        return TrySubmitWithIndex(flushContext, out _);
+    }
+
+    /// <summary>
+    /// Finishes and submits the flush context's current command encoder and returns its submission index.
+    /// </summary>
+    /// <param name="flushContext">The flush-scoped WebGPU device, queue, and encoder state.</param>
+    /// <param name="submissionIndex">Receives the queue submission index for the submitted command buffer.</param>
+    /// <returns>
+    /// <see langword="true"/> when the command buffer was submitted; otherwise <see langword="false"/>.
+    /// </returns>
+    internal static bool TrySubmitWithIndex(WebGPUFlushContext flushContext, out WrappedSubmissionIndex submissionIndex)
+    {
+        CommandEncoder* commandEncoder = flushContext.CommandEncoder;
+        submissionIndex = default;
+
+        if (commandEncoder is null)
+        {
+            return false;
         }
 
         // An encoder cannot be finished while a pass is still recording.
@@ -1016,7 +1038,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
             using (WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference())
             {
-                flushContext.Api.QueueSubmit((Queue*)queueReference.Handle, 1, ref commandBuffer);
+                Queue* queue = (Queue*)queueReference.Handle;
+                ulong index = flushContext.WgpuExtension.QueueSubmitForIndex(queue, 1, ref commandBuffer);
+                submissionIndex.Queue = queue;
+                submissionIndex.SubmissionIndex = index;
             }
 
             flushContext.Api.CommandBufferRelease(commandBuffer);

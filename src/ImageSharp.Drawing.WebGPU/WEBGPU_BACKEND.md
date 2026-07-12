@@ -37,7 +37,7 @@ Those types all exist to get a `DrawingCanvas` over a native WebGPU target. Once
 
 The support probes also live outside the backend:
 
-- `WebGPUEnvironment.ProbeAvailability()` checks whether the library-managed WebGPU device and queue can be acquired
+- `WebGPUEnvironment.ProbeAvailability()` checks whether the required WGPU extension is available and the library-managed WebGPU device and queue can be acquired; it reports `WgpuExtensionUnavailable` separately from core API initialization failure
 - `WebGPUEnvironment.ProbeComputePipelineSupport()` runs the crash-isolated trivial compute-pipeline probe
 
 That split keeps support probing separate from flush execution. `WebGPUDrawingBackend` is the flush executor, not the public support API. The WebGPU constructors create their objects directly; callers use `WebGPUEnvironment` when they want explicit preflight checks.
@@ -261,7 +261,7 @@ They cache things such as:
 - composite pipelines
 - a small amount of reusable device-scoped support state
 
-`WebGPURuntime` also backs the explicit support probes surfaced by `WebGPUEnvironment`. The probe and runtime layer is where the library-managed device/queue availability and crash-isolated compute-pipeline test are cached.
+`WebGPURuntime` also backs the explicit support probes surfaced by `WebGPUEnvironment`. The probe and runtime layer is where required WGPU-extension availability, library-managed device/queue availability, and the crash-isolated compute-pipeline test are cached.
 
 `WebGPUDrawingBackend` adds one more cache layer above that device-scoped runtime state. It retains:
 

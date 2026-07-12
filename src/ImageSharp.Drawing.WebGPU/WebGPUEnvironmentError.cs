@@ -18,7 +18,7 @@ public enum WebGPUEnvironmentError
     Success = 0,
 
     /// <summary>
-    /// The shared WebGPU API loader or required extension could not be initialized.
+    /// The shared WebGPU API loader could not be initialized.
     /// </summary>
     ApiInitializationFailed,
 
@@ -66,4 +66,9 @@ public enum WebGPUEnvironmentError
     /// The isolated compute-pipeline probe process terminated before it could report a normal result.
     /// </summary>
     ComputePipelineProbeProcessFailed,
+
+    /// <summary>
+    /// The required WGPU extension is unavailable.
+    /// </summary>
+    WgpuExtensionUnavailable
 }

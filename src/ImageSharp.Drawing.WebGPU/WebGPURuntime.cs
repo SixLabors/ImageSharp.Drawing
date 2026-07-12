@@ -185,7 +185,9 @@ internal static unsafe partial class WebGPURuntime
     {
         lock (Sync)
         {
-            // Fast path: return cached handles.
+            // Handles are published only after runtime initialization has acquired the required
+            // extension. Teardown clears the handles and extension together under this same lock,
+            // so cached handles already prove the complete environment invariant.
             if (autoDeviceHandle is not null && autoQueueHandle is not null)
             {
                 device = autoDeviceHandle;
@@ -197,6 +199,13 @@ internal static unsafe partial class WebGPURuntime
             try
             {
                 EnsureInitialized();
+            }
+            catch (RequiredWgpuExtensionUnavailableException)
+            {
+                device = null;
+                queue = null;
+                errorCode = WebGPUEnvironmentError.WgpuExtensionUnavailable;
+                return false;
             }
             catch
             {
@@ -291,13 +300,17 @@ internal static unsafe partial class WebGPURuntime
     }
 
     /// <summary>
-    /// Probes whether the current process can initialize WebGPU and provision a device/queue pair.
+    /// Probes whether the current process can initialize WebGPU with the required WGPU extension
+    /// and provision a device/queue pair.
     /// </summary>
-    /// <returns><see cref="WebGPUEnvironmentError.Success"/> when basic WebGPU device acquisition succeeds; otherwise the failure code.</returns>
+    /// <returns>
+    /// <see cref="WebGPUEnvironmentError.Success"/> when the required WGPU extension and basic WebGPU device acquisition
+    /// are available; otherwise, the failure code.
+    /// </returns>
     /// <remarks>
-    /// This is the broad availability check. It answers only "can this process get far enough to open WebGPU at all?"
-    /// and deliberately stops before shader-module or pipeline creation. Callers that only need to know whether native
-    /// WebGPU interop exists should use this probe. Callers that need the staged compute backend must additionally use
+    /// This is the broad availability check. It answers only whether the process can initialize the required native
+    /// WebGPU entry points and acquire a device and queue. It deliberately stops before shader-module or pipeline creation.
+    /// Callers that only need to know whether native WebGPU interop exists should use this probe. Callers that need the staged compute backend must additionally use
     /// <see cref="WebGPUEnvironment.ProbeComputePipelineSupport()"/>, because successful device acquisition does not guarantee
     /// that compute-pipeline creation is actually usable on the active runtime/driver stack.
     /// </remarks>
@@ -576,7 +589,7 @@ internal static unsafe partial class WebGPURuntime
 
         if (wgpuExtension is null && !api.TryGetDeviceExtension<Wgpu>(null, out wgpuExtension))
         {
-            throw new InvalidOperationException("WebGPU.TryGetDeviceExtension for Wgpu failed.");
+            throw new RequiredWgpuExtensionUnavailableException();
         }
     }
 
@@ -599,6 +612,7 @@ internal static unsafe partial class WebGPURuntime
             WebGPUEnvironmentError.DeviceAcquisitionFailed => "The WebGPU runtime failed to provision a WebGPU device and queue.",
             WebGPUEnvironmentError.ComputePipelineCreationFailed => "The isolated WebGPU compute-pipeline probe reported failure.",
             WebGPUEnvironmentError.ComputePipelineProbeProcessFailed => "The isolated WebGPU compute-pipeline probe process terminated before it could report a result.",
+            WebGPUEnvironmentError.WgpuExtensionUnavailable => "The required WGPU extension is unavailable.",
             _ => "The WebGPU runtime failed for an unknown reason."
         };
 
@@ -757,45 +771,60 @@ internal static unsafe partial class WebGPURuntime
 
         // WebGPU treats these sentinel values as "leave this limit at its default" when a required-limits
         // block is supplied, so only the two storage ceilings below deviate from the device defaults.
-        const uint KeepU32 = uint.MaxValue;
-        const ulong KeepU64 = ulong.MaxValue;
+        const uint keepU32 = uint.MaxValue;
+        const ulong keepU64 = ulong.MaxValue;
 
         Limits limits = new()
         {
-            MaxTextureDimension1D = KeepU32,
-            MaxTextureDimension2D = KeepU32,
-            MaxTextureDimension3D = KeepU32,
-            MaxTextureArrayLayers = KeepU32,
-            MaxBindGroups = KeepU32,
-            MaxBindGroupsPlusVertexBuffers = KeepU32,
-            MaxBindingsPerBindGroup = KeepU32,
-            MaxDynamicUniformBuffersPerPipelineLayout = KeepU32,
-            MaxDynamicStorageBuffersPerPipelineLayout = KeepU32,
-            MaxSampledTexturesPerShaderStage = KeepU32,
-            MaxSamplersPerShaderStage = KeepU32,
-            MaxStorageBuffersPerShaderStage = KeepU32,
-            MaxStorageTexturesPerShaderStage = KeepU32,
-            MaxUniformBuffersPerShaderStage = KeepU32,
-            MaxUniformBufferBindingSize = KeepU64,
+            MaxTextureDimension1D = keepU32,
+            MaxTextureDimension2D = keepU32,
+            MaxTextureDimension3D = keepU32,
+            MaxTextureArrayLayers = keepU32,
+            MaxBindGroups = keepU32,
+            MaxBindGroupsPlusVertexBuffers = keepU32,
+            MaxBindingsPerBindGroup = keepU32,
+            MaxDynamicUniformBuffersPerPipelineLayout = keepU32,
+            MaxDynamicStorageBuffersPerPipelineLayout = keepU32,
+            MaxSampledTexturesPerShaderStage = keepU32,
+            MaxSamplersPerShaderStage = keepU32,
+            MaxStorageBuffersPerShaderStage = keepU32,
+            MaxStorageTexturesPerShaderStage = keepU32,
+            MaxUniformBuffersPerShaderStage = keepU32,
+            MaxUniformBufferBindingSize = keepU64,
             MaxStorageBufferBindingSize = adapterLimits.Limits.MaxStorageBufferBindingSize,
-            MinUniformBufferOffsetAlignment = KeepU32,
-            MinStorageBufferOffsetAlignment = KeepU32,
-            MaxVertexBuffers = KeepU32,
+            MinUniformBufferOffsetAlignment = keepU32,
+            MinStorageBufferOffsetAlignment = keepU32,
+            MaxVertexBuffers = keepU32,
             MaxBufferSize = adapterLimits.Limits.MaxBufferSize,
-            MaxVertexAttributes = KeepU32,
-            MaxVertexBufferArrayStride = KeepU32,
-            MaxInterStageShaderComponents = KeepU32,
-            MaxInterStageShaderVariables = KeepU32,
-            MaxColorAttachments = KeepU32,
-            MaxColorAttachmentBytesPerSample = KeepU32,
-            MaxComputeWorkgroupStorageSize = KeepU32,
-            MaxComputeInvocationsPerWorkgroup = KeepU32,
-            MaxComputeWorkgroupSizeX = KeepU32,
-            MaxComputeWorkgroupSizeY = KeepU32,
-            MaxComputeWorkgroupSizeZ = KeepU32,
-            MaxComputeWorkgroupsPerDimension = KeepU32,
+            MaxVertexAttributes = keepU32,
+            MaxVertexBufferArrayStride = keepU32,
+            MaxInterStageShaderComponents = keepU32,
+            MaxInterStageShaderVariables = keepU32,
+            MaxColorAttachments = keepU32,
+            MaxColorAttachmentBytesPerSample = keepU32,
+            MaxComputeWorkgroupStorageSize = keepU32,
+            MaxComputeInvocationsPerWorkgroup = keepU32,
+            MaxComputeWorkgroupSizeX = keepU32,
+            MaxComputeWorkgroupSizeY = keepU32,
+            MaxComputeWorkgroupSizeZ = keepU32,
+            MaxComputeWorkgroupsPerDimension = keepU32,
         };
 
         return new RequiredLimits { Limits = limits };
+    }
+
+    /// <summary>
+    /// Identifies failure to load the WGPU extension separately from failure to initialize the
+    /// core WebGPU API so the public environment probe can report the required capability.
+    /// </summary>
+    private sealed class RequiredWgpuExtensionUnavailableException : InvalidOperationException
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="RequiredWgpuExtensionUnavailableException"/> class.
+        /// </summary>
+        public RequiredWgpuExtensionUnavailableException()
+            : base("The required WGPU extension is unavailable.")
+        {
+        }
     }
 }

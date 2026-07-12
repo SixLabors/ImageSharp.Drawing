@@ -1391,8 +1391,8 @@ internal static class WebGPUSceneDispatch
         // Single submit: scheduling + fine + readback all in one command encoder.
         // The readback map blocks until the GPU finishes everything.
         if (!TryEnqueueSchedulingStatusReadback(flushContext, scheduling.BumpBuffer, currentArena.ReadbackBuffer, 0, out error) ||
-            !WebGPUDrawingBackend.TrySubmit(flushContext) ||
-            !TryReadSchedulingStatus(flushContext, currentArena.ReadbackBuffer, out GpuSceneBumpAllocators bumpAllocators, out error))
+            !WebGPUDrawingBackend.TrySubmitWithIndex(flushContext, out WrappedSubmissionIndex schedulingSubmissionIndex) ||
+            !TryReadSchedulingStatus(flushContext, currentArena.ReadbackBuffer, schedulingSubmissionIndex, out GpuSceneBumpAllocators bumpAllocators, out error))
         {
             return false;
         }
@@ -1417,7 +1417,7 @@ internal static class WebGPUSceneDispatch
 
         CopyToTarget(ref stagedScene, target, outputTexture, targetWidth, targetHeight);
 
-        if (!WebGPUDrawingBackend.TrySubmit(flushContext))
+        if (!WebGPUDrawingBackend.TrySubmitPendingCommands(flushContext))
         {
             error = "Failed to submit the staged-scene final copy.";
             return false;
@@ -1552,7 +1552,7 @@ internal static class WebGPUSceneDispatch
         // must already hold its original value.
         CopyTargetToTexture(ref stagedScene, target, outputTexture, targetWidth, targetHeight);
 
-        if (!WebGPUDrawingBackend.TrySubmit(flushContext))
+        if (!WebGPUDrawingBackend.TrySubmitPendingCommands(flushContext))
         {
             error = "Failed to submit the staged-scene chunk prefill copy.";
             return false;
@@ -1588,6 +1588,11 @@ internal static class WebGPUSceneDispatch
 
             int chunkReadbackCount = 0;
             bool sharedSchedulingPrepared = false;
+
+            // The direct single-chunk path assigns this when it submits the chunk attempt. The
+            // shared multi-chunk path assigns it when the accumulated chunk encoder is submitted
+            // below, so status mapping never observes the initial value.
+            WrappedSubmissionIndex chunkSubmissionIndex = default;
 
             // Outer loop: advance through tile rows. Each iteration renders one chunk.
             while (tileYStart < totalTileHeight)
@@ -1643,7 +1648,7 @@ internal static class WebGPUSceneDispatch
                             return false;
                         }
 
-                        if (!WebGPUDrawingBackend.TrySubmit(flushContext))
+                        if (!WebGPUDrawingBackend.TrySubmitPendingCommands(flushContext))
                         {
                             error = "Failed to submit the staged-scene shared chunk scheduling passes.";
                             return false;
@@ -1674,6 +1679,7 @@ internal static class WebGPUSceneDispatch
                             (nuint)chunkReadbackCount * (nuint)sizeof(GpuSceneBumpAllocators),
                             useSharedSchedulingState,
                             resetChunkLocalBumpAllocators: false,
+                            out chunkSubmissionIndex,
                             out error);
 
                     if (recordedChunk)
@@ -1693,7 +1699,7 @@ internal static class WebGPUSceneDispatch
                 }
             }
 
-            if (sharedSchedulingPrepared && !WebGPUDrawingBackend.TrySubmit(flushContext))
+            if (sharedSchedulingPrepared && !WebGPUDrawingBackend.TrySubmitWithIndex(flushContext, out chunkSubmissionIndex))
             {
                 error = "Failed to submit the staged-scene chunk passes.";
                 return false;
@@ -1710,6 +1716,7 @@ internal static class WebGPUSceneDispatch
                         chunkAttemptBumpSizes,
                         chunkAttemptTileHeights,
                         totalTileHeight,
+                        chunkSubmissionIndex,
                         out requiresGrowth,
                         out grownBumpSizes,
                         out error))
@@ -1732,7 +1739,7 @@ internal static class WebGPUSceneDispatch
 
             CopyToTarget(ref stagedScene, target, outputTexture, targetWidth, targetHeight);
 
-            if (!WebGPUDrawingBackend.TrySubmit(flushContext))
+            if (!WebGPUDrawingBackend.TrySubmitWithIndex(flushContext, out chunkSubmissionIndex))
             {
                 return false;
             }
@@ -1749,7 +1756,8 @@ internal static class WebGPUSceneDispatch
                     stagedScene.Config.BumpSizes,
                     chunkAttemptBumpSizes[..chunkReadbackCount],
                     chunkAttemptTileHeights[..chunkReadbackCount],
-                    totalTileHeight);
+                    totalTileHeight,
+                    chunkSubmissionIndex);
                 deferredReadbackBufferTransferred = true;
             }
 
@@ -1775,6 +1783,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="readbackOffset">The byte offset inside the shared readback buffer where this chunk should copy its bump allocators.</param>
     /// <param name="reuseSharedSchedulingState">Whether this chunk should reuse the flush-scoped shared scheduling results instead of rerunning the full scheduling pipeline.</param>
     /// <param name="resetChunkLocalBumpAllocators">Whether the chunk-local bump counters should be cleared while preserving the shared full-scene scheduling state.</param>
+    /// <param name="submissionIndex">Receives the queue submission index for the chunk's submission.</param>
     /// <param name="error">Receives the chunk failure reason when scheduling or fine dispatch cannot complete.</param>
     /// <returns><see langword="true"/> when this chunk rendered successfully; otherwise, <see langword="false"/>.</returns>
     private static unsafe bool TryRenderChunkAttempt(
@@ -1786,8 +1795,11 @@ internal static class WebGPUSceneDispatch
         nuint readbackOffset,
         bool reuseSharedSchedulingState,
         bool resetChunkLocalBumpAllocators,
+        out WrappedSubmissionIndex submissionIndex,
         out string? error)
     {
+        submissionIndex = default;
+
         error = null;
         WebGPUSceneSchedulingResources scheduling;
 
@@ -1826,7 +1838,7 @@ internal static class WebGPUSceneDispatch
         }
 
         if (!TryEnqueueSchedulingStatusReadback(stagedScene.FlushContext, scheduling.BumpBuffer, readbackBuffer, readbackOffset, out error) ||
-            !WebGPUDrawingBackend.TrySubmit(stagedScene.FlushContext))
+            !WebGPUDrawingBackend.TrySubmitWithIndex(stagedScene.FlushContext, out submissionIndex))
         {
             return false;
         }
@@ -2855,7 +2867,7 @@ internal static class WebGPUSceneDispatch
         // output is complete before the copy executes, no CPU-side wait required.
         CopyToTarget(ref stagedScene, target, outputTexture, targetWidth, targetHeight);
 
-        if (!WebGPUDrawingBackend.TrySubmit(flushContext))
+        if (!WebGPUDrawingBackend.TrySubmitWithIndex(flushContext, out WrappedSubmissionIndex submissionIndex))
         {
             // The submit failed after the copy into the buffer was recorded but never executed;
             // the map was not started, so recycling stays safe.
@@ -2870,7 +2882,8 @@ internal static class WebGPUSceneDispatch
             flushContext.DeviceHandle,
             flushContext.DeviceState,
             readbackBuffer,
-            stagedScene.Config.BumpSizes);
+            stagedScene.Config.BumpSizes,
+            submissionIndex);
         return true;
     }
 
@@ -2953,12 +2966,14 @@ internal static class WebGPUSceneDispatch
     /// </remarks>
     /// <param name="flushContext">The flush context that owns the device used to pump the map callback.</param>
     /// <param name="readbackBuffer">The map-readable buffer holding the copied allocator state.</param>
+    /// <param name="submissionIndex">The queue submission index for this readback.</param>
     /// <param name="bumpAllocators">Receives the bump-allocator counters reported by the GPU.</param>
     /// <param name="error">Receives the map failure reason.</param>
     /// <returns><see langword="true"/> when the status was read successfully; otherwise, <see langword="false"/>.</returns>
     private static unsafe bool TryReadSchedulingStatus(
         WebGPUFlushContext flushContext,
         WgpuBuffer* readbackBuffer,
+        WrappedSubmissionIndex submissionIndex,
         out GpuSceneBumpAllocators bumpAllocators,
         out string? error)
     {
@@ -2978,7 +2993,7 @@ internal static class WebGPUSceneDispatch
         flushContext.Api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, (nuint)sizeof(GpuSceneBumpAllocators), callback, null);
         using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
         {
-            if (!WaitForMapSignal(flushContext.WgpuExtension, (Device*)deviceReference.Handle, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
+            if (!WaitForMapSignal(flushContext.WgpuExtension, (Device*)deviceReference.Handle, mapReady, submissionIndex) || mapStatus != BufferMapAsyncStatus.Success)
             {
                 error = $"Failed to map staged-scene scheduling status with status '{mapStatus}'.";
                 return false;
@@ -3068,6 +3083,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="chunkBumpSizes">The chunk-local capacities used by each recorded chunk attempt.</param>
     /// <param name="chunkTileHeights">The real tile-row height of each recorded chunk attempt.</param>
     /// <param name="fullTileHeight">The full tile-row height of the chunked target range.</param>
+    /// <param name="submissionIndex">The queue submission index for this readback.</param>
     /// <param name="requiresGrowth">Receives whether any chunk overflowed and the flush must be retried.</param>
     /// <param name="grownBumpSizes">Receives the merged full-scene scratch budget derived from all chunks.</param>
     /// <param name="error">Receives the map failure reason.</param>
@@ -3079,6 +3095,7 @@ internal static class WebGPUSceneDispatch
         ReadOnlySpan<WebGPUSceneBumpSizes> chunkBumpSizes,
         ReadOnlySpan<uint> chunkTileHeights,
         uint fullTileHeight,
+        WrappedSubmissionIndex submissionIndex,
         out bool requiresGrowth,
         out WebGPUSceneBumpSizes grownBumpSizes,
         out string? error)
@@ -3115,7 +3132,7 @@ internal static class WebGPUSceneDispatch
         flushContext.Api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, mappedByteLength, callback, null);
         using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
         {
-            if (!WaitForMapSignal(flushContext.WgpuExtension, (Device*)deviceReference.Handle, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
+            if (!WaitForMapSignal(flushContext.WgpuExtension, (Device*)deviceReference.Handle, mapReady, submissionIndex) || mapStatus != BufferMapAsyncStatus.Success)
             {
                 error = $"Failed to map staged-scene chunk scheduling status with status '{mapStatus}'.";
                 return false;
@@ -4368,27 +4385,26 @@ internal static class WebGPUSceneDispatch
     /// <summary>
     /// Pumps the WebGPU device while waiting for one asynchronous map callback to signal completion.
     /// </summary>
-    /// <param name="extension">The optional native WGPU extension used to advance callback delivery.</param>
+    /// <param name="extension">The native WGPU extension used to advance callback delivery.</param>
     /// <param name="device">The device that owns the mapped readback buffer.</param>
     /// <param name="signal">The event that the map callback sets when the copy is ready to read.</param>
+    /// <param name="submissionIndex">The queue submission index to scope the wait to this readback.</param>
     /// <returns><see langword="true"/> when the callback completed before the timeout; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static unsafe bool WaitForMapSignal(Wgpu? extension, Device* device, ManualResetEventSlim signal)
+    private static unsafe bool WaitForMapSignal(
+        Wgpu extension,
+        Device* device,
+        ManualResetEventSlim signal,
+        WrappedSubmissionIndex submissionIndex)
     {
-        // Without the native wgpu extension the implementation delivers map callbacks on its own,
-        // so a plain bounded wait suffices.
-        if (extension is null)
-        {
-            return signal.Wait(5000);
-        }
-
         // wgpu-native only fires map callbacks from inside DevicePoll, so the device must be
-        // pumped until the callback sets the signal. Both paths share the same five-second bound
-        // so a lost device cannot hang the flush thread indefinitely.
+        // pumped through the readback's owning submission until the callback sets the signal.
+        // The five-second bound prevents a lost device from hanging the flush thread indefinitely.
         Stopwatch stopwatch = Stopwatch.StartNew();
+
         while (!signal.IsSet && stopwatch.ElapsedMilliseconds < 5000)
         {
-            _ = extension.DevicePoll(device, true, (WrappedSubmissionIndex*)null);
+            _ = extension.DevicePoll(device, true, ref submissionIndex);
         }
 
         return signal.IsSet;
