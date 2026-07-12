@@ -688,7 +688,10 @@ fn fill_path(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result: ptr<fun
     if aliased {
         // Aliased fills quantize analytic coverage against this fill's own coverage threshold,
         // matching the CPU rasterizer's per-fill RasterizationMode.Aliased + AntialiasThreshold.
-        let threshold = fill.coverage_threshold;
+        // The comparison is biased by more than the area formula's xmin epsilon so coverage that
+        // is analytically equal to the threshold (a half-covered pixel against the default 0.5)
+        // quantizes inclusively, as the CPU rasterizer's exact arithmetic does.
+        let threshold = fill.coverage_threshold - 1e-5;
         for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
             area[i] = select(0.0, 1.0, area[i] >= threshold);
         }

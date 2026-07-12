@@ -206,9 +206,7 @@ public class BackdropColorMatrixLayerEffect : BackdropLayerEffect
     /// </summary>
     /// <param name="matrix">The colour matrix applied to the backdrop.</param>
     public BackdropColorMatrixLayerEffect(ColorMatrix matrix)
-    {
-        this.Matrix = matrix;
-    }
+        => this.Matrix = matrix;
 
     /// <summary>
     /// Gets the colour matrix applied to the backdrop.

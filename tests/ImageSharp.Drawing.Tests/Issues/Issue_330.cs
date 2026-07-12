@@ -16,8 +16,8 @@ public class Issue_330
     {
         FontFamily fontFamily = TestFontUtilities.GetFontFamily(TestFonts.OpenSans);
 
-        Font bibfont = fontFamily.CreateFont(600, FontStyle.Bold);
-        Font namefont = fontFamily.CreateFont(140, FontStyle.Bold);
+        Font bibfont = fontFamily.CreateFont(600, FontStyle.Regular);
+        Font namefont = fontFamily.CreateFont(140, FontStyle.Regular);
 
         provider.RunValidatingProcessorTest(p => p.Paint(canvas =>
             {

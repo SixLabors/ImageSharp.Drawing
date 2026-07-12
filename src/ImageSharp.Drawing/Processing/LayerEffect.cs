@@ -323,9 +323,7 @@ public sealed class ColorMatrixLayerEffect : LayerEffect
     /// </summary>
     /// <param name="matrix">The colour matrix applied to the layer content.</param>
     public ColorMatrixLayerEffect(ColorMatrix matrix)
-    {
-        this.Matrix = matrix;
-    }
+        => this.Matrix = matrix;
 
     /// <summary>
     /// Gets the colour matrix applied to the layer content.

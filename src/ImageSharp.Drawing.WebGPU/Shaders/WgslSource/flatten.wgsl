@@ -954,13 +954,32 @@ fn read_path_segment(tag: PathTagData, is_stroke: bool) -> CubicPoints {
     return CubicPoints(p0, p1, p2, p3);
 }
 
+// Half-width of the band around integer device coordinates that is snapped onto the grid by
+// snap_to_pixel_grid. Sub-milli-pixel, so the coverage change is imperceptible, while safely
+// exceeding the rounding spread of the flattening and stroking arithmetic.
+const PIXEL_GRID_SNAP_EPSILON: f32 = 1e-3;
+
+// Snaps coordinates lying within PIXEL_GRID_SNAP_EPSILON of an integer device coordinate onto
+// that integer. The counting stages resolve grid ties with exact comparisons (the boundary
+// horizontal cull and the start-on-boundary backdrop bump in path_count pair up, as do the
+// left-edge y_edge assignments in path_tiling); those pairings only hold when every endpoint
+// meeting a boundary agrees on whether it lies exactly on it. Flattening and stroking round
+// independently per point, so a contour can otherwise reach the boundary with mixed exactness
+// and flip the winding of a whole tile row.
+fn snap_to_pixel_grid(p: vec2f) -> vec2f {
+    let r = round(p);
+    return select(p, r, abs(p - r) < vec2(PIXEL_GRID_SNAP_EPSILON));
+}
+
 // Writes a line into the `lines` buffer at the pre-allocated slot `line_ix` and grows this
 // invocation's running bbox. Out-of-range writes are dropped (the bump counter may legitimately
 // exceed the buffer size).
 fn write_line(line_ix: u32, path_ix: u32, p0: vec2f, p1: vec2f) {
-    bbox = vec4(min(bbox.xy, min(p0, p1)), max(bbox.zw, max(p0, p1)));
+    let s0 = snap_to_pixel_grid(p0);
+    let s1 = snap_to_pixel_grid(p1);
+    bbox = vec4(min(bbox.xy, min(s0, s1)), max(bbox.zw, max(s0, s1)));
     if line_ix < config.lines_size {
-        lines[line_ix] = LineSoup(path_ix, p0, p1);
+        lines[line_ix] = LineSoup(path_ix, s0, s1);
     }
 }
 
