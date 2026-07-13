@@ -490,8 +490,8 @@ internal static unsafe partial class WebGPURuntime
     }
 
     /// <summary>
-    /// Releases all runtime-owned state: cached per-device shared state, the auto-provisioned
-    /// device/queue pair, cached probe results, and finally the shared loader wrappers.
+    /// Releases all runtime-owned GPU state and cached probe results. The process-wide loader
+    /// wrappers remain rooted until operating-system process teardown.
     /// Callers must hold <see cref="Sync"/>.
     /// </summary>
     private static void DisposeRuntimeCore()
@@ -524,35 +524,13 @@ internal static unsafe partial class WebGPURuntime
             computePipelineProbeResult = null;
         }
 
-        // By the time process-exit teardown reaches the shared loader wrappers, the runtime may
-        // already be unwinding native loader state underneath Silk. The cached device/queue and
-        // all runtime-owned GPU state have already been released above, so these dispose failures
-        // no longer represent leaked WebGPU objects; they only mean the loader is already torn
-        // down or no longer in a state where Silk can unload it cleanly. We must still null the
-        // references so any later re-entry in the same process cannot observe stale wrappers.
-        try
-        {
-            wgpuExtension?.Dispose();
-        }
-        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
-        {
-        }
-        finally
-        {
-            wgpuExtension = null;
-        }
-
-        try
-        {
-            api?.Dispose();
-        }
-        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
-        {
-        }
-        finally
-        {
-            api = null;
-        }
+        // Keep the process-wide Silk.NET.WebGPU.WebGPU API loader and
+        // Silk.NET.WebGPU.Extensions.WGPU.Wgpu extension facade rooted after releasing every GPU object above.
+        // Explicitly unloading wgpu_native.dll can destroy a Win32 window while its WGL window-
+        // procedure chain still points into that module. Control Flow Guard invalidates those
+        // indirect-call targets during unload, so the WM_NCDESTROY re-entry fails with
+        // FAST_FAIL_GUARD_ICALL_CHECK_FAILURE. Normal process teardown owns the final module
+        // unload and reclaims the wrappers after no managed code can re-enter the runtime.
     }
 
     /// <summary>
