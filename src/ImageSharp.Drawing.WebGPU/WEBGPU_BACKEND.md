@@ -138,7 +138,7 @@ Its responsibilities are:
 - encode retained WebGPU scenes from prepared command batches, choosing between the parallel encoder and the ordered encoder
 - create render-scoped staged scene resources
 - run the staged path inside a bounded scratch-growth retry loop
-- walk the ordered operation list (render ranges, Apply, scoped layers) when the scene retains one
+- execute the transactional ordered plan (render ranges, Apply groups, and explicit layer transitions) when the scene retains one
 - keep explicit layer boundaries in the shared flush model until the staged scene encoder lowers them
 - retain the last successful scratch capacities, chunk-height hints, and backend-local GPU arenas across renders when possible
 - serve strictly typed GPU readback through `ReadRegion<TPixel>(...)`
@@ -197,13 +197,14 @@ Batches containing Apply take `TryEncodeOrdered(...)` instead: Apply reads pixel
 
 ## Ordered Scenes: Apply And Scoped Layers
 
-Most scenes encode into one packed draw stream that renders as a single staged dispatch. Scenes containing Apply, and layers that require a scoped Apply, encode instead into an ordered `WebGPUSceneOperation` list retained with the scene. There are three operation kinds:
+Most scenes encode into one packed draw stream that renders as a single staged dispatch. Scenes containing Apply, and layers that contain Apply, encode instead into a flat ordered `WebGPUSceneOperation` plan retained with the scene. There are four operation kinds:
 
 - `RenderRange` renders one encoded draw range into the current target
-- `Apply` reads the source region back to the CPU, runs the user's image mutation, uploads the result into a transient texture, and draws it through the operation's draw range
-- `ScopedLayer` renders its child operations into a transient offscreen texture (cleared to transparent black) and then composites that texture back onto the parent target through a composite range that samples the layer texture via the external texture-view binding
+- `Apply` retains the processor and draw range; maximal consecutive Applies whose source reads cannot observe an earlier Apply write share one pixel-readback barrier
+- `BeginLayer` enters a stable transient layer target cleared to transparent black
+- `EndLayer` returns to the parent target and composites the layer through the retained range's external texture binding
 
-`RenderScene<TPixel>(...)` walks that list in order inside one flush context, recursing into scoped layers. Plain scenes never allocate the operation list and take the single staged-dispatch path.
+`RenderScene<TPixel>(...)` executes that plan in order inside one flush context. Range output stays in per-target ping-pong textures until allocator status has been validated at an Apply or final barrier. A barrier maps one flush-local status/pixel buffer once; allocator overflow grows all scratch capacities together and replays only retained GPU ranges from durable target checkpoints. Apply callbacks are never replayed. Plain scenes never allocate the operation plan and take the single staged-dispatch path.
 
 ## Flush Context Creation
 
@@ -233,7 +234,7 @@ flowchart TD
 
 That means layer semantics are part of the main staged scene pipeline rather than a second GPU composition subsystem.
 
-The one exception is a `BeginLayer` that requires a scoped Apply. The ordered encoder turns that layer into a `ScopedLayer` operation that renders into an offscreen texture and composites back onto the parent target, as described above.
+The one exception is a layer containing Apply. The ordered encoder retains explicit `BeginLayer` and `EndLayer` operations around the layer's child ranges. The transactional executor can then replay work across root and nested-layer targets without recursively rebuilding operation topology.
 
 ## Scratch Growth And Retry
 
@@ -295,7 +296,7 @@ If you want to understand the backend first, read the code in this order:
 1. `WebGPUEnvironment.cs`
 2. `WebGPUWindow.cs`, `WebGPUSurfaceFrame.cs`, `WebGPUExternalSurface.cs`, `WebGPUSurfaceHost.cs`, `WebGPURenderTarget.cs`, and `WebGPUDeviceContext.cs`
 3. `WebGPUDrawingBackend.cs` and its partials (`WebGPUDrawingBackend.Readback.cs`, `WebGPUDrawingBackend.CopyPixels.cs`, `WebGPUDrawingBackend.CompositePixels.cs`)
-4. `WebGPUSceneOperations.cs` for the ordered Apply/scoped-layer scene model
+4. `WebGPUSceneOperations.cs` and `WebGPUDrawingBackend.Ordered.cs` for the ordered Apply/layer plan and transactional executor
 5. `WebGPUFlushContext.cs`
 6. `WebGPURuntime.cs`
 7. `WebGPURuntime.DeviceSharedState.cs`

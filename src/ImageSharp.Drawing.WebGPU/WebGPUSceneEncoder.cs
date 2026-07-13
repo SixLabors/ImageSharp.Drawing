@@ -64,7 +64,7 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// The tile height in pixels used by binning, coarse, and fine. Must match TILE_HEIGHT in config.wgsl.
     /// </summary>
-    private const int TileHeight = 16;
+    public const int TileHeight = 16;
 
     /// <summary>
     /// Half the length of the synthetic horizontal segment substituted for point-like strokes so caps
@@ -318,7 +318,7 @@ internal static class WebGPUSceneEncoder
                 return true;
             }
 
-            encodedScene = SupportedSubsetSceneResolver.Resolve(ref encoding, targetBounds, allocator);
+            encodedScene = SupportedSubsetSceneResolver.Resolve(ref encoding, targetBounds, allocator, []);
             error = null;
             return true;
         }
@@ -353,13 +353,13 @@ internal static class WebGPUSceneEncoder
         SceneEncodingPlan plan = SceneEncodingPlan.CreateDefault(scene.CommandCount);
         SupportedSubsetSceneEncoding encoding = new(allocator, targetBounds, plan);
         List<WebGPUSceneOperation> operations = [];
+        int nextLayerTargetId = 1;
 
         try
         {
             SceneEncodingCheckpoint rangeStart = encoding.BeginPackedIndependentRange(targetBounds, ClipBlendMode, replayActiveClips: true);
-            if (!TryEncodeOrderedOperations(scene, 0, scene.CommandCount, targetBounds, ref encoding, operations, ref rangeStart, out error))
+            if (!TryEncodeOrderedOperations(scene, 0, scene.CommandCount, targetBounds, 0, ref encoding, operations, ref rangeStart, ref nextLayerTargetId, out error))
             {
-                DisposeOperations(operations);
                 encodedScene = WebGPUEncodedScene.Empty;
                 return false;
             }
@@ -377,6 +377,7 @@ internal static class WebGPUSceneEncoder
                 return true;
             }
 
+            FinalizeOrderedOperations(operations);
             encodedScene = SupportedSubsetSceneResolver.Resolve(ref encoding, targetBounds, allocator, [.. operations]);
             error = null;
             return true;
@@ -395,9 +396,11 @@ internal static class WebGPUSceneEncoder
     /// <param name="commandStart">The inclusive command start index.</param>
     /// <param name="commandEnd">The exclusive command end index.</param>
     /// <param name="targetBounds">The bounds of the target the range renders into.</param>
+    /// <param name="targetId">The stable identity of the target the range renders into.</param>
     /// <param name="encoding">The shared mutable scene encoding.</param>
     /// <param name="operations">Receives the ordered scene operations.</param>
     /// <param name="rangeStart">The checkpoint of the currently open packed range; updated whenever the range is split.</param>
+    /// <param name="nextLayerTargetId">The next stable target identity available for a scoped layer.</param>
     /// <param name="error">Receives the failure reason when encoding fails.</param>
     /// <returns><see langword="true"/> when the range encoded successfully.</returns>
     private static bool TryEncodeOrderedOperations(
@@ -405,9 +408,11 @@ internal static class WebGPUSceneEncoder
         int commandStart,
         int commandEnd,
         Rectangle targetBounds,
+        int targetId,
         ref SupportedSubsetSceneEncoding encoding,
         List<WebGPUSceneOperation> operations,
         ref SceneEncodingCheckpoint rangeStart,
+        ref int nextLayerTargetId,
         out string? error)
     {
         IReadOnlyList<CompositionSceneCommand> commands = scene.Commands;
@@ -436,13 +441,11 @@ internal static class WebGPUSceneEncoder
                     }
 
                     Rectangle layerBounds = command.LayerBounds;
-                    WebGPUScopedLayerSceneItem layer = new(layerBounds);
-                    operations.Add(new WebGPUSceneOperation(layer));
-
-                    int childOperationStart = operations.Count;
+                    int layerTargetId = nextLayerTargetId++;
+                    operations.Add(new WebGPUSceneOperation(layerBounds, layerTargetId, targetId));
 
                     SceneEncodingCheckpoint childStart = encoding.BeginPackedIndependentRange(layerBounds, ClipBlendMode, replayActiveClips: true);
-                    if (!TryEncodeOrderedOperations(scene, i + 1, layerEnd, layerBounds, ref encoding, operations, ref childStart, out error))
+                    if (!TryEncodeOrderedOperations(scene, i + 1, layerEnd, layerBounds, layerTargetId, ref encoding, operations, ref childStart, ref nextLayerTargetId, out error))
                     {
                         return false;
                     }
@@ -452,8 +455,6 @@ internal static class WebGPUSceneEncoder
                     {
                         operations.Add(new WebGPUSceneOperation(childRange));
                     }
-
-                    int childOperationCount = operations.Count - childOperationStart;
 
                     // Children are rendered into the temporary layer with the active clip stack
                     // already replayed. Replaying the same clips again while compositing the
@@ -466,7 +467,7 @@ internal static class WebGPUSceneEncoder
                     }
 
                     WebGPUSceneRange compositeRange = encoding.EndPackedIndependentRange(targetBounds, compositeStart, closeActiveClips: false);
-                    layer.SetComposite(childOperationCount, compositeRange);
+                    operations.Add(new WebGPUSceneOperation(compositeRange, layerTargetId, targetId));
 
                     rangeStart = encoding.BeginPackedIndependentRange(targetBounds, ClipBlendMode, replayActiveClips: true);
                     i = layerEnd;
@@ -688,6 +689,83 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
+    /// Completes immutable Apply-group and barrier-capacity metadata after the ordered stream has
+    /// been flattened into explicit layer entry and exit operations.
+    /// </summary>
+    /// <param name="operations">The ordered operations to finalize in place.</param>
+    private static void FinalizeOrderedOperations(List<WebGPUSceneOperation> operations)
+    {
+        int pendingStatusCapacity = 0;
+        int denseApplyIndex = 0;
+
+        for (int i = 0; i < operations.Count; i++)
+        {
+            WebGPUSceneOperation operation = operations[i];
+            switch (operation.Kind)
+            {
+                case WebGPUSceneOperationKind.RenderRange:
+                case WebGPUSceneOperationKind.EndLayer:
+                    pendingStatusCapacity = checked(pendingStatusCapacity + operation.Range.MaximumStatusRecordCount);
+                    break;
+
+                case WebGPUSceneOperationKind.Apply:
+                    int groupCount = 1;
+
+                    // Every candidate read must be disjoint from every earlier conservative write.
+                    // Pairwise testing represents the true union of rectangles; replacing it with
+                    // one bounding rectangle would incorrectly split groups across empty gaps.
+                    for (int candidateIndex = i + 1; candidateIndex < operations.Count; candidateIndex++)
+                    {
+                        WebGPUSceneOperation candidateOperation = operations[candidateIndex];
+                        if (candidateOperation.Kind != WebGPUSceneOperationKind.Apply)
+                        {
+                            break;
+                        }
+
+                        WebGPUApplySceneItem candidate = candidateOperation.Apply!;
+                        Rectangle candidateRead = candidate.SourceRect;
+                        candidateRead.Offset(-candidate.ReadOffset.X, -candidate.ReadOffset.Y);
+                        bool intersectsEarlierWrite = false;
+
+                        for (int previousIndex = i; previousIndex < candidateIndex; previousIndex++)
+                        {
+                            Rectangle previousWrite = operations[previousIndex].Apply!.SourceRect;
+                            if (candidateRead.Left < previousWrite.Right &&
+                                candidateRead.Right > previousWrite.Left &&
+                                candidateRead.Top < previousWrite.Bottom &&
+                                candidateRead.Bottom > previousWrite.Top)
+                            {
+                                intersectsEarlierWrite = true;
+                                break;
+                            }
+                        }
+
+                        if (intersectsEarlierWrite)
+                        {
+                            break;
+                        }
+
+                        groupCount++;
+                    }
+
+                    operation.SetApplyGroup(groupCount, pendingStatusCapacity);
+
+                    // The Apply draw ranges execute after this barrier and become the complete
+                    // pending transaction seen by the next group or end-of-flush validation.
+                    pendingStatusCapacity = 0;
+                    for (int operationIndex = i; operationIndex < i + groupCount; operationIndex++)
+                    {
+                        operations[operationIndex].SetApplyIndex(denseApplyIndex++);
+                        pendingStatusCapacity = checked(pendingStatusCapacity + operations[operationIndex].Apply!.DrawRange.MaximumStatusRecordCount);
+                    }
+
+                    i += groupCount - 1;
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
     /// Creates rasterizer options for an encoder-synthesized fill from the drawing options it composites with.
     /// </summary>
     /// <param name="interest">The absolute raster interest bounds of the synthesized fill.</param>
@@ -743,18 +821,6 @@ internal static class WebGPUSceneEncoder
 
         bounds.Inflate(new SizeF(inflate, inflate));
         return bounds;
-    }
-
-    /// <summary>
-    /// Disposes ordered scene operations produced before an encoding failure.
-    /// </summary>
-    /// <param name="operations">The operations to dispose.</param>
-    private static void DisposeOperations(List<WebGPUSceneOperation> operations)
-    {
-        for (int i = 0; i < operations.Count; i++)
-        {
-            operations[i].Dispose();
-        }
     }
 
     /// <summary>
@@ -3727,7 +3793,7 @@ internal static class WebGPUSceneEncoder
             ref SupportedSubsetSceneEncoding encoding,
             in Rectangle targetBounds,
             MemoryAllocator allocator,
-            WebGPUSceneOperation[]? operations = null)
+            WebGPUSceneOperation[] operations)
         {
             int pathTagByteCount = encoding.PathTags.Count;
 
@@ -3985,7 +4051,8 @@ internal static class WebGPUSceneEncoder
                     fineRasterizationMode,
                     fineCoverageThreshold,
                     estimatedTileCrossings,
-                    estimatedBinFootprint);
+                    estimatedBinFootprint,
+                    []);
 
                 sceneDataOwner = null;
                 gradientPixelsOwner = null;
@@ -6626,7 +6693,8 @@ internal sealed class WebGPUEncodedScene : IDisposable
         RasterizationMode.Antialiased,
         0F,
         0L,
-        0L);
+        0L,
+        []);
 
     private readonly IMemoryOwner<uint>? sceneDataOwner;
     private readonly IMemoryOwner<uint>? gradientPixelsOwner;
@@ -6698,7 +6766,7 @@ internal sealed class WebGPUEncodedScene : IDisposable
         float fineCoverageThreshold,
         long estimatedTileCrossings,
         long estimatedBinFootprint,
-        WebGPUSceneOperation[]? operations = null)
+        WebGPUSceneOperation[] operations)
     {
         this.TargetSize = targetSize;
         this.InfoWordCount = infoWordCount;
@@ -6707,7 +6775,7 @@ internal sealed class WebGPUEncodedScene : IDisposable
         this.pathGradientDataOwner = pathGradientDataOwner;
         this.PathGradientDataWordCount = pathGradientDataWordCount;
         this.images = images;
-        this.operations = operations ?? [];
+        this.operations = operations;
         this.SceneWordCount = sceneWordCount;
         this.GradientRowCount = gradientRowCount;
         this.Layout = layout;
@@ -6730,6 +6798,55 @@ internal sealed class WebGPUEncodedScene : IDisposable
         this.FineCoverageThreshold = fineCoverageThreshold;
         this.EstimatedTileCrossings = estimatedTileCrossings;
         this.EstimatedBinFootprint = estimatedBinFootprint;
+
+        int targetCount = operations.Length == 0 ? 0 : 1;
+        int applyCount = 0;
+        int maxApplyGroupCount = 0;
+        int pendingRangeCount = 0;
+        int maxPendingRangeCount = 0;
+        int finalStatusCapacity = 0;
+        int maxStatusCapacity = 0;
+
+        for (int i = 0; i < operations.Length; i++)
+        {
+            WebGPUSceneOperation operation = operations[i];
+            switch (operation.Kind)
+            {
+                case WebGPUSceneOperationKind.RenderRange:
+                case WebGPUSceneOperationKind.EndLayer:
+                    pendingRangeCount++;
+                    finalStatusCapacity = checked(finalStatusCapacity + operation.Range.MaximumStatusRecordCount);
+                    break;
+
+                case WebGPUSceneOperationKind.BeginLayer:
+                    targetCount = Math.Max(targetCount, operation.LayerTargetId + 1);
+                    break;
+
+                case WebGPUSceneOperationKind.Apply when operation.ApplyGroupCount != 0:
+                    applyCount += operation.ApplyGroupCount;
+                    maxApplyGroupCount = Math.Max(maxApplyGroupCount, operation.ApplyGroupCount);
+                    maxPendingRangeCount = Math.Max(maxPendingRangeCount, pendingRangeCount);
+                    maxStatusCapacity = Math.Max(maxStatusCapacity, operation.PendingStatusCapacity);
+
+                    pendingRangeCount = operation.ApplyGroupCount;
+                    finalStatusCapacity = 0;
+                    for (int applyIndex = i; applyIndex < i + operation.ApplyGroupCount; applyIndex++)
+                    {
+                        finalStatusCapacity = checked(
+                            finalStatusCapacity + operations[applyIndex].Apply!.DrawRange.MaximumStatusRecordCount);
+                    }
+
+                    i += operation.ApplyGroupCount - 1;
+                    break;
+            }
+        }
+
+        this.OrderedTargetCount = targetCount;
+        this.OrderedApplyCount = applyCount;
+        this.MaxApplyGroupCount = maxApplyGroupCount;
+        this.MaxPendingRangeCount = Math.Max(maxPendingRangeCount, pendingRangeCount);
+        this.FinalStatusCapacity = finalStatusCapacity;
+        this.MaxStatusCapacity = Math.Max(maxStatusCapacity, finalStatusCapacity);
     }
 
     /// <summary>
@@ -6785,12 +6902,42 @@ internal sealed class WebGPUEncodedScene : IDisposable
     /// <summary>
     /// Gets the ordered retained operations for a scene containing Apply.
     /// </summary>
-    public IReadOnlyList<WebGPUSceneOperation> Operations => this.operations;
+    public ReadOnlySpan<WebGPUSceneOperation> OrderedOperations => this.operations;
 
     /// <summary>
     /// Gets a value indicating whether this scene renders through ordered operations.
     /// </summary>
     public bool HasOperations => this.operations.Length != 0;
+
+    /// <summary>
+    /// Gets the number of stable root and scoped-layer target identities in the ordered plan.
+    /// </summary>
+    public int OrderedTargetCount { get; }
+
+    /// <summary>
+    /// Gets the number of Apply operations retained by the ordered plan.
+    /// </summary>
+    public int OrderedApplyCount { get; }
+
+    /// <summary>
+    /// Gets the largest dependency-independent Apply group retained by the ordered plan.
+    /// </summary>
+    public int MaxApplyGroupCount { get; }
+
+    /// <summary>
+    /// Gets the largest number of range submissions retained by one unvalidated transaction.
+    /// </summary>
+    public int MaxPendingRangeCount { get; }
+
+    /// <summary>
+    /// Gets the maximum scheduling-status record count required by any ordered barrier.
+    /// </summary>
+    public int MaxStatusCapacity { get; }
+
+    /// <summary>
+    /// Gets the maximum scheduling-status record count awaiting validation at end of flush.
+    /// </summary>
+    public int FinalStatusCapacity { get; }
 
     /// <summary>
     /// Gets the number of fill records in the encoded scene.
@@ -6931,11 +7078,6 @@ internal sealed class WebGPUEncodedScene : IDisposable
         this.sceneDataOwner?.Dispose();
         this.gradientPixelsOwner?.Dispose();
         this.pathGradientDataOwner?.Dispose();
-
-        for (int i = 0; i < this.operations.Length; i++)
-        {
-            this.operations[i].Dispose();
-        }
     }
 }
 

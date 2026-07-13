@@ -1906,6 +1906,255 @@ public partial class WebGPUDrawingBackendTests
     }
 
     [WebGPUTheory]
+    [InlineData(false, 2)]
+    [InlineData(true, 1)]
+    public void OrderedPlan_GroupsOnlyDependencyIndependentApplies(bool offsetReadIntersectsEarlierWrite, int expectedFirstGroupCount)
+    {
+        using WebGPUDrawingBackend backend = new();
+        Configuration configuration = Configuration.Default.Clone();
+        configuration.SetDrawingBackend(backend);
+        DrawingOptions drawingOptions = new();
+
+        using WebGPURenderTarget renderTarget = new(96, 64);
+        using DrawingCanvas canvas = WebGPUCanvasFactory.CreateCanvas(
+            configuration,
+            drawingOptions,
+            backend,
+            renderTarget.Bounds,
+            renderTarget.Surface,
+            renderTarget.Format);
+
+        canvas.Fill(Brushes.Solid(Color.White));
+        canvas.Apply(new Rectangle(8, 8, 20, 20), context => context.Invert());
+
+        if (offsetReadIntersectsEarlierWrite)
+        {
+            // The second write is disjoint, but its non-zero write-back offset moves the source
+            // read onto the first write. The planner must therefore preserve a separate barrier.
+            canvas.Apply(
+                new Rectangle(8, 8, 20, 20),
+                context => context.Invert(),
+                new GraphicsOptions(),
+                new Point(42, 0));
+        }
+        else
+        {
+            canvas.Apply(new Rectangle(50, 8, 20, 20), context => context.Invert());
+        }
+
+        using DrawingBackendScene scene = canvas.CreateScene();
+        WebGPUDrawingBackendScene webGPUScene = Assert.IsType<WebGPUDrawingBackendScene>(scene);
+        ReadOnlySpan<WebGPUSceneOperation> operations = webGPUScene.EncodedScene.OrderedOperations;
+        int firstApplyIndex = 0;
+
+        while (operations[firstApplyIndex].Kind != WebGPUSceneOperationKind.Apply)
+        {
+            firstApplyIndex++;
+        }
+
+        Assert.Equal(expectedFirstGroupCount, operations[firstApplyIndex].ApplyGroupCount);
+        Assert.Equal(0, operations[firstApplyIndex].ApplyIndex);
+        Assert.True(operations[firstApplyIndex].PendingStatusCapacity > 0);
+
+        WebGPUSceneOperation secondApply = operations[firstApplyIndex + 1];
+        Assert.Equal(WebGPUSceneOperationKind.Apply, secondApply.Kind);
+        Assert.Equal(1, secondApply.ApplyIndex);
+        Assert.Equal(offsetReadIntersectsEarlierWrite ? 1 : 0, secondApply.ApplyGroupCount);
+    }
+
+    [WebGPUTheory]
+    [WithBlankImage(128, 96, PixelTypes.Rgba32)]
+    public void ConsecutiveIndependentApplies_ShareReadbackAndMatchDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+
+        static void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(8, 12, 40, 36));
+            canvas.Fill(Brushes.Solid(Color.Blue), new Rectangle(76, 44, 36, 40));
+
+            // These disjoint source/write rectangles are encoded as one two-image barrier while
+            // their processors and draw ranges remain in their original order.
+            canvas.Apply(new Rectangle(8, 12, 40, 36), context => context.Invert());
+            canvas.Apply(new Rectangle(76, 44, 36, 40), context => context.Invert());
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<TPixel> webGPUImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+            defaultImage.Width,
+            defaultImage.Height,
+            backend,
+            drawingOptions,
+            DrawAction);
+
+        DebugSaveBackendPair(provider, null, defaultImage, webGPUImage);
+        AssertBackendPairSimilarity(defaultImage, webGPUImage, 0.005F);
+    }
+
+    [WebGPUTheory]
+    [WithBlankImage(96, 64, PixelTypes.Rgba32)]
+    public void ConsecutiveClippedApplies_ShareReadbackAndMatchDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new() { GraphicsOptions = new GraphicsOptions { Antialias = false } };
+
+        static void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(0, 8, 16, 24));
+            canvas.Fill(Brushes.Solid(Color.Blue), new Rectangle(80, 8, 16, 24));
+
+            // Both reads extend beyond opposite target edges. Their packed rows retain the
+            // destination offsets needed to reconstruct the full processor images.
+            canvas.Apply(new Rectangle(-8, 8, 24, 24), context => context.Invert());
+            canvas.Apply(new Rectangle(80, 8, 24, 24), context => context.Invert());
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<TPixel> webGPUImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+            defaultImage.Width,
+            defaultImage.Height,
+            backend,
+            drawingOptions,
+            DrawAction);
+
+        DebugSaveBackendPair(provider, null, defaultImage, webGPUImage);
+        AssertBackendPairSimilarity(defaultImage, webGPUImage, 0.005F);
+    }
+
+    [WebGPUFact]
+    public void OrderedPlan_SplitsApplyGroupsAtRenderAndLayerBoundaries()
+    {
+        using WebGPUDrawingBackend backend = new();
+        Configuration configuration = Configuration.Default.Clone();
+        configuration.SetDrawingBackend(backend);
+
+        using WebGPURenderTarget renderTarget = new(96, 64);
+        using DrawingCanvas canvas = WebGPUCanvasFactory.CreateCanvas(
+            configuration,
+            new DrawingOptions(),
+            backend,
+            renderTarget.Bounds,
+            renderTarget.Surface,
+            renderTarget.Format);
+
+        canvas.Fill(Brushes.Solid(Color.White));
+        canvas.Apply(new Rectangle(4, 4, 16, 16), context => context.Invert());
+        canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(28, 4, 16, 16));
+        canvas.Apply(new Rectangle(52, 4, 16, 16), context => context.Invert());
+        canvas.SaveLayer(new GraphicsOptions(), new Rectangle(4, 28, 40, 28));
+        canvas.Apply(new Rectangle(4, 28, 16, 16), context => context.Invert());
+        canvas.Restore();
+
+        using DrawingBackendScene scene = canvas.CreateScene();
+        WebGPUDrawingBackendScene webGPUScene = Assert.IsType<WebGPUDrawingBackendScene>(scene);
+        ReadOnlySpan<WebGPUSceneOperation> operations = webGPUScene.EncodedScene.OrderedOperations;
+        int applyCount = 0;
+        bool sawBeginLayer = false;
+        bool sawEndLayer = false;
+
+        for (int i = 0; i < operations.Length; i++)
+        {
+            WebGPUSceneOperation operation = operations[i];
+            sawBeginLayer |= operation.Kind == WebGPUSceneOperationKind.BeginLayer;
+            sawEndLayer |= operation.Kind == WebGPUSceneOperationKind.EndLayer;
+
+            if (operation.Kind == WebGPUSceneOperationKind.Apply)
+            {
+                Assert.Equal(1, operation.ApplyGroupCount);
+                applyCount++;
+            }
+        }
+
+        Assert.Equal(3, applyCount);
+        Assert.True(sawBeginLayer);
+        Assert.True(sawEndLayer);
+    }
+
+    [WebGPUTheory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void ConsecutiveIndependentApplies_ProcessorExceptionCommitsEarlierResults(int throwingApplyIndex)
+    {
+        using WebGPUDrawingBackend backend = new();
+        Configuration configuration = Configuration.Default.Clone();
+        configuration.SetDrawingBackend(backend);
+        DrawingOptions drawingOptions = new() { GraphicsOptions = new GraphicsOptions { Antialias = false } };
+        InvalidOperationException expectedException = new("Expected processor failure.");
+
+        using WebGPURenderTarget renderTarget = new(128, 64);
+        DrawingCanvas canvas = WebGPUCanvasFactory.CreateCanvas(
+            configuration,
+            drawingOptions,
+            backend,
+            renderTarget.Bounds,
+            renderTarget.Surface,
+            renderTarget.Format);
+
+        canvas.Fill(Brushes.Solid(Color.White));
+        canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(8, 8, 24, 24));
+        canvas.Fill(Brushes.Solid(Color.Blue), new Rectangle(56, 8, 24, 24));
+        canvas.Fill(Brushes.Solid(Color.Lime), new Rectangle(96, 8, 24, 24));
+
+        Rectangle[] applyRectangles =
+        [
+            new Rectangle(8, 8, 24, 24),
+            new Rectangle(56, 8, 24, 24),
+            new Rectangle(96, 8, 24, 24)
+        ];
+
+        for (int i = 0; i < applyRectangles.Length; i++)
+        {
+            int applyIndex = i;
+            canvas.Apply(
+                applyRectangles[i],
+                context =>
+                {
+                    if (applyIndex == throwingApplyIndex)
+                    {
+                        throw expectedException;
+                    }
+
+                    context.Invert();
+                });
+        }
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => canvas.Dispose());
+        Assert.Same(expectedException, exception);
+
+        using Image<Rgba32> image = renderTarget.ReadbackImage<Rgba32>();
+        Rgba32[] originalColors =
+        [
+            Color.Red.ToPixel<Rgba32>(),
+            Color.Blue.ToPixel<Rgba32>(),
+            Color.Lime.ToPixel<Rgba32>()
+        ];
+        Rgba32[] invertedColors =
+        [
+            Color.Cyan.ToPixel<Rgba32>(),
+            Color.Yellow.ToPixel<Rgba32>(),
+            Color.Magenta.ToPixel<Rgba32>()
+        ];
+
+        for (int i = 0; i < applyRectangles.Length; i++)
+        {
+            Rgba32 expectedColor = i < throwingApplyIndex ? invertedColors[i] : originalColors[i];
+            Assert.Equal(expectedColor, image[applyRectangles[i].X + 8, applyRectangles[i].Y + 8]);
+        }
+
+        Assert.Equal(Color.White.ToPixel<Rgba32>(), image[44, 44]);
+    }
+
+    [WebGPUTheory]
     [WithSolidFilledImages(128, 128, "White", PixelTypes.Rgba32)]
     public void SaveLayer_ManyLayers_UsesClipReduce_AndMatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>

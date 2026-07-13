@@ -24,15 +24,20 @@ internal enum WebGPUSceneOperationKind
     Apply,
 
     /// <summary>
-    /// Renders a scoped layer into a temporary target and composites it back into the parent target.
+    /// Begins rendering into a scoped-layer target.
     /// </summary>
-    ScopedLayer
+    BeginLayer,
+
+    /// <summary>
+    /// Composites a completed scoped-layer target into its parent target.
+    /// </summary>
+    EndLayer
 }
 
 /// <summary>
 /// One ordered operation retained by a single WebGPU scene.
 /// </summary>
-internal sealed class WebGPUSceneOperation : IDisposable
+internal sealed class WebGPUSceneOperation
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUSceneOperation"/> class.
@@ -55,13 +60,31 @@ internal sealed class WebGPUSceneOperation : IDisposable
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUSceneOperation"/> class.
+    /// Initializes a new instance of the <see cref="WebGPUSceneOperation"/> class for a scoped-layer entry.
     /// </summary>
-    /// <param name="layer">The retained scoped-layer operation data.</param>
-    public WebGPUSceneOperation(WebGPUScopedLayerSceneItem layer)
+    /// <param name="layerBounds">The absolute bounds of the scoped layer.</param>
+    /// <param name="layerTargetId">The stable target identity assigned to the scoped layer.</param>
+    /// <param name="parentTargetId">The stable target identity of the containing target.</param>
+    public WebGPUSceneOperation(Rectangle layerBounds, int layerTargetId, int parentTargetId)
     {
-        this.Kind = WebGPUSceneOperationKind.ScopedLayer;
-        this.Layer = layer;
+        this.Kind = WebGPUSceneOperationKind.BeginLayer;
+        this.LayerBounds = layerBounds;
+        this.LayerTargetId = layerTargetId;
+        this.ParentTargetId = parentTargetId;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUSceneOperation"/> class for a scoped-layer exit.
+    /// </summary>
+    /// <param name="compositeRange">The encoded range that composites the layer into its parent.</param>
+    /// <param name="layerTargetId">The stable target identity assigned to the scoped layer.</param>
+    /// <param name="parentTargetId">The stable target identity of the containing target.</param>
+    public WebGPUSceneOperation(WebGPUSceneRange compositeRange, int layerTargetId, int parentTargetId)
+    {
+        this.Kind = WebGPUSceneOperationKind.EndLayer;
+        this.Range = compositeRange;
+        this.LayerTargetId = layerTargetId;
+        this.ParentTargetId = parentTargetId;
     }
 
     /// <summary>
@@ -82,18 +105,55 @@ internal sealed class WebGPUSceneOperation : IDisposable
     public WebGPUApplySceneItem? Apply { get; }
 
     /// <summary>
-    /// Gets the retained layer data for a scoped-layer operation.
-    /// Non-null only when <see cref="Kind"/> is <see cref="WebGPUSceneOperationKind.ScopedLayer"/>.
+    /// Gets the absolute bounds of a scoped layer.
+    /// Only meaningful when <see cref="Kind"/> is <see cref="WebGPUSceneOperationKind.BeginLayer"/>.
     /// </summary>
-    public WebGPUScopedLayerSceneItem? Layer { get; }
+    public Rectangle LayerBounds { get; }
 
-    /// <inheritdoc />
-    public void Dispose()
+    /// <summary>
+    /// Gets the stable target identity for a scoped-layer entry or exit.
+    /// </summary>
+    public int LayerTargetId { get; }
+
+    /// <summary>
+    /// Gets the stable parent target identity for a scoped-layer entry or exit.
+    /// </summary>
+    public int ParentTargetId { get; }
+
+    /// <summary>
+    /// Gets the number of consecutive dependency-independent Apply operations in the group that
+    /// begins at this operation. The value is non-zero only for an Apply group head.
+    /// </summary>
+    public int ApplyGroupCount { get; private set; }
+
+    /// <summary>
+    /// Gets the maximum number of scheduling-status records awaiting validation immediately
+    /// before this Apply group reads its source pixels.
+    /// </summary>
+    public int PendingStatusCapacity { get; private set; }
+
+    /// <summary>
+    /// Gets the dense zero-based Apply index used by the flush readback layout.
+    /// Only meaningful when <see cref="Kind"/> is <see cref="WebGPUSceneOperationKind.Apply"/>.
+    /// </summary>
+    public int ApplyIndex { get; private set; }
+
+    /// <summary>
+    /// Completes the retained barrier metadata for an Apply group head.
+    /// </summary>
+    /// <param name="applyGroupCount">The number of Apply operations sharing the source snapshot.</param>
+    /// <param name="pendingStatusCapacity">The maximum number of status records produced before the shared readback.</param>
+    public void SetApplyGroup(int applyGroupCount, int pendingStatusCapacity)
     {
-        // At most one payload is non-null; disposing both unconditionally keeps the owner kind-agnostic.
-        this.Apply?.Dispose();
-        this.Layer?.Dispose();
+        this.ApplyGroupCount = applyGroupCount;
+        this.PendingStatusCapacity = pendingStatusCapacity;
     }
+
+    /// <summary>
+    /// Assigns the dense Apply index used by the generic render-time layout.
+    /// </summary>
+    /// <param name="applyIndex">The zero-based Apply index.</param>
+    public void SetApplyIndex(int applyIndex) => this.ApplyIndex = applyIndex;
 }
 
 /// <summary>
@@ -275,12 +335,21 @@ internal readonly struct WebGPUSceneRange
     /// Gets the CPU-side upper bound for the range's per-(draw, bin) binning records.
     /// </summary>
     public long EstimatedBinFootprint { get; }
+
+    /// <summary>
+    /// Gets the maximum number of allocator-status records produced by this range. The staged
+    /// pipeline emits one record per chunk, and one tile row is the smallest legal chunk.
+    /// </summary>
+    public int MaximumStatusRecordCount
+        => this.TargetBounds.Height > 0
+            ? ((this.TargetBounds.Height - 1) / WebGPUSceneEncoder.TileHeight) + 1
+            : 1;
 }
 
 /// <summary>
 /// Retained WebGPU data for one Apply operation.
 /// </summary>
-internal sealed class WebGPUApplySceneItem : IDisposable
+internal sealed class WebGPUApplySceneItem
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUApplySceneItem"/> class.
@@ -321,62 +390,7 @@ internal sealed class WebGPUApplySceneItem : IDisposable
     /// Gets the encoded image-fill draw range inside the retained scene.
     /// </summary>
     public WebGPUSceneRange DrawRange { get; }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        // No native resources are retained; kept so WebGPUSceneOperation can dispose payloads uniformly.
-    }
 }
 
 #pragma warning restore SA1649
 #pragma warning restore SA1201
-
-/// <summary>
-/// Retained WebGPU data for one layer that must be materialized because it contains Apply.
-/// </summary>
-internal sealed class WebGPUScopedLayerSceneItem : IDisposable
-{
-    /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUScopedLayerSceneItem"/> class.
-    /// </summary>
-    /// <param name="bounds">The absolute layer bounds.</param>
-    public WebGPUScopedLayerSceneItem(Rectangle bounds)
-    {
-        this.Bounds = bounds;
-    }
-
-    /// <summary>
-    /// Gets the absolute layer bounds.
-    /// </summary>
-    public Rectangle Bounds { get; }
-
-    /// <summary>
-    /// Gets the number of operations rendered into the temporary layer target.
-    /// Populated by <see cref="SetComposite"/> once the child operations have been lowered.
-    /// </summary>
-    public int OperationCount { get; private set; }
-
-    /// <summary>
-    /// Gets the encoded image-fill draw range that composites the layer texture into the parent target.
-    /// Populated by <see cref="SetComposite"/> once the child operations have been lowered.
-    /// </summary>
-    public WebGPUSceneRange CompositeRange { get; private set; }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        // No native resources are retained; kept so WebGPUSceneOperation can dispose payloads uniformly.
-    }
-
-    /// <summary>
-    /// Completes the retained layer metadata after the child and composite ranges have been lowered.
-    /// </summary>
-    /// <param name="operationCount">The number of operations rendered into the temporary layer target.</param>
-    /// <param name="compositeRange">The encoded image-fill draw range that composites the layer texture into the parent target.</param>
-    public void SetComposite(int operationCount, WebGPUSceneRange compositeRange)
-    {
-        this.OperationCount = operationCount;
-        this.CompositeRange = compositeRange;
-    }
-}

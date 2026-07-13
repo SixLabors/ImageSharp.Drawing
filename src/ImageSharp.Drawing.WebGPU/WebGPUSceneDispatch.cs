@@ -1163,6 +1163,267 @@ internal static class WebGPUSceneDispatch
     }
 
     /// <summary>
+    /// Submits one ordered range into an uncommitted composition texture and copies its allocator
+    /// status into a caller-owned barrier buffer without mapping or waiting for the GPU.
+    /// </summary>
+    /// <param name="stagedScene">The staged range to submit.</param>
+    /// <param name="backdropTarget">The validated or transaction-local image sampled by the fine pass.</param>
+    /// <param name="outputTexture">The composition texture receiving the complete range output.</param>
+    /// <param name="outputTextureView">The storage view for <paramref name="outputTexture"/>.</param>
+    /// <param name="schedulingArena">The reusable scheduling arena slot for this flush.</param>
+    /// <param name="initialChunkTileHeightHint">The advisory first chunk height for an oversized range.</param>
+    /// <param name="statusReadbackBuffer">The flush barrier buffer receiving allocator records.</param>
+    /// <param name="statusReadbackOffset">The byte offset of this range's first allocator record.</param>
+    /// <param name="submittedChunkBumpSizes">Receives the capacity used by each emitted status record.</param>
+    /// <param name="submittedChunkTileHeights">Receives each chunk height, or zero for a monolithic range.</param>
+    /// <param name="statusCount">Receives the number of allocator records emitted by this range.</param>
+    /// <param name="fullTileHeight">Receives the range height in fine-pass tile rows.</param>
+    /// <param name="successfulChunkTileHeight">Receives the largest chunk height submitted successfully.</param>
+    /// <param name="submissionIndex">Receives the exact index of the submission containing the final status copy.</param>
+    /// <param name="error">Receives the submission failure reason.</param>
+    /// <returns><see langword="true"/> when the range was submitted; otherwise, <see langword="false"/>.</returns>
+    public static unsafe bool TrySubmitTransactionalStagedScene(
+        ref WebGPUStagedScene stagedScene,
+        WebGPUSceneTarget backdropTarget,
+        Texture* outputTexture,
+        TextureView* outputTextureView,
+        ref WebGPUSceneSchedulingArena? schedulingArena,
+        uint initialChunkTileHeightHint,
+        WgpuBuffer* statusReadbackBuffer,
+        nuint statusReadbackOffset,
+        Span<WebGPUSceneBumpSizes> submittedChunkBumpSizes,
+        Span<uint> submittedChunkTileHeights,
+        out int statusCount,
+        out uint fullTileHeight,
+        out uint successfulChunkTileHeight,
+        out WrappedSubmissionIndex submissionIndex,
+        out string? error)
+    {
+        statusCount = 0;
+        fullTileHeight = checked((uint)Math.Max((backdropTarget.Bounds.Height + 15) / 16, 1));
+        successfulChunkTileHeight = 0;
+        submissionIndex = default;
+        error = null;
+
+        if (IsChunkableBindingFailure(stagedScene.BindingLimitFailure.Buffer))
+        {
+            return TrySubmitTransactionalChunkedStagedScene(
+                ref stagedScene,
+                backdropTarget,
+                outputTexture,
+                outputTextureView,
+                ref schedulingArena,
+                initialChunkTileHeightHint,
+                statusReadbackBuffer,
+                statusReadbackOffset,
+                submittedChunkBumpSizes,
+                submittedChunkTileHeights,
+                out statusCount,
+                out fullTileHeight,
+                out successfulChunkTileHeight,
+                out submissionIndex,
+                out error);
+        }
+
+        WebGPUSceneSchedulingArena currentArena = EnsureSchedulingArena(
+            stagedScene.FlushContext,
+            stagedScene.Config.BufferSizes,
+            (nuint)sizeof(GpuSceneBumpAllocators),
+            ref schedulingArena);
+
+        WebGPUFlushContext flushContext = stagedScene.FlushContext;
+        if (!TryWriteSceneHeader(flushContext, stagedScene.Resources.HeaderBuffer, CreateHeader(stagedScene, 0U), out error) ||
+            !TryDispatchSchedulingStages(ref stagedScene, currentArena, out WebGPUSceneSchedulingResources scheduling, out error) ||
+            !TryDispatchFineArea(
+                flushContext,
+                stagedScene.Resources,
+                stagedScene.Config.BufferSizes,
+                scheduling,
+                outputTextureView,
+                backdropTarget.TextureView,
+                checked((uint)((backdropTarget.Bounds.Width + 15) / 16)),
+                checked((uint)((backdropTarget.Bounds.Height + 15) / 16)),
+                out error) ||
+            !TryEnqueueSchedulingStatusReadback(flushContext, scheduling.BumpBuffer, statusReadbackBuffer, statusReadbackOffset, out error) ||
+            !WebGPUDrawingBackend.TrySubmitWithIndex(flushContext, out submissionIndex))
+        {
+            return false;
+        }
+
+        submittedChunkBumpSizes[0] = stagedScene.Config.BumpSizes;
+        submittedChunkTileHeights[0] = 0;
+        statusCount = 1;
+        return true;
+    }
+
+    /// <summary>
+    /// Submits one oversized ordered range in tile-row chunks while retaining every allocator
+    /// record in the caller's shared transaction buffer.
+    /// </summary>
+    /// <param name="stagedScene">The oversized staged range to submit.</param>
+    /// <param name="backdropTarget">The transaction image sampled by every chunk's fine pass.</param>
+    /// <param name="outputTexture">The composition texture receiving all chunk output.</param>
+    /// <param name="outputTextureView">The storage view for <paramref name="outputTexture"/>.</param>
+    /// <param name="schedulingArena">The reusable scheduling arena slot for this flush.</param>
+    /// <param name="initialChunkTileHeightHint">The advisory first chunk height.</param>
+    /// <param name="statusReadbackBuffer">The flush barrier buffer receiving chunk allocator records.</param>
+    /// <param name="statusReadbackOffset">The byte offset of the first chunk record.</param>
+    /// <param name="submittedChunkBumpSizes">Receives the capacity used by each chunk.</param>
+    /// <param name="submittedChunkTileHeights">Receives the real height of each chunk.</param>
+    /// <param name="statusCount">Receives the number of submitted chunks.</param>
+    /// <param name="fullTileHeight">Receives the full range height in tile rows.</param>
+    /// <param name="successfulChunkTileHeight">Receives the largest successful chunk height.</param>
+    /// <param name="submissionIndex">Receives the submission containing the final chunk status.</param>
+    /// <param name="error">Receives the chunk submission failure reason.</param>
+    /// <returns><see langword="true"/> when every chunk was submitted; otherwise, <see langword="false"/>.</returns>
+    private static unsafe bool TrySubmitTransactionalChunkedStagedScene(
+        ref WebGPUStagedScene stagedScene,
+        WebGPUSceneTarget backdropTarget,
+        Texture* outputTexture,
+        TextureView* outputTextureView,
+        ref WebGPUSceneSchedulingArena? schedulingArena,
+        uint initialChunkTileHeightHint,
+        WgpuBuffer* statusReadbackBuffer,
+        nuint statusReadbackOffset,
+        Span<WebGPUSceneBumpSizes> submittedChunkBumpSizes,
+        Span<uint> submittedChunkTileHeights,
+        out int statusCount,
+        out uint fullTileHeight,
+        out uint successfulChunkTileHeight,
+        out WrappedSubmissionIndex submissionIndex,
+        out string? error)
+    {
+        statusCount = 0;
+        fullTileHeight = checked((uint)Math.Max((backdropTarget.Bounds.Height + 15) / 16, 1));
+        successfulChunkTileHeight = 0;
+        submissionIndex = default;
+        error = null;
+
+        WebGPUEncodedScene encodedScene = stagedScene.EncodedScene;
+        WebGPUFlushContext flushContext = stagedScene.FlushContext;
+        nuint maxStorageBufferBindingSize = flushContext.DeviceState.MaxStorageBufferBindingSize;
+
+        if (!flushContext.EnsureCommandEncoder())
+        {
+            error = "Failed to create a command encoder for the transactional chunk prefill.";
+            return false;
+        }
+
+        // Chunked fine dispatch writes only its assigned tile rows. Seed the complete output from
+        // the transaction backdrop so untouched pixels preserve the preceding logical image.
+        CopyTargetToTexture(ref stagedScene, backdropTarget, outputTexture, backdropTarget.Bounds.Width, backdropTarget.Bounds.Height);
+
+        uint tileYStart = 0;
+        uint nextChunkTileHeight = initialChunkTileHeightHint == 0
+            ? GetInitialChunkTileHeight(fullTileHeight, stagedScene.BindingLimitFailure)
+            : Math.Min(initialChunkTileHeightHint, fullTileHeight);
+
+        bool sharedSchedulingPrepared = false;
+
+        while (tileYStart < fullTileHeight)
+        {
+            uint remainingTileHeight = fullTileHeight - tileYStart;
+            uint requestedTileHeight = Math.Min(nextChunkTileHeight, remainingTileHeight);
+
+            while (true)
+            {
+                WebGPUSceneChunkWindow chunkWindow = CreateChunkWindow(tileYStart, requestedTileHeight, remainingTileHeight);
+                WebGPUSceneBumpSizes chunkBumpSize = stagedScene.Range.HasValue
+                    ? ScaleChunkBumpSizes(stagedScene.Config.BumpSizes, stagedScene.Range.Value, chunkWindow.TileHeight)
+                    : ScaleChunkBumpSizes(stagedScene.Config.BumpSizes, encodedScene, chunkWindow.TileHeight);
+
+                WebGPUSceneConfig chunkConfig = stagedScene.Range.HasValue
+                    ? WebGPUSceneConfig.Create(encodedScene, stagedScene.Range.Value, chunkBumpSize, chunkWindow)
+                    : WebGPUSceneConfig.Create(encodedScene, chunkBumpSize, chunkWindow);
+
+                if (!TryValidateBindingSizes(encodedScene, chunkConfig, maxStorageBufferBindingSize, out BindingLimitFailure bindingLimitFailure, out error))
+                {
+                    if (IsChunkableBindingFailure(bindingLimitFailure.Buffer))
+                    {
+                        uint smallerTileHeight = ShrinkChunkTileHeight(requestedTileHeight, remainingTileHeight, bindingLimitFailure);
+                        if (smallerTileHeight >= requestedTileHeight)
+                        {
+                            return false;
+                        }
+
+                        requestedTileHeight = smallerTileHeight;
+                        continue;
+                    }
+
+                    return false;
+                }
+
+                WebGPUStagedScene chunkScene = stagedScene.Range.HasValue
+                    ? new WebGPUStagedScene(flushContext, encodedScene, stagedScene.Range.Value, chunkConfig, stagedScene.Resources, BindingLimitFailure.None)
+                    : new WebGPUStagedScene(flushContext, encodedScene, chunkConfig, stagedScene.Resources, BindingLimitFailure.None);
+
+                WebGPUSceneSchedulingArena currentArena = EnsureSchedulingArena(
+                    flushContext,
+                    chunkConfig.BufferSizes,
+                    (nuint)sizeof(GpuSceneBumpAllocators),
+                    ref schedulingArena);
+
+                bool useSharedSchedulingState = sharedSchedulingPrepared || chunkWindow.TileHeight < fullTileHeight;
+                if (!sharedSchedulingPrepared && useSharedSchedulingState)
+                {
+                    if (!TryDispatchSharedSchedulingStages(ref stagedScene, currentArena, out error) ||
+                        !WebGPUDrawingBackend.TrySubmitPendingCommands(flushContext))
+                    {
+                        error ??= "Failed to submit the shared transactional chunk scheduling stages.";
+                        return false;
+                    }
+
+                    sharedSchedulingPrepared = true;
+                }
+
+                nuint chunkStatusOffset = checked(statusReadbackOffset + ((nuint)statusCount * (nuint)sizeof(GpuSceneBumpAllocators)));
+                bool recordedChunk = useSharedSchedulingState
+                    ? TryRecordChunkAttempt(
+                        ref chunkScene,
+                        backdropTarget,
+                        currentArena,
+                        outputTextureView,
+                        statusReadbackBuffer,
+                        chunkStatusOffset,
+                        statusCount > 0,
+                        out error)
+                    : TryRenderChunkAttempt(
+                        ref chunkScene,
+                        backdropTarget,
+                        currentArena,
+                        outputTextureView,
+                        statusReadbackBuffer,
+                        chunkStatusOffset,
+                        useSharedSchedulingState,
+                        resetChunkLocalBumpAllocators: false,
+                        out submissionIndex,
+                        out error);
+
+                if (!recordedChunk)
+                {
+                    return false;
+                }
+
+                submittedChunkBumpSizes[statusCount] = chunkConfig.BumpSizes;
+                submittedChunkTileHeights[statusCount] = chunkWindow.TileHeight;
+                statusCount++;
+                tileYStart += chunkWindow.TileHeight;
+                nextChunkTileHeight = requestedTileHeight;
+                successfulChunkTileHeight = Math.Max(successfulChunkTileHeight, chunkWindow.TileHeight);
+                break;
+            }
+        }
+
+        if (sharedSchedulingPrepared && !WebGPUDrawingBackend.TrySubmitWithIndex(flushContext, out submissionIndex))
+        {
+            error = "Failed to submit the transactional chunk passes.";
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Creates a new scheduling arena: the transient scratch storage buffers, the zero-initialized
     /// bump-allocator buffer, and the map-readable status readback buffer.
     /// </summary>
@@ -2290,7 +2551,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="currentSizes">The capacities used for the current attempt.</param>
     /// <returns><see langword="true"/> when the flush should be retried with larger scratch buffers; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool RequiresScratchReallocation(in GpuSceneBumpAllocators bumpAllocators, WebGPUSceneBumpSizes currentSizes)
+    public static bool RequiresScratchReallocation(in GpuSceneBumpAllocators bumpAllocators, WebGPUSceneBumpSizes currentSizes)
         => bumpAllocators.Failed != 0 ||
            bumpAllocators.Binning > currentSizes.Binning ||
            bumpAllocators.Ptcl > currentSizes.Ptcl ||
@@ -2307,7 +2568,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="currentSizes">The capacities used for the current attempt.</param>
     /// <param name="bumpAllocators">The bump allocator counters read back from the GPU.</param>
     /// <returns>The enlarged capacities to use for the next retry.</returns>
-    private static WebGPUSceneBumpSizes GrowBumpSizes(WebGPUSceneBumpSizes currentSizes, in GpuSceneBumpAllocators bumpAllocators)
+    public static WebGPUSceneBumpSizes GrowBumpSizes(WebGPUSceneBumpSizes currentSizes, in GpuSceneBumpAllocators bumpAllocators)
     {
         WebGPUSceneBumpSizes grownSizes = new(
             GrowBumpSize(currentSizes.Lines, bumpAllocators.Lines),
@@ -3029,7 +3290,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="fullTileHeight">The full tile-row height of the chunked target range.</param>
     /// <param name="grownBumpSizes">Receives the merged full-scene scratch budget derived from all chunks.</param>
     /// <returns><see langword="true"/> when any chunk overflowed and the next render needs larger capacities.</returns>
-    private static bool ResolveChunkSchedulingStatuses(
+    public static bool ResolveChunkSchedulingStatuses(
         ReadOnlySpan<GpuSceneBumpAllocators> statuses,
         ReadOnlySpan<WebGPUSceneBumpSizes> chunkBumpSizes,
         ReadOnlySpan<uint> chunkTileHeights,

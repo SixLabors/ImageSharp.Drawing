@@ -5,6 +5,7 @@ using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.Attributes;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Processing.Backends;
 
@@ -40,6 +41,116 @@ public partial class WebGPUDrawingBackendTests
         (int Distinct, bool Chunked, int Errors) result = RenderManyLines(1600, 1100, lineCount: 100_000, passes: 1);
         Assert.Equal(0, result.Errors);
         Assert.True(result.Distinct >= RenderedContentDistinctColorFloor, $"First flush is a black screen: {result.Distinct} distinct colours.");
+    }
+
+    // Ordered execution retains one status record per successful chunk until its next Apply
+    // barrier. This covers the multi-record path rather than only the monolithic range used by
+    // ordinary Apply tests.
+    [WebGPUFact]
+    public void FillManyLines_ChunkedOrderedRange_RendersThroughApplyBarrier()
+    {
+        const int width = 1600;
+        const int height = 1100;
+        (PointF Start, PointF End, Color Color, float Width)[] lines = CreateRandomLines(width, height, 100_000);
+        Brush background = Brushes.Solid(Color.ParseHex("#003366"));
+
+        int gpuErrors = 0;
+        WebGPUEnvironment.UncapturedError = (_, _) => Interlocked.Increment(ref gpuErrors);
+        try
+        {
+            using WebGPURenderTarget target = new(WebGPUTextureFormat.Bgra8Unorm, width, height);
+            using (DrawingCanvas canvas = target.CreateCanvas())
+            {
+                canvas.Fill(background);
+                foreach ((PointF start, PointF end, Color color, float lineWidth) in lines)
+                {
+                    canvas.DrawLine(new SolidPen(color, lineWidth), start, end);
+                }
+
+                // Apply forces the oversized preceding range through the ordered transaction's
+                // shared status-and-pixel barrier.
+                canvas.Apply(new Rectangle(0, 0, width, height), context => context.Invert());
+            }
+
+            using Image<Rgba32> readback = target.ReadbackImage().CloneAs<Rgba32>();
+            int distinct = CountDistinctColors(readback);
+            Assert.Equal(0, gpuErrors);
+            Assert.True(target.Backend.DiagnosticLastFlushUsedChunking, "The ordered range must exercise multi-chunk status validation.");
+            Assert.True(distinct >= RenderedContentDistinctColorFloor, $"Ordered chunk output is blank: {distinct} distinct colours.");
+        }
+        finally
+        {
+            WebGPUEnvironment.UncapturedError = null;
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    [InlineData(7)]
+    public void SchedulingScratchGrowth_HandlesEachAllocatorUniformly(int allocatorIndex)
+    {
+        WebGPUSceneBumpSizes current = new(100, 100, 100, 100, 100, 100, 100, 100);
+        GpuSceneBumpAllocators actual = new()
+        {
+            Lines = allocatorIndex == 0 ? 101U : 100U,
+            Binning = allocatorIndex == 1 ? 101U : 100U,
+            PathRows = allocatorIndex == 2 ? 101U : 100U,
+            Tile = allocatorIndex == 3 ? 101U : 100U,
+            SegCounts = allocatorIndex == 4 ? 101U : 100U,
+            Segments = allocatorIndex == 5 ? 101U : 100U,
+            BlendSpill = allocatorIndex == 6 ? 101U : 100U,
+            Ptcl = allocatorIndex == 7 ? 101U : 100U
+        };
+
+        Assert.True(WebGPUSceneDispatch.RequiresScratchReallocation(in actual, current));
+        WebGPUSceneBumpSizes grown = WebGPUSceneDispatch.GrowBumpSizes(current, in actual);
+
+        Assert.Equal(allocatorIndex == 0, grown.Lines > current.Lines);
+        Assert.Equal(allocatorIndex == 1, grown.Binning > current.Binning);
+        Assert.Equal(allocatorIndex == 2, grown.PathRows > current.PathRows);
+        Assert.Equal(allocatorIndex == 3, grown.PathTiles > current.PathTiles);
+        Assert.Equal(allocatorIndex == 4, grown.SegCounts > current.SegCounts);
+        Assert.Equal(allocatorIndex == 5, grown.Segments > current.Segments);
+        Assert.Equal(allocatorIndex == 6, grown.BlendSpill > current.BlendSpill);
+        Assert.Equal(allocatorIndex == 7, grown.Ptcl > current.Ptcl);
+    }
+
+    [Fact]
+    public void ChunkSchedulingScratchGrowth_IncludesBlendSpillOverflow()
+    {
+        WebGPUSceneBumpSizes submitted = new(100, 100, 100, 100, 100, 100, 100, 100);
+        GpuSceneBumpAllocators[] statuses =
+        [
+            new GpuSceneBumpAllocators
+            {
+                Lines = 100,
+                Binning = 100,
+                PathRows = 100,
+                Tile = 100,
+                SegCounts = 100,
+                Segments = 100,
+                BlendSpill = 101,
+                Ptcl = 100
+            }
+        ];
+        WebGPUSceneBumpSizes[] submittedSizes = [submitted];
+        uint[] chunkTileHeights = [1];
+
+        bool requiresGrowth = WebGPUSceneDispatch.ResolveChunkSchedulingStatuses(
+            statuses,
+            submittedSizes,
+            chunkTileHeights,
+            4,
+            out WebGPUSceneBumpSizes grown);
+
+        Assert.True(requiresGrowth);
+        Assert.True(grown.BlendSpill > submitted.BlendSpill);
     }
 
     // A correctly seeded scene renders fully on its first flush. An under-seeded scratch estimate (for
