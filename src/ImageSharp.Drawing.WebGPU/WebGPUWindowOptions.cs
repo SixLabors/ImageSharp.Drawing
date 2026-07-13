@@ -87,4 +87,9 @@ public sealed class WebGPUWindowOptions
     /// Gets or sets the swapchain texture format used by acquired frames.
     /// </summary>
     public WebGPUTextureFormat Format { get; set; } = WebGPUTextureFormat.Rgba8Unorm;
+
+    /// <summary>
+    /// Gets or sets how the native compositor interprets the window surface alpha channel.
+    /// </summary>
+    public WebGPUCompositeAlphaMode AlphaMode { get; set; } = WebGPUCompositeAlphaMode.Auto;
 }

@@ -48,6 +48,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     private FramePacingSignal? previousFrameWorkDone;
     private readonly FeatureName requiredFeature;
     private readonly Configuration configuration;
+    private readonly WebGPUCompositeAlphaMode alphaMode;
 
     // Mutable because the device-owned portion of the stack is replaced on device-loss recovery.
     private WebGPUDeviceContext deviceContext;
@@ -69,6 +70,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     /// <param name="queueHandle">The owned default queue handle paired with <paramref name="deviceHandle"/>.</param>
     /// <param name="deviceContext">The device context bound to <paramref name="deviceHandle"/> and <paramref name="queueHandle"/>.</param>
     /// <param name="format">The negotiated swapchain texture format.</param>
+    /// <param name="alphaMode">How the native compositor interprets the swapchain alpha channel.</param>
     /// <param name="requiredFeature">The optional WebGPU feature required by the selected texture format.</param>
     private WebGPUSurfaceResources(
         WebGPU api,
@@ -80,6 +82,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         WebGPUQueueHandle queueHandle,
         WebGPUDeviceContext deviceContext,
         WebGPUTextureFormat format,
+        WebGPUCompositeAlphaMode alphaMode,
         FeatureName requiredFeature)
     {
         this.Api = api;
@@ -91,6 +94,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         this.QueueHandle = queueHandle;
         this.deviceContext = deviceContext;
         this.Format = format;
+        this.alphaMode = alphaMode;
         this.requiredFeature = requiredFeature;
     }
 
@@ -138,6 +142,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     /// <param name="configuration">The ImageSharp configuration the device context will use for its rendering backend.</param>
     /// <param name="nativeSource">The native surface source that provides the platform handles for surface creation.</param>
     /// <param name="format">The swapchain texture format.</param>
+    /// <param name="alphaMode">How the native compositor interprets the swapchain alpha channel.</param>
     /// <param name="initialPresentMode">The present mode to apply to the first surface configuration.</param>
     /// <param name="initialFramebufferSize">The framebuffer size to apply to the first surface configuration. Zero-area
     /// sizes are permitted and leave the surface unconfigured until the caller invokes <see cref="ConfigureSurface"/>
@@ -152,6 +157,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         Configuration configuration,
         INativeWindowSource nativeSource,
         WebGPUTextureFormat format,
+        WebGPUCompositeAlphaMode alphaMode,
         WebGPUPresentMode initialPresentMode,
         Size initialFramebufferSize)
     {
@@ -191,6 +197,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
                 deviceResources.QueueHandle,
                 deviceResources.DeviceContext,
                 format,
+                alphaMode,
                 requiredFeature);
 
             resources.ConfigureSurface(initialPresentMode, initialFramebufferSize);
@@ -250,6 +257,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         {
             Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst | TextureUsage.TextureBinding,
             Format = WebGPUTextureFormatMapper.ToNative(this.Format),
+            AlphaMode = ToNative(this.alphaMode),
             PresentMode = ToNative(presentMode),
             Width = (uint)framebufferSize.Width,
             Height = (uint)framebufferSize.Height,
@@ -273,6 +281,19 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
             WebGPUPresentMode.Immediate => SilkPresentMode.Immediate,
             WebGPUPresentMode.Mailbox => SilkPresentMode.Mailbox,
             _ => throw new InvalidOperationException("The WebGPU present mode mapping is incomplete.")
+        };
+
+    /// <summary>
+    /// Maps the public composite-alpha enumeration to the native Silk.NET value.
+    /// </summary>
+    /// <param name="alphaMode">The composite-alpha mode to map.</param>
+    /// <returns>The native composite-alpha mode.</returns>
+    private static CompositeAlphaMode ToNative(WebGPUCompositeAlphaMode alphaMode)
+        => alphaMode switch
+        {
+            WebGPUCompositeAlphaMode.Auto => CompositeAlphaMode.Auto,
+            WebGPUCompositeAlphaMode.Opaque => CompositeAlphaMode.Opaque,
+            _ => throw new InvalidOperationException("The WebGPU composite alpha mode mapping is incomplete.")
         };
 
     /// <summary>

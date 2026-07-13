@@ -53,6 +53,7 @@ public sealed class WebGPUWindow : IDisposable
         this.window = Window.Create(CreateSilkOptions(options));
         this.Configuration = configuration;
         this.Format = options.Format;
+        this.AlphaMode = options.AlphaMode;
         this.presentMode = options.PresentMode;
 
         try
@@ -62,6 +63,7 @@ public sealed class WebGPUWindow : IDisposable
                 configuration,
                 this.window,
                 this.Format,
+                this.AlphaMode,
                 this.presentMode,
                 ToSize(this.window.FramebufferSize));
         }
@@ -271,6 +273,11 @@ public sealed class WebGPUWindow : IDisposable
     /// Gets the swapchain texture format.
     /// </summary>
     public WebGPUTextureFormat Format { get; }
+
+    /// <summary>
+    /// Gets how the native compositor interprets the window surface alpha channel.
+    /// </summary>
+    public WebGPUCompositeAlphaMode AlphaMode { get; }
 
     /// <summary>
     /// Tries to acquire the next drawable frame using default drawing options.
@@ -558,6 +565,7 @@ public sealed class WebGPUWindow : IDisposable
         silkOptions.WindowState = ToNative(options.WindowState);
         silkOptions.WindowBorder = ToNative(options.WindowBorder);
         silkOptions.TopMost = options.IsTopMost;
+
         return silkOptions;
     }
 

@@ -4,9 +4,7 @@
 using System.Runtime.CompilerServices;
 using Silk.NET.WebGPU;
 using Silk.NET.WebGPU.Extensions.WGPU;
-using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 

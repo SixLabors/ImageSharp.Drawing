@@ -27,4 +27,9 @@ public sealed class WebGPUExternalSurfaceOptions
     /// adapter reports it.
     /// </remarks>
     public WebGPUTextureFormat Format { get; set; } = WebGPUTextureFormat.Rgba8Unorm;
+
+    /// <summary>
+    /// Gets or sets how the native compositor interprets the surface alpha channel.
+    /// </summary>
+    public WebGPUCompositeAlphaMode AlphaMode { get; set; } = WebGPUCompositeAlphaMode.Auto;
 }

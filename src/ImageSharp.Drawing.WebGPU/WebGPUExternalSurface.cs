@@ -68,6 +68,7 @@ public sealed class WebGPUExternalSurface : IDisposable
             configuration,
             new SilkNativeSurfaceAdapter(host),
             options.Format,
+            options.AlphaMode,
             this.presentMode,
             this.framebufferSize);
     }
