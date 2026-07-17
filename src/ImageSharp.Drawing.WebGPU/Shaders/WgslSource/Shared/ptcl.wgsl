@@ -62,16 +62,15 @@ struct CmdJump {
 
 // Solid color paint.
 struct CmdColor {
-    rgba_color: u32, // packed premultiplied RGBA8
+    color_rg: u32, // associated RG packed as binary16
+    color_ba: u32, // associated BA packed as binary16
     draw_flags: u32, // blend mode and alpha, see DRAW_FLAGS_* in drawtag.wgsl
 }
 
-// Recolor paint (RecolorBrush): blends the backdrop toward target_color
-// where the squared color distance from source_color is within threshold.
+// Recolor paint. The target-specialized source, target and threshold live in
+// the shared auxiliary brush-data region so their f32 precision survives PTCL lowering.
 struct CmdRecolor {
-    source_color: u32, // packed RGBA8 to match against
-    target_color: u32, // packed RGBA8 to substitute
-    threshold: f32, // squared color distance tolerance
+    data_offset: u32,
     draw_flags: u32,
 }
 
@@ -98,13 +97,15 @@ struct CmdRadGrad {
     flags: u32, // RAD_GRAD_SWAPPED when the circle order was flipped
 }
 
-// Elliptic gradient paint: t is the normalized distance in the unit space
-// mapped by the inverse transform.
+// Elliptic gradient paint. Normal ellipses map pixels into normalized unit
+// space; point and line kinds retain finite local coordinates so fine can
+// reproduce the CPU brush's zero-radius division semantics.
 struct CmdEllipticGrad {
     index: u32,
     extend_mode: u32,
     matrx: vec4<f32>,
     xlat: vec2<f32>,
+    kind: u32, // ELLIPTIC_GRAD_KIND_* selector
 }
 
 // Sweep (conic) gradient paint sweeping angles t0..t1 about the origin of
@@ -123,7 +124,7 @@ struct CmdSweepGrad {
 struct CmdPathGrad {
     // Absolute offset of the gradient data in the shared info/bin-data
     // buffer; coarse rebases the scene-relative offset by
-    // config.path_gradient_data_base before writing the command.
+    // config.brush_data_base before writing the command.
     data_offset: u32,
     edge_count: u32,
     flags: u32,
@@ -141,6 +142,7 @@ struct CmdImage {
     y_extend_mode: u32,
     alpha: f32,
     alpha_type: u32,
+    signed_unit: u32,
 }
 
 // Pops a clip/layer: blends the layer against its backdrop and, for clips,

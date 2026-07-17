@@ -3,9 +3,6 @@
 
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using Silk.NET.WebGPU;
-using Silk.NET.WebGPU.Extensions.WGPU;
-using WgpuBuffer = Silk.NET.WebGPU.Buffer;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -21,8 +18,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <remarks>
 /// The instance owns a dedicated map-readable buffer rather than borrowing the pooled scheduling
 /// arena's readback buffer: the arena returns to its pool when the flush ends, and reusing a
-/// buffer with a map still pending is undefined behavior. The map callback thunk is kept alive by
-/// this instance until the callback has fired or resolution timed out.
+/// buffer with a map still pending is undefined behavior. The map callback wrapper roots itself
+/// from native registration until WebGPU delivers the invocation; after a resolution timeout it
+/// suppresses access to this disposed owner while still preserving the unmanaged function target.
 /// </remarks>
 internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
 {
@@ -30,11 +28,6 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     /// The API facade used to read and release the readback buffer.
     /// </summary>
     private readonly WebGPU api;
-
-    /// <summary>
-    /// The native WGPU extension used to pump map callbacks during resolution.
-    /// </summary>
-    private readonly Wgpu wgpuExtension;
 
     /// <summary>
     /// The wrapped device handle that owns the readback buffer.
@@ -66,9 +59,9 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     private readonly nuint bufferByteCapacity;
 
     /// <summary>
-    /// The pinned map callback thunk; must stay alive until the callback fires.
+    /// The self-rooting map callback wrapper that tracks the invocation accepted by native WebGPU.
     /// </summary>
-    private readonly PfnBufferMapCallback callback;
+    private readonly WebGPUBufferMapCallback callback;
 
     /// <summary>
     /// Set by the map callback once the buffer contents are readable.
@@ -78,12 +71,12 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     /// <summary>
     /// The map status reported by the callback.
     /// </summary>
-    private BufferMapAsyncStatus mapStatus = BufferMapAsyncStatus.Unknown;
+    private BufferMapAsyncStatus mapStatus;
 
     /// <summary>
     /// The submission index tied to this readback submission.
     /// </summary>
-    private readonly WrappedSubmissionIndex submissionIndex;
+    private readonly ulong submissionIndex;
 
     /// <summary>
     /// Whether resolution has already run.
@@ -100,7 +93,6 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     /// starts the asynchronous map of the already-submitted readback copy.
     /// </summary>
     /// <param name="api">The API facade used to read and release the readback buffer.</param>
-    /// <param name="wgpuExtension">The native WGPU extension used to pump map callbacks.</param>
     /// <param name="deviceHandle">The wrapped device handle that owns the readback buffer.</param>
     /// <param name="deviceState">The device-scoped shared state whose pool recycles the buffer.</param>
     /// <param name="readbackBuffer">The dedicated map-readable buffer; ownership transfers to this instance.</param>
@@ -108,15 +100,13 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     /// <param name="submissionIndex">The queue submission index for this deferred status copy.</param>
     public WebGPUPendingSchedulingStatus(
         WebGPU api,
-        Wgpu wgpuExtension,
         WebGPUDeviceHandle deviceHandle,
         WebGPURuntime.DeviceSharedState deviceState,
         WgpuBuffer* readbackBuffer,
         WebGPUSceneBumpSizes submittedBumpSizes,
-        WrappedSubmissionIndex submissionIndex)
+        ulong submissionIndex)
         : this(
             api,
-            wgpuExtension,
             deviceHandle,
             deviceState,
             readbackBuffer,
@@ -135,7 +125,6 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     /// a chunked staged-scene flush and starts the asynchronous map of all chunk status records.
     /// </summary>
     /// <param name="api">The API facade used to read and release the readback buffer.</param>
-    /// <param name="wgpuExtension">The native WGPU extension used to pump map callbacks.</param>
     /// <param name="deviceHandle">The wrapped device handle that owns the readback buffer.</param>
     /// <param name="deviceState">The device-scoped shared state whose pool recycles the buffer.</param>
     /// <param name="readbackBuffer">The dedicated map-readable buffer; ownership transfers to this instance.</param>
@@ -147,7 +136,6 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     /// <param name="submissionIndex">The queue submission index for this deferred status copy.</param>
     public WebGPUPendingSchedulingStatus(
         WebGPU api,
-        Wgpu wgpuExtension,
         WebGPUDeviceHandle deviceHandle,
         WebGPURuntime.DeviceSharedState deviceState,
         WgpuBuffer* readbackBuffer,
@@ -156,10 +144,9 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         ReadOnlySpan<WebGPUSceneBumpSizes> chunkBumpSizes,
         ReadOnlySpan<uint> chunkTileHeights,
         uint fullTileHeight,
-        WrappedSubmissionIndex submissionIndex)
+        ulong submissionIndex)
         : this(
             api,
-            wgpuExtension,
             deviceHandle,
             deviceState,
             readbackBuffer,
@@ -178,7 +165,6 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     /// starts the asynchronous map of the already-submitted readback copy.
     /// </summary>
     /// <param name="api">The API facade used to read and release the readback buffer.</param>
-    /// <param name="wgpuExtension">The native WGPU extension used to pump map callbacks.</param>
     /// <param name="deviceHandle">The wrapped device handle that owns the readback buffer.</param>
     /// <param name="deviceState">The device-scoped shared state whose pool recycles the buffer.</param>
     /// <param name="readbackBuffer">The dedicated map-readable buffer; ownership transfers to this instance.</param>
@@ -191,7 +177,6 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     /// <param name="submissionIndex">The queue submission index for this deferred status copy.</param>
     private WebGPUPendingSchedulingStatus(
         WebGPU api,
-        Wgpu wgpuExtension,
         WebGPUDeviceHandle deviceHandle,
         WebGPURuntime.DeviceSharedState deviceState,
         WgpuBuffer* readbackBuffer,
@@ -201,10 +186,9 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         WebGPUSceneBumpSizes[]? chunkBumpSizes,
         uint[]? chunkTileHeights,
         uint fullTileHeight,
-        WrappedSubmissionIndex submissionIndex)
+        ulong submissionIndex)
     {
         this.api = api;
-        this.wgpuExtension = wgpuExtension;
         this.deviceHandle = deviceHandle;
         this.deviceState = deviceState;
         this.readbackBuffer = readbackBuffer;
@@ -216,7 +200,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         this.ChunkTileHeights = chunkTileHeights;
         this.FullTileHeight = fullTileHeight;
 
-        this.callback = PfnBufferMapCallback.From(this.OnMapped);
+        this.callback = WebGPUBufferMapCallback.From(this.OnMapped);
         this.api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, readbackByteLength, this.callback, null);
     }
 
@@ -266,8 +250,8 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         }
 
         using WebGPUHandle.HandleReference deviceReference = this.deviceHandle.AcquireReference();
-        WrappedSubmissionIndex submissionIndex = this.submissionIndex;
-        _ = this.wgpuExtension.DevicePoll((Device*)deviceReference.Handle, false, ref submissionIndex);
+        ulong submissionIndex = this.submissionIndex;
+        _ = this.api.DevicePoll((Device*)deviceReference.Handle, false, &submissionIndex);
     }
 
     /// <summary>
@@ -293,7 +277,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         using (WebGPUHandle.HandleReference deviceReference = this.deviceHandle.AcquireReference())
         {
             signaled = WaitForMapSignal(
-                this.wgpuExtension,
+                this.api,
                 (Device*)deviceReference.Handle,
                 this.mapReady,
                 this.submissionIndex);
@@ -340,7 +324,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         using (WebGPUHandle.HandleReference deviceReference = this.deviceHandle.AcquireReference())
         {
             signaled = WaitForMapSignal(
-                this.wgpuExtension,
+                this.api,
                 (Device*)deviceReference.Handle,
                 this.mapReady,
                 this.submissionIndex);
@@ -368,8 +352,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
 
     /// <summary>
     /// Disposes the pending status. When still unresolved this waits (bounded) for the map
-    /// callback so the pinned thunk is never freed while the native side can still invoke it,
-    /// then releases the readback buffer.
+    /// callback, then retires the managed owner and releases the readback buffer.
     /// </summary>
     public void Dispose()
     {
@@ -378,13 +361,15 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
             return;
         }
 
-        // Mark disposal before releasing the unmanaged callback thunk so repeated calls cannot
-        // pass the same pointer to SilkMarshal.Free more than once.
+        // Mark disposal before retiring the callback owner so repeated calls cannot release the
+        // readback resources twice. The wrapper retains its own root if native still owes a call.
         this.disposed = true;
 
         if (!this.resolved)
         {
-            // The result is discarded; the wait only exists to retire the native callback safely.
+            // Give the accepted map a bounded opportunity to finish before releasing its buffer.
+            // A timeout is still safe because retiring the wrapper below suppresses a later call
+            // into this owner while its self-root preserves the native function target.
             _ = this.TryResolve(out _);
         }
 
@@ -436,25 +421,30 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     /// Pumps the WebGPU device while waiting for the map callback to signal completion.
     /// Mirrors the synchronous flush path's wait so a lost device cannot hang the caller.
     /// </summary>
-    /// <param name="extension">The native WGPU extension used to advance callback delivery.</param>
+    /// <param name="api">The WebGPU API used to advance callback delivery.</param>
     /// <param name="device">The device that owns the mapped readback buffer.</param>
     /// <param name="signal">The event that the map callback sets when the copy is ready to read.</param>
     /// <param name="submissionIndex">The queue submission index used for this readback.</param>
     /// <returns><see langword="true"/> when the callback completed before the timeout; otherwise, <see langword="false"/>.</returns>
     private static bool WaitForMapSignal(
-        Wgpu extension,
+        WebGPU api,
         Device* device,
         ManualResetEventSlim signal,
-        WrappedSubmissionIndex submissionIndex)
+        ulong submissionIndex)
     {
-        // wgpu-native only fires map callbacks from inside DevicePoll, so the device must be
-        // pumped through the readback's owning submission until the callback sets the signal.
-        // The five-second bound matches other backend map waits.
+        // Keep polling scoped to this readback's submission, but never ask one native poll to wait.
+        // A blocking DevicePoll can overrun the managed five-second bound before control returns
+        // to the stopwatch check.
         Stopwatch stopwatch = Stopwatch.StartNew();
 
         while (!signal.IsSet && stopwatch.ElapsedMilliseconds < 5000)
         {
-            _ = extension.DevicePoll(device, true, ref submissionIndex);
+            _ = api.DevicePoll(device, false, &submissionIndex);
+
+            if (!signal.IsSet)
+            {
+                Thread.Yield();
+            }
         }
 
         return signal.IsSet;

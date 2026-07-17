@@ -556,7 +556,7 @@ public partial class WebGPUDrawingBackendTests
                    nativeSurfaceBackend,
                    renderTarget.Bounds,
                    renderTarget.Surface,
-                   renderTarget.Format))
+                   renderTarget.Surface.TargetDescriptor))
         {
             DrawFirstFrame(firstCanvas);
             firstCanvas.Flush();
@@ -568,7 +568,7 @@ public partial class WebGPUDrawingBackendTests
                    nativeSurfaceBackend,
                    renderTarget.Bounds,
                    renderTarget.Surface,
-                   renderTarget.Format))
+                   renderTarget.Surface.TargetDescriptor))
         {
             DrawSecondFrame(secondCanvas);
             secondCanvas.Flush();
@@ -637,7 +637,7 @@ public partial class WebGPUDrawingBackendTests
                    nativeSurfaceBackend,
                    sourceRenderTarget.Bounds,
                    sourceRenderTarget.Surface,
-                   sourceRenderTarget.Format))
+                   sourceRenderTarget.Surface.TargetDescriptor))
         {
             DrawSource(sourceCanvas);
         }
@@ -648,7 +648,7 @@ public partial class WebGPUDrawingBackendTests
                    nativeSurfaceBackend,
                    targetRenderTarget.Bounds,
                    targetRenderTarget.Surface,
-                   targetRenderTarget.Format))
+                   targetRenderTarget.Surface.TargetDescriptor))
 
         using (DrawingCanvas sourceCanvas = WebGPUCanvasFactory.CreateCanvas(
                    nativeSurfaceConfiguration,
@@ -656,7 +656,7 @@ public partial class WebGPUDrawingBackendTests
                    nativeSurfaceBackend,
                    sourceRenderTarget.Bounds,
                    sourceRenderTarget.Surface,
-                   sourceRenderTarget.Format))
+                   sourceRenderTarget.Surface.TargetDescriptor))
         {
             DrawTargetBeforeCopy(targetCanvas);
             targetCanvas.CopyPixelsFrom(sourceCanvas, sourceBounds, new Point(0, 0));
@@ -1103,7 +1103,7 @@ public partial class WebGPUDrawingBackendTests
                    nativeSurfaceBackend,
                    renderTarget.Bounds,
                    renderTarget.Surface,
-                   renderTarget.Format))
+                   renderTarget.Surface.TargetDescriptor))
         {
             DrawAction(nativeSurfaceCanvas);
         }
@@ -1240,7 +1240,7 @@ public partial class WebGPUDrawingBackendTests
                        backend,
                        renderTarget.Bounds,
                        renderTarget.Surface,
-                       renderTarget.Format))
+                       renderTarget.Surface.TargetDescriptor))
             {
                 initialCanvas.DrawImage(initialImage, initialImage.Bounds, targetBounds);
             }
@@ -1252,7 +1252,7 @@ public partial class WebGPUDrawingBackendTests
                    backend,
                    renderTarget.Bounds,
                    renderTarget.Surface,
-                   renderTarget.Format))
+                   renderTarget.Surface.TargetDescriptor))
         {
             drawAction(canvas);
         }
@@ -1281,7 +1281,7 @@ public partial class WebGPUDrawingBackendTests
                    backend,
                    renderTarget.Bounds,
                    renderTarget.Surface,
-                   renderTarget.Format))
+                   renderTarget.Surface.TargetDescriptor))
         {
             initialCanvas.DrawImage(initialImage, initialImage.Bounds, targetBounds);
         }
@@ -1292,7 +1292,7 @@ public partial class WebGPUDrawingBackendTests
                    backend,
                    renderTarget.Bounds,
                    renderTarget.Surface,
-                   renderTarget.Format))
+                   renderTarget.Surface.TargetDescriptor))
         {
             drawAction(canvas);
         }
@@ -1922,7 +1922,7 @@ public partial class WebGPUDrawingBackendTests
             backend,
             renderTarget.Bounds,
             renderTarget.Surface,
-            renderTarget.Format);
+            renderTarget.Surface.TargetDescriptor);
 
         canvas.Fill(Brushes.Solid(Color.White));
         canvas.Apply(new Rectangle(8, 8, 20, 20), context => context.Invert());
@@ -2044,7 +2044,7 @@ public partial class WebGPUDrawingBackendTests
             backend,
             renderTarget.Bounds,
             renderTarget.Surface,
-            renderTarget.Format);
+            renderTarget.Surface.TargetDescriptor);
 
         canvas.Fill(Brushes.Solid(Color.White));
         canvas.Apply(new Rectangle(4, 4, 16, 16), context => context.Invert());
@@ -2098,7 +2098,7 @@ public partial class WebGPUDrawingBackendTests
             backend,
             renderTarget.Bounds,
             renderTarget.Surface,
-            renderTarget.Format);
+            renderTarget.Surface.TargetDescriptor);
 
         canvas.Fill(Brushes.Solid(Color.White));
         canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(8, 8, 24, 24));
@@ -2230,7 +2230,7 @@ public partial class WebGPUDrawingBackendTests
                    nativeSurfaceBackend,
                    renderTarget.Bounds,
                    renderTarget.Surface,
-                   renderTarget.Format))
+                   renderTarget.Surface.TargetDescriptor))
         {
             DrawAction(canvas);
         }
@@ -2304,7 +2304,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceBackend,
             sceneRenderTarget.Bounds,
             sceneRenderTarget.Surface,
-            sceneRenderTarget.Format);
+            sceneRenderTarget.Surface.TargetDescriptor);
 
         // Create the scene through the WebGPU backend so the test covers retained encoding and replay.
         DrawRetainedScene(nativeSceneCanvas);
@@ -2317,7 +2317,7 @@ public partial class WebGPUDrawingBackendTests
                    nativeSurfaceBackend,
                    renderTarget.Bounds,
                    renderTarget.Surface,
-                   renderTarget.Format))
+                   renderTarget.Surface.TargetDescriptor))
         {
             DrawRetainedFlow(nativeCanvas, nativeScene);
         }
@@ -2386,7 +2386,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceBackend,
             sceneRenderTarget.Bounds,
             sceneRenderTarget.Surface,
-            sceneRenderTarget.Format);
+            sceneRenderTarget.Surface.TargetDescriptor);
 
         // Create the scene through the WebGPU backend so retained layer commands are encoded.
         DrawRetainedScene(nativeSceneCanvas);
@@ -2399,7 +2399,7 @@ public partial class WebGPUDrawingBackendTests
                    nativeSurfaceBackend,
                    renderTarget.Bounds,
                    renderTarget.Surface,
-                   renderTarget.Format))
+                   renderTarget.Surface.TargetDescriptor))
         {
             DrawRetainedFlow(nativeCanvas, nativeScene);
         }
@@ -2493,6 +2493,115 @@ public partial class WebGPUDrawingBackendTests
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
+    [WebGPUFact]
+    public void FillPath_WithZeroLengthLinearGradient_MatchesDefaultEndColor()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        PointF endpoint = new(8, 8);
+        Brush brush = new LinearGradientBrush(
+            endpoint,
+            endpoint,
+            GradientRepetitionMode.None,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Blue));
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 16, 16));
+
+        using Image<Rgba32> defaultImage = new(16, 16, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(16, 16, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(16, 16, backend, drawingOptions, DrawAction, initialImage);
+
+        // A zero-length linear axis is defined at t=1, so the end stop fills every pixel.
+        Rgba32 expected = Color.Blue.ToPixel<Rgba32>();
+        Assert.Equal(expected, defaultImage[0, 0]);
+        Assert.Equal(defaultImage[0, 0], actual[0, 0]);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithDontFillGradients_ComposesTransparentOutsideGradient()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        (Brush Brush, Point Sample)[] cases =
+        [
+            (
+                new LinearGradientBrush(
+                    new PointF(4, 8),
+                    new PointF(12, 8),
+                    GradientRepetitionMode.DontFill,
+                    new ColorStop(0, Color.Red),
+                    new ColorStop(1, Color.Blue)),
+                new Point(0, 8)),
+            (
+                new RadialGradientBrush(
+                    new PointF(8, 8),
+                    3F,
+                    GradientRepetitionMode.DontFill,
+                    new ColorStop(0, Color.Red),
+                    new ColorStop(1, Color.Blue)),
+                new Point(0, 0)),
+            (
+                new EllipticGradientBrush(
+                    new PointF(8, 8),
+                    new PointF(12, 8),
+                    0.5F,
+                    GradientRepetitionMode.DontFill,
+                    new ColorStop(0, Color.Red),
+                    new ColorStop(1, Color.Blue)),
+                new Point(0, 0)),
+            (
+                new SweepGradientBrush(
+                    new PointF(8.5F, 8.5F),
+                    0F,
+                    90F,
+                    GradientRepetitionMode.DontFill,
+                    new ColorStop(0, Color.Red),
+                    new ColorStop(1, Color.Blue)),
+                new Point(8, 15))
+        ];
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        static void DrawAction(DrawingCanvas canvas, Brush brush) => canvas.Fill(brush, new RectanglePolygon(0, 0, 16, 16));
+
+        using WebGPUDrawingBackend backend = new();
+        foreach ((Brush brush, Point sample) in cases)
+        {
+            using Image<Rgba32> defaultImage = new(16, 16, background);
+            RenderWithDefaultBackend(defaultImage, drawingOptions, canvas => DrawAction(canvas, brush));
+
+            using Image<Rgba32> initialImage = new(16, 16, background);
+            using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(
+                16,
+                16,
+                backend,
+                drawingOptions,
+                canvas => DrawAction(canvas, brush),
+                initialImage);
+
+            // DontFill returns a transparent brush sample outside the gradient. Src still
+            // composes that sample, replacing a fully covered backdrop with transparency.
+            Assert.Equal(default(Rgba32), defaultImage[sample.X, sample.Y]);
+            Assert.Equal(defaultImage[sample.X, sample.Y], actual[sample.X, sample.Y]);
+        }
+    }
+
     [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_WithRadialGradientBrush_SingleCircle_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
@@ -2571,6 +2680,82 @@ public partial class WebGPUDrawingBackendTests
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
+    [WebGPUFact]
+    public void FillPath_WithSwappedRadialDontFill_ComposesTransparentOutsideGradient()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        Brush brush = new RadialGradientBrush(
+            new PointF(16, 16),
+            10F,
+            new PointF(18, 16),
+            0F,
+            GradientRepetitionMode.DontFill,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Lime));
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 32, 32));
+
+        using Image<Rgba32> defaultImage = new(32, 32, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(32, 32, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(32, 32, backend, drawingOptions, DrawAction, initialImage);
+
+        // Radius1 == 0 makes the conical evaluator swap its circles. The restored parameter
+        // remains outside the finite cone, so DontFill supplies a transparent Src sample.
+        Assert.Equal(default(Rgba32), defaultImage[0, 0]);
+        Assert.Equal(defaultImage[0, 0], actual[0, 0]);
+        Assert.NotEqual(background, actual[17, 16]);
+    }
+
+    [WebGPUTheory]
+    [InlineData(GradientRepetitionMode.Repeat)]
+    [InlineData(GradientRepetitionMode.Reflect)]
+    public void FillPath_WithSwappedRadialRepetition_MatchesDefaultOutput(GradientRepetitionMode repetitionMode)
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        Brush brush = new RadialGradientBrush(
+            new PointF(16, 16),
+            10F,
+            new PointF(18, 16),
+            0F,
+            repetitionMode,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Lime));
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 32, 32));
+
+        using Image<Rgba32> defaultImage = new(32, 32, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(32, 32, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(32, 32, backend, drawingOptions, DrawAction, initialImage);
+
+        // The sampled point lies before the original start circle after the shader's
+        // canonical circle swap. Repetition must therefore see the restored negative t.
+        Rgba32 expected = Color.Red.ToPixel<Rgba32>();
+        Assert.Equal(expected, defaultImage[0, 0]);
+        Assert.Equal(defaultImage[0, 0], actual[0, 0]);
+    }
+
     [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_WithEllipticGradientBrush_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
@@ -2608,6 +2793,68 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.014F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [InlineData(GradientRepetitionMode.None, true)]
+    [InlineData(GradientRepetitionMode.Repeat, true)]
+    [InlineData(GradientRepetitionMode.Reflect, true)]
+    [InlineData(GradientRepetitionMode.DontFill, true)]
+    [InlineData(GradientRepetitionMode.None, false)]
+    [InlineData(GradientRepetitionMode.Repeat, false)]
+    [InlineData(GradientRepetitionMode.Reflect, false)]
+    [InlineData(GradientRepetitionMode.DontFill, false)]
+    public void FillPath_WithDegenerateEllipticGradient_MatchesDefaultOutput(
+        GradientRepetitionMode repetitionMode,
+        bool zeroReferenceAxis)
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        PointF center = new(3.5F, 3.5F);
+        PointF referenceAxisEnd = zeroReferenceAxis ? center : new PointF(5.5F, 5.5F);
+        float axisRatio = zeroReferenceAxis ? 1F : 0F;
+        Brush brush = new EllipticGradientBrush(
+            center,
+            referenceAxisEnd,
+            axisRatio,
+            repetitionMode,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Lime));
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 8, 8));
+
+        using Image<Rgba32> defaultImage = new(8, 8, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(8, 8, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(8, 8, backend, drawingOptions, DrawAction, initialImage);
+
+        Rgba32 transparent = default;
+        Rgba32 lastStop = Color.Lime.ToPixel<Rgba32>();
+        bool fillsOutsideCollapsedAxes = repetitionMode != GradientRepetitionMode.DontFill;
+
+        for (int y = 0; y < 8; y++)
+        {
+            for (int x = 0; x < 8; x++)
+            {
+                // The CPU equations produce NaN where a zero-radius division has a zero
+                // numerator. With a point ellipse that is either local axis; with a line
+                // ellipse it is the collapsed secondary axis, which is x == y here.
+                bool isUndefined = zeroReferenceAxis ? x == 3 || y == 3 : x == y;
+                Rgba32 expected = !isUndefined && fillsOutsideCollapsedAxes ? lastStop : transparent;
+
+                Assert.Equal(expected, defaultImage[x, y]);
+                Assert.Equal(defaultImage[x, y], actual[x, y]);
+            }
+        }
     }
 
     [WebGPUTheory]
@@ -2700,6 +2947,77 @@ public partial class WebGPUDrawingBackendTests
             tolerantPercentage: 0.0280F);
     }
 
+    [WebGPUFact]
+    public void FillPath_WithTinySweepDontFill_MatchesDefaultOutsideSweep()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        Brush brush = new SweepGradientBrush(
+            new PointF(16.5F, 16.5F),
+            0F,
+            0.0001F,
+            GradientRepetitionMode.DontFill,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Blue));
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 32, 32));
+
+        using Image<Rgba32> defaultImage = new(32, 32, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(32, 32, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(32, 32, backend, drawingOptions, DrawAction, initialImage);
+
+        // A quarter-turn direction lies outside this real but extremely small sweep.
+        // Comparing the epsilon in turns would misclassify the interval as a full circle.
+        Assert.Equal(background, defaultImage[16, 8]);
+        Assert.Equal(defaultImage[16, 8], actual[16, 8]);
+        Assert.NotEqual(background, actual[16, 16]);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithSweepDontFillAtCenter_MatchesDefaultFirstColor()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        Brush brush = new SweepGradientBrush(
+            new PointF(8.5F, 8.5F),
+            90F,
+            180F,
+            GradientRepetitionMode.DontFill,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Blue));
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 16, 16));
+
+        using Image<Rgba32> defaultImage = new(16, 16, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(16, 16, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(16, 16, backend, drawingOptions, DrawAction, initialImage);
+
+        // The center has no angle and is defined as t=0 rather than being derived
+        // from the configured angular interval.
+        Rgba32 expected = Color.Red.ToPixel<Rgba32>();
+        Assert.Equal(expected, defaultImage[8, 8]);
+        Assert.Equal(defaultImage[8, 8], actual[8, 8]);
+    }
+
     [WebGPUTheory]
     [WithBasicTestPatternImages(384, 256, PixelTypes.Rgba32)]
     public void FillPath_WithPathGradientBrush_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
@@ -2755,6 +3073,306 @@ public partial class WebGPUDrawingBackendTests
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.013F);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithTriangularPathGradientOnEdgeExtension_MatchesDefaultOutput()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        Brush brush = new PathGradientBrush(
+        [
+            new PointF(0.5F, 0.5F),
+            new PointF(2.5F, 0.5F),
+            new PointF(0.5F, 2.5F)
+        ],
+        [
+            Color.Red,
+            Color.Lime,
+            Color.Blue
+        ]);
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 4, 3));
+
+        using Image<Rgba32> defaultImage = new(4, 3, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(4, 3, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(4, 3, backend, drawingOptions, DrawAction, initialImage);
+
+        // The CPU sign-product test accepts this extension of the triangle's horizontal edge.
+        // Preserve that contract exactly instead of substituting a conventional inside test.
+        Rgba32 expected = Color.Lime.ToPixel<Rgba32>();
+        Assert.Equal(expected, defaultImage[3, 0]);
+        Assert.Equal(defaultImage[3, 0], actual[3, 0]);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithNearParallelPathGradientEdge_MatchesDefaultNoIntersection()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        Brush brush = new PathGradientBrush(
+        [
+            new PointF(12.5F, 8.4999875F),
+            new PointF(14.5F, 8.5000125F),
+            new PointF(-16F, 8.5F),
+            new PointF(4F, 8.5F),
+            new PointF(4F, 8.5F),
+            new PointF(5F, 8.5F)
+        ],
+        [
+            Color.Lime,
+            Color.Lime,
+            Color.Lime,
+            Color.Lime,
+            Color.Lime,
+            Color.Lime
+        ],
+        Color.Lime);
+
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 32, 16));
+
+        using Image<Rgba32> defaultImage = new(32, 16, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(32, 16, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(32, 16, backend, drawingOptions, DrawAction, initialImage);
+
+        // The ray is 20 pixels long and the first edge rises by 0.000025 pixels, so their
+        // cross product is about 0.0005. The CPU rejects that value inside its +/-0.001
+        // parallel window; the former shader window of +/-0.000001 incorrectly accepted it.
+        Rgba32 expected = Color.Transparent.ToPixel<Rgba32>();
+        Assert.Equal(expected, defaultImage[8, 8]);
+        Assert.Equal(defaultImage[8, 8], actual[8, 8]);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithPathGradientIntersectionJustBehindSample_MatchesDefaultOutput()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        Brush brush = new PathGradientBrush(
+        [
+            new PointF(1F, 0.5001F),
+            new PointF(7F, 0.5001F),
+            new PointF(7F, 7F),
+            new PointF(1F, 7F)
+        ],
+        [
+            Color.Lime,
+            Color.Lime,
+            Color.Lime,
+            Color.Lime
+        ],
+        Color.Lime);
+
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 8, 8));
+
+        using Image<Rgba32> defaultImage = new(8, 8, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(8, 8, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(8, 8, backend, drawingOptions, DrawAction, initialImage);
+
+        // The sample center is 0.0001 pixels above the first edge. Its ray intersection
+        // parameter is about -0.000023, inside the CPU's strict (-0.001, 1.001) window.
+        Rgba32 expected = Color.Lime.ToPixel<Rgba32>();
+        Assert.Equal(expected, defaultImage[4, 0]);
+        Assert.Equal(defaultImage[4, 0], actual[4, 0]);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithNegativePathGradientEdgeParameter_UsesDistanceMagnitude()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        Color halfRed = Color.FromScaledVector(new Vector4(0.5F, 0F, 0F, 1F));
+        Brush brush = new PathGradientBrush(
+        [
+            new PointF(10F, 10F),
+            new PointF(20F, 10F),
+            new PointF(-4.5F, -10F),
+            new PointF(2F, 27F),
+            new PointF(3.5F, -2F),
+            new PointF(11.045F, 7F)
+        ],
+        [
+            halfRed,
+            Color.Red,
+            halfRed,
+            halfRed,
+            halfRed,
+            halfRed
+        ],
+        halfRed);
+
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 32, 32));
+
+        using Image<Rgba32> defaultImage = new(32, 32, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(32, 32, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(32, 32, backend, drawingOptions, DrawAction, initialImage);
+
+        // These vertices place the first-edge intersection at u=-0.00075, inside the CPU
+        // endpoint tolerance. CPU edge interpolation measures distance and therefore uses
+        // |u|; signed extrapolation lands on the opposite side of the Rgba32 rounding boundary.
+        Rgba32 expected = new(128, 0, 0, 255);
+        Assert.Equal(expected, defaultImage[8, 8]);
+        Assert.Equal(defaultImage[8, 8], actual[8, 8]);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(320, 200, "White", PixelTypes.Rgba32)]
+    public void FillPath_WithTranslucentGradientBrushes_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        Brush radialBrush = new RadialGradientBrush(
+            new PointF(82, 100),
+            68F,
+            GradientRepetitionMode.None,
+            new ColorStop(0F, Color.Orange.WithAlpha(0.95F)),
+            new ColorStop(1F, Color.MediumVioletRed.WithAlpha(0.25F)));
+
+        PointF[] pathGradientPoints =
+        [
+            new PointF(164, 20),
+            new PointF(306, 20),
+            new PointF(306, 180),
+            new PointF(164, 180)
+        ];
+
+        Brush pathGradientBrush = new PathGradientBrush(
+            pathGradientPoints,
+            [
+                Color.CornflowerBlue.WithAlpha(0.9F),
+                Color.Gold.WithAlpha(0.2F),
+                Color.LimeGreen.WithAlpha(0.75F),
+                Color.BlueViolet.WithAlpha(0.35F)
+            ],
+            Color.DeepPink.WithAlpha(0.6F));
+
+        // Unequal RGB and alpha values make straight-alpha interpolation visibly diverge from
+        // CSS Color 4 associated-alpha interpolation. Axis-aligned bounds remove curved-edge
+        // coverage noise while the two brushes cover the ramp and direct shader interpolation paths.
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(radialBrush, new RectanglePolygon(14, 20, 136, 160));
+            canvas.Fill(pathGradientBrush, new RectanglePolygon(164, 20, 142, 160));
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.032F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithSubEpsilonAlpha_RgbaHalfTargetPreservesColorAndAlpha()
+    {
+        const float sourceAlpha = 0.047F;
+        const float smallestPackedBlendPercentage = 1F / 65535F;
+
+        Color color = Color.FromScaledVector(new Vector4(0.8F, 0.4F, 0.2F, sourceAlpha));
+        PointF[] points =
+        [
+            new PointF(0, 0),
+            new PointF(32, 0),
+            new PointF(32, 32),
+            new PointF(0, 32)
+        ];
+
+        Brush brush = new PathGradientBrush(points, [color, color, color, color], color);
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                BlendPercentage = smallestPackedBlendPercentage
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 32, 32));
+
+        using Image<RgbaHalf> defaultImage = new(32, 32);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<RgbaHalf> nativeSurfaceInitialImage = new(32, 32);
+        using Image<RgbaHalf> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            WebGPUTextureFormat.Rgba16Float,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        RgbaHalf expected = RgbaHalf.FromScaledVector4(new Vector4(0.8F, 0.4F, 0.2F, sourceAlpha * smallestPackedBlendPercentage));
+
+        RgbaHalf defaultPixel = defaultImage[16, 16];
+        RgbaHalf nativeSurfacePixel = nativeSurfaceImage[16, 16];
+
+        // The smallest nonzero packed blend value reduces alpha to a binary16 subnormal. The
+        // source alpha keeps that result away from a binary16 rounding boundary because WGSL
+        // permits conversion to round in either direction. Both backends must therefore produce
+        // the same exact pixel while preserving the nonzero alpha.
+        Assert.Equal(expected, defaultPixel);
+        Assert.Equal(expected, nativeSurfacePixel);
+        Assert.NotEqual((Half)0F, nativeSurfacePixel.A);
     }
 
     [WebGPUTheory]
@@ -2854,6 +3472,97 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithRecolorBrush_PreservesFullPrecisionSourceKey()
+    {
+        Rgba32 background = new(128, 0, 0, 255);
+        Color source = Color.FromScaledVector(new Vector4(128F / 255F, 0F, 0F, 1F));
+
+        // The exact Rgba32 component differs from its nearest binary16 value by about 7.7e-6.
+        // This threshold accepts the exact f32 key but rejects that prematurely rounded key.
+        Brush brush = new RecolorBrush(source, Color.Blue, 1e-12F);
+        DrawingOptions drawingOptions = new() { GraphicsOptions = new GraphicsOptions { Antialias = false } };
+
+        using Image<Rgba32> defaultImage = new(8, 8, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, canvas => canvas.Fill(brush));
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(8, 8, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(8, 8, backend, drawingOptions, canvas => canvas.Fill(brush), initialImage);
+
+        Assert.Equal(Color.Blue.ToPixel<Rgba32>(), defaultImage[4, 4]);
+        Assert.Equal(defaultImage[4, 4], actual[4, 4]);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithRecolorBrush_ObservesPriorDrawInTargetStorage()
+    {
+        Color firstColor = Color.FromScaledVector(new Vector4(0.5F, 0F, 0F, 1F));
+        Color source = Color.FromPixel(new Rgba32(128, 0, 0, 255));
+
+        // Rgba32 stores 0.5 as 128 / 255. The narrow threshold distinguishes that stored value
+        // from the unquantized 0.5 retained between commands by the staged GPU pipeline.
+        Brush brush = new RecolorBrush(source, Color.Blue, 1e-8F);
+        DrawingOptions drawingOptions = new() { GraphicsOptions = new GraphicsOptions { Antialias = false } };
+
+        void Draw(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(firstColor));
+            canvas.Fill(brush);
+        }
+
+        using Image<Rgba32> defaultImage = new(8, 8);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, Draw);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend<Rgba32>(8, 8, backend, drawingOptions, Draw);
+
+        Assert.Equal(Color.Blue.ToPixel<Rgba32>(), defaultImage[4, 4]);
+        Assert.Equal(defaultImage[4, 4], actual[4, 4]);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithRecolorBrush_AssociatedTargetObservesStoredComponents()
+    {
+        Color firstColor = Color.FromScaledVector(new Vector4(1F, 0F, 0F, 0.5F));
+        Color source = Color.FromScaledVector(new Vector4(1F, 0F, 0F, 128F / 255F));
+
+        // The source becomes (128 / 255, 0, 0, 128 / 255) in associated space. The first
+        // fill remains (0.5, 0, 0, 0.5) until its match-only Rgba32P storage round-trip.
+        Brush brush = new RecolorBrush(source, Color.Blue, 1e-8F);
+        DrawingOptions drawingOptions = new() { GraphicsOptions = new GraphicsOptions { Antialias = false } };
+
+        void Draw(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(firstColor));
+            canvas.Fill(brush);
+        }
+
+        using Image<Rgba32P> defaultImage = new(8, 8);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, Draw);
+
+        using WebGPUDrawingBackend backend = new();
+        using WebGPURenderTarget renderTarget = new(WebGPUTextureFormat.Rgba8Unorm, PixelAlphaRepresentation.Associated, 8, 8);
+        Configuration configuration = Configuration.Default.Clone();
+        configuration.SetDrawingBackend(backend);
+
+        using (DrawingCanvas canvas = WebGPUCanvasFactory.CreateCanvas(
+                   configuration,
+                   drawingOptions,
+                   backend,
+                   renderTarget.Bounds,
+                   renderTarget.Surface,
+                   renderTarget.Surface.TargetDescriptor))
+        {
+            Draw(canvas);
+        }
+
+        using Image<Rgba32P> actual = renderTarget.ReadbackImage<Rgba32P>();
+
+        Assert.Equal(Color.Blue.ToPixel<Rgba32P>(), defaultImage[4, 4]);
+        Assert.Equal(defaultImage[4, 4], actual[4, 4]);
     }
 
     [WebGPUTheory]
@@ -3198,6 +3907,35 @@ the evil Galactic Empire.";
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUFact]
+    public void SaveLayer_HalfTargetClearUsesLogicalTransparent()
+    {
+        Color layerColor = Color.FromScaledVector(new Vector4(0.75F, 0.25F, 0.5F, 0.5F));
+        DrawingOptions drawingOptions = new() { GraphicsOptions = new GraphicsOptions { Antialias = false } };
+
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 0, 32, 32));
+            canvas.Fill(Brushes.Solid(layerColor), new RectanglePolygon(12, 12, 8, 8));
+            canvas.Restore();
+        }
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<RgbaHalf> initialImage = new(32, 32);
+        using Image<RgbaHalf> actual = RenderWithNativeSurfaceWebGpuBackend(
+            32,
+            32,
+            backend,
+            WebGPUTextureFormat.Rgba16Float,
+            drawingOptions,
+            DrawAction,
+            initialImage);
+
+        // The untouched part of an isolated layer must remain binary16 transparent black.
+        Assert.Equal(Vector4.Zero, actual[0, 0].ToScaledVector4());
+        Assert.True(actual[16, 16].ToScaledVector4().W > 0F);
     }
 
     [WebGPUTheory]

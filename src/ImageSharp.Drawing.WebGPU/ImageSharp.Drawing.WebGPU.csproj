@@ -23,9 +23,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <!--
-      This project is strong-name signed by the shared SixLabors build settings.
-      Silk.NET WebGPU packages are currently unsigned, which triggers CS8002.
-      Keep CS8002 visible as a warning, but do not fail the build for it.
+      Silk.NET.Windowing.Glfw is unsigned, while this project is strong-name signed.
+      Keep CS8002 visible as a warning without allowing warnings-as-errors to fail the build.
     -->
     <WarningsNotAsErrors>$(WarningsNotAsErrors);8002;NU1900</WarningsNotAsErrors>
   </PropertyGroup>
@@ -49,24 +48,35 @@
     </Otherwise>
   </Choose>
 
+  <PropertyGroup>
+    <!-- An explicit application RID takes precedence when cross-compiling; otherwise use the SDK host RID for local execution. -->
+    <_WebGPUNativeRuntimeIdentifier Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_WebGPUNativeRuntimeIdentifier>
+    <_WebGPUNativeRuntimeIdentifier Condition="'$(_WebGPUNativeRuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</_WebGPUNativeRuntimeIdentifier>
+  </PropertyGroup>
+
   <ItemGroup>
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
     <None Include="..\..\shared-infrastructure\branding\icons\imagesharp.drawing\sixlabors.imagesharp.drawing.128.png" Pack="true" PackagePath="" />
-    <None Include="buildTransitive\$(PackageId).targets" Pack="true" PackagePath="buildTransitive\$(PackageId).targets" />
+
+    <!-- Platform SDKs consume native libraries from their standard RID-specific package paths. -->
+    <None Include="runtimes/**/*" Pack="true" PackagePath="%(Identity)" />
+
+    <!-- ProjectReference builds need the selected native library beside the managed assembly because NuGet runtime asset resolution is not involved. -->
+    <None Update="runtimes/$(_WebGPUNativeRuntimeIdentifier)/native/*"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          TargetPath="%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
     <!--
-      Silk.NET packages are listed as NuGet dependencies so the native wgpu binaries
-      and managed interop are restored for consumers. Compile assets are marked private
-      so that ProjectReference consumers within this solution do not see Silk types
-      or CS8002 warnings; however, NuGet package consumers will receive the full
-      Silk packages as transitive dependencies.
+      Silk.NET windowing packages remain NuGet dependencies so their managed runtimes and native
+      assets are restored for consumers using the corresponding external-surface host. Compile assets
+      are marked private so ProjectReference consumers do not see Silk types or CS8002 warnings; the
+      packages remain transitive NuGet dependencies so their runtime assets reach package consumers.
     -->
-    <PackageReference Include="Silk.NET.WebGPU" Version="2.23.0" PrivateAssets="compile;build;analyzers;contentfiles;buildtransitive" />
-    <PackageReference Include="Silk.NET.WebGPU.Extensions.WGPU" Version="2.23.0" PrivateAssets="compile;build;analyzers;contentfiles;buildtransitive" />
-    <PackageReference Include="Silk.NET.WebGPU.Native.WGPU" Version="2.23.0" PrivateAssets="compile;build;analyzers;contentfiles;buildtransitive" />
     <PackageReference Include="Silk.NET.Windowing.Glfw" Version="2.23.0" PrivateAssets="compile;build;analyzers;contentfiles;buildtransitive" />
+    <PackageReference Include="Silk.NET.Windowing.Sdl" Version="2.23.0" PrivateAssets="compile;build;analyzers;contentfiles;buildtransitive" />
   </ItemGroup>
 
   <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
@@ -80,4 +90,17 @@
     <AdditionalFiles Include="Shaders\WgslSource\*.wgsl" />
     <AdditionalFiles Include="Shaders\WgslSource\Shared\*.wgsl" />
   </ItemGroup>
+
+  <!--
+    Binding generation is explicit because the generated source is checked in. Keeping it out of
+    the normal Build target avoids restoring ClangSharp or locating native C headers for consumers.
+  -->
+  <Target Name="GenerateWebGPUBindings">
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)" Command="pwsh -NoProfile -NonInteractive -File &quot;$(MSBuildProjectDirectory)\Native\Bindings\Generate-WebGPUBindings.ps1&quot;" />
+  </Target>
+
+  <!-- Native downloads are explicit so normal builds remain offline and use only restored assets. -->
+  <Target Name="DownloadWebGPUNative">
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)" Command="pwsh -NoProfile -NonInteractive -File &quot;$(MSBuildProjectDirectory)\Native\Bindings\Download-WebGPUNative.ps1&quot;" />
+  </Target>
 </Project>

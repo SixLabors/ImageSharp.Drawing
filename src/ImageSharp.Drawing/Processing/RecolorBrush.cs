@@ -47,13 +47,18 @@ public sealed class RecolorBrush : Brush
         GraphicsOptions options,
         int canvasWidth,
         RectangleF region)
-        => new RecolorBrushRenderer<TPixel>(
+    {
+        Vector4 sourceColor = this.SourceColor.ToScaledVector4(TPixel.GetPixelTypeInfo().AlphaRepresentation);
+        TPixel targetColor = this.TargetColor.ToPixel<TPixel>();
+
+        return new RecolorBrushRenderer<TPixel>(
             configuration,
             options,
             canvasWidth,
-            this.SourceColor.ToPixel<TPixel>(),
-            this.TargetColor.ToPixel<TPixel>(),
+            sourceColor,
+            targetColor,
             this.Threshold);
+    }
 
     /// <inheritdoc />
     public override bool Equals(Brush? other)
@@ -89,31 +94,23 @@ public sealed class RecolorBrush : Brush
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
         /// <param name="canvasWidth">The canvas width for the current render pass.</param>
-        /// <param name="sourceColor">The color to match against existing pixels.</param>
+        /// <param name="sourceColor">The color to match, expressed in the destination pixel format's native alpha representation.</param>
         /// <param name="targetColor">The color to recolor matched pixels with.</param>
         /// <param name="threshold">The color-matching threshold as a value between 0 and 1.</param>
         public RecolorBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
             int canvasWidth,
-            TPixel sourceColor,
+            Vector4 sourceColor,
             TPixel targetColor,
             float threshold)
             : base(configuration, options, canvasWidth)
         {
-            this.sourceColor = sourceColor.ToScaledVector4();
+            this.sourceColor = sourceColor;
             this.targetColorPixel = targetColor;
 
-            // TODO: Review this. We can skip the conversion from/to Vector4.
-            // Lets hack a min max extremes for a color space by letting the IPackedPixel clamp our values to something in the correct spaces :)
-            TPixel maxColor = TPixel.FromVector4(new Vector4(float.MaxValue));
-            TPixel minColor = TPixel.FromVector4(new Vector4(float.MinValue));
-
             // Matching happens in squared-distance space so no per-pixel sqrt is needed.
-            // Scale the user's [0..1] threshold by the squared distance across the pixel
-            // format's representable range; for unit-scaled RGBA vectors that factor is 4,
-            // which the GPU encoder mirrors by pre-transforming Threshold * 4 for the shader.
-            this.threshold = Vector4.DistanceSquared(maxColor.ToVector4(), minColor.ToVector4()) * threshold;
+            this.threshold = threshold * Vector4.DistanceSquared(Vector4.Zero, Vector4.One);
         }
 
         /// <inheritdoc />
@@ -131,7 +128,10 @@ public sealed class RecolorBrush : Brush
                 // The brush reads the already-composed destination pixel: recoloring is a
                 // function of what is currently on the canvas, not of a source texture.
                 TPixel result = destinationRow[i];
-                Vector4 background = result.ToVector4();
+
+                // Keep both operands in TPixel's native representation. The constrained call is
+                // statically specialized and adds no representation branch to the pixel loop.
+                Vector4 background = result.ToScaledVector4();
                 float distance = Vector4.DistanceSquared(background, this.sourceColor);
 
                 // Blend strength falls off linearly with squared distance: an exact match

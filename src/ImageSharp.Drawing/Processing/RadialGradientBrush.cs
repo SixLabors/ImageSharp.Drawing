@@ -122,7 +122,22 @@ public sealed class RadialGradientBrush : GradientBrush
         GraphicsOptions options,
         int canvasWidth,
         RectangleF region)
-        => new RadialGradientBrushRenderer<TPixel>(
+    {
+        if (TPixel.GetPixelTypeInfo().AlphaRepresentation == PixelAlphaRepresentation.Associated)
+        {
+            return new RadialGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(
+                configuration,
+                options,
+                canvasWidth,
+                this.Center0,
+                this.Radius0,
+                this.Center1,
+                this.Radius1,
+                this.ColorStopsArray,
+                this.RepetitionMode);
+        }
+
+        return new RadialGradientBrushRenderer<TPixel, UnassociatedGradientPixelEncoder<TPixel>>(
             configuration,
             options,
             canvasWidth,
@@ -132,13 +147,16 @@ public sealed class RadialGradientBrush : GradientBrush
             this.Radius1,
             this.ColorStopsArray,
             this.RepetitionMode);
+    }
 
     /// <summary>
     /// The radial gradient brush applicator.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private sealed class RadialGradientBrushRenderer<TPixel> : GradientBrushRenderer<TPixel>
+    /// <typeparam name="TEncoder">The destination representation encoder.</typeparam>
+    private sealed class RadialGradientBrushRenderer<TPixel, TEncoder> : GradientBrushRenderer<TPixel, TEncoder>
         where TPixel : unmanaged, IPixel<TPixel>
+        where TEncoder : struct, IGradientPixelEncoder<TPixel>
     {
         // Tolerance (1/4096) for classifying near-degenerate circle configurations
         // such as equal radii or a focal point sitting on the limiting circle.
@@ -162,7 +180,7 @@ public sealed class RadialGradientBrush : GradientBrush
         private readonly bool isSwapped;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="RadialGradientBrushRenderer{TPixel}" /> class.
+        /// Initializes a new instance of the <see cref="RadialGradientBrushRenderer{TPixel, TEncoder}" /> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>

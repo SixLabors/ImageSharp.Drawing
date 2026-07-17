@@ -2,8 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
-using Silk.NET.WebGPU;
-using Silk.NET.WebGPU.Extensions.WGPU;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -86,6 +84,15 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     internal bool DiagnosticLastFlushUsedChunking { get; private set; }
 
     /// <summary>
+    /// Gets or sets the upper bound used when validating staged-scene storage bindings.
+    /// </summary>
+    /// <remarks>
+    /// The default leaves the device-reported limit unchanged. Tests can lower the bound on one
+    /// backend instance to exercise chunked rendering without changing shared device state.
+    /// </remarks>
+    internal nuint ScratchBufferBindingSizeLimit { get; set; } = nuint.MaxValue;
+
+    /// <summary>
     /// Gets the binding category that selected chunked rendering for the last WebGPU flush.
     /// </summary>
     /// <remarks>
@@ -150,7 +157,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             throw new InvalidOperationException("The scene is not compatible with the WebGPU drawing backend.");
         }
 
-        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormat formatId, out FeatureName requiredFeature))
+        if (!TryGetCompositeTargetDescriptor<TPixel>(out WebGPUTargetDescriptor pixelDescriptor, out FeatureName requiredFeature))
         {
             throw new NotSupportedException($"The WebGPU backend does not support pixel format '{typeof(TPixel).Name}'.");
         }
@@ -159,11 +166,12 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         // boundary and keep staging focused on dispatch data.
         _ = nativeTarget.TryGetNativeSurface(out NativeSurface? nativeSurface);
         WebGPUNativeSurface webGPUTarget = (WebGPUNativeSurface)nativeSurface!;
-        TextureFormat textureFormat = WebGPUTextureFormatMapper.ToNative(webGPUTarget.TargetFormat);
 
-        if (webGPUTarget.TargetFormat != formatId)
+        WebGPUTargetDescriptor targetDescriptor = webGPUTarget.TargetDescriptor;
+        if (targetDescriptor.Format != pixelDescriptor.Format ||
+            targetDescriptor.AlphaRepresentation != pixelDescriptor.AlphaRepresentation)
         {
-            throw new InvalidOperationException("The target texture format does not match the WebGPU drawing backend scene pixel format.");
+            throw new InvalidOperationException("The WebGPU target descriptor does not match the drawing backend scene pixel format.");
         }
 
         if (nativeTarget.Bounds != webGPUScene.Bounds)
@@ -197,9 +205,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
                 using WebGPUFlushContext flushContext = WebGPUFlushContext.Create(
                     nativeTarget,
-                    textureFormat,
+                    targetDescriptor,
                     requiredFeature,
-                    configuration.MemoryAllocator);
+                    configuration.MemoryAllocator,
+                    this.ScratchBufferBindingSizeLimit);
 
                 using WebGPUHandle.HandleReference targetTextureReference = webGPUTarget.TargetTextureHandle.AcquireReference();
                 using WebGPUHandle.HandleReference targetTextureViewReference = webGPUTarget.TargetTextureViewHandle.AcquireReference();
@@ -210,15 +219,44 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                     nativeTarget.Bounds,
                     webGPUTarget.TextureCoordinateOffset);
 
+                if (!TryCreateSampleableBackdrop(flushContext, rootTarget, out WebGPUSceneTarget sampleableRootTarget, out string? backdropError))
+                {
+                    throw new InvalidOperationException(backdropError);
+                }
+
                 this.RenderOrderedScene<TPixel>(
                     configuration,
                     flushContext,
-                    rootTarget,
+                    sampleableRootTarget,
                     encodedScene,
                     requiredFeature,
                     ref currentBumpSizes,
                     ref resourceArena,
                     ref schedulingArena);
+
+                if (flushContext.RequiresPresentationCopies)
+                {
+                    if (!flushContext.EnsureCommandEncoder())
+                    {
+                        throw new InvalidOperationException("Failed to create a command encoder for the ordered presentation copy.");
+                    }
+
+                    CopyTextureRegion(
+                        flushContext,
+                        sampleableRootTarget.Texture,
+                        sampleableRootTarget.Bounds.X + sampleableRootTarget.TextureOffset.X,
+                        sampleableRootTarget.Bounds.Y + sampleableRootTarget.TextureOffset.Y,
+                        rootTarget.Texture,
+                        rootTarget.Bounds.X + rootTarget.TextureOffset.X,
+                        rootTarget.Bounds.Y + rootTarget.TextureOffset.Y,
+                        rootTarget.Bounds.Width,
+                        rootTarget.Bounds.Height);
+
+                    if (!TrySubmitPendingCommands(flushContext))
+                    {
+                        throw new InvalidOperationException("Failed to submit the ordered presentation copy.");
+                    }
+                }
 
                 webGPUScene.UpdateBumpSizes(currentBumpSizes);
 
@@ -239,7 +277,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                     configuration,
                     webGPUTarget,
                     nativeTarget.Bounds,
-                    textureFormat,
+                    targetDescriptor,
                     requiredFeature,
                     webGPUScene,
                     deferOverflowCheck: true,
@@ -270,8 +308,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// <param name="configuration">The active processing configuration.</param>
     /// <param name="webGPUTarget">The native surface holding the target texture handles.</param>
     /// <param name="targetBounds">The target bounds for the flush.</param>
-    /// <param name="textureFormat">The target texture format.</param>
-    /// <param name="requiredFeature">The device feature required by the target format, or <see cref="FeatureName.Undefined"/>.</param>
+    /// <param name="targetDescriptor">The target texture format and alpha representation.</param>
+    /// <param name="requiredFeature">The device feature required by the target format, or the default value.</param>
     /// <param name="webGPUScene">The retained scene being rendered.</param>
     /// <param name="deferOverflowCheck">Whether the overflow readback may be deferred; corrective re-renders pass <see langword="false"/>.</param>
     /// <param name="currentBumpSizes">The scratch capacities carried across attempts.</param>
@@ -281,7 +319,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         Configuration configuration,
         WebGPUNativeSurface webGPUTarget,
         Rectangle targetBounds,
-        TextureFormat textureFormat,
+        WebGPUTargetDescriptor targetDescriptor,
         FeatureName requiredFeature,
         WebGPUDrawingBackendScene webGPUScene,
         bool deferOverflowCheck,
@@ -303,9 +341,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 webGPUTarget,
                 targetBounds,
                 encodedScene,
-                textureFormat,
+                targetDescriptor,
                 requiredFeature,
                 currentBumpSizes,
+                this.ScratchBufferBindingSizeLimit,
                 ref resourceArena);
 
             try
@@ -340,7 +379,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                     {
                         Action? correctiveRender = webGPUTarget.IsPresentationSurface
                             ? null
-                            : () => this.RenderCorrective<TPixel>(configuration, webGPUTarget, targetBounds, textureFormat, requiredFeature, webGPUScene);
+                            : () => this.RenderCorrective<TPixel>(configuration, webGPUTarget, targetBounds, targetDescriptor, requiredFeature, webGPUScene);
                         this.EnqueuePendingSchedulingStatus(pendingStatus, webGPUScene, correctiveRender);
                     }
 
@@ -523,6 +562,69 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         => TryCreateCompositionTexture(flushContext, width, height, renderAttachment: false, out texture, out textureView, out error);
 
     /// <summary>
+    /// Creates a sampleable copy of a presentation target, or returns an offscreen target unchanged.
+    /// </summary>
+    /// <param name="flushContext">The flush context that owns the target and any copied texture.</param>
+    /// <param name="target">The target whose current contents provide the fine-shader backdrop.</param>
+    /// <param name="backdropTarget">Receives a target that can be sampled by the fine shader.</param>
+    /// <param name="error">Receives the failure reason when the presentation copy cannot be recorded.</param>
+    /// <returns><see langword="true"/> when a sampleable backdrop is available; otherwise <see langword="false"/>.</returns>
+    internal static bool TryCreateSampleableBackdrop(
+        WebGPUFlushContext flushContext,
+        WebGPUSceneTarget target,
+        out WebGPUSceneTarget backdropTarget,
+        out string? error)
+    {
+        if (!flushContext.RequiresPresentationCopies)
+        {
+            backdropTarget = target;
+            error = null;
+            return true;
+        }
+
+        if (!TryCreateCompositionTexture(
+                flushContext,
+                target.Bounds.Width,
+                target.Bounds.Height,
+                out Texture* backdropTexture,
+                out TextureView* backdropTextureView,
+                out error))
+        {
+            backdropTarget = default;
+            return false;
+        }
+
+        if (!flushContext.EnsureCommandEncoder())
+        {
+            backdropTarget = default;
+            error = "Failed to create a command encoder for the presentation backdrop copy.";
+            return false;
+        }
+
+        // Swapchain capabilities do not guarantee TextureBinding. Copy into a backend-owned
+        // composition texture before the fine shader binds the existing pixels as its backdrop.
+        CopyTextureRegion(
+            flushContext,
+            target.Texture,
+            target.Bounds.X + target.TextureOffset.X,
+            target.Bounds.Y + target.TextureOffset.Y,
+            backdropTexture,
+            0,
+            0,
+            target.Bounds.Width,
+            target.Bounds.Height);
+
+        backdropTarget = new WebGPUSceneTarget(
+            backdropTexture,
+            backdropTextureView,
+            target.Bounds,
+            new Point(-target.Bounds.X, -target.Bounds.Y));
+
+        error = null;
+        return true;
+    }
+
+    /// <summary>
     /// Creates one transient composition texture that can be sampled from, storage-bound, and copied.
     /// When <paramref name="renderAttachment"/> is <see langword="true"/> the texture can also be used
     /// as a render-pass target, which scoped layers require for clearing. The texture and view are
@@ -555,12 +657,12 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         TextureDescriptor textureDescriptor = new()
         {
-            Usage = usage,
-            Dimension = TextureDimension.Dimension2D,
-            Size = new Extent3D((uint)width, (uint)height, 1),
-            Format = flushContext.TextureFormat,
-            MipLevelCount = 1,
-            SampleCount = 1
+            usage = (ulong)usage,
+            dimension = TextureDimension._2D,
+            size = new Extent3D((uint)width, (uint)height, 1),
+            format = flushContext.TextureFormat,
+            mipLevelCount = 1,
+            sampleCount = 1
         };
 
         using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
@@ -576,16 +678,16 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         TextureViewDescriptor textureViewDescriptor = new()
         {
-            Format = flushContext.TextureFormat,
-            Dimension = TextureViewDimension.Dimension2D,
-            BaseMipLevel = 0,
-            MipLevelCount = 1,
-            BaseArrayLayer = 0,
-            ArrayLayerCount = 1,
-            Aspect = TextureAspect.All
+            format = flushContext.TextureFormat,
+            dimension = TextureViewDimension._2D,
+            baseMipLevel = 0,
+            mipLevelCount = 1,
+            baseArrayLayer = 0,
+            arrayLayerCount = 1,
+            aspect = TextureAspect.All
         };
 
-        textureView = flushContext.Api.TextureCreateView(texture, in textureViewDescriptor);
+        textureView = flushContext.Api.TextureCreateView(texture, &textureViewDescriptor);
         if (textureView is null)
         {
             flushContext.Api.TextureRelease(texture);
@@ -628,18 +730,18 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     {
         ImageCopyTexture source = new()
         {
-            Texture = sourceTexture,
-            MipLevel = 0,
-            Origin = new Origin3D((uint)sourceOriginX, (uint)sourceOriginY, 0),
-            Aspect = TextureAspect.All
+            texture = sourceTexture,
+            mipLevel = 0,
+            origin = new Origin3D((uint)sourceOriginX, (uint)sourceOriginY, 0),
+            aspect = TextureAspect.All
         };
 
         ImageCopyTexture destination = new()
         {
-            Texture = destinationTexture,
-            MipLevel = 0,
-            Origin = new Origin3D((uint)destinationOriginX, (uint)destinationOriginY, 0),
-            Aspect = TextureAspect.All
+            texture = destinationTexture,
+            mipLevel = 0,
+            origin = new Origin3D((uint)destinationOriginX, (uint)destinationOriginY, 0),
+            aspect = TextureAspect.All
         };
 
         Extent3D copySize = new((uint)width, (uint)height, 1);
@@ -671,7 +773,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// <returns>
     /// <see langword="true"/> when the command buffer was submitted; otherwise <see langword="false"/>.
     /// </returns>
-    internal static bool TrySubmitWithIndex(WebGPUFlushContext flushContext, out WrappedSubmissionIndex submissionIndex)
+    internal static bool TrySubmitWithIndex(WebGPUFlushContext flushContext, out ulong submissionIndex)
     {
         CommandEncoder* commandEncoder = flushContext.CommandEncoder;
         submissionIndex = default;
@@ -698,9 +800,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             using (WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference())
             {
                 Queue* queue = (Queue*)queueReference.Handle;
-                ulong index = flushContext.WgpuExtension.QueueSubmitForIndex(queue, 1, ref commandBuffer);
-                submissionIndex.Queue = queue;
-                submissionIndex.SubmissionIndex = index;
+                submissionIndex = flushContext.Api.QueueSubmitForIndex(queue, 1, ref commandBuffer);
             }
 
             flushContext.Api.CommandBufferRelease(commandBuffer);
@@ -732,8 +832,9 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         this.lastChunkingBindingFailure = WebGPUSceneDispatch.BindingLimitBuffer.None;
         this.isDisposed = true;
 
-        // Retire any deferred readbacks first: their native map callbacks must fire (or time
-        // out) before the pinned thunks and readback buffers can be released safely.
+        // Retire deferred readbacks before their buffers. Each map is resolved or canceled here;
+        // a callback that native WebGPU still owes remains self-rooted after a timeout and is
+        // prevented from entering the disposed readback owner.
         this.HarvestPendingSchedulingStatuses(scene: null, drainAll: true);
 
         WebGPUSceneSchedulingArena.Dispose(Interlocked.Exchange(ref this.cachedSchedulingArena, null));
@@ -846,14 +947,14 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// <param name="configuration">The processing configuration of the original flush.</param>
     /// <param name="webGPUTarget">The native surface holding the target texture handles.</param>
     /// <param name="targetBounds">The target bounds of the original flush.</param>
-    /// <param name="textureFormat">The target texture format.</param>
-    /// <param name="requiredFeature">The device feature required by the target format, or <see cref="FeatureName.Undefined"/>.</param>
+    /// <param name="targetDescriptor">The target texture format and alpha representation.</param>
+    /// <param name="requiredFeature">The device feature required by the target format, or the default value.</param>
     /// <param name="webGPUScene">The retained scene to replay, kept alive by a deferred-render reference.</param>
     private void RenderCorrective<TPixel>(
         Configuration configuration,
         WebGPUNativeSurface webGPUTarget,
         Rectangle targetBounds,
-        TextureFormat textureFormat,
+        WebGPUTargetDescriptor targetDescriptor,
         FeatureName requiredFeature,
         WebGPUDrawingBackendScene webGPUScene)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -868,7 +969,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 configuration,
                 webGPUTarget,
                 targetBounds,
-                textureFormat,
+                targetDescriptor,
                 requiredFeature,
                 webGPUScene,
                 deferOverflowCheck: false,

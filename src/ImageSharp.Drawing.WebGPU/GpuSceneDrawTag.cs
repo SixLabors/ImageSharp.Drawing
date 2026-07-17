@@ -14,11 +14,11 @@ internal static class GpuSceneDrawTag
     // scene-word-count, and info-word-count increments consumed by the scan/reduction stages.
     // Visible-fill tags carry five extra info words: coverage threshold plus raster interest. Must match drawtag.wgsl.
     public const uint Nop = 0U;
-    public const uint FillColor = 0x184U;
-    public const uint FillRecolor = 0x18CU;
+    public const uint FillColor = 0x188U;
+    public const uint FillRecolor = 0x184U;
     public const uint FillLinGradient = 0x254U;
     public const uint FillRadGradient = 0x3DCU;
-    public const uint FillEllipticGradient = 0x31CU;
+    public const uint FillEllipticGradient = 0x35CU;
     public const uint FillSweepGradient = 0x394U;
     public const uint FillPathGradient = 0x190U;
     public const uint FillImage = 0x3D4U;

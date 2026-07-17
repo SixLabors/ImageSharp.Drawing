@@ -1542,7 +1542,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         // Normalize the source image once so deferred composition does not repeat per-pixel conversions.
         Image<TPixel> convertedImage = imageBrush.UntypedImage.CloneAs<TPixel>();
         this.pendingImageResources.Add(convertedImage);
-        return new ImageBrush<TPixel>(convertedImage, imageBrush.SourceRegion, imageBrush.Offset);
+        return new ImageBrush<TPixel>(convertedImage, imageBrush.SourceRegion, imageBrush.Offset, imageBrush.WrapX, imageBrush.WrapY);
     }
 
     /// <summary>

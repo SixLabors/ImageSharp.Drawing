@@ -1,8 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Silk.NET.WebGPU.Extensions.WGPU;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -12,9 +12,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </summary>
 public static unsafe class WebGPUEnvironment
 {
-    // Rooted so the native wgpu log callback is not collected while wgpu holds it.
-    private static PfnLogCallback nativeLogCallback;
-
     // The native callback is registered at most once per process; later sink changes only
     // swap the managed sink field the callback reads.
     private static bool nativeLogCallbackRegistered;
@@ -61,18 +58,16 @@ public static unsafe class WebGPUEnvironment
             return;
         }
 
-        // Register the native callback once. HandleNativeLog reads the sink field on every
-        // invocation, so swapping the sink needs no re-registration; re-creating the thunk
-        // here would leak the previous one, which must stay rooted while wgpu holds it.
+        // Register the static unmanaged entry point once. HandleNativeLog reads the sink field on
+        // every invocation, so swapping the sink needs no native callback reconfiguration.
         if (nativeLogCallbackRegistered)
         {
             return;
         }
 
-        Wgpu wgpu = WebGPURuntime.GetWgpuExtension();
-        nativeLogCallback = PfnLogCallback.From(HandleNativeLog);
-        wgpu.SetLogCallback(nativeLogCallback, null);
-        wgpu.SetLogLevel(LogLevel.Warn);
+        WebGPU api = WebGPURuntime.GetApi();
+        api.SetLogCallback(&HandleNativeLog, null);
+        api.SetLogLevel(LogLevel.Warn);
         nativeLogCallbackRegistered = true;
     }
 
@@ -82,7 +77,8 @@ public static unsafe class WebGPUEnvironment
     /// <param name="level">The native log level.</param>
     /// <param name="message">The native UTF-8 log message, or <see langword="null"/>.</param>
     /// <param name="userData">Unused native user-data pointer.</param>
-    private static void HandleNativeLog(LogLevel level, byte* message, void* userData)
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void HandleNativeLog(LogLevel level, WebGPUStringView message, void* userData)
     {
         Action<string>? sink = nativeLogSink;
         if (sink is null)
@@ -90,7 +86,7 @@ public static unsafe class WebGPUEnvironment
             return;
         }
 
-        string text = message is null ? string.Empty : Marshal.PtrToStringUTF8((nint)message) ?? string.Empty;
+        string text = message.ToManagedString();
         try
         {
             sink($"[wgpu {level}] {text}");
@@ -102,16 +98,18 @@ public static unsafe class WebGPUEnvironment
     }
 
     /// <summary>
-    /// Probes whether the required WGPU extension and the library-managed WebGPU device and queue are available.
+    /// Probes whether the required wgpu-native entry points and the library-managed WebGPU device and queue are available.
     /// </summary>
     /// <returns>
-    /// <see cref="WebGPUEnvironmentError.Success"/> when the required WGPU extension and the library-managed
+    /// <see cref="WebGPUEnvironmentError.Success"/> when the required wgpu-native entry points and the library-managed
     /// WebGPU device and queue are available;
     /// otherwise, the stable failure code describing why the probe failed.
     /// </returns>
     /// <remarks>
+    /// Returns <see cref="WebGPUEnvironmentError.DxcUnavailable"/> on Windows when the packaged
+    /// DirectX Shader Compiler runtime is unavailable.
     /// Returns <see cref="WebGPUEnvironmentError.WgpuExtensionUnavailable"/> when the core WebGPU API loads
-    /// but the WGPU extension required by the backend cannot be acquired.
+    /// but a wgpu-native extension entry point required by the backend is unavailable.
     /// </remarks>
     public static WebGPUEnvironmentError ProbeAvailability()
         => WebGPURuntime.ProbeAvailability();

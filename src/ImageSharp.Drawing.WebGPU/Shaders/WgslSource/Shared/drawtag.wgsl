@@ -30,11 +30,11 @@ struct DrawMonoid {
 // bits 6..9 = info words (see map_draw_tag).
 // Visible-fill draw tags carry five extra info words: coverage threshold plus raster interest.
 const DRAWTAG_NOP = 0u;
-const DRAWTAG_FILL_COLOR = 0x184u;
-const DRAWTAG_FILL_RECOLOR = 0x18cu;
+const DRAWTAG_FILL_COLOR = 0x188u;
+const DRAWTAG_FILL_RECOLOR = 0x184u;
 const DRAWTAG_FILL_LIN_GRADIENT = 0x254u;
 const DRAWTAG_FILL_RAD_GRADIENT = 0x3dcu;
-const DRAWTAG_FILL_ELLIPTIC_GRADIENT = 0x31cu;
+const DRAWTAG_FILL_ELLIPTIC_GRADIENT = 0x35cu;
 const DRAWTAG_FILL_SWEEP_GRADIENT = 0x394u;
 const DRAWTAG_FILL_PATH_GRADIENT = 0x190u;
 const DRAWTAG_FILL_IMAGE = 0x3d4u;

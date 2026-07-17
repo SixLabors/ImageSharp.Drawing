@@ -677,7 +677,7 @@ internal readonly struct WebGPUSceneBufferSizes
         WebGPUSceneBufferSize<GpuPathTile> pathTiles,
         WebGPUSceneBufferSize<GpuSegmentCount> segCounts,
         WebGPUSceneBufferSize<GpuPathSegment> segments,
-        WebGPUSceneBufferSize<uint> blendSpill,
+        WebGPUSceneBufferSize<ulong> blendSpill,
         WebGPUSceneBufferSize<uint> ptcl)
     {
         this.PathReduced = pathReduced;
@@ -825,7 +825,7 @@ internal readonly struct WebGPUSceneBufferSizes
     /// <summary>
     /// Gets the size of the blend-spill buffer.
     /// </summary>
-    public WebGPUSceneBufferSize<uint> BlendSpill { get; }
+    public WebGPUSceneBufferSize<ulong> BlendSpill { get; }
 
     /// <summary>
     /// Gets the size of the PTCL buffer.
@@ -901,7 +901,7 @@ internal readonly struct WebGPUSceneBufferSizes
             WebGPUSceneBufferSize<GpuPathTile>.Create(bumpSizes.PathTiles),
             WebGPUSceneBufferSize<GpuSegmentCount>.Create(bumpSizes.SegCounts),
             WebGPUSceneBufferSize<GpuPathSegment>.Create(bumpSizes.Segments),
-            WebGPUSceneBufferSize<uint>.Create(bumpSizes.BlendSpill),
+            WebGPUSceneBufferSize<ulong>.Create(bumpSizes.BlendSpill),
             WebGPUSceneBufferSize<uint>.Create(ptclCount));
     }
 
@@ -953,7 +953,7 @@ internal readonly struct WebGPUSceneBufferSizes
             WebGPUSceneBufferSize<GpuPathTile>.Create(bumpSizes.PathTiles),
             WebGPUSceneBufferSize<GpuSegmentCount>.Create(bumpSizes.SegCounts),
             WebGPUSceneBufferSize<GpuPathSegment>.Create(bumpSizes.Segments),
-            WebGPUSceneBufferSize<uint>.Create(bumpSizes.BlendSpill),
+            WebGPUSceneBufferSize<ulong>.Create(bumpSizes.BlendSpill),
             WebGPUSceneBufferSize<uint>.Create(ptclCount));
     }
 

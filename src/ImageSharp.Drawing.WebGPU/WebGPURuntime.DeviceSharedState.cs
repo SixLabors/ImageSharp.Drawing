@@ -2,8 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Collections.Concurrent;
-using System.Runtime.InteropServices;
-using Silk.NET.WebGPU;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -96,6 +94,18 @@ internal static unsafe partial class WebGPURuntime
     }
 
     /// <summary>
+    /// Marks the cached state for a native device as lost.
+    /// </summary>
+    /// <param name="deviceKey">The raw device pointer reported by the native callback.</param>
+    public static void MarkDeviceLost(nint deviceKey)
+    {
+        if (DeviceStateCache.TryGetValue(deviceKey, out DeviceSharedState? state))
+        {
+            state.MarkLost();
+        }
+    }
+
+    /// <summary>
     /// Shared device-scoped caches for pipelines and pipeline layouts.
     /// </summary>
     internal sealed class DeviceSharedState : IDisposable
@@ -132,6 +142,11 @@ internal static unsafe partial class WebGPURuntime
         private readonly object statusReadbackSync = new();
 
         /// <summary>
+        /// Signals that the one-time background pipeline warm-up no longer uses this state.
+        /// </summary>
+        private readonly ManualResetEventSlim pipelineWarmupCompleted = new(false);
+
+        /// <summary>
         /// Upper bound on pooled status readback buffers; returns beyond it release instead.
         /// </summary>
         private const int MaxPooledStatusReadbackBuffers = 16;
@@ -148,19 +163,18 @@ internal static unsafe partial class WebGPURuntime
         private WebGPUHandle.HandleReference deviceReference;
 
         /// <summary>
-        /// Rooted native callback thunk; kept alive while it is registered on the device.
-        /// </summary>
-        private readonly PfnErrorCallback uncapturedErrorCallback;
-
-        /// <summary>
         /// Tracks whether <see cref="Dispose"/> has run.
         /// </summary>
         private bool disposed;
 
         /// <summary>
+        /// Set atomically by the native device-lost callback, which may run on any runtime thread.
+        /// </summary>
+        private int isLost;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="DeviceSharedState"/> class, acquiring a
-        /// device reference, installing the uncaptured-error callback, and snapshotting the
-        /// device features and limits.
+        /// device reference and snapshotting the device features and limits.
         /// </summary>
         /// <param name="api">The WebGPU API facade used to manage native resources.</param>
         /// <param name="deviceHandle">The device this state is scoped to.</param>
@@ -171,17 +185,14 @@ internal static unsafe partial class WebGPURuntime
 
             try
             {
-                this.uncapturedErrorCallback = PfnErrorCallback.From(HandleUncapturedError);
                 this.Device = (Device*)this.deviceReference.Handle;
-                this.Api.DeviceSetUncapturedErrorCallback(this.Device, this.uncapturedErrorCallback, null);
                 this.deviceFeatures = EnumerateDeviceFeatures(api, this.Device);
                 this.MaxStorageBufferBindingSize = QueryMaxStorageBufferBindingSize(api, this.Device);
             }
             catch
             {
-                // Construction failed part-way; undo the callback thunk and the device
-                // reference so the handle refcount is not left permanently elevated.
-                this.uncapturedErrorCallback.Dispose();
+                // Construction failed part-way; release the device reference so the handle
+                // refcount is not left permanently elevated.
                 this.deviceReference.Dispose();
                 throw;
             }
@@ -221,6 +232,11 @@ internal static unsafe partial class WebGPURuntime
         public nuint MaxStorageBufferBindingSize { get; }
 
         /// <summary>
+        /// Gets a value indicating whether the native runtime has reported this device as lost.
+        /// </summary>
+        public bool IsLost => Volatile.Read(ref this.isLost) != 0;
+
+        /// <summary>
         /// Returns whether the device has the specified feature.
         /// </summary>
         /// <param name="feature">The feature to check.</param>
@@ -229,12 +245,24 @@ internal static unsafe partial class WebGPURuntime
             => this.deviceFeatures.Contains(feature);
 
         /// <summary>
+        /// Marks the native device as lost.
+        /// </summary>
+        public void MarkLost()
+            => Volatile.Write(ref this.isLost, 1);
+
+        /// <summary>
+        /// Signals that background pipeline warm-up has stopped using this state.
+        /// </summary>
+        public void CompletePipelineWarmup()
+            => this.pipelineWarmupCompleted.Set();
+
+        /// <summary>
         /// Rents a pooled map-readable status buffer, or creates one when the pool has no buffer
         /// large enough for the requested status data.
         /// </summary>
         /// <param name="byteLength">The required scheduling-status byte length.</param>
         /// <returns>The rented buffer, or <see langword="null"/> when creation failed.</returns>
-        public Silk.NET.WebGPU.Buffer* RentStatusReadbackBuffer(nuint byteLength)
+        public WgpuBuffer* RentStatusReadbackBuffer(nuint byteLength)
         {
             lock (this.statusReadbackSync)
             {
@@ -251,7 +279,7 @@ internal static unsafe partial class WebGPURuntime
                             this.statusReadbackBuffers.Push(retained[--retainedIndex]);
                         }
 
-                        return (Silk.NET.WebGPU.Buffer*)entry.Buffer;
+                        return (WgpuBuffer*)entry.Buffer;
                     }
 
                     retained[retainedIndex++] = entry;
@@ -265,9 +293,9 @@ internal static unsafe partial class WebGPURuntime
 
             BufferDescriptor descriptor = new()
             {
-                Usage = BufferUsage.CopyDst | BufferUsage.MapRead,
-                Size = byteLength,
-                MappedAtCreation = false
+                usage = (ulong)(BufferUsage.CopyDst | BufferUsage.MapRead),
+                size = byteLength,
+                mappedAtCreation = 0U,
             };
 
             return this.Api.DeviceCreateBuffer(this.Device, in descriptor);
@@ -279,7 +307,7 @@ internal static unsafe partial class WebGPURuntime
         /// </summary>
         /// <param name="buffer">The buffer to recycle.</param>
         /// <param name="byteLength">The byte capacity of <paramref name="buffer"/>.</param>
-        public void ReturnStatusReadbackBuffer(Silk.NET.WebGPU.Buffer* buffer, nuint byteLength)
+        public void ReturnStatusReadbackBuffer(WgpuBuffer* buffer, nuint byteLength)
         {
             if (buffer is null)
             {
@@ -299,39 +327,6 @@ internal static unsafe partial class WebGPURuntime
         }
 
         /// <summary>
-        /// Forwards uncaptured native WebGPU errors through the public environment callback.
-        /// </summary>
-        /// <param name="errorType">The native error classification.</param>
-        /// <param name="message">The native UTF-8 error message, or <see langword="null"/>.</param>
-        /// <param name="userData">Unused native user-data pointer.</param>
-        private static void HandleUncapturedError(ErrorType errorType, byte* message, void* userData)
-        {
-            _ = userData;
-
-            string errorMessage = message is null
-                ? string.Empty
-                : Marshal.PtrToStringUTF8((nint)message) ?? string.Empty;
-
-            WebGPUEnvironment.ReportUncapturedError(ToPublicErrorType(errorType), errorMessage);
-        }
-
-        /// <summary>
-        /// Maps Silk's native error enum to the public API enum without exposing Silk types.
-        /// </summary>
-        /// <param name="errorType">The native error classification.</param>
-        /// <returns>The equivalent public error type.</returns>
-        private static WebGPUErrorType ToPublicErrorType(ErrorType errorType)
-            => errorType switch
-            {
-                ErrorType.NoError => WebGPUErrorType.NoError,
-                ErrorType.Validation => WebGPUErrorType.Validation,
-                ErrorType.OutOfMemory => WebGPUErrorType.OutOfMemory,
-                ErrorType.Internal => WebGPUErrorType.Internal,
-                ErrorType.DeviceLost => WebGPUErrorType.DeviceLost,
-                _ => WebGPUErrorType.Unknown
-            };
-
-        /// <summary>
         /// Snapshots the feature set currently reported by the native device.
         /// </summary>
         /// <param name="api">The WebGPU API facade.</param>
@@ -344,19 +339,26 @@ internal static unsafe partial class WebGPURuntime
                 return [];
             }
 
-            int count = (int)api.DeviceEnumerateFeatures(device, (FeatureName*)null);
-            if (count <= 0)
+            SupportedFeatures supportedFeatures = default;
+            api.DeviceGetFeatures(device, &supportedFeatures);
+            if (supportedFeatures.featureCount == 0)
             {
                 return [];
             }
 
-            FeatureName* features = stackalloc FeatureName[count];
-            api.DeviceEnumerateFeatures(device, features);
-
-            HashSet<FeatureName> result = new(count);
-            for (int i = 0; i < count; i++)
+            HashSet<FeatureName> result = new((int)supportedFeatures.featureCount);
+            try
             {
-                result.Add(features[i]);
+                for (nuint i = 0; i < supportedFeatures.featureCount; i++)
+                {
+                    result.Add(supportedFeatures.features[i]);
+                }
+            }
+            finally
+            {
+                // The feature array belongs to the native query result and must be returned through
+                // the matching free-members function after the managed snapshot has been copied.
+                api.SupportedFeaturesFreeMembers(supportedFeatures);
             }
 
             return result;
@@ -375,8 +377,8 @@ internal static unsafe partial class WebGPURuntime
                 return DefaultMaxStorageBufferBindingSize;
             }
 
-            SupportedLimits supportedLimits = default;
-            if (!api.DeviceGetLimits(device, ref supportedLimits))
+            Limits supportedLimits = default;
+            if (api.DeviceGetLimits(device, &supportedLimits) != Status.Success)
             {
                 return DefaultMaxStorageBufferBindingSize;
             }
@@ -387,8 +389,8 @@ internal static unsafe partial class WebGPURuntime
             // ceiling that the chunking decision must respect is the minimum of both. Using the binding
             // size alone lets a large scene skip chunking and then fail buffer creation, which surfaces
             // as an invalid-buffer validation error and a blank frame.
-            ulong binding = supportedLimits.Limits.MaxStorageBufferBindingSize;
-            ulong bufferSize = supportedLimits.Limits.MaxBufferSize;
+            ulong binding = supportedLimits.maxStorageBufferBindingSize;
+            ulong bufferSize = supportedLimits.maxBufferSize;
             ulong reported = Math.Min(binding == 0 ? ulong.MaxValue : binding, bufferSize == 0 ? ulong.MaxValue : bufferSize);
             if (reported == 0 || reported == ulong.MaxValue || reported > nuint.MaxValue)
             {
@@ -571,6 +573,10 @@ internal static unsafe partial class WebGPURuntime
                 return;
             }
 
+            // Warm-up creates entries through the same pipeline caches as a foreground flush.
+            // Wait before enumerating and releasing them so teardown never races their creation.
+            this.pipelineWarmupCompleted.Wait();
+
             foreach (CompositePipelineInfrastructure infrastructure in this.compositePipelines.Values)
             {
                 this.ReleaseCompositeInfrastructure(infrastructure);
@@ -589,17 +595,13 @@ internal static unsafe partial class WebGPURuntime
             {
                 while (this.statusReadbackBuffers.Count > 0)
                 {
-                    this.Api.BufferRelease((Silk.NET.WebGPU.Buffer*)this.statusReadbackBuffers.Pop().Buffer);
+                    this.Api.BufferRelease((WgpuBuffer*)this.statusReadbackBuffers.Pop().Buffer);
                 }
             }
 
-            // Clear the native callback slot before freeing Silk's delegate thunk; otherwise the
-            // device could still invoke a callback whose managed thunk has been reclaimed.
-            this.Api.DeviceSetUncapturedErrorCallback(this.Device, default, null);
-            this.uncapturedErrorCallback.Dispose();
-
             // Drop the device reference last: every release above calls into the device.
             this.deviceReference.Dispose();
+            this.pipelineWarmupCompleted.Dispose();
             this.disposed = true;
         }
 
@@ -635,8 +637,8 @@ internal static unsafe partial class WebGPURuntime
             bindGroupLayouts[0] = bindGroupLayout;
             PipelineLayoutDescriptor pipelineLayoutDescriptor = new()
             {
-                BindGroupLayoutCount = 1,
-                BindGroupLayouts = bindGroupLayouts
+                bindGroupLayoutCount = 1,
+                bindGroupLayouts = bindGroupLayouts
             };
 
             pipelineLayout = this.Api.DeviceCreatePipelineLayout(this.Device, in pipelineLayoutDescriptor);
@@ -713,47 +715,47 @@ internal static unsafe partial class WebGPURuntime
             _ = blendMode;
             VertexState vertexState = new()
             {
-                Module = shaderModule,
-                EntryPoint = vertexEntryPointPtr,
-                BufferCount = 0,
-                Buffers = null
+                module = shaderModule,
+                entryPoint = vertexEntryPointPtr,
+                bufferCount = 0,
+                buffers = null
             };
 
             ColorTargetState* colorTargets = stackalloc ColorTargetState[1];
             colorTargets[0] = new ColorTargetState
             {
-                Format = textureFormat,
-                Blend = null,
-                WriteMask = ColorWriteMask.All
+                format = textureFormat,
+                blend = null,
+                writeMask = (ulong)ColorWriteMask.All
             };
 
             FragmentState fragmentState = new()
             {
-                Module = shaderModule,
-                EntryPoint = fragmentEntryPointPtr,
-                TargetCount = 1,
-                Targets = colorTargets
+                module = shaderModule,
+                entryPoint = fragmentEntryPointPtr,
+                targetCount = 1,
+                targets = colorTargets
             };
 
             RenderPipelineDescriptor descriptor = new()
             {
-                Layout = pipelineLayout,
-                Vertex = vertexState,
-                Primitive = new PrimitiveState
+                layout = pipelineLayout,
+                vertex = vertexState,
+                primitive = new PrimitiveState
                 {
-                    Topology = PrimitiveTopology.TriangleList,
-                    StripIndexFormat = IndexFormat.Undefined,
-                    FrontFace = FrontFace.Ccw,
-                    CullMode = CullMode.None
+                    topology = PrimitiveTopology.TriangleList,
+                    stripIndexFormat = IndexFormat.Undefined,
+                    frontFace = FrontFace.CCW,
+                    cullMode = CullMode.None
                 },
-                DepthStencil = null,
-                Multisample = new MultisampleState
+                depthStencil = null,
+                multisample = new MultisampleState
                 {
-                    Count = 1,
-                    Mask = uint.MaxValue,
-                    AlphaToCoverageEnabled = false
+                    count = 1,
+                    mask = uint.MaxValue,
+                    alphaToCoverageEnabled = 0U,
                 },
-                Fragment = &fragmentState
+                fragment = &fragmentState
             };
 
             return this.Api.DeviceCreateRenderPipeline(this.Device, in descriptor);
@@ -775,14 +777,14 @@ internal static unsafe partial class WebGPURuntime
             {
                 ProgrammableStageDescriptor computeState = new()
                 {
-                    Module = shaderModule,
-                    EntryPoint = entryPointPtr
+                    module = shaderModule,
+                    entryPoint = entryPointPtr
                 };
 
                 ComputePipelineDescriptor descriptor = new()
                 {
-                    Layout = pipelineLayout,
-                    Compute = computeState
+                    layout = pipelineLayout,
+                    compute = computeState
                 };
 
                 return this.Api.DeviceCreateComputePipeline(this.Device, in descriptor);
@@ -800,13 +802,13 @@ internal static unsafe partial class WebGPURuntime
             {
                 ShaderModuleWGSLDescriptor wgslDescriptor = new()
                 {
-                    Chain = new ChainedStruct { SType = SType.ShaderModuleWgslDescriptor },
-                    Code = shaderCodePtr
+                    chain = new ChainedStruct { sType = SType.ShaderSourceWGSL },
+                    code = shaderCodePtr
                 };
 
                 ShaderModuleDescriptor shaderDescriptor = new()
                 {
-                    NextInChain = (ChainedStruct*)&wgslDescriptor
+                    nextInChain = (ChainedStruct*)&wgslDescriptor
                 };
 
                 return this.Api.DeviceCreateShaderModule(this.Device, in shaderDescriptor);

@@ -190,25 +190,23 @@ fn write_path(tile: Tile, tile_ix: u32, draw_flags: u32, coverage_threshold: f32
     }
 }
 
-// Emits a CMD_COLOR paint command (packed RGBA color plus draw flags).
+// Emits a CMD_COLOR paint command (binary16 RGBA color plus draw flags).
 fn write_color(color: CmdColor) {
-    alloc_cmd(3u);
+    alloc_cmd(4u);
     ptcl[cmd_offset] = CMD_COLOR;
-    ptcl[cmd_offset + 1u] = color.rgba_color;
-    ptcl[cmd_offset + 2u] = color.draw_flags;
-    cmd_offset += 3u;
+    ptcl[cmd_offset + 1u] = color.color_rg;
+    ptcl[cmd_offset + 2u] = color.color_ba;
+    ptcl[cmd_offset + 3u] = color.draw_flags;
+    cmd_offset += 4u;
 }
 
-// Emits a CMD_RECOLOR paint command that replaces pixels matching
-// source_color (within the given threshold) with target_color.
-fn write_recolor(source_color: u32, target_color: u32, threshold: u32, draw_flags: u32) {
-    alloc_cmd(5u);
+// Emits a CMD_RECOLOR command referencing one target-specialized auxiliary record.
+fn write_recolor(data_offset: u32, draw_flags: u32) {
+    alloc_cmd(3u);
     ptcl[cmd_offset] = CMD_RECOLOR;
-    ptcl[cmd_offset + 1u] = source_color;
-    ptcl[cmd_offset + 2u] = target_color;
-    ptcl[cmd_offset + 3u] = threshold;
-    ptcl[cmd_offset + 4u] = draw_flags;
-    cmd_offset += 5u;
+    ptcl[cmd_offset + 1u] = data_offset;
+    ptcl[cmd_offset + 2u] = draw_flags;
+    cmd_offset += 3u;
 }
 
 // Emits a gradient paint command. ty selects the CMD_*_GRAD opcode, index is
@@ -603,13 +601,12 @@ fn main(
                 switch drawtag {
                     case DRAWTAG_FILL_COLOR: {
                         if write_path(tile, tile_ix, draw_flags, coverage_threshold, interest, false) {
-                            let rgba_color = scene[dd];
-                            write_color(CmdColor(rgba_color, draw_flags));
+                            write_color(CmdColor(scene[dd], scene[dd + 1u], draw_flags));
                         }
                     }
                     case DRAWTAG_FILL_RECOLOR: {
                         if write_path(tile, tile_ix, draw_flags, coverage_threshold, interest, false) {
-                            write_recolor(scene[dd], scene[dd + 1u], scene[dd + 2u], draw_flags);
+                            write_recolor(config.brush_data_base + scene[dd], draw_flags);
                         }
                     }
                     case DRAWTAG_FILL_LIN_GRADIENT: {
@@ -642,7 +639,7 @@ fn main(
                     }
                     case DRAWTAG_FILL_PATH_GRADIENT: {
                         if write_path(tile, tile_ix, draw_flags, coverage_threshold, interest, false) {
-                            write_path_grad(config.path_gradient_data_base + scene[dd], scene[dd + 1u], scene[dd + 2u], draw_flags);
+                            write_path_grad(config.brush_data_base + scene[dd], scene[dd + 1u], scene[dd + 2u], draw_flags);
                         }
                     }
                     case DRAWTAG_FILL_IMAGE: {

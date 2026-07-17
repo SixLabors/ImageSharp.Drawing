@@ -4,12 +4,9 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
-using Silk.NET.WebGPU;
-using Silk.NET.WebGPU.Extensions.WGPU;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-using WgpuBuffer = Silk.NET.WebGPU.Buffer;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -83,11 +80,11 @@ public sealed unsafe partial class WebGPUDrawingBackend
         private readonly WgpuBuffer* readbackBuffer;
         private readonly nuint readbackByteLength;
         private readonly ManualResetEventSlim mapReady = new(false);
-        private readonly PfnBufferMapCallback mapCallback;
+        private readonly WebGPUBufferMapCallback mapCallback;
         private WebGPUSceneResourceArena? resourceArena;
         private WebGPUSceneSchedulingArena? schedulingArena;
         private BufferMapAsyncStatus mapStatus;
-        private WrappedSubmissionIndex lastSubmissionIndex;
+        private ulong lastSubmissionIndex;
         private int currentTargetId;
         private int journalCount;
         private int statusCount;
@@ -135,9 +132,9 @@ public sealed unsafe partial class WebGPUDrawingBackend
             this.readbackByteLength = this.BuildReadbackLayout();
             BufferDescriptor descriptor = new()
             {
-                Usage = BufferUsage.CopyDst | BufferUsage.MapRead,
-                Size = checked(this.readbackByteLength),
-                MappedAtCreation = false
+                usage = (ulong)(BufferUsage.CopyDst | BufferUsage.MapRead),
+                size = checked(this.readbackByteLength),
+                mappedAtCreation = 0U,
             };
 
             using WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference();
@@ -150,7 +147,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             // The flush context releases the native buffer after every submitted command that
             // references it has left managed ownership.
             flushContext.TrackBuffer(this.readbackBuffer);
-            this.mapCallback = PfnBufferMapCallback.From(this.OnMapCompleted);
+            this.mapCallback = WebGPUBufferMapCallback.From(this.OnMapCompleted);
         }
 
         /// <summary>
@@ -403,7 +400,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                     out int emittedStatusCount,
                     out uint fullTileHeight,
                     out uint successfulChunkTileHeight,
-                    out WrappedSubmissionIndex submissionIndex,
+                    out ulong submissionIndex,
                     out string? error);
 
                 if (!submitted)
@@ -464,23 +461,23 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
                     ImageCopyTexture sourceCopy = new()
                     {
-                        Texture = sourceTarget.Texture,
-                        MipLevel = 0,
-                        Origin = new Origin3D(
+                        texture = sourceTarget.Texture,
+                        mipLevel = 0,
+                        origin = new Origin3D(
                             (uint)(region.ClippedSource.X + sourceTarget.TextureOffset.X),
                             (uint)(region.ClippedSource.Y + sourceTarget.TextureOffset.Y),
                             0),
-                        Aspect = TextureAspect.All
+                        aspect = TextureAspect.All
                     };
 
                     ImageCopyBuffer destinationCopy = new()
                     {
-                        Buffer = this.readbackBuffer,
-                        Layout = new TextureDataLayout
+                        buffer = this.readbackBuffer,
+                        layout = new TextureDataLayout
                         {
-                            Offset = region.BufferOffset,
-                            BytesPerRow = (uint)region.ReadbackRowBytes,
-                            RowsPerImage = (uint)region.ClippedSource.Height
+                            offset = region.BufferOffset,
+                            bytesPerRow = (uint)region.ReadbackRowBytes,
+                            rowsPerImage = (uint)region.ClippedSource.Height
                         }
                     };
 
@@ -503,7 +500,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                     return;
                 }
 
-                WrappedSubmissionIndex barrierSubmissionIndex = recordedPixelCopy
+                ulong barrierSubmissionIndex = recordedPixelCopy
                     ? this.SubmitBarrierCommands()
                     : this.lastSubmissionIndex;
 
@@ -585,9 +582,9 @@ public sealed unsafe partial class WebGPUDrawingBackend
         /// <param name="mappedByteLength">The byte length required by the current barrier.</param>
         /// <param name="submissionIndex">The exact submission that completes the barrier data.</param>
         /// <returns>The mapped read-only range.</returns>
-        private void* MapReadback(nuint mappedByteLength, WrappedSubmissionIndex submissionIndex)
+        private void* MapReadback(nuint mappedByteLength, ulong submissionIndex)
         {
-            this.mapStatus = BufferMapAsyncStatus.Unknown;
+            this.mapStatus = default;
             this.mapReady.Reset();
             this.flushContext.Api.BufferMapAsync(
                 this.readbackBuffer,
@@ -598,11 +595,12 @@ public sealed unsafe partial class WebGPUDrawingBackend
                 null);
 
             using WebGPUHandle.HandleReference deviceReference = this.flushContext.DeviceHandle.AcquireReference();
-            if (!WaitForMapSignal(this.flushContext.WgpuExtension, (Device*)deviceReference.Handle, this.mapReady, submissionIndex) ||
+            if (!WaitForMapSignal(this.flushContext.Api, (Device*)deviceReference.Handle, this.mapReady, submissionIndex) ||
                 this.mapStatus != BufferMapAsyncStatus.Success)
             {
-                // Unmapping cancels a still-pending map before the callback thunk is released by
-                // executor disposal, so native code cannot retain a dead managed callback.
+                // Unmapping cancels a still-pending map before executor disposal retires its
+                // managed owner. The wrapper remains self-rooted until native delivers the
+                // cancellation callback, so native code cannot retain a dead delegate target.
                 this.flushContext.Api.BufferUnmap(this.readbackBuffer);
                 throw new InvalidOperationException($"Failed to map the ordered WebGPU barrier with status '{this.mapStatus}'.");
             }
@@ -901,9 +899,9 @@ public sealed unsafe partial class WebGPUDrawingBackend
         /// Submits the texture-copy commands that complete one mixed Apply barrier.
         /// </summary>
         /// <returns>The exact submission index owning the copied pixels.</returns>
-        private WrappedSubmissionIndex SubmitBarrierCommands()
+        private ulong SubmitBarrierCommands()
         {
-            if (!TrySubmitWithIndex(this.flushContext, out WrappedSubmissionIndex submissionIndex))
+            if (!TrySubmitWithIndex(this.flushContext, out ulong submissionIndex))
             {
                 throw new InvalidOperationException("Failed to submit the ordered Apply barrier.");
             }

@@ -122,13 +122,26 @@ public sealed class PathGradientBrush : Brush
         GraphicsOptions options,
         int canvasWidth,
         RectangleF region)
-        => new PathGradientBrushRenderer<TPixel>(
+    {
+        if (TPixel.GetPixelTypeInfo().AlphaRepresentation == PixelAlphaRepresentation.Associated)
+        {
+            return new PathGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(
+                configuration,
+                options,
+                canvasWidth,
+                this.edges,
+                this.CenterColor,
+                this.HasExplicitCenterColor);
+        }
+
+        return new PathGradientBrushRenderer<TPixel, UnassociatedGradientPixelEncoder<TPixel>>(
             configuration,
             options,
             canvasWidth,
             this.edges,
             this.CenterColor,
             this.HasExplicitCenterColor);
+    }
 
     /// <summary>
     /// Computes the default center color as the arithmetic mean of the point colors
@@ -141,7 +154,16 @@ public sealed class PathGradientBrush : Brush
         Guard.NotNull(colors, nameof(colors));
         Guard.MustBeGreaterThan(colors.Length, 0, nameof(colors));
 
-        return Color.FromScaledVector(colors.Select(c => c.ToScaledVector4()).Aggregate((p1, p2) => p1 + p2) / colors.Length);
+        Vector4 sum = Vector4.Zero;
+        foreach (Color color in colors)
+        {
+            // CSS Color 4 requires alpha to be premultiplied before color interpolation. The
+            // implicit center therefore averages associated values just like the rendered gradient.
+            // https://www.w3.org/TR/css-color-4/#interpolation-alpha
+            sum += color.ToScaledVector4(PixelAlphaRepresentation.Associated);
+        }
+
+        return Color.FromScaledVector(sum / colors.Length, PixelAlphaRepresentation.Associated);
     }
 
     /// <summary>
@@ -170,8 +192,8 @@ public sealed class PathGradientBrush : Brush
         {
             this.Start = start;
             this.End = end;
-            this.StartColor = startColor.ToScaledVector4();
-            this.EndColor = endColor.ToScaledVector4();
+            this.StartColor = startColor;
+            this.EndColor = endColor;
 
             this.length = DistanceBetween(this.End, this.Start);
         }
@@ -187,14 +209,14 @@ public sealed class PathGradientBrush : Brush
         public Vector2 End { get; }
 
         /// <summary>
-        /// Gets the color at the start point as a scaled vector.
+        /// Gets the color at the start point.
         /// </summary>
-        public Vector4 StartColor { get; }
+        public Color StartColor { get; }
 
         /// <summary>
-        /// Gets the color at the end point as a scaled vector.
+        /// Gets the color at the end point.
         /// </summary>
-        public Vector4 EndColor { get; }
+        public Color EndColor { get; }
 
         /// <summary>
         /// Tests whether the segment from <paramref name="start"/> to <paramref name="end"/>
@@ -211,25 +233,14 @@ public sealed class PathGradientBrush : Brush
             PolygonUtilities.LineSegmentToLineSegmentIgnoreCollinear(start, end, this.Start, this.End, ref ip);
 
         /// <summary>
-        /// Gets the interpolated edge color at the given distance from the start point.
+        /// Gets the interpolation ratio at the given point, measured by its distance from the edge start.
         /// </summary>
-        /// <param name="distance">The distance along the edge from the start point.</param>
-        /// <returns>The interpolated color as a scaled vector.</returns>
-        public Vector4 ColorAt(float distance)
-        {
+        /// <param name="point">The point on or near the edge.</param>
+        /// <returns>The interpolation ratio from the edge start to the edge end.</returns>
+        public float GetInterpolationRatio(PointF point)
+
             // Zero-length edges have no gradient direction; use the start color.
-            float ratio = this.length > 0 ? distance / this.length : 0;
-
-            return Vector4.Lerp(this.StartColor, this.EndColor, ratio);
-        }
-
-        /// <summary>
-        /// Gets the interpolated edge color at the given point, measured by its
-        /// distance from the edge start.
-        /// </summary>
-        /// <param name="point">The point on (or near) the edge.</param>
-        /// <returns>The interpolated color as a scaled vector.</returns>
-        public Vector4 ColorAt(PointF point) => this.ColorAt(DistanceBetween(point, this.Start));
+            => this.length > 0 ? DistanceBetween(point, this.Start) / this.length : 0;
 
         /// <inheritdoc/>
         public bool Equals(Edge? other)
@@ -251,8 +262,10 @@ public sealed class PathGradientBrush : Brush
     /// The path gradient brush applicator.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private sealed class PathGradientBrushRenderer<TPixel> : BrushRenderer<TPixel>
+    /// <typeparam name="TEncoder">The destination representation encoder.</typeparam>
+    private sealed class PathGradientBrushRenderer<TPixel, TEncoder> : BrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
+        where TEncoder : struct, IGradientPixelEncoder<TPixel>
     {
         private readonly Vector2 center;
 
@@ -264,12 +277,14 @@ public sealed class PathGradientBrush : Brush
 
         private readonly IList<Edge> edges;
 
+        private readonly (Vector4 StartColor, Vector4 EndColor)[] edgeColors;
+
         private readonly TPixel centerPixel;
 
         private readonly TPixel transparentPixel;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="PathGradientBrushRenderer{TPixel}"/> class.
+        /// Initializes a new instance of the <see cref="PathGradientBrushRenderer{TPixel, TEncoder}"/> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
@@ -287,12 +302,24 @@ public sealed class PathGradientBrush : Brush
             : base(configuration, options, canvasWidth)
         {
             this.edges = edges;
+            this.edgeColors = new (Vector4 StartColor, Vector4 EndColor)[edges.Count];
             Vector2[] points = [.. edges.Select(s => s.Start)];
 
+            // CSS Color 4 requires alpha to be premultiplied before color interpolation. Cache
+            // associated inputs without packing through TPixel so destination storage cannot
+            // change the gradient and conversion remains outside the hot loop.
+            // https://www.w3.org/TR/css-color-4/#interpolation-alpha
+            for (int i = 0; i < edges.Count; i++)
+            {
+                this.edgeColors[i] = (
+                    edges[i].StartColor.ToScaledVector4(PixelAlphaRepresentation.Associated),
+                    edges[i].EndColor.ToScaledVector4(PixelAlphaRepresentation.Associated));
+            }
+
             this.center = points.Aggregate((p1, p2) => p1 + p2) / edges.Count;
-            this.centerColor = centerColor.ToScaledVector4();
             this.hasSpecialCenterColor = hasSpecialCenterColor;
-            this.centerPixel = centerColor.ToPixel<TPixel>();
+            this.centerColor = centerColor.ToScaledVector4(PixelAlphaRepresentation.Associated);
+            this.centerPixel = TEncoder.Encode(this.centerColor);
             this.maxDistance = points.Select(p => p - this.center).Max(d => d.Length());
             this.transparentPixel = Color.Transparent.ToPixel<TPixel>();
         }
@@ -330,11 +357,11 @@ public sealed class PathGradientBrush : Brush
                         return this.transparentPixel;
                     }
 
-                    Vector4 pointColor = ((1 - u - v) * this.edges[0].StartColor)
-                        + (u * this.edges[0].EndColor)
-                        + (v * this.edges[2].StartColor);
+                    Vector4 pointColor = ((1 - u - v) * this.edgeColors[0].StartColor)
+                        + (u * this.edgeColors[0].EndColor)
+                        + (v * this.edgeColors[2].StartColor);
 
-                    return TPixel.FromScaledVector4(pointColor);
+                    return TEncoder.Encode(pointColor);
                 }
 
                 // General case: cast a ray from the sample point away from the center and
@@ -344,7 +371,7 @@ public sealed class PathGradientBrush : Brush
                 Vector2 direction = Vector2.Normalize(point - this.center);
                 Vector2 end = point + (direction * this.maxDistance);
 
-                (Edge Edge, Vector2 Point)? isc = this.FindIntersection(point, end);
+                (Edge Edge, int EdgeIndex, Vector2 Point)? isc = this.FindIntersection(point, end);
 
                 if (!isc.HasValue)
                 {
@@ -352,7 +379,10 @@ public sealed class PathGradientBrush : Brush
                 }
 
                 Vector2 intersection = isc.Value.Point;
-                Vector4 edgeColor = isc.Value.Edge.ColorAt(intersection);
+                int edgeIndex = isc.Value.EdgeIndex;
+                (Vector4 startColor, Vector4 endColor) = this.edgeColors[edgeIndex];
+
+                Vector4 edgeColor = Vector4.Lerp(startColor, endColor, isc.Value.Edge.GetInterpolationRatio(intersection));
 
                 // ratio is 0 on the boundary (edge color) and 1 at the center (center color).
                 float length = DistanceBetween(intersection, this.center);
@@ -360,7 +390,7 @@ public sealed class PathGradientBrush : Brush
 
                 Vector4 color = Vector4.Lerp(edgeColor, this.centerColor, ratio);
 
-                return TPixel.FromScaledVector4(color);
+                return TEncoder.Encode(color);
             }
         }
 
@@ -396,17 +426,19 @@ public sealed class PathGradientBrush : Brush
         /// </summary>
         /// <param name="start">The start point of the query segment.</param>
         /// <param name="end">The end point of the query segment.</param>
-        /// <returns>The closest intersected edge and the intersection point, or <see langword="null"/> when no edge is hit.</returns>
-        private (Edge Edge, Vector2 Point)? FindIntersection(
-            PointF start,
-            PointF end)
+        /// <returns>The closest intersected edge, its index, and the intersection point, or <see langword="null"/> when no edge is hit.</returns>
+        private (Edge Edge, int EdgeIndex, Vector2 Point)? FindIntersection(PointF start, PointF end)
         {
             Vector2 ip = default;
             Vector2 closestIntersection = default;
             Edge? closestEdge = null;
+            int closestEdgeIndex = 0;
             float minDistance = float.MaxValue;
-            foreach (Edge edge in this.edges)
+
+            for (int i = 0; i < this.edges.Count; i++)
             {
+                Edge edge = this.edges[i];
+
                 if (!edge.Intersect(start, end, ref ip))
                 {
                     continue;
@@ -417,11 +449,12 @@ public sealed class PathGradientBrush : Brush
                 {
                     minDistance = d;
                     closestEdge = edge;
+                    closestEdgeIndex = i;
                     closestIntersection = ip;
                 }
             }
 
-            return closestEdge != null ? (closestEdge, closestIntersection) : null;
+            return closestEdge != null ? (closestEdge, closestEdgeIndex, closestIntersection) : null;
         }
 
         /// <summary>

@@ -1,8 +1,11 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Silk.NET.WebGPU;
-using Silk.NET.WebGPU.Extensions.WGPU;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Text;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
+using FilePath = System.IO.Path;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -11,9 +14,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This type owns the process-level Silk <see cref="WebGPU"/> API loader, its
-/// shared <see cref="Wgpu"/> extension, and a lazily provisioned default
-/// device/queue pair used by the GPU backend when no native surface is available.
+/// This type owns the process-level <see cref="WebGPU"/> API facade and a lazily provisioned
+/// default device/queue pair used by the GPU backend when no native surface is available.
 /// </para>
 /// <para>
 /// Backends use <see cref="GetApi"/> to access the shared WebGPU loader and
@@ -44,11 +46,6 @@ internal static unsafe partial class WebGPURuntime
     /// Process-level WebGPU API loader.
     /// </summary>
     private static WebGPU? api;
-
-    /// <summary>
-    /// Shared wgpu-native extension facade.
-    /// </summary>
-    private static Wgpu? wgpuExtension;
 
     /// <summary>
     /// Lazily provisioned device handle for CPU-backed frames. Owned by the runtime and
@@ -133,8 +130,12 @@ internal static unsafe partial class WebGPURuntime
 
             if (sharedInstance is null)
             {
-                InstanceDescriptor descriptor = default;
-                Instance* created = api.CreateInstance(&descriptor);
+                if (!TryGetDxcPaths(out _, out _))
+                {
+                    throw new InvalidOperationException("The packaged DirectX Shader Compiler runtime is unavailable.");
+                }
+
+                Instance* created = CreateConfiguredInstance(api);
                 if (created is null)
                 {
                     throw new InvalidOperationException("WebGPU instance creation failed.");
@@ -144,25 +145,6 @@ internal static unsafe partial class WebGPURuntime
             }
 
             return sharedInstance;
-        }
-    }
-
-    /// <summary>
-    /// Gets the shared wgpu-native extension facade, initializing the runtime on first use.
-    /// </summary>
-    /// <returns>The shared wgpu-native extension facade.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the WebGPU API cannot be initialized.</exception>
-    public static Wgpu GetWgpuExtension()
-    {
-        lock (Sync)
-        {
-            EnsureInitialized();
-            if (wgpuExtension is null)
-            {
-                throw new InvalidOperationException("WebGPU.TryGetDeviceExtension for Wgpu failed.");
-            }
-
-            return wgpuExtension;
         }
     }
 
@@ -196,16 +178,17 @@ internal static unsafe partial class WebGPURuntime
                 return true;
             }
 
-            try
-            {
-                EnsureInitialized();
-            }
-            catch (RequiredWgpuExtensionUnavailableException)
+            if (!TryGetDxcPaths(out _, out _))
             {
                 device = null;
                 queue = null;
-                errorCode = WebGPUEnvironmentError.WgpuExtensionUnavailable;
+                errorCode = WebGPUEnvironmentError.DxcUnavailable;
                 return false;
+            }
+
+            try
+            {
+                EnsureInitialized();
             }
             catch
             {
@@ -225,7 +208,7 @@ internal static unsafe partial class WebGPURuntime
 
             // Provision: instance -> adapter -> device -> queue.
             // The instance and adapter are transient; only the device and queue are cached.
-            Instance* instance = api.CreateInstance((InstanceDescriptor*)null);
+            Instance* instance = CreateConfiguredInstance(api);
             if (instance is null)
             {
                 device = null;
@@ -240,7 +223,7 @@ internal static unsafe partial class WebGPURuntime
             bool initialized = false;
             try
             {
-                if (!TryRequestAdapter(api, instance, out adapter, out errorCode))
+                if (!TryRequestAdapter(api, instance, null, out adapter, out errorCode))
                 {
                     device = null;
                     queue = null;
@@ -260,6 +243,21 @@ internal static unsafe partial class WebGPURuntime
                     device = null;
                     queue = null;
                     errorCode = WebGPUEnvironmentError.QueueAcquisitionFailed;
+                    return false;
+                }
+
+                // DevicePoll is a wgpu-native extension entry point required by every asynchronous
+                // readback path. Probe it before publishing the device so availability cannot report
+                // success against an incompatible native library found by the operating system.
+                try
+                {
+                    _ = api.DevicePoll(requestedDevice, false, null);
+                }
+                catch (EntryPointNotFoundException)
+                {
+                    device = null;
+                    queue = null;
+                    errorCode = WebGPUEnvironmentError.WgpuExtensionUnavailable;
                     return false;
                 }
 
@@ -416,13 +414,13 @@ internal static unsafe partial class WebGPURuntime
             {
                 ShaderModuleWGSLDescriptor wgslDescriptor = new()
                 {
-                    Chain = new ChainedStruct { SType = SType.ShaderModuleWgslDescriptor },
-                    Code = shaderCodePtr
+                    chain = new ChainedStruct { sType = SType.ShaderSourceWGSL },
+                    code = shaderCodePtr
                 };
 
                 ShaderModuleDescriptor shaderDescriptor = new()
                 {
-                    NextInChain = (ChainedStruct*)&wgslDescriptor
+                    nextInChain = (ChainedStruct*)&wgslDescriptor
                 };
 
                 ShaderModule* shaderModule = api.DeviceCreateShaderModule(device, in shaderDescriptor);
@@ -438,14 +436,14 @@ internal static unsafe partial class WebGPURuntime
                     {
                         ProgrammableStageDescriptor computeStage = new()
                         {
-                            Module = shaderModule,
-                            EntryPoint = entryPointPtr
+                            module = shaderModule,
+                            entryPoint = entryPointPtr
                         };
 
                         PipelineLayoutDescriptor layoutDescriptor = new()
                         {
-                            BindGroupLayoutCount = 0,
-                            BindGroupLayouts = null
+                            bindGroupLayoutCount = 0,
+                            bindGroupLayouts = null
                         };
 
                         PipelineLayout* pipelineLayout = api.DeviceCreatePipelineLayout(device, in layoutDescriptor);
@@ -458,8 +456,8 @@ internal static unsafe partial class WebGPURuntime
                         {
                             ComputePipelineDescriptor pipelineDescriptor = new()
                             {
-                                Layout = pipelineLayout,
-                                Compute = computeStage
+                                layout = pipelineLayout,
+                                compute = computeStage
                             };
 
                             ComputePipeline* pipeline = api.DeviceCreateComputePipeline(device, in pipelineDescriptor);
@@ -524,17 +522,12 @@ internal static unsafe partial class WebGPURuntime
             computePipelineProbeResult = null;
         }
 
-        // Keep the process-wide Silk.NET.WebGPU.WebGPU API loader and
-        // Silk.NET.WebGPU.Extensions.WGPU.Wgpu extension facade rooted after releasing every GPU object above.
-        // Explicitly unloading wgpu_native.dll can destroy a Win32 window while its WGL window-
-        // procedure chain still points into that module. Control Flow Guard invalidates those
-        // indirect-call targets during unload, so the WM_NCDESTROY re-entry fails with
-        // FAST_FAIL_GUARD_ICALL_CHECK_FAILURE. Normal process teardown owns the final module
-        // unload and reclaims the wrappers after no managed code can re-enter the runtime.
+        // DllImport keeps the native module loaded until normal process teardown. It must not be
+        // explicitly unloaded while a platform window can still dispatch native callbacks.
     }
 
     /// <summary>
-    /// Loads the shared API loader and wgpu extension and installs the process-exit teardown hook.
+    /// Loads the shared API facade and installs the process-exit teardown hook.
     /// Callers must hold <see cref="Sync"/>; the exit hook re-acquires the lock when it fires.
     /// </summary>
     private static void EnsureInitialized()
@@ -564,11 +557,60 @@ internal static unsafe partial class WebGPURuntime
         {
             throw new InvalidOperationException("WebGPU.GetApi returned null.");
         }
+    }
 
-        if (wgpuExtension is null && !api.TryGetDeviceExtension<Wgpu>(null, out wgpuExtension))
+    /// <summary>
+    /// Creates an instance configured to use the packaged DirectX Shader Compiler on Windows.
+    /// </summary>
+    /// <param name="webGpu">The WebGPU API used to create the instance.</param>
+    /// <returns>The created instance, or <see langword="null"/> when creation fails.</returns>
+    private static Instance* CreateConfiguredInstance(WebGPU webGpu)
+    {
+        InstanceDescriptor descriptor = default;
+        if (!OperatingSystem.IsWindows())
         {
-            throw new RequiredWgpuExtensionUnavailableException();
+            return webGpu.CreateInstance(&descriptor);
         }
+
+        _ = TryGetDxcPaths(out string dxcPath, out _);
+        byte[] dxcPathBytes = Encoding.UTF8.GetBytes(dxcPath + '\0');
+
+        fixed (byte* dxcPathPointer = dxcPathBytes)
+        {
+            // DXC applies only to DX12, so select that backend explicitly. This also prevents
+            // unused Windows backends from reporting failed HWND capability probes before the
+            // runtime selects the valid DX12 adapter.
+            InstanceExtras extras = new()
+            {
+                chain = new ChainedStruct
+                {
+                    sType = (SType)NativeSType.WGPUSType_InstanceExtras
+                },
+                backends = WebGPUNative.WGPUInstanceBackend_DX12,
+                dx12ShaderCompiler = Dx12Compiler.Dxc,
+                dxcPath = dxcPathPointer,
+
+                // A direct HWND swapchain is always opaque. The visual path makes wgpu create
+                // a DirectComposition visual for that HWND and supports alpha-aware presentation.
+                dx12PresentationSystem = WGPUDx12SwapchainKind.DxgiFromVisual
+            };
+
+            descriptor.nextInChain = (ChainedStruct*)&extras;
+            return webGpu.CreateInstance(&descriptor);
+        }
+    }
+
+    /// <summary>
+    /// Locates the packaged DirectX Shader Compiler files required by the Windows backend.
+    /// </summary>
+    /// <param name="dxcPath">Receives the path to <c>dxcompiler.dll</c>.</param>
+    /// <param name="dxilPath">Receives the path to <c>dxil.dll</c>.</param>
+    /// <returns><see langword="true"/> when both files are available, or on non-Windows platforms.</returns>
+    private static bool TryGetDxcPaths(out string dxcPath, out string dxilPath)
+    {
+        dxcPath = FilePath.Combine(AppContext.BaseDirectory, "dxcompiler.dll");
+        dxilPath = FilePath.Combine(AppContext.BaseDirectory, "dxil.dll");
+        return !OperatingSystem.IsWindows() || (File.Exists(dxcPath) && File.Exists(dxilPath));
     }
 
     /// <summary>
@@ -581,6 +623,7 @@ internal static unsafe partial class WebGPURuntime
         {
             WebGPUEnvironmentError.Success => "The WebGPU operation did not report an error.",
             WebGPUEnvironmentError.ApiInitializationFailed => "Failed to initialize the WebGPU runtime.",
+            WebGPUEnvironmentError.DxcUnavailable => "The packaged DirectX Shader Compiler runtime is unavailable.",
             WebGPUEnvironmentError.InstanceCreationFailed => "The WebGPU runtime could not create an instance.",
             WebGPUEnvironmentError.AdapterRequestTimedOut => "Timed out while waiting for the WebGPU adapter request callback.",
             WebGPUEnvironmentError.AdapterRequestFailed => "The WebGPU runtime failed to acquire a WebGPU adapter.",
@@ -599,34 +642,55 @@ internal static unsafe partial class WebGPURuntime
     /// </summary>
     /// <param name="api">The WebGPU API wrapper.</param>
     /// <param name="instance">The instance that issues the request.</param>
+    /// <param name="compatibleSurface">The presentation surface the adapter must support, or <see langword="null"/> for an offscreen adapter.</param>
     /// <param name="adapter">Receives the returned adapter on success.</param>
     /// <param name="errorCode">Receives the stable failure code when the request fails.</param>
     /// <returns><see langword="true"/> when an adapter was acquired; otherwise, <see langword="false"/>.</returns>
-    private static bool TryRequestAdapter(
+    public static bool TryRequestAdapter(
         WebGPU api,
         Instance* instance,
+        Surface* compatibleSurface,
         out Adapter* adapter,
         out WebGPUEnvironmentError errorCode)
     {
-        RequestAdapterStatus callbackStatus = RequestAdapterStatus.Unknown;
+        RequestAdapterStatus callbackStatus = default;
         Adapter* callbackAdapter = null;
         using ManualResetEventSlim callbackReady = new(false);
 
         // The native callback completes on the runtime's thread model, so the managed side stores
         // the result into locals and then resumes once the signal is set or the request times out.
-        void Callback(RequestAdapterStatus status, Adapter* adapterPtr, byte* message, void* userData)
+        void Callback(RequestAdapterStatus status, Adapter* adapterPtr, WebGPUStringView message, void* userData)
         {
             callbackStatus = status;
             callbackAdapter = adapterPtr;
             callbackReady.Set();
         }
 
-        using PfnRequestAdapterCallback callbackPtr = PfnRequestAdapterCallback.From(Callback);
+        void ReleaseAbandonedResult(RequestAdapterStatus status, Adapter* adapterPtr, WebGPUStringView message, void* userData)
+        {
+            _ = status;
+            _ = message;
+            _ = userData;
+
+            if (adapterPtr is not null)
+            {
+                // AllowSpontaneous callbacks can run from a native WebGPU call stack, where the
+                // checked-in header forbids re-entrant WebGPU calls. Release a late owned result
+                // on the thread pool after the callback has returned to native code.
+                _ = ThreadPool.UnsafeQueueUserWorkItem(
+                    static state => state.Api.AdapterRelease((Adapter*)state.Handle),
+                    (Api: api, Handle: (nint)adapterPtr),
+                    preferLocal: false);
+            }
+        }
+
+        using WebGPURequestAdapterCallback callbackPtr = WebGPURequestAdapterCallback.From(Callback, ReleaseAbandonedResult);
         WebGPUEnvironmentOptions environmentOptions = WebGPUEnvironment.Options;
 
         RequestAdapterOptions options = new()
         {
-            PowerPreference = environmentOptions.PowerPreference switch
+            compatibleSurface = compatibleSurface,
+            powerPreference = environmentOptions.PowerPreference switch
             {
                 WebGPUPowerPreference.Default => PowerPreference.Undefined,
                 WebGPUPowerPreference.LowPower => PowerPreference.LowPower,
@@ -638,6 +702,19 @@ internal static unsafe partial class WebGPURuntime
         api.InstanceRequestAdapter(instance, in options, callbackPtr, null);
         if (!callbackReady.Wait(CallbackTimeoutMilliseconds))
         {
+            // Retire the owner before disposing its signal. Dispose waits for a callback already
+            // in progress; rechecking the signal then distinguishes that race from a genuinely
+            // outstanding native request whose eventual result must use the abandonment path.
+            callbackPtr.Dispose();
+            if (callbackReady.IsSet)
+            {
+                adapter = callbackAdapter;
+                errorCode = callbackStatus == RequestAdapterStatus.Success && callbackAdapter is not null
+                    ? WebGPUEnvironmentError.Success
+                    : WebGPUEnvironmentError.AdapterRequestFailed;
+                return errorCode == WebGPUEnvironmentError.Success;
+            }
+
             adapter = null;
             errorCode = WebGPUEnvironmentError.AdapterRequestTimedOut;
             return false;
@@ -662,51 +739,83 @@ internal static unsafe partial class WebGPURuntime
     /// <param name="device">Receives the returned device on success.</param>
     /// <param name="errorCode">Receives the stable failure code when the request fails.</param>
     /// <returns><see langword="true"/> when a device was acquired; otherwise, <see langword="false"/>.</returns>
-    private static bool TryRequestDevice(
+    public static bool TryRequestDevice(
         WebGPU api,
         Adapter* adapter,
         out Device* device,
         out WebGPUEnvironmentError errorCode)
     {
-        RequestDeviceStatus callbackStatus = RequestDeviceStatus.Unknown;
+        RequestDeviceStatus callbackStatus = default;
         Device* callbackDevice = null;
         using ManualResetEventSlim callbackReady = new(false);
 
         // Device creation is also callback-driven, so the request writes into locals and then
         // the caller continues once the callback signals completion.
-        void Callback(RequestDeviceStatus status, Device* devicePtr, byte* message, void* userData)
+        void Callback(RequestDeviceStatus status, Device* devicePtr, WebGPUStringView message, void* userData)
         {
             callbackStatus = status;
             callbackDevice = devicePtr;
             callbackReady.Set();
         }
 
-        using PfnRequestDeviceCallback callbackPtr = PfnRequestDeviceCallback.From(Callback);
+        void ReleaseAbandonedResult(RequestDeviceStatus status, Device* devicePtr, WebGPUStringView message, void* userData)
+        {
+            _ = status;
+            _ = message;
+            _ = userData;
+
+            if (devicePtr is not null)
+            {
+                // The native result carries ownership even though the managed request has timed
+                // out. Defer its release until after this spontaneous callback returns because
+                // webgpu.h explicitly forbids re-entrant API calls from such a callback.
+                _ = ThreadPool.UnsafeQueueUserWorkItem(
+                    static state => state.Api.DeviceRelease((Device*)state.Handle),
+                    (Api: api, Handle: (nint)devicePtr),
+                    preferLocal: false);
+            }
+        }
+
+        using WebGPURequestDeviceCallback callbackPtr = WebGPURequestDeviceCallback.From(Callback, ReleaseAbandonedResult);
 
         // Auto-provision a device when no native surface provides one.
         // Request optional storage features that are available on this adapter.
         // The compute compositor needs storage binding on the transient output texture,
         // and some formats (e.g. Bgra8Unorm) require explicit device features.
-        Span<FeatureName> requestedFeatures = stackalloc FeatureName[1];
+        Span<FeatureName> requestedFeatures = stackalloc FeatureName[2];
         int requestedCount = 0;
-        if (api.AdapterHasFeature(adapter, FeatureName.Bgra8UnormStorage))
+        if (api.AdapterHasFeature(adapter, FeatureName.BGRA8UnormStorage))
         {
-            requestedFeatures[requestedCount++] = FeatureName.Bgra8UnormStorage;
+            requestedFeatures[requestedCount++] = FeatureName.BGRA8UnormStorage;
+        }
+
+        if (api.AdapterHasFeature(adapter, FeatureName.TextureFormatsTier1))
+        {
+            requestedFeatures[requestedCount++] = FeatureName.TextureFormatsTier1;
         }
 
         // Raise only the storage-buffer binding and total buffer-size ceilings to the adapter maximum so
         // a large scene fits in a single storage binding instead of falling back to chunked (multi-pass)
         // rendering. Every other limit stays at its WebGPU default. Without this the device inherits the
         // default 128 MiB maxStorageBufferBindingSize, which a dense stroke batch's segment buffer exceeds.
-        RequiredLimits requiredLimits = BuildStorageBindingLimits(api, adapter);
+        Limits requiredLimits = BuildStorageBindingLimits(api, adapter);
 
         fixed (FeatureName* featuresPtr = requestedFeatures)
         {
             DeviceDescriptor descriptor = new()
             {
-                RequiredLimits = &requiredLimits,
-                RequiredFeatureCount = (uint)requestedCount,
-                RequiredFeatures = requestedCount > 0 ? featuresPtr : null,
+                requiredLimits = &requiredLimits,
+                requiredFeatureCount = (nuint)requestedCount,
+                requiredFeatures = requestedCount > 0 ? featuresPtr : null,
+                deviceLostCallbackInfo = new()
+                {
+                    mode = WGPUCallbackMode.AllowSpontaneous,
+                    callback = &HandleDeviceLost
+                },
+                uncapturedErrorCallbackInfo = new()
+                {
+                    callback = &HandleUncapturedError
+                }
             };
 
             api.AdapterRequestDevice(adapter, in descriptor, callbackPtr, null);
@@ -714,6 +823,18 @@ internal static unsafe partial class WebGPURuntime
 
         if (!callbackReady.Wait(CallbackTimeoutMilliseconds))
         {
+            // Synchronize with a callback that crossed the timeout boundary before deciding
+            // whether the result was observed or must be abandoned later.
+            callbackPtr.Dispose();
+            if (callbackReady.IsSet)
+            {
+                device = callbackDevice;
+                errorCode = callbackStatus == RequestDeviceStatus.Success && callbackDevice is not null
+                    ? WebGPUEnvironmentError.Success
+                    : WebGPUEnvironmentError.DeviceRequestFailed;
+                return errorCode == WebGPUEnvironmentError.Success;
+            }
+
             device = null;
             errorCode = WebGPUEnvironmentError.DeviceRequestTimedOut;
             return false;
@@ -741,11 +862,11 @@ internal static unsafe partial class WebGPURuntime
     /// </remarks>
     /// <param name="api">The WebGPU API used to query the adapter.</param>
     /// <param name="adapter">The adapter whose maximum storage limits are requested.</param>
-    /// <returns>The populated <see cref="RequiredLimits"/> to attach to the device descriptor.</returns>
-    public static RequiredLimits BuildStorageBindingLimits(WebGPU api, Adapter* adapter)
+    /// <returns>The populated <see cref="Limits"/> to attach to the device descriptor.</returns>
+    public static Limits BuildStorageBindingLimits(WebGPU api, Adapter* adapter)
     {
-        SupportedLimits adapterLimits = default;
-        _ = api.AdapterGetLimits(adapter, ref adapterLimits);
+        Limits adapterLimits = default;
+        _ = api.AdapterGetLimits(adapter, &adapterLimits);
 
         // WebGPU treats these sentinel values as "leave this limit at its default" when a required-limits
         // block is supplied, so only the two storage ceilings below deviate from the device defaults.
@@ -754,55 +875,88 @@ internal static unsafe partial class WebGPURuntime
 
         Limits limits = new()
         {
-            MaxTextureDimension1D = keepU32,
-            MaxTextureDimension2D = keepU32,
-            MaxTextureDimension3D = keepU32,
-            MaxTextureArrayLayers = keepU32,
-            MaxBindGroups = keepU32,
-            MaxBindGroupsPlusVertexBuffers = keepU32,
-            MaxBindingsPerBindGroup = keepU32,
-            MaxDynamicUniformBuffersPerPipelineLayout = keepU32,
-            MaxDynamicStorageBuffersPerPipelineLayout = keepU32,
-            MaxSampledTexturesPerShaderStage = keepU32,
-            MaxSamplersPerShaderStage = keepU32,
-            MaxStorageBuffersPerShaderStage = keepU32,
-            MaxStorageTexturesPerShaderStage = keepU32,
-            MaxUniformBuffersPerShaderStage = keepU32,
-            MaxUniformBufferBindingSize = keepU64,
-            MaxStorageBufferBindingSize = adapterLimits.Limits.MaxStorageBufferBindingSize,
-            MinUniformBufferOffsetAlignment = keepU32,
-            MinStorageBufferOffsetAlignment = keepU32,
-            MaxVertexBuffers = keepU32,
-            MaxBufferSize = adapterLimits.Limits.MaxBufferSize,
-            MaxVertexAttributes = keepU32,
-            MaxVertexBufferArrayStride = keepU32,
-            MaxInterStageShaderComponents = keepU32,
-            MaxInterStageShaderVariables = keepU32,
-            MaxColorAttachments = keepU32,
-            MaxColorAttachmentBytesPerSample = keepU32,
-            MaxComputeWorkgroupStorageSize = keepU32,
-            MaxComputeInvocationsPerWorkgroup = keepU32,
-            MaxComputeWorkgroupSizeX = keepU32,
-            MaxComputeWorkgroupSizeY = keepU32,
-            MaxComputeWorkgroupSizeZ = keepU32,
-            MaxComputeWorkgroupsPerDimension = keepU32,
+            maxTextureDimension1D = keepU32,
+            maxTextureDimension2D = keepU32,
+            maxTextureDimension3D = keepU32,
+            maxTextureArrayLayers = keepU32,
+            maxBindGroups = keepU32,
+            maxBindGroupsPlusVertexBuffers = keepU32,
+            maxBindingsPerBindGroup = keepU32,
+            maxDynamicUniformBuffersPerPipelineLayout = keepU32,
+            maxDynamicStorageBuffersPerPipelineLayout = keepU32,
+            maxSampledTexturesPerShaderStage = keepU32,
+            maxSamplersPerShaderStage = keepU32,
+            maxStorageBuffersPerShaderStage = keepU32,
+            maxStorageTexturesPerShaderStage = keepU32,
+            maxUniformBuffersPerShaderStage = keepU32,
+            maxUniformBufferBindingSize = keepU64,
+            maxStorageBufferBindingSize = adapterLimits.maxStorageBufferBindingSize,
+            minUniformBufferOffsetAlignment = keepU32,
+            minStorageBufferOffsetAlignment = keepU32,
+            maxVertexBuffers = keepU32,
+            maxBufferSize = adapterLimits.maxBufferSize,
+            maxVertexAttributes = keepU32,
+            maxVertexBufferArrayStride = keepU32,
+            maxInterStageShaderVariables = keepU32,
+            maxColorAttachments = keepU32,
+            maxColorAttachmentBytesPerSample = keepU32,
+            maxComputeWorkgroupStorageSize = keepU32,
+            maxComputeInvocationsPerWorkgroup = keepU32,
+            maxComputeWorkgroupSizeX = keepU32,
+            maxComputeWorkgroupSizeY = keepU32,
+            maxComputeWorkgroupSizeZ = keepU32,
+            maxComputeWorkgroupsPerDimension = keepU32,
+            maxImmediateSize = keepU32,
         };
 
-        return new RequiredLimits { Limits = limits };
+        return limits;
     }
 
     /// <summary>
-    /// Identifies failure to load the WGPU extension separately from failure to initialize the
-    /// core WebGPU API so the public environment probe can report the required capability.
+    /// Reports a native device-lost callback through the managed WebGPU error callback.
     /// </summary>
-    private sealed class RequiredWgpuExtensionUnavailableException : InvalidOperationException
+    /// <param name="device">The address of the device reported by WebGPU.</param>
+    /// <param name="reason">The native device-lost reason.</param>
+    /// <param name="message">The diagnostic message supplied by the runtime.</param>
+    /// <param name="userData1">The first unused native user-data pointer.</param>
+    /// <param name="userData2">The second unused native user-data pointer.</param>
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void HandleDeviceLost(
+        Device** device,
+        DeviceLostReason reason,
+        WebGPUStringView message,
+        void* userData1,
+        void* userData2)
     {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="RequiredWgpuExtensionUnavailableException"/> class.
-        /// </summary>
-        public RequiredWgpuExtensionUnavailableException()
-            : base("The required WGPU extension is unavailable.")
+        if (device is not null && *device is not null)
         {
+            MarkDeviceLost((nint)(*device));
         }
+
+        _ = userData1;
+        _ = userData2;
+        WebGPUEnvironment.ReportUncapturedError(WebGPUErrorType.DeviceLost, $"Device lost ({reason}): {message.ToManagedString()}");
+    }
+
+    /// <summary>
+    /// Reports a native uncaptured-error callback through the managed WebGPU error callback.
+    /// </summary>
+    /// <param name="device">The address of the device reporting the error.</param>
+    /// <param name="type">The native error type.</param>
+    /// <param name="message">The diagnostic message supplied by the runtime.</param>
+    /// <param name="userData1">The first unused native user-data pointer.</param>
+    /// <param name="userData2">The second unused native user-data pointer.</param>
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void HandleUncapturedError(
+        Device** device,
+        ErrorType type,
+        WebGPUStringView message,
+        void* userData1,
+        void* userData2)
+    {
+        _ = device;
+        _ = userData1;
+        _ = userData2;
+        WebGPUEnvironment.ReportUncapturedError(WebGPUErrorTypeMapper.ToPublic(type), message.ToManagedString());
     }
 }

@@ -33,7 +33,7 @@ public enum WebGPUTextureFormat
     Bgra8Unorm,
 
     /// <summary>
-    /// Four-channel 16-bit floating-point RGBA format, mapped to <see cref="HalfVector4"/>.
+    /// Four-channel 16-bit floating-point RGBA format, mapped to <see cref="RgbaHalf"/>.
     /// </summary>
     Rgba16Float
 }

@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Silk.NET.WebGPU;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -44,12 +43,12 @@ public sealed unsafe partial class WebGPUDrawingBackend
             throw new NotSupportedException("The source and target frames must expose valid WebGPU device, queue, and texture handles.");
         }
 
-        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormat expectedFormat, out _))
+        if (!TryGetCompositeTargetDescriptor<TPixel>(out WebGPUTargetDescriptor expectedTargetDescriptor, out _))
         {
             throw new NotSupportedException($"The WebGPU backend does not support pixel format '{typeof(TPixel).Name}'.");
         }
 
-        if (nativeSource.TargetFormat != expectedFormat || nativeTarget.TargetFormat != expectedFormat)
+        if (nativeSource.TargetDescriptor != expectedTargetDescriptor || nativeTarget.TargetDescriptor != expectedTargetDescriptor)
         {
             throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' does not match one of the WebGPU target formats.");
         }
@@ -123,18 +122,18 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
             ImageCopyTexture textureSource = new()
             {
-                Texture = (Texture*)sourceTextureReference.Handle,
-                MipLevel = 0,
-                Origin = new Origin3D((uint)nativeSourceX, (uint)nativeSourceY, 0),
-                Aspect = TextureAspect.All
+                texture = (Texture*)sourceTextureReference.Handle,
+                mipLevel = 0,
+                origin = new Origin3D((uint)nativeSourceX, (uint)nativeSourceY, 0),
+                aspect = TextureAspect.All
             };
 
             ImageCopyTexture textureTarget = new()
             {
-                Texture = (Texture*)targetTextureReference.Handle,
-                MipLevel = 0,
-                Origin = new Origin3D((uint)nativeTargetX, (uint)nativeTargetY, 0),
-                Aspect = TextureAspect.All
+                texture = (Texture*)targetTextureReference.Handle,
+                mipLevel = 0,
+                origin = new Origin3D((uint)nativeTargetX, (uint)nativeTargetY, 0),
+                aspect = TextureAspect.All
             };
 
             Extent3D copySize = new((uint)width, (uint)height, 1);

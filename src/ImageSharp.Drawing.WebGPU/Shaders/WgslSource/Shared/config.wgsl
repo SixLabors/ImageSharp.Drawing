@@ -30,10 +30,10 @@ struct Config {
     n_path: u32, // number of paths in the scene
     n_clip: u32, // number of clip begin/end records in the scene
 
-    // To reduce the number of bindings, info, path-gradient data, and bin data are combined
+    // To reduce the number of bindings, info, auxiliary brush data, and bin data are combined
     // into one buffer.
     bin_data_start: u32, // start of bump-allocated bin data within that buffer
-    path_gradient_data_base: u32, // start of path-gradient edge data within that buffer
+    brush_data_base: u32, // start of auxiliary brush data within that buffer
     ptcl_dyn_start: u32, // start of the bump-allocated region of the ptcl buffer
 
     // offsets within scene buffer (in u32 units)
@@ -91,3 +91,9 @@ const RAD_GRAD_KIND_CONE = 4u;
 
 // Radial gradient flags
 const RAD_GRAD_SWAPPED = 1u;
+
+// Elliptic gradient kinds. Degenerate kinds preserve the CPU brush's IEEE-754
+// division behavior without placing infinities or NaNs in the transform matrix.
+const ELLIPTIC_GRAD_KIND_NORMAL = 0u;
+const ELLIPTIC_GRAD_KIND_POINT = 1u;
+const ELLIPTIC_GRAD_KIND_LINE = 2u;

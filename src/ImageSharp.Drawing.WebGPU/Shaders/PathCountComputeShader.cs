@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
-using Silk.NET.WebGPU;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -68,8 +67,8 @@ internal static unsafe class PathCountComputeShader
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 7,
-            Entries = entries
+            entryCount = 7,
+            entries = entries
         };
 
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
@@ -94,13 +93,13 @@ internal static unsafe class PathCountComputeShader
     private static BindGroupLayoutEntry CreateStorageEntry(uint binding, BufferBindingType type, nuint minBindingSize)
         => new()
         {
-            Binding = binding,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
+            binding = binding,
+            visibility = (ulong)ShaderStage.Compute,
+            buffer = new BufferBindingLayout
             {
-                Type = type,
-                HasDynamicOffset = false,
-                MinBindingSize = minBindingSize
+                type = type,
+                hasDynamicOffset = 0U,
+                minBindingSize = minBindingSize
             }
         };
 
@@ -114,13 +113,13 @@ internal static unsafe class PathCountComputeShader
     private static BindGroupLayoutEntry CreateUniformEntry(uint binding, nuint minBindingSize)
         => new()
         {
-            Binding = binding,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
+            binding = binding,
+            visibility = (ulong)ShaderStage.Compute,
+            buffer = new BufferBindingLayout
             {
-                Type = BufferBindingType.Uniform,
-                HasDynamicOffset = false,
-                MinBindingSize = minBindingSize
+                type = BufferBindingType.Uniform,
+                hasDynamicOffset = 0U,
+                minBindingSize = minBindingSize
             }
         };
 }

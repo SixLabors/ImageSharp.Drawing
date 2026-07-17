@@ -17,4 +17,9 @@ public enum WebGPUCompositeAlphaMode
     /// Ignores the surface alpha channel and presents every pixel as opaque.
     /// </summary>
     Opaque,
+
+    /// <summary>
+    /// Presents color components that have already been multiplied by alpha.
+    /// </summary>
+    Premultiplied = 2,
 }

@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
-using Silk.NET.WebGPU;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -52,8 +51,8 @@ internal static unsafe class PrepareComputeShader
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 1,
-            Entries = entries
+            entryCount = 1,
+            entries = entries
         };
 
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);

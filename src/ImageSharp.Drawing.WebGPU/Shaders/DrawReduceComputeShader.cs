@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Silk.NET.WebGPU;
-
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -47,8 +45,8 @@ internal static unsafe class DrawReduceComputeShader
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 3,
-            Entries = entries
+            entryCount = 3,
+            entries = entries
         };
 
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);

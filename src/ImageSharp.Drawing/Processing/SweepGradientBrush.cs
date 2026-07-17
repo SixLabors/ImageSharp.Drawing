@@ -217,23 +217,36 @@ public sealed class SweepGradientBrush : GradientBrush
         Configuration configuration,
         GraphicsOptions options,
         int canvasWidth,
-        RectangleF region) =>
+        RectangleF region)
+    {
+        if (TPixel.GetPixelTypeInfo().AlphaRepresentation == PixelAlphaRepresentation.Associated)
+        {
+            return new SweepGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(
+                configuration,
+                options,
+                canvasWidth,
+                this,
+                this.ColorStopsArray,
+                this.RepetitionMode);
+        }
 
-        // The renderer precomputes the angular interval once and then samples it per pixel.
-        new SweepGradientBrushRenderer<TPixel>(
+        return new SweepGradientBrushRenderer<TPixel, UnassociatedGradientPixelEncoder<TPixel>>(
             configuration,
             options,
             canvasWidth,
             this,
             this.ColorStopsArray,
             this.RepetitionMode);
+    }
 
     /// <summary>
     /// The sweep (conic) gradient brush applicator.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private sealed class SweepGradientBrushRenderer<TPixel> : GradientBrushRenderer<TPixel>
+    /// <typeparam name="TEncoder">The destination representation encoder.</typeparam>
+    private sealed class SweepGradientBrushRenderer<TPixel, TEncoder> : GradientBrushRenderer<TPixel, TEncoder>
         where TPixel : unmanaged, IPixel<TPixel>
+        where TEncoder : struct, IGradientPixelEncoder<TPixel>
     {
         private const float Tau = MathF.Tau;
 
@@ -246,7 +259,7 @@ public sealed class SweepGradientBrush : GradientBrush
         private readonly float endRad;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="SweepGradientBrushRenderer{TPixel}"/> class.
+        /// Initializes a new instance of the <see cref="SweepGradientBrushRenderer{TPixel, TEncoder}"/> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>

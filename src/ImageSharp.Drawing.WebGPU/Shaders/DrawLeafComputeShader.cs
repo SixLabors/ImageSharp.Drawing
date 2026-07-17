@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Silk.NET.WebGPU;
-
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -55,8 +53,8 @@ internal static unsafe class DrawLeafComputeShader
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 7,
-            Entries = entries
+            entryCount = 7,
+            entries = entries
         };
 
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);

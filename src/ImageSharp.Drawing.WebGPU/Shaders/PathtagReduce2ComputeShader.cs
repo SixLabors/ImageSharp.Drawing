@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Silk.NET.WebGPU;
-
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -45,8 +43,8 @@ internal static unsafe class PathtagReduce2ComputeShader
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 2,
-            Entries = entries
+            entryCount = 2,
+            entries = entries
         };
 
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);

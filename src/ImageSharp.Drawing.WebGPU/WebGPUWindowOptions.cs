@@ -20,6 +20,9 @@ public sealed class WebGPUWindowOptions
     /// <summary>
     /// Gets or sets the initial client-area size in window coordinates.
     /// </summary>
+    /// <remarks>
+    /// A size with a non-positive dimension uses the default initial size.
+    /// </remarks>
     public Size Size { get; set; } = new(1280, 720);
 
     /// <summary>
@@ -38,6 +41,7 @@ public sealed class WebGPUWindowOptions
     /// <remarks>
     /// This is a scheduling hint for the underlying window loop rather than a guarantee of presented frame rate.
     /// The chosen <see cref="PresentMode"/> and the platform's display timing still influence what the user sees.
+    /// Negative or non-finite values use the default unrestricted rate.
     /// </remarks>
     public double FramesPerSecond { get; set; }
 
@@ -46,6 +50,7 @@ public sealed class WebGPUWindowOptions
     /// </summary>
     /// <remarks>
     /// Use this when you want simulation or input updates to run at a different cadence from rendering.
+    /// Negative or non-finite values use the default unrestricted rate.
     /// </remarks>
     public double UpdatesPerSecond { get; set; }
 
@@ -61,11 +66,17 @@ public sealed class WebGPUWindowOptions
     /// <summary>
     /// Gets or sets the initial window state such as normal, maximized, or fullscreen.
     /// </summary>
+    /// <remarks>
+    /// Unrecognized values use <see cref="WebGPUWindowState.Normal"/>.
+    /// </remarks>
     public WebGPUWindowState WindowState { get; set; } = WebGPUWindowState.Normal;
 
     /// <summary>
     /// Gets or sets the initial window border mode.
     /// </summary>
+    /// <remarks>
+    /// Unrecognized values use <see cref="WebGPUWindowBorder.Resizable"/>.
+    /// </remarks>
     public WebGPUWindowBorder WindowBorder { get; set; } = WebGPUWindowBorder.Resizable;
 
     /// <summary>
@@ -80,16 +91,23 @@ public sealed class WebGPUWindowOptions
     /// Choose <see cref="WebGPUPresentMode.Fifo"/> for the usual v-synced behavior,
     /// <see cref="WebGPUPresentMode.Immediate"/> for the lowest latency with possible tearing, or
     /// <see cref="WebGPUPresentMode.Mailbox"/> when you want newer-frame-wins behavior and the backend supports it.
+    /// When the requested mode is unavailable, <see cref="WebGPUPresentMode.Fifo"/> is used.
     /// </remarks>
     public WebGPUPresentMode PresentMode { get; set; } = WebGPUPresentMode.Fifo;
 
     /// <summary>
     /// Gets or sets the swapchain texture format used by acquired frames.
     /// </summary>
+    /// <remarks>
+    /// The requested format is used when available. Otherwise, a compatible format is selected automatically.
+    /// </remarks>
     public WebGPUTextureFormat Format { get; set; } = WebGPUTextureFormat.Rgba8Unorm;
 
     /// <summary>
     /// Gets or sets how the native compositor interprets the window surface alpha channel.
     /// </summary>
+    /// <remarks>
+    /// The requested mode is used when available. Otherwise, a compatible mode is selected automatically.
+    /// </remarks>
     public WebGPUCompositeAlphaMode AlphaMode { get; set; } = WebGPUCompositeAlphaMode.Auto;
 }

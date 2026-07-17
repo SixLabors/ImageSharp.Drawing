@@ -70,5 +70,10 @@ public enum WebGPUEnvironmentError
     /// <summary>
     /// The required WGPU extension is unavailable.
     /// </summary>
-    WgpuExtensionUnavailable
+    WgpuExtensionUnavailable,
+
+    /// <summary>
+    /// The DirectX Shader Compiler required by the Windows WebGPU backend is unavailable.
+    /// </summary>
+    DxcUnavailable
 }

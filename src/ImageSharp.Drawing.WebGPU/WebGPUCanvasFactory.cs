@@ -7,13 +7,11 @@ using SixLabors.ImageSharp.PixelFormats;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Creates typed canvas objects for the fixed set of WebGPU texture formats.
+/// Creates typed canvas objects for the supported WebGPU target descriptors.
 /// </summary>
 /// <remarks>
-/// The surface texture format selects the canvas pixel type: <see cref="WebGPUTextureFormat.Rgba8Unorm"/>
-/// yields <see cref="Rgba32"/>, <see cref="WebGPUTextureFormat.Bgra8Unorm"/> yields <see cref="Bgra32"/>,
-/// <see cref="WebGPUTextureFormat.Rgba8Snorm"/> yields <see cref="NormalizedByte4"/>, and
-/// <see cref="WebGPUTextureFormat.Rgba16Float"/> yields <see cref="HalfVector4"/>.
+/// The texture format selects the channel layout and component encoding. The alpha representation
+/// selects the associated or unassociated CLR pixel type with that physical layout.
 /// </remarks>
 internal static class WebGPUCanvasFactory
 {
@@ -25,7 +23,7 @@ internal static class WebGPUCanvasFactory
     /// <param name="backend">The drawing backend the canvas renders through.</param>
     /// <param name="bounds">The canvas bounds within the surface.</param>
     /// <param name="surface">The WebGPU native surface backing the canvas.</param>
-    /// <param name="format">The surface texture format that selects the canvas pixel type.</param>
+    /// <param name="targetDescriptor">The surface texture format and alpha representation that select the canvas pixel type.</param>
     /// <returns>The typed drawing canvas.</returns>
     public static DrawingCanvas CreateCanvas(
         Configuration configuration,
@@ -33,43 +31,71 @@ internal static class WebGPUCanvasFactory
         IDrawingBackend backend,
         Rectangle bounds,
         NativeSurface surface,
-        WebGPUTextureFormat format)
+        WebGPUTargetDescriptor targetDescriptor)
 
         // CS8524 (unnamed enum values) is suppressed rather than adding a discard arm:
         // WebGPUTextureFormat is a closed set and every named value is matched, so an
         // out-of-range value can only come from invalid casting elsewhere.
-#pragma warning disable CS8524
-        => format switch
+#pragma warning disable CS8509, CS8524
+        => (targetDescriptor.Format, targetDescriptor.AlphaRepresentation) switch
         {
-            WebGPUTextureFormat.Rgba8Unorm => CreateCanvas<Rgba32>(
+            (WebGPUTextureFormat.Rgba8Unorm, PixelAlphaRepresentation.Unassociated) => CreateCanvas<Rgba32>(
                 configuration,
                 options,
                 backend,
                 bounds,
                 surface),
 
-            WebGPUTextureFormat.Bgra8Unorm => CreateCanvas<Bgra32>(
+            (WebGPUTextureFormat.Rgba8Unorm, PixelAlphaRepresentation.Associated) => CreateCanvas<Rgba32P>(
                 configuration,
                 options,
                 backend,
                 bounds,
                 surface),
 
-            WebGPUTextureFormat.Rgba8Snorm => CreateCanvas<NormalizedByte4>(
+            (WebGPUTextureFormat.Bgra8Unorm, PixelAlphaRepresentation.Unassociated) => CreateCanvas<Bgra32>(
                 configuration,
                 options,
                 backend,
                 bounds,
                 surface),
 
-            WebGPUTextureFormat.Rgba16Float => CreateCanvas<HalfVector4>(
+            (WebGPUTextureFormat.Bgra8Unorm, PixelAlphaRepresentation.Associated) => CreateCanvas<Bgra32P>(
+                configuration,
+                options,
+                backend,
+                bounds,
+                surface),
+
+            (WebGPUTextureFormat.Rgba8Snorm, PixelAlphaRepresentation.Unassociated) => CreateCanvas<NormalizedByte4>(
+                configuration,
+                options,
+                backend,
+                bounds,
+                surface),
+
+            (WebGPUTextureFormat.Rgba8Snorm, PixelAlphaRepresentation.Associated) => CreateCanvas<NormalizedByte4P>(
+                configuration,
+                options,
+                backend,
+                bounds,
+                surface),
+
+            (WebGPUTextureFormat.Rgba16Float, PixelAlphaRepresentation.Unassociated) => CreateCanvas<RgbaHalf>(
+                configuration,
+                options,
+                backend,
+                bounds,
+                surface),
+
+            (WebGPUTextureFormat.Rgba16Float, PixelAlphaRepresentation.Associated) => CreateCanvas<RgbaHalfP>(
                 configuration,
                 options,
                 backend,
                 bounds,
                 surface)
         };
-#pragma warning restore CS8524
+#pragma warning restore CS8509, CS8524
 
     /// <summary>
     /// Creates a typed canvas over a WebGPU native surface with a shared text cache.
@@ -80,7 +106,7 @@ internal static class WebGPUCanvasFactory
     /// <param name="backend">The drawing backend the canvas renders through.</param>
     /// <param name="bounds">The canvas bounds within the surface.</param>
     /// <param name="surface">The WebGPU native surface backing the canvas.</param>
-    /// <param name="format">The surface texture format that selects the canvas pixel type.</param>
+    /// <param name="targetDescriptor">The surface texture format and alpha representation that select the canvas pixel type.</param>
     /// <returns>The typed drawing canvas.</returns>
     public static DrawingCanvas CreateCanvas(
         Configuration configuration,
@@ -89,13 +115,13 @@ internal static class WebGPUCanvasFactory
         IDrawingBackend backend,
         Rectangle bounds,
         NativeSurface surface,
-        WebGPUTextureFormat format)
+        WebGPUTargetDescriptor targetDescriptor)
 
         // See the comment on the overload above for why CS8524 is suppressed.
-#pragma warning disable CS8524
-        => format switch
+#pragma warning disable CS8509, CS8524
+        => (targetDescriptor.Format, targetDescriptor.AlphaRepresentation) switch
         {
-            WebGPUTextureFormat.Rgba8Unorm => CreateCanvas<Rgba32>(
+            (WebGPUTextureFormat.Rgba8Unorm, PixelAlphaRepresentation.Unassociated) => CreateCanvas<Rgba32>(
                 configuration,
                 options,
                 textCache,
@@ -103,7 +129,7 @@ internal static class WebGPUCanvasFactory
                 bounds,
                 surface),
 
-            WebGPUTextureFormat.Bgra8Unorm => CreateCanvas<Bgra32>(
+            (WebGPUTextureFormat.Rgba8Unorm, PixelAlphaRepresentation.Associated) => CreateCanvas<Rgba32P>(
                 configuration,
                 options,
                 textCache,
@@ -111,7 +137,7 @@ internal static class WebGPUCanvasFactory
                 bounds,
                 surface),
 
-            WebGPUTextureFormat.Rgba8Snorm => CreateCanvas<NormalizedByte4>(
+            (WebGPUTextureFormat.Bgra8Unorm, PixelAlphaRepresentation.Unassociated) => CreateCanvas<Bgra32>(
                 configuration,
                 options,
                 textCache,
@@ -119,7 +145,39 @@ internal static class WebGPUCanvasFactory
                 bounds,
                 surface),
 
-            WebGPUTextureFormat.Rgba16Float => CreateCanvas<HalfVector4>(
+            (WebGPUTextureFormat.Bgra8Unorm, PixelAlphaRepresentation.Associated) => CreateCanvas<Bgra32P>(
+                configuration,
+                options,
+                textCache,
+                backend,
+                bounds,
+                surface),
+
+            (WebGPUTextureFormat.Rgba8Snorm, PixelAlphaRepresentation.Unassociated) => CreateCanvas<NormalizedByte4>(
+                configuration,
+                options,
+                textCache,
+                backend,
+                bounds,
+                surface),
+
+            (WebGPUTextureFormat.Rgba8Snorm, PixelAlphaRepresentation.Associated) => CreateCanvas<NormalizedByte4P>(
+                configuration,
+                options,
+                textCache,
+                backend,
+                bounds,
+                surface),
+
+            (WebGPUTextureFormat.Rgba16Float, PixelAlphaRepresentation.Unassociated) => CreateCanvas<RgbaHalf>(
+                configuration,
+                options,
+                textCache,
+                backend,
+                bounds,
+                surface),
+
+            (WebGPUTextureFormat.Rgba16Float, PixelAlphaRepresentation.Associated) => CreateCanvas<RgbaHalfP>(
                 configuration,
                 options,
                 textCache,
@@ -127,7 +185,7 @@ internal static class WebGPUCanvasFactory
                 bounds,
                 surface)
         };
-#pragma warning restore CS8524
+#pragma warning restore CS8509, CS8524
 
     /// <summary>
     /// Creates a typed frame over a WebGPU native surface.

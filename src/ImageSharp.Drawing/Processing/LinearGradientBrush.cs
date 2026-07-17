@@ -136,20 +136,35 @@ public sealed class LinearGradientBrush : GradientBrush
         GraphicsOptions options,
         int canvasWidth,
         RectangleF region)
-        => new LinearGradientBrushRenderer<TPixel>(
+    {
+        if (TPixel.GetPixelTypeInfo().AlphaRepresentation == PixelAlphaRepresentation.Associated)
+        {
+            return new LinearGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(
+                configuration,
+                options,
+                canvasWidth,
+                this,
+                this.ColorStopsArray,
+                this.RepetitionMode);
+        }
+
+        return new LinearGradientBrushRenderer<TPixel, UnassociatedGradientPixelEncoder<TPixel>>(
             configuration,
             options,
             canvasWidth,
             this,
             this.ColorStopsArray,
             this.RepetitionMode);
+    }
 
     /// <summary>
     /// Implements the gradient application logic for <see cref="LinearGradientBrush"/>.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private sealed class LinearGradientBrushRenderer<TPixel> : GradientBrushRenderer<TPixel>
+    /// <typeparam name="TEncoder">The destination representation encoder.</typeparam>
+    private sealed class LinearGradientBrushRenderer<TPixel, TEncoder> : GradientBrushRenderer<TPixel, TEncoder>
         where TPixel : unmanaged, IPixel<TPixel>
+        where TEncoder : struct, IGradientPixelEncoder<TPixel>
     {
         private readonly PointF start;
         private readonly float alongX;
@@ -157,7 +172,7 @@ public sealed class LinearGradientBrush : GradientBrush
         private readonly float alongsSquared;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="LinearGradientBrushRenderer{TPixel}"/> class.
+        /// Initializes a new instance of the <see cref="LinearGradientBrushRenderer{TPixel, TEncoder}"/> class.
         /// </summary>
         /// <param name="configuration">The ImageSharp configuration.</param>
         /// <param name="options">The graphics options.</param>

@@ -86,21 +86,36 @@ public sealed class EllipticGradientBrush : GradientBrush
         Configuration configuration,
         GraphicsOptions options,
         int canvasWidth,
-        RectangleF region) =>
-        new EllipticGradientBrushRenderer<TPixel>(
+        RectangleF region)
+    {
+        if (TPixel.GetPixelTypeInfo().AlphaRepresentation == PixelAlphaRepresentation.Associated)
+        {
+            return new EllipticGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(
+                configuration,
+                options,
+                canvasWidth,
+                this,
+                this.ColorStopsArray,
+                this.RepetitionMode);
+        }
+
+        return new EllipticGradientBrushRenderer<TPixel, UnassociatedGradientPixelEncoder<TPixel>>(
             configuration,
             options,
             canvasWidth,
             this,
             this.ColorStopsArray,
             this.RepetitionMode);
+    }
 
     /// <summary>
     /// The elliptic gradient brush applicator.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private sealed class EllipticGradientBrushRenderer<TPixel> : GradientBrushRenderer<TPixel>
+    /// <typeparam name="TEncoder">The destination representation encoder.</typeparam>
+    private sealed class EllipticGradientBrushRenderer<TPixel, TEncoder> : GradientBrushRenderer<TPixel, TEncoder>
         where TPixel : unmanaged, IPixel<TPixel>
+        where TEncoder : struct, IGradientPixelEncoder<TPixel>
     {
         private readonly PointF center;
 
@@ -113,7 +128,7 @@ public sealed class EllipticGradientBrush : GradientBrush
         private readonly float secondRadiusSquared;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="EllipticGradientBrushRenderer{TPixel}" /> class.
+        /// Initializes a new instance of the <see cref="EllipticGradientBrushRenderer{TPixel, TEncoder}" /> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>

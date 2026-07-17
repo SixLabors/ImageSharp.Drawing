@@ -2,7 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Text;
-using Silk.NET.WebGPU;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -10,7 +10,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// GPU stage that runs the fine rasterizer, the final pass of the pipeline: each workgroup
 /// shades one 16x16 tile by interpreting the tile's command list (PTCL) written by coarse,
 /// computing analytic coverage and evaluating brushes. Wraps <c>fine.wgsl</c>; only the output
-/// storage-texture encoding is specialized per target format.
+/// storage-texture encoding is specialized per target format and alpha representation.
 /// </summary>
 internal static class FineAreaComputeShader
 {
@@ -20,19 +20,19 @@ internal static class FineAreaComputeShader
     private const string OutputBindingMarker = "var output: texture_storage_2d<rgba8unorm, write>;";
 
     /// <summary>
-    /// The output store statement in fine.wgsl, replaced with the format-specific encode-and-store statement.
+    /// The output store statement in fine.wgsl, replaced with the target-specific encode-and-store statement.
     /// </summary>
-    private const string OutputStoreMarker = "textureStore(output, vec2<i32>(coords), rgba_sep);";
+    private const string OutputStoreMarker = "textureStore(output, vec2<i32>(coords), rgba[i]);";
 
     /// <summary>
-    /// An anchor in fine.wgsl before which the format-specific encode_output function is inserted.
+    /// An anchor in fine.wgsl before which the target conversion functions are inserted.
     /// </summary>
     private const string PremulAlphaMarker = "fn premul_alpha(rgba: vec4<f32>) -> vec4<f32> {";
 
     /// <summary>
-    /// Specialized shader bytes per output texture format, guarded by its own monitor.
+    /// Specialized shader bytes per target texture format and alpha representation, guarded by its own monitor.
     /// </summary>
-    private static readonly Dictionary<TextureFormat, byte[]> ShaderCache = [];
+    private static readonly Dictionary<(TextureFormat TextureFormat, PixelAlphaRepresentation AlphaRepresentation, WebGPUTargetNumericEncoding NumericEncoding), byte[]> ShaderCache = [];
 
     /// <summary>
     /// Gets the WGSL entry point used by this shader.
@@ -40,17 +40,24 @@ internal static class FineAreaComputeShader
     public static ReadOnlySpan<byte> EntryPoint => "main\0"u8;
 
     /// <summary>
-    /// Gets or generates the fine-pass shader specialized for the requested output texture format.
+    /// Gets or generates the fine-pass shader specialized for the requested target.
     /// </summary>
     /// <param name="textureFormat">The output texture format to specialize the shader for.</param>
+    /// <param name="alphaRepresentation">The alpha representation stored by the target.</param>
+    /// <param name="numericEncoding">The target's mapping between native channel values and ImageSharp unit values.</param>
     /// <returns>The null-terminated UTF-8 WGSL source bytes for the specialized shader.</returns>
-    public static byte[] GetCode(TextureFormat textureFormat)
+    public static byte[] GetCode(
+        TextureFormat textureFormat,
+        PixelAlphaRepresentation alphaRepresentation,
+        WebGPUTargetNumericEncoding numericEncoding)
     {
-        ShaderTraits traits = GetTraits(textureFormat);
+        (TextureFormat TextureFormat, PixelAlphaRepresentation AlphaRepresentation, WebGPUTargetNumericEncoding NumericEncoding) cacheKey =
+            (textureFormat, alphaRepresentation, numericEncoding);
+        ShaderTraits traits = GetTraits(textureFormat, alphaRepresentation, numericEncoding);
 
         lock (ShaderCache)
         {
-            if (ShaderCache.TryGetValue(textureFormat, out byte[]? cachedCode))
+            if (ShaderCache.TryGetValue(cacheKey, out byte[]? cachedCode))
             {
                 return cachedCode;
             }
@@ -58,13 +65,13 @@ internal static class FineAreaComputeShader
             string source = GeneratedWgslShaderSources.FineText;
             source = source.Replace(OutputBindingMarker, $"var output: texture_storage_2d<{traits.OutputFormat}, write>;", StringComparison.Ordinal);
             source = source.Replace(OutputStoreMarker, traits.StoreOutputStatement, StringComparison.Ordinal);
-            source = source.Replace(PremulAlphaMarker, $"{traits.EncodeOutputFunction}\n\n{PremulAlphaMarker}", StringComparison.Ordinal);
+            source = source.Replace(PremulAlphaMarker, $"{traits.TargetConversionFunctions}\n\n{PremulAlphaMarker}", StringComparison.Ordinal);
 
             int byteCount = Encoding.UTF8.GetByteCount(source);
             byte[] code = new byte[byteCount + 1];
             _ = Encoding.UTF8.GetBytes(source, code);
             code[^1] = 0;
-            ShaderCache[textureFormat] = code;
+            ShaderCache[cacheKey] = code;
             return code;
         }
     }
@@ -108,8 +115,8 @@ internal static class FineAreaComputeShader
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 9,
-            Entries = entries
+            entryCount = 9,
+            entries = entries
         };
 
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
@@ -124,62 +131,100 @@ internal static class FineAreaComputeShader
     }
 
     /// <summary>
-    /// Resolves the WGSL specialization traits for the requested output texture format.
+    /// Resolves the WGSL specialization traits for the requested target.
     /// </summary>
     /// <param name="textureFormat">The output texture format.</param>
+    /// <param name="alphaRepresentation">The alpha representation stored by the target.</param>
+    /// <param name="numericEncoding">The target's mapping between native channel values and ImageSharp unit values.</param>
     /// <returns>The traits describing the output declaration, encode function and store statement.</returns>
-    private static ShaderTraits GetTraits(TextureFormat textureFormat)
+    private static ShaderTraits GetTraits(
+        TextureFormat textureFormat,
+        PixelAlphaRepresentation alphaRepresentation,
+        WebGPUTargetNumericEncoding numericEncoding)
     {
         WebGPUDrawingBackend.CompositeTextureShaderTraits compositeTraits = WebGPUDrawingBackend.GetCompositeTextureShaderTraits(textureFormat);
 
-#pragma warning disable CS8524
-        return compositeTraits.EncodingKind switch
+#pragma warning disable CS8509, CS8524
+        (string Decode, string Encode) numericBodies = numericEncoding switch
         {
-            WebGPUDrawingBackend.CompositeTextureEncodingKind.Float => CreateFloatTraits(compositeTraits.OutputFormat),
-            WebGPUDrawingBackend.CompositeTextureEncodingKind.Snorm => CreateSnormTraits(compositeTraits.OutputFormat)
+            WebGPUTargetNumericEncoding.Unit => ("return color;", "return color;"),
+            WebGPUTargetNumericEncoding.SignedUnit =>
+                ("return (color + vec4<f32>(1.0)) * 0.5;", "return (color * 2.0) - vec4<f32>(1.0);")
         };
-#pragma warning restore CS8524
-    }
 
-    /// <summary>
-    /// Creates traits for float-encoded output formats, where the shaded color is stored unchanged.
-    /// </summary>
-    /// <param name="outputFormat">The WGSL storage-texture format name.</param>
-    /// <returns>The traits for the float encoding.</returns>
-    private static ShaderTraits CreateFloatTraits(string outputFormat)
-    {
-        const string encodeOutput =
-            """
-            fn encode_output(color: vec4<f32>) -> vec4<f32> {
+        // The CPU RecolorBrush observes a TPixel already written by earlier draws. A staged GPU
+        // scene keeps those draws in f32 registers, so Recolor alone must reproduce the target's
+        // physical storage conversion before comparing without reducing normal composition precision.
+        string targetFormatRoundTripBody = textureFormat switch
+        {
+            TextureFormat.RGBA8Unorm or TextureFormat.BGRA8Unorm => "return unpack4x8unorm(pack4x8unorm(color));",
+            TextureFormat.RGBA8Snorm => "return unpack4x8snorm(pack4x8snorm(color));",
+            TextureFormat.RGBA16Float => "return vec4<f32>(unpack2x16float(pack2x16float(color.rg)), unpack2x16float(pack2x16float(color.ba)));"
+        };
+
+        // Fine shading uses associated colors internally. Recolor explicitly crosses the target
+        // TPixel storage boundary, including associated-alpha rescaling when stored alpha quantizes.
+        (string Decode, string Encode, string RecolorNativeToInternal, string RecolorStoreTarget) alphaBodies = alphaRepresentation switch
+        {
+            PixelAlphaRepresentation.Associated =>
+                (
+                    "return decode_numeric(color);",
+                    "return encode_numeric(color);",
+                    "return color;",
+                    "if color.a <= 0.0 {\n        return vec4<f32>(0.0);\n    }\n\n    let alpha_sample = decode_numeric(round_trip_target_format(encode_numeric(vec4<f32>(0.0, 0.0, 0.0, color.a))));\n    let stored_alpha = alpha_sample.a;\n    let rgb = clamp(color.rgb * (stored_alpha / color.a), vec3<f32>(0.0), vec3<f32>(stored_alpha));\n    return decode_numeric(round_trip_target_format(encode_numeric(vec4<f32>(rgb, stored_alpha))));"),
+            PixelAlphaRepresentation.Unassociated =>
+                (
+                    "return premul_alpha(decode_numeric(color));",
+                    "let a_inv = select(0.0, 1.0 / color.a, color.a > 0.0);\n    return encode_numeric(vec4<f32>(color.rgb * a_inv, color.a));",
+                    "return premul_alpha(color);",
+                    "let a_inv = select(0.0, 1.0 / color.a, color.a > 0.0);\n    let native = vec4<f32>(color.rgb * a_inv, color.a);\n    return decode_numeric(round_trip_target_format(encode_numeric(native)));")
+        };
+#pragma warning restore CS8509, CS8524
+
+        string targetConversionFunctions =
+            $$"""
+            fn decode_numeric(color: vec4<f32>) -> vec4<f32> {
+                {{numericBodies.Decode}}
+            }
+
+            fn encode_numeric(color: vec4<f32>) -> vec4<f32> {
+                {{numericBodies.Encode}}
+            }
+
+            fn round_trip_target_format(color: vec4<f32>) -> vec4<f32> {
+                {{targetFormatRoundTripBody}}
+            }
+
+            fn decode_target(color: vec4<f32>) -> vec4<f32> {
+                {{alphaBodies.Decode}}
+            }
+
+            fn encode_target(color: vec4<f32>) -> vec4<f32> {
+                {{alphaBodies.Encode}}
+            }
+
+            fn recolor_native_to_internal(color: vec4<f32>) -> vec4<f32> {
+                {{alphaBodies.RecolorNativeToInternal}}
+            }
+
+            fn recolor_store_target(color: vec4<f32>) -> vec4<f32> {
+                {{alphaBodies.RecolorStoreTarget}}
+            }
+
+            fn decode_paint_color(color: vec4<f32>) -> vec4<f32> {
                 return color;
             }
-            """;
 
-        return new ShaderTraits(
-            outputFormat,
-            encodeOutput,
-            "textureStore(output, vec2<i32>(coords), encode_output(rgba_sep));");
-    }
+            fn pack_clip_color(color: vec4<f32>) -> vec2<u32> {
+                return vec2<u32>(pack2x16float(color.rg), pack2x16float(color.ba));
+            }
 
-    /// <summary>
-    /// Creates traits for snorm-encoded output formats, remapping the clamped [0, 1] color to [-1, 1].
-    /// </summary>
-    /// <param name="outputFormat">The WGSL storage-texture format name.</param>
-    /// <returns>The traits for the snorm encoding.</returns>
-    private static ShaderTraits CreateSnormTraits(string outputFormat)
-    {
-        const string encodeOutput =
-            """
-            fn encode_output(color: vec4<f32>) -> vec4<f32> {
-                let clamped = clamp(color, vec4<f32>(0.0), vec4<f32>(1.0));
-                return (clamped * 2.0) - vec4<f32>(1.0);
+            fn unpack_clip_color(color: vec2<u32>) -> vec4<f32> {
+                return vec4<f32>(unpack2x16float(color.x), unpack2x16float(color.y));
             }
             """;
 
-        return new ShaderTraits(
-            outputFormat,
-            encodeOutput,
-            "textureStore(output, vec2<i32>(coords), encode_output(rgba_sep));");
+        return new ShaderTraits(compositeTraits.OutputFormat, targetConversionFunctions, "textureStore(output, vec2<i32>(coords), encode_target(rgba[i]));");
     }
 
     /// <summary>
@@ -192,13 +237,13 @@ internal static class FineAreaComputeShader
     private static BindGroupLayoutEntry CreateStorageEntry(uint binding, BufferBindingType type, nuint minBindingSize)
         => new()
         {
-            Binding = binding,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
+            binding = binding,
+            visibility = (ulong)ShaderStage.Compute,
+            buffer = new BufferBindingLayout
             {
-                Type = type,
-                HasDynamicOffset = false,
-                MinBindingSize = minBindingSize
+                type = type,
+                hasDynamicOffset = 0U,
+                minBindingSize = minBindingSize
             }
         };
 
@@ -211,13 +256,13 @@ internal static class FineAreaComputeShader
     private static BindGroupLayoutEntry CreateUniformEntry(uint binding, nuint minBindingSize)
         => new()
         {
-            Binding = binding,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
+            binding = binding,
+            visibility = (ulong)ShaderStage.Compute,
+            buffer = new BufferBindingLayout
             {
-                Type = BufferBindingType.Uniform,
-                HasDynamicOffset = false,
-                MinBindingSize = minBindingSize
+                type = BufferBindingType.Uniform,
+                hasDynamicOffset = 0U,
+                minBindingSize = minBindingSize
             }
         };
 
@@ -230,13 +275,13 @@ internal static class FineAreaComputeShader
     private static BindGroupLayoutEntry CreateOutputTextureEntry(uint binding, TextureFormat outputTextureFormat)
         => new()
         {
-            Binding = binding,
-            Visibility = ShaderStage.Compute,
-            StorageTexture = new StorageTextureBindingLayout
+            binding = binding,
+            visibility = (ulong)ShaderStage.Compute,
+            storageTexture = new StorageTextureBindingLayout
             {
-                Access = StorageTextureAccess.WriteOnly,
-                Format = outputTextureFormat,
-                ViewDimension = TextureViewDimension.Dimension2D
+                access = StorageTextureAccess.WriteOnly,
+                format = outputTextureFormat,
+                viewDimension = TextureViewDimension._2D
             }
         };
 
@@ -248,13 +293,13 @@ internal static class FineAreaComputeShader
     private static BindGroupLayoutEntry CreateSampledTextureEntry(uint binding)
         => new()
         {
-            Binding = binding,
-            Visibility = ShaderStage.Compute,
-            Texture = new TextureBindingLayout
+            binding = binding,
+            visibility = (ulong)ShaderStage.Compute,
+            texture = new TextureBindingLayout
             {
-                SampleType = TextureSampleType.Float,
-                ViewDimension = TextureViewDimension.Dimension2D,
-                Multisampled = false
+                sampleType = TextureSampleType.Float,
+                viewDimension = TextureViewDimension._2D,
+                multisampled = 0U,
             }
         };
 
@@ -262,11 +307,11 @@ internal static class FineAreaComputeShader
     /// The WGSL text fragments substituted into fine.wgsl to specialize the output encoding.
     /// </summary>
     /// <param name="outputFormat">The WGSL storage-texture format name for the output binding.</param>
-    /// <param name="encodeOutputFunction">The WGSL encode_output function inserted into the shader.</param>
+    /// <param name="targetConversionFunctions">The WGSL target conversion functions inserted into the shader.</param>
     /// <param name="storeOutputStatement">The statement that encodes and stores the shaded color.</param>
     private readonly struct ShaderTraits(
         string outputFormat,
-        string encodeOutputFunction,
+        string targetConversionFunctions,
         string storeOutputStatement)
     {
         /// <summary>
@@ -275,9 +320,9 @@ internal static class FineAreaComputeShader
         public string OutputFormat { get; } = outputFormat;
 
         /// <summary>
-        /// Gets the WGSL encode_output function inserted into the shader.
+        /// Gets the WGSL target conversion functions inserted into the shader.
         /// </summary>
-        public string EncodeOutputFunction { get; } = encodeOutputFunction;
+        public string TargetConversionFunctions { get; } = targetConversionFunctions;
 
         /// <summary>
         /// Gets the statement that encodes and stores the shaded color.

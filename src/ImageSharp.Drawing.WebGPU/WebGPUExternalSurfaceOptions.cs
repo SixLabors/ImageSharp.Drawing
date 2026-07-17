@@ -15,21 +15,24 @@ public sealed class WebGPUExternalSurfaceOptions
     /// <summary>
     /// Gets or sets how completed frames are queued for presentation to the display.
     /// </summary>
+    /// <remarks>
+    /// When the requested mode is unavailable, <see cref="WebGPUPresentMode.Fifo"/> is used.
+    /// </remarks>
     public WebGPUPresentMode PresentMode { get; set; } = WebGPUPresentMode.Fifo;
 
     /// <summary>
     /// Gets or sets the swapchain texture format used by acquired frames.
     /// </summary>
     /// <remarks>
-    /// The value must be one of the <see cref="WebGPUTextureFormat"/> members the backend can render
-    /// into. <see cref="WebGPUTextureFormat.Bgra8Unorm"/> is the common swapchain format but requires
-    /// the optional <c>bgra8unorm-storage</c> device feature, which the backend enables when the
-    /// adapter reports it.
+    /// The requested format is used when available. Otherwise, a compatible format is selected automatically.
     /// </remarks>
     public WebGPUTextureFormat Format { get; set; } = WebGPUTextureFormat.Rgba8Unorm;
 
     /// <summary>
     /// Gets or sets how the native compositor interprets the surface alpha channel.
     /// </summary>
+    /// <remarks>
+    /// The requested mode is used when available. Otherwise, a compatible mode is selected automatically.
+    /// </remarks>
     public WebGPUCompositeAlphaMode AlphaMode { get; set; } = WebGPUCompositeAlphaMode.Auto;
 }

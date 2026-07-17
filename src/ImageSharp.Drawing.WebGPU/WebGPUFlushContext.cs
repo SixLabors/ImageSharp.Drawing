@@ -4,11 +4,8 @@
 using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Silk.NET.WebGPU;
-using Silk.NET.WebGPU.Extensions.WGPU;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
-using WgpuBuffer = Silk.NET.WebGPU.Buffer;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -48,46 +45,53 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// Use <see cref="Create{TPixel}"/>; this constructor only stores already-validated state.
     /// </summary>
     /// <param name="api">The WebGPU API facade for this flush.</param>
-    /// <param name="wgpuExtension">The wgpu-native extension used to poll asynchronous callbacks.</param>
     /// <param name="deviceHandle">The safe handle for the device.</param>
     /// <param name="queueHandle">The safe handle for the queue.</param>
     /// <param name="targetTextureHandle">The safe handle for the target texture.</param>
     /// <param name="targetTextureViewHandle">The safe handle for the target texture view.</param>
     /// <param name="targetBounds">The target bounds for this flush.</param>
     /// <param name="targetTextureOffset">The offset from logical target coordinates to texture coordinates.</param>
-    /// <param name="textureFormat">The target texture format.</param>
+    /// <param name="targetDescriptor">The target texture format and alpha representation.</param>
+    /// <param name="textureFormat">The native target texture format.</param>
+    /// <param name="isPresentationSurface">Whether the target texture belongs to a presentation surface.</param>
+    /// <param name="requiresPresentationCopies">Whether the target must be copied through an ImageSharp-owned texture before it can be sampled or storage-bound.</param>
     /// <param name="memoryAllocator">The allocator for temporary CPU staging buffers.</param>
     /// <param name="deviceState">The device-scoped shared caches and reusable resources.</param>
+    /// <param name="scratchBufferBindingSizeLimit">The backend-specific upper bound for staged-scene storage bindings.</param>
     private WebGPUFlushContext(
         WebGPU api,
-        Wgpu wgpuExtension,
         WebGPUDeviceHandle deviceHandle,
         WebGPUQueueHandle queueHandle,
         WebGPUTextureHandle targetTextureHandle,
         WebGPUTextureViewHandle targetTextureViewHandle,
         in Rectangle targetBounds,
         Point targetTextureOffset,
+        WebGPUTargetDescriptor targetDescriptor,
         TextureFormat textureFormat,
+        bool isPresentationSurface,
+        bool requiresPresentationCopies,
         MemoryAllocator memoryAllocator,
-        WebGPURuntime.DeviceSharedState deviceState)
+        WebGPURuntime.DeviceSharedState deviceState,
+        nuint scratchBufferBindingSizeLimit)
     {
         this.Api = api;
-        this.WgpuExtension = wgpuExtension;
         this.DeviceHandle = deviceHandle;
         this.QueueHandle = queueHandle;
         this.TargetTextureHandle = targetTextureHandle;
         this.TargetTextureViewHandle = targetTextureViewHandle;
         this.TargetBounds = targetBounds;
         this.TargetTextureOffset = targetTextureOffset;
+        this.TargetDescriptor = targetDescriptor;
         this.TextureFormat = textureFormat;
+        this.IsPresentationSurface = isPresentationSurface;
+        this.RequiresPresentationCopies = requiresPresentationCopies;
         this.MemoryAllocator = memoryAllocator;
         this.DeviceState = deviceState;
-    }
 
-    /// <summary>
-    /// Gets the wgpu-native extension used to poll asynchronous callbacks.
-    /// </summary>
-    public Wgpu WgpuExtension { get; }
+        // The device owns the real API limit. A backend instance may only make that limit more
+        // restrictive, which lets integration tests exercise chunking without mutating shared state.
+        this.ScratchBufferBindingSizeLimit = Math.Min(deviceState.MaxStorageBufferBindingSize, scratchBufferBindingSizeLimit);
+    }
 
     /// <summary>
     /// Gets the WebGPU API facade for this flush.
@@ -133,9 +137,24 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     public Point TargetTextureOffset { get; }
 
     /// <summary>
+    /// Gets the target texture format and alpha representation for this flush.
+    /// </summary>
+    public WebGPUTargetDescriptor TargetDescriptor { get; }
+
+    /// <summary>
     /// Gets the target texture format for this flush.
     /// </summary>
     public TextureFormat TextureFormat { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the target texture belongs to a presentation surface.
+    /// </summary>
+    public bool IsPresentationSurface { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the target must be copied through an ImageSharp-owned texture before it can be sampled or storage-bound.
+    /// </summary>
+    public bool RequiresPresentationCopies { get; }
 
     /// <summary>
     /// Gets the allocator used for temporary CPU staging buffers in this flush context.
@@ -146,6 +165,11 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// Gets device-scoped shared caches and reusable resources.
     /// </summary>
     public WebGPURuntime.DeviceSharedState DeviceState { get; }
+
+    /// <summary>
+    /// Gets the effective storage-binding ceiling for staged-scene scratch buffers.
+    /// </summary>
+    public nuint ScratchBufferBindingSizeLimit { get; }
 
     /// <summary>
     /// Gets the shared instance-data buffer used for parameter uploads.
@@ -182,24 +206,32 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// </summary>
     /// <typeparam name="TPixel">The pixel format of the target frame.</typeparam>
     /// <param name="frame">The target frame.</param>
-    /// <param name="expectedTextureFormat">The expected GPU texture format.</param>
+    /// <param name="expectedTargetDescriptor">The expected GPU texture format and alpha representation.</param>
     /// <param name="requiredFeature">
     /// A device feature required by the pixel type for storage binding, or
-    /// <see cref="FeatureName.Undefined"/> when no special feature is needed.
+    /// the default value when no special feature is needed.
     /// </param>
     /// <param name="memoryAllocator">The memory allocator for staging buffers.</param>
+    /// <param name="scratchBufferBindingSizeLimit">The backend-specific upper bound for staged-scene storage bindings.</param>
     /// <returns>The flush context.</returns>
     public static WebGPUFlushContext Create<TPixel>(
         NativeCanvasFrame<TPixel> frame,
-        TextureFormat expectedTextureFormat,
+        WebGPUTargetDescriptor expectedTargetDescriptor,
         FeatureName requiredFeature,
-        MemoryAllocator memoryAllocator)
+        MemoryAllocator memoryAllocator,
+        nuint scratchBufferBindingSizeLimit)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         // The native-frame overload is used after WebGPU target selection has already succeeded,
         // so this casts once at the backend boundary and keeps the concrete target data together.
         _ = frame.TryGetNativeSurface(out NativeSurface? nativeSurface);
-        return Create((WebGPUNativeSurface)nativeSurface!, frame.Bounds, expectedTextureFormat, requiredFeature, memoryAllocator);
+        return Create(
+            (WebGPUNativeSurface)nativeSurface!,
+            frame.Bounds,
+            expectedTargetDescriptor,
+            requiredFeature,
+            memoryAllocator,
+            scratchBufferBindingSizeLimit);
     }
 
     /// <summary>
@@ -209,22 +241,24 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// </summary>
     /// <param name="nativeTarget">The native surface holding the target texture handles.</param>
     /// <param name="bounds">The target bounds for the flush.</param>
-    /// <param name="expectedTextureFormat">The expected GPU texture format.</param>
+    /// <param name="expectedTargetDescriptor">The expected GPU texture format and alpha representation.</param>
     /// <param name="requiredFeature">
     /// A device feature required by the pixel type for storage binding, or
-    /// <see cref="FeatureName.Undefined"/> when no special feature is needed.
+    /// the default value when no special feature is needed.
     /// </param>
     /// <param name="memoryAllocator">The memory allocator for staging buffers.</param>
+    /// <param name="scratchBufferBindingSizeLimit">The backend-specific upper bound for staged-scene storage bindings.</param>
     /// <returns>The flush context.</returns>
     public static WebGPUFlushContext Create(
         WebGPUNativeSurface nativeTarget,
         Rectangle bounds,
-        TextureFormat expectedTextureFormat,
+        WebGPUTargetDescriptor expectedTargetDescriptor,
         FeatureName requiredFeature,
-        MemoryAllocator memoryAllocator)
+        MemoryAllocator memoryAllocator,
+        nuint scratchBufferBindingSizeLimit)
     {
         WebGPU api = WebGPURuntime.GetApi();
-        TextureFormat textureFormat = WebGPUTextureFormatMapper.ToNative(nativeTarget.TargetFormat);
+        WebGPUDrawingBackend.GetCompositeTextureFormatInfo(nativeTarget.TargetDescriptor.Format, out TextureFormat textureFormat, out _);
         Rectangle nativeBounds = new(0, 0, nativeTarget.Width, nativeTarget.Height);
         Point targetTextureOffset = nativeTarget.TextureCoordinateOffset;
         Rectangle textureBounds = new(
@@ -238,12 +272,12 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         if (nativeTarget.DeviceHandle.IsInvalid ||
             nativeTarget.QueueHandle.IsInvalid ||
             nativeTarget.TargetTextureViewHandle.IsInvalid ||
-            textureFormat != expectedTextureFormat)
+            nativeTarget.TargetDescriptor != expectedTargetDescriptor)
         {
             throw new InvalidOperationException("The native WebGPU target does not match the flush context requirements.");
         }
 
-        if (requiredFeature != FeatureName.Undefined && !deviceState.HasFeature(requiredFeature))
+        if (requiredFeature != default && !deviceState.HasFeature(requiredFeature))
         {
             throw new NotSupportedException($"The WebGPU device does not support required feature '{requiredFeature}'.");
         }
@@ -258,16 +292,19 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         return new WebGPUFlushContext(
             api,
-            WebGPURuntime.GetWgpuExtension(),
             nativeTarget.DeviceHandle,
             nativeTarget.QueueHandle,
             nativeTarget.TargetTextureHandle,
             nativeTarget.TargetTextureViewHandle,
             in bounds,
             targetTextureOffset,
+            nativeTarget.TargetDescriptor,
             textureFormat,
+            nativeTarget.IsPresentationSurface,
+            nativeTarget.RequiresPresentationCopies,
             memoryAllocator,
-            deviceState);
+            deviceState,
+            scratchBufferBindingSizeLimit);
     }
 
     /// <summary>
@@ -296,8 +333,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         nuint targetSize = requiredBytes > minimumCapacityBytes ? requiredBytes : minimumCapacityBytes;
         BufferDescriptor descriptor = new()
         {
-            Usage = BufferUsage.Storage | BufferUsage.CopyDst,
-            Size = targetSize
+            usage = (ulong)(BufferUsage.Storage | BufferUsage.CopyDst),
+            size = targetSize
         };
 
         using WebGPUHandle.HandleReference deviceReference = this.DeviceHandle.AcquireReference();
@@ -355,17 +392,25 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         RenderPassColorAttachment colorAttachment = new()
         {
-            View = targetView,
-            ResolveTarget = null,
-            LoadOp = loadExisting ? LoadOp.Load : LoadOp.Clear,
-            StoreOp = StoreOp.Store,
-            ClearValue = default
+            view = targetView,
+
+            // A 2D attachment must use WebGPU's undefined sentinel; zero selects slice 0 and is valid only for 3D views.
+            depthSlice = uint.MaxValue,
+            resolveTarget = null,
+            loadOp = loadExisting ? LoadOp.Load : LoadOp.Clear,
+            storeOp = StoreOp.Store,
+
+            // WebGPU clear values use the attachment's physical encoding. Physical -1 is the
+            // logical transparent zero for ImageSharp formats mapped through a signed-unit target.
+            clearValue = this.TargetDescriptor.NumericEncoding == WebGPUTargetNumericEncoding.SignedUnit
+                ? new Native.WGPUColor { r = -1D, g = -1D, b = -1D, a = -1D }
+                : default
         };
 
         RenderPassDescriptor renderPassDescriptor = new()
         {
-            ColorAttachmentCount = 1,
-            ColorAttachments = &colorAttachment
+            colorAttachmentCount = 1,
+            colorAttachments = &colorAttachment
         };
 
         this.PassEncoder = this.Api.CommandEncoderBeginRenderPass(this.CommandEncoder, in renderPassDescriptor);
@@ -602,10 +647,10 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         int pixelSizeInBytes = Unsafe.SizeOf<TPixel>();
         ImageCopyTexture destination = new()
         {
-            Texture = destinationTexture,
-            MipLevel = 0,
-            Origin = new Origin3D(destinationX, destinationY, destinationLayer),
-            Aspect = TextureAspect.All
+            texture = destinationTexture,
+            mipLevel = 0,
+            origin = new Origin3D(destinationX, destinationY, destinationLayer),
+            aspect = TextureAspect.All
         };
 
         Extent3D writeSize = new((uint)sourceRegion.Width, (uint)sourceRegion.Height, 1);
@@ -628,9 +673,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
                 TextureDataLayout layout = new()
                 {
-                    Offset = 0,
-                    BytesPerRow = (uint)sourceStrideBytes,
-                    RowsPerImage = (uint)sourceRegion.Height
+                    offset = 0,
+                    bytesPerRow = (uint)sourceStrideBytes,
+                    rowsPerImage = (uint)sourceRegion.Height
                 };
 
                 Span<byte> sourceBytes = MemoryMarshal.AsBytes(sourceMemory.Span).Slice(startByteOffset, uploadByteCount);
@@ -655,9 +700,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         TextureDataLayout packedLayout = new()
         {
-            Offset = 0,
-            BytesPerRow = alignedRowBytes,
-            RowsPerImage = (uint)sourceRegion.Height
+            offset = 0,
+            bytesPerRow = alignedRowBytes,
+            rowsPerImage = (uint)sourceRegion.Height
         };
 
         fixed (byte* uploadPtr = packedData)

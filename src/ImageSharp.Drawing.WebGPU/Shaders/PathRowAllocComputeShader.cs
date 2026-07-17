@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
-using Silk.NET.WebGPU;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -66,8 +65,8 @@ internal static unsafe class PathRowAllocComputeShader
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 6,
-            Entries = entries
+            entryCount = 6,
+            entries = entries
         };
 
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);

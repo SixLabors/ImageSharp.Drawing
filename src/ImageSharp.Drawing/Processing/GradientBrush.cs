@@ -86,17 +86,19 @@ public abstract class GradientBrush : Brush
     /// Base class for gradient brush applicators.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    internal abstract class GradientBrushRenderer<TPixel> : BrushRenderer<TPixel>
+    /// <typeparam name="TEncoder">The destination representation encoder.</typeparam>
+    internal abstract class GradientBrushRenderer<TPixel, TEncoder> : BrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
+        where TEncoder : struct, IGradientPixelEncoder<TPixel>
     {
         private static readonly TPixel Transparent = Color.Transparent.ToPixel<TPixel>();
 
-        private readonly ColorStop[] colorStops;
+        private readonly GradientColorStop[] colorStops;
 
         private readonly GradientRepetitionMode repetitionMode;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="GradientBrushRenderer{TPixel}"/> class.
+        /// Initializes a new instance of the <see cref="GradientBrushRenderer{TPixel, TEncoder}"/> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
@@ -111,7 +113,18 @@ public abstract class GradientBrush : Brush
             GradientRepetitionMode repetitionMode)
             : base(configuration, options, canvasWidth)
         {
-            this.colorStops = colorStops;
+            this.colorStops = new GradientColorStop[colorStops.Length];
+
+            // CSS Color 4 requires alpha to be premultiplied before color interpolation.
+            // Cache associated stop vectors once so the result is independent of TPixel storage
+            // and the per-pixel interpolation loop does not repeat the conversion.
+            // https://www.w3.org/TR/css-color-4/#interpolation-alpha
+            for (int i = 0; i < colorStops.Length; i++)
+            {
+                ColorStop stop = colorStops[i];
+                this.colorStops[i] = new GradientColorStop(stop.Ratio, stop.Color.ToScaledVector4(PixelAlphaRepresentation.Associated));
+            }
+
             this.repetitionMode = repetitionMode;
         }
 
@@ -167,21 +180,16 @@ public abstract class GradientBrush : Brush
                         break;
                 }
 
-                (ColorStop from, ColorStop to) = this.GetGradientSegment(positionOnCompleteGradient);
+                (GradientColorStop from, GradientColorStop to) = this.GetGradientSegment(positionOnCompleteGradient);
 
-                if (from.Color.Equals(to.Color))
+                if (from.Color == to.Color)
                 {
-                    return from.Color.ToPixel<TPixel>();
+                    return TEncoder.Encode(from.Color);
                 }
 
                 float onLocalGradient = (positionOnCompleteGradient - from.Ratio) / (to.Ratio - from.Ratio);
 
-                // TODO: This should use premultiplied vectors to avoid bad blends e.g. red -> brown <- green.
-                return Color.FromScaledVector(
-                    Vector4.Lerp(
-                        from.Color.ToScaledVector4(),
-                        to.Color.ToScaledVector4(),
-                        onLocalGradient)).ToPixel<TPixel>();
+                return TEncoder.Encode(Vector4.Lerp(from.Color, to.Color, onLocalGradient));
             }
         }
 
@@ -233,13 +241,13 @@ public abstract class GradientBrush : Brush
         /// </summary>
         /// <param name="positionOnCompleteGradient">The position on the gradient, after repetition handling.</param>
         /// <returns>The bracketing stops; equal when the position lies outside the stop range.</returns>
-        private (ColorStop From, ColorStop To) GetGradientSegment(float positionOnCompleteGradient)
+        private (GradientColorStop From, GradientColorStop To) GetGradientSegment(float positionOnCompleteGradient)
         {
             // Stop counts are tiny, so a linear scan over the sorted stops beats a binary search.
-            ColorStop localGradientFrom = this.colorStops[0];
-            ColorStop localGradientTo = default;
+            GradientColorStop localGradientFrom = this.colorStops[0];
+            GradientColorStop localGradientTo = default;
 
-            foreach (ColorStop colorStop in this.colorStops)
+            foreach (GradientColorStop colorStop in this.colorStops)
             {
                 localGradientTo = colorStop;
 
@@ -253,6 +261,24 @@ public abstract class GradientBrush : Brush
             }
 
             return (localGradientFrom, localGradientTo);
+        }
+
+        /// <summary>
+        /// Stores one gradient stop in the associated representation used for interpolation.
+        /// </summary>
+        /// <param name="ratio">The stop position.</param>
+        /// <param name="color">The associated stop color.</param>
+        private readonly struct GradientColorStop(float ratio, Vector4 color)
+        {
+            /// <summary>
+            /// Gets the stop position.
+            /// </summary>
+            public float Ratio { get; } = ratio;
+
+            /// <summary>
+            /// Gets the associated stop color.
+            /// </summary>
+            public Vector4 Color { get; } = color;
         }
     }
 }

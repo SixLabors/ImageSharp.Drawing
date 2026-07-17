@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.PixelFormats;
+
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -144,12 +146,25 @@ internal sealed class WebGPUDeviceContext : IDisposable
         WebGPUTextureFormat format,
         int width,
         int height)
+        => this.CreateRenderTarget(format, PixelAlphaRepresentation.Unassociated, width, height);
+
+    /// <summary>
+    /// Creates an owned offscreen WebGPU render target for this context.
+    /// </summary>
+    /// <param name="format">The target texture format.</param>
+    /// <param name="alphaRepresentation">The alpha representation stored by the target.</param>
+    /// <param name="width">The target width in pixels.</param>
+    /// <param name="height">The target height in pixels.</param>
+    /// <returns>An owned offscreen WebGPU render target.</returns>
+    public WebGPURenderTarget CreateRenderTarget(WebGPUTextureFormat format, PixelAlphaRepresentation alphaRepresentation, int width, int height)
     {
         this.ThrowIfDisposed();
         Guard.MustBeGreaterThan(width, 0, nameof(width));
         Guard.MustBeGreaterThan(height, 0, nameof(height));
 
-        return new WebGPURenderTarget(this, false, format, width, height);
+        WebGPUTargetDescriptor targetDescriptor = WebGPUDrawingBackend.CreateOffscreenTargetDescriptor(format, alphaRepresentation);
+
+        return new WebGPURenderTarget(this, false, targetDescriptor, width, height, isPresentationSurface: false);
     }
 
     /// <summary>
@@ -177,6 +192,32 @@ internal sealed class WebGPUDeviceContext : IDisposable
             CreateExternalTextureHandle(textureHandle),
             CreateExternalTextureViewHandle(textureViewHandle),
             format,
+            PixelAlphaRepresentation.Unassociated,
+            width,
+            height);
+
+    /// <summary>
+    /// Creates a drawing canvas that renders directly into an externally-owned WebGPU texture.
+    /// </summary>
+    /// <param name="textureHandle">The external WebGPU texture handle.</param>
+    /// <param name="textureViewHandle">The external WebGPU texture-view handle.</param>
+    /// <param name="format">The texture format.</param>
+    /// <param name="alphaRepresentation">The alpha representation stored by the texture.</param>
+    /// <param name="width">The frame width in pixels.</param>
+    /// <param name="height">The frame height in pixels.</param>
+    /// <returns>A drawing canvas targeting the external texture.</returns>
+    /// <remarks>
+    /// The caller retains ownership of the texture and view; this context does not release them.
+    /// The texture must have been created with <c>RenderAttachment | CopySrc | CopyDst | TextureBinding</c> usage.
+    /// Dispose the returned canvas before the host calls <c>wgpuSurfacePresent</c>, then create a new canvas on the next frame.
+    /// </remarks>
+    public DrawingCanvas CreateCanvas(nint textureHandle, nint textureViewHandle, WebGPUTextureFormat format, PixelAlphaRepresentation alphaRepresentation, int width, int height)
+        => this.CreateCanvas(
+            new DrawingOptions(),
+            CreateExternalTextureHandle(textureHandle),
+            CreateExternalTextureViewHandle(textureViewHandle),
+            format,
+            alphaRepresentation,
             width,
             height);
 
@@ -207,6 +248,33 @@ internal sealed class WebGPUDeviceContext : IDisposable
             CreateExternalTextureHandle(textureHandle),
             CreateExternalTextureViewHandle(textureViewHandle),
             format,
+            PixelAlphaRepresentation.Unassociated,
+            width,
+            height);
+
+    /// <summary>
+    /// Creates a drawing canvas that renders directly into an externally-owned WebGPU texture.
+    /// </summary>
+    /// <param name="options">The initial drawing options.</param>
+    /// <param name="textureHandle">The external WebGPU texture handle.</param>
+    /// <param name="textureViewHandle">The external WebGPU texture-view handle.</param>
+    /// <param name="format">The texture format.</param>
+    /// <param name="alphaRepresentation">The alpha representation stored by the texture.</param>
+    /// <param name="width">The frame width in pixels.</param>
+    /// <param name="height">The frame height in pixels.</param>
+    /// <returns>A drawing canvas targeting the external texture.</returns>
+    /// <remarks>
+    /// The caller retains ownership of the texture and view; this context does not release them.
+    /// The texture must have been created with <c>RenderAttachment | CopySrc | CopyDst | TextureBinding</c> usage.
+    /// Dispose the returned canvas before the host calls <c>wgpuSurfacePresent</c>, then create a new canvas on the next frame.
+    /// </remarks>
+    public DrawingCanvas CreateCanvas(DrawingOptions options, nint textureHandle, nint textureViewHandle, WebGPUTextureFormat format, PixelAlphaRepresentation alphaRepresentation, int width, int height)
+        => this.CreateCanvas(
+            options,
+            CreateExternalTextureHandle(textureHandle),
+            CreateExternalTextureViewHandle(textureViewHandle),
+            format,
+            alphaRepresentation,
             width,
             height);
 
@@ -247,11 +315,33 @@ internal sealed class WebGPUDeviceContext : IDisposable
         WebGPUTextureFormat format,
         int width,
         int height)
+        => this.CreateCanvas(options, textureHandle, textureViewHandle, format, PixelAlphaRepresentation.Unassociated, width, height);
+
+    /// <summary>
+    /// Creates a drawing canvas over wrapped texture handles that are already in this assembly's ownership model.
+    /// </summary>
+    /// <param name="options">The initial drawing options.</param>
+    /// <param name="textureHandle">The wrapped WebGPU texture handle.</param>
+    /// <param name="textureViewHandle">The wrapped WebGPU texture-view handle.</param>
+    /// <param name="format">The texture format.</param>
+    /// <param name="alphaRepresentation">The alpha representation stored by the texture.</param>
+    /// <param name="width">The frame width in pixels.</param>
+    /// <param name="height">The frame height in pixels.</param>
+    /// <returns>A drawing canvas targeting the wrapped texture.</returns>
+    public DrawingCanvas CreateCanvas(
+        DrawingOptions options,
+        WebGPUTextureHandle textureHandle,
+        WebGPUTextureViewHandle textureViewHandle,
+        WebGPUTextureFormat format,
+        PixelAlphaRepresentation alphaRepresentation,
+        int width,
+        int height)
     {
         Rectangle bounds = new(0, 0, width, height);
-        WebGPUNativeSurface surface = this.CreateSurface(textureHandle, textureViewHandle, format, width, height);
+        WebGPUTargetDescriptor targetDescriptor = WebGPUDrawingBackend.CreateNativeTargetDescriptor(format, alphaRepresentation);
+        WebGPUNativeSurface surface = this.CreateSurface(textureHandle, textureViewHandle, targetDescriptor, width, height);
 
-        return WebGPUCanvasFactory.CreateCanvas(this.Configuration, options, this.Backend, bounds, surface, format);
+        return WebGPUCanvasFactory.CreateCanvas(this.Configuration, options, this.Backend, bounds, surface, targetDescriptor);
     }
 
     /// <summary>
@@ -262,14 +352,14 @@ internal sealed class WebGPUDeviceContext : IDisposable
     /// </summary>
     /// <param name="textureHandle">The wrapped WebGPU texture handle.</param>
     /// <param name="textureViewHandle">The wrapped WebGPU texture-view handle.</param>
-    /// <param name="format">The texture format.</param>
+    /// <param name="targetDescriptor">The texture format and alpha representation.</param>
     /// <param name="width">The surface width in pixels.</param>
     /// <param name="height">The surface height in pixels.</param>
     /// <returns>The native surface bound to this context's device and queue.</returns>
     private WebGPUNativeSurface CreateSurface(
         WebGPUTextureHandle textureHandle,
         WebGPUTextureViewHandle textureViewHandle,
-        WebGPUTextureFormat format,
+        WebGPUTargetDescriptor targetDescriptor,
         int width,
         int height)
     {
@@ -282,10 +372,12 @@ internal sealed class WebGPUDeviceContext : IDisposable
             this.QueueHandle,
             textureHandle,
             textureViewHandle,
-            format,
+            targetDescriptor,
             width,
             height,
-            isPresentationSurface: true);
+            textureCoordinateOffset: default,
+            isPresentationSurface: true,
+            requiresPresentationCopies: true);
     }
 
     /// <summary>

@@ -44,8 +44,8 @@ public partial class WebGPUDrawingBackendTests
     }
 
     // Ordered execution retains one status record per successful chunk until its next Apply
-    // barrier. This covers the multi-record path rather than only the monolithic range used by
-    // ordinary Apply tests.
+    // barrier. Constrain only this backend instance to WebGPU's baseline 128 MiB storage-binding
+    // limit so the test covers the multi-record path on adapters whose native limit is much larger.
     [WebGPUFact]
     public void FillManyLines_ChunkedOrderedRange_RendersThroughApplyBarrier()
     {
@@ -59,6 +59,8 @@ public partial class WebGPUDrawingBackendTests
         try
         {
             using WebGPURenderTarget target = new(WebGPUTextureFormat.Bgra8Unorm, width, height);
+            target.Backend.ScratchBufferBindingSizeLimit = 128U * 1024U * 1024U;
+
             using (DrawingCanvas canvas = target.CreateCanvas())
             {
                 canvas.Fill(background);
@@ -74,8 +76,11 @@ public partial class WebGPUDrawingBackendTests
 
             using Image<Rgba32> readback = target.ReadbackImage().CloneAs<Rgba32>();
             int distinct = CountDistinctColors(readback);
+
             Assert.Equal(0, gpuErrors);
-            Assert.True(target.Backend.DiagnosticLastFlushUsedChunking, "The ordered range must exercise multi-chunk status validation.");
+            Assert.True(
+                target.Backend.DiagnosticLastFlushUsedChunking,
+                "The ordered range must exercise multi-chunk status validation.");
             Assert.True(distinct >= RenderedContentDistinctColorFloor, $"Ordered chunk output is blank: {distinct} distinct colours.");
         }
         finally

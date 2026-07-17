@@ -164,9 +164,17 @@ fn main(
                     // Encode the gradient as a line equation so fine can
                     // evaluate the parameter as t = dot(p, line_xy) + line_c.
                     let dxy = p1 - p0;
-                    let scale = 1.0 / dot(dxy, dxy);
-                    let line_xy = dxy * scale;
-                    let line_c = -dot(p0, line_xy);
+                    let axis_squared = dot(dxy, dxy);
+                    var line_xy = vec2(0.0, 0.0);
+                    var line_c = 1.0;
+                    if axis_squared != 0.0 {
+                        let scale = 1.0 / axis_squared;
+                        line_xy = dxy * scale;
+                        line_c = -dot(p0, line_xy);
+                    }
+
+                    // The CPU brush defines a zero-length axis as the gradient end. The
+                    // initialized equation therefore evaluates t=1 everywhere without NaN.
                     info[di + 1u] = bitcast<u32>(line_xy.x);
                     info[di + 2u] = bitcast<u32>(line_xy.y);
                     info[di + 3u] = bitcast<u32>(line_c);
@@ -254,28 +262,56 @@ fn main(
                     let second_end = bitcast<vec2<f32>>(vec2(scene[dd + 5u], scene[dd + 6u]));
                     let dxy = axis_end - center;
                     let axis = length(dxy);
-                    let inv_axis = 1.0 / axis;
                     let second_axis_len = length(second_end - center);
-                    let transformed_axis_ratio = select(1.0, second_axis_len / axis, axis > 0.0);
-                    let inv_second_axis = inv_axis / transformed_axis_ratio;
-                    let cos_theta = dxy.x * inv_axis;
-                    let sin_theta = dxy.y * inv_axis;
-                    // Map the ellipse to the unit circle so the fill parameter is length(local_xy).
-                    // The rotation must be by the NEGATED axis angle (rotate the sample onto the
-                    // reference axis); fine evaluates local = (m0, m1) * x + (m2, m3) * y + xlat.
-                    // Mirrors the CPU EllipticGradientBrush renderer; keep the two in lockstep.
+                    var kind = ELLIPTIC_GRAD_KIND_NORMAL;
+                    var inv_axis = 1.0;
+                    var inv_second_axis = 1.0;
+                    var cos_theta = 1.0;
+                    var sin_theta = 0.0;
+
+                    if axis == 0.0 {
+                        // MathF.Atan2(0, 0) gives the CPU brush an identity rotation. Keep the
+                        // matrix finite; fine reproduces the two zero-radius divisions explicitly.
+                        kind = ELLIPTIC_GRAD_KIND_POINT;
+                    } else {
+                        cos_theta = dxy.x / axis;
+                        sin_theta = dxy.y / axis;
+
+                        if second_axis_len == 0.0 {
+                            // The raw axis vector makes local y the perpendicular dot product.
+                            // Its exact zero is the collapsed-axis test and avoids normalization
+                            // residue changing an undefined CPU sample into an off-axis sample.
+                            kind = ELLIPTIC_GRAD_KIND_LINE;
+                            cos_theta = dxy.x;
+                            sin_theta = dxy.y;
+                        } else {
+                            inv_axis = 1.0 / axis;
+                            inv_second_axis = 1.0 / second_axis_len;
+                        }
+                    }
+
+                    // Normal ellipses map to the unit circle so length(local_xy) is the gradient
+                    // parameter. Every kind uses the NEGATED axis angle, matching the CPU brush;
+                    // degenerate kinds retain the unscaled rotated coordinates for zero tests.
                     let m0 = cos_theta * inv_axis;
                     let m1 = -sin_theta * inv_second_axis;
                     let m2 = sin_theta * inv_axis;
                     let m3 = cos_theta * inv_second_axis;
-                    let xlat_x = -(m0 * center.x + m2 * center.y);
-                    let xlat_y = -(m1 * center.x + m3 * center.y);
+                    var xlat_x = center.x;
+                    var xlat_y = center.y;
+
+                    if kind == ELLIPTIC_GRAD_KIND_NORMAL {
+                        xlat_x = -(m0 * center.x + m2 * center.y);
+                        xlat_y = -(m1 * center.x + m3 * center.y);
+                    }
+
                     info[di + 1u] = bitcast<u32>(m0);
                     info[di + 2u] = bitcast<u32>(m1);
                     info[di + 3u] = bitcast<u32>(m2);
                     info[di + 4u] = bitcast<u32>(m3);
                     info[di + 5u] = bitcast<u32>(xlat_x);
                     info[di + 6u] = bitcast<u32>(xlat_y);
+                    info[di + 7u] = kind;
                 }
                 case DRAWTAG_FILL_SWEEP_GRADIENT: {
                     info[di] = draw_flags;

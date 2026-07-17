@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Silk.NET.WebGPU;
-
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -18,10 +16,10 @@ internal static class WebGPUTextureFormatMapper
     public static TextureFormat ToNative(WebGPUTextureFormat formatId)
         => formatId switch
         {
-            WebGPUTextureFormat.Rgba8Unorm => TextureFormat.Rgba8Unorm,
-            WebGPUTextureFormat.Rgba8Snorm => TextureFormat.Rgba8Snorm,
-            WebGPUTextureFormat.Bgra8Unorm => TextureFormat.Bgra8Unorm,
-            WebGPUTextureFormat.Rgba16Float => TextureFormat.Rgba16float,
+            WebGPUTextureFormat.Rgba8Unorm => TextureFormat.RGBA8Unorm,
+            WebGPUTextureFormat.Rgba8Snorm => TextureFormat.RGBA8Snorm,
+            WebGPUTextureFormat.Bgra8Unorm => TextureFormat.BGRA8Unorm,
+            WebGPUTextureFormat.Rgba16Float => TextureFormat.RGBA16Float,
             _ => throw new InvalidOperationException("The WebGPU texture format mapping is incomplete.")
         };
 
@@ -33,10 +31,10 @@ internal static class WebGPUTextureFormatMapper
     public static WebGPUTextureFormat FromNative(TextureFormat textureFormat)
         => textureFormat switch
         {
-            TextureFormat.Rgba8Unorm => WebGPUTextureFormat.Rgba8Unorm,
-            TextureFormat.Rgba8Snorm => WebGPUTextureFormat.Rgba8Snorm,
-            TextureFormat.Bgra8Unorm => WebGPUTextureFormat.Bgra8Unorm,
-            TextureFormat.Rgba16float => WebGPUTextureFormat.Rgba16Float,
+            TextureFormat.RGBA8Unorm => WebGPUTextureFormat.Rgba8Unorm,
+            TextureFormat.RGBA8Snorm => WebGPUTextureFormat.Rgba8Snorm,
+            TextureFormat.BGRA8Unorm => WebGPUTextureFormat.Bgra8Unorm,
+            TextureFormat.RGBA16Float => WebGPUTextureFormat.Rgba16Float,
             _ => throw new InvalidOperationException("The native texture format mapping is incomplete.")
         };
 }

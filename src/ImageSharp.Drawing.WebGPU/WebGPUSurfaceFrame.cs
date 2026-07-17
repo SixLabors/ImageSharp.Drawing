@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Silk.NET.WebGPU;
-
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -18,13 +16,14 @@ public sealed unsafe class WebGPUSurfaceFrame : IDisposable
 {
     private readonly WebGPU api;
     private readonly WebGPUDeviceContext deviceContext;
-    private readonly WebGPUTextureFormat format;
+    private readonly WebGPUTargetDescriptor targetDescriptor;
 
     // Mutable struct: Dispose nulls its internal owner guard, so the field must not be readonly
     // or disposal would run on a defensive copy and leave the field's guard intact.
     private WebGPUHandle.HandleReference surfaceReference;
     private readonly WebGPUTextureHandle textureHandle;
     private readonly WebGPUTextureViewHandle textureViewHandle;
+    private readonly WebGPUPresentationRenderer presentationRenderer;
     private readonly Action? onDisposed;
     private bool isDisposed;
 
@@ -34,20 +33,22 @@ public sealed unsafe class WebGPUSurfaceFrame : IDisposable
     /// </summary>
     /// <param name="api">The shared WebGPU API loader.</param>
     /// <param name="deviceContext">The device context the frame renders through.</param>
-    /// <param name="format">The swapchain texture format; used when creating matching render targets.</param>
+    /// <param name="targetDescriptor">The swapchain texture format and alpha representation used when creating matching render targets.</param>
     /// <param name="surfaceHandle">The surface handle presented on disposal. The frame holds a reference, not ownership.</param>
     /// <param name="textureHandle">The owned per-frame texture handle, released on disposal.</param>
     /// <param name="textureViewHandle">The owned per-frame texture-view handle, released on disposal.</param>
-    /// <param name="canvas">The drawing canvas targeting the acquired texture.</param>
+    /// <param name="canvas">The drawing canvas targeting the persistent ImageSharp-owned frame texture.</param>
+    /// <param name="presentationRenderer">The renderer that transfers the completed frame into the acquired surface texture.</param>
     /// <param name="onDisposed">Invoked after disposal completes; the owning surface uses this to allow the next acquire.</param>
     internal WebGPUSurfaceFrame(
         WebGPU api,
         WebGPUDeviceContext deviceContext,
-        WebGPUTextureFormat format,
+        WebGPUTargetDescriptor targetDescriptor,
         WebGPUSurfaceHandle surfaceHandle,
         WebGPUTextureHandle textureHandle,
         WebGPUTextureViewHandle textureViewHandle,
         DrawingCanvas canvas,
+        WebGPUPresentationRenderer presentationRenderer,
         Action? onDisposed = null)
     {
         this.api = api;
@@ -55,8 +56,9 @@ public sealed unsafe class WebGPUSurfaceFrame : IDisposable
         this.surfaceReference = surfaceHandle.AcquireReference();
         this.textureHandle = textureHandle;
         this.textureViewHandle = textureViewHandle;
-        this.format = format;
+        this.targetDescriptor = targetDescriptor;
         this.Canvas = canvas;
+        this.presentationRenderer = presentationRenderer;
         this.onDisposed = onDisposed;
     }
 
@@ -78,7 +80,7 @@ public sealed unsafe class WebGPUSurfaceFrame : IDisposable
     {
         this.ThrowIfDisposed();
 
-        return this.deviceContext.CreateRenderTarget(this.format, width, height);
+        return this.deviceContext.CreateRenderTarget(this.targetDescriptor.Format, this.targetDescriptor.AlphaRepresentation, width, height);
     }
 
     /// <summary>
@@ -93,8 +95,10 @@ public sealed unsafe class WebGPUSurfaceFrame : IDisposable
 
         try
         {
-            // Dispose submits the canvas work. Present only after rendering has targeted this acquired surface texture.
+            // Queue ordering makes the selected copy or render-attachment transfer consume the
+            // completed canvas texture without a CPU wait.
             this.Canvas.Dispose();
+            this.presentationRenderer.Present(this.textureHandle, this.textureViewHandle);
             this.api.SurfacePresent((Surface*)this.surfaceReference.Handle);
         }
         finally
