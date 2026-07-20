@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
+
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -13,13 +15,13 @@ internal static class WebGPUErrorTypeMapper
     /// </summary>
     /// <param name="errorType">The native error classification.</param>
     /// <returns>The public error classification.</returns>
-    public static WebGPUErrorType ToPublic(ErrorType errorType)
+    public static WebGPUErrorType ToPublic(WGPUErrorType errorType)
         => errorType switch
         {
-            ErrorType.NoError => WebGPUErrorType.NoError,
-            ErrorType.Validation => WebGPUErrorType.Validation,
-            ErrorType.OutOfMemory => WebGPUErrorType.OutOfMemory,
-            ErrorType.Internal => WebGPUErrorType.Internal,
+            WGPUErrorType.NoError => WebGPUErrorType.NoError,
+            WGPUErrorType.Validation => WebGPUErrorType.Validation,
+            WGPUErrorType.OutOfMemory => WebGPUErrorType.OutOfMemory,
+            WGPUErrorType.Internal => WebGPUErrorType.Internal,
             _ => WebGPUErrorType.Unknown
         };
 }

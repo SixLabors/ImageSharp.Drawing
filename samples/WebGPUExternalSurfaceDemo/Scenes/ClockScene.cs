@@ -5,7 +5,7 @@ using System.Globalization;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.PixelFormats;
+using WebGPUExternalSurfaceDemo.Controls;
 using Brushes = SixLabors.ImageSharp.Drawing.Processing.Brushes;
 using Color = SixLabors.ImageSharp.Color;
 using Font = SixLabors.Fonts.Font;
@@ -39,6 +39,9 @@ internal sealed class ClockScene : RenderScene
     private static readonly Color NumeralColor = Color.DarkSlateGray;
 
     private readonly Font numeralFont;
+
+    /// <inheritdoc />
+    protected override WebGPURenderMode RenderMode => WebGPURenderMode.Continuous;
 
     public ClockScene()
     {

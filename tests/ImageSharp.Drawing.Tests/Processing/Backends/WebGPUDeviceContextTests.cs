@@ -43,27 +43,10 @@ public class WebGPUDeviceContextTests
         Assert.False(WebGPUDrawingBackend.TryGetCompositeTargetDescriptor<Abgr32P>(out _, out _));
     }
 
-    [Fact]
-    public void Create_RejectsZeroHandles()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new WebGPUDeviceContext(0, 1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new WebGPUDeviceContext(1, 0));
-    }
-
     [WebGPUFact]
-    public void CreateCanvas_RejectsInvalidHandles_AndReadbackRejectsMismatchedFormat()
+    public void RenderTarget_ReadbackRejectsMismatchedFormat()
     {
-        using WebGPUDeviceContext drawing = new();
-        using WebGPURenderTarget target = drawing.CreateRenderTarget(WebGPUTextureFormat.Rgba8Unorm, 8, 8);
-        using WebGPUHandle.HandleReference textureReference = target.TextureHandle.AcquireReference();
-        using WebGPUHandle.HandleReference textureViewReference = target.TextureViewHandle.AcquireReference();
-
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => drawing.CreateCanvas(0, textureViewReference.Handle, target.Format, 8, 8));
-
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => drawing.CreateCanvas(textureReference.Handle, 0, target.Format, 8, 8));
-
+        using WebGPURenderTarget target = new(WebGPUTextureFormat.Rgba8Unorm, 8, 8);
         using Image<Bgra32> destination = new(8, 8);
 
         Assert.Throws<NotSupportedException>(
@@ -71,30 +54,9 @@ public class WebGPUDeviceContextTests
     }
 
     [WebGPUFact]
-    public void CreateCanvas_WithExternalTexture_UsesGpuPath()
-    {
-        using WebGPUDeviceContext drawing = new();
-        using WebGPURenderTarget target = drawing.CreateRenderTarget(WebGPUTextureFormat.Rgba8Unorm, 32, 24);
-        using (DrawingCanvas canvas = drawing.CreateCanvas(
-                   new DrawingOptions(),
-                   target.TextureHandle,
-                   target.TextureViewHandle,
-                   target.Format,
-                   32,
-                   24))
-        {
-            canvas.Fill(Brushes.Solid(Color.Red), new RectanglePolygon(0, 0, 32, 24));
-        }
-
-        using Image<Rgba32> readback = target.ReadbackImage<Rgba32>();
-        Assert.NotEqual(default, readback[16, 12]);
-    }
-
-    [WebGPUFact]
     public void RenderTarget_CreateCanvas_RendersAndReadsBack()
     {
-        using WebGPUDeviceContext drawing = new();
-        using WebGPURenderTarget target = drawing.CreateRenderTarget(WebGPUTextureFormat.Rgba8Unorm, 18, 14);
+        using WebGPURenderTarget target = new(WebGPUTextureFormat.Rgba8Unorm, 18, 14);
         using (DrawingCanvas canvas = target.CreateCanvas())
         {
             canvas.Fill(Brushes.Solid(Color.Green), new RectanglePolygon(0, 0, 18, 14));
@@ -131,11 +93,12 @@ public class WebGPUDeviceContextTests
     [WebGPUFact]
     public void RenderTarget_AssociatedSnormTarget_UsesAssociatedCanvasAndReadback()
     {
-        using WebGPUDeviceContext deviceContext = new();
-        WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(WebGPURuntime.GetApi(), deviceContext.DeviceHandle);
+        using WebGPURenderTarget probe = new(WebGPUTextureFormat.Rgba8Unorm, 1, 1);
+        WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(WebGPURuntime.GetApi(), probe.DeviceContext.DeviceHandle);
+
         if (!deviceState.HasFeature(FeatureName.TextureFormatsTier1))
         {
-            Assert.Throws<NotSupportedException>(() => deviceContext.CreateRenderTarget(WebGPUTextureFormat.Rgba8Snorm, PixelAlphaRepresentation.Associated, 8, 6));
+            Assert.Throws<NotSupportedException>(() => new WebGPURenderTarget(WebGPUTextureFormat.Rgba8Snorm, PixelAlphaRepresentation.Associated, 8, 6));
             return;
         }
 
@@ -156,11 +119,12 @@ public class WebGPUDeviceContextTests
     [WebGPUFact]
     public void RenderTarget_SnormTargets_InitializeToNativeDefault()
     {
-        using WebGPUDeviceContext deviceContext = new();
-        WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(WebGPURuntime.GetApi(), deviceContext.DeviceHandle);
+        using WebGPURenderTarget probe = new(WebGPUTextureFormat.Rgba8Unorm, 1, 1);
+        WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(WebGPURuntime.GetApi(), probe.DeviceContext.DeviceHandle);
+
         if (!deviceState.HasFeature(FeatureName.TextureFormatsTier1))
         {
-            Assert.Throws<NotSupportedException>(() => deviceContext.CreateRenderTarget(WebGPUTextureFormat.Rgba8Snorm, 8, 6));
+            Assert.Throws<NotSupportedException>(() => new WebGPURenderTarget(WebGPUTextureFormat.Rgba8Snorm, 8, 6));
             return;
         }
 
@@ -247,45 +211,27 @@ public class WebGPUDeviceContextTests
     [WebGPUFact]
     public void PresentationRenderer_TransfersEverySupportedTargetFormat()
     {
-        using WebGPUDeviceContext deviceContext = new();
-        WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(WebGPURuntime.GetApi(), deviceContext.DeviceHandle);
+        using WebGPURenderTarget probe = new(WebGPUTextureFormat.Rgba8Unorm, 1, 1);
+        WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(WebGPURuntime.GetApi(), probe.DeviceContext.DeviceHandle);
 
-        AssertPresentationTransfer<Rgba32>(deviceContext, WebGPUTextureFormat.Rgba8Unorm, PixelAlphaRepresentation.Unassociated, copyToSurface: true);
-        AssertPresentationTransfer<Rgba32>(deviceContext, WebGPUTextureFormat.Rgba8Unorm, PixelAlphaRepresentation.Unassociated, copyToSurface: false);
-        AssertPresentationTransfer<Rgba32P>(deviceContext, WebGPUTextureFormat.Rgba8Unorm, PixelAlphaRepresentation.Associated, copyToSurface: true);
-        AssertPresentationTransfer<Rgba32P>(deviceContext, WebGPUTextureFormat.Rgba8Unorm, PixelAlphaRepresentation.Associated, copyToSurface: false);
-        AssertPresentationTransfer<RgbaHalfP>(deviceContext, WebGPUTextureFormat.Rgba16Float, PixelAlphaRepresentation.Associated, copyToSurface: true);
-        AssertPresentationTransfer<RgbaHalfP>(deviceContext, WebGPUTextureFormat.Rgba16Float, PixelAlphaRepresentation.Associated, copyToSurface: false);
+        AssertPresentationTransfer<Rgba32>(WebGPUTextureFormat.Rgba8Unorm, PixelAlphaRepresentation.Unassociated, copyToSurface: true);
+        AssertPresentationTransfer<Rgba32>(WebGPUTextureFormat.Rgba8Unorm, PixelAlphaRepresentation.Unassociated, copyToSurface: false);
+        AssertPresentationTransfer<Rgba32P>(WebGPUTextureFormat.Rgba8Unorm, PixelAlphaRepresentation.Associated, copyToSurface: true);
+        AssertPresentationTransfer<Rgba32P>(WebGPUTextureFormat.Rgba8Unorm, PixelAlphaRepresentation.Associated, copyToSurface: false);
+        AssertPresentationTransfer<RgbaHalfP>(WebGPUTextureFormat.Rgba16Float, PixelAlphaRepresentation.Associated, copyToSurface: true);
+        AssertPresentationTransfer<RgbaHalfP>(WebGPUTextureFormat.Rgba16Float, PixelAlphaRepresentation.Associated, copyToSurface: false);
 
         if (deviceState.HasFeature(FeatureName.BGRA8UnormStorage))
         {
-            AssertPresentationTransfer<Bgra32P>(deviceContext, WebGPUTextureFormat.Bgra8Unorm, PixelAlphaRepresentation.Associated, copyToSurface: true);
-            AssertPresentationTransfer<Bgra32P>(deviceContext, WebGPUTextureFormat.Bgra8Unorm, PixelAlphaRepresentation.Associated, copyToSurface: false);
+            AssertPresentationTransfer<Bgra32P>(WebGPUTextureFormat.Bgra8Unorm, PixelAlphaRepresentation.Associated, copyToSurface: true);
+            AssertPresentationTransfer<Bgra32P>(WebGPUTextureFormat.Bgra8Unorm, PixelAlphaRepresentation.Associated, copyToSurface: false);
         }
 
         if (deviceState.HasFeature(FeatureName.TextureFormatsTier1))
         {
-            AssertPresentationTransfer<NormalizedByte4P>(deviceContext, WebGPUTextureFormat.Rgba8Snorm, PixelAlphaRepresentation.Associated, copyToSurface: true);
-            AssertPresentationTransfer<NormalizedByte4P>(deviceContext, WebGPUTextureFormat.Rgba8Snorm, PixelAlphaRepresentation.Associated, copyToSurface: false);
+            AssertPresentationTransfer<NormalizedByte4P>(WebGPUTextureFormat.Rgba8Snorm, PixelAlphaRepresentation.Associated, copyToSurface: true);
+            AssertPresentationTransfer<NormalizedByte4P>(WebGPUTextureFormat.Rgba8Snorm, PixelAlphaRepresentation.Associated, copyToSurface: false);
         }
-    }
-
-    [WebGPUFact]
-    public void Dispose_Context_DoesNotReleaseOwnedTargetHandles()
-    {
-        using WebGPUDeviceContext drawing = new();
-        using WebGPURenderTarget target = drawing.CreateRenderTarget(WebGPUTextureFormat.Rgba8Unorm, 12, 10);
-
-        drawing.Dispose();
-
-        using WebGPUDrawingBackend backend = new();
-        using Image<Rgba32> image = new(12, 10);
-
-        backend.ReadRegion(
-            Configuration.Default,
-            WebGPUCanvasFactory.CreateFrame<Rgba32>(target.Bounds, target.Surface),
-            target.Bounds,
-            image.Frames.RootFrame.PixelBuffer.GetRegion());
     }
 
     private static void AssertCompositeTargetDescriptor<TPixel>(WebGPUTextureFormat format, PixelAlphaRepresentation alphaRepresentation, WebGPUTargetNumericEncoding numericEncoding, FeatureName requiredFeature)
@@ -343,18 +289,18 @@ public class WebGPUDeviceContextTests
         Assert.Equal(target.AlphaRepresentation, child.AlphaRepresentation);
     }
 
-    private static void AssertPresentationTransfer<TPixel>(WebGPUDeviceContext deviceContext, WebGPUTextureFormat format, PixelAlphaRepresentation alphaRepresentation, bool copyToSurface)
+    private static void AssertPresentationTransfer<TPixel>(WebGPUTextureFormat format, PixelAlphaRepresentation alphaRepresentation, bool copyToSurface)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        using WebGPURenderTarget source = deviceContext.CreateRenderTarget(format, alphaRepresentation, 13, 9);
-        using WebGPURenderTarget destination = deviceContext.CreateRenderTarget(format, alphaRepresentation, source.Width, source.Height);
+        using WebGPURenderTarget source = new(format, alphaRepresentation, 13, 9);
+        using WebGPURenderTarget destination = source.CreateRenderTarget(source.Width, source.Height);
         using (DrawingCanvas canvas = source.CreateCanvas())
         {
             canvas.Fill(Brushes.Solid(Color.FromPixel(new Rgba32(173, 41, 229, 137))), new RectanglePolygon(0, 0, source.Width, source.Height));
             canvas.Fill(Brushes.Solid(Color.FromPixel(new Rgba32(19, 211, 67, 83))), new RectanglePolygon(3, 2, 7, 5));
         }
 
-        using (WebGPUPresentationRenderer renderer = new(WebGPURuntime.GetApi(), deviceContext, source, copyToSurface))
+        using (WebGPUPresentationRenderer renderer = new(WebGPURuntime.GetApi(), source.DeviceContext, source, copyToSurface))
         {
             renderer.Present(destination.TextureHandle, destination.TextureViewHandle);
         }

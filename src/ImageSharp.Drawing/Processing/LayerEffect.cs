@@ -12,43 +12,59 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// </summary>
 public abstract class LayerEffect
 {
+    private readonly bool isPassThrough;
+    private readonly GraphicsOptions? writeBackOptions;
+    private readonly Point writeBackOffset;
+    private readonly Action<IImageProcessingContext> operation;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="LayerEffect"/> class.
     /// </summary>
-    private protected LayerEffect()
+    /// <param name="operation">The operation that implements the effect.</param>
+    protected LayerEffect(Action<IImageProcessingContext> operation)
     {
+        Guard.NotNull(operation, nameof(operation));
+        this.operation = operation;
     }
 
     /// <summary>
-    /// Gets the distance, in pixels, the effect can push content beyond its source region. Layer
-    /// and processing bounds are expanded by this reach so the effect output is not cut off.
+    /// Initializes a new instance of the <see cref="LayerEffect"/> class with the observable
+    /// behavior of another effect when this effect is not executed natively.
     /// </summary>
-    internal abstract int Reach { get; }
+    /// <param name="fallbackEffect">The effect whose behavior is used as the fallback.</param>
+    protected LayerEffect(LayerEffect fallbackEffect)
+    {
+        Guard.NotNull(fallbackEffect, nameof(fallbackEffect));
+        this.isPassThrough = fallbackEffect.IsPassThrough;
+        this.writeBackOptions = fallbackEffect.WriteBackOptions;
+        this.writeBackOffset = fallbackEffect.WriteBackOffset;
+        this.operation = fallbackEffect.CreateOperation();
+    }
 
     /// <summary>
     /// Gets a value indicating whether the effect leaves the layer content unchanged, in which
     /// case its application is skipped entirely.
     /// </summary>
-    internal virtual bool IsPassThrough => false;
+    internal virtual bool IsPassThrough => this.isPassThrough;
 
     /// <summary>
     /// Gets the graphics options used to composite the processed pixels back onto the layer, or
     /// <see langword="null"/> to replace the processed region outright.
     /// </summary>
-    internal abstract GraphicsOptions? WriteBackOptions { get; }
+    internal virtual GraphicsOptions? WriteBackOptions => this.writeBackOptions;
 
     /// <summary>
     /// Gets the offset, in pixels, at which the processed pixels are written back relative to the
     /// region they were read from.
     /// </summary>
-    internal abstract Point WriteBackOffset { get; }
+    internal virtual Point WriteBackOffset => this.writeBackOffset;
 
     /// <summary>
     /// Creates the image-processing operation that transforms the layer snapshot into the effect
     /// output.
     /// </summary>
     /// <returns>The operation to run against the layer snapshot.</returns>
-    internal abstract Action<IImageProcessingContext> CreateOperation();
+    internal Action<IImageProcessingContext> CreateOperation() => this.operation;
 }
 
 /// <summary>
@@ -61,6 +77,7 @@ public sealed class BlurLayerEffect : LayerEffect
     /// </summary>
     /// <param name="sigma">The Gaussian blur sigma, in pixels; zero leaves the content unchanged.</param>
     public BlurLayerEffect(float sigma)
+        : base(context => context.GaussianBlur(sigma))
     {
         Guard.MustBeGreaterThanOrEqualTo(sigma, 0, nameof(sigma));
         this.Sigma = sigma;
@@ -72,9 +89,6 @@ public sealed class BlurLayerEffect : LayerEffect
     public float Sigma { get; }
 
     /// <inheritdoc/>
-    internal override int Reach => (int)MathF.Ceiling(this.Sigma * 3F) + 1;
-
-    /// <inheritdoc/>
     internal override bool IsPassThrough => this.Sigma == 0;
 
     /// <inheritdoc/>
@@ -82,13 +96,6 @@ public sealed class BlurLayerEffect : LayerEffect
 
     /// <inheritdoc/>
     internal override Point WriteBackOffset => default;
-
-    /// <inheritdoc/>
-    internal override Action<IImageProcessingContext> CreateOperation()
-    {
-        float sigma = this.Sigma;
-        return context => context.GaussianBlur(sigma);
-    }
 }
 
 /// <summary>
@@ -107,6 +114,7 @@ public sealed class DropShadowLayerEffect : LayerEffect
     /// a semi-transparent shadow.
     /// </param>
     public DropShadowLayerEffect(Point offset, float sigma, Color color)
+        : base(CreateOperation(sigma, color))
     {
         Guard.MustBeGreaterThanOrEqualTo(sigma, 0, nameof(sigma));
         this.Offset = offset;
@@ -130,31 +138,31 @@ public sealed class DropShadowLayerEffect : LayerEffect
     public Color Color { get; }
 
     /// <inheritdoc/>
-    internal override int Reach
-        => (int)MathF.Ceiling(this.Sigma * 3F) + Math.Max(Math.Abs(this.Offset.X), Math.Abs(this.Offset.Y)) + 1;
-
-    /// <inheritdoc/>
     internal override GraphicsOptions? WriteBackOptions
         => new() { AlphaCompositionMode = PixelAlphaCompositionMode.DestOver };
 
     /// <inheritdoc/>
     internal override Point WriteBackOffset => this.Offset;
 
-    /// <inheritdoc/>
-    internal override Action<IImageProcessingContext> CreateOperation()
+    /// <summary>
+    /// Creates the CPU drop-shadow operation for the supplied effect values.
+    /// </summary>
+    /// <param name="sigma">The Gaussian blur sigma.</param>
+    /// <param name="color">The shadow colour.</param>
+    /// <returns>The configured image-processing operation.</returns>
+    private static Action<IImageProcessingContext> CreateOperation(float sigma, Color color)
     {
         // The tint replaces the snapshot's colour with the constant shadow colour and scales its
         // alpha. The colour filter operates on straight alpha, so with the RGB rows zeroed the
         // constant row sets the colour outright; because the colour is then constant across the
         // snapshot, the blur only spreads alpha and cannot bleed foreign colours into the shadow.
-        Vector4 vector = this.Color.ToPixel<Rgba32>().ToScaledVector4();
+        Vector4 vector = color.ToPixel<Rgba32>().ToScaledVector4();
         ColorMatrix tint = default;
         tint.M44 = vector.W;
         tint.M51 = vector.X;
         tint.M52 = vector.Y;
         tint.M53 = vector.Z;
 
-        float sigma = this.Sigma;
         return context =>
         {
             context.Filter(tint);
@@ -181,6 +189,7 @@ public sealed class GlowLayerEffect : LayerEffect
     /// fainter glow.
     /// </param>
     public GlowLayerEffect(float sigma, Color color)
+        : base(CreateOperation(sigma, color))
     {
         Guard.MustBeGreaterThan(sigma, 0, nameof(sigma));
         this.Sigma = sigma;
@@ -198,30 +207,31 @@ public sealed class GlowLayerEffect : LayerEffect
     public Color Color { get; }
 
     /// <inheritdoc/>
-    internal override int Reach => (int)MathF.Ceiling(this.Sigma * 3F) + 1;
-
-    /// <inheritdoc/>
     internal override GraphicsOptions? WriteBackOptions
         => new() { AlphaCompositionMode = PixelAlphaCompositionMode.DestOver };
 
     /// <inheritdoc/>
     internal override Point WriteBackOffset => default;
 
-    /// <inheritdoc/>
-    internal override Action<IImageProcessingContext> CreateOperation()
+    /// <summary>
+    /// Creates the CPU glow operation for the supplied effect values.
+    /// </summary>
+    /// <param name="sigma">The Gaussian blur sigma.</param>
+    /// <param name="color">The glow colour.</param>
+    /// <returns>The configured image-processing operation.</returns>
+    private static Action<IImageProcessingContext> CreateOperation(float sigma, Color color)
     {
         // The tint replaces the snapshot's colour with the constant glow colour and scales its
         // alpha. The colour filter operates on straight alpha, so with the RGB rows zeroed the
         // constant row sets the colour outright; because the colour is then constant across the
         // snapshot, the blur only spreads alpha and cannot bleed foreign colours into the glow.
-        Vector4 vector = this.Color.ToPixel<Rgba32>().ToScaledVector4();
+        Vector4 vector = color.ToPixel<Rgba32>().ToScaledVector4();
         ColorMatrix tint = default;
         tint.M44 = vector.W;
         tint.M51 = vector.X;
         tint.M52 = vector.Y;
         tint.M53 = vector.Z;
 
-        float sigma = this.Sigma;
         return context =>
         {
             context.Filter(tint);
@@ -250,6 +260,7 @@ public sealed class InnerShadowLayerEffect : LayerEffect
     /// semi-transparent shadow.
     /// </param>
     public InnerShadowLayerEffect(Point offset, float sigma, Color color)
+        : base(CreateOperation(sigma, color))
     {
         Guard.MustBeGreaterThanOrEqualTo(sigma, 0, nameof(sigma));
         this.Offset = offset;
@@ -273,25 +284,26 @@ public sealed class InnerShadowLayerEffect : LayerEffect
     public Color Color { get; }
 
     /// <inheritdoc/>
-    internal override int Reach
-        => (int)MathF.Ceiling(this.Sigma * 3F) + Math.Max(Math.Abs(this.Offset.X), Math.Abs(this.Offset.Y)) + 1;
-
-    /// <inheritdoc/>
     internal override GraphicsOptions? WriteBackOptions
         => new() { AlphaCompositionMode = PixelAlphaCompositionMode.SrcAtop };
 
     /// <inheritdoc/>
     internal override Point WriteBackOffset => this.Offset;
 
-    /// <inheritdoc/>
-    internal override Action<IImageProcessingContext> CreateOperation()
+    /// <summary>
+    /// Creates the CPU inner-shadow operation for the supplied effect values.
+    /// </summary>
+    /// <param name="sigma">The Gaussian blur sigma.</param>
+    /// <param name="color">The shadow colour.</param>
+    /// <returns>The configured image-processing operation.</returns>
+    private static Action<IImageProcessingContext> CreateOperation(float sigma, Color color)
     {
         // The shadow is the blurred INVERSE of the content's silhouette: everywhere the content is
         // not, tinted with the shadow colour. The matrix maps alpha to colourAlpha * (1 - alpha)
         // with the constant RGB rows carrying the shadow colour, the blur feathers the boundary,
         // and the SrcAtop write-back clips the result onto the content so only the parts that
         // reach inside its edges remain.
-        Vector4 vector = this.Color.ToPixel<Rgba32>().ToScaledVector4();
+        Vector4 vector = color.ToPixel<Rgba32>().ToScaledVector4();
         ColorMatrix invertedTint = default;
         invertedTint.M44 = -vector.W;
         invertedTint.M54 = vector.W;
@@ -299,7 +311,6 @@ public sealed class InnerShadowLayerEffect : LayerEffect
         invertedTint.M52 = vector.Y;
         invertedTint.M53 = vector.Z;
 
-        float sigma = this.Sigma;
         return context =>
         {
             context.Filter(invertedTint);
@@ -323,15 +334,13 @@ public sealed class ColorMatrixLayerEffect : LayerEffect
     /// </summary>
     /// <param name="matrix">The colour matrix applied to the layer content.</param>
     public ColorMatrixLayerEffect(ColorMatrix matrix)
+        : base(context => context.Filter(matrix))
         => this.Matrix = matrix;
 
     /// <summary>
     /// Gets the colour matrix applied to the layer content.
     /// </summary>
     public ColorMatrix Matrix { get; }
-
-    /// <inheritdoc/>
-    internal override int Reach => 0;
 
     /// <inheritdoc/>
     internal override GraphicsOptions? WriteBackOptions => null;
@@ -341,11 +350,4 @@ public sealed class ColorMatrixLayerEffect : LayerEffect
 
     /// <inheritdoc/>
     internal override bool IsPassThrough => this.Matrix == ColorMatrix.Identity;
-
-    /// <inheritdoc/>
-    internal override Action<IImageProcessingContext> CreateOperation()
-    {
-        ColorMatrix matrix = this.Matrix;
-        return context => context.Filter(matrix);
-    }
 }

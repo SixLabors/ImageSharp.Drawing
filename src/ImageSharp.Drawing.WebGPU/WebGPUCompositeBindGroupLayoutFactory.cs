@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
+
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -13,6 +15,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <returns><see langword="true"/> if the layout was created; otherwise <see langword="false"/>.</returns>
 internal unsafe delegate bool WebGPUCompositeBindGroupLayoutFactory(
     WebGPU api,
-    Device* device,
-    out BindGroupLayout* bindGroupLayout,
+    WGPUDeviceImpl* device,
+    out WGPUBindGroupLayoutImpl* bindGroupLayout,
     out string? error);

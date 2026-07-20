@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
+
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -30,8 +32,8 @@ internal static unsafe class DrawLeafComputeShader
     /// <returns><see langword="true"/> when the bind-group layout was created successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
-        Device* device,
-        out BindGroupLayout* layout,
+        WGPUDeviceImpl* device,
+        out WGPUBindGroupLayoutImpl* layout,
         out string? error)
     {
         // Bindings match draw_leaf.wgsl:
@@ -42,16 +44,16 @@ internal static unsafe class DrawLeafComputeShader
         //   4 draw_monoid (read-write; exclusive prefix written per draw object)
         //   5 info (read-write; per-draw brush info words for coarse and fine)
         //   6 clip_inp (read-write; ClipInp records for clip_reduce and clip_leaf)
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[7];
+        WGPUBindGroupLayoutEntry* entries = stackalloc WGPUBindGroupLayoutEntry[7];
         entries[0] = SceneShaderBindingLayoutHelper.CreateUniformEntry(0, (nuint)sizeof(GpuSceneConfig));
-        entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, BufferBindingType.ReadOnlyStorage);
-        entries[2] = SceneShaderBindingLayoutHelper.CreateStorageEntry(2, BufferBindingType.ReadOnlyStorage);
-        entries[3] = SceneShaderBindingLayoutHelper.CreateStorageEntry(3, BufferBindingType.ReadOnlyStorage);
-        entries[4] = SceneShaderBindingLayoutHelper.CreateStorageEntry(4, BufferBindingType.Storage);
-        entries[5] = SceneShaderBindingLayoutHelper.CreateStorageEntry(5, BufferBindingType.Storage);
-        entries[6] = SceneShaderBindingLayoutHelper.CreateStorageEntry(6, BufferBindingType.Storage);
+        entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, WGPUBufferBindingType.ReadOnlyStorage);
+        entries[2] = SceneShaderBindingLayoutHelper.CreateStorageEntry(2, WGPUBufferBindingType.ReadOnlyStorage);
+        entries[3] = SceneShaderBindingLayoutHelper.CreateStorageEntry(3, WGPUBufferBindingType.ReadOnlyStorage);
+        entries[4] = SceneShaderBindingLayoutHelper.CreateStorageEntry(4, WGPUBufferBindingType.Storage);
+        entries[5] = SceneShaderBindingLayoutHelper.CreateStorageEntry(5, WGPUBufferBindingType.Storage);
+        entries[6] = SceneShaderBindingLayoutHelper.CreateStorageEntry(6, WGPUBufferBindingType.Storage);
 
-        BindGroupLayoutDescriptor descriptor = new()
+        WGPUBindGroupLayoutDescriptor descriptor = new()
         {
             entryCount = 7,
             entries = entries

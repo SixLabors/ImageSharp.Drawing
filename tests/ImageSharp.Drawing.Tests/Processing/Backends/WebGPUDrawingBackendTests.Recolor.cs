@@ -94,12 +94,12 @@ public partial class WebGPUDrawingBackendTests
     [WebGPUFact]
     public void FillPath_WithRecolorBrush_NormalizedByte4PTargetMatchesExactStorage()
     {
-        using WebGPUDeviceContext deviceContext = new();
-        WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(WebGPURuntime.GetApi(), deviceContext.DeviceHandle);
+        using WebGPURenderTarget probe = new(WebGPUTextureFormat.Rgba8Unorm, 1, 1);
+        WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(WebGPURuntime.GetApi(), probe.DeviceContext.DeviceHandle);
 
         if (!deviceState.HasFeature(FeatureName.TextureFormatsTier1))
         {
-            Assert.Throws<NotSupportedException>(() => deviceContext.CreateRenderTarget(WebGPUTextureFormat.Rgba8Snorm, PixelAlphaRepresentation.Associated, 8, 8));
+            Assert.Throws<NotSupportedException>(() => new WebGPURenderTarget(WebGPUTextureFormat.Rgba8Snorm, PixelAlphaRepresentation.Associated, 8, 8));
             return;
         }
 

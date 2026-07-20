@@ -30,7 +30,7 @@ internal sealed unsafe class WebGPUQueueWorkDoneCallback : WebGPUCallbackLifetim
     /// </summary>
     /// <param name="status">The queue completion status.</param>
     /// <param name="userData">The caller-provided context pointer.</param>
-    public delegate void Callback(QueueWorkDoneStatus status, void* userData);
+    public delegate void Callback(WGPUQueueWorkDoneStatus status, void* userData);
 
     /// <summary>
     /// Matches the complete native <c>WGPUQueueWorkDoneCallback</c> ABI declared by webgpu.h.
@@ -41,7 +41,7 @@ internal sealed unsafe class WebGPUQueueWorkDoneCallback : WebGPUCallbackLifetim
     /// <param name="userdata2">The second caller-provided context pointer.</param>
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void NativeCallback(
-        QueueWorkDoneStatus status,
+        WGPUQueueWorkDoneStatus status,
         WGPUStringView message,
         void* userdata1,
         void* userdata2);
@@ -49,8 +49,8 @@ internal sealed unsafe class WebGPUQueueWorkDoneCallback : WebGPUCallbackLifetim
     /// <summary>
     /// Gets the unmanaged callback pointer stored in a WebGPU callback-info structure.
     /// </summary>
-    public delegate* unmanaged[Cdecl]<QueueWorkDoneStatus, WGPUStringView, void*, void*, void> Pointer
-        => (delegate* unmanaged[Cdecl]<QueueWorkDoneStatus, WGPUStringView, void*, void*, void>)this.pointer;
+    public delegate* unmanaged[Cdecl]<WGPUQueueWorkDoneStatus, WGPUStringView, void*, void*, void> Pointer
+        => (delegate* unmanaged[Cdecl]<WGPUQueueWorkDoneStatus, WGPUStringView, void*, void*, void>)this.pointer;
 
     /// <summary>
     /// Creates a rooted callback thunk.
@@ -66,7 +66,7 @@ internal sealed unsafe class WebGPUQueueWorkDoneCallback : WebGPUCallbackLifetim
     /// <param name="message">The native diagnostic message.</param>
     /// <param name="userdata1">The caller-provided context pointer.</param>
     /// <param name="userdata2">The second native context pointer, which this wrapper does not use.</param>
-    private void Invoke(QueueWorkDoneStatus status, WGPUStringView message, void* userdata1, void* userdata2)
+    private void Invoke(WGPUQueueWorkDoneStatus status, WGPUStringView message, void* userdata1, void* userdata2)
     {
         _ = message;
         _ = userdata2;

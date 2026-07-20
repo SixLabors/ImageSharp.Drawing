@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -157,7 +158,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             throw new InvalidOperationException("The scene is not compatible with the WebGPU drawing backend.");
         }
 
-        if (!TryGetCompositeTargetDescriptor<TPixel>(out WebGPUTargetDescriptor pixelDescriptor, out FeatureName requiredFeature))
+        if (!TryGetCompositeTargetDescriptor<TPixel>(out WebGPUTargetDescriptor pixelDescriptor, out WGPUFeatureName requiredFeature))
         {
             throw new NotSupportedException($"The WebGPU backend does not support pixel format '{typeof(TPixel).Name}'.");
         }
@@ -214,8 +215,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 using WebGPUHandle.HandleReference targetTextureViewReference = webGPUTarget.TargetTextureViewHandle.AcquireReference();
 
                 WebGPUSceneTarget rootTarget = new(
-                    (Texture*)targetTextureReference.Handle,
-                    (TextureView*)targetTextureViewReference.Handle,
+                    (WGPUTextureImpl*)targetTextureReference.Handle,
+                    (WGPUTextureViewImpl*)targetTextureViewReference.Handle,
                     nativeTarget.Bounds,
                     webGPUTarget.TextureCoordinateOffset);
 
@@ -224,11 +225,18 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                     throw new InvalidOperationException(backdropError);
                 }
 
+                // Presentation targets redraw continuously, so allocator status can resolve through
+                // the existing deferred queue without stalling each shader frame. CPU Apply and
+                // offscreen targets retain synchronous validation because their pixels must be
+                // complete before control returns to user code.
+                bool deferOrderedStatus = webGPUTarget.IsPresentationSurface && encodedScene.OrderedApplyCount == 0;
                 this.RenderOrderedScene<TPixel>(
                     configuration,
                     flushContext,
                     sampleableRootTarget,
                     encodedScene,
+                    webGPUScene,
+                    deferOrderedStatus,
                     requiredFeature,
                     ref currentBumpSizes,
                     ref resourceArena,
@@ -320,7 +328,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         WebGPUNativeSurface webGPUTarget,
         Rectangle targetBounds,
         WebGPUTargetDescriptor targetDescriptor,
-        FeatureName requiredFeature,
+        WGPUFeatureName requiredFeature,
         WebGPUDrawingBackendScene webGPUScene,
         bool deferOverflowCheck,
         ref WebGPUSceneBumpSizes currentBumpSizes,
@@ -421,7 +429,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// </summary>
     /// <param name="flushContext">The flush-scoped WebGPU device, queue, and encoder state.</param>
     /// <param name="targetView">The texture view to clear.</param>
-    private static void ClearTarget(WebGPUFlushContext flushContext, TextureView* targetView)
+    private static void ClearTarget(WebGPUFlushContext flushContext, WGPUTextureViewImpl* targetView)
     {
         if (!flushContext.EnsureCommandEncoder() || !flushContext.BeginRenderPass(targetView, loadExisting: false))
         {
@@ -556,8 +564,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         WebGPUFlushContext flushContext,
         int width,
         int height,
-        out Texture* texture,
-        out TextureView* textureView,
+        out WGPUTextureImpl* texture,
+        out WGPUTextureViewImpl* textureView,
         out string? error)
         => TryCreateCompositionTexture(flushContext, width, height, renderAttachment: false, out texture, out textureView, out error);
 
@@ -586,8 +594,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 flushContext,
                 target.Bounds.Width,
                 target.Bounds.Height,
-                out Texture* backdropTexture,
-                out TextureView* backdropTextureView,
+                out WGPUTextureImpl* backdropTexture,
+                out WGPUTextureViewImpl* backdropTextureView,
                 out error))
         {
             backdropTarget = default;
@@ -643,8 +651,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         int width,
         int height,
         bool renderAttachment,
-        out Texture* texture,
-        out TextureView* textureView,
+        out WGPUTextureImpl* texture,
+        out WGPUTextureViewImpl* textureView,
         out string? error)
     {
         textureView = null;
@@ -655,11 +663,29 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             usage |= TextureUsage.RenderAttachment;
         }
 
-        TextureDescriptor textureDescriptor = new()
+        // Prefer a device-pooled texture from an earlier flush. Every consumer addresses these
+        // textures in texel space with explicit extents, so an entry larger than requested is
+        // safe, and reuse skips both driver allocation and wgpu's lazy zero-initialization.
+        if (flushContext.DeviceState.TryRentPooledTexture(
+                flushContext.TextureFormat,
+                (ulong)usage,
+                (uint)width,
+                (uint)height,
+                out texture,
+                out textureView,
+                out uint rentedWidth,
+                out uint rentedHeight))
+        {
+            flushContext.TrackPooledTexture(texture, textureView, flushContext.TextureFormat, (ulong)usage, rentedWidth, rentedHeight);
+            error = null;
+            return true;
+        }
+
+        WGPUTextureDescriptor textureDescriptor = new()
         {
             usage = (ulong)usage,
-            dimension = TextureDimension._2D,
-            size = new Extent3D((uint)width, (uint)height, 1),
+            dimension = WGPUTextureDimension._2D,
+            size = new WGPUExtent3D((uint)width, (uint)height, 1),
             format = flushContext.TextureFormat,
             mipLevelCount = 1,
             sampleCount = 1
@@ -667,7 +693,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
         {
-            texture = flushContext.Api.DeviceCreateTexture((Device*)deviceReference.Handle, in textureDescriptor);
+            texture = flushContext.Api.DeviceCreateTexture((WGPUDeviceImpl*)deviceReference.Handle, in textureDescriptor);
         }
 
         if (texture is null)
@@ -676,15 +702,15 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             return false;
         }
 
-        TextureViewDescriptor textureViewDescriptor = new()
+        WGPUTextureViewDescriptor textureViewDescriptor = new()
         {
             format = flushContext.TextureFormat,
-            dimension = TextureViewDimension._2D,
+            dimension = WGPUTextureViewDimension._2D,
             baseMipLevel = 0,
             mipLevelCount = 1,
             baseArrayLayer = 0,
             arrayLayerCount = 1,
-            aspect = TextureAspect.All
+            aspect = WGPUTextureAspect.All
         };
 
         textureView = flushContext.Api.TextureCreateView(texture, &textureViewDescriptor);
@@ -696,9 +722,9 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             return false;
         }
 
-        // Ownership transfers to the flush context here; it releases both handles when disposed.
-        flushContext.TrackTexture(texture);
-        flushContext.TrackTextureView(textureView);
+        // Ownership transfers to the flush context here; it returns both handles to the device
+        // pool when disposed, so the next flush rents them instead of recreating.
+        flushContext.TrackPooledTexture(texture, textureView, flushContext.TextureFormat, (ulong)usage, (uint)width, (uint)height);
         error = null;
         return true;
     }
@@ -719,32 +745,32 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void CopyTextureRegion(
         WebGPUFlushContext flushContext,
-        Texture* sourceTexture,
+        WGPUTextureImpl* sourceTexture,
         int sourceOriginX,
         int sourceOriginY,
-        Texture* destinationTexture,
+        WGPUTextureImpl* destinationTexture,
         int destinationOriginX,
         int destinationOriginY,
         int width,
         int height)
     {
-        ImageCopyTexture source = new()
+        WGPUTexelCopyTextureInfo source = new()
         {
             texture = sourceTexture,
             mipLevel = 0,
-            origin = new Origin3D((uint)sourceOriginX, (uint)sourceOriginY, 0),
-            aspect = TextureAspect.All
+            origin = new WGPUOrigin3D((uint)sourceOriginX, (uint)sourceOriginY, 0),
+            aspect = WGPUTextureAspect.All
         };
 
-        ImageCopyTexture destination = new()
+        WGPUTexelCopyTextureInfo destination = new()
         {
             texture = destinationTexture,
             mipLevel = 0,
-            origin = new Origin3D((uint)destinationOriginX, (uint)destinationOriginY, 0),
-            aspect = TextureAspect.All
+            origin = new WGPUOrigin3D((uint)destinationOriginX, (uint)destinationOriginY, 0),
+            aspect = WGPUTextureAspect.All
         };
 
-        Extent3D copySize = new((uint)width, (uint)height, 1);
+        WGPUExtent3D copySize = new((uint)width, (uint)height, 1);
         flushContext.Api.CommandEncoderCopyTextureToTexture(flushContext.CommandEncoder, in source, in destination, in copySize);
     }
 
@@ -775,7 +801,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// </returns>
     internal static bool TrySubmitWithIndex(WebGPUFlushContext flushContext, out ulong submissionIndex)
     {
-        CommandEncoder* commandEncoder = flushContext.CommandEncoder;
+        WGPUCommandEncoderImpl* commandEncoder = flushContext.CommandEncoder;
         submissionIndex = default;
 
         if (commandEncoder is null)
@@ -787,10 +813,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         flushContext.EndComputePassIfOpen();
         flushContext.EndRenderPassIfOpen();
 
-        CommandBuffer* commandBuffer = null;
+        WGPUCommandBufferImpl* commandBuffer = null;
         try
         {
-            CommandBufferDescriptor descriptor = default;
+            WGPUCommandBufferDescriptor descriptor = default;
             commandBuffer = flushContext.Api.CommandEncoderFinish(commandEncoder, in descriptor);
             if (commandBuffer is null)
             {
@@ -799,7 +825,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
             using (WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference())
             {
-                Queue* queue = (Queue*)queueReference.Handle;
+                WGPUQueueImpl* queue = (WGPUQueueImpl*)queueReference.Handle;
                 submissionIndex = flushContext.Api.QueueSubmitForIndex(queue, 1, ref commandBuffer);
             }
 
@@ -955,7 +981,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         WebGPUNativeSurface webGPUTarget,
         Rectangle targetBounds,
         WebGPUTargetDescriptor targetDescriptor,
-        FeatureName requiredFeature,
+        WGPUFeatureName requiredFeature,
         WebGPUDrawingBackendScene webGPUScene)
         where TPixel : unmanaged, IPixel<TPixel>
     {

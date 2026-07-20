@@ -99,6 +99,23 @@ public sealed class DrawingTextCache
     public int Count => this.entries.Count;
 
     /// <summary>
+    /// Gets the reusable drawing-operation scratch list handed to text renderers. Canvases are
+    /// per-frame objects while this cache survives across frames, so hosting the scratch here
+    /// keeps its capacity instead of regrowing a list of large operation structs every draw.
+    /// The list is cleared at the start of each text draw; like the caches on this type it
+    /// assumes single-threaded use.
+    /// </summary>
+    internal List<DrawingOperation> OperationScratch { get; } = [];
+
+    /// <summary>
+    /// Gets the reusable render-pass sort buffer used when text operations are lowered to
+    /// composition commands, hosted here for the same lifetime reason as
+    /// <see cref="OperationScratch"/>. The consuming batcher retains the commands, never this
+    /// buffer.
+    /// </summary>
+    internal List<(byte RenderPass, int Sequence, Backends.CompositionSceneCommand Command)> CommandSortScratch { get; } = [];
+
+    /// <summary>
     /// Removes all cached text drawing data.
     /// </summary>
     public void Clear()
@@ -107,6 +124,8 @@ public sealed class DrawingTextCache
         this.usage.Clear();
         this.runPathEntries.Clear();
         this.runPathUsage.Clear();
+        this.OperationScratch.Clear();
+        this.CommandSortScratch.Clear();
     }
 
     /// <summary>

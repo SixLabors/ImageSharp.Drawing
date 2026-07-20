@@ -3,6 +3,7 @@
 
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -48,7 +49,7 @@ public static unsafe class WebGPUEnvironment
     /// Passing <see langword="null"/> only mutes the managed sink; a previously registered
     /// native callback stays installed and simply drops its messages.
     /// The first call that installs a sink also fixes the native log level at
-    /// <see cref="LogLevel.Warn"/>; that level is not lowered again by later calls.
+    /// the warning level; that level is not lowered again by later calls.
     /// </remarks>
     public static void EnableNativeLogging(Action<string>? sink)
     {
@@ -67,7 +68,7 @@ public static unsafe class WebGPUEnvironment
 
         WebGPU api = WebGPURuntime.GetApi();
         api.SetLogCallback(&HandleNativeLog, null);
-        api.SetLogLevel(LogLevel.Warn);
+        api.SetLogLevel(WGPULogLevel.Warn);
         nativeLogCallbackRegistered = true;
     }
 
@@ -78,7 +79,7 @@ public static unsafe class WebGPUEnvironment
     /// <param name="message">The native UTF-8 log message, or <see langword="null"/>.</param>
     /// <param name="userData">Unused native user-data pointer.</param>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static void HandleNativeLog(LogLevel level, WebGPUStringView message, void* userData)
+    private static void HandleNativeLog(WGPULogLevel level, WGPUStringView message, void* userData)
     {
         Action<string>? sink = nativeLogSink;
         if (sink is null)

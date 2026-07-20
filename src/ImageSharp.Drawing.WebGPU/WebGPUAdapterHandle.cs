@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
+
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -31,7 +33,7 @@ internal sealed unsafe class WebGPUAdapterHandle : WebGPUHandle
     {
         try
         {
-            this.api?.AdapterRelease((Adapter*)this.handle);
+            this.api?.AdapterRelease((WGPUAdapterImpl*)this.handle);
             return true;
         }
         catch

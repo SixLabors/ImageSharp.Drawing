@@ -5,6 +5,7 @@ using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
+using WebGPUExternalSurfaceDemo.Controls;
 using Brush = SixLabors.ImageSharp.Drawing.Processing.Brush;
 using Brushes = SixLabors.ImageSharp.Drawing.Processing.Brushes;
 using Color = SixLabors.ImageSharp.Color;
@@ -114,6 +115,55 @@ internal sealed class ManualTextFlowScene : RenderScene
     }
 
     public override string DisplayName => "Manual Text Flow";
+
+    /// <inheritdoc />
+    protected override Control CreateContent(WebGPURenderControl renderControl)
+    {
+        ComboBox shapeSelector = new()
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 140,
+            Margin = new Padding(0, 0, 8, 0),
+        };
+
+        foreach (ManualTextFlowObstacleShape shape in Enum.GetValues<ManualTextFlowObstacleShape>())
+        {
+            shapeSelector.Items.Add(shape);
+        }
+
+        shapeSelector.SelectedItem = this.ObstacleShape;
+        shapeSelector.SelectedIndexChanged += (_, _) =>
+        {
+            if (shapeSelector.SelectedItem is ManualTextFlowObstacleShape shape)
+            {
+                // The selector demonstrates that any closed path can drive the same
+                // line-slot algorithm without changing the shared sample host.
+                this.ObstacleShape = shape;
+                renderControl.Invalidate();
+            }
+        };
+
+        FlowLayoutPanel toolbar = new()
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            Padding = new Padding(8),
+        };
+
+        toolbar.Controls.Add(new Label
+        {
+            AutoSize = true,
+            Margin = new Padding(0, 5, 8, 0),
+            Text = "Shape",
+        });
+
+        toolbar.Controls.Add(shapeSelector);
+
+        Panel panel = new() { Dock = DockStyle.Fill };
+        panel.Controls.Add(renderControl);
+        panel.Controls.Add(toolbar);
+        return panel;
+    }
 
     /// <summary>
     /// Gets or sets the closed shape used as the flow obstacle.

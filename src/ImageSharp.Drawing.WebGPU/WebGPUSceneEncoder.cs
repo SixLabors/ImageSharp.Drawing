@@ -588,10 +588,10 @@ internal static class WebGPUSceneEncoder
         out WebGPUSceneOperation? operation,
         out string? error)
     {
-        RectangleF rawBounds = RectangleF.Transform(source.SourcePath.Bounds, source.DrawingOptions.Transform);
-        Rectangle sourceRect = Rectangle.Intersect(source.ApplyCanvasBounds, ToConservativeBounds(rawBounds));
+        RectangleF rawOutputBounds = RectangleF.Transform(source.ApplyOutputBounds, source.DrawingOptions.Transform);
+        Rectangle outputRect = Rectangle.Intersect(source.ApplyCanvasBounds, ToConservativeBounds(rawOutputBounds));
 
-        if (sourceRect.Width <= 0 || sourceRect.Height <= 0)
+        if (outputRect.Width <= 0 || outputRect.Height <= 0)
         {
             operation = null;
             error = null;
@@ -599,14 +599,20 @@ internal static class WebGPUSceneEncoder
         }
 
         Point brushOffset = new(
-            sourceRect.X - (int)MathF.Floor(rawBounds.Left),
-            sourceRect.Y - (int)MathF.Floor(rawBounds.Top));
+            outputRect.X - (int)MathF.Floor(rawOutputBounds.Left),
+            outputRect.Y - (int)MathF.Floor(rawOutputBounds.Top));
+
+        IWebGPUShaderEffectSource? shaderEffect = source.ApplyEffect as IWebGPUShaderEffectSource;
+        bool hasNativeEffect = shaderEffect is not null;
+        GpuImageSource imageSource = hasNativeEffect
+            ? new GpuImageSource(new Size(outputRect.Width, outputRect.Height), brushOffset, WrapMode.Repeat, WrapMode.Repeat, WebGPUShaderEffectWorkingTexture.Descriptor)
+            : new GpuImageSource(new Size(outputRect.Width, outputRect.Height), brushOffset, WrapMode.Repeat, WrapMode.Repeat);
 
         RasterizerOptions rasterizerOptions = source.RasterizerOptions;
         LinearGeometry geometry = source.SourcePath.ToLinearGeometry(MatrixUtilities.GetScale(source.Transform));
         if (!encoding.TryAppendExternalTextureFill(
             source.SourcePath,
-            new GpuImageSource(new Size(sourceRect.Width, sourceRect.Height), brushOffset, WrapMode.Repeat, WrapMode.Repeat),
+            imageSource,
             source.DrawingOptions,
             in rasterizerOptions,
             source.DestinationOffset,
@@ -619,7 +625,9 @@ internal static class WebGPUSceneEncoder
         }
 
         WebGPUSceneRange drawRange = encoding.EndPackedIndependentRange(targetBounds, drawStart, closeActiveClips: true);
-        operation = new WebGPUSceneOperation(new WebGPUApplySceneItem(source.ApplyOperation, sourceRect, source.ApplyWriteBackOffset, drawRange));
+        operation = hasNativeEffect
+            ? new WebGPUSceneOperation(new WebGPUShaderEffectSceneItem(shaderEffect!, outputRect, outputRect, source.ApplyWriteBackOffset, drawRange))
+            : new WebGPUSceneOperation(new WebGPUApplySceneItem(source.ApplyOperation, source.ApplyEffect, outputRect, outputRect, source.ApplyWriteBackOffset, drawRange));
         error = null;
         return true;
     }
@@ -730,13 +738,13 @@ internal static class WebGPUSceneEncoder
                         }
 
                         WebGPUApplySceneItem candidate = candidateOperation.Apply!;
-                        Rectangle candidateRead = candidate.SourceRect;
+                        Rectangle candidateRead = candidate.InputRect;
                         candidateRead.Offset(-candidate.ReadOffset.X, -candidate.ReadOffset.Y);
                         bool intersectsEarlierWrite = false;
 
                         for (int previousIndex = i; previousIndex < candidateIndex; previousIndex++)
                         {
-                            Rectangle previousWrite = operations[previousIndex].Apply!.SourceRect;
+                            Rectangle previousWrite = operations[previousIndex].Apply!.OutputRect;
                             if (candidateRead.Left < previousWrite.Right &&
                                 candidateRead.Right > previousWrite.Left &&
                                 candidateRead.Top < previousWrite.Bottom &&
@@ -767,6 +775,12 @@ internal static class WebGPUSceneEncoder
                     }
 
                     i += groupCount - 1;
+                    break;
+
+                case WebGPUSceneOperationKind.ShaderEffect:
+                    // A native effect consumes the committed source produced by every preceding
+                    // range. Its write-back becomes the first range in the next transaction.
+                    pendingStatusCapacity = operation.ShaderEffect!.DrawRange.MaximumStatusRecordCount;
                     break;
             }
         }
@@ -6832,6 +6846,10 @@ internal sealed class WebGPUEncodedScene : IDisposable
 
         int targetCount = operations.Length == 0 ? 0 : 1;
         int applyCount = 0;
+        int shaderEffectCount = 0;
+        int maximumShaderEffectWidth = 0;
+        int maximumShaderEffectHeight = 0;
+        int maximumShaderUniformByteLength = 0;
         int maxApplyGroupCount = 0;
         int pendingRangeCount = 0;
         int maxPendingRangeCount = 0;
@@ -6869,11 +6887,35 @@ internal sealed class WebGPUEncodedScene : IDisposable
 
                     i += operation.ApplyGroupCount - 1;
                     break;
+
+                case WebGPUSceneOperationKind.ShaderEffect:
+                    shaderEffectCount++;
+                    WebGPUShaderEffectSceneItem shaderEffect = operation.ShaderEffect!;
+                    maximumShaderEffectWidth = Math.Max(maximumShaderEffectWidth, shaderEffect.InputRect.Width);
+                    maximumShaderEffectHeight = Math.Max(maximumShaderEffectHeight, shaderEffect.InputRect.Height);
+
+                    ReadOnlySpan<WebGPUShaderPass> shaderPasses = shaderEffect.Effect.GetShaderPasses();
+                    for (int passIndex = 0; passIndex < shaderPasses.Length; passIndex++)
+                    {
+                        maximumShaderUniformByteLength = Math.Max(
+                            maximumShaderUniformByteLength,
+                            shaderPasses[passIndex].Program.UniformLayout.ByteLength);
+                    }
+
+                    maxPendingRangeCount = Math.Max(maxPendingRangeCount, pendingRangeCount);
+                    maxStatusCapacity = Math.Max(maxStatusCapacity, finalStatusCapacity);
+                    pendingRangeCount = 1;
+                    finalStatusCapacity = operation.ShaderEffect!.DrawRange.MaximumStatusRecordCount;
+                    break;
             }
         }
 
         this.OrderedTargetCount = targetCount;
         this.OrderedApplyCount = applyCount;
+        this.OrderedShaderEffectCount = shaderEffectCount;
+        this.MaximumShaderEffectWidth = maximumShaderEffectWidth;
+        this.MaximumShaderEffectHeight = maximumShaderEffectHeight;
+        this.MaximumShaderUniformByteLength = maximumShaderUniformByteLength;
         this.MaxApplyGroupCount = maxApplyGroupCount;
         this.MaxPendingRangeCount = Math.Max(maxPendingRangeCount, pendingRangeCount);
         this.FinalStatusCapacity = finalStatusCapacity;
@@ -6954,6 +6996,26 @@ internal sealed class WebGPUEncodedScene : IDisposable
     /// Gets the number of Apply operations retained by the ordered plan.
     /// </summary>
     public int OrderedApplyCount { get; }
+
+    /// <summary>
+    /// Gets the number of native shader-effect operations retained by the ordered plan.
+    /// </summary>
+    public int OrderedShaderEffectCount { get; }
+
+    /// <summary>
+    /// Gets the largest native effect input width in this scene.
+    /// </summary>
+    public int MaximumShaderEffectWidth { get; }
+
+    /// <summary>
+    /// Gets the largest native effect input height in this scene.
+    /// </summary>
+    public int MaximumShaderEffectHeight { get; }
+
+    /// <summary>
+    /// Gets the largest user-uniform binding required by a native effect pass in this scene.
+    /// </summary>
+    public int MaximumShaderUniformByteLength { get; }
 
     /// <summary>
     /// Gets the largest dependency-independent Apply group retained by the ordered plan.
@@ -7086,6 +7148,22 @@ internal sealed class WebGPUEncodedScene : IDisposable
     public GpuSceneLayout Layout { get; }
 
     /// <summary>
+    /// Gets the version of the packed scene stream. <see cref="SetSceneWord"/> increments it for
+    /// every effective mutation so resident GPU copies of the stream can detect staleness.
+    /// </summary>
+    public int SceneDataVersion { get; private set; }
+
+    /// <summary>
+    /// Gets the inclusive first scene-word index mutated after encoding, or <see cref="int.MaxValue"/> when none.
+    /// </summary>
+    public int MutatedSceneWordMin { get; private set; } = int.MaxValue;
+
+    /// <summary>
+    /// Gets the exclusive end of the scene-word span mutated after encoding, or zero when none.
+    /// </summary>
+    public int MutatedSceneWordEnd { get; private set; }
+
+    /// <summary>
     /// Overwrites one scene word in place.
     /// </summary>
     /// <param name="index">The scene-word index to update.</param>
@@ -7097,7 +7175,18 @@ internal sealed class WebGPUEncodedScene : IDisposable
             throw new InvalidOperationException("The scene buffer is not available.");
         }
 
-        this.sceneDataOwner.Memory.Span[index] = value;
+        // Identical rewrites (for example overflow replay re-staging the same range) must not
+        // advance the version, or resident GPU streams would be patched needlessly every attempt.
+        Span<uint> sceneWords = this.sceneDataOwner.Memory.Span;
+        if (sceneWords[index] == value)
+        {
+            return;
+        }
+
+        sceneWords[index] = value;
+        this.SceneDataVersion++;
+        this.MutatedSceneWordMin = Math.Min(this.MutatedSceneWordMin, index);
+        this.MutatedSceneWordEnd = Math.Max(this.MutatedSceneWordEnd, index + 1);
     }
 
     /// <summary>
@@ -7133,6 +7222,8 @@ internal readonly struct GpuImageSource
         this.Offset = default;
         this.WrapX = default;
         this.WrapY = default;
+        this.Descriptor = default;
+        this.HasExplicitDescriptor = false;
         this.IsExternalTexture = false;
     }
 
@@ -7150,6 +7241,28 @@ internal readonly struct GpuImageSource
         this.Offset = offset;
         this.WrapX = wrapX;
         this.WrapY = wrapY;
+        this.Descriptor = default;
+        this.HasExplicitDescriptor = false;
+        this.IsExternalTexture = true;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GpuImageSource"/> struct from a render-time WebGPU texture whose representation differs from the target.
+    /// </summary>
+    /// <param name="size">The render-time texture size.</param>
+    /// <param name="offset">The image offset encoded into the fill payload.</param>
+    /// <param name="wrapX">The horizontal wrap mode.</param>
+    /// <param name="wrapY">The vertical wrap mode.</param>
+    /// <param name="descriptor">The physical and logical representation of the supplied texture.</param>
+    public GpuImageSource(Size size, Point offset, WrapMode wrapX, WrapMode wrapY, WebGPUTargetDescriptor descriptor)
+    {
+        this.Brush = null;
+        this.Size = size;
+        this.Offset = offset;
+        this.WrapX = wrapX;
+        this.WrapY = wrapY;
+        this.Descriptor = descriptor;
+        this.HasExplicitDescriptor = true;
         this.IsExternalTexture = true;
     }
 
@@ -7177,6 +7290,16 @@ internal readonly struct GpuImageSource
     /// Gets the vertical wrap mode.
     /// </summary>
     public WrapMode WrapY { get; }
+
+    /// <summary>
+    /// Gets the physical and logical representation of an external texture that differs from the render target.
+    /// </summary>
+    public WebGPUTargetDescriptor Descriptor { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether <see cref="Descriptor"/> replaces the render target descriptor for this source.
+    /// </summary>
+    public bool HasExplicitDescriptor { get; }
 
     /// <summary>
     /// Gets a value indicating whether the source texture is supplied by the WebGPU render path.

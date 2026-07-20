@@ -182,9 +182,19 @@ public readonly struct CompositionCommand
     public Rectangle ApplyCanvasBounds => this.applyBarrier?.CanvasBounds ?? throw new InvalidOperationException("Only apply commands carry apply canvas bounds.");
 
     /// <summary>
+    /// Gets the local bounds within which an Apply command writes its processed output.
+    /// </summary>
+    public RectangleF ApplyOutputBounds => this.ApplyBarrier.OutputBounds;
+
+    /// <summary>
     /// Gets the image processor carried by an Apply command.
     /// </summary>
     public Action<IImageProcessingContext> ApplyOperation => this.applyBarrier?.Operation ?? throw new InvalidOperationException("Only apply commands carry an apply operation.");
+
+    /// <summary>
+    /// Gets the layer effect carried by an Apply command, or <see langword="null"/> when the command represents a direct Apply operation.
+    /// </summary>
+    public LayerEffect? ApplyEffect => this.ApplyBarrier.Effect;
 
     /// <summary>
     /// Gets the offset subtracted from an Apply command's write rectangle when reading the source

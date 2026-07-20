@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
+
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -18,8 +20,8 @@ internal sealed unsafe class WebGPUPresentationRenderer : IDisposable
     private readonly uint width;
     private readonly uint height;
     private readonly bool copyToSurface;
-    private readonly RenderPipeline* pipeline;
-    private BindGroup* bindGroup;
+    private readonly WGPURenderPipelineImpl* pipeline;
+    private WGPUBindGroupImpl* bindGroup;
     private bool isDisposed;
 
     /// <summary>
@@ -48,7 +50,7 @@ internal sealed unsafe class WebGPUPresentationRenderer : IDisposable
         }
 
         WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(api, this.deviceHandle);
-        TextureFormat textureFormat = WebGPUTextureFormatMapper.ToNative(this.targetDescriptor.Format);
+        WGPUTextureFormat textureFormat = WebGPUTextureFormatMapper.ToNative(this.targetDescriptor.Format);
 
         if (!deviceState.TryGetOrCreateCompositePipeline(
                 PipelineKey,
@@ -56,8 +58,8 @@ internal sealed unsafe class WebGPUPresentationRenderer : IDisposable
                 PresentationShader.TryCreateBindGroupLayout,
                 textureFormat,
                 CompositePipelineBlendMode.None,
-                out BindGroupLayout* bindGroupLayout,
-                out RenderPipeline* createdPipeline,
+                out WGPUBindGroupLayoutImpl* bindGroupLayout,
+                out WGPURenderPipelineImpl* createdPipeline,
                 out string? error))
         {
             throw new InvalidOperationException(error);
@@ -68,20 +70,20 @@ internal sealed unsafe class WebGPUPresentationRenderer : IDisposable
         using WebGPUHandle.HandleReference deviceReference = this.deviceHandle.AcquireReference();
         using WebGPUHandle.HandleReference sourceTextureViewReference = source.TextureViewHandle.AcquireReference();
 
-        BindGroupEntry entry = new()
+        WGPUBindGroupEntry entry = new()
         {
             binding = 0,
-            textureView = (TextureView*)sourceTextureViewReference.Handle
+            textureView = (WGPUTextureViewImpl*)sourceTextureViewReference.Handle
         };
 
-        BindGroupDescriptor bindGroupDescriptor = new()
+        WGPUBindGroupDescriptor bindGroupDescriptor = new()
         {
             layout = bindGroupLayout,
             entryCount = 1,
             entries = &entry
         };
 
-        this.bindGroup = api.DeviceCreateBindGroup((Device*)deviceReference.Handle, in bindGroupDescriptor);
+        this.bindGroup = api.DeviceCreateBindGroup((WGPUDeviceImpl*)deviceReference.Handle, in bindGroupDescriptor);
         if (this.bindGroup is null)
         {
             throw new InvalidOperationException("Failed to create the WebGPU presentation bind group.");
@@ -103,9 +105,9 @@ internal sealed unsafe class WebGPUPresentationRenderer : IDisposable
             return;
         }
 
-        CommandEncoder* commandEncoder = null;
-        RenderPassEncoder* renderPass = null;
-        CommandBuffer* commandBuffer = null;
+        WGPUCommandEncoderImpl* commandEncoder = null;
+        WGPURenderPassEncoderImpl* renderPass = null;
+        WGPUCommandBufferImpl* commandBuffer = null;
 
         try
         {
@@ -113,28 +115,28 @@ internal sealed unsafe class WebGPUPresentationRenderer : IDisposable
             using WebGPUHandle.HandleReference queueReference = this.queueHandle.AcquireReference();
             using WebGPUHandle.HandleReference destinationTextureViewReference = destinationTextureViewHandle.AcquireReference();
 
-            CommandEncoderDescriptor commandEncoderDescriptor = default;
-            commandEncoder = this.api.DeviceCreateCommandEncoder((Device*)deviceReference.Handle, in commandEncoderDescriptor);
+            WGPUCommandEncoderDescriptor commandEncoderDescriptor = default;
+            commandEncoder = this.api.DeviceCreateCommandEncoder((WGPUDeviceImpl*)deviceReference.Handle, in commandEncoderDescriptor);
             if (commandEncoder is null)
             {
                 throw new InvalidOperationException("Failed to create the WebGPU presentation command encoder.");
             }
 
-            RenderPassColorAttachment colorAttachment = new()
+            WGPURenderPassColorAttachment colorAttachment = new()
             {
-                view = (TextureView*)destinationTextureViewReference.Handle,
+                view = (WGPUTextureViewImpl*)destinationTextureViewReference.Handle,
                 depthSlice = uint.MaxValue,
-                loadOp = LoadOp.Clear,
-                storeOp = StoreOp.Store,
+                loadOp = WGPULoadOp.Clear,
+                storeOp = WGPUStoreOp.Store,
 
                 // The fullscreen triangle overwrites every texel. This format-correct clear still
                 // preserves logical transparency if clipping rules ever leave an edge uncovered.
                 clearValue = this.targetDescriptor.NumericEncoding == WebGPUTargetNumericEncoding.SignedUnit
-                    ? new Native.WGPUColor { r = -1D, g = -1D, b = -1D, a = -1D }
+                    ? new WGPUColor { r = -1D, g = -1D, b = -1D, a = -1D }
                     : default
             };
 
-            RenderPassDescriptor renderPassDescriptor = new()
+            WGPURenderPassDescriptor renderPassDescriptor = new()
             {
                 colorAttachmentCount = 1,
                 colorAttachments = &colorAttachment
@@ -153,14 +155,14 @@ internal sealed unsafe class WebGPUPresentationRenderer : IDisposable
             this.api.RenderPassEncoderRelease(renderPass);
             renderPass = null;
 
-            CommandBufferDescriptor commandBufferDescriptor = default;
+            WGPUCommandBufferDescriptor commandBufferDescriptor = default;
             commandBuffer = this.api.CommandEncoderFinish(commandEncoder, in commandBufferDescriptor);
             if (commandBuffer is null)
             {
                 throw new InvalidOperationException("Failed to finish the WebGPU presentation command buffer.");
             }
 
-            this.api.QueueSubmit((Queue*)queueReference.Handle, 1, ref commandBuffer);
+            this.api.QueueSubmit((WGPUQueueImpl*)queueReference.Handle, 1, ref commandBuffer);
         }
         finally
         {
@@ -188,8 +190,8 @@ internal sealed unsafe class WebGPUPresentationRenderer : IDisposable
     /// <param name="destinationTextureHandle">The acquired surface texture.</param>
     private void CopyToSurface(WebGPUTextureHandle destinationTextureHandle)
     {
-        CommandEncoder* commandEncoder = null;
-        CommandBuffer* commandBuffer = null;
+        WGPUCommandEncoderImpl* commandEncoder = null;
+        WGPUCommandBufferImpl* commandBuffer = null;
 
         try
         {
@@ -198,33 +200,33 @@ internal sealed unsafe class WebGPUPresentationRenderer : IDisposable
             using WebGPUHandle.HandleReference sourceTextureReference = this.sourceTextureHandle.AcquireReference();
             using WebGPUHandle.HandleReference destinationTextureReference = destinationTextureHandle.AcquireReference();
 
-            CommandEncoderDescriptor commandEncoderDescriptor = default;
-            commandEncoder = this.api.DeviceCreateCommandEncoder((Device*)deviceReference.Handle, in commandEncoderDescriptor);
+            WGPUCommandEncoderDescriptor commandEncoderDescriptor = default;
+            commandEncoder = this.api.DeviceCreateCommandEncoder((WGPUDeviceImpl*)deviceReference.Handle, in commandEncoderDescriptor);
             if (commandEncoder is null)
             {
                 throw new InvalidOperationException("Failed to create the WebGPU presentation copy command encoder.");
             }
 
-            ImageCopyTexture source = new()
+            WGPUTexelCopyTextureInfo source = new()
             {
-                texture = (Texture*)sourceTextureReference.Handle,
+                texture = (WGPUTextureImpl*)sourceTextureReference.Handle,
                 mipLevel = 0,
                 origin = default,
-                aspect = TextureAspect.All
+                aspect = WGPUTextureAspect.All
             };
 
-            ImageCopyTexture destination = new()
+            WGPUTexelCopyTextureInfo destination = new()
             {
-                texture = (Texture*)destinationTextureReference.Handle,
+                texture = (WGPUTextureImpl*)destinationTextureReference.Handle,
                 mipLevel = 0,
                 origin = default,
-                aspect = TextureAspect.All
+                aspect = WGPUTextureAspect.All
             };
 
-            Extent3D copySize = new(this.width, this.height, 1);
+            WGPUExtent3D copySize = new(this.width, this.height, 1);
             this.api.CommandEncoderCopyTextureToTexture(commandEncoder, in source, in destination, in copySize);
 
-            CommandBufferDescriptor commandBufferDescriptor = default;
+            WGPUCommandBufferDescriptor commandBufferDescriptor = default;
             commandBuffer = this.api.CommandEncoderFinish(commandEncoder, in commandBufferDescriptor);
             if (commandBuffer is null)
             {
@@ -233,7 +235,7 @@ internal sealed unsafe class WebGPUPresentationRenderer : IDisposable
 
             // Canvas disposal submits first. Queue ordering therefore completes the render before
             // this copy without a CPU wait or an additional synchronization primitive.
-            this.api.QueueSubmit((Queue*)queueReference.Handle, 1, ref commandBuffer);
+            this.api.QueueSubmit((WGPUQueueImpl*)queueReference.Handle, 1, ref commandBuffer);
         }
         finally
         {

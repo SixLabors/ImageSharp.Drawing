@@ -18,6 +18,7 @@ internal sealed class ApplyBarrier
     /// <param name="destinationOffset">The absolute destination offset captured when the barrier was recorded.</param>
     /// <param name="ownerLayer">The layer that owned this barrier when it was recorded.</param>
     /// <param name="operation">The processor operation to run against the replay-time snapshot.</param>
+    /// <param name="effect">The layer effect represented by the operation, or <see langword="null"/> for a direct Apply operation.</param>
     /// <param name="writeBackOptions">
     /// The graphics options used to composite the processed pixels back onto the target, or
     /// <see langword="null"/> to replace the region outright.
@@ -31,16 +32,20 @@ internal sealed class ApplyBarrier
         Point destinationOffset,
         DrawingCanvasLayer? ownerLayer,
         Action<IImageProcessingContext> operation,
-        GraphicsOptions? writeBackOptions = null,
-        Point writeBackOffset = default)
+        LayerEffect? effect,
+        GraphicsOptions? writeBackOptions,
+        Point writeBackOffset)
     {
         this.Path = path;
+        this.OutputBounds = path.Bounds;
+
         this.Options = options;
         this.CanvasBounds = canvasBounds;
         this.TargetBounds = targetBounds;
         this.DestinationOffset = destinationOffset;
         this.OwnerLayer = ownerLayer;
         this.Operation = operation;
+        this.Effect = effect;
         this.WriteBackOptions = writeBackOptions;
         this.WriteBackOffset = writeBackOffset;
     }
@@ -49,6 +54,11 @@ internal sealed class ApplyBarrier
     /// Gets the closed path defining the processed region.
     /// </summary>
     public IPath Path { get; }
+
+    /// <summary>
+    /// Gets the local bounds within which the processed output is written.
+    /// </summary>
+    public RectangleF OutputBounds { get; }
 
     /// <summary>
     /// Gets the drawing options captured when the barrier was recorded.
@@ -84,6 +94,11 @@ internal sealed class ApplyBarrier
     /// Gets the processor operation to run against the replay-time snapshot.
     /// </summary>
     public Action<IImageProcessingContext> Operation { get; }
+
+    /// <summary>
+    /// Gets the layer effect represented by the operation, or <see langword="null"/> for a direct Apply operation.
+    /// </summary>
+    public LayerEffect? Effect { get; }
 
     /// <summary>
     /// Gets the graphics options used to composite the processed pixels back onto the target.

@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -67,7 +68,7 @@ internal static unsafe class WebGPUSceneResources
         WebGPUSceneRange range,
         WebGPUSceneConfig config,
         uint baseColor,
-        TextureView* externalTextureView,
+        WGPUTextureViewImpl* externalTextureView,
         [NotNullWhen(true)] ref WebGPUSceneResourceArena? arena,
         out WebGPUSceneResourceSet resources,
         out string? error)
@@ -101,7 +102,7 @@ internal static unsafe class WebGPUSceneResources
         WebGPUEncodedScene scene,
         WebGPUSceneConfig config,
         uint baseColor,
-        TextureView* externalTextureView,
+        WGPUTextureViewImpl* externalTextureView,
         [NotNullWhen(true)] ref WebGPUSceneResourceArena? arena,
         out WebGPUSceneResourceSet resources,
         out string? error)
@@ -137,7 +138,7 @@ internal static unsafe class WebGPUSceneResources
         WebGPUSceneRange? range,
         WebGPUSceneConfig config,
         uint baseColor,
-        TextureView* externalTextureView,
+        WGPUTextureViewImpl* externalTextureView,
         [NotNullWhen(true)] ref WebGPUSceneResourceArena? arena,
         out WebGPUSceneResourceSet resources,
         out string? error)
@@ -147,12 +148,12 @@ internal static unsafe class WebGPUSceneResources
         int infoWordCount = range?.InfoWordCount ?? scene.InfoWordCount;
 
         // Textures are scene-dependent and not pooled.
-        if (!TryCreateGradientTexture(flushContext, scene, out TextureView* gradientTextureView, out error))
+        if (!TryCreateGradientTexture(flushContext, scene, out WGPUTextureViewImpl* gradientTextureView, out error))
         {
             return false;
         }
 
-        if (!TryCreateImageAtlasTexture<TPixel>(flushContext, scene, range, flushContext.TextureFormat, externalTextureView, out TextureView* imageAtlasTextureView, out error))
+        if (!TryCreateImageAtlasTexture<TPixel>(flushContext, scene, range, flushContext.TextureFormat, externalTextureView, out WGPUTextureViewImpl* imageAtlasTextureView, out error))
         {
             return false;
         }
@@ -168,18 +169,58 @@ internal static unsafe class WebGPUSceneResources
         {
             // Upload new scene data and header into the existing arena buffers.
             using WebGPUHandle.HandleReference reuseQueueReference = flushContext.QueueHandle.AcquireReference();
-            Queue* reuseQueue = (Queue*)reuseQueueReference.Handle;
+            WGPUQueueImpl* reuseQueue = (WGPUQueueImpl*)reuseQueueReference.Handle;
+
+            // Consecutive ordered ranges stage the same encoded scene. The packed scene stream is
+            // range-independent apart from the image draw-data words patched by texture staging
+            // above, so a matching resident version skips the upload entirely and a stale version
+            // re-uploads only the mutated span. Queue ordering already ran the resident upload
+            // before any command submitted afterwards can read the buffer.
             ReadOnlySpan<uint> sceneData = scene.SceneData.Span;
-            fixed (uint* sceneDataPtr = sceneData)
+            if (!ReferenceEquals(arena.UploadedScene, scene))
             {
-                flushContext.Api.QueueWriteBuffer(reuseQueue, arena.SceneBuffer, 0, sceneDataPtr, (nuint)(sceneData.Length * sizeof(uint)));
+                fixed (uint* sceneDataPtr = sceneData)
+                {
+                    flushContext.Api.QueueWriteBuffer(reuseQueue, arena.SceneBuffer, 0, sceneDataPtr, (nuint)(sceneData.Length * sizeof(uint)));
+                }
+            }
+            else if (arena.UploadedSceneVersion != scene.SceneDataVersion)
+            {
+                // The resident stream was uploaded before this range's image staging rewrote its
+                // draw-data words. Patch the accumulated mutated span; rewriting words that
+                // already hold their final values is idempotent.
+                int mutatedStart = scene.MutatedSceneWordMin;
+                int mutatedLength = scene.MutatedSceneWordEnd - mutatedStart;
+                fixed (uint* sceneDataPtr = sceneData.Slice(mutatedStart, mutatedLength))
+                {
+                    flushContext.Api.QueueWriteBuffer(
+                        reuseQueue,
+                        arena.SceneBuffer,
+                        checked((ulong)mutatedStart * sizeof(uint)),
+                        sceneDataPtr,
+                        (nuint)(mutatedLength * sizeof(uint)));
+                }
             }
 
             GpuSceneConfig header = range.HasValue
                 ? CreateHeader(scene, range.Value, config, baseColor)
                 : CreateHeader(scene, config, baseColor);
             flushContext.Api.QueueWriteBuffer(reuseQueue, arena.HeaderBuffer, 0, &header, (nuint)sizeof(GpuSceneConfig));
-            UploadBrushData<TPixel>(flushContext, arena.InfoBinDataBuffer, infoWordCount, scene);
+
+            // Brush words land immediately after the range's info prefix and recolor payloads are
+            // specialized per TPixel, so the brush upload can only be skipped when the scene, the
+            // prefix length, and the pixel specialization all match the bytes already resident.
+            if (!ReferenceEquals(arena.UploadedScene, scene) ||
+                arena.UploadedBrushInfoWordCount != infoWordCount ||
+                arena.UploadedPixelType != typeof(TPixel))
+            {
+                UploadBrushData<TPixel>(flushContext, arena.InfoBinDataBuffer, infoWordCount, scene);
+            }
+
+            arena.UploadedScene = scene;
+            arena.UploadedSceneVersion = scene.SceneDataVersion;
+            arena.UploadedBrushInfoWordCount = infoWordCount;
+            arena.UploadedPixelType = typeof(TPixel);
 
             resources = new WebGPUSceneResourceSet(
                 arena.HeaderBuffer,
@@ -206,45 +247,62 @@ internal static unsafe class WebGPUSceneResources
             return true;
         }
 
-        // Arena miss; create all buffers fresh and build a new arena.
+        // Arena miss; create all buffers fresh and build a new arena. Size every buffer to the
+        // union of the new requirement and the outgoing arena's capacity: consecutive ordered
+        // ranges of one scene can each dominate a different dimension, and exact-fit recreation
+        // would otherwise thrash the whole arena on every alternation.
+        WebGPUSceneBufferSizes createSizes = arena is null
+            ? config.BufferSizes
+            : MaxMergeArenaSizes(config.BufferSizes, arena.CapacitySizes);
+        nuint createInfoBinDataByteLength = arena is null
+            ? infoBinDataByteLength
+            : Math.Max(infoBinDataByteLength, arena.InfoBinDataByteCapacity);
+        nuint createSceneByteLength = arena is null
+            ? sceneByteLength
+            : Math.Max(sceneByteLength, arena.SceneByteCapacity);
+
         WebGPUSceneResourceArena.Dispose(arena);
         arena = null;
 
-        WgpuBuffer* infoBinDataBuffer = CreateAndUploadCombinedInfoBinDataBuffer<TPixel>(
+        WGPUBufferImpl* infoBinDataBuffer = CreateAndUploadCombinedInfoBinDataBuffer<TPixel>(
             flushContext,
             infoWordCount,
             scene,
-            checked(config.BufferSizes.BinData.ByteLength + config.BufferSizes.BinHeaders.ByteLength));
+            checked(createSizes.BinData.ByteLength + createSizes.BinHeaders.ByteLength),
+            createInfoBinDataByteLength);
 
-        WgpuBuffer* pathReducedBuffer = CreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], config.BufferSizes.PathReduced.Length);
-        WgpuBuffer* pathReduced2Buffer = CreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], config.BufferSizes.PathReduced2.Length);
-        WgpuBuffer* pathReducedScanBuffer = CreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], config.BufferSizes.PathReducedScan.Length);
-        WgpuBuffer* pathMonoidBuffer = CreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], config.BufferSizes.PathMonoids.Length);
-        WgpuBuffer* pathBboxBuffer = CreateAndUploadBuffer<GpuPathBbox>(flushContext, [], config.BufferSizes.PathBboxes.Length);
-        WgpuBuffer* drawReducedBuffer = CreateAndUploadBuffer<GpuSceneDrawMonoid>(flushContext, [], config.BufferSizes.DrawReduced.Length);
-        WgpuBuffer* drawMonoidBuffer = CreateAndUploadBuffer<GpuSceneDrawMonoid>(flushContext, [], config.BufferSizes.DrawMonoids.Length);
-        WgpuBuffer* clipInputBuffer = CreateAndUploadBuffer<GpuClipInp>(flushContext, [], config.BufferSizes.ClipInputs.Length);
-        WgpuBuffer* clipElementBuffer = CreateAndUploadBuffer<GpuClipElement>(flushContext, [], config.BufferSizes.ClipElements.Length);
-        WgpuBuffer* clipBicBuffer = CreateAndUploadBuffer<GpuBic>(flushContext, [], config.BufferSizes.ClipBics.Length);
-        WgpuBuffer* clipBboxBuffer = CreateAndUploadBuffer<Vector4>(flushContext, [], config.BufferSizes.ClipBboxes.Length);
-        WgpuBuffer* drawBboxBuffer = CreateAndUploadBuffer<GpuDrawBbox>(flushContext, [], config.BufferSizes.DrawBboxes.Length);
-        WgpuBuffer* pathBuffer = CreateAndUploadBuffer<GpuScenePath>(flushContext, [], config.BufferSizes.Paths.Length);
-        WgpuBuffer* lineBuffer = CreateAndUploadBuffer<GpuSceneLine>(flushContext, [], config.BufferSizes.Lines.Length);
-        WgpuBuffer* sceneBuffer = CreateAndUploadBuffer(flushContext, scene.SceneData.Span, (uint)scene.SceneData.Length);
+        WGPUBufferImpl* pathReducedBuffer = CreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], createSizes.PathReduced.Length);
+        WGPUBufferImpl* pathReduced2Buffer = CreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], createSizes.PathReduced2.Length);
+        WGPUBufferImpl* pathReducedScanBuffer = CreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], createSizes.PathReducedScan.Length);
+        WGPUBufferImpl* pathMonoidBuffer = CreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], createSizes.PathMonoids.Length);
+        WGPUBufferImpl* pathBboxBuffer = CreateAndUploadBuffer<GpuPathBbox>(flushContext, [], createSizes.PathBboxes.Length);
+        WGPUBufferImpl* drawReducedBuffer = CreateAndUploadBuffer<GpuSceneDrawMonoid>(flushContext, [], createSizes.DrawReduced.Length);
+        WGPUBufferImpl* drawMonoidBuffer = CreateAndUploadBuffer<GpuSceneDrawMonoid>(flushContext, [], createSizes.DrawMonoids.Length);
+        WGPUBufferImpl* clipInputBuffer = CreateAndUploadBuffer<GpuClipInp>(flushContext, [], createSizes.ClipInputs.Length);
+        WGPUBufferImpl* clipElementBuffer = CreateAndUploadBuffer<GpuClipElement>(flushContext, [], createSizes.ClipElements.Length);
+        WGPUBufferImpl* clipBicBuffer = CreateAndUploadBuffer<GpuBic>(flushContext, [], createSizes.ClipBics.Length);
+        WGPUBufferImpl* clipBboxBuffer = CreateAndUploadBuffer<Vector4>(flushContext, [], createSizes.ClipBboxes.Length);
+        WGPUBufferImpl* drawBboxBuffer = CreateAndUploadBuffer<GpuDrawBbox>(flushContext, [], createSizes.DrawBboxes.Length);
+        WGPUBufferImpl* pathBuffer = CreateAndUploadBuffer<GpuScenePath>(flushContext, [], createSizes.Paths.Length);
+        WGPUBufferImpl* lineBuffer = CreateAndUploadBuffer<GpuSceneLine>(flushContext, [], createSizes.Lines.Length);
+        WGPUBufferImpl* sceneBuffer = CreateAndUploadBuffer(
+            flushContext,
+            scene.SceneData.Span,
+            checked((uint)(createSceneByteLength / sizeof(uint))));
 
         GpuSceneConfig newHeader = range.HasValue
             ? CreateHeader(scene, range.Value, config, baseColor)
             : CreateHeader(scene, config, baseColor);
-        WgpuBuffer* headerBuffer = CreateAndUploadScalarBuffer(flushContext, in newHeader);
+        WGPUBufferImpl* headerBuffer = CreateAndUploadScalarBuffer(flushContext, in newHeader);
 
         // Build the new arena from the freshly created buffers.
         // These buffers are NOT tracked by the flush context; the arena owns them.
         arena = new WebGPUSceneResourceArena(
             flushContext.Api,
             flushContext.DeviceHandle,
-            config.BufferSizes,
-            infoBinDataByteLength,
-            sceneByteLength,
+            createSizes,
+            createInfoBinDataByteLength,
+            createSceneByteLength,
             headerBuffer,
             sceneBuffer,
             pathReducedBuffer,
@@ -262,6 +320,11 @@ internal static unsafe class WebGPUSceneResources
             drawBboxBuffer,
             pathBuffer,
             lineBuffer);
+
+        arena.UploadedScene = scene;
+        arena.UploadedSceneVersion = scene.SceneDataVersion;
+        arena.UploadedBrushInfoWordCount = infoWordCount;
+        arena.UploadedPixelType = typeof(TPixel);
 
         resources = new WebGPUSceneResourceSet(
             headerBuffer,
@@ -287,6 +350,42 @@ internal static unsafe class WebGPUSceneResources
         error = null;
         return true;
     }
+
+    /// <summary>
+    /// Merges the required sizes for the arena-owned buffers with the capacities of an outgoing
+    /// arena so recreation settles at the union of every range's dominant dimensions.
+    /// </summary>
+    /// <param name="required">The sizes required by the range being staged.</param>
+    /// <param name="previousCapacities">The capacities of the arena being replaced.</param>
+    /// <returns>The sizes to create the replacement arena with. Fields that do not correspond to
+    /// an arena-owned buffer keep the required values.</returns>
+    private static WebGPUSceneBufferSizes MaxMergeArenaSizes(in WebGPUSceneBufferSizes required, in WebGPUSceneBufferSizes previousCapacities)
+        => new(
+            WebGPUSceneBufferSize<GpuTagMonoid>.Create(Math.Max(required.PathReduced.Length, previousCapacities.PathReduced.Length)),
+            WebGPUSceneBufferSize<GpuTagMonoid>.Create(Math.Max(required.PathReduced2.Length, previousCapacities.PathReduced2.Length)),
+            WebGPUSceneBufferSize<GpuTagMonoid>.Create(Math.Max(required.PathReducedScan.Length, previousCapacities.PathReducedScan.Length)),
+            WebGPUSceneBufferSize<GpuTagMonoid>.Create(Math.Max(required.PathMonoids.Length, previousCapacities.PathMonoids.Length)),
+            WebGPUSceneBufferSize<GpuPathBbox>.Create(Math.Max(required.PathBboxes.Length, previousCapacities.PathBboxes.Length)),
+            WebGPUSceneBufferSize<GpuSceneDrawMonoid>.Create(Math.Max(required.DrawReduced.Length, previousCapacities.DrawReduced.Length)),
+            WebGPUSceneBufferSize<GpuSceneDrawMonoid>.Create(Math.Max(required.DrawMonoids.Length, previousCapacities.DrawMonoids.Length)),
+            required.Info,
+            WebGPUSceneBufferSize<GpuClipInp>.Create(Math.Max(required.ClipInputs.Length, previousCapacities.ClipInputs.Length)),
+            WebGPUSceneBufferSize<GpuClipElement>.Create(Math.Max(required.ClipElements.Length, previousCapacities.ClipElements.Length)),
+            WebGPUSceneBufferSize<GpuBic>.Create(Math.Max(required.ClipBics.Length, previousCapacities.ClipBics.Length)),
+            WebGPUSceneBufferSize<Vector4>.Create(Math.Max(required.ClipBboxes.Length, previousCapacities.ClipBboxes.Length)),
+            WebGPUSceneBufferSize<GpuDrawBbox>.Create(Math.Max(required.DrawBboxes.Length, previousCapacities.DrawBboxes.Length)),
+            required.BumpAlloc,
+            WebGPUSceneBufferSize<GpuScenePath>.Create(Math.Max(required.Paths.Length, previousCapacities.Paths.Length)),
+            WebGPUSceneBufferSize<GpuSceneLine>.Create(Math.Max(required.Lines.Length, previousCapacities.Lines.Length)),
+            required.BinHeaders,
+            required.BinData,
+            required.IndirectCount,
+            required.PathRows,
+            required.PathTiles,
+            required.SegCounts,
+            required.Segments,
+            required.BlendSpill,
+            required.Ptcl);
 
     /// <summary>
     /// Creates the root config block uploaded to staged-scene shaders for one render attempt.
@@ -409,9 +508,9 @@ internal static unsafe class WebGPUSceneResources
         WebGPUFlushContext flushContext,
         WebGPUEncodedScene scene,
         WebGPUSceneRange? range,
-        TextureFormat textureFormat,
-        TextureView* externalTextureView,
-        out TextureView* textureView,
+        WGPUTextureFormat textureFormat,
+        WGPUTextureViewImpl* externalTextureView,
+        out WGPUTextureViewImpl* textureView,
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -426,6 +525,10 @@ internal static unsafe class WebGPUSceneResources
                 if (IsImageDescriptorInRange(descriptor, range) &&
                     descriptor.Source.IsExternalTexture)
                 {
+                    WebGPUTargetDescriptor sourceDescriptor = descriptor.Source.HasExplicitDescriptor
+                        ? descriptor.Source.Descriptor
+                        : flushContext.TargetDescriptor;
+
                     int sceneIndex = (int)scene.Layout.DrawDataBase + descriptor.DrawDataWordOffset;
                     scene.SetSceneWord(sceneIndex, PackImageAtlasOffset(0, 0));
                     scene.SetSceneWord(sceneIndex + 1, PackImageExtents(descriptor.Source.Size.Width, descriptor.Source.Size.Height));
@@ -434,8 +537,8 @@ internal static unsafe class WebGPUSceneResources
                         PackImageSampleInfo(
                             MapImageWrapMode(descriptor.Source.WrapX),
                             MapImageWrapMode(descriptor.Source.WrapY),
-                            flushContext.TargetDescriptor.AlphaRepresentation,
-                            flushContext.TargetDescriptor.NumericEncoding));
+                            sourceDescriptor.AlphaRepresentation,
+                            sourceDescriptor.NumericEncoding));
                 }
             }
 
@@ -479,7 +582,7 @@ internal static unsafe class WebGPUSceneResources
             atlasHeight += height;
         }
 
-        if (!TryCreateTexture(flushContext, textureFormat, atlasWidth, atlasHeight, "image atlas", out Texture* texture, out textureView, out error))
+        if (!TryCreateTexture(flushContext, textureFormat, atlasWidth, atlasHeight, "image atlas", out WGPUTextureImpl* texture, out textureView, out error))
         {
             return false;
         }
@@ -564,7 +667,7 @@ internal static unsafe class WebGPUSceneResources
     private static bool TryCreateGradientTexture(
         WebGPUFlushContext flushContext,
         WebGPUEncodedScene scene,
-        out TextureView* textureView,
+        out WGPUTextureViewImpl* textureView,
         out string? error)
     {
         if (scene.GradientRowCount == 0)
@@ -572,74 +675,103 @@ internal static unsafe class WebGPUSceneResources
             // Gradient rows contain associated binary16 components, for which physical zero is transparent.
             ulong transparentPixel = 0;
 
-            return TryCreateSinglePixelSampledTexture(flushContext, TextureFormat.RGBA16Float, transparentPixel, out _, out textureView, out error);
+            return TryCreateSinglePixelSampledTexture(flushContext, WGPUTextureFormat.RGBA16Float, transparentPixel, out _, out textureView, out error);
         }
 
-        TextureDescriptor textureDescriptor = new()
+        // Gradient rows are scene-wide, so one uploaded texture serves every range of the flush.
+        if (flushContext.TryGetCachedGradientTextureView(scene, out textureView))
         {
-            usage = (ulong)(TextureUsage.TextureBinding | TextureUsage.CopyDst),
-            dimension = TextureDimension._2D,
-
-            // 512 must match GRADIENT_WIDTH in fine.wgsl and the encoder's ramp width.
-            size = new Extent3D(512, (uint)scene.GradientRowCount, 1),
-            format = TextureFormat.RGBA16Float,
-            mipLevelCount = 1,
-            sampleCount = 1
-        };
-
-        Texture* texture;
-        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
-        {
-            texture = flushContext.Api.DeviceCreateTexture((Device*)deviceReference.Handle, in textureDescriptor);
+            error = null;
+            return true;
         }
 
-        if (texture is null)
+        const TextureUsage usage = TextureUsage.TextureBinding | TextureUsage.CopyDst;
+        WGPUTextureImpl* texture;
+
+        // Prefer a device-pooled texture. Extra rows in a larger entry are never addressed: the
+        // fine shader loads gradient texels by exact ramp row index.
+        if (flushContext.DeviceState.TryRentPooledTexture(
+                WGPUTextureFormat.RGBA16Float,
+                (ulong)usage,
+                512,
+                (uint)scene.GradientRowCount,
+                out texture,
+                out textureView,
+                out uint rentedWidth,
+                out uint rentedHeight))
         {
-            textureView = null;
-            error = "Failed to create a gradient texture.";
-            return false;
+            flushContext.TrackPooledTexture(texture, textureView, WGPUTextureFormat.RGBA16Float, (ulong)usage, rentedWidth, rentedHeight);
+        }
+        else
+        {
+            WGPUTextureDescriptor textureDescriptor = new()
+            {
+                usage = (ulong)usage,
+                dimension = WGPUTextureDimension._2D,
+
+                // 512 must match GRADIENT_WIDTH in fine.wgsl and the encoder's ramp width.
+                size = new WGPUExtent3D(512, (uint)scene.GradientRowCount, 1),
+                format = WGPUTextureFormat.RGBA16Float,
+                mipLevelCount = 1,
+                sampleCount = 1
+            };
+
+            using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
+            {
+                texture = flushContext.Api.DeviceCreateTexture((WGPUDeviceImpl*)deviceReference.Handle, in textureDescriptor);
+            }
+
+            if (texture is null)
+            {
+                textureView = null;
+                error = "Failed to create a gradient texture.";
+                return false;
+            }
+
+            WGPUTextureViewDescriptor textureViewDescriptor = new()
+            {
+                format = WGPUTextureFormat.RGBA16Float,
+                dimension = WGPUTextureViewDimension._2D,
+                baseMipLevel = 0,
+                mipLevelCount = 1,
+                baseArrayLayer = 0,
+                arrayLayerCount = 1,
+                aspect = WGPUTextureAspect.All
+            };
+
+            textureView = flushContext.Api.TextureCreateView(texture, &textureViewDescriptor);
+            if (textureView is null)
+            {
+                flushContext.Api.TextureRelease(texture);
+                error = "Failed to create a gradient texture view.";
+                return false;
+            }
+
+            // Returned to the device pool with the flush so later flushes rent instead of recreating.
+            flushContext.TrackPooledTexture(texture, textureView, WGPUTextureFormat.RGBA16Float, (ulong)usage, 512, (uint)scene.GradientRowCount);
         }
 
-        TextureViewDescriptor textureViewDescriptor = new()
-        {
-            format = TextureFormat.RGBA16Float,
-            dimension = TextureViewDimension._2D,
-            baseMipLevel = 0,
-            mipLevelCount = 1,
-            baseArrayLayer = 0,
-            arrayLayerCount = 1,
-            aspect = TextureAspect.All
-        };
-
-        textureView = flushContext.Api.TextureCreateView(texture, &textureViewDescriptor);
-        if (textureView is null)
-        {
-            flushContext.Api.TextureRelease(texture);
-            error = "Failed to create a gradient texture view.";
-            return false;
-        }
-
-        TextureDataLayout layout = new()
+        WGPUTexelCopyBufferLayout layout = new()
         {
             offset = 0,
             bytesPerRow = 512 * 8,
             rowsPerImage = (uint)scene.GradientRowCount
         };
 
-        ImageCopyTexture destination = new()
+        WGPUTexelCopyTextureInfo destination = new()
         {
             texture = texture,
             mipLevel = 0,
-            origin = new Origin3D(0, 0, 0),
-            aspect = TextureAspect.All
+            origin = new WGPUOrigin3D(0, 0, 0),
+            aspect = WGPUTextureAspect.All
         };
 
         fixed (uint* pixelPtr = scene.GradientPixels.Span)
         {
-            Extent3D extent = new(512, (uint)scene.GradientRowCount, 1);
+            WGPUExtent3D extent = new(512, (uint)scene.GradientRowCount, 1);
             using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
             flushContext.Api.QueueWriteTexture(
-                (Queue*)queueReference.Handle,
+                (WGPUQueueImpl*)queueReference.Handle,
                 in destination,
                 pixelPtr,
                 (nuint)(scene.GradientPixels.Length * sizeof(uint)),
@@ -647,8 +779,7 @@ internal static unsafe class WebGPUSceneResources
                 in extent);
         }
 
-        flushContext.TrackTexture(texture);
-        flushContext.TrackTextureView(textureView);
+        flushContext.CacheGradientTextureView(scene, textureView);
         error = null;
         return true;
     }
@@ -689,7 +820,7 @@ internal static unsafe class WebGPUSceneResources
     /// <returns><see langword="true"/> when the entry was uploaded.</returns>
     private static bool TryUploadImageEntry<TPixel>(
         WebGPUFlushContext flushContext,
-        Texture* texture,
+        WGPUTextureImpl* texture,
         Brush brush,
         int atlasY,
         TPixel[] rowBuffer,
@@ -723,7 +854,7 @@ internal static unsafe class WebGPUSceneResources
     /// <returns><see langword="true"/> when the entry was uploaded.</returns>
     private static bool TryUploadPatternEntry<TPixel>(
         WebGPUFlushContext flushContext,
-        Texture* texture,
+        WGPUTextureImpl* texture,
         PatternBrush patternBrush,
         int atlasY,
         TPixel[] rowBuffer,
@@ -768,7 +899,7 @@ internal static unsafe class WebGPUSceneResources
     /// <returns><see langword="true"/> when the entry was uploaded.</returns>
     private static bool TryUploadImageBrushEntry<TPixel>(
         WebGPUFlushContext flushContext,
-        Texture* texture,
+        WGPUTextureImpl* texture,
         ImageBrush<TPixel> imageBrush,
         int atlasY,
         out int entryWidth,
@@ -806,23 +937,25 @@ internal static unsafe class WebGPUSceneResources
     /// <param name="infoWordCount">The number of GPU-written info words preceding the gradient data.</param>
     /// <param name="scene">The encoded scene supplying auxiliary brush data.</param>
     /// <param name="dynamicBinByteLength">The combined bin-data and bin-header byte length appended after the gradient data.</param>
+    /// <param name="minimumTotalByteLength">The minimum buffer capacity, used to preserve an outgoing arena's high-water size.</param>
     /// <returns>The created buffer.</returns>
-    private static WgpuBuffer* CreateAndUploadCombinedInfoBinDataBuffer<TPixel>(
+    private static WGPUBufferImpl* CreateAndUploadCombinedInfoBinDataBuffer<TPixel>(
         WebGPUFlushContext flushContext,
         int infoWordCount,
         WebGPUEncodedScene scene,
-        nuint dynamicBinByteLength)
+        nuint dynamicBinByteLength,
+        nuint minimumTotalByteLength)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         ReadOnlySpan<uint> brushData = scene.PathGradientData.Span;
         nuint infoByteLength = checked((nuint)(infoWordCount + brushData.Length) * (nuint)Unsafe.SizeOf<uint>());
-        nuint totalByteLength = checked(infoByteLength + dynamicBinByteLength);
+        nuint totalByteLength = Math.Max(checked(infoByteLength + dynamicBinByteLength), minimumTotalByteLength);
         if (totalByteLength == 0)
         {
             totalByteLength = (nuint)Unsafe.SizeOf<uint>();
         }
 
-        BufferDescriptor descriptor = new()
+        WGPUBufferDescriptor descriptor = new()
         {
             usage = (ulong)(BufferUsage.Storage | BufferUsage.CopyDst),
             size = totalByteLength
@@ -830,7 +963,7 @@ internal static unsafe class WebGPUSceneResources
 
         using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
         {
-            WgpuBuffer* buffer = flushContext.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in descriptor);
+            WGPUBufferImpl* buffer = flushContext.Api.DeviceCreateBuffer((WGPUDeviceImpl*)deviceReference.Handle, in descriptor);
             UploadBrushData<TPixel>(flushContext, buffer, infoWordCount, scene);
             return buffer;
         }
@@ -846,7 +979,7 @@ internal static unsafe class WebGPUSceneResources
     /// <param name="scene">The encoded scene supplying static and target-specialized brush data.</param>
     private static void UploadBrushData<TPixel>(
         WebGPUFlushContext flushContext,
-        WgpuBuffer* buffer,
+        WGPUBufferImpl* buffer,
         int infoWordCount,
         WebGPUEncodedScene scene)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -861,7 +994,7 @@ internal static unsafe class WebGPUSceneResources
         nuint byteLength = checked((nuint)brushData.Length * (nuint)Unsafe.SizeOf<uint>());
 
         using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
-        Queue* queue = (Queue*)queueReference.Handle;
+        WGPUQueueImpl* queue = (WGPUQueueImpl*)queueReference.Handle;
         fixed (uint* dataPtr = brushData)
         {
             flushContext.Api.QueueWriteBuffer(queue, buffer, offset, dataPtr, byteLength);
@@ -910,79 +1043,29 @@ internal static unsafe class WebGPUSceneResources
     /// <returns><see langword="true"/> when the texture and view were created.</returns>
     private static bool TryCreateSinglePixelSampledTexture<TPixel>(
         WebGPUFlushContext flushContext,
-        TextureFormat textureFormat,
+        WGPUTextureFormat textureFormat,
         TPixel pixel,
-        out Texture* texture,
-        out TextureView* textureView,
+        out WGPUTextureImpl* texture,
+        out WGPUTextureViewImpl* textureView,
         out string? error)
         where TPixel : unmanaged
     {
-        TextureDescriptor textureDescriptor = new()
-        {
-            usage = (ulong)(TextureUsage.TextureBinding | TextureUsage.CopyDst),
-            dimension = TextureDimension._2D,
-            size = new Extent3D(1, 1, 1),
-            format = textureFormat,
-            mipLevelCount = 1,
-            sampleCount = 1
-        };
-
-        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
-        {
-            texture = flushContext.Api.DeviceCreateTexture((Device*)deviceReference.Handle, in textureDescriptor);
-        }
-
-        if (texture is null)
-        {
-            textureView = null;
-            error = "Failed to create a sampled scene texture.";
-            return false;
-        }
-
-        TextureViewDescriptor textureViewDescriptor = new()
-        {
-            format = textureFormat,
-            dimension = TextureViewDimension._2D,
-            baseMipLevel = 0,
-            mipLevelCount = 1,
-            baseArrayLayer = 0,
-            arrayLayerCount = 1,
-            aspect = TextureAspect.All
-        };
-
-        textureView = flushContext.Api.TextureCreateView(texture, &textureViewDescriptor);
-        if (textureView is null)
-        {
-            flushContext.Api.TextureRelease(texture);
-            texture = null;
-            error = "Failed to create a sampled scene texture view.";
-            return false;
-        }
-
-        nuint pixelSize = (nuint)Unsafe.SizeOf<TPixel>();
-        ImageCopyTexture destination = new()
-        {
-            texture = texture,
-            mipLevel = 0,
-            origin = new Origin3D(0, 0, 0),
-            aspect = TextureAspect.All
-        };
-
-        TextureDataLayout layout = new()
-        {
-            offset = 0,
-            bytesPerRow = (uint)pixelSize,
-            rowsPerImage = 1
-        };
-
-        Extent3D size = new(1, 1, 1);
+        // The fallback content is immutable, so the view comes from the device-lifetime cache:
+        // it must not be tracked by the flush context, which would release a shared native object.
+        texture = null;
         using (WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference())
         {
-            flushContext.Api.QueueWriteTexture((Queue*)queueReference.Handle, in destination, &pixel, pixelSize, in layout, in size);
+            if (!flushContext.DeviceState.TryGetOrCreateSinglePixelTexture(
+                    (WGPUQueueImpl*)queueReference.Handle,
+                    textureFormat,
+                    new ReadOnlySpan<byte>(&pixel, Unsafe.SizeOf<TPixel>()),
+                    out textureView))
+            {
+                error = "Failed to create a sampled scene texture.";
+                return false;
+            }
         }
 
-        flushContext.TrackTexture(texture);
-        flushContext.TrackTextureView(textureView);
         error = null;
         return true;
     }
@@ -1001,19 +1084,19 @@ internal static unsafe class WebGPUSceneResources
     /// <returns><see langword="true"/> when the texture and view were created.</returns>
     private static bool TryCreateTexture(
         WebGPUFlushContext flushContext,
-        TextureFormat textureFormat,
+        WGPUTextureFormat textureFormat,
         int width,
         int height,
         string textureName,
-        out Texture* texture,
-        out TextureView* textureView,
+        out WGPUTextureImpl* texture,
+        out WGPUTextureViewImpl* textureView,
         out string? error)
     {
-        TextureDescriptor textureDescriptor = new()
+        WGPUTextureDescriptor textureDescriptor = new()
         {
             usage = (ulong)(TextureUsage.TextureBinding | TextureUsage.CopyDst),
-            dimension = TextureDimension._2D,
-            size = new Extent3D((uint)width, (uint)height, 1),
+            dimension = WGPUTextureDimension._2D,
+            size = new WGPUExtent3D((uint)width, (uint)height, 1),
             format = textureFormat,
             mipLevelCount = 1,
             sampleCount = 1
@@ -1021,7 +1104,7 @@ internal static unsafe class WebGPUSceneResources
 
         using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
         {
-            texture = flushContext.Api.DeviceCreateTexture((Device*)deviceReference.Handle, in textureDescriptor);
+            texture = flushContext.Api.DeviceCreateTexture((WGPUDeviceImpl*)deviceReference.Handle, in textureDescriptor);
         }
 
         if (texture is null)
@@ -1031,15 +1114,15 @@ internal static unsafe class WebGPUSceneResources
             return false;
         }
 
-        TextureViewDescriptor textureViewDescriptor = new()
+        WGPUTextureViewDescriptor textureViewDescriptor = new()
         {
             format = textureFormat,
-            dimension = TextureViewDimension._2D,
+            dimension = WGPUTextureViewDimension._2D,
             baseMipLevel = 0,
             mipLevelCount = 1,
             baseArrayLayer = 0,
             arrayLayerCount = 1,
-            aspect = TextureAspect.All
+            aspect = WGPUTextureAspect.All
         };
 
         textureView = flushContext.Api.TextureCreateView(texture, &textureViewDescriptor);
@@ -1072,7 +1155,7 @@ internal static unsafe class WebGPUSceneResources
     /// <returns><see langword="true"/> when the region was written.</returns>
     private static bool TryWriteTextureRegion<TPixel>(
         WebGPUFlushContext flushContext,
-        Texture* texture,
+        WGPUTextureImpl* texture,
         int x,
         int y,
         int width,
@@ -1081,7 +1164,7 @@ internal static unsafe class WebGPUSceneResources
         out string? error)
         where TPixel : unmanaged
     {
-        TextureDataLayout layout = new()
+        WGPUTexelCopyBufferLayout layout = new()
         {
             offset = 0,
             bytesPerRow = (uint)(width * Unsafe.SizeOf<TPixel>()),
@@ -1090,18 +1173,18 @@ internal static unsafe class WebGPUSceneResources
 
         fixed (TPixel* pixelPtr = pixels)
         {
-            ImageCopyTexture destination = new()
+            WGPUTexelCopyTextureInfo destination = new()
             {
                 texture = texture,
                 mipLevel = 0,
-                origin = new Origin3D((uint)x, (uint)y, 0),
-                aspect = TextureAspect.All
+                origin = new WGPUOrigin3D((uint)x, (uint)y, 0),
+                aspect = WGPUTextureAspect.All
             };
 
-            Extent3D extent = new((uint)width, (uint)height, 1);
+            WGPUExtent3D extent = new((uint)width, (uint)height, 1);
             using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
             flushContext.Api.QueueWriteTexture(
-                (Queue*)queueReference.Handle,
+                (WGPUQueueImpl*)queueReference.Handle,
                 in destination,
                 pixelPtr,
                 (nuint)(pixels.Length * Unsafe.SizeOf<TPixel>()),
@@ -1188,13 +1271,13 @@ internal static unsafe class WebGPUSceneResources
     /// <param name="flushContext">The active WebGPU flush context.</param>
     /// <param name="value">The value to upload.</param>
     /// <returns>The created buffer.</returns>
-    private static WgpuBuffer* CreateAndUploadScalarBuffer<T>(
+    private static WGPUBufferImpl* CreateAndUploadScalarBuffer<T>(
         WebGPUFlushContext flushContext,
         in T value)
         where T : unmanaged
     {
         nuint byteLength = (nuint)Unsafe.SizeOf<T>();
-        BufferDescriptor descriptor = new()
+        WGPUBufferDescriptor descriptor = new()
         {
             usage = (ulong)(BufferUsage.Storage | BufferUsage.Uniform | BufferUsage.CopyDst),
             size = byteLength
@@ -1202,10 +1285,10 @@ internal static unsafe class WebGPUSceneResources
 
         using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
         {
-            WgpuBuffer* buffer = flushContext.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in descriptor);
+            WGPUBufferImpl* buffer = flushContext.Api.DeviceCreateBuffer((WGPUDeviceImpl*)deviceReference.Handle, in descriptor);
             using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
             flushContext.Api.QueueWriteBuffer(
-                (Queue*)queueReference.Handle,
+                (WGPUQueueImpl*)queueReference.Handle,
                 buffer,
                 0,
                 Unsafe.AsPointer(ref Unsafe.AsRef(in value)),
@@ -1226,7 +1309,7 @@ internal static unsafe class WebGPUSceneResources
     /// <param name="values">The initial contents to upload; may be empty for scratch buffers.</param>
     /// <param name="minimumLength">The minimum element capacity to reserve.</param>
     /// <returns>The created buffer.</returns>
-    private static WgpuBuffer* CreateAndUploadBuffer<T>(
+    private static WGPUBufferImpl* CreateAndUploadBuffer<T>(
         WebGPUFlushContext flushContext,
         ReadOnlySpan<T> values,
         uint minimumLength)
@@ -1234,7 +1317,7 @@ internal static unsafe class WebGPUSceneResources
     {
         uint elementCount = Math.Max(Math.Max((uint)values.Length, minimumLength), 1U);
         nuint byteLength = checked(elementCount * (nuint)Unsafe.SizeOf<T>());
-        BufferDescriptor descriptor = new()
+        WGPUBufferDescriptor descriptor = new()
         {
             usage = (ulong)(BufferUsage.Storage | BufferUsage.CopyDst),
             size = byteLength
@@ -1242,7 +1325,7 @@ internal static unsafe class WebGPUSceneResources
 
         using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
         {
-            WgpuBuffer* buffer = flushContext.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in descriptor);
+            WGPUBufferImpl* buffer = flushContext.Api.DeviceCreateBuffer((WGPUDeviceImpl*)deviceReference.Handle, in descriptor);
             if (!values.IsEmpty)
             {
                 nuint uploadByteLength = checked((nuint)values.Length * (nuint)Unsafe.SizeOf<T>());
@@ -1250,7 +1333,7 @@ internal static unsafe class WebGPUSceneResources
                 fixed (T* dataPtr = values)
                 {
                     flushContext.Api.QueueWriteBuffer(
-                        (Queue*)queueReference.Handle,
+                        (WGPUQueueImpl*)queueReference.Handle,
                         buffer,
                         0,
                         dataPtr,
@@ -1303,25 +1386,25 @@ internal readonly unsafe struct WebGPUSceneResourceSet
     /// <param name="gradientTextureView">The gradient texture view.</param>
     /// <param name="imageAtlasTextureView">The image atlas texture view.</param>
     public WebGPUSceneResourceSet(
-        WgpuBuffer* headerBuffer,
-        WgpuBuffer* sceneBuffer,
-        WgpuBuffer* pathReducedBuffer,
-        WgpuBuffer* pathReduced2Buffer,
-        WgpuBuffer* pathReducedScanBuffer,
-        WgpuBuffer* pathMonoidBuffer,
-        WgpuBuffer* pathBboxBuffer,
-        WgpuBuffer* drawReducedBuffer,
-        WgpuBuffer* drawMonoidBuffer,
-        WgpuBuffer* infoBinDataBuffer,
-        WgpuBuffer* clipInputBuffer,
-        WgpuBuffer* clipElementBuffer,
-        WgpuBuffer* clipBicBuffer,
-        WgpuBuffer* clipBboxBuffer,
-        WgpuBuffer* drawBboxBuffer,
-        WgpuBuffer* pathBuffer,
-        WgpuBuffer* lineBuffer,
-        TextureView* gradientTextureView,
-        TextureView* imageAtlasTextureView)
+        WGPUBufferImpl* headerBuffer,
+        WGPUBufferImpl* sceneBuffer,
+        WGPUBufferImpl* pathReducedBuffer,
+        WGPUBufferImpl* pathReduced2Buffer,
+        WGPUBufferImpl* pathReducedScanBuffer,
+        WGPUBufferImpl* pathMonoidBuffer,
+        WGPUBufferImpl* pathBboxBuffer,
+        WGPUBufferImpl* drawReducedBuffer,
+        WGPUBufferImpl* drawMonoidBuffer,
+        WGPUBufferImpl* infoBinDataBuffer,
+        WGPUBufferImpl* clipInputBuffer,
+        WGPUBufferImpl* clipElementBuffer,
+        WGPUBufferImpl* clipBicBuffer,
+        WGPUBufferImpl* clipBboxBuffer,
+        WGPUBufferImpl* drawBboxBuffer,
+        WGPUBufferImpl* pathBuffer,
+        WGPUBufferImpl* lineBuffer,
+        WGPUTextureViewImpl* gradientTextureView,
+        WGPUTextureViewImpl* imageAtlasTextureView)
     {
         this.HeaderBuffer = headerBuffer;
         this.SceneBuffer = sceneBuffer;
@@ -1347,97 +1430,97 @@ internal readonly unsafe struct WebGPUSceneResourceSet
     /// <summary>
     /// Gets the root scene-config buffer bound at slot zero by most staged-scene shaders.
     /// </summary>
-    public WgpuBuffer* HeaderBuffer { get; }
+    public WGPUBufferImpl* HeaderBuffer { get; }
 
     /// <summary>
     /// Gets the packed scene-data buffer produced by the CPU encoder.
     /// </summary>
-    public WgpuBuffer* SceneBuffer { get; }
+    public WGPUBufferImpl* SceneBuffer { get; }
 
     /// <summary>
     /// Gets the first pathtag-reduction scratch buffer.
     /// </summary>
-    public WgpuBuffer* PathReducedBuffer { get; }
+    public WGPUBufferImpl* PathReducedBuffer { get; }
 
     /// <summary>
     /// Gets the second pathtag-reduction scratch buffer.
     /// </summary>
-    public WgpuBuffer* PathReduced2Buffer { get; }
+    public WGPUBufferImpl* PathReduced2Buffer { get; }
 
     /// <summary>
     /// Gets the pathtag-scan prefix scratch buffer.
     /// </summary>
-    public WgpuBuffer* PathReducedScanBuffer { get; }
+    public WGPUBufferImpl* PathReducedScanBuffer { get; }
 
     /// <summary>
     /// Gets the final pathtag monoid buffer.
     /// </summary>
-    public WgpuBuffer* PathMonoidBuffer { get; }
+    public WGPUBufferImpl* PathMonoidBuffer { get; }
 
     /// <summary>
     /// Gets the per-path bounding-box buffer.
     /// </summary>
-    public WgpuBuffer* PathBboxBuffer { get; }
+    public WGPUBufferImpl* PathBboxBuffer { get; }
 
     /// <summary>
     /// Gets the draw-reduction scratch buffer.
     /// </summary>
-    public WgpuBuffer* DrawReducedBuffer { get; }
+    public WGPUBufferImpl* DrawReducedBuffer { get; }
 
     /// <summary>
     /// Gets the final draw monoid buffer.
     /// </summary>
-    public WgpuBuffer* DrawMonoidBuffer { get; }
+    public WGPUBufferImpl* DrawMonoidBuffer { get; }
 
     /// <summary>
     /// Gets the combined info/bin-data scratch buffer.
     /// </summary>
-    public WgpuBuffer* InfoBinDataBuffer { get; }
+    public WGPUBufferImpl* InfoBinDataBuffer { get; }
 
     /// <summary>
     /// Gets the clip input buffer.
     /// </summary>
-    public WgpuBuffer* ClipInputBuffer { get; }
+    public WGPUBufferImpl* ClipInputBuffer { get; }
 
     /// <summary>
     /// Gets the clip element buffer.
     /// </summary>
-    public WgpuBuffer* ClipElementBuffer { get; }
+    public WGPUBufferImpl* ClipElementBuffer { get; }
 
     /// <summary>
     /// Gets the clip bic reduction buffer.
     /// </summary>
-    public WgpuBuffer* ClipBicBuffer { get; }
+    public WGPUBufferImpl* ClipBicBuffer { get; }
 
     /// <summary>
     /// Gets the reduced clip bounding-box buffer.
     /// </summary>
-    public WgpuBuffer* ClipBboxBuffer { get; }
+    public WGPUBufferImpl* ClipBboxBuffer { get; }
 
     /// <summary>
     /// Gets the per-draw bounding-box buffer.
     /// </summary>
-    public WgpuBuffer* DrawBboxBuffer { get; }
+    public WGPUBufferImpl* DrawBboxBuffer { get; }
 
     /// <summary>
     /// Gets the per-path scheduling buffer.
     /// </summary>
-    public WgpuBuffer* PathBuffer { get; }
+    public WGPUBufferImpl* PathBuffer { get; }
 
     /// <summary>
     /// Gets the flattened line buffer.
     /// </summary>
-    public WgpuBuffer* LineBuffer { get; }
+    public WGPUBufferImpl* LineBuffer { get; }
 
     /// <summary>
     /// Gets the sampled gradient-ramp texture view.
     /// </summary>
-    public TextureView* GradientTextureView { get; }
+    public WGPUTextureViewImpl* GradientTextureView { get; }
 
     /// <summary>
     /// Gets the sampled image-atlas texture view.
     /// </summary>
-    public TextureView* ImageAtlasTextureView { get; }
+    public WGPUTextureViewImpl* ImageAtlasTextureView { get; }
 }
 
 /// <summary>
@@ -1481,23 +1564,23 @@ internal sealed unsafe class WebGPUSceneResourceArena
         WebGPUSceneBufferSizes capacitySizes,
         nuint infoBinDataByteCapacity,
         nuint sceneByteCapacity,
-        WgpuBuffer* headerBuffer,
-        WgpuBuffer* sceneBuffer,
-        WgpuBuffer* pathReducedBuffer,
-        WgpuBuffer* pathReduced2Buffer,
-        WgpuBuffer* pathReducedScanBuffer,
-        WgpuBuffer* pathMonoidBuffer,
-        WgpuBuffer* pathBboxBuffer,
-        WgpuBuffer* drawReducedBuffer,
-        WgpuBuffer* drawMonoidBuffer,
-        WgpuBuffer* infoBinDataBuffer,
-        WgpuBuffer* clipInputBuffer,
-        WgpuBuffer* clipElementBuffer,
-        WgpuBuffer* clipBicBuffer,
-        WgpuBuffer* clipBboxBuffer,
-        WgpuBuffer* drawBboxBuffer,
-        WgpuBuffer* pathBuffer,
-        WgpuBuffer* lineBuffer)
+        WGPUBufferImpl* headerBuffer,
+        WGPUBufferImpl* sceneBuffer,
+        WGPUBufferImpl* pathReducedBuffer,
+        WGPUBufferImpl* pathReduced2Buffer,
+        WGPUBufferImpl* pathReducedScanBuffer,
+        WGPUBufferImpl* pathMonoidBuffer,
+        WGPUBufferImpl* pathBboxBuffer,
+        WGPUBufferImpl* drawReducedBuffer,
+        WGPUBufferImpl* drawMonoidBuffer,
+        WGPUBufferImpl* infoBinDataBuffer,
+        WGPUBufferImpl* clipInputBuffer,
+        WGPUBufferImpl* clipElementBuffer,
+        WGPUBufferImpl* clipBicBuffer,
+        WGPUBufferImpl* clipBboxBuffer,
+        WGPUBufferImpl* drawBboxBuffer,
+        WGPUBufferImpl* pathBuffer,
+        WGPUBufferImpl* lineBuffer)
     {
         this.Api = api;
         this.Device = device;
@@ -1551,87 +1634,113 @@ internal sealed unsafe class WebGPUSceneResourceArena
     /// <summary>
     /// Gets the root scene-config buffer.
     /// </summary>
-    public WgpuBuffer* HeaderBuffer { get; }
+    public WGPUBufferImpl* HeaderBuffer { get; }
 
     /// <summary>
     /// Gets the packed scene-data buffer.
     /// </summary>
-    public WgpuBuffer* SceneBuffer { get; }
+    public WGPUBufferImpl* SceneBuffer { get; }
 
     /// <summary>
     /// Gets the first pathtag-reduction scratch buffer.
     /// </summary>
-    public WgpuBuffer* PathReducedBuffer { get; }
+    public WGPUBufferImpl* PathReducedBuffer { get; }
 
     /// <summary>
     /// Gets the second pathtag-reduction scratch buffer.
     /// </summary>
-    public WgpuBuffer* PathReduced2Buffer { get; }
+    public WGPUBufferImpl* PathReduced2Buffer { get; }
 
     /// <summary>
     /// Gets the pathtag scan scratch buffer.
     /// </summary>
-    public WgpuBuffer* PathReducedScanBuffer { get; }
+    public WGPUBufferImpl* PathReducedScanBuffer { get; }
 
     /// <summary>
     /// Gets the final pathtag monoid buffer.
     /// </summary>
-    public WgpuBuffer* PathMonoidBuffer { get; }
+    public WGPUBufferImpl* PathMonoidBuffer { get; }
 
     /// <summary>
     /// Gets the per-path bounding-box buffer.
     /// </summary>
-    public WgpuBuffer* PathBboxBuffer { get; }
+    public WGPUBufferImpl* PathBboxBuffer { get; }
 
     /// <summary>
     /// Gets the draw reduction buffer.
     /// </summary>
-    public WgpuBuffer* DrawReducedBuffer { get; }
+    public WGPUBufferImpl* DrawReducedBuffer { get; }
 
     /// <summary>
     /// Gets the final draw monoid buffer.
     /// </summary>
-    public WgpuBuffer* DrawMonoidBuffer { get; }
+    public WGPUBufferImpl* DrawMonoidBuffer { get; }
 
     /// <summary>
     /// Gets the combined info/bin-data buffer.
     /// </summary>
-    public WgpuBuffer* InfoBinDataBuffer { get; }
+    public WGPUBufferImpl* InfoBinDataBuffer { get; }
 
     /// <summary>
     /// Gets the clip input buffer.
     /// </summary>
-    public WgpuBuffer* ClipInputBuffer { get; }
+    public WGPUBufferImpl* ClipInputBuffer { get; }
 
     /// <summary>
     /// Gets the clip element buffer.
     /// </summary>
-    public WgpuBuffer* ClipElementBuffer { get; }
+    public WGPUBufferImpl* ClipElementBuffer { get; }
 
     /// <summary>
     /// Gets the clip bic (stack-monoid) reduction buffer.
     /// </summary>
-    public WgpuBuffer* ClipBicBuffer { get; }
+    public WGPUBufferImpl* ClipBicBuffer { get; }
 
     /// <summary>
     /// Gets the clip bounding-box buffer.
     /// </summary>
-    public WgpuBuffer* ClipBboxBuffer { get; }
+    public WGPUBufferImpl* ClipBboxBuffer { get; }
 
     /// <summary>
     /// Gets the draw bounding-box buffer.
     /// </summary>
-    public WgpuBuffer* DrawBboxBuffer { get; }
+    public WGPUBufferImpl* DrawBboxBuffer { get; }
 
     /// <summary>
     /// Gets the per-path scheduling buffer.
     /// </summary>
-    public WgpuBuffer* PathBuffer { get; }
+    public WGPUBufferImpl* PathBuffer { get; }
 
     /// <summary>
     /// Gets the flattened line buffer.
     /// </summary>
-    public WgpuBuffer* LineBuffer { get; }
+    public WGPUBufferImpl* LineBuffer { get; }
+
+    /// <summary>
+    /// Gets or sets the encoded scene whose packed stream currently resides in <see cref="SceneBuffer"/>.
+    /// </summary>
+    /// <remarks>
+    /// Reference identity plus <see cref="UploadedSceneVersion"/> prove residency: the packed
+    /// stream only changes through the scene's tracked word mutations after encoding.
+    /// </remarks>
+    public object? UploadedScene { get; set; }
+
+    /// <summary>
+    /// Gets or sets the <see cref="WebGPUEncodedScene.SceneDataVersion"/> value captured when the
+    /// resident stream was last uploaded or patched.
+    /// </summary>
+    public int UploadedSceneVersion { get; set; }
+
+    /// <summary>
+    /// Gets or sets the info-word prefix length used by the resident brush upload. Brush words
+    /// start immediately after this prefix, so a different prefix relocates them.
+    /// </summary>
+    public int UploadedBrushInfoWordCount { get; set; }
+
+    /// <summary>
+    /// Gets or sets the pixel type the resident recolor payloads were specialized for.
+    /// </summary>
+    public Type? UploadedPixelType { get; set; }
 
     /// <summary>
     /// Returns true if every buffer fits the required sizes for this scene.

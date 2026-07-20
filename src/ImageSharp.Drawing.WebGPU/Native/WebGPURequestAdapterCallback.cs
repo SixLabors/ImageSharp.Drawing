@@ -36,8 +36,8 @@ internal sealed unsafe class WebGPURequestAdapterCallback : WebGPUCallbackLifeti
     /// <param name="message">The native diagnostic message.</param>
     /// <param name="userData">The caller-provided context pointer.</param>
     public delegate void Callback(
-        RequestAdapterStatus status,
-        Adapter* adapter,
+        WGPURequestAdapterStatus status,
+        WGPUAdapterImpl* adapter,
         WGPUStringView message,
         void* userData);
 
@@ -51,8 +51,8 @@ internal sealed unsafe class WebGPURequestAdapterCallback : WebGPUCallbackLifeti
     /// <param name="userdata2">The second caller-provided context pointer.</param>
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void NativeCallback(
-        RequestAdapterStatus status,
-        Adapter* adapter,
+        WGPURequestAdapterStatus status,
+        WGPUAdapterImpl* adapter,
         WGPUStringView message,
         void* userdata1,
         void* userdata2);
@@ -60,8 +60,8 @@ internal sealed unsafe class WebGPURequestAdapterCallback : WebGPUCallbackLifeti
     /// <summary>
     /// Gets the unmanaged callback pointer stored in a WebGPU callback-info structure.
     /// </summary>
-    public delegate* unmanaged[Cdecl]<RequestAdapterStatus, Adapter*, WGPUStringView, void*, void*, void> Pointer
-        => (delegate* unmanaged[Cdecl]<RequestAdapterStatus, Adapter*, WGPUStringView, void*, void*, void>)this.pointer;
+    public delegate* unmanaged[Cdecl]<WGPURequestAdapterStatus, WGPUAdapterImpl*, WGPUStringView, void*, void*, void> Pointer
+        => (delegate* unmanaged[Cdecl]<WGPURequestAdapterStatus, WGPUAdapterImpl*, WGPUStringView, void*, void*, void>)this.pointer;
 
     /// <summary>
     /// Creates a rooted callback thunk.
@@ -80,8 +80,8 @@ internal sealed unsafe class WebGPURequestAdapterCallback : WebGPUCallbackLifeti
     /// <param name="userdata1">The caller-provided context pointer.</param>
     /// <param name="userdata2">The second native context pointer, which this wrapper does not use.</param>
     private void Invoke(
-        RequestAdapterStatus status,
-        Adapter* adapter,
+        WGPURequestAdapterStatus status,
+        WGPUAdapterImpl* adapter,
         WGPUStringView message,
         void* userdata1,
         void* userdata2)

@@ -63,7 +63,7 @@ internal static unsafe partial class WebGPURuntime
     /// Process-shared WebGPU instance used by every native surface. Owned by the runtime and
     /// released during process-exit teardown; callers must never release it.
     /// </summary>
-    private static Instance* sharedInstance;
+    private static WGPUInstanceImpl* sharedInstance;
 
     /// <summary>
     /// Tracks whether the process-exit hook has been installed. Guarded by <see cref="Sync"/>.
@@ -118,7 +118,7 @@ internal static unsafe partial class WebGPURuntime
     /// </remarks>
     /// <returns>The shared native instance pointer.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the WebGPU API or instance cannot be initialized.</exception>
-    public static Instance* GetOrCreateSharedInstance()
+    public static WGPUInstanceImpl* GetOrCreateSharedInstance()
     {
         lock (Sync)
         {
@@ -135,7 +135,7 @@ internal static unsafe partial class WebGPURuntime
                     throw new InvalidOperationException("The packaged DirectX Shader Compiler runtime is unavailable.");
                 }
 
-                Instance* created = CreateConfiguredInstance(api);
+                WGPUInstanceImpl* created = CreateConfiguredInstance(api);
                 if (created is null)
                 {
                     throw new InvalidOperationException("WebGPU instance creation failed.");
@@ -208,7 +208,7 @@ internal static unsafe partial class WebGPURuntime
 
             // Provision: instance -> adapter -> device -> queue.
             // The instance and adapter are transient; only the device and queue are cached.
-            Instance* instance = CreateConfiguredInstance(api);
+            WGPUInstanceImpl* instance = CreateConfiguredInstance(api);
             if (instance is null)
             {
                 device = null;
@@ -217,9 +217,9 @@ internal static unsafe partial class WebGPURuntime
                 return false;
             }
 
-            Adapter* adapter = null;
-            Device* requestedDevice = null;
-            Queue* requestedQueue = null;
+            WGPUAdapterImpl* adapter = null;
+            WGPUDeviceImpl* requestedDevice = null;
+            WGPUQueueImpl* requestedQueue = null;
             bool initialized = false;
             try
             {
@@ -406,24 +406,24 @@ internal static unsafe partial class WebGPURuntime
 
             WebGPU api = GetApi();
             using WebGPUHandle.HandleReference deviceReference = deviceHandle.AcquireReference();
-            Device* device = (Device*)deviceReference.Handle;
+            WGPUDeviceImpl* device = (WGPUDeviceImpl*)deviceReference.Handle;
 
             ReadOnlySpan<byte> probeShader = "@compute @workgroup_size(1) fn main() {}\0"u8;
 
             fixed (byte* shaderCodePtr = probeShader)
             {
-                ShaderModuleWGSLDescriptor wgslDescriptor = new()
+                WGPUShaderSourceWGSL wgslDescriptor = new()
                 {
-                    chain = new ChainedStruct { sType = SType.ShaderSourceWGSL },
+                    chain = new WGPUChainedStruct { sType = WGPUSType.ShaderSourceWGSL },
                     code = shaderCodePtr
                 };
 
-                ShaderModuleDescriptor shaderDescriptor = new()
+                WGPUShaderModuleDescriptor shaderDescriptor = new()
                 {
-                    nextInChain = (ChainedStruct*)&wgslDescriptor
+                    nextInChain = (WGPUChainedStruct*)&wgslDescriptor
                 };
 
-                ShaderModule* shaderModule = api.DeviceCreateShaderModule(device, in shaderDescriptor);
+                WGPUShaderModuleImpl* shaderModule = api.DeviceCreateShaderModule(device, in shaderDescriptor);
                 if (shaderModule is null)
                 {
                     return 1;
@@ -434,19 +434,19 @@ internal static unsafe partial class WebGPURuntime
                     ReadOnlySpan<byte> entryPoint = "main\0"u8;
                     fixed (byte* entryPointPtr = entryPoint)
                     {
-                        ProgrammableStageDescriptor computeStage = new()
+                        WGPUComputeState computeStage = new()
                         {
                             module = shaderModule,
                             entryPoint = entryPointPtr
                         };
 
-                        PipelineLayoutDescriptor layoutDescriptor = new()
+                        WGPUPipelineLayoutDescriptor layoutDescriptor = new()
                         {
                             bindGroupLayoutCount = 0,
                             bindGroupLayouts = null
                         };
 
-                        PipelineLayout* pipelineLayout = api.DeviceCreatePipelineLayout(device, in layoutDescriptor);
+                        WGPUPipelineLayoutImpl* pipelineLayout = api.DeviceCreatePipelineLayout(device, in layoutDescriptor);
                         if (pipelineLayout is null)
                         {
                             return 1;
@@ -454,13 +454,13 @@ internal static unsafe partial class WebGPURuntime
 
                         try
                         {
-                            ComputePipelineDescriptor pipelineDescriptor = new()
+                            WGPUComputePipelineDescriptor pipelineDescriptor = new()
                             {
                                 layout = pipelineLayout,
                                 compute = computeStage
                             };
 
-                            ComputePipeline* pipeline = api.DeviceCreateComputePipeline(device, in pipelineDescriptor);
+                            WGPUComputePipelineImpl* pipeline = api.DeviceCreateComputePipeline(device, in pipelineDescriptor);
                             if (pipeline is null)
                             {
                                 return 1;
@@ -564,9 +564,9 @@ internal static unsafe partial class WebGPURuntime
     /// </summary>
     /// <param name="webGpu">The WebGPU API used to create the instance.</param>
     /// <returns>The created instance, or <see langword="null"/> when creation fails.</returns>
-    private static Instance* CreateConfiguredInstance(WebGPU webGpu)
+    private static WGPUInstanceImpl* CreateConfiguredInstance(WebGPU webGpu)
     {
-        InstanceDescriptor descriptor = default;
+        WGPUInstanceDescriptor descriptor = default;
         if (!OperatingSystem.IsWindows())
         {
             return webGpu.CreateInstance(&descriptor);
@@ -580,14 +580,14 @@ internal static unsafe partial class WebGPURuntime
             // DXC applies only to DX12, so select that backend explicitly. This also prevents
             // unused Windows backends from reporting failed HWND capability probes before the
             // runtime selects the valid DX12 adapter.
-            InstanceExtras extras = new()
+            WGPUInstanceExtras extras = new()
             {
-                chain = new ChainedStruct
+                chain = new WGPUChainedStruct
                 {
-                    sType = (SType)NativeSType.WGPUSType_InstanceExtras
+                    sType = (WGPUSType)WGPUNativeSType.WGPUSType_InstanceExtras
                 },
                 backends = WebGPUNative.WGPUInstanceBackend_DX12,
-                dx12ShaderCompiler = Dx12Compiler.Dxc,
+                dx12ShaderCompiler = WGPUDx12Compiler.Dxc,
                 dxcPath = dxcPathPointer,
 
                 // A direct HWND swapchain is always opaque. The visual path makes wgpu create
@@ -595,7 +595,7 @@ internal static unsafe partial class WebGPURuntime
                 dx12PresentationSystem = WGPUDx12SwapchainKind.DxgiFromVisual
             };
 
-            descriptor.nextInChain = (ChainedStruct*)&extras;
+            descriptor.nextInChain = (WGPUChainedStruct*)&extras;
             return webGpu.CreateInstance(&descriptor);
         }
     }
@@ -648,25 +648,25 @@ internal static unsafe partial class WebGPURuntime
     /// <returns><see langword="true"/> when an adapter was acquired; otherwise, <see langword="false"/>.</returns>
     public static bool TryRequestAdapter(
         WebGPU api,
-        Instance* instance,
-        Surface* compatibleSurface,
-        out Adapter* adapter,
+        WGPUInstanceImpl* instance,
+        WGPUSurfaceImpl* compatibleSurface,
+        out WGPUAdapterImpl* adapter,
         out WebGPUEnvironmentError errorCode)
     {
-        RequestAdapterStatus callbackStatus = default;
-        Adapter* callbackAdapter = null;
+        WGPURequestAdapterStatus callbackStatus = default;
+        WGPUAdapterImpl* callbackAdapter = null;
         using ManualResetEventSlim callbackReady = new(false);
 
         // The native callback completes on the runtime's thread model, so the managed side stores
         // the result into locals and then resumes once the signal is set or the request times out.
-        void Callback(RequestAdapterStatus status, Adapter* adapterPtr, WebGPUStringView message, void* userData)
+        void Callback(WGPURequestAdapterStatus status, WGPUAdapterImpl* adapterPtr, WGPUStringView message, void* userData)
         {
             callbackStatus = status;
             callbackAdapter = adapterPtr;
             callbackReady.Set();
         }
 
-        void ReleaseAbandonedResult(RequestAdapterStatus status, Adapter* adapterPtr, WebGPUStringView message, void* userData)
+        void ReleaseAbandonedResult(WGPURequestAdapterStatus status, WGPUAdapterImpl* adapterPtr, WGPUStringView message, void* userData)
         {
             _ = status;
             _ = message;
@@ -678,7 +678,7 @@ internal static unsafe partial class WebGPURuntime
                 // checked-in header forbids re-entrant WebGPU calls. Release a late owned result
                 // on the thread pool after the callback has returned to native code.
                 _ = ThreadPool.UnsafeQueueUserWorkItem(
-                    static state => state.Api.AdapterRelease((Adapter*)state.Handle),
+                    static state => state.Api.AdapterRelease((WGPUAdapterImpl*)state.Handle),
                     (Api: api, Handle: (nint)adapterPtr),
                     preferLocal: false);
             }
@@ -687,14 +687,14 @@ internal static unsafe partial class WebGPURuntime
         using WebGPURequestAdapterCallback callbackPtr = WebGPURequestAdapterCallback.From(Callback, ReleaseAbandonedResult);
         WebGPUEnvironmentOptions environmentOptions = WebGPUEnvironment.Options;
 
-        RequestAdapterOptions options = new()
+        WGPURequestAdapterOptions options = new()
         {
             compatibleSurface = compatibleSurface,
             powerPreference = environmentOptions.PowerPreference switch
             {
-                WebGPUPowerPreference.Default => PowerPreference.Undefined,
-                WebGPUPowerPreference.LowPower => PowerPreference.LowPower,
-                WebGPUPowerPreference.HighPerformance => PowerPreference.HighPerformance,
+                WebGPUPowerPreference.Default => WGPUPowerPreference.Undefined,
+                WebGPUPowerPreference.LowPower => WGPUPowerPreference.LowPower,
+                WebGPUPowerPreference.HighPerformance => WGPUPowerPreference.HighPerformance,
                 _ => throw new InvalidOperationException("The WebGPU power preference mapping is incomplete.")
             }
         };
@@ -709,7 +709,7 @@ internal static unsafe partial class WebGPURuntime
             if (callbackReady.IsSet)
             {
                 adapter = callbackAdapter;
-                errorCode = callbackStatus == RequestAdapterStatus.Success && callbackAdapter is not null
+                errorCode = callbackStatus == WGPURequestAdapterStatus.Success && callbackAdapter is not null
                     ? WebGPUEnvironmentError.Success
                     : WebGPUEnvironmentError.AdapterRequestFailed;
                 return errorCode == WebGPUEnvironmentError.Success;
@@ -721,7 +721,7 @@ internal static unsafe partial class WebGPURuntime
         }
 
         adapter = callbackAdapter;
-        if (callbackStatus != RequestAdapterStatus.Success || callbackAdapter is null)
+        if (callbackStatus != WGPURequestAdapterStatus.Success || callbackAdapter is null)
         {
             errorCode = WebGPUEnvironmentError.AdapterRequestFailed;
             return false;
@@ -741,24 +741,24 @@ internal static unsafe partial class WebGPURuntime
     /// <returns><see langword="true"/> when a device was acquired; otherwise, <see langword="false"/>.</returns>
     public static bool TryRequestDevice(
         WebGPU api,
-        Adapter* adapter,
-        out Device* device,
+        WGPUAdapterImpl* adapter,
+        out WGPUDeviceImpl* device,
         out WebGPUEnvironmentError errorCode)
     {
-        RequestDeviceStatus callbackStatus = default;
-        Device* callbackDevice = null;
+        WGPURequestDeviceStatus callbackStatus = default;
+        WGPUDeviceImpl* callbackDevice = null;
         using ManualResetEventSlim callbackReady = new(false);
 
         // Device creation is also callback-driven, so the request writes into locals and then
         // the caller continues once the callback signals completion.
-        void Callback(RequestDeviceStatus status, Device* devicePtr, WebGPUStringView message, void* userData)
+        void Callback(WGPURequestDeviceStatus status, WGPUDeviceImpl* devicePtr, WGPUStringView message, void* userData)
         {
             callbackStatus = status;
             callbackDevice = devicePtr;
             callbackReady.Set();
         }
 
-        void ReleaseAbandonedResult(RequestDeviceStatus status, Device* devicePtr, WebGPUStringView message, void* userData)
+        void ReleaseAbandonedResult(WGPURequestDeviceStatus status, WGPUDeviceImpl* devicePtr, WGPUStringView message, void* userData)
         {
             _ = status;
             _ = message;
@@ -770,7 +770,7 @@ internal static unsafe partial class WebGPURuntime
                 // out. Defer its release until after this spontaneous callback returns because
                 // webgpu.h explicitly forbids re-entrant API calls from such a callback.
                 _ = ThreadPool.UnsafeQueueUserWorkItem(
-                    static state => state.Api.DeviceRelease((Device*)state.Handle),
+                    static state => state.Api.DeviceRelease((WGPUDeviceImpl*)state.Handle),
                     (Api: api, Handle: (nint)devicePtr),
                     preferLocal: false);
             }
@@ -782,27 +782,27 @@ internal static unsafe partial class WebGPURuntime
         // Request optional storage features that are available on this adapter.
         // The compute compositor needs storage binding on the transient output texture,
         // and some formats (e.g. Bgra8Unorm) require explicit device features.
-        Span<FeatureName> requestedFeatures = stackalloc FeatureName[2];
+        Span<WGPUFeatureName> requestedFeatures = stackalloc WGPUFeatureName[2];
         int requestedCount = 0;
-        if (api.AdapterHasFeature(adapter, FeatureName.BGRA8UnormStorage))
+        if (api.AdapterHasFeature(adapter, WGPUFeatureName.BGRA8UnormStorage))
         {
-            requestedFeatures[requestedCount++] = FeatureName.BGRA8UnormStorage;
+            requestedFeatures[requestedCount++] = WGPUFeatureName.BGRA8UnormStorage;
         }
 
-        if (api.AdapterHasFeature(adapter, FeatureName.TextureFormatsTier1))
+        if (api.AdapterHasFeature(adapter, WGPUFeatureName.TextureFormatsTier1))
         {
-            requestedFeatures[requestedCount++] = FeatureName.TextureFormatsTier1;
+            requestedFeatures[requestedCount++] = WGPUFeatureName.TextureFormatsTier1;
         }
 
         // Raise only the storage-buffer binding and total buffer-size ceilings to the adapter maximum so
         // a large scene fits in a single storage binding instead of falling back to chunked (multi-pass)
         // rendering. Every other limit stays at its WebGPU default. Without this the device inherits the
         // default 128 MiB maxStorageBufferBindingSize, which a dense stroke batch's segment buffer exceeds.
-        Limits requiredLimits = BuildStorageBindingLimits(api, adapter);
+        WGPULimits requiredLimits = BuildStorageBindingLimits(api, adapter);
 
-        fixed (FeatureName* featuresPtr = requestedFeatures)
+        fixed (WGPUFeatureName* featuresPtr = requestedFeatures)
         {
-            DeviceDescriptor descriptor = new()
+            WGPUDeviceDescriptor descriptor = new()
             {
                 requiredLimits = &requiredLimits,
                 requiredFeatureCount = (nuint)requestedCount,
@@ -829,7 +829,7 @@ internal static unsafe partial class WebGPURuntime
             if (callbackReady.IsSet)
             {
                 device = callbackDevice;
-                errorCode = callbackStatus == RequestDeviceStatus.Success && callbackDevice is not null
+                errorCode = callbackStatus == WGPURequestDeviceStatus.Success && callbackDevice is not null
                     ? WebGPUEnvironmentError.Success
                     : WebGPUEnvironmentError.DeviceRequestFailed;
                 return errorCode == WebGPUEnvironmentError.Success;
@@ -841,7 +841,7 @@ internal static unsafe partial class WebGPURuntime
         }
 
         device = callbackDevice;
-        if (callbackStatus != RequestDeviceStatus.Success || callbackDevice is null)
+        if (callbackStatus != WGPURequestDeviceStatus.Success || callbackDevice is null)
         {
             errorCode = WebGPUEnvironmentError.DeviceRequestFailed;
             return false;
@@ -862,10 +862,10 @@ internal static unsafe partial class WebGPURuntime
     /// </remarks>
     /// <param name="api">The WebGPU API used to query the adapter.</param>
     /// <param name="adapter">The adapter whose maximum storage limits are requested.</param>
-    /// <returns>The populated <see cref="Limits"/> to attach to the device descriptor.</returns>
-    public static Limits BuildStorageBindingLimits(WebGPU api, Adapter* adapter)
+    /// <returns>The populated <see cref="WGPULimits"/> to attach to the device descriptor.</returns>
+    public static WGPULimits BuildStorageBindingLimits(WebGPU api, WGPUAdapterImpl* adapter)
     {
-        Limits adapterLimits = default;
+        WGPULimits adapterLimits = default;
         _ = api.AdapterGetLimits(adapter, &adapterLimits);
 
         // WebGPU treats these sentinel values as "leave this limit at its default" when a required-limits
@@ -873,7 +873,7 @@ internal static unsafe partial class WebGPURuntime
         const uint keepU32 = uint.MaxValue;
         const ulong keepU64 = ulong.MaxValue;
 
-        Limits limits = new()
+        WGPULimits limits = new()
         {
             maxTextureDimension1D = keepU32,
             maxTextureDimension2D = keepU32,
@@ -922,9 +922,9 @@ internal static unsafe partial class WebGPURuntime
     /// <param name="userData2">The second unused native user-data pointer.</param>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void HandleDeviceLost(
-        Device** device,
-        DeviceLostReason reason,
-        WebGPUStringView message,
+        WGPUDeviceImpl** device,
+        WGPUDeviceLostReason reason,
+        WGPUStringView message,
         void* userData1,
         void* userData2)
     {
@@ -948,9 +948,9 @@ internal static unsafe partial class WebGPURuntime
     /// <param name="userData2">The second unused native user-data pointer.</param>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void HandleUncapturedError(
-        Device** device,
-        ErrorType type,
-        WebGPUStringView message,
+        WGPUDeviceImpl** device,
+        WGPUErrorType type,
+        WGPUStringView message,
         void* userData1,
         void* userData2)
     {

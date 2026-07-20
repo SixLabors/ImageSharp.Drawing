@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
+
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -25,16 +27,14 @@ internal sealed unsafe class WebGPUTextureViewHandle : WebGPUHandle
 
     public WebGPUTextureViewHandle(WebGPU? api, nint textureViewHandle, bool ownsHandle)
         : base(textureViewHandle, ownsHandle)
-    {
-        this.api = api;
-    }
+        => this.api = api;
 
     /// <inheritdoc />
     protected override bool ReleaseHandle()
     {
         try
         {
-            this.api?.TextureViewRelease((TextureView*)this.handle);
+            this.api?.TextureViewRelease((WGPUTextureViewImpl*)this.handle);
             return true;
         }
         catch

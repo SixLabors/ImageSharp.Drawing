@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
+
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -153,45 +155,45 @@ internal sealed class WebGPUNativeSurface : NativeSurface
         Guard.MustBeGreaterThan(width, 0, nameof(width));
         Guard.MustBeGreaterThan(height, 0, nameof(height));
 
-        WebGPUDrawingBackend.GetCompositeTextureFormatInfo(targetDescriptor.Format, out TextureFormat textureFormat, out FeatureName requiredFeature);
+        WebGPUDrawingBackend.GetCompositeTextureFormatInfo(targetDescriptor.Format, out WGPUTextureFormat textureFormat, out WGPUFeatureName requiredFeature);
 
         using WebGPUHandle.HandleReference deviceReference = deviceHandle.AcquireReference();
 
-        Device* device = (Device*)deviceReference.Handle;
+        WGPUDeviceImpl* device = (WGPUDeviceImpl*)deviceReference.Handle;
         if (requiredFeature != default &&
             !WebGPURuntime.GetOrCreateDeviceState(api, deviceHandle).HasFeature(requiredFeature))
         {
             throw new NotSupportedException($"The WebGPU device does not support required feature '{requiredFeature}' for texture format '{targetDescriptor.Format}'.");
         }
 
-        TextureDescriptor textureDescriptor = new()
+        WGPUTextureDescriptor textureDescriptor = new()
         {
             usage = (ulong)(TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst | TextureUsage.TextureBinding | TextureUsage.StorageBinding),
-            dimension = TextureDimension._2D,
-            size = new Extent3D((uint)width, (uint)height, 1),
+            dimension = WGPUTextureDimension._2D,
+            size = new WGPUExtent3D((uint)width, (uint)height, 1),
             format = textureFormat,
             mipLevelCount = 1,
             sampleCount = 1,
         };
 
-        Texture* texture = api.DeviceCreateTexture(device, in textureDescriptor);
+        WGPUTextureImpl* texture = api.DeviceCreateTexture(device, in textureDescriptor);
         if (texture is null)
         {
             throw new InvalidOperationException("The WebGPU device could not create a render-target texture.");
         }
 
-        TextureViewDescriptor textureViewDescriptor = new()
+        WGPUTextureViewDescriptor textureViewDescriptor = new()
         {
             format = textureFormat,
-            dimension = TextureViewDimension._2D,
+            dimension = WGPUTextureViewDimension._2D,
             baseMipLevel = 0,
             mipLevelCount = 1,
             baseArrayLayer = 0,
             arrayLayerCount = 1,
-            aspect = TextureAspect.All,
+            aspect = WGPUTextureAspect.All,
         };
 
-        TextureView* textureView = api.TextureCreateView(texture, &textureViewDescriptor);
+        WGPUTextureViewImpl* textureView = api.TextureCreateView(texture, &textureViewDescriptor);
         if (textureView is null)
         {
             api.TextureRelease(texture);

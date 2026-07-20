@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
+
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -16,8 +18,8 @@ internal readonly unsafe struct WebGPUSceneTarget
     /// <param name="bounds">The absolute logical bounds represented by the target.</param>
     /// <param name="textureOffset">The offset from absolute logical coordinates to texture coordinates.</param>
     public WebGPUSceneTarget(
-        Texture* texture,
-        TextureView* textureView,
+        WGPUTextureImpl* texture,
+        WGPUTextureViewImpl* textureView,
         Rectangle bounds,
         Point textureOffset)
     {
@@ -30,12 +32,12 @@ internal readonly unsafe struct WebGPUSceneTarget
     /// <summary>
     /// Gets the target texture.
     /// </summary>
-    public Texture* Texture { get; }
+    public WGPUTextureImpl* Texture { get; }
 
     /// <summary>
     /// Gets the target texture view.
     /// </summary>
-    public TextureView* TextureView { get; }
+    public WGPUTextureViewImpl* TextureView { get; }
 
     /// <summary>
     /// Gets the absolute logical bounds represented by the target.

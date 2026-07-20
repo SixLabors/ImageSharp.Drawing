@@ -159,6 +159,19 @@ public sealed class WebGPURenderTarget : IDisposable
     internal WebGPUDrawingBackend Backend => this.deviceContext.Backend;
 
     /// <summary>
+    /// Gets the device context used by this render target.
+    /// </summary>
+    public WebGPUDeviceContext DeviceContext
+    {
+        get
+        {
+            this.ThrowIfDisposed();
+
+            return this.deviceContext;
+        }
+    }
+
+    /// <summary>
     /// Gets the native surface backing this render target.
     /// Most callers should use <see cref="CreateCanvas()"/> or <see cref="ReadbackImage()"/> instead.
     /// </summary>

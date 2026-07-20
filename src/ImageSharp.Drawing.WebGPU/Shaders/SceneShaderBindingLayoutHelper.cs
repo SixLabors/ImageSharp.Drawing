@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -19,15 +20,15 @@ internal static class SceneShaderBindingLayoutHelper
     /// <param name="minBindingSize">The minimum buffer binding size in bytes, or 0 to skip validation.</param>
     /// <returns>The populated binding entry.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static BindGroupLayoutEntry CreateStorageEntry(
+    public static WGPUBindGroupLayoutEntry CreateStorageEntry(
         uint binding,
-        BufferBindingType type,
+        WGPUBufferBindingType type,
         nuint minBindingSize = 0)
         => new()
         {
             binding = binding,
             visibility = (ulong)ShaderStage.Compute,
-            buffer = new BufferBindingLayout
+            buffer = new WGPUBufferBindingLayout
             {
                 type = type,
                 hasDynamicOffset = 0U,
@@ -42,14 +43,14 @@ internal static class SceneShaderBindingLayoutHelper
     /// <param name="minBindingSize">The minimum buffer binding size in bytes.</param>
     /// <returns>The populated binding entry.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static BindGroupLayoutEntry CreateUniformEntry(uint binding, nuint minBindingSize)
+    public static WGPUBindGroupLayoutEntry CreateUniformEntry(uint binding, nuint minBindingSize)
         => new()
         {
             binding = binding,
             visibility = (ulong)ShaderStage.Compute,
-            buffer = new BufferBindingLayout
+            buffer = new WGPUBufferBindingLayout
             {
-                type = BufferBindingType.Uniform,
+                type = WGPUBufferBindingType.Uniform,
                 hasDynamicOffset = 0U,
                 minBindingSize = minBindingSize
             }

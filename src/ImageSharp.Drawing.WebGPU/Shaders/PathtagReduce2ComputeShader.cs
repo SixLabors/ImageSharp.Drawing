@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
+
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -30,18 +32,18 @@ internal static unsafe class PathtagReduce2ComputeShader
     /// <returns><see langword="true"/> when the bind-group layout was created successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
-        Device* device,
-        out BindGroupLayout* layout,
+        WGPUDeviceImpl* device,
+        out WGPUBindGroupLayoutImpl* layout,
         out string? error)
     {
         // Bindings match pathtag_reduce2.wgsl:
         //   0 reduced_in (read-only first-level partials from pathtag_reduce)
         //   1 reduced (read-write; one second-level TagMonoid aggregate written per workgroup)
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[2];
-        entries[0] = SceneShaderBindingLayoutHelper.CreateStorageEntry(0, BufferBindingType.ReadOnlyStorage);
-        entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, BufferBindingType.Storage);
+        WGPUBindGroupLayoutEntry* entries = stackalloc WGPUBindGroupLayoutEntry[2];
+        entries[0] = SceneShaderBindingLayoutHelper.CreateStorageEntry(0, WGPUBufferBindingType.ReadOnlyStorage);
+        entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, WGPUBufferBindingType.Storage);
 
-        BindGroupLayoutDescriptor descriptor = new()
+        WGPUBindGroupLayoutDescriptor descriptor = new()
         {
             entryCount = 2,
             entries = entries

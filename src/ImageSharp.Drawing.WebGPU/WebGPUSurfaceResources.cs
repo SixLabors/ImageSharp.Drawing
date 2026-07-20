@@ -52,8 +52,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     private readonly TextureUsage surfaceUsage;
     private WebGPURenderTarget? presentationTarget;
     private WebGPUPresentationRenderer? presentationRenderer;
-    private WebGPUCompositeAlphaMode alphaMode;
-    private uint supportedPresentModes;
+    private readonly uint supportedPresentModes;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUSurfaceResources"/> class with an acquired surface.
@@ -80,7 +79,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         this.session = session;
         this.SurfaceHandle = surfaceHandle;
         this.Format = format;
-        this.alphaMode = alphaMode;
+        this.AlphaMode = alphaMode;
         this.PresentMode = presentMode;
         this.supportedPresentModes = supportedPresentModes;
         this.surfaceUsage = surfaceUsage;
@@ -105,7 +104,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     /// <summary>
     /// Gets the negotiated composite alpha mode.
     /// </summary>
-    public WebGPUCompositeAlphaMode AlphaMode => this.alphaMode;
+    public WebGPUCompositeAlphaMode AlphaMode { get; }
 
     /// <summary>
     /// Gets the texture format and alpha representation negotiated for acquired frames.
@@ -113,7 +112,12 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     public WebGPUTargetDescriptor TargetDescriptor
         => WebGPUDrawingBackend.CreateNativeTargetDescriptor(
             this.Format,
-            this.alphaMode == WebGPUCompositeAlphaMode.Premultiplied ? PixelAlphaRepresentation.Associated : PixelAlphaRepresentation.Unassociated);
+            this.AlphaMode == WebGPUCompositeAlphaMode.Premultiplied ? PixelAlphaRepresentation.Associated : PixelAlphaRepresentation.Unassociated);
+
+    /// <summary>
+    /// Gets the device context owned by the surface session.
+    /// </summary>
+    public WebGPUDeviceContext DeviceContext => this.session.DeviceContext;
 
     /// <summary>
     /// Gets the negotiated swapchain presentation mode.
@@ -147,8 +151,8 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         Size initialFramebufferSize)
     {
         WebGPU api = session.Api;
-        Instance* instance = WebGPURuntime.GetOrCreateSharedInstance();
-        Surface* surface = WebGPUSurfaceFactory.Create(api, instance, nativeSource);
+        WGPUInstanceImpl* instance = WebGPURuntime.GetOrCreateSharedInstance();
+        WGPUSurfaceImpl* surface = WebGPUSurfaceFactory.Create(api, instance, nativeSource);
         return Create(session, surface, format, alphaMode, initialPresentMode, initialFramebufferSize);
     }
 
@@ -171,8 +175,8 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         Size initialFramebufferSize)
     {
         WebGPU api = session.Api;
-        Instance* instance = WebGPURuntime.GetOrCreateSharedInstance();
-        Surface* surface = WebGPUSurfaceFactory.Create(api, instance, host);
+        WGPUInstanceImpl* instance = WebGPURuntime.GetOrCreateSharedInstance();
+        WGPUSurfaceImpl* surface = WebGPUSurfaceFactory.Create(api, instance, host);
         return Create(session, surface, format, alphaMode, initialPresentMode, initialFramebufferSize);
     }
 
@@ -188,7 +192,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     /// <returns>The initialized surface resources.</returns>
     private static WebGPUSurfaceResources Create(
         WebGPUSurfaceSession session,
-        Surface* surface,
+        WGPUSurfaceImpl* surface,
         WebGPUTextureFormat format,
         WebGPUCompositeAlphaMode alphaMode,
         WebGPUPresentMode initialPresentMode,
@@ -216,7 +220,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
             {
                 NegotiateSurfaceConfiguration(
                     api,
-                    (Adapter*)adapterReference.Handle,
+                    (WGPUAdapterImpl*)adapterReference.Handle,
                     surface,
                     ref format,
                     ref alphaMode,
@@ -284,7 +288,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
             return;
         }
 
-        this.ConfigureSurfaceCore(presentMode, framebufferSize, this.session.DeviceHandle, this.Format, this.alphaMode);
+        this.ConfigureSurfaceCore(presentMode, framebufferSize, this.session.DeviceHandle, this.Format, this.AlphaMode);
     }
 
     /// <summary>
@@ -307,7 +311,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
             return;
         }
 
-        SurfaceConfiguration surfaceConfiguration = new()
+        WGPUSurfaceConfiguration surfaceConfiguration = new()
         {
             usage = (ulong)this.surfaceUsage,
             format = WebGPUTextureFormatMapper.ToNative(format),
@@ -319,8 +323,8 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
 
         using WebGPUHandle.HandleReference surfaceReference = this.SurfaceHandle.AcquireReference();
         using WebGPUHandle.HandleReference deviceReference = deviceHandle.AcquireReference();
-        surfaceConfiguration.device = (Device*)deviceReference.Handle;
-        this.Api.SurfaceConfigure((Surface*)surfaceReference.Handle, in surfaceConfiguration);
+        surfaceConfiguration.device = (WGPUDeviceImpl*)deviceReference.Handle;
+        this.Api.SurfaceConfigure((WGPUSurfaceImpl*)surfaceReference.Handle, in surfaceConfiguration);
     }
 
     /// <summary>
@@ -328,12 +332,12 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     /// </summary>
     /// <param name="presentMode">The present mode to map.</param>
     /// <returns>The native present mode.</returns>
-    private static PresentMode ToNative(WebGPUPresentMode presentMode)
+    private static WGPUPresentMode ToNative(WebGPUPresentMode presentMode)
         => presentMode switch
         {
-            WebGPUPresentMode.Fifo => Native.WGPUPresentMode.Fifo,
-            WebGPUPresentMode.Immediate => Native.WGPUPresentMode.Immediate,
-            WebGPUPresentMode.Mailbox => Native.WGPUPresentMode.Mailbox,
+            WebGPUPresentMode.Fifo => WGPUPresentMode.Fifo,
+            WebGPUPresentMode.Immediate => WGPUPresentMode.Immediate,
+            WebGPUPresentMode.Mailbox => WGPUPresentMode.Mailbox,
             _ => throw new InvalidOperationException("The WebGPU present mode mapping is incomplete.")
         };
 
@@ -342,12 +346,12 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     /// </summary>
     /// <param name="alphaMode">The composite-alpha mode to map.</param>
     /// <returns>The native composite-alpha mode.</returns>
-    private static CompositeAlphaMode ToNative(WebGPUCompositeAlphaMode alphaMode)
+    private static WGPUCompositeAlphaMode ToNative(WebGPUCompositeAlphaMode alphaMode)
         => alphaMode switch
         {
-            WebGPUCompositeAlphaMode.Auto => CompositeAlphaMode.Auto,
-            WebGPUCompositeAlphaMode.Opaque => CompositeAlphaMode.Opaque,
-            WebGPUCompositeAlphaMode.Premultiplied => CompositeAlphaMode.Premultiplied,
+            WebGPUCompositeAlphaMode.Auto => WGPUCompositeAlphaMode.Auto,
+            WebGPUCompositeAlphaMode.Opaque => WGPUCompositeAlphaMode.Opaque,
+            WebGPUCompositeAlphaMode.Premultiplied => WGPUCompositeAlphaMode.Premultiplied,
             _ => throw new InvalidOperationException("The WebGPU composite alpha mode mapping is incomplete.")
         };
 
@@ -370,6 +374,34 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         Size framebufferSize,
         DrawingOptions options,
         [NotNullWhen(true)] out WebGPUSurfaceFrame? frame)
+        => this.TryAcquireFrameCore(presentMode, framebufferSize, options, textCache: null, out frame);
+
+    /// <summary>
+    /// Acquires the next presentable frame using a caller-owned text cache.
+    /// </summary>
+    /// <param name="presentMode">The present mode used when reconfiguring the surface.</param>
+    /// <param name="framebufferSize">The current framebuffer size in pixels.</param>
+    /// <param name="options">The drawing options that seed the canvas on the returned frame.</param>
+    /// <param name="textCache">The text cache used by the returned frame canvas.</param>
+    /// <param name="frame">Receives the acquired frame on success.</param>
+    /// <returns><see langword="true"/> when a frame is available; otherwise <see langword="false"/>.</returns>
+    public bool TryAcquireFrame(
+        WebGPUPresentMode presentMode,
+        Size framebufferSize,
+        DrawingOptions options,
+        DrawingTextCache textCache,
+        [NotNullWhen(true)] out WebGPUSurfaceFrame? frame)
+        => this.TryAcquireFrameCore(presentMode, framebufferSize, options, textCache, out frame);
+
+    /// <summary>
+    /// Acquires a presentable frame and selects the cache ownership used by its canvas.
+    /// </summary>
+    private bool TryAcquireFrameCore(
+        WebGPUPresentMode presentMode,
+        Size framebufferSize,
+        DrawingOptions options,
+        DrawingTextCache? textCache,
+        [NotNullWhen(true)] out WebGPUSurfaceFrame? frame)
     {
         frame = null;
 
@@ -391,26 +423,26 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         // readback is deferred, so this wait alone bounds how far the CPU runs ahead.
         this.WaitForPreviousFrameWorkDone();
 
-        SurfaceTexture surfaceTexture = default;
+        WGPUSurfaceTexture surfaceTexture = default;
         using (WebGPUHandle.HandleReference surfaceReference = this.SurfaceHandle.AcquireReference())
         {
-            this.Api.SurfaceGetCurrentTexture((Surface*)surfaceReference.Handle, &surfaceTexture);
+            this.Api.SurfaceGetCurrentTexture((WGPUSurfaceImpl*)surfaceReference.Handle, &surfaceTexture);
         }
 
         switch (surfaceTexture.status)
         {
-            case SurfaceGetCurrentTextureStatus.SuccessOptimal:
-            case SurfaceGetCurrentTextureStatus.SuccessSuboptimal:
+            case WGPUSurfaceGetCurrentTextureStatus.SuccessOptimal:
+            case WGPUSurfaceGetCurrentTextureStatus.SuccessSuboptimal:
                 break;
 
-            case (SurfaceGetCurrentTextureStatus)WGPUNativeSurfaceGetCurrentTextureStatus.WGPUSurfaceGetCurrentTextureStatus_Occluded:
+            case (WGPUSurfaceGetCurrentTextureStatus)WGPUNativeSurfaceGetCurrentTextureStatus.WGPUSurfaceGetCurrentTextureStatus_Occluded:
                 // wgpu-native uses this extension status when the compositor has no drawable
                 // surface. The surface remains configured and can be retried on the next frame.
                 return false;
 
-            case SurfaceGetCurrentTextureStatus.Timeout:
-            case SurfaceGetCurrentTextureStatus.Outdated:
-            case SurfaceGetCurrentTextureStatus.Lost:
+            case WGPUSurfaceGetCurrentTextureStatus.Timeout:
+            case WGPUSurfaceGetCurrentTextureStatus.Outdated:
+            case WGPUSurfaceGetCurrentTextureStatus.Lost:
                 if (surfaceTexture.texture is not null)
                 {
                     this.Api.TextureRelease(surfaceTexture.texture);
@@ -419,7 +451,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
                 this.ConfigureSurface(presentMode, framebufferSize);
                 return false;
 
-            case SurfaceGetCurrentTextureStatus.Error:
+            case WGPUSurfaceGetCurrentTextureStatus.Error:
             default:
                 if (surfaceTexture.texture is not null)
                 {
@@ -429,7 +461,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
                 throw new InvalidOperationException($"Surface texture error: {surfaceTexture.status}");
         }
 
-        TextureView* textureView = this.Api.TextureCreateView(surfaceTexture.texture, null);
+        WGPUTextureViewImpl* textureView = this.Api.TextureCreateView(surfaceTexture.texture, null);
         if (textureView is null)
         {
             this.Api.TextureRelease(surfaceTexture.texture);
@@ -479,7 +511,11 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
                 }
             }
 
-            DrawingCanvas canvas = this.presentationTarget.CreateCanvas(options);
+            // A supplied cache survives frame disposal and retains glyph/run geometry. The null
+            // path preserves the existing frame-local cache behavior for every current caller.
+            DrawingCanvas canvas = textCache is null
+                ? this.presentationTarget.CreateCanvas(options)
+                : this.presentationTarget.CreateCanvas(options, textCache);
 
             frame = new WebGPUSurfaceFrame(
                 this.Api,
@@ -539,7 +575,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         this.previousFrameWorkDone = null;
         using (WebGPUHandle.HandleReference deviceReference = this.session.DeviceHandle.AcquireReference())
         {
-            _ = signal.Wait(this.Api, (Device*)deviceReference.Handle);
+            _ = signal.Wait(this.Api, (WGPUDeviceImpl*)deviceReference.Handle);
         }
 
         signal.Dispose();
@@ -564,7 +600,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         try
         {
             using WebGPUHandle.HandleReference queueReference = this.session.QueueHandle.AcquireReference();
-            this.previousFrameWorkDone = new FramePacingSignal(this.Api, (Queue*)queueReference.Handle);
+            this.previousFrameWorkDone = new FramePacingSignal(this.Api, (WGPUQueueImpl*)queueReference.Handle);
         }
         catch (ObjectDisposedException)
         {
@@ -606,8 +642,8 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
     /// <param name="surfaceUsage">Receives the guaranteed render-attachment usage and any supported optional usages selected by the backend.</param>
     private static void NegotiateSurfaceConfiguration(
         WebGPU api,
-        Adapter* adapter,
-        Surface* surface,
+        WGPUAdapterImpl* adapter,
+        WGPUSurfaceImpl* surface,
         ref WebGPUTextureFormat format,
         ref WebGPUCompositeAlphaMode alphaMode,
         ref WebGPUPresentMode presentMode,
@@ -618,9 +654,9 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         surfaceUsage = RequiredSurfaceUsage;
 
         WGPUSurfaceCapabilities capabilities = default;
-        Status capabilityStatus = api.SurfaceGetCapabilities(surface, adapter, &capabilities);
+        WGPUStatus capabilityStatus = api.SurfaceGetCapabilities(surface, adapter, &capabilities);
 
-        if (capabilityStatus != Status.Success)
+        if (capabilityStatus != WGPUStatus.Success)
         {
             throw new InvalidOperationException($"The WebGPU runtime could not query surface capabilities. Status: '{capabilityStatus}'.");
         }
@@ -646,7 +682,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
                 _ => WebGPUTextureFormat.Rgba8Unorm
             };
 
-            WebGPUDrawingBackend.GetCompositeTextureFormatInfo(format, out TextureFormat nativeFormat, out FeatureName requiredFeature);
+            WebGPUDrawingBackend.GetCompositeTextureFormatInfo(format, out WGPUTextureFormat nativeFormat, out WGPUFeatureName requiredFeature);
             bool supportsFormat = requiredFeature == default || api.AdapterHasFeature(adapter, requiredFeature);
 
             if (supportsFormat)
@@ -680,7 +716,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
 
                 foreach (WebGPUTextureFormat fallbackFormat in fallbackFormats)
                 {
-                    WebGPUDrawingBackend.GetCompositeTextureFormatInfo(fallbackFormat, out TextureFormat fallbackNativeFormat, out FeatureName fallbackFeature);
+                    WebGPUDrawingBackend.GetCompositeTextureFormatInfo(fallbackFormat, out WGPUTextureFormat fallbackNativeFormat, out WGPUFeatureName fallbackFeature);
 
                     if (fallbackFeature != default && !api.AdapterHasFeature(adapter, fallbackFeature))
                     {
@@ -715,9 +751,9 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
             {
                 supportedPresentModes |= capabilities.presentModes[i] switch
                 {
-                    Native.WGPUPresentMode.Fifo => 1U << (int)WebGPUPresentMode.Fifo,
-                    Native.WGPUPresentMode.Immediate => 1U << (int)WebGPUPresentMode.Immediate,
-                    Native.WGPUPresentMode.Mailbox => 1U << (int)WebGPUPresentMode.Mailbox,
+                    WGPUPresentMode.Fifo => 1U << (int)WebGPUPresentMode.Fifo,
+                    WGPUPresentMode.Immediate => 1U << (int)WebGPUPresentMode.Immediate,
+                    WGPUPresentMode.Mailbox => 1U << (int)WebGPUPresentMode.Mailbox,
                     _ => 0
                 };
             }
@@ -743,9 +779,9 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
                 _ => WebGPUCompositeAlphaMode.Auto
             };
 
-            CompositeAlphaMode nativeAlphaMode = ToNative(alphaMode);
+            WGPUCompositeAlphaMode nativeAlphaMode = ToNative(alphaMode);
 
-            if (nativeAlphaMode != CompositeAlphaMode.Auto)
+            if (nativeAlphaMode != WGPUCompositeAlphaMode.Auto)
             {
                 bool supportsAlphaMode = false;
 
@@ -796,7 +832,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         /// </summary>
         /// <param name="api">The WebGPU API used to register the callback.</param>
         /// <param name="queue">The queue whose submitted work the signal covers.</param>
-        public FramePacingSignal(WebGPU api, Queue* queue)
+        public FramePacingSignal(WebGPU api, WGPUQueueImpl* queue)
         {
             this.callback = WebGPUQueueWorkDoneCallback.From(this.OnWorkDone);
             api.QueueOnSubmittedWorkDone(queue, this.callback, null);
@@ -808,20 +844,18 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         /// <param name="api">The WebGPU API used to poll the device.</param>
         /// <param name="device">The device that owns the queue.</param>
         /// <returns><see langword="true"/> when the callback completed before the timeout; otherwise, <see langword="false"/>.</returns>
-        public bool Wait(WebGPU api, Device* device)
+        public bool Wait(WebGPU api, WGPUDeviceImpl* device)
         {
             Stopwatch stopwatch = Stopwatch.StartNew();
             while (!this.workDone.IsSet && stopwatch.ElapsedMilliseconds < CallbackTimeoutMilliseconds)
             {
                 // The queue callback already captures the work boundary registered by the
-                // constructor. A non-blocking poll advances it while allowing the stopwatch to
-                // enforce the timeout even when the device is lost or stalled.
-                _ = api.DevicePoll(device, false, null);
-
-                if (!this.workDone.IsSet)
-                {
-                    Thread.Yield();
-                }
+                // constructor. A blocking poll parks this thread in the native fence wait for the
+                // duration of the GPU work instead of spinning tens of thousands of non-blocking
+                // polls per frame; the callback is delivered during the poll that observes its
+                // boundary. wgpu bounds the native wait internally, so the stopwatch still
+                // enforces the overall timeout when the device is lost or stalled.
+                _ = api.DevicePoll(device, true, null);
             }
 
             return this.workDone.IsSet;
@@ -839,7 +873,7 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
         /// </summary>
         /// <param name="status">The completion status reported by the implementation.</param>
         /// <param name="userData">Unused user data pointer.</param>
-        private void OnWorkDone(QueueWorkDoneStatus status, void* userData)
+        private void OnWorkDone(WGPUQueueWorkDoneStatus status, void* userData)
         {
             _ = status;
             _ = userData;

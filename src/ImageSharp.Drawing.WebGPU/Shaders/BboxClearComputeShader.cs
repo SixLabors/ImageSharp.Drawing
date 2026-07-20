@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -42,18 +43,18 @@ internal static unsafe class BboxClearComputeShader
     /// <returns><see langword="true"/> when the bind-group layout was created successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
-        Device* device,
-        out BindGroupLayout* layout,
+        WGPUDeviceImpl* device,
+        out WGPUBindGroupLayoutImpl* layout,
         out string? error)
     {
         // Bindings match bbox_clear.wgsl:
         //   0 config uniform
         //   1 path_bboxes (read-write; min/max fields reset to their inverted extremes)
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[2];
+        WGPUBindGroupLayoutEntry* entries = stackalloc WGPUBindGroupLayoutEntry[2];
         entries[0] = SceneShaderBindingLayoutHelper.CreateUniformEntry(0, (nuint)sizeof(GpuSceneConfig));
-        entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, BufferBindingType.Storage);
+        entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, WGPUBufferBindingType.Storage);
 
-        BindGroupLayoutDescriptor descriptor = new()
+        WGPUBindGroupLayoutDescriptor descriptor = new()
         {
             entryCount = 2,
             entries = entries

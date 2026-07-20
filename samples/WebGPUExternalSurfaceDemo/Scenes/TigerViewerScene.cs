@@ -5,7 +5,7 @@ using System.Numerics;
 using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Tests;
-using SixLabors.ImageSharp.PixelFormats;
+using WebGPUExternalSurfaceDemo.Controls;
 using Brushes = SixLabors.ImageSharp.Drawing.Processing.Brushes;
 using Color = SixLabors.ImageSharp.Color;
 using PointF = SixLabors.ImageSharp.PointF;
@@ -57,7 +57,7 @@ internal sealed class TigerViewerScene : RenderScene
     /// Gets a multi-line diagnostic string describing the current zoom, pan, and mouse-in-world values
     /// so the host can overlay it for debugging.
     /// </summary>
-    public string StatusText
+    private string StatusText
     {
         get
         {
@@ -115,6 +115,27 @@ internal sealed class TigerViewerScene : RenderScene
         }
 
         canvas.Restore();
+    }
+
+    /// <inheritdoc />
+    protected override Control CreateContent(WebGPURenderControl renderControl)
+    {
+        // The diagnostics describe this scene's world transform, so the scene owns the
+        // overlay behavior. WinForms owns its lifetime through the child-control tree.
+        Label statusLabel = new()
+        {
+            AutoSize = false,
+            Size = new System.Drawing.Size(350, 100),
+            BackColor = System.Drawing.Color.FromArgb(160, 0, 0, 0),
+            ForeColor = System.Drawing.Color.White,
+            Font = new System.Drawing.Font(System.Drawing.FontFamily.GenericMonospace, 9F),
+            Padding = new Padding(6),
+            Location = new System.Drawing.Point(6, 6),
+        };
+
+        renderControl.PaintFrame += (_, _) => statusLabel.Text = this.StatusText;
+        renderControl.Controls.Add(statusLabel);
+        return renderControl;
     }
 
     public override void OnMouseDown(MouseEventArgs e)

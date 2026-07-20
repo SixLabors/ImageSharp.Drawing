@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -43,7 +44,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     /// <summary>
     /// The dedicated map-readable buffer holding the copied bump-allocator counters.
     /// </summary>
-    private WgpuBuffer* readbackBuffer;
+    private WGPUBufferImpl* readbackBuffer;
 
     /// <summary>
     /// The mapped byte length requested when the asynchronous map was started.
@@ -71,7 +72,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     /// <summary>
     /// The map status reported by the callback.
     /// </summary>
-    private BufferMapAsyncStatus mapStatus;
+    private WGPUMapAsyncStatus mapStatus;
 
     /// <summary>
     /// The submission index tied to this readback submission.
@@ -102,7 +103,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         WebGPU api,
         WebGPUDeviceHandle deviceHandle,
         WebGPURuntime.DeviceSharedState deviceState,
-        WgpuBuffer* readbackBuffer,
+        WGPUBufferImpl* readbackBuffer,
         WebGPUSceneBumpSizes submittedBumpSizes,
         ulong submissionIndex)
         : this(
@@ -112,6 +113,40 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
             readbackBuffer,
             (nuint)sizeof(GpuSceneBumpAllocators),
             (nuint)sizeof(GpuSceneBumpAllocators),
+            submittedBumpSizes,
+            null,
+            null,
+            0U,
+            submissionIndex)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUPendingSchedulingStatus"/> class for
+    /// one allocator record stored in a larger pooled readback buffer.
+    /// </summary>
+    /// <param name="api">The API facade used to read and release the readback buffer.</param>
+    /// <param name="deviceHandle">The wrapped device handle that owns the readback buffer.</param>
+    /// <param name="deviceState">The device-scoped shared state whose pool recycles the buffer.</param>
+    /// <param name="readbackBuffer">The dedicated map-readable buffer; ownership transfers to this instance.</param>
+    /// <param name="bufferByteCapacity">The physical byte capacity of <paramref name="readbackBuffer"/>.</param>
+    /// <param name="submittedBumpSizes">The scratch capacities the deferred flush rendered with.</param>
+    /// <param name="submissionIndex">The queue submission index for this deferred status copy.</param>
+    public WebGPUPendingSchedulingStatus(
+        WebGPU api,
+        WebGPUDeviceHandle deviceHandle,
+        WebGPURuntime.DeviceSharedState deviceState,
+        WGPUBufferImpl* readbackBuffer,
+        nuint bufferByteCapacity,
+        WebGPUSceneBumpSizes submittedBumpSizes,
+        ulong submissionIndex)
+        : this(
+            api,
+            deviceHandle,
+            deviceState,
+            readbackBuffer,
+            (nuint)sizeof(GpuSceneBumpAllocators),
+            bufferByteCapacity,
             submittedBumpSizes,
             null,
             null,
@@ -138,7 +173,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         WebGPU api,
         WebGPUDeviceHandle deviceHandle,
         WebGPURuntime.DeviceSharedState deviceState,
-        WgpuBuffer* readbackBuffer,
+        WGPUBufferImpl* readbackBuffer,
         nuint bufferByteCapacity,
         WebGPUSceneBumpSizes submittedBumpSizes,
         ReadOnlySpan<WebGPUSceneBumpSizes> chunkBumpSizes,
@@ -179,7 +214,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         WebGPU api,
         WebGPUDeviceHandle deviceHandle,
         WebGPURuntime.DeviceSharedState deviceState,
-        WgpuBuffer* readbackBuffer,
+        WGPUBufferImpl* readbackBuffer,
         nuint readbackByteLength,
         nuint bufferByteCapacity,
         WebGPUSceneBumpSizes submittedBumpSizes,
@@ -251,7 +286,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
 
         using WebGPUHandle.HandleReference deviceReference = this.deviceHandle.AcquireReference();
         ulong submissionIndex = this.submissionIndex;
-        _ = this.api.DevicePoll((Device*)deviceReference.Handle, false, &submissionIndex);
+        _ = this.api.DevicePoll((WGPUDeviceImpl*)deviceReference.Handle, false, &submissionIndex);
     }
 
     /// <summary>
@@ -278,12 +313,12 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         {
             signaled = WaitForMapSignal(
                 this.api,
-                (Device*)deviceReference.Handle,
+                (WGPUDeviceImpl*)deviceReference.Handle,
                 this.mapReady,
                 this.submissionIndex);
         }
 
-        if (!signaled || this.mapStatus != BufferMapAsyncStatus.Success)
+        if (!signaled || this.mapStatus != WGPUMapAsyncStatus.Success)
         {
             this.ReleaseBuffer(unmap: false);
             return false;
@@ -325,12 +360,12 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         {
             signaled = WaitForMapSignal(
                 this.api,
-                (Device*)deviceReference.Handle,
+                (WGPUDeviceImpl*)deviceReference.Handle,
                 this.mapReady,
                 this.submissionIndex);
         }
 
-        if (!signaled || this.mapStatus != BufferMapAsyncStatus.Success)
+        if (!signaled || this.mapStatus != WGPUMapAsyncStatus.Success)
         {
             this.ReleaseBuffer(unmap: false);
             return false;
@@ -383,7 +418,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     /// </summary>
     /// <param name="status">The map status reported by the implementation.</param>
     /// <param name="userData">Unused user data pointer.</param>
-    private void OnMapped(BufferMapAsyncStatus status, void* userData)
+    private void OnMapped(WGPUMapAsyncStatus status, void* userData)
     {
         _ = userData;
         this.mapStatus = status;
@@ -428,7 +463,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
     /// <returns><see langword="true"/> when the callback completed before the timeout; otherwise, <see langword="false"/>.</returns>
     private static bool WaitForMapSignal(
         WebGPU api,
-        Device* device,
+        WGPUDeviceImpl* device,
         ManualResetEventSlim signal,
         ulong submissionIndex)
     {
@@ -443,7 +478,7 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
 
             if (!signal.IsSet)
             {
-                Thread.Yield();
+                _ = Thread.Yield();
             }
         }
 

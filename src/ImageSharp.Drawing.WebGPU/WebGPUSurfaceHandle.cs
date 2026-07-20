@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
+
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -9,19 +11,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 internal sealed unsafe class WebGPUSurfaceHandle : WebGPUHandle
 {
     private readonly WebGPU? api;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUSurfaceHandle"/> class.
-    /// </summary>
-    /// <param name="surfaceHandle">The WebGPU surface handle value.</param>
-    /// <param name="ownsHandle">
-    /// <see langword="true"/> when this wrapper owns the surface and must release it;
-    /// <see langword="false"/> when the caller retains ownership.
-    /// </param>
-    private WebGPUSurfaceHandle(nint surfaceHandle, bool ownsHandle)
-        : this(ownsHandle ? WebGPURuntime.GetApi() : null, surfaceHandle, ownsHandle)
-    {
-    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUSurfaceHandle"/> class.
@@ -44,7 +33,7 @@ internal sealed unsafe class WebGPUSurfaceHandle : WebGPUHandle
     {
         try
         {
-            this.api?.SurfaceRelease((Surface*)this.handle);
+            this.api?.SurfaceRelease((WGPUSurfaceImpl*)this.handle);
             return true;
         }
         catch

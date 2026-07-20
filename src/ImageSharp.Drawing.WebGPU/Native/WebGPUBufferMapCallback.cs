@@ -33,7 +33,7 @@ internal sealed unsafe class WebGPUBufferMapCallback : WebGPUCallbackLifetime
     /// </summary>
     /// <param name="status">The map completion status.</param>
     /// <param name="userData">The caller-provided context pointer.</param>
-    public delegate void Callback(BufferMapAsyncStatus status, void* userData);
+    public delegate void Callback(WGPUMapAsyncStatus status, void* userData);
 
     /// <summary>
     /// Matches the complete native <c>WGPUBufferMapCallback</c> ABI declared by webgpu.h.
@@ -44,7 +44,7 @@ internal sealed unsafe class WebGPUBufferMapCallback : WebGPUCallbackLifetime
     /// <param name="userdata2">The second caller-provided context pointer.</param>
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void NativeCallback(
-        BufferMapAsyncStatus status,
+        WGPUMapAsyncStatus status,
         WGPUStringView message,
         void* userdata1,
         void* userdata2);
@@ -52,8 +52,8 @@ internal sealed unsafe class WebGPUBufferMapCallback : WebGPUCallbackLifetime
     /// <summary>
     /// Gets the unmanaged callback pointer stored in a WebGPU callback-info structure.
     /// </summary>
-    public delegate* unmanaged[Cdecl]<BufferMapAsyncStatus, WGPUStringView, void*, void*, void> Pointer
-        => (delegate* unmanaged[Cdecl]<BufferMapAsyncStatus, WGPUStringView, void*, void*, void>)this.pointer;
+    public delegate* unmanaged[Cdecl]<WGPUMapAsyncStatus, WGPUStringView, void*, void*, void> Pointer
+        => (delegate* unmanaged[Cdecl]<WGPUMapAsyncStatus, WGPUStringView, void*, void*, void>)this.pointer;
 
     /// <summary>
     /// Creates a rooted callback thunk.
@@ -69,7 +69,7 @@ internal sealed unsafe class WebGPUBufferMapCallback : WebGPUCallbackLifetime
     /// <param name="message">The native diagnostic message.</param>
     /// <param name="userdata1">The caller-provided context pointer.</param>
     /// <param name="userdata2">The second native context pointer, which this wrapper does not use.</param>
-    private void Invoke(BufferMapAsyncStatus status, WGPUStringView message, void* userdata1, void* userdata2)
+    private void Invoke(WGPUMapAsyncStatus status, WGPUStringView message, void* userdata1, void* userdata2)
     {
         _ = message;
         _ = userdata2;

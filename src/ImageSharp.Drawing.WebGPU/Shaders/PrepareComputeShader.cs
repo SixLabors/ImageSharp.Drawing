@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -40,16 +41,16 @@ internal static unsafe class PrepareComputeShader
     /// <returns><see langword="true"/> when the bind-group layout was created successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
-        Device* device,
-        out BindGroupLayout* layout,
+        WGPUDeviceImpl* device,
+        out WGPUBindGroupLayoutImpl* layout,
         out string? error)
     {
         // Bindings match prepare.wgsl:
         //   0 bump allocators (read-write; all counters and the failure mask zeroed)
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[1];
-        entries[0] = SceneShaderBindingLayoutHelper.CreateStorageEntry(0, BufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));
+        WGPUBindGroupLayoutEntry* entries = stackalloc WGPUBindGroupLayoutEntry[1];
+        entries[0] = SceneShaderBindingLayoutHelper.CreateStorageEntry(0, WGPUBufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));
 
-        BindGroupLayoutDescriptor descriptor = new()
+        WGPUBindGroupLayoutDescriptor descriptor = new()
         {
             entryCount = 1,
             entries = entries

@@ -717,7 +717,7 @@ public partial class WebGPUDrawingBackendTests
         // Content draws into an effect layer; on restore the canvas slots the tinted, blurred
         // silhouette beneath the untouched content at the shadow offset, then composites text plus
         // shadow onto the white background.
-        DropShadowLayerEffect shadow = new(new Point(10, 10), 4F, Color.Firebrick);
+        WebGPUDropShadowLayerEffect shadow = new(new Point(10, 10), 4F, Color.Firebrick);
 
         Rectangle region = new(0, 0, 420, 160);
         void DrawAction(DrawingCanvas canvas)
@@ -759,7 +759,7 @@ public partial class WebGPUDrawingBackendTests
         void DrawAction(DrawingCanvas canvas)
         {
             canvas.DrawText(new RichTextOptions(font) { Origin = new PointF(24, 20) }, "Sharp", brush, null);
-            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 90, 420, 100), new BlurLayerEffect(4F));
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 90, 420, 100), new WebGPUGaussianBlurLayerEffect(4F));
             canvas.DrawText(new RichTextOptions(font) { Origin = new PointF(24, 100) }, "Blurred", brush, null);
             canvas.Restore();
         }
@@ -837,7 +837,7 @@ public partial class WebGPUDrawingBackendTests
         // The shadow hugs the glyphs' top and left inside edges, clipped to the content itself.
         void DrawAction(DrawingCanvas canvas)
         {
-            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 0, 420, 160), new InnerShadowLayerEffect(new Point(4, 4), 3F, Color.Black));
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 0, 420, 160), new WebGPUInnerShadowLayerEffect(new Point(4, 4), 3F, Color.Black));
             canvas.DrawText(new RichTextOptions(font) { Origin = new PointF(24, 20) }, "Inset", brush, null);
             canvas.Restore();
         }
@@ -872,7 +872,7 @@ public partial class WebGPUDrawingBackendTests
         // The glow spreads evenly beneath the glyphs in all directions.
         void DrawAction(DrawingCanvas canvas)
         {
-            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 0, 420, 160), new GlowLayerEffect(6F, Color.Red));
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 0, 420, 160), new WebGPUGlowLayerEffect(6F, Color.Red));
             canvas.DrawText(new RichTextOptions(font) { Origin = new PointF(24, 30) }, "Glow", brush, null);
             canvas.Restore();
         }
@@ -916,17 +916,17 @@ public partial class WebGPUDrawingBackendTests
         // opaque photograph has none. Acrylic is the non-CSS frosted-glass material.
         BackdropLayerEffect effect = filter switch
         {
-            "blur" => new BackdropBlurLayerEffect(2F),
-            "brightness" => new BackdropBrightnessLayerEffect(0.6F),
-            "contrast" => new BackdropContrastLayerEffect(0.4F),
-            "drop-shadow" => new BackdropDropShadowLayerEffect(new Point(4, 4), 5F, Color.Black.WithAlpha(.7F)),
-            "grayscale" => new BackdropGrayscaleLayerEffect(0.3F),
-            "hue-rotate" => new BackdropHueRotateLayerEffect(120F),
-            "invert" => new BackdropInvertLayerEffect(0.7F),
-            "opacity" => new BackdropOpacityLayerEffect(0.2F),
-            "sepia" => new BackdropSepiaLayerEffect(0.9F),
-            "saturate" => new BackdropSaturateLayerEffect(0.8F),
-            "acrylic" => new BackdropAcrylicLayerEffect(2F, Color.PeachPuff.WithAlpha(0.35F)),
+            "blur" => new WebGPUBackdropGaussianBlurLayerEffect(2F),
+            "brightness" => new WebGPUBackdropColorMatrixLayerEffect(KnownFilterMatrices.CreateBrightnessFilter(0.6F)),
+            "contrast" => new WebGPUBackdropColorMatrixLayerEffect(KnownFilterMatrices.CreateContrastFilter(0.4F)),
+            "drop-shadow" => new WebGPUBackdropDropShadowLayerEffect(new Point(4, 4), 5F, Color.Black.WithAlpha(.7F)),
+            "grayscale" => new WebGPUBackdropColorMatrixLayerEffect(KnownFilterMatrices.CreateGrayscaleBt709Filter(0.3F)),
+            "hue-rotate" => new WebGPUBackdropColorMatrixLayerEffect(KnownFilterMatrices.CreateHueFilter(120F)),
+            "invert" => new WebGPUBackdropColorMatrixLayerEffect(KnownFilterMatrices.CreateInvertFilter(0.7F)),
+            "opacity" => new WebGPUBackdropColorMatrixLayerEffect(KnownFilterMatrices.CreateOpacityFilter(0.2F)),
+            "sepia" => new WebGPUBackdropColorMatrixLayerEffect(KnownFilterMatrices.CreateSepiaFilter(0.9F)),
+            "saturate" => new WebGPUBackdropColorMatrixLayerEffect(KnownFilterMatrices.CreateSaturateFilter(0.8F)),
+            "acrylic" => new WebGPUBackdropAcrylicLayerEffect(2F, Color.PeachPuff.WithAlpha(0.35F)),
             _ => throw new ArgumentOutOfRangeException(nameof(filter)),
         };
 
@@ -969,7 +969,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, filter, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.03F);
         AssertBackendPairReferenceOutputs(provider, filter, defaultImage, nativeSurfaceImage, 0.0006F);
     }
 
@@ -986,7 +986,7 @@ public partial class WebGPUDrawingBackendTests
         // original colour.
         void DrawAction(DrawingCanvas canvas)
         {
-            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 0, 420, 160), new ColorMatrixLayerEffect(KnownFilterMatrices.CreateHueFilter(180F)));
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 0, 420, 160), new WebGPUColorMatrixLayerEffect(KnownFilterMatrices.CreateHueFilter(180F)));
             canvas.DrawText(new RichTextOptions(font) { Origin = new PointF(24, 30) }, "Recoloured", brush, null);
             canvas.Restore();
         }

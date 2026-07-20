@@ -70,6 +70,19 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     private readonly DrawingTextCache textCache;
 
     /// <summary>
+    /// Reusable operation list handed to each text renderer. Hosted by the text cache because
+    /// canvases are per-frame objects; sharing the cache-owned list keeps its capacity across
+    /// frames instead of regrowing a fresh list of large operation structs per draw.
+    /// </summary>
+    private readonly List<DrawingOperation> textOperations;
+
+    /// <summary>
+    /// Reusable sort buffer for <see cref="DrawTextOperations"/>, hosted by the text cache for
+    /// the same reason as <see cref="textOperations"/>.
+    /// </summary>
+    private readonly List<(byte RenderPass, int Sequence, CompositionSceneCommand Command)> textCommandSortBuffer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class.
     /// </summary>
     /// <param name="configuration">The active processing configuration.</param>
@@ -278,6 +291,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         this.targetFrame = targetFrame;
         this.batcher = batcher;
         this.textCache = textCache;
+        this.textOperations = textCache.OperationScratch;
+        this.textCommandSortBuffer = textCache.CommandSortScratch;
         this.ownsBatcher = ownsBatcher;
         this.ownsTextCache = ownsTextCache;
 
@@ -386,7 +401,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
     /// <summary>
     /// Pushes an effect layer for rectangular content bounds: the effect region is the bounds
-    /// expanded by the effect's reach, so blurred and offset output spills naturally around the
+    /// expanded by the effect's output reach, so blurred and offset output spills naturally around the
     /// content instead of being cut at its edge.
     /// </summary>
     /// <param name="layerOptions">The compositing options used when the layer closes.</param>
@@ -397,7 +412,6 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     private int SaveEffectLayerCore(GraphicsOptions layerOptions, Rectangle bounds, LayerEffect effect, DrawingOptions? options)
     {
         Guard.NotNull(effect, nameof(effect));
-        bounds.Inflate(effect.Reach, effect.Reach);
         return this.SaveEffectLayerCore(layerOptions, new RectanglePolygon(bounds), effect, options);
     }
 
@@ -418,15 +432,12 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         Guard.NotNull(region, nameof(region));
         Guard.NotNull(effect, nameof(effect));
 
-        // The layer must contain the effect output, including pixels the write-back lands beyond
-        // the region when the effect carries an offset.
         RectangleF regionBounds = region.Bounds;
-        int reach = Math.Max(effect.Reach, 1);
         Rectangle layerBounds = Rectangle.FromLTRB(
-            (int)MathF.Floor(regionBounds.Left) - reach,
-            (int)MathF.Floor(regionBounds.Top) - reach,
-            (int)MathF.Ceiling(regionBounds.Right) + reach,
-            (int)MathF.Ceiling(regionBounds.Bottom) + reach);
+            (int)MathF.Floor(regionBounds.Left),
+            (int)MathF.Floor(regionBounds.Top),
+            (int)MathF.Ceiling(regionBounds.Right),
+            (int)MathF.Ceiling(regionBounds.Bottom));
 
         DrawingCanvasState currentState = this.ResolveState();
 
@@ -444,7 +455,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                     this.Save(options!);
                 }
 
-                this.ApplyCore(region, effect.CreateOperation(), effect.WriteBackOptions, effect.WriteBackOffset);
+                this.ApplyCore(region, effect.CreateOperation(), effect, effect.WriteBackOptions, effect.WriteBackOffset);
                 if (pushed)
                 {
                     this.Restore();
@@ -639,7 +650,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
     /// <inheritdoc />
     public override void Apply(IPath path, Action<IImageProcessingContext> operation)
-        => this.ApplyCore(path, operation, writeBackOptions: null, writeBackOffset: default);
+        => this.ApplyCore(path, operation, effect: null, writeBackOptions: null, writeBackOffset: default);
 
     /// <inheritdoc />
     public override void Apply(Rectangle region, Action<IImageProcessingContext> operation, GraphicsOptions writeBackOptions, Point writeBackOffset)
@@ -649,7 +660,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     public override void Apply(IPath path, Action<IImageProcessingContext> operation, GraphicsOptions writeBackOptions, Point writeBackOffset)
     {
         Guard.NotNull(writeBackOptions, nameof(writeBackOptions));
-        this.ApplyCore(path, operation, writeBackOptions, writeBackOffset);
+        this.ApplyCore(path, operation, effect: null, writeBackOptions, writeBackOffset);
     }
 
     /// <summary>
@@ -657,12 +668,13 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// </summary>
     /// <param name="path">The path region to process.</param>
     /// <param name="operation">The image-processing operation to apply to the region.</param>
+    /// <param name="effect">The layer effect represented by the operation, or <see langword="null"/> for a direct Apply operation.</param>
     /// <param name="writeBackOptions">
     /// The graphics options used to composite the processed pixels back, or <see langword="null"/>
     /// to replace the region outright.
     /// </param>
     /// <param name="writeBackOffset">The offset at which the processed pixels are written back.</param>
-    private void ApplyCore(IPath path, Action<IImageProcessingContext> operation, GraphicsOptions? writeBackOptions, Point writeBackOffset)
+    private void ApplyCore(IPath path, Action<IImageProcessingContext> operation, LayerEffect? effect, GraphicsOptions? writeBackOptions, Point writeBackOffset)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(path, nameof(path));
@@ -690,6 +702,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             state.DestinationOffset,
             state.Layer,
             operation,
+            effect,
             writeBackOptions,
             writeBackOffset);
 
@@ -822,7 +835,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         EnsureTextPaint(brush, pen);
 
         RichTextOptions configuredOptions = ConfigureTextOptions(textOptions, path, out IPath? configuredPath);
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, configuredPath, pen, brush, this.textCache);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, configuredPath, pen, brush, this.textCache, this.textOperations);
         TextRenderer renderer = new(glyphRenderer);
         renderer.Render(text, configuredOptions);
 
@@ -853,7 +866,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             Matrix4x4.CreateTranslation(location.X, location.Y, 0) * effectiveOptions.Transform,
             effectiveOptions.TextContrast);
 
-        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache);
+        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache, this.textOperations);
         textBlock.RenderTo(glyphRenderer, wrappingLength);
 
         this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions);
@@ -875,7 +888,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.textCache);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.textCache, this.textOperations);
         textBlock.RenderTo(glyphRenderer, wrappingLength);
 
         this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions);
@@ -904,7 +917,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             Matrix4x4.CreateTranslation(location.X, location.Y, 0) * effectiveOptions.Transform,
             effectiveOptions.TextContrast);
 
-        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache);
+        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache, this.textOperations);
         lineLayout.RenderTo(glyphRenderer);
 
         this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions);
@@ -925,7 +938,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.textCache);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.textCache, this.textOperations);
         lineLayout.RenderTo(glyphRenderer);
 
         this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions);
@@ -945,7 +958,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path: null, pen, brush, this.textCache);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path: null, pen, brush, this.textCache, this.textOperations);
         TextRenderer renderer = new(glyphRenderer);
         renderer.Render(glyphId, options);
 
@@ -973,7 +986,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path: null, pen, brush, this.textCache);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path: null, pen, brush, this.textCache, this.textOperations);
         TextRenderer renderer = new(glyphRenderer);
         renderer.Render(glyphRun, options);
 
@@ -1749,7 +1762,10 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         // Build composition commands and enforce render-pass ordering while preserving
         // original emission order inside each pass. This preserves overlapping color-font
         // layer compositing semantics (for example emoji mouth/teeth layers).
-        List<(byte RenderPass, int Sequence, CompositionSceneCommand Command)> entries = new(operations.Count);
+        // The cache-owned buffer keeps its capacity across draws; draw calls never overlap on
+        // one canvas, and the batcher retains the commands, not this buffer.
+        List<(byte RenderPass, int Sequence, CompositionSceneCommand Command)> entries = this.textCommandSortBuffer;
+        entries.Clear();
         for (int i = 0; i < operations.Count; i++)
         {
             DrawingOperation operation = operations[i];
@@ -1773,6 +1789,10 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 this.batcher.AddStrokePath(((StrokePathCompositionSceneCommand)entries[i].Command).Command);
             }
         }
+
+        // The buffer outlives the canvas (the text cache hosts it), so release the command
+        // references now rather than rooting the final draw's geometry until the next draw.
+        entries.Clear();
     }
 
     /// <summary>
@@ -1974,6 +1994,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             this.ApplyCore(
                 pending.Region,
                 pending.Effect.CreateOperation(),
+                pending.Effect,
                 pending.Effect.WriteBackOptions,
                 pending.Effect.WriteBackOffset);
         }

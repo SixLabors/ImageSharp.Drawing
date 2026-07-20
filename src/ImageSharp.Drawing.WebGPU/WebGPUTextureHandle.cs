@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
+
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -44,7 +46,7 @@ internal sealed unsafe class WebGPUTextureHandle : WebGPUHandle
     {
         try
         {
-            this.api?.TextureRelease((Texture*)this.handle);
+            this.api?.TextureRelease((WGPUTextureImpl*)this.handle);
             return true;
         }
         catch

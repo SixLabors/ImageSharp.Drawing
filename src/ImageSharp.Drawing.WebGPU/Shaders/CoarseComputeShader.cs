@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -52,8 +53,8 @@ internal static unsafe class CoarseComputeShader
     /// <returns><see langword="true"/> when the bind-group layout was created successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
-        Device* device,
-        out BindGroupLayout* layout,
+        WGPUDeviceImpl* device,
+        out WGPUBindGroupLayoutImpl* layout,
         out string? error)
     {
         // Bindings match coarse.wgsl:
@@ -66,18 +67,18 @@ internal static unsafe class CoarseComputeShader
         //   6 tiles (read-write; segment_count_or_ix rewritten to the allocated segment index)
         //   7 bump allocators (read-write; ptcl, segments and blend_spill counters, failure mask)
         //   8 ptcl (read-write; per-tile command lists written)
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[9];
+        WGPUBindGroupLayoutEntry* entries = stackalloc WGPUBindGroupLayoutEntry[9];
         entries[0] = CreateUniformEntry(0, (nuint)sizeof(GpuSceneConfig));
-        entries[1] = CreateStorageEntry(1, BufferBindingType.ReadOnlyStorage, 0);
-        entries[2] = CreateStorageEntry(2, BufferBindingType.ReadOnlyStorage, 0);
-        entries[3] = CreateStorageEntry(3, BufferBindingType.ReadOnlyStorage, 0);
-        entries[4] = CreateStorageEntry(4, BufferBindingType.ReadOnlyStorage, 0);
-        entries[5] = CreateStorageEntry(5, BufferBindingType.ReadOnlyStorage, 0);
-        entries[6] = CreateStorageEntry(6, BufferBindingType.Storage, 0);
-        entries[7] = CreateStorageEntry(7, BufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));
-        entries[8] = CreateStorageEntry(8, BufferBindingType.Storage, 0);
+        entries[1] = CreateStorageEntry(1, WGPUBufferBindingType.ReadOnlyStorage, 0);
+        entries[2] = CreateStorageEntry(2, WGPUBufferBindingType.ReadOnlyStorage, 0);
+        entries[3] = CreateStorageEntry(3, WGPUBufferBindingType.ReadOnlyStorage, 0);
+        entries[4] = CreateStorageEntry(4, WGPUBufferBindingType.ReadOnlyStorage, 0);
+        entries[5] = CreateStorageEntry(5, WGPUBufferBindingType.ReadOnlyStorage, 0);
+        entries[6] = CreateStorageEntry(6, WGPUBufferBindingType.Storage, 0);
+        entries[7] = CreateStorageEntry(7, WGPUBufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));
+        entries[8] = CreateStorageEntry(8, WGPUBufferBindingType.Storage, 0);
 
-        BindGroupLayoutDescriptor descriptor = new()
+        WGPUBindGroupLayoutDescriptor descriptor = new()
         {
             entryCount = 9,
             entries = entries
@@ -102,12 +103,12 @@ internal static unsafe class CoarseComputeShader
     /// <param name="minBindingSize">The minimum buffer binding size in bytes, or 0 to skip validation.</param>
     /// <returns>The populated binding entry.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static BindGroupLayoutEntry CreateStorageEntry(uint binding, BufferBindingType type, nuint minBindingSize)
+    private static WGPUBindGroupLayoutEntry CreateStorageEntry(uint binding, WGPUBufferBindingType type, nuint minBindingSize)
         => new()
         {
             binding = binding,
             visibility = (ulong)ShaderStage.Compute,
-            buffer = new BufferBindingLayout
+            buffer = new WGPUBufferBindingLayout
             {
                 type = type,
                 hasDynamicOffset = 0U,
@@ -122,14 +123,14 @@ internal static unsafe class CoarseComputeShader
     /// <param name="minBindingSize">The minimum buffer binding size in bytes.</param>
     /// <returns>The populated binding entry.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static BindGroupLayoutEntry CreateUniformEntry(uint binding, nuint minBindingSize)
+    private static WGPUBindGroupLayoutEntry CreateUniformEntry(uint binding, nuint minBindingSize)
         => new()
         {
             binding = binding,
             visibility = (ulong)ShaderStage.Compute,
-            buffer = new BufferBindingLayout
+            buffer = new WGPUBufferBindingLayout
             {
-                type = BufferBindingType.Uniform,
+                type = WGPUBufferBindingType.Uniform,
                 hasDynamicOffset = 0U,
                 minBindingSize = minBindingSize
             }

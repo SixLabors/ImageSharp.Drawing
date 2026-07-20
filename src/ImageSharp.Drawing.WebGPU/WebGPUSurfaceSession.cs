@@ -16,7 +16,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 public sealed unsafe class WebGPUSurfaceSession : IDisposable
 {
     private readonly Configuration configuration;
-    private readonly Func<Configuration, WebGPUDeviceHandle, WebGPUQueueHandle, WebGPUDeviceContext> createDeviceContext;
     private WebGPU? api;
     private WebGPUAdapterHandle? adapterHandle;
     private WebGPUDeviceHandle? deviceHandle;
@@ -38,23 +37,10 @@ public sealed unsafe class WebGPUSurfaceSession : IDisposable
     /// </summary>
     /// <param name="configuration">The configuration used by surfaces and render targets created by this session.</param>
     public WebGPUSurfaceSession(Configuration configuration)
-        : this(configuration, static (configuration, device, queue) => new WebGPUDeviceContext(configuration, device, queue))
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUSurfaceSession"/> class.
-    /// </summary>
-    /// <param name="configuration">The configuration used by surfaces and render targets created by this session.</param>
-    /// <param name="createDeviceContext">Creates the drawing context after native adapter, device, and queue acquisition.</param>
-    internal WebGPUSurfaceSession(
-        Configuration configuration,
-        Func<Configuration, WebGPUDeviceHandle, WebGPUQueueHandle, WebGPUDeviceContext> createDeviceContext)
     {
         Guard.NotNull(configuration, nameof(configuration));
 
         this.configuration = configuration;
-        this.createDeviceContext = createDeviceContext;
     }
 
     /// <summary>
@@ -83,9 +69,20 @@ public sealed unsafe class WebGPUSurfaceSession : IDisposable
     internal WebGPUQueueHandle QueueHandle => this.queueHandle!;
 
     /// <summary>
-    /// Gets the drawing context shared by every surface in the session.
+    /// Gets the device context shared by every surface and render target in this session.
     /// </summary>
-    internal WebGPUDeviceContext DeviceContext => this.deviceContext!;
+    /// <exception cref="InvalidOperationException">Thrown when no presentation surface has initialized the session.</exception>
+    /// <remarks>The session owns the returned context; callers must not dispose it separately.</remarks>
+    public WebGPUDeviceContext DeviceContext
+    {
+        get
+        {
+            this.ThrowIfDisposed();
+
+            return this.deviceContext
+                ?? throw new InvalidOperationException("Create a presentation surface before accessing its WebGPU device context.");
+        }
+    }
 
     /// <summary>
     /// Creates a presentation surface attached to an externally owned native host.
@@ -131,14 +128,19 @@ public sealed unsafe class WebGPUSurfaceSession : IDisposable
             throw new InvalidOperationException("Create a presentation surface before creating an offscreen target from its WebGPU session.");
         }
 
-        return this.deviceContext.CreateRenderTarget(format, alphaRepresentation, width, height);
+        Guard.MustBeGreaterThan(width, 0, nameof(width));
+        Guard.MustBeGreaterThan(height, 0, nameof(height));
+
+        WebGPUTargetDescriptor targetDescriptor = WebGPUDrawingBackend.CreateOffscreenTargetDescriptor(format, alphaRepresentation);
+
+        return new WebGPURenderTarget(this.deviceContext, false, targetDescriptor, width, height, isPresentationSurface: false);
     }
 
     /// <summary>
     /// Initializes the session against its first compatible presentation surface.
     /// </summary>
     /// <param name="compatibleSurface">The surface used to select the presentation adapter.</param>
-    internal void EnsureInitialized(Surface* compatibleSurface)
+    internal void EnsureInitialized(WGPUSurfaceImpl* compatibleSurface)
     {
         this.ThrowIfDisposed();
 
@@ -147,8 +149,8 @@ public sealed unsafe class WebGPUSurfaceSession : IDisposable
             return;
         }
 
-        Adapter* adapter = null;
-        Device* device = null;
+        WGPUAdapterImpl* adapter = null;
+        WGPUDeviceImpl* device = null;
         WebGPUAdapterHandle? acquiredAdapter = null;
         WebGPUDeviceHandle? acquiredDevice = null;
         WebGPUQueueHandle? acquiredQueue = null;
@@ -156,7 +158,7 @@ public sealed unsafe class WebGPUSurfaceSession : IDisposable
 
         try
         {
-            Instance* instance = WebGPURuntime.GetOrCreateSharedInstance();
+            WGPUInstanceImpl* instance = WebGPURuntime.GetOrCreateSharedInstance();
 
             if (!WebGPURuntime.TryRequestAdapter(this.Api, instance, compatibleSurface, out adapter, out WebGPUEnvironmentError adapterError))
             {
@@ -171,7 +173,7 @@ public sealed unsafe class WebGPUSurfaceSession : IDisposable
             }
 
             acquiredDevice = new WebGPUDeviceHandle(this.Api, (nint)device, ownsHandle: true);
-            Queue* queue = this.Api.DeviceGetQueue(device);
+            WGPUQueueImpl* queue = this.Api.DeviceGetQueue(device);
 
             if (queue is null)
             {
@@ -179,7 +181,7 @@ public sealed unsafe class WebGPUSurfaceSession : IDisposable
             }
 
             acquiredQueue = new WebGPUQueueHandle(this.Api, (nint)queue, ownsHandle: true);
-            acquiredContext = this.createDeviceContext(this.configuration, acquiredDevice, acquiredQueue);
+            acquiredContext = new WebGPUDeviceContext(this.configuration, acquiredDevice, acquiredQueue);
             WebGPURuntime.DeviceSharedState acquiredState = WebGPURuntime.GetOrCreateDeviceState(this.Api, acquiredDevice);
 
             // Device-state construction queries native limits and can fail. Publish the session

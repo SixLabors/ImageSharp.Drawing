@@ -514,8 +514,9 @@ internal sealed partial class FlushScene
         /// Initializes a new instance of the <see cref="ApplySceneItem"/> class.
         /// </summary>
         /// <param name="operation">The image processing operation.</param>
-        /// <param name="sourceRect">The canvas-local rectangle the processed pixels are written to.</param>
-        /// <param name="readOffset">The offset subtracted from <paramref name="sourceRect"/> when reading the source pixels.</param>
+        /// <param name="inputRect">The canvas-local rectangle containing the source pixels supplied to the operation.</param>
+        /// <param name="outputRect">The canvas-local bounds within which the processed pixels are written.</param>
+        /// <param name="readOffset">The offset subtracted from <paramref name="inputRect"/> when reading the source pixels.</param>
         /// <param name="brushOffset">The offset used by the runtime image brush.</param>
         /// <param name="graphicsOptions">The graphics options used by the apply item.</param>
         /// <param name="brushBounds">The brush bounds used for applicator creation.</param>
@@ -526,7 +527,8 @@ internal sealed partial class FlushScene
         /// <param name="ownerLayer">The layer that owned this item when it was recorded.</param>
         public ApplySceneItem(
             Action<IImageProcessingContext> operation,
-            Rectangle sourceRect,
+            Rectangle inputRect,
+            Rectangle outputRect,
             Point readOffset,
             Point brushOffset,
             GraphicsOptions graphicsOptions,
@@ -538,7 +540,8 @@ internal sealed partial class FlushScene
             DrawingCanvasLayer? ownerLayer)
         {
             this.Operation = operation;
-            this.SourceRect = sourceRect;
+            this.InputRect = inputRect;
+            this.OutputRect = outputRect;
             this.ReadOffset = readOffset;
             this.BrushOffset = brushOffset;
             this.GraphicsOptions = graphicsOptions;
@@ -556,12 +559,17 @@ internal sealed partial class FlushScene
         public Action<IImageProcessingContext> Operation { get; }
 
         /// <summary>
-        /// Gets the canvas-local rectangle the processed pixels are written to.
+        /// Gets the canvas-local rectangle containing the source pixels supplied to the operation.
         /// </summary>
-        public Rectangle SourceRect { get; }
+        public Rectangle InputRect { get; }
 
         /// <summary>
-        /// Gets the offset subtracted from <see cref="SourceRect"/> when reading the source pixels,
+        /// Gets the canvas-local bounds within which the processed pixels are written.
+        /// </summary>
+        public Rectangle OutputRect { get; }
+
+        /// <summary>
+        /// Gets the offset subtracted from <see cref="InputRect"/> when reading the source pixels,
         /// so a write-back recorded at an offset still reads the pre-offset region.
         /// </summary>
         public Point ReadOffset { get; }

@@ -4,11 +4,11 @@
 using System.Diagnostics;
 using System.Numerics;
 using SixLabors.Fonts;
+using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
-using SixLabors.ImageSharp.Drawing.Text;
 using SixLabors.ImageSharp.PixelFormats;
 using Color = SixLabors.ImageSharp.Color;
 
@@ -45,37 +45,45 @@ public static class Program
         private const int BallCount = 1000;
         private static readonly TimeSpan FpsUpdateInterval = TimeSpan.FromSeconds(1);
         private static readonly Brush BackgroundBrush = Brushes.Solid(Color.FromPixel(new Bgra32(30, 30, 40, 255)));
-        private static readonly Brush TextBrush = Brushes.Solid(Color.FromPixel(new Bgra32(70, 70, 100, 255)));
+        private static readonly Brush TextBrush = Brushes.Solid(Color.FromPixel(new Bgra32(242, 247, 255, 255)));
+        private static readonly Brush CyanBrush = Brushes.Solid(Color.FromPixel(new Bgra32(68, 236, 255, 255)));
+        private static readonly Brush MagentaBrush = Brushes.Solid(Color.FromPixel(new Bgra32(255, 104, 216, 255)));
+        private static readonly Brush GoldBrush = Brushes.Solid(Color.FromPixel(new Bgra32(255, 218, 92, 255)));
+        private static readonly Brush MintBrush = Brushes.Solid(Color.FromPixel(new Bgra32(112, 255, 185, 255)));
+
+        // The shader-accelerated acrylic effect blurs the animated scene beneath the document
+        // before applying the dark tint, preserving visible motion without sacrificing contrast.
+        private static readonly WebGPUBackdropAcrylicLayerEffect TextBackdropEffect = new(
+            2F,
+            Color.FromPixel(new Bgra32(8, 12, 24, 150)));
 
         private readonly WebGPUWindow window;
+        private readonly DrawingOptions drawingOptions = new();
+        private readonly DrawingTextCache textCache = new();
+        private readonly TextBlock scrollTextBlock;
         private readonly Random rng = new(42);
         private readonly Stopwatch fpsWindow = Stopwatch.StartNew();
         private Ball[] balls = [];
         private int frameCount;
-        private IPathCollection scrollPaths = new PathCollection();
         private float scrollOffset;
         private float scrollTextHeight;
+        private float scrollWrappingLength;
 
         private const string ScrollText =
-            "ImageSharp.Drawing on WebGPU\n\n" +
-            "Real-time GPU-accelerated 2D vector graphics " +
-            "rendered directly to a native window.\n\n" +
-            "The canvas API provides a familiar drawing model: " +
-            "Fill, Draw, DrawText, Clip, and Transform - " +
-            "all composited on the GPU via compute shaders.\n\n" +
-            "Text is shaped once using SixLabors.Fonts and " +
-            "converted to vector paths via TextBuilder. " +
-            "Each frame simply translates the cached geometry.\n\n" +
-            "Shapes are rasterized into coverage masks on the " +
-            "CPU, uploaded to GPU textures, then composited " +
-            "using a WebGPU compute pipeline that evaluates " +
-            "Porter-Duff blending per pixel.\n\n" +
-            "The drawing backend automatically manages texture " +
-            "atlases, bind groups, and pipeline state for the " +
-            "native target selected by the window.\n\n" +
+            "ImageSharp.Drawing on WebGPU\n" +
+            "RICH TEXT • SHARED CACHE • NATIVE PRESENTATION\n\n" +
+            "One prepared TextBlock combines bold emphasis, italic asides, " +
+            "outlined accents, large callouts, and small annotations.\n\n" +
+            "Decorations can underline links, overline headings, and strike out revisions " +
+            "without splitting the document into separate draw calls.\n\n" +
+            "Unicode shaping and font fallback: العربية • עברית • हिंदी • 中文 • 日本語 • 😀\n\n" +
+            "SixLabors.Fonts shapes the text once. A DrawingTextCache owned by " +
+            "the application then preserves reusable glyph and run geometry as " +
+            "new frame canvases scroll the document.\n\n" +
+            "The ordinary DrawingCanvas API still supplies fills, paths, text, " +
+            "clipping, transforms, and Porter-Duff compositing.\n\n" +
             "SixLabors ImageSharp.Drawing\n" +
-            "github.com/SixLabors/ImageSharp.Drawing\n\n" +
-            "Built on the WebGPUWindow wrapper.";
+            "github.com/SixLabors/ImageSharp.Drawing";
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DemoApp"/> class.
@@ -85,37 +93,26 @@ public static class Program
         {
             this.window = window;
             this.window.Update += this.OnUpdate;
+            this.scrollTextBlock = CreateScrollTextBlock();
             this.InitializeScene();
         }
 
         /// <summary>
         /// Starts the window-owned render loop for the demo.
         /// </summary>
-        public void Run() => this.window.Run(this.OnRender);
+        public void Run() => this.window.Run(this.drawingOptions, this.textCache, this.OnRender);
 
         /// <summary>
         /// Builds the one-time scene state used by the demo.
         /// </summary>
         /// <remarks>
-        /// The scrolling text is shaped once up front and reused every frame so the steady-state loop only applies
-        /// a translation and submits visible paths.
+        /// The scrolling text is shaped once up front and reused by every frame canvas through one caller-owned cache.
         /// </remarks>
         private void InitializeScene()
         {
-            Font scrollFont = SystemFonts.CreateFont("Arial", 24);
             Size framebufferSize = this.window.FramebufferSize;
-            TextOptions textOptions = new(scrollFont)
-            {
-                Origin = new Vector2(framebufferSize.Width / 2F, 0),
-                WrappingLength = framebufferSize.Width - 80,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                LineSpacing = 1.6F,
-            };
-
-            this.scrollPaths = TextBuilder.GeneratePaths(ScrollText, textOptions);
-            FontRectangle bounds = TextMeasurer.MeasureBounds(ScrollText, textOptions);
-            FontRectangle size = new(0, 0, bounds.Width, bounds.Height);
-            this.scrollTextHeight = size.Height;
+            this.scrollWrappingLength = Math.Max(1F, framebufferSize.Width - 80F);
+            this.scrollTextHeight = this.scrollTextBlock.MeasureAdvance(this.scrollWrappingLength).Height;
 
             Ball[] balls = new Ball[BallCount];
             for (int i = 0; i < balls.Length; i++)
@@ -177,49 +174,144 @@ public static class Program
         }
 
         /// <summary>
-        /// Draws the cached scrolling text block with simple viewport culling.
+        /// Draws the prepared scrolling rich-text block.
         /// </summary>
         /// <param name="canvas">The destination canvas for the current frame.</param>
         /// <param name="width">The current framebuffer width.</param>
         /// <param name="height">The current framebuffer height.</param>
         private void DrawScrollingText(DrawingCanvas canvas, int width, int height)
         {
-            if (this.scrollTextHeight <= 0)
+            float wrappingLength = Math.Max(1F, width - 80F);
+            if (wrappingLength != this.scrollWrappingLength)
             {
-                return;
+                // TextBlock retains shaping, so a resize only recomputes line breaking and height;
+                // it does not reshape the document or discard the shared glyph/run cache.
+                this.scrollWrappingLength = wrappingLength;
+                this.scrollTextHeight = this.scrollTextBlock.MeasureAdvance(wrappingLength).Height;
             }
 
             float totalCycle = height + this.scrollTextHeight;
             float wrappedOffset = this.scrollOffset % totalCycle;
             float y = height - wrappedOffset;
 
-            Matrix3x2 translation = Matrix3x2.CreateTranslation(0, y);
-            RectangleF viewport = new(0, 0, width, height);
-            DrawingOptions translatedOptions = new()
+            // Limit the acrylic work to the visible part of the scrolling document. The extra
+            // padding keeps blur samples around the first and last glyph rows inside the layer.
+            Rectangle layerBounds = Rectangle.Intersect(
+                canvas.Bounds,
+                Rectangle.Round(new RectangleF(24F, y - 16F, width - 48F, this.scrollTextHeight + 32F)));
+
+            canvas.SaveLayer(this.drawingOptions.GraphicsOptions, layerBounds, TextBackdropEffect);
+
+            // Rich runs supply their own paint where specified; TextBrush paints the remaining body.
+            // The cache keys run geometry in local space, so changing y does not invalidate it.
+            canvas.DrawText(this.scrollTextBlock, new PointF(40F, y), wrappingLength, TextBrush, pen: null);
+            canvas.Restore();
+        }
+
+        /// <summary>
+        /// Creates the prepared rich-text document reused throughout the render loop.
+        /// </summary>
+        /// <returns>The prepared text block.</returns>
+        private static TextBlock CreateScrollTextBlock()
+        {
+            Font bodyFont = SystemFonts.CreateFont("Arial", 24);
+            Font titleFont = bodyFont.Family.CreateFont(44, FontStyle.Bold);
+            Font boldFont = bodyFont.Family.CreateFont(24, FontStyle.Bold);
+            Font italicFont = bodyFont.Family.CreateFont(24, FontStyle.Italic);
+            Font calloutFont = bodyFont.Family.CreateFont(30, FontStyle.Bold);
+            Font annotationFont = bodyFont.Family.CreateFont(18, FontStyle.Italic);
+
+            List<FontFamily> fallbackFontFamilies = [];
+            AddFallbackFont(fallbackFontFamilies, bodyFont.Family, new CodePoint('ع'));
+            AddFallbackFont(fallbackFontFamilies, bodyFont.Family, new CodePoint('ע'));
+            AddFallbackFont(fallbackFontFamilies, bodyFont.Family, new CodePoint('ह'));
+            AddFallbackFont(fallbackFontFamilies, bodyFont.Family, new CodePoint('中'));
+            AddFallbackFont(fallbackFontFamilies, bodyFont.Family, new CodePoint(0x1F600));
+
+            RichTextRun title = CreateTextRun("ImageSharp.Drawing on WebGPU", titleFont, CyanBrush);
+            title.Pen = Pens.Solid(Color.FromPixel(new Bgra32(5, 24, 42, 255)), 2.25F);
+
+            RichTextRun subtitle = CreateTextRun("RICH TEXT • SHARED CACHE • NATIVE PRESENTATION", boldFont, GoldBrush);
+            subtitle.TextDecorations = TextDecorations.Overline;
+            subtitle.OverlinePen = Pens.Solid(Color.FromPixel(new Bgra32(255, 218, 92, 255)), 2F);
+
+            RichTextRun bold = CreateTextRun("bold emphasis", boldFont, CyanBrush);
+            RichTextRun italic = CreateTextRun("italic asides", italicFont, MagentaBrush);
+            RichTextRun outlined = CreateTextRun("outlined accents", boldFont, BackgroundBrush);
+            outlined.Pen = Pens.Solid(Color.FromPixel(new Bgra32(255, 218, 92, 255)), 2.25F);
+
+            RichTextRun callout = CreateTextRun("large callouts", calloutFont, GoldBrush);
+            RichTextRun annotation = CreateTextRun("small annotations", annotationFont, MagentaBrush);
+
+            RichTextRun underline = CreateTextRun("underline links", boldFont, CyanBrush);
+            underline.TextDecorations = TextDecorations.Underline;
+            underline.UnderlinePen = Pens.Solid(Color.FromPixel(new Bgra32(68, 236, 255, 255)), 2F);
+
+            RichTextRun overline = CreateTextRun("overline headings", boldFont, GoldBrush);
+            overline.TextDecorations = TextDecorations.Overline;
+            overline.OverlinePen = Pens.Solid(Color.FromPixel(new Bgra32(255, 218, 92, 255)), 2F);
+
+            RichTextRun strikeout = CreateTextRun("strike out revisions", italicFont, MagentaBrush);
+            strikeout.TextDecorations = TextDecorations.Strikeout;
+            strikeout.StrikeoutPen = Pens.Solid(Color.FromPixel(new Bgra32(255, 104, 216, 255)), 2F);
+
+            RichTextRun fallback = CreateTextRun("العربية • עברית • हिंदी • 中文 • 日本語 • 😀", boldFont, MintBrush);
+
+            RichTextRun link = CreateTextRun("github.com/SixLabors/ImageSharp.Drawing", boldFont, CyanBrush);
+            link.TextDecorations = TextDecorations.Underline;
+            link.UnderlinePen = Pens.Solid(Color.FromPixel(new Bgra32(86, 225, 255, 255)), 2F);
+
+            RichTextOptions options = new(bodyFont)
             {
-                Transform = new Matrix4x4(translation),
+                FallbackFontFamilies = fallbackFontFamilies,
+                LineSpacing = 1.5F,
+                TextRuns = [title, subtitle, bold, italic, outlined, callout, annotation, underline, overline, strikeout, fallback, link],
             };
 
-            // Save once with the frame-local translation, then submit only paths that are actually visible.
-            canvas.Save(translatedOptions);
-            foreach (IPath path in this.scrollPaths)
+            return new TextBlock(ScrollText, options);
+        }
+
+        /// <summary>
+        /// Adds the installed system family selected by the platform text matcher for a representative character.
+        /// </summary>
+        /// <param name="fallbackFontFamilies">The ordered fallback list being built.</param>
+        /// <param name="primaryFamily">The primary family already used by the document.</param>
+        /// <param name="codePoint">A character requiring coverage from the selected fallback family.</param>
+        private static void AddFallbackFont(List<FontFamily> fallbackFontFamilies, FontFamily primaryFamily, CodePoint codePoint)
+        {
+            // TextOptions consumes an explicit fallback list; it does not invoke the platform
+            // matcher while shaping. Resolve representative characters once so DirectWrite,
+            // CoreText, or Fontconfig can choose installed families appropriate to this machine.
+            if (SystemFonts.TryMatchCharacter(codePoint, FontStyle.Regular, primaryFamily.Name, culture: null, out FontMatch match) &&
+                !fallbackFontFamilies.Contains(match.Family))
             {
-                RectangleF pathBounds = path.Bounds;
-                RectangleF translated = new(
-                    pathBounds.X + translation.M31,
-                    pathBounds.Y + translation.M32,
-                    pathBounds.Width,
-                    pathBounds.Height);
-
-                if (!viewport.IntersectsWith(translated))
-                {
-                    continue;
-                }
-
-                canvas.Fill(TextBrush, path);
+                fallbackFontFamilies.Add(match.Family);
             }
+        }
 
-            canvas.Restore();
+        /// <summary>
+        /// Creates a rich-text run for the unique marker text within <see cref="ScrollText"/>.
+        /// </summary>
+        /// <param name="marker">The text covered by the run.</param>
+        /// <param name="font">The font applied to the run.</param>
+        /// <param name="brush">The brush applied to the run.</param>
+        /// <returns>The configured rich-text run.</returns>
+        private static RichTextRun CreateTextRun(string marker, Font font, Brush brush)
+        {
+            int stringStart = ScrollText.IndexOf(marker, StringComparison.Ordinal);
+
+            // RichTextRun uses grapheme indices rather than UTF-16 offsets. Computing both bounds
+            // through Fonts keeps the markers correct when the sample contains bullets or other
+            // multi-code-unit user-perceived characters.
+            int start = ScrollText.AsSpan(0, stringStart).GetGraphemeCount();
+
+            return new RichTextRun
+            {
+                Start = start,
+                End = start + marker.GetGraphemeCount(),
+                Font = font,
+                Brush = brush,
+            };
         }
     }
 

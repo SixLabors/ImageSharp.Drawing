@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
+
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -79,8 +81,11 @@ public sealed unsafe class WebGPUSurfaceFrame : IDisposable
     public WebGPURenderTarget CreateRenderTarget(int width, int height)
     {
         this.ThrowIfDisposed();
+        this.deviceContext.ThrowIfDisposed();
+        Guard.MustBeGreaterThan(width, 0, nameof(width));
+        Guard.MustBeGreaterThan(height, 0, nameof(height));
 
-        return this.deviceContext.CreateRenderTarget(this.targetDescriptor.Format, this.targetDescriptor.AlphaRepresentation, width, height);
+        return new WebGPURenderTarget(this.deviceContext, false, this.targetDescriptor, width, height, isPresentationSurface: false);
     }
 
     /// <summary>
@@ -99,7 +104,7 @@ public sealed unsafe class WebGPUSurfaceFrame : IDisposable
             // completed canvas texture without a CPU wait.
             this.Canvas.Dispose();
             this.presentationRenderer.Present(this.textureHandle, this.textureViewHandle);
-            this.api.SurfacePresent((Surface*)this.surfaceReference.Handle);
+            _ = this.api.SurfacePresent((WGPUSurfaceImpl*)this.surfaceReference.Handle);
         }
         finally
         {

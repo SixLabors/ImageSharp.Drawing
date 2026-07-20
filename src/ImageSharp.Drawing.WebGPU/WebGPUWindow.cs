@@ -134,6 +134,20 @@ public sealed class WebGPUWindow : IDisposable
     public Configuration Configuration { get; }
 
     /// <summary>
+    /// Gets the WebGPU device context used to render this window.
+    /// </summary>
+    /// <remarks>The window owns the returned context; callers must not dispose it separately.</remarks>
+    public WebGPUDeviceContext DeviceContext
+    {
+        get
+        {
+            this.ThrowIfDisposed();
+
+            return this.session.DeviceContext;
+        }
+    }
+
+    /// <summary>
     /// Gets or sets the window title.
     /// </summary>
     public string Title
@@ -309,6 +323,26 @@ public sealed class WebGPUWindow : IDisposable
         => this.TryAcquireFrameCore(options, out frame);
 
     /// <summary>
+    /// Tries to acquire the next drawable frame using a caller-owned text cache.
+    /// </summary>
+    /// <param name="options">The drawing options for the acquired frame.</param>
+    /// <param name="textCache">The text cache shared by acquired frame canvases.</param>
+    /// <param name="frame">Receives the acquired frame on success.</param>
+    /// <returns><see langword="true"/> when a frame is available; otherwise <see langword="false"/>.</returns>
+    public bool TryAcquireFrame(DrawingOptions options, DrawingTextCache textCache, [NotNullWhen(true)] out WebGPUSurfaceFrame? frame)
+    {
+        Guard.NotNull(textCache, nameof(textCache));
+        this.ThrowIfDisposed();
+
+        return this.resources.TryAcquireFrame(
+            this.resources.PresentMode,
+            this.FramebufferSize,
+            options,
+            textCache,
+            out frame);
+    }
+
+    /// <summary>
     /// Runs the window's event loop and renders one WebGPU frame per render callback.
     /// </summary>
     /// <param name="render">The per-frame render callback.</param>
@@ -324,6 +358,39 @@ public sealed class WebGPUWindow : IDisposable
     {
         Guard.NotNull(render, nameof(render));
         this.Run(options, (frame, _) => render(frame));
+    }
+
+    /// <summary>
+    /// Runs the window's event loop using a caller-owned text cache shared by every frame canvas.
+    /// </summary>
+    /// <param name="options">The drawing options applied to each acquired frame.</param>
+    /// <param name="textCache">The text cache shared by acquired frame canvases.</param>
+    /// <param name="render">The per-frame render callback.</param>
+    public void Run(DrawingOptions options, DrawingTextCache textCache, Action<WebGPUSurfaceFrame> render)
+    {
+        Guard.NotNull(textCache, nameof(textCache));
+        Guard.NotNull(render, nameof(render));
+        this.ThrowIfDisposed();
+
+        void OnRender(double deltaTime)
+        {
+            if (!this.resources.TryAcquireFrame(
+                this.resources.PresentMode,
+                this.FramebufferSize,
+                options,
+                textCache,
+                out WebGPUSurfaceFrame? frame))
+            {
+                return;
+            }
+
+            using (frame)
+            {
+                render(frame);
+            }
+        }
+
+        this.RunCore(OnRender);
     }
 
     /// <summary>
@@ -356,7 +423,17 @@ public sealed class WebGPUWindow : IDisposable
             }
         }
 
-        this.window.Render += OnRender;
+        this.RunCore(OnRender);
+    }
+
+    /// <summary>
+    /// Runs the native event pump with the supplied frame callback.
+    /// </summary>
+    /// <param name="render">The callback registered with the native render event.</param>
+    private void RunCore(Action<double> render)
+    {
+        this.window.Render += render;
+
         try
         {
             // Pump events, update, and render explicitly instead of using the default loop so a
@@ -381,7 +458,7 @@ public sealed class WebGPUWindow : IDisposable
         }
         finally
         {
-            this.window.Render -= OnRender;
+            this.window.Render -= render;
         }
     }
 

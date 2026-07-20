@@ -9,7 +9,7 @@ It exists to show the intended shape of a real-time app:
 - draw with the normal `DrawingCanvas` API
 - present by ending the acquired frame
 
-The sample opens an `800x600` window, draws a dark background, animates 1000 bouncing ellipses, scrolls a block of pre-shaped text, and updates the window title with frame timing statistics.
+The sample opens an `800x600` window, draws a dark background, animates 1000 bouncing ellipses, scrolls a prepared rich-text document, and updates the window title with frame timing statistics.
 
 ## Why this sample matters
 
@@ -38,7 +38,7 @@ When the sample starts you should see:
 
 - a native window titled `ImageSharp.Drawing WebGPU Demo`
 - animated semi-transparent balls bouncing around the viewport
-- a large scrolling text block in the background
+- a high-contrast scrolling rich-text document over a shader-accelerated frosted acrylic backdrop, with multiple sizes, bold and italic runs, multilingual fallback text, fills, outlines, and underline/overline/strikeout pens
 - the title bar updating once per second with current frame time, current FPS, mean FPS, and FPS standard deviation
 
 ## Code Tour
@@ -72,18 +72,16 @@ Important details:
 - the window reference
 - a deterministic `Random`
 - the `Ball[]` animation state
-- cached text paths
+- one prepared `TextBlock` and a caller-owned `DrawingTextCache` shared across frames
 - FPS accumulation state
 
 `InitializeScene()` does the expensive one-time work:
 
-- creates an `Arial` font at 24px
-- builds `TextOptions` using the current framebuffer width
-- shapes the scrolling text once with `TextBuilder.GeneratePaths(...)`
-- measures the total text height with `TextMeasurer.MeasureSize(...)`
+- creates a prepared `TextBlock` with several `RichTextRun` entries
+- measures its initial wrapped height
 - creates 1000 random balls sized and positioned for the current framebuffer
 
-The important pattern here is that text shaping is not done every frame. The sample converts the whole text block into vector paths once, then reuses that geometry as the text scrolls.
+The important pattern is that text shaping is not done every frame. `DemoApp` also owns one `DrawingTextCache` and passes it to the window loop, allowing each short-lived frame canvas to reuse glyph and run geometry from previous frames.
 
 ### 3. Update loop
 
@@ -106,7 +104,7 @@ Separating animation from rendering keeps the sample structure close to a normal
 `Run()` calls:
 
 ```csharp
-this.window.Run(this.OnRender);
+this.window.Run(this.drawingOptions, this.textCache, this.OnRender);
 ```
 
 `WebGPUWindow.Run(...)` acquires one `WebGPUSurfaceFrame` per render callback and disposes it automatically after your callback returns. In this sample that means you do not call `Flush()` yourself.
@@ -115,8 +113,8 @@ Inside `OnRender(...)` the sample:
 
 1. grabs `DrawingCanvas canvas = frame.Canvas`
 2. fills the full frame with a solid background color
-3. draws the scrolling text block
-4. fills one ellipse per ball
+3. fills one ellipse per ball
+4. draws the scrolling text block inside a clipped `WebGPUBackdropAcrylicLayerEffect`
 5. updates the window title once per second with timing statistics
 
 The drawing code is intentionally plain `DrawingCanvas` API usage:
@@ -127,20 +125,11 @@ The drawing code is intentionally plain `DrawingCanvas` API usage:
 
 That is the point of the sample: the WebGPU path should feel like normal ImageSharp.Drawing usage, not a separate graphics API.
 
-### 5. Scrolling text path reuse
+### 5. Prepared rich text and shared geometry
 
 `DrawScrollingText(...)` shows the most important optimization in the sample.
 
-Instead of rebuilding glyphs every frame, it:
-
-- computes a wrapped vertical scroll offset
-- builds a translation matrix for the current frame
-- saves a transformed canvas state with `canvas.Save(translatedOptions)`
-- culls any path whose translated bounds are outside the viewport
-- fills only the visible paths
-- restores the prior canvas state with `canvas.Restore()`
-
-The culling is simple but effective: large amounts of off-screen text never get submitted for rasterization.
+Instead of reshaping text or rebuilding glyph paths every frame, it computes the wrapped vertical position and draws the prepared `TextBlock`. The text is isolated in a layer clipped to its visible bounds; `WebGPUBackdropAcrylicLayerEffect` blurs and tints the animated balls beneath that layer before the sharp text is composited over them. Rich runs demonstrate size and style changes, multilingual fallback, independent fills and outlines, and all three text decorations within one document. The caller-owned cache is deliberately independent of frame lifetime, so disposing a presented frame does not discard reusable text geometry.
 
 ## Frame lifetime and rendering
 
@@ -191,15 +180,13 @@ Notes:
 
 ## Resize behavior
 
-The sample builds the scrolling text layout once from the startup framebuffer size. That keeps the demo simple and avoids reshaping text during the steady-state render loop.
+The sample shapes the scrolling text once. A resize changes only the wrapping length and measured height; it does not reshape the document.
 
 As a result:
 
 - the animation keeps working after resize because balls update against the current framebuffer size
 - the text continues to render
-- the text wrapping width is based on the initial framebuffer width, not a reflowed width after resize
-
-That tradeoff is acceptable for a demo because the sample is trying to show rendering flow, cached path reuse, and frame presentation rather than full responsive layout management.
+- the rich text reflows to the current framebuffer width
 
 ## Files
 

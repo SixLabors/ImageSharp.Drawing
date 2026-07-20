@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -107,46 +108,46 @@ public sealed unsafe partial class WebGPUDrawingBackend
             throw new NotSupportedException("WebGPU frame pixel copies require source and target frames from the same device and queue.");
         }
 
-        CommandEncoder* commandEncoder = null;
-        CommandBuffer* commandBuffer = null;
+        WGPUCommandEncoderImpl* commandEncoder = null;
+        WGPUCommandBufferImpl* commandBuffer = null;
 
         try
         {
-            Device* device = (Device*)targetDeviceReference.Handle;
-            CommandEncoderDescriptor encoderDescriptor = default;
+            WGPUDeviceImpl* device = (WGPUDeviceImpl*)targetDeviceReference.Handle;
+            WGPUCommandEncoderDescriptor encoderDescriptor = default;
             commandEncoder = api.DeviceCreateCommandEncoder(device, in encoderDescriptor);
             if (commandEncoder is null)
             {
                 throw new InvalidOperationException("The WebGPU device could not create a command encoder for the pixel copy.");
             }
 
-            ImageCopyTexture textureSource = new()
+            WGPUTexelCopyTextureInfo textureSource = new()
             {
-                texture = (Texture*)sourceTextureReference.Handle,
+                texture = (WGPUTextureImpl*)sourceTextureReference.Handle,
                 mipLevel = 0,
-                origin = new Origin3D((uint)nativeSourceX, (uint)nativeSourceY, 0),
-                aspect = TextureAspect.All
+                origin = new WGPUOrigin3D((uint)nativeSourceX, (uint)nativeSourceY, 0),
+                aspect = WGPUTextureAspect.All
             };
 
-            ImageCopyTexture textureTarget = new()
+            WGPUTexelCopyTextureInfo textureTarget = new()
             {
-                texture = (Texture*)targetTextureReference.Handle,
+                texture = (WGPUTextureImpl*)targetTextureReference.Handle,
                 mipLevel = 0,
-                origin = new Origin3D((uint)nativeTargetX, (uint)nativeTargetY, 0),
-                aspect = TextureAspect.All
+                origin = new WGPUOrigin3D((uint)nativeTargetX, (uint)nativeTargetY, 0),
+                aspect = WGPUTextureAspect.All
             };
 
-            Extent3D copySize = new((uint)width, (uint)height, 1);
+            WGPUExtent3D copySize = new((uint)width, (uint)height, 1);
             api.CommandEncoderCopyTextureToTexture(commandEncoder, in textureSource, in textureTarget, in copySize);
 
-            CommandBufferDescriptor commandBufferDescriptor = default;
+            WGPUCommandBufferDescriptor commandBufferDescriptor = default;
             commandBuffer = api.CommandEncoderFinish(commandEncoder, in commandBufferDescriptor);
             if (commandBuffer is null)
             {
                 throw new InvalidOperationException("The WebGPU device could not finalize the pixel-copy command buffer.");
             }
 
-            api.QueueSubmit((Queue*)targetQueueReference.Handle, 1, ref commandBuffer);
+            api.QueueSubmit((WGPUQueueImpl*)targetQueueReference.Handle, 1, ref commandBuffer);
             api.CommandBufferRelease(commandBuffer);
             commandBuffer = null;
             api.CommandEncoderRelease(commandEncoder);

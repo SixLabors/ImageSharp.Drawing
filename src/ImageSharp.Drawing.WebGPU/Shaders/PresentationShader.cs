@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
+
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -22,21 +24,21 @@ internal static unsafe class PresentationShader
     /// <param name="layout">Receives the created bind-group layout on success.</param>
     /// <param name="error">Receives the creation failure reason when layout creation fails.</param>
     /// <returns><see langword="true"/> when the bind-group layout was created successfully; otherwise, <see langword="false"/>.</returns>
-    public static bool TryCreateBindGroupLayout(WebGPU api, Device* device, out BindGroupLayout* layout, out string? error)
+    public static bool TryCreateBindGroupLayout(WebGPU api, WGPUDeviceImpl* device, out WGPUBindGroupLayoutImpl* layout, out string? error)
     {
-        BindGroupLayoutEntry entry = new()
+        WGPUBindGroupLayoutEntry entry = new()
         {
             binding = 0,
             visibility = (ulong)ShaderStage.Fragment,
-            texture = new TextureBindingLayout
+            texture = new WGPUTextureBindingLayout
             {
-                sampleType = TextureSampleType.Float,
-                viewDimension = TextureViewDimension._2D,
+                sampleType = WGPUTextureSampleType.Float,
+                viewDimension = WGPUTextureViewDimension._2D,
                 multisampled = 0U
             }
         };
 
-        BindGroupLayoutDescriptor descriptor = new()
+        WGPUBindGroupLayoutDescriptor descriptor = new()
         {
             entryCount = 1,
             entries = &entry

@@ -108,6 +108,20 @@ public sealed class WebGPUExternalSurface : IDisposable
     }
 
     /// <summary>
+    /// Gets the WebGPU device context used to render this surface.
+    /// </summary>
+    /// <remarks>The owning surface session controls the returned context's lifetime.</remarks>
+    public WebGPUDeviceContext DeviceContext
+    {
+        get
+        {
+            this.ThrowIfDisposed();
+
+            return this.resources.DeviceContext;
+        }
+    }
+
+    /// <summary>
     /// Notifies the external surface that the drawable framebuffer has resized and reconfigures the swapchain when the
     /// size changes. Zero-area sizes (minimize, mid-layout) pause frame acquisition while the last valid native
     /// configuration is retained.

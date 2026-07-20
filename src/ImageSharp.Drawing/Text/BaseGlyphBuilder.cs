@@ -149,6 +149,23 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     public IReadOnlyList<GlyphPathCollection> Glyphs => this.currentGlyphs;
 
     /// <summary>
+    /// Gets a value indicating whether per-grapheme <see cref="GlyphPathCollection"/> aggregates
+    /// are built while rendering. Consumers of <see cref="Glyphs"/> require them; renderers that
+    /// emit drawing operations directly override this to skip one builder and two list
+    /// allocations per grapheme.
+    /// </summary>
+    protected virtual bool CollectsGlyphPaths => true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the current glyph's decoded outline is built into
+    /// path objects when the glyph or layer ends. Reset to <see langword="true"/> at every glyph
+    /// begin; caching subclasses clear it for glyphs whose cached path will be reused, skipping
+    /// the per-frame construction of a path graph that would be discarded. When cleared, the
+    /// subclass must not read the outline from <see cref="CurrentPaths"/> for that glyph.
+    /// </summary>
+    protected bool OutlineBuildRequired { get; set; } = true;
+
+    /// <summary>
     /// Gets the <see cref="PathBuilder"/> used to accumulate outline segments
     /// (<c>MoveTo</c>, <c>LineTo</c>, curves) for the current glyph or layer.
     /// The builder is cleared between glyphs / layers.
@@ -215,29 +232,36 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     /// </returns>
     bool IGlyphRenderer.BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
     {
-        // If grapheme changed, flush previous aggregate and start a new one:
-        if (this.graphemeBuilder is not null && this.currentGraphemeIndex != parameters.GraphemeIndex)
+        // Grapheme aggregates only exist for consumers of the built glyph collections
+        // (TextBuilder, DrawGlyphs). Renderers that emit drawing operations directly skip the
+        // whole aggregate, which otherwise allocates a builder and two lists for every grapheme.
+        if (this.CollectsGlyphPaths)
         {
-            if (this.graphemePathCount > 0)
+            // If grapheme changed, flush previous aggregate and start a new one:
+            if (this.graphemeBuilder is not null && this.currentGraphemeIndex != parameters.GraphemeIndex)
             {
-                this.currentGlyphs.Add(this.graphemeBuilder.Build());
+                if (this.graphemePathCount > 0)
+                {
+                    this.currentGlyphs.Add(this.graphemeBuilder.Build());
+                }
+
+                this.graphemeBuilder = null;
+                this.graphemePathCount = 0;
             }
 
-            this.graphemeBuilder = null;
-            this.graphemePathCount = 0;
-        }
-
-        if (this.graphemeBuilder is null)
-        {
-            this.graphemeBuilder = new GlyphPathCollection.Builder();
-            this.currentGraphemeIndex = parameters.GraphemeIndex;
-            this.graphemePathCount = 0;
+            if (this.graphemeBuilder is null)
+            {
+                this.graphemeBuilder = new GlyphPathCollection.Builder();
+                this.currentGraphemeIndex = parameters.GraphemeIndex;
+                this.graphemePathCount = 0;
+            }
         }
 
         this.parameters = parameters;
         this.Builder.Clear();
         this.usedLayers = false;
         this.inLayer = false;
+        this.OutlineBuildRequired = true;
 
         this.layerStartIndex = this.graphemePathCount;
         this.currentLayerPaint = null;
@@ -247,12 +271,25 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     }
 
     /// <inheritdoc/>
-    void IGlyphRenderer.BeginFigure() => this.Builder.StartFigure();
+    void IGlyphRenderer.BeginFigure()
+    {
+        // Skip segment accumulation entirely when the outline will not be built: the skip-ink
+        // collectors observe the stream through the font engine's tee before it reaches this
+        // renderer, so dropping the geometry here loses nothing.
+        if (this.OutlineBuildRequired)
+        {
+            this.Builder.StartFigure();
+        }
+    }
 
     /// <inheritdoc/>
     void IGlyphRenderer.CubicBezierTo(Vector2 secondControlPoint, Vector2 thirdControlPoint, Vector2 point)
     {
-        this.Builder.AddCubicBezier(this.currentPoint, secondControlPoint, thirdControlPoint, point);
+        if (this.OutlineBuildRequired)
+        {
+            this.Builder.AddCubicBezier(this.currentPoint, secondControlPoint, thirdControlPoint, point);
+        }
+
         this.currentPoint = point;
     }
 
@@ -265,7 +302,9 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     {
         // If the glyph did not open any explicit layer, treat its geometry as a single
         // implicit layer so that non-color glyphs still produce a GlyphPathCollection entry.
-        if (!this.usedLayers)
+        // When the subclass reuses a cached path, building the decoded outline here would
+        // allocate a path graph that nothing reads.
+        if (!this.usedLayers && this.OutlineBuildRequired)
         {
             IPath path = this.Builder.Build();
 
@@ -294,33 +333,55 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     }
 
     /// <inheritdoc/>
-    void IGlyphRenderer.EndFigure() => this.Builder.CloseFigure();
+    void IGlyphRenderer.EndFigure()
+    {
+        if (this.OutlineBuildRequired)
+        {
+            this.Builder.CloseFigure();
+        }
+    }
 
     /// <inheritdoc/>
     void IGlyphRenderer.LineTo(Vector2 point)
     {
-        this.Builder.AddLine(this.currentPoint, point);
+        if (this.OutlineBuildRequired)
+        {
+            this.Builder.AddLine(this.currentPoint, point);
+        }
+
         this.currentPoint = point;
     }
 
     /// <inheritdoc/>
     void IGlyphRenderer.MoveTo(Vector2 point)
     {
-        this.Builder.StartFigure();
+        if (this.OutlineBuildRequired)
+        {
+            this.Builder.StartFigure();
+        }
+
         this.currentPoint = point;
     }
 
     /// <inheritdoc/>
     void IGlyphRenderer.ArcTo(float radiusX, float radiusY, float rotation, bool largeArc, bool sweep, Vector2 point)
     {
-        this.Builder.AddArc(this.currentPoint, radiusX, radiusY, rotation, largeArc, sweep, point);
+        if (this.OutlineBuildRequired)
+        {
+            this.Builder.AddArc(this.currentPoint, radiusX, radiusY, rotation, largeArc, sweep, point);
+        }
+
         this.currentPoint = point;
     }
 
     /// <inheritdoc/>
     void IGlyphRenderer.QuadraticBezierTo(Vector2 secondControlPoint, Vector2 point)
     {
-        this.Builder.AddQuadraticBezier(this.currentPoint, secondControlPoint, point);
+        if (this.OutlineBuildRequired)
+        {
+            this.Builder.AddQuadraticBezier(this.currentPoint, secondControlPoint, point);
+        }
+
         this.currentPoint = point;
     }
 
@@ -356,34 +417,39 @@ internal class BaseGlyphBuilder : IGlyphRenderer
             return;
         }
 
-        IPath path = this.Builder.Build();
-
-        // If the layer defines a clip quad (e.g. from COLR v1), intersect the
-        // built path with the quad polygon to constrain rendering.
-        if (this.currentClipBounds is not null)
+        // When the subclass reuses a cached layer path, building the decoded outline here
+        // would allocate a path graph that nothing reads.
+        if (this.OutlineBuildRequired)
         {
-            ClipQuad clip = this.currentClipBounds.Value;
-            PointF[] points = [clip.TopLeft, clip.TopRight, clip.BottomRight, clip.BottomLeft];
-            LinearLineSegment segment = new(points);
-            Polygon polygon = new(segment);
+            IPath path = this.Builder.Build();
 
-            path = path.Clip(BooleanOperation.Intersection, TextUtilities.MapFillRule(this.currentLayerFillRule), polygon);
-        }
+            // If the layer defines a clip quad (e.g. from COLR v1), intersect the
+            // built path with the quad polygon to constrain rendering.
+            if (this.currentClipBounds is not null)
+            {
+                ClipQuad clip = this.currentClipBounds.Value;
+                PointF[] points = [clip.TopLeft, clip.TopRight, clip.BottomRight, clip.BottomLeft];
+                LinearLineSegment segment = new(points);
+                Polygon polygon = new(segment);
 
-        this.CurrentPaths.Add(path);
+                path = path.Clip(BooleanOperation.Intersection, TextUtilities.MapFillRule(this.currentLayerFillRule), polygon);
+            }
 
-        if (this.graphemeBuilder is not null)
-        {
-            this.graphemeBuilder.AddPath(path);
-            this.graphemeBuilder.AddLayer(
-                startIndex: this.layerStartIndex,
-                count: 1,
-                paint: this.currentLayerPaint,
-                fillRule: this.currentLayerFillRule,
-                bounds: path.Bounds,
-                kind: GlyphLayerKind.Painted);
+            this.CurrentPaths.Add(path);
 
-            this.graphemePathCount++;
+            if (this.graphemeBuilder is not null)
+            {
+                this.graphemeBuilder.AddPath(path);
+                this.graphemeBuilder.AddLayer(
+                    startIndex: this.layerStartIndex,
+                    count: 1,
+                    paint: this.currentLayerPaint,
+                    fillRule: this.currentLayerFillRule,
+                    bounds: path.Bounds,
+                    kind: GlyphLayerKind.Painted);
+
+                this.graphemePathCount++;
+            }
         }
 
         this.Builder.Clear();

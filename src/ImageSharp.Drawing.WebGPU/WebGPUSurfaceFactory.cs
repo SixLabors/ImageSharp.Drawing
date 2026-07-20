@@ -4,6 +4,7 @@
 using Silk.NET.Core.Contexts;
 using Silk.NET.GLFW;
 using Silk.NET.SDL;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -19,7 +20,7 @@ internal static unsafe class WebGPUSurfaceFactory
     /// <param name="instance">The instance that owns the surface.</param>
     /// <param name="source">The native window source.</param>
     /// <returns>The created surface, or <see langword="null"/> on failure.</returns>
-    public static Surface* Create(WebGPU api, Instance* instance, INativeWindowSource source)
+    public static WGPUSurfaceImpl* Create(WebGPU api, WGPUInstanceImpl* instance, INativeWindowSource source)
     {
         // Every backend entry point supplies an initialized window source. The Silk contract makes
         // Native nullable only for source implementations that have not created their window yet.
@@ -33,7 +34,7 @@ internal static unsafe class WebGPUSurfaceFactory
     /// <param name="instance">The instance that owns the surface.</param>
     /// <param name="host">The external native host.</param>
     /// <returns>The created surface, or <see langword="null"/> on failure.</returns>
-    public static Surface* Create(WebGPU api, Instance* instance, WebGPUSurfaceHost host)
+    public static WGPUSurfaceImpl* Create(WebGPU api, WGPUInstanceImpl* instance, WebGPUSurfaceHost host)
     {
         // External hosts model the descriptors accepted by wgpu-native directly. GLFW and SDL are
         // the only toolkit-level entries and are translated before reaching the native C API.
@@ -63,7 +64,7 @@ internal static unsafe class WebGPUSurfaceFactory
     /// translation so a toolkit that cannot expose a supported platform source terminates without recursing indefinitely.
     /// </param>
     /// <returns>The created surface, or <see langword="null"/> when Silk exposes no compatible platform source.</returns>
-    private static Surface* Create(WebGPU api, Instance* instance, INativeWindow native, bool translateToolkitHandle)
+    private static WGPUSurfaceImpl* Create(WebGPU api, WGPUInstanceImpl* instance, INativeWindow native, bool translateToolkitHandle)
     {
         if (native.X11 is { } x11)
         {
@@ -102,7 +103,7 @@ internal static unsafe class WebGPUSurfaceFactory
         {
             // SDL_Window* follows the same rule. SDL_GetWindowWMInfo exposes the underlying
             // platform handles required by the WebGPU C surface descriptor.
-            SdlNativeWindow platformWindow = new(SdlProvider.SDL.Value, (Silk.NET.SDL.Window*)sdl);
+            SdlNativeWindow platformWindow = new(SdlProvider.SDL.Value, (Window*)sdl);
             return Create(api, instance, platformWindow, false);
         }
 
@@ -117,16 +118,16 @@ internal static unsafe class WebGPUSurfaceFactory
     /// <param name="display">The Xlib <c>Display*</c>.</param>
     /// <param name="window">The Xlib window identifier.</param>
     /// <returns>The created surface.</returns>
-    private static Surface* CreateXlibSurface(WebGPU api, Instance* instance, nint display, nuint window)
+    private static WGPUSurfaceImpl* CreateXlibSurface(WebGPU api, WGPUInstanceImpl* instance, nint display, nuint window)
     {
-        SurfaceSourceXlibWindow source = new()
+        WGPUSurfaceSourceXlibWindow source = new()
         {
-            chain = new ChainedStruct { sType = SType.SurfaceSourceXlibWindow },
+            chain = new WGPUChainedStruct { sType = WGPUSType.SurfaceSourceXlibWindow },
             display = (void*)display,
             window = window
         };
 
-        return CreateSurface(api, instance, (ChainedStruct*)&source);
+        return CreateSurface(api, instance, (WGPUChainedStruct*)&source);
     }
 
     /// <summary>
@@ -136,7 +137,7 @@ internal static unsafe class WebGPUSurfaceFactory
     /// <param name="instance">The instance that owns the surface.</param>
     /// <param name="nsWindow">The AppKit <c>NSWindow*</c>.</param>
     /// <returns>The created surface.</returns>
-    private static Surface* CreateCocoaSurface(WebGPU api, Instance* instance, nint nsWindow)
+    private static WGPUSurfaceImpl* CreateCocoaSurface(WebGPU api, WGPUInstanceImpl* instance, nint nsWindow)
     {
         nint metalLayer = MacOSMetalLayerFactory.Create(nsWindow);
 
@@ -158,15 +159,15 @@ internal static unsafe class WebGPUSurfaceFactory
     /// <param name="instance">The instance that owns the surface.</param>
     /// <param name="metalLayer">The <c>CAMetalLayer*</c> used for presentation.</param>
     /// <returns>The created surface.</returns>
-    private static Surface* CreateMetalLayerSurface(WebGPU api, Instance* instance, nint metalLayer)
+    private static WGPUSurfaceImpl* CreateMetalLayerSurface(WebGPU api, WGPUInstanceImpl* instance, nint metalLayer)
     {
-        SurfaceSourceMetalLayer source = new()
+        WGPUSurfaceSourceMetalLayer source = new()
         {
-            chain = new ChainedStruct { sType = SType.SurfaceSourceMetalLayer },
+            chain = new WGPUChainedStruct { sType = WGPUSType.SurfaceSourceMetalLayer },
             layer = (void*)metalLayer
         };
 
-        return CreateSurface(api, instance, (ChainedStruct*)&source);
+        return CreateSurface(api, instance, (WGPUChainedStruct*)&source);
     }
 
     /// <summary>
@@ -177,16 +178,16 @@ internal static unsafe class WebGPUSurfaceFactory
     /// <param name="display">The Wayland <c>wl_display*</c>.</param>
     /// <param name="surface">The Wayland <c>wl_surface*</c>.</param>
     /// <returns>The created surface.</returns>
-    private static Surface* CreateWaylandSurface(WebGPU api, Instance* instance, nint display, nint surface)
+    private static WGPUSurfaceImpl* CreateWaylandSurface(WebGPU api, WGPUInstanceImpl* instance, nint display, nint surface)
     {
-        SurfaceSourceWaylandSurface source = new()
+        WGPUSurfaceSourceWaylandSurface source = new()
         {
-            chain = new ChainedStruct { sType = SType.SurfaceSourceWaylandSurface },
+            chain = new WGPUChainedStruct { sType = WGPUSType.SurfaceSourceWaylandSurface },
             display = (void*)display,
             surface = (void*)surface
         };
 
-        return CreateSurface(api, instance, (ChainedStruct*)&source);
+        return CreateSurface(api, instance, (WGPUChainedStruct*)&source);
     }
 
     /// <summary>
@@ -197,16 +198,16 @@ internal static unsafe class WebGPUSurfaceFactory
     /// <param name="hwnd">The Win32 <c>HWND</c>.</param>
     /// <param name="hinstance">The Win32 <c>HINSTANCE</c>.</param>
     /// <returns>The created surface.</returns>
-    private static Surface* CreateWindowsSurface(WebGPU api, Instance* instance, nint hwnd, nint hinstance)
+    private static WGPUSurfaceImpl* CreateWindowsSurface(WebGPU api, WGPUInstanceImpl* instance, nint hwnd, nint hinstance)
     {
-        SurfaceSourceWindowsHWND source = new()
+        WGPUSurfaceSourceWindowsHWND source = new()
         {
-            chain = new ChainedStruct { sType = SType.SurfaceSourceWindowsHWND },
+            chain = new WGPUChainedStruct { sType = WGPUSType.SurfaceSourceWindowsHWND },
             hwnd = (void*)hwnd,
             hinstance = (void*)hinstance
         };
 
-        return CreateSurface(api, instance, (ChainedStruct*)&source);
+        return CreateSurface(api, instance, (WGPUChainedStruct*)&source);
     }
 
     /// <summary>
@@ -216,15 +217,15 @@ internal static unsafe class WebGPUSurfaceFactory
     /// <param name="instance">The instance that owns the surface.</param>
     /// <param name="window">The Android <c>ANativeWindow*</c>.</param>
     /// <returns>The created surface.</returns>
-    private static Surface* CreateAndroidSurface(WebGPU api, Instance* instance, nint window)
+    private static WGPUSurfaceImpl* CreateAndroidSurface(WebGPU api, WGPUInstanceImpl* instance, nint window)
     {
-        SurfaceSourceAndroidNativeWindow source = new()
+        WGPUSurfaceSourceAndroidNativeWindow source = new()
         {
-            chain = new ChainedStruct { sType = SType.SurfaceSourceAndroidNativeWindow },
+            chain = new WGPUChainedStruct { sType = WGPUSType.SurfaceSourceAndroidNativeWindow },
             window = (void*)window
         };
 
-        return CreateSurface(api, instance, (ChainedStruct*)&source);
+        return CreateSurface(api, instance, (WGPUChainedStruct*)&source);
     }
 
     /// <summary>
@@ -234,15 +235,15 @@ internal static unsafe class WebGPUSurfaceFactory
     /// <param name="instance">The instance that owns the surface.</param>
     /// <param name="panelNative">The panel's <c>ISwapChainPanelNative*</c>.</param>
     /// <returns>The created surface.</returns>
-    private static Surface* CreateSwapChainPanelSurface(WebGPU api, Instance* instance, nint panelNative)
+    private static WGPUSurfaceImpl* CreateSwapChainPanelSurface(WebGPU api, WGPUInstanceImpl* instance, nint panelNative)
     {
-        SurfaceSourceSwapChainPanel source = new()
+        WGPUSurfaceSourceSwapChainPanel source = new()
         {
-            chain = new ChainedStruct { sType = (SType)NativeSType.WGPUSType_SurfaceSourceSwapChainPanel },
+            chain = new WGPUChainedStruct { sType = (WGPUSType)WGPUNativeSType.WGPUSType_SurfaceSourceSwapChainPanel },
             panelNative = (void*)panelNative
         };
 
-        return CreateSurface(api, instance, (ChainedStruct*)&source);
+        return CreateSurface(api, instance, (WGPUChainedStruct*)&source);
     }
 
     /// <summary>
@@ -252,11 +253,11 @@ internal static unsafe class WebGPUSurfaceFactory
     /// <param name="instance">The instance that owns the surface.</param>
     /// <param name="source">The platform source descriptor at the head of the chain.</param>
     /// <returns>The created surface.</returns>
-    private static Surface* CreateSurface(WebGPU api, Instance* instance, ChainedStruct* source)
+    private static WGPUSurfaceImpl* CreateSurface(WebGPU api, WGPUInstanceImpl* instance, WGPUChainedStruct* source)
     {
         // Every source descriptor is stack allocated by its owning helper. wgpuInstanceCreateSurface
         // consumes the chain synchronously, so no pointer to that storage escapes this call.
-        SurfaceDescriptor descriptor = new() { nextInChain = source };
+        WGPUSurfaceDescriptor descriptor = new() { nextInChain = source };
         return api.InstanceCreateSurface(instance, in descriptor);
     }
 }

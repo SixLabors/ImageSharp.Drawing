@@ -6,6 +6,7 @@ using SixLabors.Fonts;
 using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
+using WebGPUExternalSurfaceDemo.Controls;
 using Brush = SixLabors.ImageSharp.Drawing.Processing.Brush;
 using Brushes = SixLabors.ImageSharp.Drawing.Processing.Brushes;
 using Color = SixLabors.ImageSharp.Color;
@@ -57,6 +58,13 @@ internal sealed class RichTextEditorScene : RenderScene
     private static readonly Pen GuidePen = Pens.Solid(GuideColor, 1F);
 
     private readonly Dictionary<FontKey, Font> fontCache = [];
+    private readonly CheckBox boldButton = new();
+    private readonly CheckBox italicButton = new();
+    private readonly CheckBox underlineButton = new();
+    private readonly CheckBox strikeoutButton = new();
+    private readonly ComboBox fontFamilyComboBox = new();
+    private readonly Label fontSizeLabel = new();
+    private readonly Label selectionStatusLabel = new();
 
     // Style runs use source grapheme ranges, not UTF-16 indices. The Fonts APIs
     // expose grapheme indices for interaction, so the editor can apply formatting
@@ -128,6 +136,116 @@ internal sealed class RichTextEditorScene : RenderScene
 
     /// <inheritdoc />
     public override string DisplayName => "Rich Text Editor";
+
+    /// <inheritdoc />
+    protected override Control CreateContent(WebGPURenderControl renderControl)
+    {
+        this.ConfigureToggleButton(this.boldButton, "B", this.ToggleBold, renderControl);
+        this.ConfigureToggleButton(this.italicButton, "I", this.ToggleItalic, renderControl);
+        this.ConfigureToggleButton(this.underlineButton, "U", this.ToggleUnderline, renderControl);
+        this.ConfigureToggleButton(this.strikeoutButton, "S", this.ToggleStrikeout, renderControl);
+
+        this.fontFamilyComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        this.fontFamilyComboBox.Width = 240;
+        this.fontFamilyComboBox.Margin = new Padding(0, 0, 8, 0);
+        foreach (string name in SystemFonts.Collection.Families.Select(x => x.Name).Order())
+        {
+            this.fontFamilyComboBox.Items.Add(name);
+        }
+
+        this.fontFamilyComboBox.SelectedItem = this.FontFamilyName;
+        this.fontFamilyComboBox.SelectedIndexChanged += (_, _) =>
+        {
+            if (this.fontFamilyComboBox.SelectedItem is string name)
+            {
+                this.SetFontFamily(name);
+                renderControl.Focus();
+                renderControl.Invalidate();
+            }
+        };
+
+        this.fontSizeLabel.AutoSize = true;
+        this.fontSizeLabel.Margin = new Padding(0, 5, 8, 0);
+        this.selectionStatusLabel.AutoSize = true;
+        this.selectionStatusLabel.Margin = new Padding(10, 5, 0, 0);
+
+        FlowLayoutPanel toolbar = new()
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            Padding = new Padding(8),
+        };
+
+        toolbar.Controls.Add(this.fontFamilyComboBox);
+        toolbar.Controls.Add(this.boldButton);
+        toolbar.Controls.Add(this.italicButton);
+        toolbar.Controls.Add(this.underlineButton);
+        toolbar.Controls.Add(this.strikeoutButton);
+        toolbar.Controls.Add(this.CreateButton("A-", () => this.ChangeFontSize(-2F), renderControl));
+        toolbar.Controls.Add(this.fontSizeLabel);
+        toolbar.Controls.Add(this.CreateButton("A+", () => this.ChangeFontSize(2F), renderControl));
+        toolbar.Controls.Add(this.CreateColorButton(System.Drawing.Color.Black, Color.ParseHex("#17212B"), renderControl));
+        toolbar.Controls.Add(this.CreateColorButton(System.Drawing.Color.RoyalBlue, Color.ParseHex("#145DA0"), renderControl));
+        toolbar.Controls.Add(this.CreateColorButton(System.Drawing.Color.Firebrick, Color.ParseHex("#B33A3A"), renderControl));
+        toolbar.Controls.Add(this.CreateColorButton(System.Drawing.Color.SeaGreen, Color.ParseHex("#2B7A4B"), renderControl));
+        toolbar.Controls.Add(this.selectionStatusLabel);
+
+        Panel panel = new() { Dock = DockStyle.Fill };
+        panel.Controls.Add(renderControl);
+        panel.Controls.Add(toolbar);
+        this.UpdateToolbar();
+        return panel;
+    }
+
+    /// <inheritdoc />
+    protected override void ConfigureControl(WebGPURenderControl renderControl)
+    {
+        renderControl.TabStop = true;
+
+        // The scene owns editor focus and capture because these are part of selection
+        // behavior, not responsibilities of the generic external-surface host.
+        renderControl.MouseDown += (_, e) =>
+        {
+            renderControl.Focus();
+            if (e.Button == MouseButtons.Left)
+            {
+                renderControl.Capture = true;
+            }
+        };
+
+        renderControl.MouseUp += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                renderControl.Capture = false;
+            }
+        };
+
+        renderControl.PreviewKeyDown += (_, e) =>
+        {
+            e.IsInputKey = e.KeyCode is Keys.Left or Keys.Right or Keys.Up or Keys.Down or Keys.Home or Keys.End;
+        };
+
+        renderControl.KeyDown += (_, e) =>
+        {
+            if (this.OnKeyDown(e))
+            {
+                e.SuppressKeyPress = true;
+                this.UpdateToolbar();
+                renderControl.Invalidate();
+            }
+        };
+
+        renderControl.KeyPress += (_, e) =>
+        {
+            if (this.OnKeyPress(e.KeyChar))
+            {
+                e.Handled = true;
+                this.UpdateToolbar();
+                renderControl.Invalidate();
+            }
+        };
+    }
 
     /// <summary>
     /// Gets the active font family name.
@@ -289,6 +407,7 @@ internal sealed class RichTextEditorScene : RenderScene
     {
         this.BeginSelection(e.X, e.Y);
         this.draggingSelection = e.Button == MouseButtons.Left;
+        this.UpdateToolbar();
     }
 
     /// <inheritdoc />
@@ -301,10 +420,15 @@ internal sealed class RichTextEditorScene : RenderScene
 
         this.draggingSelection = true;
         this.ExtendSelection(e.X, e.Y);
+        this.UpdateToolbar();
     }
 
     /// <inheritdoc />
-    public override void OnMouseUp(MouseEventArgs e) => this.draggingSelection = false;
+    public override void OnMouseUp(MouseEventArgs e)
+    {
+        this.draggingSelection = false;
+        this.UpdateToolbar();
+    }
 
     /// <summary>
     /// Starts a pointer selection operation at the supplied control coordinates.
@@ -439,6 +563,69 @@ internal sealed class RichTextEditorScene : RenderScene
         this.metricsDirty = true;
         this.textOptionsDirty = true;
         this.caretGeometryDirty = true;
+    }
+
+    private void ConfigureToggleButton(
+        CheckBox button,
+        string text,
+        Action action,
+        WebGPURenderControl renderControl)
+    {
+        button.Appearance = Appearance.Button;
+        button.AutoSize = true;
+        button.Text = text;
+        button.Font = new System.Drawing.Font(System.Drawing.FontFamily.GenericSansSerif, 9F, System.Drawing.FontStyle.Bold);
+        button.Margin = new Padding(0, 0, 6, 0);
+        button.Click += (_, _) => this.InvokeEditorCommand(action, renderControl);
+    }
+
+    private Button CreateButton(string text, Action action, WebGPURenderControl renderControl)
+    {
+        Button button = new()
+        {
+            AutoSize = true,
+            Text = text,
+            Margin = new Padding(0, 0, 6, 0),
+        };
+
+        button.Click += (_, _) => this.InvokeEditorCommand(action, renderControl);
+        return button;
+    }
+
+    private Button CreateColorButton(
+        System.Drawing.Color color,
+        Color textColor,
+        WebGPURenderControl renderControl)
+    {
+        Button button = new()
+        {
+            BackColor = color,
+            FlatStyle = FlatStyle.Flat,
+            Margin = new Padding(0, 1, 6, 0),
+            Size = new System.Drawing.Size(28, 24),
+            UseVisualStyleBackColor = false,
+        };
+
+        button.Click += (_, _) => this.InvokeEditorCommand(() => this.SetFillColor(textColor), renderControl);
+        return button;
+    }
+
+    private void InvokeEditorCommand(Action action, WebGPURenderControl renderControl)
+    {
+        action();
+        this.UpdateToolbar();
+        renderControl.Focus();
+        renderControl.Invalidate();
+    }
+
+    private void UpdateToolbar()
+    {
+        this.boldButton.Checked = this.IsBold;
+        this.italicButton.Checked = this.IsItalic;
+        this.underlineButton.Checked = this.IsUnderline;
+        this.strikeoutButton.Checked = this.IsStrikeout;
+        this.fontSizeLabel.Text = $"{this.CurrentFontSize:0.#} pt";
+        this.selectionStatusLabel.Text = $"Selected: {this.SelectionLength}";
     }
 
     private bool HandleControlKey(Keys keyCode)

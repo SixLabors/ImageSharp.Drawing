@@ -24,6 +24,11 @@ internal enum WebGPUSceneOperationKind
     Apply,
 
     /// <summary>
+    /// Executes a native layer-effect plan and draws its working texture back through retained scene data.
+    /// </summary>
+    ShaderEffect,
+
+    /// <summary>
     /// Begins rendering into a scoped-layer target.
     /// </summary>
     BeginLayer,
@@ -57,6 +62,16 @@ internal sealed class WebGPUSceneOperation
     {
         this.Kind = WebGPUSceneOperationKind.Apply;
         this.Apply = apply;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUSceneOperation"/> class.
+    /// </summary>
+    /// <param name="shaderEffect">The retained native shader-effect operation data.</param>
+    public WebGPUSceneOperation(WebGPUShaderEffectSceneItem shaderEffect)
+    {
+        this.Kind = WebGPUSceneOperationKind.ShaderEffect;
+        this.ShaderEffect = shaderEffect;
     }
 
     /// <summary>
@@ -103,6 +118,12 @@ internal sealed class WebGPUSceneOperation
     /// Non-null only when <see cref="Kind"/> is <see cref="WebGPUSceneOperationKind.Apply"/>.
     /// </summary>
     public WebGPUApplySceneItem? Apply { get; }
+
+    /// <summary>
+    /// Gets the retained native effect data for a shader-effect operation.
+    /// Non-null only when <see cref="Kind"/> is <see cref="WebGPUSceneOperationKind.ShaderEffect"/>.
+    /// </summary>
+    public WebGPUShaderEffectSceneItem? ShaderEffect { get; }
 
     /// <summary>
     /// Gets the absolute bounds of a scoped layer.
@@ -355,17 +376,23 @@ internal sealed class WebGPUApplySceneItem
     /// Initializes a new instance of the <see cref="WebGPUApplySceneItem"/> class.
     /// </summary>
     /// <param name="operation">The ImageSharp processor operation.</param>
-    /// <param name="sourceRect">The rectangle the processed pixels are drawn back to.</param>
-    /// <param name="readOffset">The offset subtracted from <paramref name="sourceRect"/> when reading the source pixels.</param>
+    /// <param name="effect">The layer effect represented by the operation, or <see langword="null"/> for a direct Apply operation.</param>
+    /// <param name="inputRect">The rectangle containing the source pixels supplied to the operation.</param>
+    /// <param name="outputRect">The bounds within which the processed pixels are written.</param>
+    /// <param name="readOffset">The offset subtracted from <paramref name="inputRect"/> when reading the source pixels.</param>
     /// <param name="drawRange">The encoded image-fill draw range inside the retained scene.</param>
     public WebGPUApplySceneItem(
         Action<IImageProcessingContext> operation,
-        Rectangle sourceRect,
+        LayerEffect? effect,
+        Rectangle inputRect,
+        Rectangle outputRect,
         Point readOffset,
         WebGPUSceneRange drawRange)
     {
         this.Operation = operation;
-        this.SourceRect = sourceRect;
+        this.Effect = effect;
+        this.InputRect = inputRect;
+        this.OutputRect = outputRect;
         this.ReadOffset = readOffset;
         this.DrawRange = drawRange;
     }
@@ -376,18 +403,76 @@ internal sealed class WebGPUApplySceneItem
     public Action<IImageProcessingContext> Operation { get; }
 
     /// <summary>
-    /// Gets the rectangle the processed pixels are drawn back to.
+    /// Gets the layer effect represented by the operation, or <see langword="null"/> for a direct Apply operation.
     /// </summary>
-    public Rectangle SourceRect { get; }
+    public LayerEffect? Effect { get; }
 
     /// <summary>
-    /// Gets the offset subtracted from <see cref="SourceRect"/> when reading the source pixels, so
+    /// Gets the rectangle containing the source pixels supplied to the operation.
+    /// </summary>
+    public Rectangle InputRect { get; }
+
+    /// <summary>
+    /// Gets the bounds within which the processed pixels are written.
+    /// </summary>
+    public Rectangle OutputRect { get; }
+
+    /// <summary>
+    /// Gets the offset subtracted from <see cref="InputRect"/> when reading the source pixels, so
     /// a write-back recorded at an offset still reads the pre-offset region.
     /// </summary>
     public Point ReadOffset { get; }
 
     /// <summary>
     /// Gets the encoded image-fill draw range inside the retained scene.
+    /// </summary>
+    public WebGPUSceneRange DrawRange { get; }
+}
+
+/// <summary>
+/// Retained WebGPU data for one native layer-effect operation.
+/// </summary>
+internal sealed class WebGPUShaderEffectSceneItem
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUShaderEffectSceneItem"/> class.
+    /// </summary>
+    /// <param name="effect">The shader effect that owns the ordered GPU passes.</param>
+    /// <param name="inputRect">The rectangle represented by the effect working texture.</param>
+    /// <param name="outputRect">The bounds within which the working texture is written back.</param>
+    /// <param name="readOffset">The offset subtracted from <paramref name="inputRect"/> when reading source pixels.</param>
+    /// <param name="drawRange">The encoded working-texture write-back range.</param>
+    public WebGPUShaderEffectSceneItem(IWebGPUShaderEffectSource effect, Rectangle inputRect, Rectangle outputRect, Point readOffset, WebGPUSceneRange drawRange)
+    {
+        this.Effect = effect;
+        this.InputRect = inputRect;
+        this.OutputRect = outputRect;
+        this.ReadOffset = readOffset;
+        this.DrawRange = drawRange;
+    }
+
+    /// <summary>
+    /// Gets the shader effect that owns the ordered GPU passes.
+    /// </summary>
+    public IWebGPUShaderEffectSource Effect { get; }
+
+    /// <summary>
+    /// Gets the rectangle represented by the effect working texture.
+    /// </summary>
+    public Rectangle InputRect { get; }
+
+    /// <summary>
+    /// Gets the bounds within which the working texture is written back.
+    /// </summary>
+    public Rectangle OutputRect { get; }
+
+    /// <summary>
+    /// Gets the offset subtracted from <see cref="InputRect"/> when resolving the source snapshot.
+    /// </summary>
+    public Point ReadOffset { get; }
+
+    /// <summary>
+    /// Gets the encoded working-texture write-back range.
     /// </summary>
     public WebGPUSceneRange DrawRange { get; }
 }

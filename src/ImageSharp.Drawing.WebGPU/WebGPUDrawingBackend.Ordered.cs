@@ -4,6 +4,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -18,14 +19,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 public sealed unsafe partial class WebGPUDrawingBackend
 {
     /// <summary>
-    /// Executes the immutable ordered plan with allocator validation deferred to Apply readbacks
-    /// and the final flush boundary.
+    /// Executes the immutable ordered plan with allocator validation at Apply barriers, at the
+    /// final offscreen boundary, or through deferred presentation readbacks.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format of the render target.</typeparam>
     /// <param name="configuration">The active ImageSharp configuration.</param>
     /// <param name="flushContext">The flush-scoped WebGPU resources and command state.</param>
     /// <param name="rootTarget">The externally owned root render target.</param>
     /// <param name="encodedScene">The retained scene and ordered execution plan.</param>
+    /// <param name="scene">The retained scene that receives deferred allocator growth.</param>
+    /// <param name="deferSchedulingStatus">Whether presentation allocator statuses can resolve after the frame returns.</param>
     /// <param name="requiredFeature">The texture-format feature required by <typeparamref name="TPixel"/>.</param>
     /// <param name="currentBumpSizes">The scratch capacities carried across flushes.</param>
     /// <param name="resourceArena">The reusable staged-scene resource arena.</param>
@@ -35,7 +38,9 @@ public sealed unsafe partial class WebGPUDrawingBackend
         WebGPUFlushContext flushContext,
         WebGPUSceneTarget rootTarget,
         WebGPUEncodedScene encodedScene,
-        FeatureName requiredFeature,
+        WebGPUDrawingBackendScene scene,
+        bool deferSchedulingStatus,
+        WGPUFeatureName requiredFeature,
         ref WebGPUSceneBumpSizes currentBumpSizes,
         ref WebGPUSceneResourceArena? resourceArena,
         ref WebGPUSceneSchedulingArena? schedulingArena)
@@ -47,6 +52,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
             flushContext,
             rootTarget,
             encodedScene,
+            scene,
+            deferSchedulingStatus,
             requiredFeature,
             currentBumpSizes,
             resourceArena,
@@ -59,8 +66,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
     }
 
     /// <summary>
-    /// Owns one ordered flush's transaction journal, target checkpoints, mixed readback buffer,
-    /// and map callback.
+    /// Owns one ordered flush's target checkpoints and either its synchronous transaction journal
+    /// or its deferred presentation status readbacks.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format used to lay out and materialize Apply readbacks.</typeparam>
     private sealed unsafe class WebGPUOrderedExecutor<TPixel> : IDisposable
@@ -70,20 +77,23 @@ public sealed unsafe partial class WebGPUDrawingBackend
         private readonly Configuration configuration;
         private readonly WebGPUFlushContext flushContext;
         private readonly WebGPUEncodedScene encodedScene;
-        private readonly FeatureName requiredFeature;
+        private readonly WebGPUDrawingBackendScene scene;
+        private readonly bool deferSchedulingStatus;
+        private readonly WGPUFeatureName requiredFeature;
         private readonly WebGPUOrderedTargetState[] targets;
         private readonly WebGPUOrderedJournalEntry[] journal;
         private readonly WebGPUSceneBumpSizes[] submittedBumpSizes;
         private readonly uint[] submittedChunkTileHeights;
         private readonly WebGPUApplyReadbackRegion[] applyRegions;
         private readonly Image<TPixel>?[] applyImages;
-        private readonly WgpuBuffer* readbackBuffer;
+        private readonly WGPUBufferImpl* readbackBuffer;
         private readonly nuint readbackByteLength;
-        private readonly ManualResetEventSlim mapReady = new(false);
-        private readonly WebGPUBufferMapCallback mapCallback;
+        private readonly ManualResetEventSlim? mapReady;
+        private readonly WebGPUBufferMapCallback? mapCallback;
+        private readonly WebGPUEffectRenderer? effectRenderer;
         private WebGPUSceneResourceArena? resourceArena;
         private WebGPUSceneSchedulingArena? schedulingArena;
-        private BufferMapAsyncStatus mapStatus;
+        private WGPUMapAsyncStatus mapStatus;
         private ulong lastSubmissionIndex;
         private int currentTargetId;
         private int journalCount;
@@ -98,6 +108,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
         /// <param name="flushContext">The flush-scoped WebGPU command and resource context.</param>
         /// <param name="rootTarget">The externally owned root target.</param>
         /// <param name="encodedScene">The retained ordered scene.</param>
+        /// <param name="scene">The retained scene that receives deferred allocator growth.</param>
+        /// <param name="deferSchedulingStatus">Whether presentation allocator statuses can resolve after the frame returns.</param>
         /// <param name="requiredFeature">The target-format feature required by <typeparamref name="TPixel"/>.</param>
         /// <param name="bumpSizes">The initial scheduling scratch capacities.</param>
         /// <param name="resourceArena">The rented resource arena, or <see langword="null"/>.</param>
@@ -108,7 +120,9 @@ public sealed unsafe partial class WebGPUDrawingBackend
             WebGPUFlushContext flushContext,
             WebGPUSceneTarget rootTarget,
             WebGPUEncodedScene encodedScene,
-            FeatureName requiredFeature,
+            WebGPUDrawingBackendScene scene,
+            bool deferSchedulingStatus,
+            WGPUFeatureName requiredFeature,
             WebGPUSceneBumpSizes bumpSizes,
             WebGPUSceneResourceArena? resourceArena,
             WebGPUSceneSchedulingArena? schedulingArena)
@@ -117,37 +131,75 @@ public sealed unsafe partial class WebGPUDrawingBackend
             this.configuration = configuration;
             this.flushContext = flushContext;
             this.encodedScene = encodedScene;
+            this.scene = scene;
+            this.deferSchedulingStatus = deferSchedulingStatus;
             this.requiredFeature = requiredFeature;
             this.BumpSizes = bumpSizes;
             this.resourceArena = resourceArena;
             this.schedulingArena = schedulingArena;
             this.targets = new WebGPUOrderedTargetState[encodedScene.OrderedTargetCount];
-            this.journal = new WebGPUOrderedJournalEntry[encodedScene.MaxPendingRangeCount];
+            this.journal = deferSchedulingStatus
+                ? []
+                : new WebGPUOrderedJournalEntry[encodedScene.MaxPendingRangeCount];
+
             this.submittedBumpSizes = new WebGPUSceneBumpSizes[encodedScene.MaxStatusCapacity];
             this.submittedChunkTileHeights = new uint[encodedScene.MaxStatusCapacity];
             this.applyRegions = new WebGPUApplyReadbackRegion[encodedScene.OrderedApplyCount];
             this.applyImages = new Image<TPixel>?[encodedScene.MaxApplyGroupCount];
             this.targets[0].Initialize(rootTarget);
 
-            this.readbackByteLength = this.BuildReadbackLayout();
-            BufferDescriptor descriptor = new()
+            if (deferSchedulingStatus)
             {
-                usage = (ulong)(BufferUsage.CopyDst | BufferUsage.MapRead),
-                size = checked(this.readbackByteLength),
-                mappedAtCreation = 0U,
-            };
+                this.readbackBuffer = null;
+                this.readbackByteLength = 0;
+                this.mapReady = null;
+                this.mapCallback = null;
+            }
+            else
+            {
+                this.readbackByteLength = this.BuildReadbackLayout();
+                WGPUBufferDescriptor descriptor = new()
+                {
+                    usage = (ulong)(BufferUsage.CopyDst | BufferUsage.MapRead),
+                    size = checked(this.readbackByteLength),
+                    mappedAtCreation = 0U,
+                };
 
-            using WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference();
-            this.readbackBuffer = flushContext.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in descriptor);
-            if (this.readbackBuffer is null)
-            {
-                throw new InvalidOperationException("Failed to create the ordered WebGPU barrier readback buffer.");
+                using WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference();
+                this.readbackBuffer = flushContext.Api.DeviceCreateBuffer((WGPUDeviceImpl*)deviceReference.Handle, in descriptor);
+                if (this.readbackBuffer is null)
+                {
+                    throw new InvalidOperationException("Failed to create the ordered WebGPU barrier readback buffer.");
+                }
+
+                // The flush context releases the native buffer after every submitted command that
+                // references it has left managed ownership.
+                flushContext.TrackBuffer(this.readbackBuffer);
+                this.mapReady = new ManualResetEventSlim(false);
+                this.mapCallback = WebGPUBufferMapCallback.From(this.OnMapCompleted);
             }
 
-            // The flush context releases the native buffer after every submitted command that
-            // references it has left managed ownership.
-            flushContext.TrackBuffer(this.readbackBuffer);
-            this.mapCallback = WebGPUBufferMapCallback.From(this.OnMapCompleted);
+            if (encodedScene.OrderedShaderEffectCount != 0)
+            {
+                // The uniform buffer holds one disjoint region per pass of a single invocation, so
+                // its size follows the largest pass count among the retained effect operations.
+                int maximumPassCount = 0;
+                ReadOnlySpan<WebGPUSceneOperation> operations = encodedScene.OrderedOperations;
+                for (int i = 0; i < operations.Length; i++)
+                {
+                    if (operations[i].Kind == WebGPUSceneOperationKind.ShaderEffect)
+                    {
+                        maximumPassCount = Math.Max(maximumPassCount, operations[i].ShaderEffect!.Effect.GetShaderPasses().Length);
+                    }
+                }
+
+                this.effectRenderer = new WebGPUEffectRenderer(
+                    flushContext,
+                    encodedScene.MaximumShaderEffectWidth,
+                    encodedScene.MaximumShaderEffectHeight,
+                    encodedScene.MaximumShaderUniformByteLength,
+                    maximumPassCount);
+            }
         }
 
         /// <summary>
@@ -166,8 +218,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
         public WebGPUSceneSchedulingArena? SchedulingArena => this.schedulingArena;
 
         /// <summary>
-        /// Executes every retained operation, validates the final transaction, and commits the
-        /// root target before returning.
+        /// Executes every retained operation and commits the root target. Presentation-only
+        /// allocator validation completes through the backend's deferred status queue.
         /// </summary>
         public void Execute()
         {
@@ -204,15 +256,29 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
                     case WebGPUSceneOperationKind.Apply:
                         this.ResolveApplyBarrier(i, operation.ApplyGroupCount);
-                        this.CommitValidatedTargets();
+                        this.CommitTargets();
                         this.ProcessApplyGroup(i, operation.ApplyGroupCount);
                         i += operation.ApplyGroupCount - 1;
+                        break;
+
+                    case WebGPUSceneOperationKind.ShaderEffect:
+                        if (!this.deferSchedulingStatus)
+                        {
+                            this.ResolveFinalBarrier();
+                            this.CommitTargets();
+                        }
+
+                        this.ProcessShaderEffect(operation.ShaderEffect!);
                         break;
                 }
             }
 
-            this.ResolveFinalBarrier();
-            this.CommitValidatedTargets();
+            if (!this.deferSchedulingStatus)
+            {
+                this.ResolveFinalBarrier();
+            }
+
+            this.CommitTargets();
         }
 
         /// <inheritdoc />
@@ -225,8 +291,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
             this.disposed = true;
             this.DisposeApplyImages(this.applyImages.Length);
-            this.mapCallback.Dispose();
-            this.mapReady.Dispose();
+            this.mapCallback?.Dispose();
+            this.mapReady?.Dispose();
         }
 
         /// <summary>
@@ -236,7 +302,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
         private nuint BuildReadbackLayout()
         {
             int pixelSize = Unsafe.SizeOf<TPixel>();
-            ulong maximumByteLength = checked((ulong)this.encodedScene.FinalStatusCapacity * (ulong)sizeof(GpuSceneBumpAllocators));
+            ulong maximumByteLength = checked((ulong)this.encodedScene.MaxStatusCapacity * (ulong)sizeof(GpuSceneBumpAllocators));
             ReadOnlySpan<WebGPUSceneOperation> operations = this.encodedScene.OrderedOperations;
 
             for (int i = 0; i < operations.Length; i++)
@@ -258,7 +324,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                 {
                     WebGPUSceneOperation applyOperation = operations[i + groupIndex];
                     WebGPUApplySceneItem apply = applyOperation.Apply!;
-                    Rectangle requestedRead = apply.SourceRect;
+                    Rectangle requestedRead = apply.InputRect;
                     requestedRead.Offset(-apply.ReadOffset.X, -apply.ReadOffset.Y);
                     Rectangle clippedRead = Rectangle.Intersect(apply.DrawRange.TargetBounds, requestedRead);
                     int packedRowBytes = checked(clippedRead.Width * pixelSize);
@@ -297,8 +363,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
                     operation.LayerBounds.Width,
                     operation.LayerBounds.Height,
                     renderAttachment: true,
-                    out Texture* layerTexture,
-                    out TextureView* layerTextureView,
+                    out WGPUTextureImpl* layerTexture,
+                    out WGPUTextureViewImpl* layerTextureView,
                     out string? error))
             {
                 throw new InvalidOperationException(error);
@@ -316,7 +382,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
         }
 
         /// <summary>
-        /// Adds one range to the current transaction and submits it without mapping allocator status.
+        /// Submits one range with synchronous transaction validation or deferred presentation validation.
         /// </summary>
         /// <param name="range">The retained range to submit.</param>
         /// <param name="targetId">The logical target receiving the range.</param>
@@ -327,7 +393,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             WebGPUSceneRange range,
             int targetId,
             WebGPUOrderedExternalSourceKind externalSourceKind,
-            TextureView* externalTextureView,
+            WGPUTextureViewImpl* externalTextureView,
             int externalTargetId)
         {
             if (range.FillCount == 0)
@@ -335,20 +401,27 @@ public sealed unsafe partial class WebGPUDrawingBackend
                 return;
             }
 
-            ref WebGPUOrderedJournalEntry entry = ref this.journal[this.journalCount];
-            entry = new WebGPUOrderedJournalEntry(
+            WebGPUOrderedJournalEntry newEntry = new(
                 range,
                 targetId,
                 externalSourceKind,
                 externalTextureView,
                 externalTargetId);
 
+            if (this.deferSchedulingStatus)
+            {
+                this.SubmitRangeAttempt(ref newEntry);
+                return;
+            }
+
+            ref WebGPUOrderedJournalEntry entry = ref this.journal[this.journalCount];
+            entry = newEntry;
             this.SubmitRangeAttempt(ref entry);
             this.journalCount++;
         }
 
         /// <summary>
-        /// Submits one initial or replayed range attempt and replaces its status metadata in place.
+        /// Submits one initial or replayed range attempt and records or defers its status metadata.
         /// </summary>
         /// <param name="entry">The stable journal entry describing the GPU draw.</param>
         private void SubmitRangeAttempt(ref WebGPUOrderedJournalEntry entry)
@@ -357,11 +430,11 @@ public sealed unsafe partial class WebGPUDrawingBackend
             WebGPUSceneTarget backdropTarget = targetState.GetLatestTarget();
             targetState.GetNextOutput(
                 this.flushContext,
-                out Texture* outputTexture,
-                out TextureView* outputTextureView,
+                out WGPUTextureImpl* outputTexture,
+                out WGPUTextureViewImpl* outputTextureView,
                 out WebGPUOrderedTargetImage outputImage);
 
-            TextureView* externalTextureView = entry.ExternalSourceKind switch
+            WGPUTextureViewImpl* externalTextureView = entry.ExternalSourceKind switch
             {
                 WebGPUOrderedExternalSourceKind.TextureView => entry.ExternalTextureView,
                 WebGPUOrderedExternalSourceKind.Target => this.targets[entry.ExternalTargetId].GetLatestTarget().TextureView,
@@ -377,6 +450,23 @@ public sealed unsafe partial class WebGPUDrawingBackend
                 externalTextureView,
                 ref this.resourceArena);
 
+            nuint statusBufferCapacity = 0;
+            WGPUBufferImpl* statusReadbackBuffer = this.readbackBuffer;
+            bool statusBufferPassedToDispatch = false;
+            bool statusBufferOwnershipTransferred = false;
+
+            if (this.deferSchedulingStatus)
+            {
+                statusBufferCapacity = checked(
+                    (nuint)entry.Range.MaximumStatusRecordCount * (nuint)sizeof(GpuSceneBumpAllocators));
+                statusReadbackBuffer = this.flushContext.DeviceState.RentStatusReadbackBuffer(statusBufferCapacity);
+                if (statusReadbackBuffer is null)
+                {
+                    stagedScene.Dispose();
+                    throw new InvalidOperationException("Failed to create the deferred ordered scheduling-status readback buffer.");
+                }
+            }
+
             try
             {
                 if (stagedScene.BindingLimitFailure.Buffer != WebGPUSceneDispatch.BindingLimitBuffer.None)
@@ -385,7 +475,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
                     this.backend.lastChunkingBindingFailure = stagedScene.BindingLimitFailure.Buffer;
                 }
 
-                int statusStart = this.statusCount;
+                int statusStart = this.deferSchedulingStatus ? 0 : this.statusCount;
+                statusBufferPassedToDispatch = this.deferSchedulingStatus;
                 bool submitted = WebGPUSceneDispatch.TrySubmitTransactionalStagedScene(
                     ref stagedScene,
                     backdropTarget,
@@ -393,7 +484,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                     outputTextureView,
                     ref this.schedulingArena,
                     this.backend.GetChunkTileHeightHint(stagedScene.BindingLimitFailure.Buffer, entry.Range.TargetBounds.Size),
-                    this.readbackBuffer,
+                    statusReadbackBuffer,
                     checked((nuint)statusStart * (nuint)sizeof(GpuSceneBumpAllocators)),
                     this.submittedBumpSizes.AsSpan(statusStart),
                     this.submittedChunkTileHeights.AsSpan(statusStart),
@@ -409,9 +500,39 @@ public sealed unsafe partial class WebGPUDrawingBackend
                 }
 
                 entry.SetStatus(statusStart, emittedStatusCount, fullTileHeight, stagedScene.BindingLimitFailure.IsExceeded);
-                this.statusCount += emittedStatusCount;
                 this.lastSubmissionIndex = submissionIndex;
                 targetState.SetLatestImage(outputImage);
+
+                if (this.deferSchedulingStatus)
+                {
+                    WebGPUPendingSchedulingStatus pendingStatus = stagedScene.BindingLimitFailure.IsExceeded
+                        ? new WebGPUPendingSchedulingStatus(
+                            this.flushContext.Api,
+                            this.flushContext.DeviceHandle,
+                            this.flushContext.DeviceState,
+                            statusReadbackBuffer,
+                            statusBufferCapacity,
+                            stagedScene.Config.BumpSizes,
+                            this.submittedBumpSizes.AsSpan(0, emittedStatusCount),
+                            this.submittedChunkTileHeights.AsSpan(0, emittedStatusCount),
+                            fullTileHeight,
+                            submissionIndex)
+                        : new WebGPUPendingSchedulingStatus(
+                            this.flushContext.Api,
+                            this.flushContext.DeviceHandle,
+                            this.flushContext.DeviceState,
+                            statusReadbackBuffer,
+                            statusBufferCapacity,
+                            this.submittedBumpSizes[0],
+                            submissionIndex);
+
+                    statusBufferOwnershipTransferred = true;
+                    this.backend.EnqueuePendingSchedulingStatus(pendingStatus, this.scene, correctiveRender: null);
+                }
+                else
+                {
+                    this.statusCount += emittedStatusCount;
+                }
 
                 if (successfulChunkTileHeight != 0)
                 {
@@ -424,6 +545,21 @@ public sealed unsafe partial class WebGPUDrawingBackend
             finally
             {
                 stagedScene.Dispose();
+
+                if (this.deferSchedulingStatus && !statusBufferOwnershipTransferred)
+                {
+                    if (statusBufferPassedToDispatch)
+                    {
+                        // Dispatch may already have submitted commands that reference the buffer.
+                        // Native command ownership permits releasing it with the flush resources,
+                        // but it must not return to the reusable pool before those commands retire.
+                        this.flushContext.TrackBuffer(statusReadbackBuffer);
+                    }
+                    else
+                    {
+                        this.flushContext.DeviceState.ReturnStatusReadbackBuffer(statusReadbackBuffer, statusBufferCapacity);
+                    }
+                }
             }
         }
 
@@ -459,21 +595,21 @@ public sealed unsafe partial class WebGPUDrawingBackend
                         throw new InvalidOperationException("Failed to create the ordered Apply readback command encoder.");
                     }
 
-                    ImageCopyTexture sourceCopy = new()
+                    WGPUTexelCopyTextureInfo sourceCopy = new()
                     {
                         texture = sourceTarget.Texture,
                         mipLevel = 0,
-                        origin = new Origin3D(
+                        origin = new WGPUOrigin3D(
                             (uint)(region.ClippedSource.X + sourceTarget.TextureOffset.X),
                             (uint)(region.ClippedSource.Y + sourceTarget.TextureOffset.Y),
                             0),
-                        aspect = TextureAspect.All
+                        aspect = WGPUTextureAspect.All
                     };
 
-                    ImageCopyBuffer destinationCopy = new()
+                    WGPUTexelCopyBufferInfo destinationCopy = new()
                     {
                         buffer = this.readbackBuffer,
-                        layout = new TextureDataLayout
+                        layout = new WGPUTexelCopyBufferLayout
                         {
                             offset = region.BufferOffset,
                             bytesPerRow = (uint)region.ReadbackRowBytes,
@@ -481,7 +617,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                         }
                     };
 
-                    Extent3D copySize = new((uint)region.ClippedSource.Width, (uint)region.ClippedSource.Height, 1);
+                    WGPUExtent3D copySize = new((uint)region.ClippedSource.Width, (uint)region.ClippedSource.Height, 1);
                     this.flushContext.Api.CommandEncoderCopyTextureToBuffer(
                         this.flushContext.CommandEncoder,
                         in sourceCopy,
@@ -585,18 +721,18 @@ public sealed unsafe partial class WebGPUDrawingBackend
         private void* MapReadback(nuint mappedByteLength, ulong submissionIndex)
         {
             this.mapStatus = default;
-            this.mapReady.Reset();
+            this.mapReady!.Reset();
             this.flushContext.Api.BufferMapAsync(
                 this.readbackBuffer,
                 MapMode.Read,
                 0,
                 mappedByteLength,
-                this.mapCallback,
+                this.mapCallback!,
                 null);
 
             using WebGPUHandle.HandleReference deviceReference = this.flushContext.DeviceHandle.AcquireReference();
-            if (!WaitForMapSignal(this.flushContext.Api, (Device*)deviceReference.Handle, this.mapReady, submissionIndex) ||
-                this.mapStatus != BufferMapAsyncStatus.Success)
+            if (!WaitForMapSignal(this.flushContext.Api, (WGPUDeviceImpl*)deviceReference.Handle, this.mapReady!, submissionIndex) ||
+                this.mapStatus != WGPUMapAsyncStatus.Success)
             {
                 // Unmapping cancels a still-pending map before executor disposal retires its
                 // managed owner. The wrapper remains self-rooted until native delivers the
@@ -694,10 +830,11 @@ public sealed unsafe partial class WebGPUDrawingBackend
         }
 
         /// <summary>
-        /// Copies validated active target images into their durable root/layer checkpoints and
-        /// submits all commits together without an additional CPU wait.
+        /// Copies active target images into their durable root/layer checkpoints and submits all
+        /// commits together. Synchronous paths call this after validation; presentation paths
+        /// validate the submitted allocator records through the deferred status queue.
         /// </summary>
-        private void CommitValidatedTargets()
+        private void CommitTargets()
         {
             bool recordedCommit = false;
 
@@ -737,7 +874,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
             if (!TrySubmitPendingCommands(this.flushContext))
             {
-                throw new InvalidOperationException("Failed to submit validated ordered target commits.");
+                throw new InvalidOperationException("Failed to submit ordered target commits.");
             }
 
             for (int i = 0; i < this.targets.Length; i++)
@@ -770,10 +907,10 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
                     if (!TryCreateCompositionTexture(
                             this.flushContext,
-                            apply.SourceRect.Width,
-                            apply.SourceRect.Height,
-                            out Texture* texture,
-                            out TextureView* textureView,
+                            apply.InputRect.Width,
+                            apply.InputRect.Height,
+                            out WGPUTextureImpl* texture,
+                            out WGPUTextureViewImpl* textureView,
                             out string? error))
                     {
                         throw new InvalidOperationException(error);
@@ -783,7 +920,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                     {
                         WebGPUFlushContext.UploadTextureFromRegion(
                             this.flushContext.Api,
-                            (Queue*)queueReference.Handle,
+                            (WGPUQueueImpl*)queueReference.Handle,
                             texture,
                             image.Frames.RootFrame.PixelBuffer.GetRegion(),
                             this.configuration.MemoryAllocator);
@@ -809,7 +946,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                     // later processor exception escapes. Validate and commit those draws without
                     // invoking any processor a second time.
                     this.ResolveFinalBarrier();
-                    this.CommitValidatedTargets();
+                    this.CommitTargets();
                 }
                 catch
                 {
@@ -823,6 +960,31 @@ public sealed unsafe partial class WebGPUDrawingBackend
         }
 
         /// <summary>
+        /// Executes one native effect against the latest ordered source and journals its retained write-back range.
+        /// </summary>
+        /// <param name="effect">The native effect operation.</param>
+        private void ProcessShaderEffect(WebGPUShaderEffectSceneItem effect)
+        {
+            // A fully clipped write-back has no fill to draw. Skip the passes entirely: nothing
+            // samples the result, and SubmitRange would return without submitting, leaving the
+            // recorded passes in the shared encoder while the next invocation rewrites the
+            // uniform regions they reference.
+            if (effect.DrawRange.FillCount == 0)
+            {
+                return;
+            }
+
+            WebGPUSceneTarget sourceTarget = this.targets[this.currentTargetId].GetLatestTarget();
+            WGPUTextureViewImpl* effectTextureView = this.effectRenderer!.Render(effect, sourceTarget);
+            this.SubmitRange(
+                effect.DrawRange,
+                this.currentTargetId,
+                WebGPUOrderedExternalSourceKind.TextureView,
+                effectTextureView,
+                0);
+        }
+
+        /// <summary>
         /// Creates transparent source images for a group whose requested reads are fully clipped.
         /// </summary>
         /// <param name="firstOperationIndex">The Apply group head operation index.</param>
@@ -832,8 +994,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
             ReadOnlySpan<WebGPUSceneOperation> operations = this.encodedScene.OrderedOperations;
             for (int i = 0; i < applyCount; i++)
             {
-                Rectangle sourceRect = operations[firstOperationIndex + i].Apply!.SourceRect;
-                this.applyImages[i] = new Image<TPixel>(this.configuration, sourceRect.Width, sourceRect.Height);
+                Rectangle inputRect = operations[firstOperationIndex + i].Apply!.InputRect;
+                this.applyImages[i] = new Image<TPixel>(this.configuration, inputRect.Width, inputRect.Height);
             }
         }
 
@@ -860,7 +1022,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                     WebGPUSceneOperation operation = operations[firstOperationIndex + i];
                     WebGPUApplySceneItem apply = operation.Apply!;
                     WebGPUApplyReadbackRegion region = this.applyRegions[operation.ApplyIndex];
-                    Image<TPixel> image = new(this.configuration, apply.SourceRect.Width, apply.SourceRect.Height);
+                    Image<TPixel> image = new(this.configuration, apply.InputRect.Width, apply.InputRect.Height);
                     this.applyImages[i] = image;
 
                     Buffer2DRegion<TPixel> destination = image.Frames.RootFrame.PixelBuffer.GetRegion();
@@ -914,11 +1076,11 @@ public sealed unsafe partial class WebGPUDrawingBackend
         /// </summary>
         /// <param name="status">The native buffer-map completion status.</param>
         /// <param name="userData">Unused native callback state.</param>
-        private void OnMapCompleted(BufferMapAsyncStatus status, void* userData)
+        private void OnMapCompleted(WGPUMapAsyncStatus status, void* userData)
         {
             _ = userData;
             this.mapStatus = status;
-            this.mapReady.Set();
+            this.mapReady!.Set();
         }
 
         /// <summary>
@@ -979,10 +1141,10 @@ public sealed unsafe partial class WebGPUDrawingBackend
     /// </summary>
     private struct WebGPUOrderedTargetState
     {
-        private Texture* scratchATexture;
-        private TextureView* scratchAView;
-        private Texture* scratchBTexture;
-        private TextureView* scratchBView;
+        private WGPUTextureImpl* scratchATexture;
+        private WGPUTextureViewImpl* scratchAView;
+        private WGPUTextureImpl* scratchBTexture;
+        private WGPUTextureViewImpl* scratchBView;
         private WebGPUOrderedTargetImage latestImage;
 
         /// <summary>
@@ -1047,8 +1209,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
         /// <param name="image">Receives the selected scratch identity.</param>
         public void GetNextOutput(
             WebGPUFlushContext flushContext,
-            out Texture* texture,
-            out TextureView* textureView,
+            out WGPUTextureImpl* texture,
+            out WGPUTextureViewImpl* textureView,
             out WebGPUOrderedTargetImage image)
         {
             image = this.latestImage == WebGPUOrderedTargetImage.ScratchA
@@ -1129,7 +1291,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             WebGPUSceneRange range,
             int targetId,
             WebGPUOrderedExternalSourceKind externalSourceKind,
-            TextureView* externalTextureView,
+            WGPUTextureViewImpl* externalTextureView,
             int externalTargetId)
         {
             this.Range = range;
@@ -1161,7 +1323,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
         /// <summary>
         /// Gets the fixed Apply upload texture view.
         /// </summary>
-        public TextureView* ExternalTextureView { get; }
+        public WGPUTextureViewImpl* ExternalTextureView { get; }
 
         /// <summary>
         /// Gets the stable layer target identity supplying a composite texture.

@@ -4,6 +4,7 @@
 using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -30,6 +31,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     // passes end, so command encoding never references a freed object.
     private readonly List<nint> transientBindGroups = [];
     private readonly List<nint> transientBuffers = [];
+    private readonly List<nint> transientSamplers = [];
     private readonly List<nint> transientTextureViews = [];
     private readonly List<nint> transientTextures = [];
 
@@ -37,6 +39,17 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     // key = source Image reference, value = uploaded texture view handle.
     // Handles are released when this flush context is disposed.
     private readonly Dictionary<Image, nint> cachedSourceTextureViews = new(ReferenceEqualityComparer.Instance);
+
+    // Device-pooled resources rented for this flush. Unlike the transient lists above these are
+    // returned to the device pool at disposal instead of released, so the next flush can reuse
+    // the same native objects without recreation or lazy zero-initialization.
+    private readonly List<PooledTextureRental> pooledTextures = [];
+    private readonly List<PooledBufferRental> pooledUniformBuffers = [];
+
+    // One gradient-ramp texture serves every staged range of the flush's encoded scene. The view
+    // is owned through pooledTextures; this cache only avoids duplicate staging.
+    private object? cachedGradientScene;
+    private nint cachedGradientTextureView;
 
     private bool disposed;
 
@@ -67,7 +80,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         in Rectangle targetBounds,
         Point targetTextureOffset,
         WebGPUTargetDescriptor targetDescriptor,
-        TextureFormat textureFormat,
+        WGPUTextureFormat textureFormat,
         bool isPresentationSurface,
         bool requiresPresentationCopies,
         MemoryAllocator memoryAllocator,
@@ -144,7 +157,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <summary>
     /// Gets the target texture format for this flush.
     /// </summary>
-    public TextureFormat TextureFormat { get; }
+    public WGPUTextureFormat TextureFormat { get; }
 
     /// <summary>
     /// Gets a value indicating whether the target texture belongs to a presentation surface.
@@ -174,7 +187,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <summary>
     /// Gets the shared instance-data buffer used for parameter uploads.
     /// </summary>
-    public WgpuBuffer* InstanceBuffer { get; private set; }
+    public WGPUBufferImpl* InstanceBuffer { get; private set; }
 
     /// <summary>
     /// Gets the instance buffer capacity in bytes.
@@ -189,17 +202,17 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <summary>
     /// Gets or sets the active command encoder.
     /// </summary>
-    public CommandEncoder* CommandEncoder { get; set; }
+    public WGPUCommandEncoderImpl* CommandEncoder { get; set; }
 
     /// <summary>
     /// Gets the currently open render pass encoder, if any.
     /// </summary>
-    public RenderPassEncoder* PassEncoder { get; private set; }
+    public WGPURenderPassEncoderImpl* PassEncoder { get; private set; }
 
     /// <summary>
     /// Gets the currently open compute pass encoder, if any.
     /// </summary>
-    public ComputePassEncoder* ComputePassEncoder { get; private set; }
+    public WGPUComputePassEncoderImpl* ComputePassEncoder { get; private set; }
 
     /// <summary>
     /// Creates a flush context for a native WebGPU surface.
@@ -217,7 +230,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     public static WebGPUFlushContext Create<TPixel>(
         NativeCanvasFrame<TPixel> frame,
         WebGPUTargetDescriptor expectedTargetDescriptor,
-        FeatureName requiredFeature,
+        WGPUFeatureName requiredFeature,
         MemoryAllocator memoryAllocator,
         nuint scratchBufferBindingSizeLimit)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -253,12 +266,12 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         WebGPUNativeSurface nativeTarget,
         Rectangle bounds,
         WebGPUTargetDescriptor expectedTargetDescriptor,
-        FeatureName requiredFeature,
+        WGPUFeatureName requiredFeature,
         MemoryAllocator memoryAllocator,
         nuint scratchBufferBindingSizeLimit)
     {
         WebGPU api = WebGPURuntime.GetApi();
-        WebGPUDrawingBackend.GetCompositeTextureFormatInfo(nativeTarget.TargetDescriptor.Format, out TextureFormat textureFormat, out _);
+        WebGPUDrawingBackend.GetCompositeTextureFormatInfo(nativeTarget.TargetDescriptor.Format, out WGPUTextureFormat textureFormat, out _);
         Rectangle nativeBounds = new(0, 0, nativeTarget.Width, nativeTarget.Height);
         Point targetTextureOffset = nativeTarget.TextureCoordinateOffset;
         Rectangle textureBounds = new(
@@ -331,14 +344,14 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
 
         nuint targetSize = requiredBytes > minimumCapacityBytes ? requiredBytes : minimumCapacityBytes;
-        BufferDescriptor descriptor = new()
+        WGPUBufferDescriptor descriptor = new()
         {
             usage = (ulong)(BufferUsage.Storage | BufferUsage.CopyDst),
             size = targetSize
         };
 
         using WebGPUHandle.HandleReference deviceReference = this.DeviceHandle.AcquireReference();
-        this.InstanceBuffer = this.Api.DeviceCreateBuffer((Device*)deviceReference.Handle, in descriptor);
+        this.InstanceBuffer = this.Api.DeviceCreateBuffer((WGPUDeviceImpl*)deviceReference.Handle, in descriptor);
         this.InstanceBufferCapacity = targetSize;
     }
 
@@ -353,9 +366,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             return true;
         }
 
-        CommandEncoderDescriptor descriptor = default;
+        WGPUCommandEncoderDescriptor descriptor = default;
         using WebGPUHandle.HandleReference deviceReference = this.DeviceHandle.AcquireReference();
-        this.CommandEncoder = this.Api.DeviceCreateCommandEncoder((Device*)deviceReference.Handle, in descriptor);
+        this.CommandEncoder = this.Api.DeviceCreateCommandEncoder((WGPUDeviceImpl*)deviceReference.Handle, in descriptor);
         return this.CommandEncoder is not null;
     }
 
@@ -364,7 +377,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// </summary>
     /// <param name="targetView">The texture view that receives the pass output.</param>
     /// <returns><see langword="true"/> if a render pass is open; otherwise <see langword="false"/>.</returns>
-    public bool BeginRenderPass(TextureView* targetView)
+    public bool BeginRenderPass(WGPUTextureViewImpl* targetView)
         => this.BeginRenderPass(targetView, loadExisting: false);
 
     /// <summary>
@@ -378,7 +391,17 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <paramref name="loadExisting"/> are ignored in that case. Fails when no command encoder
     /// exists or a compute pass is open, because passes cannot be nested on one encoder.
     /// </remarks>
-    public bool BeginRenderPass(TextureView* targetView, bool loadExisting)
+    public bool BeginRenderPass(WGPUTextureViewImpl* targetView, bool loadExisting)
+        => this.BeginRenderPass(targetView, this.TargetDescriptor, loadExisting);
+
+    /// <summary>
+    /// Begins a render pass using the physical encoding of the supplied target representation.
+    /// </summary>
+    /// <param name="targetView">The texture view that receives the pass output.</param>
+    /// <param name="targetDescriptor">The representation stored by <paramref name="targetView"/>.</param>
+    /// <param name="loadExisting"><see langword="true"/> to load existing contents; <see langword="false"/> to clear.</param>
+    /// <returns><see langword="true"/> if a render pass is open; otherwise <see langword="false"/>.</returns>
+    public bool BeginRenderPass(WGPUTextureViewImpl* targetView, WebGPUTargetDescriptor targetDescriptor, bool loadExisting)
     {
         if (this.PassEncoder is not null)
         {
@@ -390,24 +413,24 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             return false;
         }
 
-        RenderPassColorAttachment colorAttachment = new()
+        WGPURenderPassColorAttachment colorAttachment = new()
         {
             view = targetView,
 
             // A 2D attachment must use WebGPU's undefined sentinel; zero selects slice 0 and is valid only for 3D views.
             depthSlice = uint.MaxValue,
             resolveTarget = null,
-            loadOp = loadExisting ? LoadOp.Load : LoadOp.Clear,
-            storeOp = StoreOp.Store,
+            loadOp = loadExisting ? WGPULoadOp.Load : WGPULoadOp.Clear,
+            storeOp = WGPUStoreOp.Store,
 
             // WebGPU clear values use the attachment's physical encoding. Physical -1 is the
             // logical transparent zero for ImageSharp formats mapped through a signed-unit target.
-            clearValue = this.TargetDescriptor.NumericEncoding == WebGPUTargetNumericEncoding.SignedUnit
-                ? new Native.WGPUColor { r = -1D, g = -1D, b = -1D, a = -1D }
+            clearValue = targetDescriptor.NumericEncoding == WebGPUTargetNumericEncoding.SignedUnit
+                ? new WGPUColor { r = -1D, g = -1D, b = -1D, a = -1D }
                 : default
         };
 
-        RenderPassDescriptor renderPassDescriptor = new()
+        WGPURenderPassDescriptor renderPassDescriptor = new()
         {
             colorAttachmentCount = 1,
             colorAttachments = &colorAttachment
@@ -448,7 +471,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             return false;
         }
 
-        ComputePassDescriptor descriptor = default;
+        WGPUComputePassDescriptor descriptor = default;
         this.ComputePassEncoder = this.Api.CommandEncoderBeginComputePass(this.CommandEncoder, in descriptor);
         return this.ComputePassEncoder is not null;
     }
@@ -472,7 +495,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// Tracks a transient bind group allocated during this flush.
     /// </summary>
     /// <param name="bindGroup">The bind group to track.</param>
-    public void TrackBindGroup(BindGroup* bindGroup)
+    public void TrackBindGroup(WGPUBindGroupImpl* bindGroup)
     {
         if (bindGroup is not null)
         {
@@ -484,7 +507,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// Tracks a transient buffer allocated during this flush.
     /// </summary>
     /// <param name="buffer">The buffer to track.</param>
-    public void TrackBuffer(WgpuBuffer* buffer)
+    public void TrackBuffer(WGPUBufferImpl* buffer)
     {
         if (buffer is not null)
         {
@@ -493,10 +516,22 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     }
 
     /// <summary>
+    /// Tracks a transient sampler allocated during this flush.
+    /// </summary>
+    /// <param name="sampler">The sampler to track.</param>
+    public void TrackSampler(WGPUSamplerImpl* sampler)
+    {
+        if (sampler is not null)
+        {
+            this.transientSamplers.Add((nint)sampler);
+        }
+    }
+
+    /// <summary>
     /// Tracks a transient texture view allocated during this flush.
     /// </summary>
     /// <param name="textureView">The texture view to track.</param>
-    public void TrackTextureView(TextureView* textureView)
+    public void TrackTextureView(WGPUTextureViewImpl* textureView)
     {
         if (textureView is not null)
         {
@@ -508,11 +543,49 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// Tracks a transient texture allocated during this flush.
     /// </summary>
     /// <param name="texture">The texture to track.</param>
-    public void TrackTexture(Texture* texture)
+    public void TrackTexture(WGPUTextureImpl* texture)
     {
         if (texture is not null)
         {
             this.transientTextures.Add((nint)texture);
+        }
+    }
+
+    /// <summary>
+    /// Tracks a device-pooled texture rented for this flush. It is returned to the device pool,
+    /// not released, when this flush context is disposed.
+    /// </summary>
+    /// <param name="texture">The rented texture.</param>
+    /// <param name="textureView">The full view rented or created with <paramref name="texture"/>.</param>
+    /// <param name="format">The format the texture was created with.</param>
+    /// <param name="usage">The exact usage bits the texture was created with.</param>
+    /// <param name="width">The created width in texels.</param>
+    /// <param name="height">The created height in texels.</param>
+    public void TrackPooledTexture(
+        WGPUTextureImpl* texture,
+        WGPUTextureViewImpl* textureView,
+        WGPUTextureFormat format,
+        ulong usage,
+        uint width,
+        uint height)
+    {
+        if (texture is not null)
+        {
+            this.pooledTextures.Add(new PooledTextureRental((nint)texture, (nint)textureView, format, usage, width, height));
+        }
+    }
+
+    /// <summary>
+    /// Tracks a device-pooled layer-effect uniform buffer rented for this flush. It is returned
+    /// to the device pool, not released, when this flush context is disposed.
+    /// </summary>
+    /// <param name="buffer">The rented buffer.</param>
+    /// <param name="byteLength">The byte capacity of <paramref name="buffer"/>.</param>
+    public void TrackPooledUniformBuffer(WGPUBufferImpl* buffer, nuint byteLength)
+    {
+        if (buffer is not null)
+        {
+            this.pooledUniformBuffers.Add(new PooledBufferRental((nint)buffer, byteLength));
         }
     }
 
@@ -522,11 +595,11 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <param name="image">The source image key.</param>
     /// <param name="textureView">When this method returns <see langword="true"/>, contains the cached texture view.</param>
     /// <returns><see langword="true"/> if a cached texture view exists; otherwise <see langword="false"/>.</returns>
-    public bool TryGetCachedSourceTextureView(Image image, out TextureView* textureView)
+    public bool TryGetCachedSourceTextureView(Image image, out WGPUTextureViewImpl* textureView)
     {
         if (this.cachedSourceTextureViews.TryGetValue(image, out nint handle) && handle != 0)
         {
-            textureView = (TextureView*)handle;
+            textureView = (WGPUTextureViewImpl*)handle;
             return true;
         }
 
@@ -539,8 +612,38 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// </summary>
     /// <param name="image">The source image key.</param>
     /// <param name="textureView">The texture view to cache.</param>
-    public void CacheSourceTextureView(Image image, TextureView* textureView)
+    public void CacheSourceTextureView(Image image, WGPUTextureViewImpl* textureView)
         => this.cachedSourceTextureViews[image] = (nint)textureView;
+
+    /// <summary>
+    /// Tries to resolve the uploaded gradient-ramp texture view for the flush's encoded scene.
+    /// </summary>
+    /// <param name="scene">The encoded scene whose gradient rows were uploaded.</param>
+    /// <param name="textureView">When this method returns <see langword="true"/>, contains the cached view.</param>
+    /// <returns><see langword="true"/> when the scene's gradient texture was already staged this flush.</returns>
+    public bool TryGetCachedGradientTextureView(object scene, out WGPUTextureViewImpl* textureView)
+    {
+        if (ReferenceEquals(this.cachedGradientScene, scene) && this.cachedGradientTextureView != 0)
+        {
+            textureView = (WGPUTextureViewImpl*)this.cachedGradientTextureView;
+            return true;
+        }
+
+        textureView = null;
+        return false;
+    }
+
+    /// <summary>
+    /// Caches the uploaded gradient-ramp texture view so later ranges of the same scene bind it
+    /// without creating and uploading another texture.
+    /// </summary>
+    /// <param name="scene">The encoded scene whose gradient rows were uploaded.</param>
+    /// <param name="textureView">The staged gradient texture view.</param>
+    public void CacheGradientTextureView(object scene, WGPUTextureViewImpl* textureView)
+    {
+        this.cachedGradientScene = scene;
+        this.cachedGradientTextureView = (nint)textureView;
+    }
 
     /// <summary>
     /// Releases transient GPU resources owned by this flush context.
@@ -574,31 +677,61 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         for (int i = 0; i < this.transientBindGroups.Count; i++)
         {
-            this.Api.BindGroupRelease((BindGroup*)this.transientBindGroups[i]);
+            this.Api.BindGroupRelease((WGPUBindGroupImpl*)this.transientBindGroups[i]);
         }
 
         for (int i = 0; i < this.transientBuffers.Count; i++)
         {
-            this.Api.BufferRelease((WgpuBuffer*)this.transientBuffers[i]);
+            this.Api.BufferRelease((WGPUBufferImpl*)this.transientBuffers[i]);
+        }
+
+        for (int i = 0; i < this.transientSamplers.Count; i++)
+        {
+            this.Api.SamplerRelease((WGPUSamplerImpl*)this.transientSamplers[i]);
         }
 
         for (int i = 0; i < this.transientTextureViews.Count; i++)
         {
-            this.Api.TextureViewRelease((TextureView*)this.transientTextureViews[i]);
+            this.Api.TextureViewRelease((WGPUTextureViewImpl*)this.transientTextureViews[i]);
         }
 
         for (int i = 0; i < this.transientTextures.Count; i++)
         {
-            this.Api.TextureRelease((Texture*)this.transientTextures[i]);
+            this.Api.TextureRelease((WGPUTextureImpl*)this.transientTextures[i]);
         }
 
         this.transientBindGroups.Clear();
         this.transientBuffers.Clear();
+        this.transientSamplers.Clear();
         this.transientTextureViews.Clear();
         this.transientTextures.Clear();
 
         // Cache entries point to transient texture views that are released above.
         this.cachedSourceTextureViews.Clear();
+
+        // Rented pooled resources go back to the device pool after the commands that used them
+        // were submitted; queue ordering makes reuse by a later flush safe, and the pool itself
+        // releases entries once its retention bound is reached.
+        for (int i = 0; i < this.pooledTextures.Count; i++)
+        {
+            PooledTextureRental rental = this.pooledTextures[i];
+            this.DeviceState.ReturnPooledTexture(
+                (WGPUTextureImpl*)rental.Texture,
+                (WGPUTextureViewImpl*)rental.View,
+                rental.Format,
+                rental.Usage,
+                rental.Width,
+                rental.Height);
+        }
+
+        for (int i = 0; i < this.pooledUniformBuffers.Count; i++)
+        {
+            PooledBufferRental rental = this.pooledUniformBuffers[i];
+            this.DeviceState.ReturnEffectUniformBuffer((WGPUBufferImpl*)rental.Buffer, rental.ByteLength);
+        }
+
+        this.pooledTextures.Clear();
+        this.pooledUniformBuffers.Clear();
 
         this.disposed = true;
     }
@@ -614,8 +747,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <param name="memoryAllocator">The allocator used when a packed staging copy is required.</param>
     public static void UploadTextureFromRegion<TPixel>(
         WebGPU api,
-        Queue* queue,
-        Texture* destinationTexture,
+        WGPUQueueImpl* queue,
+        WGPUTextureImpl* destinationTexture,
         Buffer2DRegion<TPixel> sourceRegion,
         MemoryAllocator memoryAllocator)
         where TPixel : unmanaged
@@ -635,8 +768,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <param name="destinationLayer">The destination array layer.</param>
     public static void UploadTextureFromRegion<TPixel>(
         WebGPU api,
-        Queue* queue,
-        Texture* destinationTexture,
+        WGPUQueueImpl* queue,
+        WGPUTextureImpl* destinationTexture,
         Buffer2DRegion<TPixel> sourceRegion,
         MemoryAllocator memoryAllocator,
         uint destinationX,
@@ -645,15 +778,15 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         where TPixel : unmanaged
     {
         int pixelSizeInBytes = Unsafe.SizeOf<TPixel>();
-        ImageCopyTexture destination = new()
+        WGPUTexelCopyTextureInfo destination = new()
         {
             texture = destinationTexture,
             mipLevel = 0,
-            origin = new Origin3D(destinationX, destinationY, destinationLayer),
-            aspect = TextureAspect.All
+            origin = new WGPUOrigin3D(destinationX, destinationY, destinationLayer),
+            aspect = WGPUTextureAspect.All
         };
 
-        Extent3D writeSize = new((uint)sourceRegion.Width, (uint)sourceRegion.Height, 1);
+        WGPUExtent3D writeSize = new((uint)sourceRegion.Width, (uint)sourceRegion.Height, 1);
         int rowBytes = checked(sourceRegion.Width * pixelSizeInBytes);
         uint alignedRowBytes = AlignTo256((uint)rowBytes);
 
@@ -671,7 +804,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                 int uploadByteCount = checked((int)directByteCount);
                 nuint uploadByteCountNuint = checked((nuint)uploadByteCount);
 
-                TextureDataLayout layout = new()
+                WGPUTexelCopyBufferLayout layout = new()
                 {
                     offset = 0,
                     bytesPerRow = (uint)sourceStrideBytes,
@@ -698,7 +831,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             MemoryMarshal.AsBytes(sourceRow)[..rowBytes].CopyTo(packedData.Slice(y * alignedRowBytesInt, rowBytes));
         }
 
-        TextureDataLayout packedLayout = new()
+        WGPUTexelCopyBufferLayout packedLayout = new()
         {
             offset = 0,
             bytesPerRow = alignedRowBytes,
@@ -718,4 +851,86 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <returns>The aligned byte count.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint AlignTo256(uint value) => (value + 255U) & ~255U;
+
+    /// <summary>
+    /// Stores one rented device-pooled texture with the creation parameters its return requires.
+    /// </summary>
+    private readonly struct PooledTextureRental
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PooledTextureRental"/> struct.
+        /// </summary>
+        /// <param name="texture">The native texture pointer stored as an integer.</param>
+        /// <param name="view">The native full-texture view pointer stored as an integer.</param>
+        /// <param name="format">The format the texture was created with.</param>
+        /// <param name="usage">The exact usage bits the texture was created with.</param>
+        /// <param name="width">The created width in texels.</param>
+        /// <param name="height">The created height in texels.</param>
+        public PooledTextureRental(nint texture, nint view, WGPUTextureFormat format, ulong usage, uint width, uint height)
+        {
+            this.Texture = texture;
+            this.View = view;
+            this.Format = format;
+            this.Usage = usage;
+            this.Width = width;
+            this.Height = height;
+        }
+
+        /// <summary>
+        /// Gets the native texture pointer stored as an integer.
+        /// </summary>
+        public nint Texture { get; }
+
+        /// <summary>
+        /// Gets the native full-texture view pointer stored as an integer.
+        /// </summary>
+        public nint View { get; }
+
+        /// <summary>
+        /// Gets the format the texture was created with.
+        /// </summary>
+        public WGPUTextureFormat Format { get; }
+
+        /// <summary>
+        /// Gets the exact usage bits the texture was created with.
+        /// </summary>
+        public ulong Usage { get; }
+
+        /// <summary>
+        /// Gets the created width in texels.
+        /// </summary>
+        public uint Width { get; }
+
+        /// <summary>
+        /// Gets the created height in texels.
+        /// </summary>
+        public uint Height { get; }
+    }
+
+    /// <summary>
+    /// Stores one rented device-pooled buffer with its capacity.
+    /// </summary>
+    private readonly struct PooledBufferRental
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PooledBufferRental"/> struct.
+        /// </summary>
+        /// <param name="buffer">The native buffer pointer stored as an integer.</param>
+        /// <param name="byteLength">The byte capacity of <paramref name="buffer"/>.</param>
+        public PooledBufferRental(nint buffer, nuint byteLength)
+        {
+            this.Buffer = buffer;
+            this.ByteLength = byteLength;
+        }
+
+        /// <summary>
+        /// Gets the native buffer pointer stored as an integer.
+        /// </summary>
+        public nint Buffer { get; }
+
+        /// <summary>
+        /// Gets the byte capacity of <see cref="Buffer"/>.
+        /// </summary>
+        public nuint ByteLength { get; }
+    }
 }

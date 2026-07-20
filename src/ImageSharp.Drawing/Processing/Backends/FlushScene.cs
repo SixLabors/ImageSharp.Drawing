@@ -992,9 +992,9 @@ internal sealed partial class FlushScene : IDisposable
     {
         if (command.Kind == CompositionCommandKind.Apply)
         {
-            RectangleF rawBounds = RectangleF.Transform(command.SourcePath.Bounds, command.DrawingOptions.Transform);
-            Rectangle sourceRect = Rectangle.Intersect(command.ApplyBarrier.CanvasBounds, ToConservativeBounds(rawBounds));
-            if (sourceRect.Width <= 0 || sourceRect.Height <= 0)
+            RectangleF rawOutputBounds = RectangleF.Transform(command.ApplyOutputBounds, command.DrawingOptions.Transform);
+            Rectangle outputRect = Rectangle.Intersect(command.ApplyCanvasBounds, ToConservativeBounds(rawOutputBounds));
+            if (outputRect.Width <= 0 || outputRect.Height <= 0)
             {
                 return;
             }
@@ -1024,13 +1024,14 @@ internal sealed partial class FlushScene : IDisposable
             }
 
             Point brushOffset = new(
-                sourceRect.X - (int)MathF.Floor(rawBounds.Left),
-                sourceRect.Y - (int)MathF.Floor(rawBounds.Top));
+                outputRect.X - (int)MathF.Floor(rawOutputBounds.Left),
+                outputRect.Y - (int)MathF.Floor(rawOutputBounds.Top));
 
             controlItems[commandIndex] = new SceneControlItem(
                 new ApplySceneItem(
                     command.ApplyBarrier.Operation,
-                    sourceRect,
+                    outputRect,
+                    outputRect,
                     command.ApplyBarrier.WriteBackOffset,
                     brushOffset,
                     preparedApply.GraphicsOptions,

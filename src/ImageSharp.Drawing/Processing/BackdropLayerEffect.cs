@@ -16,21 +16,21 @@ public abstract class BackdropLayerEffect : LayerEffect
     /// <summary>
     /// Initializes a new instance of the <see cref="BackdropLayerEffect"/> class.
     /// </summary>
-    private protected BackdropLayerEffect()
+    /// <param name="operation">The operation that implements the effect.</param>
+    protected BackdropLayerEffect(Action<IImageProcessingContext> operation)
+        : base(operation)
     {
     }
 
     /// <summary>
-    /// Gets the reach of a backdrop effect, which is always zero: the filtered backdrop is clipped
-    /// to the layer's region, so the region is never expanded.
+    /// Initializes a new instance of the <see cref="BackdropLayerEffect"/> class with the
+    /// observable behavior of another backdrop effect when this effect is not executed natively.
     /// </summary>
-    internal sealed override int Reach => 0;
-
-    /// <inheritdoc/>
-    internal override GraphicsOptions? WriteBackOptions => null;
-
-    /// <inheritdoc/>
-    internal override Point WriteBackOffset => default;
+    /// <param name="fallbackEffect">The backdrop effect whose behavior is used as the fallback.</param>
+    protected BackdropLayerEffect(BackdropLayerEffect fallbackEffect)
+        : base(fallbackEffect)
+    {
+    }
 }
 
 /// <summary>
@@ -44,6 +44,7 @@ public sealed class BackdropBlurLayerEffect : BackdropLayerEffect
     /// </summary>
     /// <param name="sigma">The Gaussian blur sigma, in pixels; zero leaves the backdrop unchanged.</param>
     public BackdropBlurLayerEffect(float sigma)
+        : base(context => context.GaussianBlur(sigma))
     {
         Guard.MustBeGreaterThanOrEqualTo(sigma, 0, nameof(sigma));
         this.Sigma = sigma;
@@ -56,13 +57,6 @@ public sealed class BackdropBlurLayerEffect : BackdropLayerEffect
 
     /// <inheritdoc/>
     internal override bool IsPassThrough => this.Sigma == 0;
-
-    /// <inheritdoc/>
-    internal override Action<IImageProcessingContext> CreateOperation()
-    {
-        float sigma = this.Sigma;
-        return context => context.GaussianBlur(sigma);
-    }
 }
 
 /// <summary>
@@ -81,6 +75,7 @@ public sealed class BackdropAcrylicLayerEffect : BackdropLayerEffect
     /// opaque tint hides the backdrop entirely.
     /// </param>
     public BackdropAcrylicLayerEffect(float sigma, Color tint)
+        : base(CreateOperation(sigma, tint))
     {
         Guard.MustBeGreaterThanOrEqualTo(sigma, 0, nameof(sigma));
         this.Sigma = sigma;
@@ -97,13 +92,18 @@ public sealed class BackdropAcrylicLayerEffect : BackdropLayerEffect
     /// </summary>
     public Color Tint { get; }
 
-    /// <inheritdoc/>
-    internal override Action<IImageProcessingContext> CreateOperation()
+    /// <summary>
+    /// Creates the CPU acrylic operation for the supplied effect values.
+    /// </summary>
+    /// <param name="sigma">The Gaussian blur sigma.</param>
+    /// <param name="color">The acrylic tint.</param>
+    /// <returns>The configured image-processing operation.</returns>
+    private static Action<IImageProcessingContext> CreateOperation(float sigma, Color color)
     {
         // Blending a constant colour over the backdrop is linear, so it is expressed as a colour
         // matrix: the backdrop's channels scale by one minus the tint's alpha and the constant row
         // carries the pre-scaled tint. The backdrop's own alpha is preserved.
-        Vector4 vector = this.Tint.ToPixel<Rgba32>().ToScaledVector4();
+        Vector4 vector = color.ToPixel<Rgba32>().ToScaledVector4();
         float keep = 1F - vector.W;
         ColorMatrix tint = default;
         tint.M11 = keep;
@@ -114,7 +114,6 @@ public sealed class BackdropAcrylicLayerEffect : BackdropLayerEffect
         tint.M52 = vector.Y * vector.W;
         tint.M53 = vector.Z * vector.W;
 
-        float sigma = this.Sigma;
         return context =>
         {
             if (sigma > 0)
@@ -140,6 +139,7 @@ public sealed class BackdropDropShadowLayerEffect : BackdropLayerEffect
     /// <param name="sigma">The Gaussian blur sigma, in pixels; zero draws a hard shadow.</param>
     /// <param name="color">The shadow colour. Its alpha scales the backdrop's alpha.</param>
     public BackdropDropShadowLayerEffect(Point offset, float sigma, Color color)
+        : base(CreateOperation(sigma, color))
     {
         Guard.MustBeGreaterThanOrEqualTo(sigma, 0, nameof(sigma));
         this.Offset = offset;
@@ -169,20 +169,24 @@ public sealed class BackdropDropShadowLayerEffect : BackdropLayerEffect
     /// <inheritdoc/>
     internal override Point WriteBackOffset => this.Offset;
 
-    /// <inheritdoc/>
-    internal override Action<IImageProcessingContext> CreateOperation()
+    /// <summary>
+    /// Creates the CPU backdrop drop-shadow operation for the supplied effect values.
+    /// </summary>
+    /// <param name="sigma">The Gaussian blur sigma.</param>
+    /// <param name="color">The shadow colour.</param>
+    /// <returns>The configured image-processing operation.</returns>
+    private static Action<IImageProcessingContext> CreateOperation(float sigma, Color color)
     {
         // The tint replaces the backdrop's colour with the constant shadow colour and scales its
         // alpha; the DestOver write-back slots the blurred silhouette beneath the untouched
         // backdrop at the offset.
-        Vector4 vector = this.Color.ToPixel<Rgba32>().ToScaledVector4();
+        Vector4 vector = color.ToPixel<Rgba32>().ToScaledVector4();
         ColorMatrix tint = default;
         tint.M44 = vector.W;
         tint.M51 = vector.X;
         tint.M52 = vector.Y;
         tint.M53 = vector.Z;
 
-        float sigma = this.Sigma;
         return context =>
         {
             context.Filter(tint);
@@ -206,6 +210,7 @@ public class BackdropColorMatrixLayerEffect : BackdropLayerEffect
     /// </summary>
     /// <param name="matrix">The colour matrix applied to the backdrop.</param>
     public BackdropColorMatrixLayerEffect(ColorMatrix matrix)
+        : base(context => context.Filter(matrix))
         => this.Matrix = matrix;
 
     /// <summary>
@@ -215,13 +220,6 @@ public class BackdropColorMatrixLayerEffect : BackdropLayerEffect
 
     /// <inheritdoc/>
     internal override bool IsPassThrough => this.Matrix == ColorMatrix.Identity;
-
-    /// <inheritdoc/>
-    internal override Action<IImageProcessingContext> CreateOperation()
-    {
-        ColorMatrix matrix = this.Matrix;
-        return context => context.Filter(matrix);
-    }
 }
 
 /// <summary>

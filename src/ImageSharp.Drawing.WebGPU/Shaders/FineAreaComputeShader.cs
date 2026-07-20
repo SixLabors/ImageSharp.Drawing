@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Text;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -32,7 +33,7 @@ internal static class FineAreaComputeShader
     /// <summary>
     /// Specialized shader bytes per target texture format and alpha representation, guarded by its own monitor.
     /// </summary>
-    private static readonly Dictionary<(TextureFormat TextureFormat, PixelAlphaRepresentation AlphaRepresentation, WebGPUTargetNumericEncoding NumericEncoding), byte[]> ShaderCache = [];
+    private static readonly Dictionary<(WGPUTextureFormat TextureFormat, PixelAlphaRepresentation AlphaRepresentation, WebGPUTargetNumericEncoding NumericEncoding), byte[]> ShaderCache = [];
 
     /// <summary>
     /// Gets the WGSL entry point used by this shader.
@@ -47,11 +48,11 @@ internal static class FineAreaComputeShader
     /// <param name="numericEncoding">The target's mapping between native channel values and ImageSharp unit values.</param>
     /// <returns>The null-terminated UTF-8 WGSL source bytes for the specialized shader.</returns>
     public static byte[] GetCode(
-        TextureFormat textureFormat,
+        WGPUTextureFormat textureFormat,
         PixelAlphaRepresentation alphaRepresentation,
         WebGPUTargetNumericEncoding numericEncoding)
     {
-        (TextureFormat TextureFormat, PixelAlphaRepresentation AlphaRepresentation, WebGPUTargetNumericEncoding NumericEncoding) cacheKey =
+        (WGPUTextureFormat TextureFormat, PixelAlphaRepresentation AlphaRepresentation, WebGPUTargetNumericEncoding NumericEncoding) cacheKey =
             (textureFormat, alphaRepresentation, numericEncoding);
         ShaderTraits traits = GetTraits(textureFormat, alphaRepresentation, numericEncoding);
 
@@ -87,9 +88,9 @@ internal static class FineAreaComputeShader
     /// <returns><see langword="true"/> when the bind-group layout was created successfully; otherwise, <see langword="false"/>.</returns>
     public static unsafe bool TryCreateBindGroupLayout(
         WebGPU api,
-        Device* device,
-        TextureFormat outputTextureFormat,
-        out BindGroupLayout* layout,
+        WGPUDeviceImpl* device,
+        WGPUTextureFormat outputTextureFormat,
+        out WGPUBindGroupLayoutImpl* layout,
         out string? error)
     {
         // Bindings match fine.wgsl:
@@ -102,18 +103,18 @@ internal static class FineAreaComputeShader
         //   6 gradients (sampled gradient ramp texture)
         //   7 image_atlas (sampled image atlas texture)
         //   8 backdrop_texture (sampled existing target contents)
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[9];
+        WGPUBindGroupLayoutEntry* entries = stackalloc WGPUBindGroupLayoutEntry[9];
         entries[0] = CreateUniformEntry(0, (nuint)sizeof(GpuSceneConfig));
-        entries[1] = CreateStorageEntry(1, BufferBindingType.ReadOnlyStorage, 0);
-        entries[2] = CreateStorageEntry(2, BufferBindingType.ReadOnlyStorage, 0);
-        entries[3] = CreateStorageEntry(3, BufferBindingType.ReadOnlyStorage, 0);
-        entries[4] = CreateStorageEntry(4, BufferBindingType.Storage, 0);
+        entries[1] = CreateStorageEntry(1, WGPUBufferBindingType.ReadOnlyStorage, 0);
+        entries[2] = CreateStorageEntry(2, WGPUBufferBindingType.ReadOnlyStorage, 0);
+        entries[3] = CreateStorageEntry(3, WGPUBufferBindingType.ReadOnlyStorage, 0);
+        entries[4] = CreateStorageEntry(4, WGPUBufferBindingType.Storage, 0);
         entries[5] = CreateOutputTextureEntry(5, outputTextureFormat);
         entries[6] = CreateSampledTextureEntry(6);
         entries[7] = CreateSampledTextureEntry(7);
         entries[8] = CreateSampledTextureEntry(8);
 
-        BindGroupLayoutDescriptor descriptor = new()
+        WGPUBindGroupLayoutDescriptor descriptor = new()
         {
             entryCount = 9,
             entries = entries
@@ -138,7 +139,7 @@ internal static class FineAreaComputeShader
     /// <param name="numericEncoding">The target's mapping between native channel values and ImageSharp unit values.</param>
     /// <returns>The traits describing the output declaration, encode function and store statement.</returns>
     private static ShaderTraits GetTraits(
-        TextureFormat textureFormat,
+        WGPUTextureFormat textureFormat,
         PixelAlphaRepresentation alphaRepresentation,
         WebGPUTargetNumericEncoding numericEncoding)
     {
@@ -157,9 +158,9 @@ internal static class FineAreaComputeShader
         // physical storage conversion before comparing without reducing normal composition precision.
         string targetFormatRoundTripBody = textureFormat switch
         {
-            TextureFormat.RGBA8Unorm or TextureFormat.BGRA8Unorm => "return unpack4x8unorm(pack4x8unorm(color));",
-            TextureFormat.RGBA8Snorm => "return unpack4x8snorm(pack4x8snorm(color));",
-            TextureFormat.RGBA16Float => "return vec4<f32>(unpack2x16float(pack2x16float(color.rg)), unpack2x16float(pack2x16float(color.ba)));"
+            WGPUTextureFormat.RGBA8Unorm or WGPUTextureFormat.BGRA8Unorm => "return unpack4x8unorm(pack4x8unorm(color));",
+            WGPUTextureFormat.RGBA8Snorm => "return unpack4x8snorm(pack4x8snorm(color));",
+            WGPUTextureFormat.RGBA16Float => "return vec4<f32>(unpack2x16float(pack2x16float(color.rg)), unpack2x16float(pack2x16float(color.ba)));"
         };
 
         // Fine shading uses associated colors internally. Recolor explicitly crosses the target
@@ -234,12 +235,12 @@ internal static class FineAreaComputeShader
     /// <param name="type">The storage-buffer access mode.</param>
     /// <param name="minBindingSize">The minimum buffer binding size in bytes, or 0 to skip validation.</param>
     /// <returns>The populated binding entry.</returns>
-    private static BindGroupLayoutEntry CreateStorageEntry(uint binding, BufferBindingType type, nuint minBindingSize)
+    private static WGPUBindGroupLayoutEntry CreateStorageEntry(uint binding, WGPUBufferBindingType type, nuint minBindingSize)
         => new()
         {
             binding = binding,
             visibility = (ulong)ShaderStage.Compute,
-            buffer = new BufferBindingLayout
+            buffer = new WGPUBufferBindingLayout
             {
                 type = type,
                 hasDynamicOffset = 0U,
@@ -253,14 +254,14 @@ internal static class FineAreaComputeShader
     /// <param name="binding">The WGSL binding index.</param>
     /// <param name="minBindingSize">The minimum buffer binding size in bytes.</param>
     /// <returns>The populated binding entry.</returns>
-    private static BindGroupLayoutEntry CreateUniformEntry(uint binding, nuint minBindingSize)
+    private static WGPUBindGroupLayoutEntry CreateUniformEntry(uint binding, nuint minBindingSize)
         => new()
         {
             binding = binding,
             visibility = (ulong)ShaderStage.Compute,
-            buffer = new BufferBindingLayout
+            buffer = new WGPUBufferBindingLayout
             {
-                type = BufferBindingType.Uniform,
+                type = WGPUBufferBindingType.Uniform,
                 hasDynamicOffset = 0U,
                 minBindingSize = minBindingSize
             }
@@ -272,16 +273,16 @@ internal static class FineAreaComputeShader
     /// <param name="binding">The WGSL binding index.</param>
     /// <param name="outputTextureFormat">The storage-texture format of the output binding.</param>
     /// <returns>The populated binding entry.</returns>
-    private static BindGroupLayoutEntry CreateOutputTextureEntry(uint binding, TextureFormat outputTextureFormat)
+    private static WGPUBindGroupLayoutEntry CreateOutputTextureEntry(uint binding, WGPUTextureFormat outputTextureFormat)
         => new()
         {
             binding = binding,
             visibility = (ulong)ShaderStage.Compute,
-            storageTexture = new StorageTextureBindingLayout
+            storageTexture = new WGPUStorageTextureBindingLayout
             {
-                access = StorageTextureAccess.WriteOnly,
+                access = WGPUStorageTextureAccess.WriteOnly,
                 format = outputTextureFormat,
-                viewDimension = TextureViewDimension._2D
+                viewDimension = WGPUTextureViewDimension._2D
             }
         };
 
@@ -290,15 +291,15 @@ internal static class FineAreaComputeShader
     /// </summary>
     /// <param name="binding">The WGSL binding index.</param>
     /// <returns>The populated binding entry.</returns>
-    private static BindGroupLayoutEntry CreateSampledTextureEntry(uint binding)
+    private static WGPUBindGroupLayoutEntry CreateSampledTextureEntry(uint binding)
         => new()
         {
             binding = binding,
             visibility = (ulong)ShaderStage.Compute,
-            texture = new TextureBindingLayout
+            texture = new WGPUTextureBindingLayout
             {
-                sampleType = TextureSampleType.Float,
-                viewDimension = TextureViewDimension._2D,
+                sampleType = WGPUTextureSampleType.Float,
+                viewDimension = WGPUTextureViewDimension._2D,
                 multisampled = 0U,
             }
         };

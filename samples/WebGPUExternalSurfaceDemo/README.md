@@ -13,7 +13,7 @@ It exists to demonstrate:
 ## Running
 
 ```bash
-dotnet run --project samples/WebGPUExternalSurfaceDemo -c Debug
+dotnet run --project samples/WebGPUExternalSurfaceDemo -c Release
 ```
 
 Requirements:
@@ -23,9 +23,10 @@ Requirements:
 - a WebGPU-capable desktop backend such as D3D12 or Vulkan
 - adapter support for the storage-capable BGRA format selected by the sample
 
-When the sample starts you should see a WinForms window with five tabs:
+When the sample starts you should see a WinForms window with six tabs:
 
 - `Clock`: a continuously-rendered animated clock scene
+- `Custom WGSL · Living Nebula`: an animated procedural galaxy with domain-warped clouds, fire-bright cores, two twinkling star fields, pointer swirl, click shockwaves, wheel zoom, and an equivalent CPU fallback
 - `Tiger`: an interactive SVG tiger viewer with pan and zoom
 - `Apply`: a reactive external-surface readback scene using `DrawingCanvas.Apply(...)`; move the mouse to move the edge-detect and blur regions, and use the mouse wheel to resize them
 - `Manual Text Flow`: prepared text is laid out one line at a time around a selectable path obstacle that follows mouse movement
@@ -56,13 +57,13 @@ The reusable integration point is [WebGPURenderControl.cs](d:/GitHub/SixLabors/I
 
 ### Surface Creation
 
-`WebGPURenderControl.OnHandleCreated(...)` creates the external surface from the WinForms control handle:
+`WebGPURenderControl.OnHandleCreated(...)` creates the external surface from the WinForms control handle. Every control receives the session owned by the form so all tabs share one adapter, device, queue, and pipeline cache:
 
 ```csharp
-this.surface = new WebGPUExternalSurface(
+this.surface = this.surfaceSession.CreateSurface(
     WebGPUSurfaceHost.Win32(
         this.Handle,
-        Marshal.GetHINSTANCE(typeof(WebGPURenderControl).Module)),
+        ProcessModuleHandle),
     initialFramebufferSize,
     new WebGPUExternalSurfaceOptions
     {
@@ -103,17 +104,18 @@ Disposing the frame renders pending canvas work, presents the surface texture, a
 
 ### Rendering Loop
 
-`WebGPURenderControl` supports on-demand and continuous rendering. On-demand controls render from normal WinForms invalidation, which keeps static scenes idle until input, resize, or another event asks them to repaint. Continuous controls hook `Application.Idle` and render while the WinForms message queue is empty; the clock scene uses this mode because it animates without input.
+`WebGPURenderControl` supports on-demand and continuous rendering. On-demand controls render from normal WinForms invalidation, which keeps static scenes idle until input, resize, or another event asks them to repaint. Continuous controls hook `Application.Idle` and render while the WinForms message queue is empty; the clock and living-nebula scenes use this mode because they animate without input.
 
 Frame pacing is delegated to the present mode. With the default `WebGPUPresentMode.Fifo`, frame acquisition naturally waits for display presentation instead of using a separate software timer.
 
 ## Scene Code
 
-[MainForm.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/MainForm.cs) creates independent `WebGPURenderControl` instances, one per tab. Each control owns its own external surface.
+[MainForm.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/MainForm.cs) supplies a shared `WebGPUSurfaceSession` and hosts each scene's complete view on a tab. [RenderScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/RenderScene.cs) creates the common render control and input plumbing, while each concrete scene owns its frame cadence, controls, overlays, and device initialization. Each render control owns its presentation surface, while the form-owned session shares device resources between them.
 
 The scenes are deliberately ordinary canvas code:
 
 - [ClockScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/ClockScene.cs): animated vector clock
+- [ShaderEffectsScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/ShaderEffectsScene.cs): interactive procedural nebula implemented as a custom WGSL layer effect with named uniforms and a CPU fallback
 - [TigerViewerScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/TigerViewerScene.cs): pan and zoom SVG tiger viewer
 - [ApplyReadbackScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/ApplyReadbackScene.cs): `Apply(...)` scene that reads the external surface back into CPU processing
 - [ManualTextFlowScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/ManualTextFlowScene.cs): interactive manual text flow using prepared line layout enumeration and a selectable closed-path obstacle
@@ -128,7 +130,9 @@ Each scene receives:
 
 - [WebGPURenderControl.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Controls/WebGPURenderControl.cs): reusable WinForms external-surface control
 - [MainForm.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/MainForm.cs): tabs and scene wiring
+- [RenderScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/RenderScene.cs): common scene view, frame scheduling, and pointer-input plumbing
 - [ClockScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/ClockScene.cs): clock scene
+- [ShaderEffectsScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/ShaderEffectsScene.cs): custom shader scene
 - [TigerViewerScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/TigerViewerScene.cs): tiger viewer scene
 - [ApplyReadbackScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/ApplyReadbackScene.cs): apply readback scene
 - [ManualTextFlowScene.cs](d:/GitHub/SixLabors/ImageSharp.Drawing/samples/WebGPUExternalSurfaceDemo/Scenes/ManualTextFlowScene.cs): manual text-flow scene
