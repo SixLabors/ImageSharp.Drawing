@@ -25,4 +25,11 @@ internal class GlyphBuilder : BaseGlyphBuilder
     /// </summary>
     /// <param name="origin">The origin offset applied to all captured glyph geometry.</param>
     public GlyphBuilder(Vector2 origin) => this.Builder.SetOrigin(origin);
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GlyphBuilder"/> class for text laid out
+    /// along a path. Each glyph is positioned on the path and rotated to its tangent.
+    /// </summary>
+    /// <param name="textPath">The path to lay the glyphs out along.</param>
+    public GlyphBuilder(IPath textPath) => this.TextPath = textPath;
 }

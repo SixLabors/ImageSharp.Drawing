@@ -850,7 +850,8 @@ public partial class ProcessWithDrawingCanvasTests
             FallbackFontFamilies = [fallback.Family],
             WrappingLength = 300,
             LayoutMode = LayoutMode.VerticalLeftRight,
-            TextRuns = [new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }
+            TextRuns = [
+                new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }
             ]
         };
 
@@ -879,7 +880,9 @@ public partial class ProcessWithDrawingCanvasTests
             FallbackFontFamilies = [fallback.Family],
             WrappingLength = 400,
             LayoutMode = LayoutMode.VerticalMixedLeftRight,
-            TextRuns = [new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }
+            LineSpacing = 1.4F,
+            TextRuns = [
+                new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }
             ]
         };
 

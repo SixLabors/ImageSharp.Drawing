@@ -52,12 +52,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     private readonly Brush? defaultBrush;
 
     /// <summary>
-    /// When the text is laid out along a path, this holds the path
-    /// for point-along-path queries. <see langword="null"/> for normal (linear) text.
-    /// </summary>
-    private readonly IPath? path;
-
-    /// <summary>
     /// Set once <see cref="Dispose()"/> has run; guards against double disposal.
     /// </summary>
     private bool isDisposed;
@@ -193,7 +187,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             // so cache hits are vanishingly rare; disable caching entirely.
             this.rasterizationRequired = true;
             this.noCache = true;
-            this.path = path;
+            this.TextPath = path;
         }
         else if (!MatrixUtilities.IsAffine(drawingOptions.Transform))
         {
@@ -299,9 +293,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             }
         }
 
-        // Transform the glyph vectors using the original bounds
-        // The default transform will automatically be applied.
-        this.TransformGlyph(in bounds);
         this.rasterizationRequired = true;
         return true;
     }
@@ -729,50 +720,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Point ClampToPixel(PointF point) => Point.Truncate(point);
-
-    /// <summary>
-    /// Applies the path-based transform to the <see cref="BaseGlyphBuilder.Builder"/>
-    /// for the current glyph, positioning it along the text path (if any) or
-    /// leaving the identity transform for linear text.
-    /// </summary>
-    /// <param name="bounds">The font-metric bounding rectangle of the glyph.</param>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void TransformGlyph(in FontRectangle bounds)
-        => this.Builder.SetTransform(this.ComputeTransform(in bounds));
-
-    /// <summary>
-    /// Computes the combined translation + rotation matrix that places a glyph
-    /// along the text path. For linear text (no path), returns <see cref="Matrix4x4.Identity"/>.
-    /// </summary>
-    /// <param name="bounds">The font-metric bounding rectangle of the glyph.</param>
-    /// <returns>
-    /// The glyph placement matrix.
-    /// </returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private Matrix4x4 ComputeTransform(in FontRectangle bounds)
-    {
-        if (this.path is null)
-        {
-            return Matrix4x4.Identity;
-        }
-
-        // Find the point of this intersection along the given path.
-        // We want to find the point on the path that is closest to the center-bottom side of the glyph.
-        // Aligned text can overflow the path on either side, so overflowing glyphs extrapolate
-        // along the boundary tangents.
-        Vector2 half = new(bounds.Width * .5F, 0);
-        if (!this.path.TryGetPathPointAtDistanceUnbounded(bounds.Left + half.X, out PathPoint pathPoint))
-        {
-            return Matrix4x4.Identity;
-        }
-
-        float angle = GeometryUtilities.DegreeToRadian(pathPoint.Angle);
-
-        // Now offset to our target point since we're aligning the top-left location of our glyph against the path.
-        Vector2 translation = (Vector2)pathPoint.Point - bounds.Location - half + new Vector2(0, bounds.Top);
-        return Matrix4x4.CreateTranslation(translation.X, translation.Y, 0)
-            * new Matrix4x4(Matrix3x2.CreateRotation(angle, (Vector2)pathPoint.Point));
-    }
 
     /// <summary>
     /// Releases managed resources owned by this renderer.

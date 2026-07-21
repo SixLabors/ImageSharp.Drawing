@@ -90,6 +90,13 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     private DecorationLane strikeoutLane;
 
     /// <summary>
+    /// The along-line distance in pixels under which two carved pieces count as contiguous and
+    /// merge. Pen-derived cell boundaries drift by ULPs between one cell's end and the next
+    /// cell's start; genuine spacing is orders of magnitude larger.
+    /// </summary>
+    private const float DecorationContiguityEpsilon = 1F / 32F;
+
+    /// <summary>
     /// Reusable buffer of widened ink gaps gathered while carving one glyph's decoration.
     /// </summary>
     private readonly List<(float Start, float End)> decorationGaps = [];
@@ -125,17 +132,32 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     private readonly PathBuilder decorationBuilder = new();
 
     /// <summary>
+    /// The transform every glyph point receives after any per-glyph placement, mirroring the
+    /// default transform baked into <see cref="Builder"/>. Held separately because path
+    /// decoration bands are built in placement space and must compose with it explicitly.
+    /// </summary>
+    private readonly Matrix4x4 baseTransform;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="BaseGlyphBuilder"/> class
     /// with an identity transform.
     /// </summary>
-    public BaseGlyphBuilder() => this.Builder = new PathBuilder();
+    public BaseGlyphBuilder()
+    {
+        this.baseTransform = Matrix4x4.Identity;
+        this.Builder = new PathBuilder();
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BaseGlyphBuilder"/> class
     /// with the specified transform applied to all incoming glyph geometry.
     /// </summary>
     /// <param name="transform">A matrix transform applied to every point received from the font engine.</param>
-    public BaseGlyphBuilder(Matrix4x4 transform) => this.Builder = new PathBuilder(transform);
+    public BaseGlyphBuilder(Matrix4x4 transform)
+    {
+        this.baseTransform = transform;
+        this.Builder = new PathBuilder(transform);
+    }
 
     /// <summary>
     /// Gets the flattened paths captured for all glyphs/graphemes.
@@ -155,6 +177,13 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     /// allocations per grapheme.
     /// </summary>
     protected virtual bool CollectsGlyphPaths => true;
+
+    /// <summary>
+    /// Gets or sets the path that glyphs are laid out along, or <see langword="null"/> for
+    /// straight-line text. When set, layout-contiguous decoration cells merge across the
+    /// per-glyph placement transforms and flush as one continuous band sampled from the path.
+    /// </summary>
+    protected IPath? TextPath { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether the current glyph's decoded outline is built into
@@ -259,6 +288,14 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
         this.parameters = parameters;
         this.Builder.Clear();
+
+        // Path-following text positions every glyph on the path; the placement composes with
+        // the builder's default transform like any other glyph geometry.
+        if (this.TextPath is IPath textPath)
+        {
+            this.ApplyPathTransform(textPath, in bounds);
+        }
+
         this.usedLayers = false;
         this.inLayer = false;
         this.OutlineBuildRequired = true;
@@ -499,7 +536,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         // that leaves the window and dispose its pooled buffer.
         if (lane.Current.HasValue)
         {
-            this.CarveDecoration(textDecorations, in lane.Previous, in lane.Current, in incoming);
+            this.CarveDecoration(textDecorations, in lane.Previous, in lane.Current, in incoming, ref lane);
             lane.Previous.Dispose();
             lane.Previous = lane.Current;
         }
@@ -509,7 +546,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
     /// <summary>
     /// Emits the last held glyph of a decoration window, carved against its previous neighbour and
-    /// no following neighbour, then clears the window.
+    /// no following neighbour, emits any segment still accumulating, then clears the window.
     /// </summary>
     /// <param name="textDecorations">The decoration type of the window.</param>
     /// <param name="lane">The window to flush.</param>
@@ -517,10 +554,12 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     {
         if (lane.Current.HasValue)
         {
-            this.CarveDecoration(textDecorations, in lane.Previous, in lane.Current, in PendingDecoration.None);
+            this.CarveDecoration(textDecorations, in lane.Previous, in lane.Current, in PendingDecoration.None, ref lane);
             lane.Previous.Dispose();
             lane.Current.Dispose();
         }
+
+        this.FlushPendingSegment(textDecorations, ref lane);
 
         lane.Previous = default;
         lane.Current = default;
@@ -534,11 +573,13 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     /// <param name="previous">The glyph before the one being carved, if any.</param>
     /// <param name="current">The glyph being carved.</param>
     /// <param name="next">The glyph after the one being carved, if any.</param>
+    /// <param name="lane">The window owning the segment accumulator for this decoration type.</param>
     private void CarveDecoration(
         TextDecorations textDecorations,
         in PendingDecoration previous,
         in PendingDecoration current,
-        in PendingDecoration next)
+        in PendingDecoration next,
+        ref DecorationLane lane)
     {
         bool rotated = current.Rotated;
         float lineStart = rotated ? Math.Min(current.Start.Y, current.End.Y) : Math.Min(current.Start.X, current.End.X);
@@ -578,7 +619,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
             if (hasGap)
             {
-                this.EmitCarvedSegment(textDecorations, in current, rotated, cursor, Math.Max(cursor, gapStart));
+                this.EmitCarvedSegment(textDecorations, in current, rotated, cursor, Math.Max(cursor, gapStart), ref lane);
                 cursor = Math.Max(cursor, gapEnd);
             }
 
@@ -589,11 +630,11 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
         if (hasGap)
         {
-            this.EmitCarvedSegment(textDecorations, in current, rotated, cursor, Math.Max(cursor, gapStart));
+            this.EmitCarvedSegment(textDecorations, in current, rotated, cursor, Math.Max(cursor, gapStart), ref lane);
             cursor = Math.Max(cursor, gapEnd);
         }
 
-        this.EmitCarvedSegment(textDecorations, in current, rotated, cursor, lineEnd);
+        this.EmitCarvedSegment(textDecorations, in current, rotated, cursor, lineEnd, ref lane);
 
         // Widens each ink interval of a glyph by its own thickness and clips it to the carved
         // glyph's extent, so only the parts that reach into it open a gap.
@@ -614,18 +655,155 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     }
 
     /// <summary>
-    /// Maps a carved along-line piece back to line endpoints and emits it as a rectangle path.
+    /// Accumulates a carved along-line piece towards emission. Contiguous pieces that share a
+    /// run, geometry, and transform accumulate into one segment so abutting glyph cells never
+    /// meet in a pair of anti-aliased edges, and the accumulator flushes whenever continuity
+    /// or styling breaks. A grapheme aggregate receives each merged segment when it flushes,
+    /// consistent with the carving window already emitting one glyph after the segment's owner.
     /// </summary>
-    private void EmitCarvedSegment(TextDecorations textDecorations, in PendingDecoration current, bool rotated, float from, float to)
+    private void EmitCarvedSegment(TextDecorations textDecorations, in PendingDecoration current, bool rotated, float from, float to, ref DecorationLane lane)
     {
         if (to <= from)
         {
             return;
         }
 
-        Vector2 segmentStart = rotated ? new Vector2(current.Start.X, from) : new Vector2(from, current.Start.Y);
-        Vector2 segmentEnd = rotated ? new Vector2(current.End.X, to) : new Vector2(to, current.End.Y);
-        this.EmitDecorationSegment(textDecorations, segmentStart, segmentEnd, current.Thickness, rotated, current.Run, in current);
+        float crossStart = rotated ? current.Start.X : current.Start.Y;
+        float crossEnd = rotated ? current.End.X : current.End.Y;
+
+        // Adjacent cells are not bitwise contiguous: the engine derives a cell's end and the
+        // next cell's start through differently ordered advance sums, so the shared boundary
+        // drifts by a few ULPs. The tolerance sits far above that drift and far below anything
+        // visible; emission rounds along-line ends to whole pixels regardless. Real spacing
+        // (tracking, justification, new lines) exceeds it by orders of magnitude and flushes.
+        //
+        // Path-following decorations merge across the per-glyph placement transforms because
+        // the flushed band re-derives its geometry from the path; everything else needs the
+        // single shared transform the flushed rectangle is built under.
+        ref PendingSegment pending = ref lane.Pending;
+        bool transformCompatible = (!rotated && this.TextPath is not null) ||
+            pending.Transform == current.Transform;
+
+        if (pending.HasValue &&
+            pending.Rotated == rotated &&
+            MathF.Abs(pending.To - from) <= DecorationContiguityEpsilon &&
+            pending.CrossStart == crossStart &&
+            pending.CrossEnd == crossEnd &&
+            pending.Thickness == current.Thickness &&
+            ReferenceEquals(pending.Run, current.Run) &&
+            transformCompatible)
+        {
+            pending.To = to;
+            return;
+        }
+
+        this.FlushPendingSegment(textDecorations, ref lane);
+
+        pending.HasValue = true;
+        pending.From = from;
+        pending.To = to;
+        pending.CrossStart = crossStart;
+        pending.CrossEnd = crossEnd;
+        pending.Thickness = current.Thickness;
+        pending.Rotated = rotated;
+        pending.Run = current.Run;
+        pending.Transform = current.Transform;
+    }
+
+    /// <summary>
+    /// Emits the contiguous decoration segment a window has accumulated, if any, and clears it.
+    /// </summary>
+    /// <param name="textDecorations">The decoration type of the window.</param>
+    /// <param name="lane">The window whose accumulated segment should be emitted.</param>
+    private void FlushPendingSegment(TextDecorations textDecorations, ref DecorationLane lane)
+    {
+        ref PendingSegment pending = ref lane.Pending;
+        if (!pending.HasValue)
+        {
+            return;
+        }
+
+        if (!pending.Rotated && this.TextPath is IPath textPath)
+        {
+            this.EmitPathDecorationBand(textDecorations, in pending, textPath);
+        }
+        else
+        {
+            Vector2 segmentStart = pending.Rotated ? new Vector2(pending.CrossStart, pending.From) : new Vector2(pending.From, pending.CrossStart);
+            Vector2 segmentEnd = pending.Rotated ? new Vector2(pending.CrossEnd, pending.To) : new Vector2(pending.To, pending.CrossEnd);
+            this.EmitDecorationSegment(textDecorations, segmentStart, segmentEnd, pending.Thickness, pending.Rotated, pending.Run, pending.Transform);
+        }
+
+        pending = default;
+    }
+
+    /// <summary>
+    /// Emits an accumulated path-following decoration segment as one continuous band. The band
+    /// samples the path over the segment's along-path interval and offsets each sample along
+    /// the local normal, so the drawn line flows with the curve instead of approximating it
+    /// with one rotated rectangle per glyph cell.
+    /// </summary>
+    /// <param name="textDecorations">The decoration type.</param>
+    /// <param name="pending">The accumulated segment.</param>
+    /// <param name="textPath">The path the text is laid out along.</param>
+    private void EmitPathDecorationBand(TextDecorations textDecorations, in PendingSegment pending, IPath textPath)
+    {
+        // Same drawn thickness and CSS positioning as the straight-line rectangle: underline
+        // shifts down by half the thickness, overline up, strikeout stays centered.
+        float thickness = MathF.Max(1F, (float)Math.Round(pending.Thickness));
+        float half = thickness * .5F;
+
+        float offset = 0F;
+        if (textDecorations == TextDecorations.Overline)
+        {
+            offset = -half;
+        }
+        else if (textDecorations == TextDecorations.Underline)
+        {
+            offset = half;
+        }
+
+        // Glyph placement maps a layout point (x, y) to path(x) + rotate(angle(x)) * (0, y),
+        // so sampling that frame along the interval yields the exact curve the glyph cells
+        // follow. A fixed step keeps chord error far below pixel scale at text curvatures.
+        const float sampleStep = 2F;
+        float crossTop = pending.CrossStart + offset - half;
+        float crossBottom = crossTop + thickness;
+
+        int steps = Math.Max(1, (int)MathF.Ceiling((pending.To - pending.From) / sampleStep));
+        PointF[] outline = new PointF[(steps + 1) * 2];
+        for (int i = 0; i <= steps; i++)
+        {
+            float x = i == steps ? pending.To : pending.From + (i * sampleStep);
+            if (!textPath.TryGetPathPointAtDistanceUnbounded(x, out PathPoint pathPoint))
+            {
+                return;
+            }
+
+            (float sin, float cos) = MathF.SinCos(GeometryUtilities.DegreeToRadian(pathPoint.Angle));
+            Vector2 normal = new(-sin, cos);
+            Vector2 point = (Vector2)pathPoint.Point;
+            outline[i] = point + (normal * crossTop);
+            outline[^(i + 1)] = point + (normal * crossBottom);
+        }
+
+        // The sampled frames replace the per-glyph placement transforms, but the builder's
+        // default transform still applies on top, exactly as it does for glyph geometry.
+        this.decorationBuilder.Clear();
+        this.decorationBuilder.SetTransform(this.baseTransform);
+        this.decorationBuilder.StartFigure();
+        this.decorationBuilder.AddLines(outline);
+        this.decorationBuilder.CloseFigure();
+
+        IPath path = this.decorationBuilder.Build();
+        this.decorationBuilder.Clear();
+
+        if (path.Bounds.IsEmpty)
+        {
+            return;
+        }
+
+        this.RegisterDecorationPath(textDecorations, path, outline[0], outline[steps], thickness, pending.Run);
     }
 
     /// <summary>
@@ -635,7 +813,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     /// transform: the window emits a glyph's segments after the shared builder has already been
     /// retargeted to the next glyph, which rotates per glyph when text follows a path.
     /// </summary>
-    private void EmitDecorationSegment(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness, bool rotated, TextRun? run, in PendingDecoration owner)
+    private void EmitDecorationSegment(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness, bool rotated, TextRun? run, Matrix4x4 transform)
     {
         // Clamp the thickness to whole pixels.
         thickness = MathF.Max(1F, (float)Math.Round(thickness));
@@ -666,7 +844,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         // Snap the corners to whole pixels on the cross axis only, keeping the stroke's edges crisp;
         // the along-line coordinates stay exact so skip-ink gap boundaries land symmetrically.
         this.decorationBuilder.Clear();
-        this.decorationBuilder.SetTransform(owner.Transform);
+        this.decorationBuilder.SetTransform(transform);
         this.decorationBuilder.StartFigure();
         this.decorationBuilder.AddLine(SnapCross(a + offset, rotated), SnapCross(b + offset, rotated));
         this.decorationBuilder.AddLine(SnapCross(b + offset, rotated), SnapCross(c + offset, rotated));
@@ -683,6 +861,22 @@ internal class BaseGlyphBuilder : IGlyphRenderer
             return;
         }
 
+        this.decorationBuilder.Clear();
+        this.RegisterDecorationPath(textDecorations, path, start, end, thickness, run);
+    }
+
+    /// <summary>
+    /// Registers a finished decoration path with the running collections and hands it to the
+    /// drawing override.
+    /// </summary>
+    /// <param name="textDecorations">The decoration type.</param>
+    /// <param name="path">The built decoration path.</param>
+    /// <param name="start">The start position of the decoration line.</param>
+    /// <param name="end">The end position of the decoration line.</param>
+    /// <param name="thickness">The drawn thickness in whole pixels.</param>
+    /// <param name="run">The text run styling the decoration.</param>
+    private void RegisterDecorationPath(TextDecorations textDecorations, IPath path, Vector2 start, Vector2 end, float thickness, TextRun? run)
+    {
         this.CurrentPaths.Add(path);
         if (this.graphemeBuilder is not null)
         {
@@ -700,7 +894,6 @@ internal class BaseGlyphBuilder : IGlyphRenderer
             this.graphemePathCount++;
         }
 
-        this.decorationBuilder.Clear();
         this.CurrentDecorationRun = run;
         this.SetDecoration(textDecorations, start, end, thickness);
     }
@@ -723,6 +916,32 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         }
 
         return ref this.strikeoutLane;
+    }
+
+    /// <summary>
+    /// Positions the current glyph along <see cref="TextPath"/>: the glyph's horizontal center
+    /// maps to the path distance and the glyph rotates to the path tangent at that point.
+    /// Aligned text can overflow the path on either side, so overflowing glyphs extrapolate
+    /// along the boundary tangents.
+    /// </summary>
+    /// <param name="textPath">The path the text is laid out along.</param>
+    /// <param name="bounds">The font-metric bounding rectangle of the glyph.</param>
+    private void ApplyPathTransform(IPath textPath, in FontRectangle bounds)
+    {
+        Vector2 half = new(bounds.Width * .5F, 0);
+        if (!textPath.TryGetPathPointAtDistanceUnbounded(bounds.Left + half.X, out PathPoint pathPoint))
+        {
+            return;
+        }
+
+        float angle = GeometryUtilities.DegreeToRadian(pathPoint.Angle);
+
+        // Translate so the glyph's top-left aligns with the path point,
+        // then rotate around the path point to follow the tangent.
+        Vector2 translation = (Vector2)pathPoint.Point - bounds.Location - half + new Vector2(0, bounds.Top);
+        this.Builder.SetTransform(
+            Matrix4x4.CreateTranslation(translation.X, translation.Y, 0)
+            * new Matrix4x4(Matrix3x2.CreateRotation(angle, (Vector2)pathPoint.Point)));
     }
 
     /// <inheritdoc cref="IGlyphRenderer.BeginText(in FontRectangle)"/>
@@ -978,5 +1197,63 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         /// The most recently reported glyph, awaiting its following neighbour before it is carved.
         /// </summary>
         public PendingDecoration Current;
+
+        /// <summary>
+        /// The carved segment being extended across contiguous same-styled glyph cells;
+        /// emitted when continuity or styling breaks, or at end of text.
+        /// </summary>
+        public PendingSegment Pending;
+    }
+
+    /// <summary>
+    /// A carved decoration piece accumulating across glyphs that share a run, geometry, and
+    /// transform, held until a piece that cannot merge or the end of text flushes it.
+    /// </summary>
+    private struct PendingSegment
+    {
+        /// <summary>
+        /// Whether this slot holds a segment.
+        /// </summary>
+        public bool HasValue;
+
+        /// <summary>
+        /// The along-line start of the accumulated segment.
+        /// </summary>
+        public float From;
+
+        /// <summary>
+        /// The along-line end of the accumulated segment; extended as contiguous pieces merge.
+        /// </summary>
+        public float To;
+
+        /// <summary>
+        /// The cross-axis coordinate of the decoration line at its start point.
+        /// </summary>
+        public float CrossStart;
+
+        /// <summary>
+        /// The cross-axis coordinate of the decoration line at its end point.
+        /// </summary>
+        public float CrossEnd;
+
+        /// <summary>
+        /// The decoration thickness in pixels.
+        /// </summary>
+        public float Thickness;
+
+        /// <summary>
+        /// Whether the owning glyphs use vertical layout.
+        /// </summary>
+        public bool Rotated;
+
+        /// <summary>
+        /// The text run styling the accumulated cells; a different run never merges.
+        /// </summary>
+        public TextRun? Run;
+
+        /// <summary>
+        /// The composed builder transform of the owning glyphs; a different transform never merges.
+        /// </summary>
+        public Matrix4x4 Transform;
     }
 }

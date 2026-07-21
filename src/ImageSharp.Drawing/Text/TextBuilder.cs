@@ -102,7 +102,7 @@ public static class TextBuilder
     public static IPathCollection GeneratePaths(string text, IPath path, TextOptions textOptions)
     {
         (IPath Path, TextOptions TextOptions) transformed = ConfigureOptions(textOptions, path);
-        PathGlyphBuilder glyphBuilder = new(transformed.Path);
+        GlyphBuilder glyphBuilder = new(transformed.Path);
         TextRenderer renderer = new(glyphBuilder);
 
         renderer.Render(text, transformed.TextOptions);
@@ -124,7 +124,7 @@ public static class TextBuilder
     public static IReadOnlyList<GlyphPathCollection> GenerateGlyphs(string text, IPath path, TextOptions textOptions)
     {
         (IPath Path, TextOptions TextOptions) transformed = ConfigureOptions(textOptions, path);
-        PathGlyphBuilder glyphBuilder = new(transformed.Path);
+        GlyphBuilder glyphBuilder = new(transformed.Path);
         TextRenderer renderer = new(glyphBuilder);
 
         renderer.Render(text, transformed.TextOptions);
