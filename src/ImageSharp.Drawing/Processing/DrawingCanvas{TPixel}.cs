@@ -413,6 +413,10 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     private int SaveEffectLayerCore(GraphicsOptions layerOptions, Rectangle bounds, LayerEffect effect, DrawingOptions? options)
     {
         Guard.NotNull(effect, nameof(effect));
+
+        // Rectangular content bounds grow into the effect region here so blurred and offset
+        // output spills naturally around the content instead of being cut at its edge.
+        bounds.Inflate(effect.Reach, effect.Reach);
         return this.SaveEffectLayerCore(layerOptions, new RectanglePolygon(bounds), effect, options);
     }
 
@@ -433,12 +437,15 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         Guard.NotNull(region, nameof(region));
         Guard.NotNull(effect, nameof(effect));
 
+        // The layer must contain the effect output, including pixels the write-back lands beyond
+        // the region when the effect carries an offset.
         RectangleF regionBounds = region.Bounds;
+        int reach = Math.Max(effect.Reach, 1);
         Rectangle layerBounds = Rectangle.FromLTRB(
-            (int)MathF.Floor(regionBounds.Left),
-            (int)MathF.Floor(regionBounds.Top),
-            (int)MathF.Ceiling(regionBounds.Right),
-            (int)MathF.Ceiling(regionBounds.Bottom));
+            (int)MathF.Floor(regionBounds.Left) - reach,
+            (int)MathF.Floor(regionBounds.Top) - reach,
+            (int)MathF.Ceiling(regionBounds.Right) + reach,
+            (int)MathF.Ceiling(regionBounds.Bottom) + reach);
 
         DrawingCanvasState currentState = this.ResolveState();
 

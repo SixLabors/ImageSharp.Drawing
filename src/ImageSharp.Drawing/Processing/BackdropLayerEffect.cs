@@ -31,6 +31,12 @@ public abstract class BackdropLayerEffect : LayerEffect
         : base(fallbackEffect)
     {
     }
+
+    /// <summary>
+    /// Gets the output reach. Backdrop effects filter the pixels already beneath the layer
+    /// clipped to the region, so their output never extends past it.
+    /// </summary>
+    public sealed override int Reach => 0;
 }
 
 /// <summary>
@@ -56,7 +62,7 @@ public sealed class BackdropBlurLayerEffect : BackdropLayerEffect
     public float Sigma { get; }
 
     /// <inheritdoc/>
-    internal override bool IsPassThrough => this.Sigma == 0;
+    public override bool IsPassThrough => this.Sigma == 0;
 }
 
 /// <summary>
@@ -163,11 +169,11 @@ public sealed class BackdropDropShadowLayerEffect : BackdropLayerEffect
     public Color Color { get; }
 
     /// <inheritdoc/>
-    internal override GraphicsOptions? WriteBackOptions
+    public override GraphicsOptions? WriteBackOptions
         => new() { AlphaCompositionMode = PixelAlphaCompositionMode.DestOver };
 
     /// <inheritdoc/>
-    internal override Point WriteBackOffset => this.Offset;
+    public override Point WriteBackOffset => this.Offset;
 
     /// <summary>
     /// Creates the CPU backdrop drop-shadow operation for the supplied effect values.
@@ -219,7 +225,7 @@ public class BackdropColorMatrixLayerEffect : BackdropLayerEffect
     public ColorMatrix Matrix { get; }
 
     /// <inheritdoc/>
-    internal override bool IsPassThrough => this.Matrix == ColorMatrix.Identity;
+    public override bool IsPassThrough => this.Matrix == ColorMatrix.Identity;
 }
 
 /// <summary>

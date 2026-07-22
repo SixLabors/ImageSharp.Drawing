@@ -16,6 +16,7 @@ public abstract class LayerEffect
     private readonly GraphicsOptions? writeBackOptions;
     private readonly Point writeBackOffset;
     private readonly Action<IImageProcessingContext> operation;
+    private readonly int reach;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LayerEffect"/> class.
@@ -39,25 +40,33 @@ public abstract class LayerEffect
         this.writeBackOptions = fallbackEffect.WriteBackOptions;
         this.writeBackOffset = fallbackEffect.WriteBackOffset;
         this.operation = fallbackEffect.CreateOperation();
+        this.reach = fallbackEffect.Reach;
     }
+
+    /// <summary>
+    /// Gets the distance, in pixels, the effect can push content beyond its source region. Layer
+    /// and processing bounds are expanded by this reach so the effect output is not cut off.
+    /// Effects constructed over a fallback inherit the fallback's reach.
+    /// </summary>
+    public virtual int Reach => this.reach;
 
     /// <summary>
     /// Gets a value indicating whether the effect leaves the layer content unchanged, in which
     /// case its application is skipped entirely.
     /// </summary>
-    internal virtual bool IsPassThrough => this.isPassThrough;
+    public virtual bool IsPassThrough => this.isPassThrough;
 
     /// <summary>
     /// Gets the graphics options used to composite the processed pixels back onto the layer, or
     /// <see langword="null"/> to replace the processed region outright.
     /// </summary>
-    internal virtual GraphicsOptions? WriteBackOptions => this.writeBackOptions;
+    public virtual GraphicsOptions? WriteBackOptions => this.writeBackOptions;
 
     /// <summary>
     /// Gets the offset, in pixels, at which the processed pixels are written back relative to the
     /// region they were read from.
     /// </summary>
-    internal virtual Point WriteBackOffset => this.writeBackOffset;
+    public virtual Point WriteBackOffset => this.writeBackOffset;
 
     /// <summary>
     /// Creates the image-processing operation that transforms the layer snapshot into the effect
@@ -89,13 +98,16 @@ public sealed class BlurLayerEffect : LayerEffect
     public float Sigma { get; }
 
     /// <inheritdoc/>
-    internal override bool IsPassThrough => this.Sigma == 0;
+    public override int Reach => (int)MathF.Ceiling(this.Sigma * 3F) + 1;
 
     /// <inheritdoc/>
-    internal override GraphicsOptions? WriteBackOptions => null;
+    public override bool IsPassThrough => this.Sigma == 0;
 
     /// <inheritdoc/>
-    internal override Point WriteBackOffset => default;
+    public override GraphicsOptions? WriteBackOptions => null;
+
+    /// <inheritdoc/>
+    public override Point WriteBackOffset => default;
 }
 
 /// <summary>
@@ -138,11 +150,15 @@ public sealed class DropShadowLayerEffect : LayerEffect
     public Color Color { get; }
 
     /// <inheritdoc/>
-    internal override GraphicsOptions? WriteBackOptions
+    public override int Reach
+        => (int)MathF.Ceiling(this.Sigma * 3F) + Math.Max(Math.Abs(this.Offset.X), Math.Abs(this.Offset.Y)) + 1;
+
+    /// <inheritdoc/>
+    public override GraphicsOptions? WriteBackOptions
         => new() { AlphaCompositionMode = PixelAlphaCompositionMode.DestOver };
 
     /// <inheritdoc/>
-    internal override Point WriteBackOffset => this.Offset;
+    public override Point WriteBackOffset => this.Offset;
 
     /// <summary>
     /// Creates the CPU drop-shadow operation for the supplied effect values.
@@ -207,11 +223,14 @@ public sealed class GlowLayerEffect : LayerEffect
     public Color Color { get; }
 
     /// <inheritdoc/>
-    internal override GraphicsOptions? WriteBackOptions
+    public override int Reach => (int)MathF.Ceiling(this.Sigma * 3F) + 1;
+
+    /// <inheritdoc/>
+    public override GraphicsOptions? WriteBackOptions
         => new() { AlphaCompositionMode = PixelAlphaCompositionMode.DestOver };
 
     /// <inheritdoc/>
-    internal override Point WriteBackOffset => default;
+    public override Point WriteBackOffset => default;
 
     /// <summary>
     /// Creates the CPU glow operation for the supplied effect values.
@@ -284,11 +303,15 @@ public sealed class InnerShadowLayerEffect : LayerEffect
     public Color Color { get; }
 
     /// <inheritdoc/>
-    internal override GraphicsOptions? WriteBackOptions
+    public override int Reach
+        => (int)MathF.Ceiling(this.Sigma * 3F) + Math.Max(Math.Abs(this.Offset.X), Math.Abs(this.Offset.Y)) + 1;
+
+    /// <inheritdoc/>
+    public override GraphicsOptions? WriteBackOptions
         => new() { AlphaCompositionMode = PixelAlphaCompositionMode.SrcAtop };
 
     /// <inheritdoc/>
-    internal override Point WriteBackOffset => this.Offset;
+    public override Point WriteBackOffset => this.Offset;
 
     /// <summary>
     /// Creates the CPU inner-shadow operation for the supplied effect values.
@@ -343,11 +366,14 @@ public sealed class ColorMatrixLayerEffect : LayerEffect
     public ColorMatrix Matrix { get; }
 
     /// <inheritdoc/>
-    internal override GraphicsOptions? WriteBackOptions => null;
+    public override int Reach => 0;
 
     /// <inheritdoc/>
-    internal override Point WriteBackOffset => default;
+    public override GraphicsOptions? WriteBackOptions => null;
 
     /// <inheritdoc/>
-    internal override bool IsPassThrough => this.Matrix == ColorMatrix.Identity;
+    public override Point WriteBackOffset => default;
+
+    /// <inheritdoc/>
+    public override bool IsPassThrough => this.Matrix == ColorMatrix.Identity;
 }

@@ -370,4 +370,34 @@ public partial class DrawingCanvasTests
         Assert.Equal(255, blended.B);
         Assert.Equal(255, blended.A);
     }
+
+    [Theory]
+    [WithSolidFilledImages(240, 160, nameof(Color.White), PixelTypes.Rgba32)]
+    public void SaveLayer_BlurEffect_OutputReachesBeyondContentBounds<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> target = provider.GetImage();
+
+        // The box-shadow pattern: a blur effect layer whose bounds equal the shadow geometry
+        // exactly, relying on the canvas to expand the effect region by the blur's reach.
+        Rectangle content = new(60, 40, 120, 80);
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.SaveLayer(new GraphicsOptions(), content, new BlurLayerEffect(6F));
+            canvas.Fill(Brushes.Solid(Color.Black), new RectanglePolygon((RectangleF)content));
+            canvas.Restore();
+        }
+
+        target.DebugSave(provider, appendSourceFileOrDescription: false);
+
+        // Blurred ink must spill outside the content rectangle, and the boundary column must
+        // no longer be a hard edge: without reach expansion the output clamps to the content
+        // bounds, leaving pure white one pixel outside and pure black one pixel inside.
+        Rgba32 outside = target[content.Right + 4, content.Top + (content.Height / 2)].ToRgba32();
+        Assert.True(outside.R < 250, $"Expected blurred ink beyond the content edge but found {outside}.");
+
+        Rgba32 edge = target[content.Right - 1, content.Top + (content.Height / 2)].ToRgba32();
+        Assert.True(edge.R > 5, $"Expected the content edge to feather but found {edge}.");
+    }
 }
