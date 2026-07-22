@@ -1006,6 +1006,7 @@ internal sealed partial class FlushScene : IDisposable
                     command.RasterizerOptions,
                     command.TargetBounds,
                     command.DestinationOffset,
+                    command.SubPixelOffset,
                     allocator,
                     out PreparedFillItem preparedApply))
             {
@@ -1364,6 +1365,7 @@ internal sealed partial class FlushScene : IDisposable
             command.RasterizerOptions,
             command.TargetBounds,
             command.DestinationOffset,
+            command.SubPixelOffset,
             allocator,
             out prepared);
 
@@ -1378,6 +1380,7 @@ internal sealed partial class FlushScene : IDisposable
     /// <param name="sourceRasterizerOptions">The rasterizer options recorded with the command.</param>
     /// <param name="targetBounds">The destination bounds of the flush.</param>
     /// <param name="destinationOffset">The offset from path-local to destination coordinates.</param>
+    /// <param name="subPixelOffset">The fractional translation applied after the drawing options transform.</param>
     /// <param name="allocator">The allocator used for retained raster storage.</param>
     /// <param name="prepared">The prepared fill payload when successful.</param>
     /// <returns><see langword="true"/> when the fill intersects the target and rasterizable geometry was created; otherwise <see langword="false"/>.</returns>
@@ -1388,10 +1391,21 @@ internal sealed partial class FlushScene : IDisposable
         in RasterizerOptions sourceRasterizerOptions,
         Rectangle targetBounds,
         Point destinationOffset,
+        Vector2 subPixelOffset,
         MemoryAllocator allocator,
         out PreparedFillItem prepared)
     {
         Matrix4x4 transform = drawingOptions.Transform;
+        if (subPixelOffset != Vector2.Zero)
+        {
+            // The sub-pixel remainder is a device-space nudge applied after the recorded
+            // transform, mirroring CompositionCommand.Transform for callers that receive the
+            // options and offset separately.
+            transform = transform.IsIdentity
+                ? Matrix4x4.CreateTranslation(subPixelOffset.X, subPixelOffset.Y, 0F)
+                : transform * Matrix4x4.CreateTranslation(subPixelOffset.X, subPixelOffset.Y, 0F);
+        }
+
         Vector2 scale = MatrixUtilities.GetScale(transform);
         Matrix4x4 residual = MatrixUtilities.GetResidual(scale, transform);
         LinearGeometry geometry = path.ToLinearGeometry(scale);

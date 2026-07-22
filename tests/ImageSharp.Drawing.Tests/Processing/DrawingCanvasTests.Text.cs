@@ -8,6 +8,7 @@ using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.Drawing.Text;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 
@@ -638,6 +639,167 @@ public partial class DrawingCanvasTests
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
     }
+
+    [Theory]
+    [WithSolidFilledImages(240, 120, nameof(Color.White), PixelTypes.Rgba32)]
+    public void DrawText_OffscreenLines_CulledOutputMatchesUnculled<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> expected = provider.GetImage();
+        using Image<TPixel> actual = provider.GetImage();
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 24);
+        string text = BuildNumberedLines(60);
+
+        // Caller-supplied visible bounds always win, so an effectively unbounded rectangle
+        // renders every line and provides the unculled reference.
+        RichTextOptions unculledOptions = new(font)
+        {
+            Origin = new Vector2(8, 8),
+            VisibleBounds = new FontRectangle(-1e6F, -1e6F, 2e6F, 2e6F)
+        };
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, expected, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.DrawText(unculledOptions, text, Brushes.Solid(Color.Black), pen: null);
+        }
+
+        RichTextOptions culledOptions = new(font) { Origin = new Vector2(8, 8) };
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, actual, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.DrawText(culledOptions, text, Brushes.Solid(Color.Black), pen: null);
+        }
+
+        ImageComparer.Exact.VerifySimilarity(expected, actual);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(240, 120, nameof(Color.White), PixelTypes.Rgba32)]
+    public void DrawText_TranslatedTransform_CulledOutputMatchesUnculled<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> expected = provider.GetImage();
+        using Image<TPixel> actual = provider.GetImage();
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 24);
+        string text = BuildNumberedLines(60);
+
+        // The translation scrolls lines 240 to 360 of the text into view, so the culling band
+        // must follow the transform; a band left at the image rectangle would cull every
+        // visible line and produce a blank image.
+        DrawingOptions scrolled = new()
+        {
+            Transform = Matrix4x4.CreateTranslation(0, -240, 0)
+        };
+
+        RichTextOptions unculledOptions = new(font)
+        {
+            Origin = new Vector2(8, 8),
+            VisibleBounds = new FontRectangle(-1e6F, -1e6F, 2e6F, 2e6F)
+        };
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, expected, scrolled))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.DrawText(unculledOptions, text, Brushes.Solid(Color.Black), pen: null);
+        }
+
+        RichTextOptions culledOptions = new(font) { Origin = new Vector2(8, 8) };
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, actual, scrolled))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.DrawText(culledOptions, text, Brushes.Solid(Color.Black), pen: null);
+        }
+
+        // Culling changes the run origin the batched glyph geometry is keyed against, and
+        // run-relative caching computes vertex positions as (absolute - origin) at bake time
+        // plus origin at raster time. Floating point addition is not associative, so the two
+        // renders' vertices differ by ULPs, and the rasterizer's sub-pixel grid snap can
+        // amplify an ULP into a single least-significant-bit coverage step on an occasional
+        // antialiased edge pixel.
+        ImageComparer.TolerantPercentage(0.005F).VerifySimilarity(expected, actual);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(240, 120, nameof(Color.White), PixelTypes.Rgba32)]
+    public void DrawText_RotatedTransform_CulledOutputMatchesUnculled<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> expected = provider.GetImage();
+        using Image<TPixel> actual = provider.GetImage();
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 24);
+        string text = BuildNumberedLines(60);
+
+        // Rotation moves text space away from device space, so culling must stand down; the
+        // rotation about the image center swings lines from below the straight-line band into
+        // view and any band applied regardless would drop them.
+        DrawingOptions rotated = new()
+        {
+            Transform =
+                Matrix4x4.CreateTranslation(-120, -60, 0) *
+                Matrix4x4.CreateRotationZ(MathF.PI / 2F) *
+                Matrix4x4.CreateTranslation(120, 60, 0)
+        };
+
+        RichTextOptions unculledOptions = new(font)
+        {
+            Origin = new Vector2(8, 8),
+            VisibleBounds = new FontRectangle(-1e6F, -1e6F, 2e6F, 2e6F)
+        };
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, expected, rotated))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.DrawText(unculledOptions, text, Brushes.Solid(Color.Black), pen: null);
+        }
+
+        RichTextOptions culledOptions = new(font) { Origin = new Vector2(8, 8) };
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, actual, rotated))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.DrawText(culledOptions, text, Brushes.Solid(Color.Black), pen: null);
+        }
+
+        ImageComparer.Exact.VerifySimilarity(expected, actual);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(240, 120, nameof(Color.White), PixelTypes.Rgba32)]
+    public void DrawText_TextBlock_OffscreenLines_CulledOutputMatchesUnculled<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> actual = provider.GetImage();
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 24);
+        string text = BuildNumberedLines(60);
+        TextBlock block = new(text, new TextOptions(font));
+
+        // On a target tall enough for every line nothing is culled, so its top band is the
+        // unculled reference for the small target where most lines lie below the bottom edge.
+        using Image<TPixel> tall = new(provider.Configuration, actual.Width, 2200);
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, tall, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.DrawText(block, new PointF(8, 8), -1, Brushes.Solid(Color.Black), pen: null);
+        }
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, actual, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.DrawText(block, new PointF(8, 8), -1, Brushes.Solid(Color.Black), pen: null);
+        }
+
+        using Image<TPixel> expected = tall.Clone(ctx => ctx.Crop(new Rectangle(0, 0, actual.Width, actual.Height)));
+        ImageComparer.Exact.VerifySimilarity(expected, actual);
+    }
+
+    /// <summary>
+    /// Builds multi-line text whose numbered lines make any culled-but-visible line an exact
+    /// pixel difference.
+    /// </summary>
+    /// <param name="count">The number of lines.</param>
+    /// <returns>The text.</returns>
+    private static string BuildNumberedLines(int count)
+        => string.Join('\n', Enumerable.Range(0, count).Select(static i => $"line {i}"));
 
     /// <summary>
     /// Draws text through the glyph-id API used by the glyph regression tests.

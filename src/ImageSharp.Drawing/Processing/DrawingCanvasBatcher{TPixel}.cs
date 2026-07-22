@@ -505,19 +505,26 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                 // The batcher is the brush normalization boundary. Backends still use
                 // DrawingOptions.Transform for geometry, but brush coordinates are prepared
                 // here so CPU and WebGPU do not each bake the transform in their own way.
+                // Position-independent brushes return themselves untransformed, and every
+                // glyph command reaches here because its composed transform carries the
+                // sub-pixel fraction, so the rebuild is skipped when nothing changed.
                 Brush brush = composition.Brush.Transform(
                     composition.Transform,
                     composition.RasterizerOptions.Interest,
                     composition.RasterizerOptions.Interest);
 
-                pathCommand.Command = CompositionCommand.Create(
-                    composition.SourcePath,
-                    brush,
-                    composition.DrawingOptions,
-                    composition.RasterizerOptions,
-                    composition.TargetBounds,
-                    composition.DestinationOffset,
-                    composition.OwnerLayer);
+                if (!ReferenceEquals(brush, composition.Brush))
+                {
+                    pathCommand.Command = CompositionCommand.Create(
+                        composition.SourcePath,
+                        brush,
+                        composition.DrawingOptions,
+                        composition.RasterizerOptions,
+                        composition.TargetBounds,
+                        composition.DestinationOffset,
+                        composition.OwnerLayer,
+                        composition.SubPixelOffset);
+                }
             }
         }
         else if (command is StrokePathCompositionSceneCommand strokePathCommand)
@@ -542,7 +549,9 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                 sourcePath = sourcePath.GenerateDashes(pen.StrokeWidth, pen.StrokePattern.Span, pen.StrokePatternOffset);
             }
 
-            if (hasDashes || hasTransform)
+            // Position-independent brushes return themselves untransformed, so only dashing
+            // or a genuinely transformed brush warrants rebuilding the command.
+            if (hasDashes || !ReferenceEquals(brush, composition.Brush))
             {
                 strokePathCommand.Command = new StrokePathCommand(
                     sourcePath,
@@ -553,7 +562,8 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                     composition.DestinationOffset,
                     composition.Pen,
                     composition.IsInsideLayer,
-                    composition.OwnerLayer);
+                    composition.OwnerLayer,
+                    composition.SubPixelOffset);
             }
         }
         else if (command is LineSegmentCompositionSceneCommand lineSegmentCommand)
@@ -567,18 +577,23 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                     composition.RasterizerOptions.Interest,
                     composition.RasterizerOptions.Interest);
 
-                command = new LineSegmentCompositionSceneCommand(
-                    new StrokeLineSegmentCommand(
-                        composition.SourceStart,
-                        composition.SourceEnd,
-                        brush,
-                        composition.DrawingOptions,
-                        composition.RasterizerOptions,
-                        composition.TargetBounds,
-                        composition.DestinationOffset,
-                        composition.Pen,
-                        composition.IsInsideLayer,
-                        composition.OwnerLayer));
+                // Position-independent brushes return themselves untransformed; skipping the
+                // rebuild also skips allocating a replacement scene command wrapper.
+                if (!ReferenceEquals(brush, composition.Brush))
+                {
+                    command = new LineSegmentCompositionSceneCommand(
+                        new StrokeLineSegmentCommand(
+                            composition.SourceStart,
+                            composition.SourceEnd,
+                            brush,
+                            composition.DrawingOptions,
+                            composition.RasterizerOptions,
+                            composition.TargetBounds,
+                            composition.DestinationOffset,
+                            composition.Pen,
+                            composition.IsInsideLayer,
+                            composition.OwnerLayer));
+                }
             }
         }
         else if (command is PolylineCompositionSceneCommand polylineCommand)
@@ -592,17 +607,22 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                     composition.RasterizerOptions.Interest,
                     composition.RasterizerOptions.Interest);
 
-                command = new PolylineCompositionSceneCommand(
-                    new StrokePolylineCommand(
-                        composition.SourcePoints,
-                        brush,
-                        composition.DrawingOptions,
-                        composition.RasterizerOptions,
-                        composition.TargetBounds,
-                        composition.DestinationOffset,
-                        composition.Pen,
-                        composition.IsInsideLayer,
-                        composition.OwnerLayer));
+                // Position-independent brushes return themselves untransformed; skipping the
+                // rebuild also skips allocating a replacement scene command wrapper.
+                if (!ReferenceEquals(brush, composition.Brush))
+                {
+                    command = new PolylineCompositionSceneCommand(
+                        new StrokePolylineCommand(
+                            composition.SourcePoints,
+                            brush,
+                            composition.DrawingOptions,
+                            composition.RasterizerOptions,
+                            composition.TargetBounds,
+                            composition.DestinationOffset,
+                            composition.Pen,
+                            composition.IsInsideLayer,
+                            composition.OwnerLayer));
+                }
             }
         }
     }

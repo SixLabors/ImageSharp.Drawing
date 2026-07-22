@@ -44,6 +44,20 @@ public static class MatrixUtilities
         => matrix.M14 == 0F && matrix.M24 == 0F && matrix.M34 == 0F && matrix.M44 == 1F;
 
     /// <summary>
+    /// Returns a value indicating whether the matrix is a pure 2D translation: an identity
+    /// linear part with no perspective terms, so geometry moves by the M41 and M42 offsets
+    /// without any scale, rotation, or skew.
+    /// </summary>
+    /// <param name="matrix">The transformation matrix.</param>
+    /// <returns><see langword="true"/> when the matrix only translates; otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsTranslationOnly(in Matrix4x4 matrix)
+        => matrix.M11 == 1F && matrix.M12 == 0F && matrix.M13 == 0F && matrix.M14 == 0F &&
+           matrix.M21 == 0F && matrix.M22 == 1F && matrix.M23 == 0F && matrix.M24 == 0F &&
+           matrix.M31 == 0F && matrix.M32 == 0F && matrix.M33 == 1F && matrix.M34 == 0F &&
+           matrix.M44 == 1F;
+
+    /// <summary>
     /// Returns a value indicating whether the matrix maps axis-aligned rectangles to axis-aligned rectangles.
     /// </summary>
     /// <remarks>

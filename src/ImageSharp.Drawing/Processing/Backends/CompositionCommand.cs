@@ -71,6 +71,7 @@ public readonly struct CompositionCommand
     /// <param name="clipDescriptor">The clip descriptor, or <see langword="null"/> for non begin-clip commands.</param>
     /// <param name="isInsideLayer">True if the command was recorded inside a layer.</param>
     /// <param name="applyBarrier">The apply barrier, or <see langword="null"/> for non-apply commands.</param>
+    /// <param name="subPixelOffset">The fractional translation composed into <see cref="Transform"/>.</param>
     private CompositionCommand(
         CompositionCommandKind kind,
         IPath? sourcePath,
@@ -83,7 +84,8 @@ public readonly struct CompositionCommand
         Point destinationOffset,
         DrawingClipDescriptor? clipDescriptor,
         bool isInsideLayer,
-        ApplyBarrier? applyBarrier)
+        ApplyBarrier? applyBarrier,
+        Vector2 subPixelOffset)
     {
         this.Kind = kind;
         this.sourcePath = sourcePath;
@@ -97,6 +99,7 @@ public readonly struct CompositionCommand
         this.clipDescriptor = clipDescriptor;
         this.IsInsideLayer = isInsideLayer;
         this.applyBarrier = applyBarrier;
+        this.SubPixelOffset = subPixelOffset;
     }
 
     /// <summary>
@@ -152,9 +155,31 @@ public readonly struct CompositionCommand
     public IPath SourcePath => this.sourcePath ?? throw new InvalidOperationException("Layer commands do not carry path geometry.");
 
     /// <summary>
-    /// Gets the command transform.
+    /// Gets the fractional translation applied after the drawing options transform. Glyph
+    /// geometry rides an integer destination offset; the sub-pixel remainder travels here so
+    /// the queued command does not need per-operation drawing options to carry it.
     /// </summary>
-    public Matrix4x4 Transform => this.drawingOptions?.Transform ?? Matrix4x4.Identity;
+    public Vector2 SubPixelOffset { get; }
+
+    /// <summary>
+    /// Gets the command transform: the drawing options transform followed by the sub-pixel
+    /// translation.
+    /// </summary>
+    public Matrix4x4 Transform
+    {
+        get
+        {
+            Matrix4x4 transform = this.drawingOptions?.Transform ?? Matrix4x4.Identity;
+            if (this.SubPixelOffset == Vector2.Zero)
+            {
+                return transform;
+            }
+
+            return transform.IsIdentity
+                ? Matrix4x4.CreateTranslation(this.SubPixelOffset.X, this.SubPixelOffset.Y, 0F)
+                : transform * Matrix4x4.CreateTranslation(this.SubPixelOffset.X, this.SubPixelOffset.Y, 0F);
+        }
+    }
 
     /// <summary>
     /// Gets the clip descriptor opened by a <see cref="CompositionCommandKind.BeginClip"/> command.
@@ -248,7 +273,8 @@ public readonly struct CompositionCommand
             destinationOffset,
             null,
             isInsideLayer,
-            null);
+            null,
+            Vector2.Zero);
 
     /// <summary>
     /// Creates a fill-path composition command with the owning layer state recorded by the canvas.
@@ -269,6 +295,38 @@ public readonly struct CompositionCommand
         Rectangle targetBounds,
         Point destinationOffset,
         DrawingCanvasLayer? layer)
+        => Create(
+            path,
+            brush,
+            drawingOptions,
+            in rasterizerOptions,
+            targetBounds,
+            destinationOffset,
+            layer,
+            Vector2.Zero);
+
+    /// <summary>
+    /// Creates a fill-path composition command carrying a sub-pixel translation alongside the
+    /// owning layer state recorded by the canvas.
+    /// </summary>
+    /// <param name="path">Path in target-local coordinates.</param>
+    /// <param name="brush">Brush used during composition.</param>
+    /// <param name="drawingOptions">Drawing options (graphics, shape, transform) used during composition.</param>
+    /// <param name="rasterizerOptions">Rasterizer options used to generate coverage.</param>
+    /// <param name="targetBounds">The absolute bounds of the logical target for this command.</param>
+    /// <param name="destinationOffset">Absolute destination offset where coverage is composited.</param>
+    /// <param name="layer">The layer that owned this command when it was recorded.</param>
+    /// <param name="subPixelOffset">The fractional translation composed into <see cref="Transform"/>.</param>
+    /// <returns>The composition command.</returns>
+    internal static CompositionCommand Create(
+        IPath path,
+        Brush brush,
+        DrawingOptions drawingOptions,
+        in RasterizerOptions rasterizerOptions,
+        Rectangle targetBounds,
+        Point destinationOffset,
+        DrawingCanvasLayer? layer,
+        Vector2 subPixelOffset)
         => new(
             CompositionCommandKind.FillLayer,
             path,
@@ -281,7 +339,8 @@ public readonly struct CompositionCommand
             destinationOffset,
             null,
             layer is not null,
-            null);
+            null,
+            subPixelOffset);
 
     /// <summary>
     /// Creates a begin-layer composition command with shared layer state.
@@ -304,7 +363,8 @@ public readonly struct CompositionCommand
             default,
             null,
             false,
-            null);
+            null,
+            Vector2.Zero);
 
     /// <summary>
     /// Creates an end-layer composition command with shared layer state.
@@ -325,7 +385,8 @@ public readonly struct CompositionCommand
             default,
             null,
             false,
-            null);
+            null,
+            Vector2.Zero);
 
     /// <summary>
     /// Creates a begin-clip composition command.
@@ -346,7 +407,8 @@ public readonly struct CompositionCommand
             destinationOffset,
             descriptor,
             false,
-            null);
+            null,
+            Vector2.Zero);
 
     /// <summary>
     /// Creates an end-clip composition command.
@@ -365,7 +427,8 @@ public readonly struct CompositionCommand
             default,
             null,
             false,
-            null);
+            null,
+            Vector2.Zero);
 
     /// <summary>
     /// Creates an apply composition command.
@@ -422,7 +485,8 @@ public readonly struct CompositionCommand
             barrier.DestinationOffset,
             null,
             barrier.IsInsideLayer,
-            barrier);
+            barrier,
+            Vector2.Zero);
     }
 
     /// <summary>

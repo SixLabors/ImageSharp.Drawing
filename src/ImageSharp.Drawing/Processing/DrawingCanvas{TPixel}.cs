@@ -4,6 +4,7 @@
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
+using SixLabors.ImageSharp.Drawing.Helpers;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
 using SixLabors.ImageSharp.Drawing.Text;
@@ -835,6 +836,19 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         EnsureTextPaint(brush, pen);
 
         RichTextOptions configuredOptions = ConfigureTextOptions(textOptions, path, out IPath? configuredPath);
+
+        // Path text bends the layout along the path so the straight visible band does not
+        // apply; caller-supplied bounds always win when present.
+        if (configuredPath is null &&
+            configuredOptions.VisibleBounds is null &&
+            TryGetVisibleTextBounds(state, effectiveOptions.Transform, out FontRectangle visibleBounds))
+        {
+            configuredOptions = new RichTextOptions(configuredOptions)
+            {
+                VisibleBounds = visibleBounds
+            };
+        }
+
         using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, configuredPath, pen, brush, this.textCache, this.textOperations);
         TextRenderer renderer = new(glyphRenderer);
         renderer.Render(text, configuredOptions);
@@ -867,7 +881,14 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             effectiveOptions.TextContrast);
 
         using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache, this.textOperations);
-        textBlock.RenderTo(glyphRenderer, wrappingLength);
+        if (TryGetVisibleTextBounds(state, placedOptions.Transform, out FontRectangle visibleBounds))
+        {
+            textBlock.RenderTo(glyphRenderer, wrappingLength, visibleBounds);
+        }
+        else
+        {
+            textBlock.RenderTo(glyphRenderer, wrappingLength);
+        }
 
         this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions);
     }
@@ -1766,10 +1787,19 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         // one canvas, and the batcher retains the commands, not this buffer.
         List<(byte RenderPass, int Sequence, CompositionSceneCommand Command)> entries = this.textCommandSortBuffer;
         entries.Clear();
+
+        // Queued glyph commands never carry the canvas transform: glyph geometry arrives with
+        // it already applied, and the sub-pixel remainder rides the command itself. One shared
+        // identity-transform options instance therefore serves every operation of this draw;
+        // per-operation options exist only for glyphs whose blend or composition modes differ.
+        DrawingOptions sharedTextOptions = drawingOptions.Transform.IsIdentity && drawingOptions.IntersectionRule == IntersectionRule.NonZero
+            ? drawingOptions
+            : new DrawingOptions(drawingOptions.GraphicsOptions, IntersectionRule.NonZero, Matrix4x4.Identity, drawingOptions.TextContrast);
+
         for (int i = 0; i < operations.Count; i++)
         {
             DrawingOperation operation = operations[i];
-            entries.Add((operation.RenderPass, i, this.CreateTextCompositionCommand(operation, drawingOptions)));
+            entries.Add((operation.RenderPass, i, this.CreateTextCompositionCommand(operation, drawingOptions, sharedTextOptions)));
         }
 
         entries.Sort(static (a, b) =>
@@ -2066,12 +2096,51 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     }
 
     /// <summary>
+    /// Computes the visible text-space bounds for the current canvas state when the effective
+    /// transform is a pure translation. The state's target bounds already fold the target size
+    /// and every conservative clip bound together, so translating them into text space yields
+    /// the band the layout engine culls against.
+    /// </summary>
+    /// <param name="state">The resolved canvas state.</param>
+    /// <param name="transform">The effective drawing transform for the text.</param>
+    /// <param name="visibleBounds">The visible bounds in text space.</param>
+    /// <returns>
+    /// <see langword="true"/> when the transform is a pure translation and the bounds are
+    /// usable; otherwise <see langword="false"/>. Culling is a fast path only, so rotation,
+    /// scale, or skew renders unculled rather than risking incorrect rejection.
+    /// </returns>
+    private static bool TryGetVisibleTextBounds(DrawingCanvasState state, in Matrix4x4 transform, out FontRectangle visibleBounds)
+    {
+        if (!MatrixUtilities.IsTranslationOnly(transform))
+        {
+            visibleBounds = default;
+            return false;
+        }
+
+        // Target bounds are absolute while glyph geometry is recorded in local canvas
+        // coordinates and shifted by the destination offset at command creation, so the
+        // text-space band is the target rectangle pulled back through both translations.
+        Rectangle target = state.TargetBounds;
+        visibleBounds = new FontRectangle(
+            target.X - state.DestinationOffset.X - transform.M41,
+            target.Y - state.DestinationOffset.Y - transform.M42,
+            target.Width,
+            target.Height);
+
+        return true;
+    }
+
+    /// <summary>
     /// Builds a normalized composition command for a text drawing operation.
     /// </summary>
     /// <param name="operation">The source drawing operation.</param>
     /// <param name="drawingOptions">Drawing options applied to the operation.</param>
+    /// <param name="sharedTextOptions">
+    /// The identity-transform options shared by every operation of the draw whose graphics
+    /// options match the canvas options.
+    /// </param>
     /// <returns>A composition scene command ready for batching.</returns>
-    private CompositionSceneCommand CreateTextCompositionCommand(DrawingOperation operation, DrawingOptions drawingOptions)
+    private CompositionSceneCommand CreateTextCompositionCommand(DrawingOperation operation, DrawingOptions drawingOptions, DrawingOptions sharedTextOptions)
     {
         Brush compositeBrush = operation.Kind == DrawingOperationKind.Fill
             ? operation.Brush!
@@ -2097,14 +2166,11 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             state.DestinationOffset.Y + operation.RenderLocation.Y);
 
         // The whole-pixel part of the glyph position rides the integer destination offset;
-        // the fractional remainder becomes the command transform. A translation-only
-        // transform has unit scale, so the backends reuse the scale-keyed flattened
-        // geometry and apply the fraction as a residual, rendering the glyph at its exact
-        // sub-pixel position with one cached path per glyph.
+        // the fractional remainder rides the command's dedicated sub-pixel field. The
+        // composed transform keeps unit scale, so the backends reuse the scale-keyed
+        // flattened geometry and apply the fraction as a residual, rendering the glyph at
+        // its exact sub-pixel position with one cached path per glyph.
         Vector2 subPixelOffset = operation.SubPixelOffset;
-        Matrix4x4 glyphTransform = subPixelOffset == Vector2.Zero
-            ? Matrix4x4.Identity
-            : Matrix4x4.CreateTranslation(subPixelOffset.X, subPixelOffset.Y, 0F);
 
         Pen? pen = operation.Kind == DrawingOperationKind.Draw ? operation.Pen : null;
 
@@ -2143,15 +2209,13 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             graphicsOptions.AntialiasThreshold,
             coverageBoost);
 
-        // Glyph paths arrive pre-laid-out, so the queued command reports only the sub-pixel
-        // translation (identity when the fraction is zero) and the GraphicsOptions/
-        // IntersectionRule produced above. Reuse the caller's instance only when graphics
-        // options, the forced non-zero rule and transform all already match.
+        // Glyph paths arrive pre-laid-out, so the queued command carries identity-transform
+        // options and reports the fraction through its sub-pixel field. The shared instance
+        // serves every operation whose graphics options match the canvas; a fresh instance
+        // exists only for the rare operation whose blend or composition modes forced a clone.
         DrawingOptions effectiveOptions = ReferenceEquals(graphicsOptions, drawingOptions.GraphicsOptions)
-            && drawingOptions.IntersectionRule == intersectionRule
-            && drawingOptions.Transform == glyphTransform
-            ? drawingOptions
-            : new DrawingOptions(graphicsOptions, intersectionRule, glyphTransform, drawingOptions.TextContrast);
+            ? sharedTextOptions
+            : new DrawingOptions(graphicsOptions, intersectionRule, Matrix4x4.Identity, drawingOptions.TextContrast);
 
         // Clipping is resolved from the ordered begin/end-clip stream, which the canvas anchors
         // at the state's destination offset. Glyph render locations only move the glyph geometry;
@@ -2166,7 +2230,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                     in rasterizerOptions,
                     state.TargetBounds,
                     destinationOffset,
-                    state.Layer));
+                    state.Layer,
+                    subPixelOffset));
         }
 
         return new StrokePathCompositionSceneCommand(
@@ -2179,7 +2244,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 destinationOffset,
                 pen,
                 state.Layer is not null,
-                state.Layer));
+                state.Layer,
+                subPixelOffset));
     }
 
     /// <summary>
