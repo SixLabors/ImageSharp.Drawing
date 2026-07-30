@@ -284,7 +284,7 @@ public partial class DrawingCanvasTests
 
     [Theory]
     [WithSolidFilledImages(420, 180, nameof(Color.Black), PixelTypes.Rgba32)]
-    public void DrawGlyphRun_Inter_MatchesGlyphByIdLoop<TPixel>(TestImageProvider<TPixel> provider)
+    public void DrawPositionedGlyphs_Inter_MatchesGlyphByIdLoop<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> expected = provider.GetImage();
@@ -328,11 +328,11 @@ public partial class DrawingCanvasTests
         using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, actual, new DrawingOptions()))
         {
             RichGlyphOptions options = new() { Font = font };
-            canvas.DrawText(new GlyphRun(glyphIds, origins), options, Brushes.Solid(Color.White), pen: null);
+            canvas.DrawText(glyphIds, origins, options, Brushes.Solid(Color.White), pen: null);
         }
 
         expected.DebugSave(provider, "per-glyph-loop", appendSourceFileOrDescription: false);
-        actual.DebugSave(provider, "batched-glyph-run", appendSourceFileOrDescription: false);
+        actual.DebugSave(provider, "batched-positioned-glyphs", appendSourceFileOrDescription: false);
 
         ImageComparer.Exact.VerifySimilarity(expected, actual);
     }

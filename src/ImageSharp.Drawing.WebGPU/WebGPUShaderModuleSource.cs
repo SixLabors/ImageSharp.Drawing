@@ -106,79 +106,79 @@ internal sealed class WebGPUShaderModuleSource
         // Emit the directive prefix exactly once, before ImageSharp's first global declaration.
         // The original characters are masked at their authored location below; retaining both
         // copies would produce duplicate directives and invalid WGSL.
-        builder.Append(userSource[..moduleDirectiveEnd]);
+        _ = builder.Append(userSource[..moduleDirectiveEnd]);
 
         // Framework declarations are generated rather than user supplied so resource bindings,
         // texture representation conversion, and diagnostic source mapping remain authoritative.
-        builder.AppendLine("struct ImageSharpFramework {");
-        builder.AppendLine("    imagesharp_source_origin: vec2<i32>,");
-        builder.AppendLine("    imagesharp_valid_min: vec2<i32>,");
-        builder.AppendLine("    imagesharp_valid_max: vec2<i32>,");
-        builder.AppendLine("    imagesharp_input_size: vec2<i32>,");
-        builder.AppendLine("};");
-        builder.Append(program.UniformLayout.WgslStructureDeclaration);
-        builder.AppendLine("@group(0) @binding(0) var imagesharp_source: texture_2d<f32>;");
-        builder.AppendLine("@group(0) @binding(1) var<uniform> imagesharp_framework: ImageSharpFramework;");
-        builder.AppendLine("@group(0) @binding(2) var<uniform> imagesharp_uniforms: ImageSharpUniforms;");
-        builder.AppendLine("@group(0) @binding(3) var imagesharp_filtering_sampler: sampler;");
-        builder.AppendLine();
-        builder.AppendLine("fn imagesharp_layer_load_scaled(position: vec2<i32>) -> vec4<f32> {");
-        builder.AppendLine("    if (any(position < imagesharp_framework.imagesharp_valid_min) || any(position >= imagesharp_framework.imagesharp_valid_max)) {");
-        builder.AppendLine("        return vec4<f32>(0.0);");
-        builder.AppendLine("    }");
-        builder.AppendLine();
-        builder.AppendLine("    let imagesharp_native = textureLoad(imagesharp_source, imagesharp_framework.imagesharp_source_origin + position, 0);");
+        _ = builder.AppendLine("struct ImageSharpFramework {");
+        _ = builder.AppendLine("    imagesharp_source_origin: vec2<i32>,");
+        _ = builder.AppendLine("    imagesharp_valid_min: vec2<i32>,");
+        _ = builder.AppendLine("    imagesharp_valid_max: vec2<i32>,");
+        _ = builder.AppendLine("    imagesharp_input_size: vec2<i32>,");
+        _ = builder.AppendLine("};");
+        _ = builder.Append(program.UniformLayout.WgslStructureDeclaration);
+        _ = builder.AppendLine("@group(0) @binding(0) var imagesharp_source: texture_2d<f32>;");
+        _ = builder.AppendLine("@group(0) @binding(1) var<uniform> imagesharp_framework: ImageSharpFramework;");
+        _ = builder.AppendLine("@group(0) @binding(2) var<uniform> imagesharp_uniforms: ImageSharpUniforms;");
+        _ = builder.AppendLine("@group(0) @binding(3) var imagesharp_filtering_sampler: sampler;");
+        _ = builder.AppendLine();
+        _ = builder.AppendLine("fn imagesharp_layer_load_scaled(position: vec2<i32>) -> vec4<f32> {");
+        _ = builder.AppendLine("    if (any(position < imagesharp_framework.imagesharp_valid_min) || any(position >= imagesharp_framework.imagesharp_valid_max)) {");
+        _ = builder.AppendLine("        return vec4<f32>(0.0);");
+        _ = builder.AppendLine("    }");
+        _ = builder.AppendLine();
+        _ = builder.AppendLine("    let imagesharp_native = textureLoad(imagesharp_source, imagesharp_framework.imagesharp_source_origin + position, 0);");
 
         if (sourceDescriptor.NumericEncoding == WebGPUTargetNumericEncoding.SignedUnit)
         {
             // Signed-unit targets store logical [0, 1] values in physical [-1, 1]. Convert before
             // alpha association so every public load helper exposes the same logical component range.
-            builder.AppendLine("    let imagesharp_scaled = (imagesharp_native + vec4<f32>(1.0)) * 0.5;");
+            _ = builder.AppendLine("    let imagesharp_scaled = (imagesharp_native + vec4<f32>(1.0)) * 0.5;");
         }
         else
         {
-            builder.AppendLine("    let imagesharp_scaled = imagesharp_native;");
+            _ = builder.AppendLine("    let imagesharp_scaled = imagesharp_native;");
         }
 
-        builder.AppendLine("    return imagesharp_scaled;");
-        builder.AppendLine("}");
-        builder.AppendLine();
-        builder.AppendLine("fn layer_load(position: vec2<i32>) -> vec4<f32> {");
-        builder.AppendLine("    let imagesharp_scaled = imagesharp_layer_load_scaled(position);");
+        _ = builder.AppendLine("    return imagesharp_scaled;");
+        _ = builder.AppendLine("}");
+        _ = builder.AppendLine();
+        _ = builder.AppendLine("fn layer_load(position: vec2<i32>) -> vec4<f32> {");
+        _ = builder.AppendLine("    let imagesharp_scaled = imagesharp_layer_load_scaled(position);");
 
         if (sourceDescriptor.AlphaRepresentation == PixelAlphaRepresentation.Associated)
         {
-            builder.AppendLine("    return imagesharp_scaled;");
+            _ = builder.AppendLine("    return imagesharp_scaled;");
         }
         else
         {
             // The renderer's common effect space is associated alpha. Multiplying at this boundary
             // prevents transparent RGB from bleeding through filtering and multi-pass effects.
-            builder.AppendLine("    return vec4<f32>(imagesharp_scaled.rgb * imagesharp_scaled.a, imagesharp_scaled.a);");
+            _ = builder.AppendLine("    return vec4<f32>(imagesharp_scaled.rgb * imagesharp_scaled.a, imagesharp_scaled.a);");
         }
 
-        builder.AppendLine("}");
-        builder.AppendLine();
-        builder.AppendLine("fn layer_load_unassociated(position: vec2<i32>) -> vec4<f32> {");
-        builder.AppendLine("    let imagesharp_scaled = imagesharp_layer_load_scaled(position);");
+        _ = builder.AppendLine("}");
+        _ = builder.AppendLine();
+        _ = builder.AppendLine("fn layer_load_unassociated(position: vec2<i32>) -> vec4<f32> {");
+        _ = builder.AppendLine("    let imagesharp_scaled = imagesharp_layer_load_scaled(position);");
 
         if (sourceDescriptor.AlphaRepresentation == PixelAlphaRepresentation.Associated)
         {
             // Division is defined only for covered pixels. Transparent associated pixels have no
             // recoverable straight RGB, so the logical transparent value is returned instead.
-            builder.AppendLine("    if (imagesharp_scaled.a > 0.0) {");
-            builder.AppendLine("        return vec4<f32>(imagesharp_scaled.rgb / imagesharp_scaled.a, imagesharp_scaled.a);");
-            builder.AppendLine("    }");
-            builder.AppendLine();
-            builder.AppendLine("    return vec4<f32>(0.0);");
+            _ = builder.AppendLine("    if (imagesharp_scaled.a > 0.0) {");
+            _ = builder.AppendLine("        return vec4<f32>(imagesharp_scaled.rgb / imagesharp_scaled.a, imagesharp_scaled.a);");
+            _ = builder.AppendLine("    }");
+            _ = builder.AppendLine();
+            _ = builder.AppendLine("    return vec4<f32>(0.0);");
         }
         else
         {
-            builder.AppendLine("    return imagesharp_scaled;");
+            _ = builder.AppendLine("    return imagesharp_scaled;");
         }
 
-        builder.AppendLine("}");
-        builder.AppendLine();
+        _ = builder.AppendLine("}");
+        _ = builder.AppendLine();
 
         bool wrapsSamples = xBorderMode.HasValue || yBorderMode.HasValue;
         if (wrapsSamples)
@@ -187,76 +187,76 @@ internal sealed class WebGPUShaderModuleSource
             // Each pass therefore pays only for its declared rule inside the pixel-sampling loop.
             AppendBorderCoordinateFunction(builder, 'x', xBorderMode);
             AppendBorderCoordinateFunction(builder, 'y', yBorderMode);
-            builder.AppendLine("fn imagesharp_wrap_position(position: vec2<i32>) -> vec2<i32> {");
-            builder.AppendLine("    return vec2<i32>(imagesharp_wrap_x(position.x), imagesharp_wrap_y(position.y));");
-            builder.AppendLine("}");
-            builder.AppendLine();
+            _ = builder.AppendLine("fn imagesharp_wrap_position(position: vec2<i32>) -> vec2<i32> {");
+            _ = builder.AppendLine("    return vec2<i32>(imagesharp_wrap_x(position.x), imagesharp_wrap_y(position.y));");
+            _ = builder.AppendLine("}");
+            _ = builder.AppendLine();
         }
 
-        builder.AppendLine("fn imagesharp_layer_sample_bilinear(position: vec2<f32>) -> vec4<f32> {");
+        _ = builder.AppendLine("fn imagesharp_layer_sample_bilinear(position: vec2<f32>) -> vec4<f32> {");
 
         // Fragment positions address pixel centers at half-integer coordinates. Subtracting one
         // half converts them to the integer texel lattice used by the four explicit loads.
-        builder.AppendLine("    let imagesharp_texel_position = position - vec2<f32>(0.5);");
-        builder.AppendLine("    let imagesharp_minimum = vec2<i32>(floor(imagesharp_texel_position));");
-        builder.AppendLine("    let imagesharp_fraction = fract(imagesharp_texel_position);");
+        _ = builder.AppendLine("    let imagesharp_texel_position = position - vec2<f32>(0.5);");
+        _ = builder.AppendLine("    let imagesharp_minimum = vec2<i32>(floor(imagesharp_texel_position));");
+        _ = builder.AppendLine("    let imagesharp_fraction = fract(imagesharp_texel_position);");
 
         if (wrapsSamples)
         {
             // Map each texel independently before interpolation. Mapping the floating-point sample
             // position instead would produce incorrect weights at reflected and wrapped boundaries.
-            builder.AppendLine("    let imagesharp_top_left = layer_load(imagesharp_wrap_position(imagesharp_minimum));");
-            builder.AppendLine("    let imagesharp_top_right = layer_load(imagesharp_wrap_position(imagesharp_minimum + vec2<i32>(1, 0)));");
-            builder.AppendLine("    let imagesharp_bottom_left = layer_load(imagesharp_wrap_position(imagesharp_minimum + vec2<i32>(0, 1)));");
-            builder.AppendLine("    let imagesharp_bottom_right = layer_load(imagesharp_wrap_position(imagesharp_minimum + vec2<i32>(1, 1)));");
+            _ = builder.AppendLine("    let imagesharp_top_left = layer_load(imagesharp_wrap_position(imagesharp_minimum));");
+            _ = builder.AppendLine("    let imagesharp_top_right = layer_load(imagesharp_wrap_position(imagesharp_minimum + vec2<i32>(1, 0)));");
+            _ = builder.AppendLine("    let imagesharp_bottom_left = layer_load(imagesharp_wrap_position(imagesharp_minimum + vec2<i32>(0, 1)));");
+            _ = builder.AppendLine("    let imagesharp_bottom_right = layer_load(imagesharp_wrap_position(imagesharp_minimum + vec2<i32>(1, 1)));");
         }
         else
         {
-            builder.AppendLine("    let imagesharp_top_left = layer_load(imagesharp_minimum);");
-            builder.AppendLine("    let imagesharp_top_right = layer_load(imagesharp_minimum + vec2<i32>(1, 0));");
-            builder.AppendLine("    let imagesharp_bottom_left = layer_load(imagesharp_minimum + vec2<i32>(0, 1));");
-            builder.AppendLine("    let imagesharp_bottom_right = layer_load(imagesharp_minimum + vec2<i32>(1, 1));");
+            _ = builder.AppendLine("    let imagesharp_top_left = layer_load(imagesharp_minimum);");
+            _ = builder.AppendLine("    let imagesharp_top_right = layer_load(imagesharp_minimum + vec2<i32>(1, 0));");
+            _ = builder.AppendLine("    let imagesharp_bottom_left = layer_load(imagesharp_minimum + vec2<i32>(0, 1));");
+            _ = builder.AppendLine("    let imagesharp_bottom_right = layer_load(imagesharp_minimum + vec2<i32>(1, 1));");
         }
 
-        builder.AppendLine("    let imagesharp_top = mix(imagesharp_top_left, imagesharp_top_right, imagesharp_fraction.x);");
-        builder.AppendLine("    let imagesharp_bottom = mix(imagesharp_bottom_left, imagesharp_bottom_right, imagesharp_fraction.x);");
-        builder.AppendLine("    return mix(imagesharp_top, imagesharp_bottom, imagesharp_fraction.y);");
-        builder.AppendLine("}");
-        builder.AppendLine();
-        builder.AppendLine("fn layer_sample(position: vec2<f32>) -> vec4<f32> {");
+        _ = builder.AppendLine("    let imagesharp_top = mix(imagesharp_top_left, imagesharp_top_right, imagesharp_fraction.x);");
+        _ = builder.AppendLine("    let imagesharp_bottom = mix(imagesharp_bottom_left, imagesharp_bottom_right, imagesharp_fraction.x);");
+        _ = builder.AppendLine("    return mix(imagesharp_top, imagesharp_bottom, imagesharp_fraction.y);");
+        _ = builder.AppendLine("}");
+        _ = builder.AppendLine();
+        _ = builder.AppendLine("fn layer_sample(position: vec2<f32>) -> vec4<f32> {");
 
         if (sourceDescriptor.AlphaRepresentation == PixelAlphaRepresentation.Associated)
         {
             // Hardware filtering is safe only when the complete bilinear footprint lies inside
             // valid associated source data. Boundary footprints use explicit transparent loads.
-            builder.AppendLine("    let imagesharp_texel_position = position - vec2<f32>(0.5);");
-            builder.AppendLine("    let imagesharp_minimum = vec2<i32>(floor(imagesharp_texel_position));");
-            builder.AppendLine("    let imagesharp_maximum = imagesharp_minimum + vec2<i32>(1);");
-            builder.AppendLine();
-            builder.AppendLine("    if (all(imagesharp_minimum >= imagesharp_framework.imagesharp_valid_min) && all(imagesharp_maximum < imagesharp_framework.imagesharp_valid_max)) {");
-            builder.AppendLine("        let imagesharp_source_position = vec2<f32>(imagesharp_framework.imagesharp_source_origin) + position;");
-            builder.AppendLine("        let imagesharp_coordinate = imagesharp_source_position / vec2<f32>(textureDimensions(imagesharp_source));");
-            builder.AppendLine("        let imagesharp_native = textureSampleLevel(imagesharp_source, imagesharp_filtering_sampler, imagesharp_coordinate, 0.0);");
+            _ = builder.AppendLine("    let imagesharp_texel_position = position - vec2<f32>(0.5);");
+            _ = builder.AppendLine("    let imagesharp_minimum = vec2<i32>(floor(imagesharp_texel_position));");
+            _ = builder.AppendLine("    let imagesharp_maximum = imagesharp_minimum + vec2<i32>(1);");
+            _ = builder.AppendLine();
+            _ = builder.AppendLine("    if (all(imagesharp_minimum >= imagesharp_framework.imagesharp_valid_min) && all(imagesharp_maximum < imagesharp_framework.imagesharp_valid_max)) {");
+            _ = builder.AppendLine("        let imagesharp_source_position = vec2<f32>(imagesharp_framework.imagesharp_source_origin) + position;");
+            _ = builder.AppendLine("        let imagesharp_coordinate = imagesharp_source_position / vec2<f32>(textureDimensions(imagesharp_source));");
+            _ = builder.AppendLine("        let imagesharp_native = textureSampleLevel(imagesharp_source, imagesharp_filtering_sampler, imagesharp_coordinate, 0.0);");
 
             if (sourceDescriptor.NumericEncoding == WebGPUTargetNumericEncoding.SignedUnit)
             {
-                builder.AppendLine("        return (imagesharp_native + vec4<f32>(1.0)) * 0.5;");
+                _ = builder.AppendLine("        return (imagesharp_native + vec4<f32>(1.0)) * 0.5;");
             }
             else
             {
-                builder.AppendLine("        return imagesharp_native;");
+                _ = builder.AppendLine("        return imagesharp_native;");
             }
 
-            builder.AppendLine("    }");
-            builder.AppendLine();
+            _ = builder.AppendLine("    }");
+            _ = builder.AppendLine();
         }
 
         // Hardware filtering would interpolate straight RGB before alpha association. Manually
         // blending layer_load results instead preserves associated-alpha interpolation and also
         // retains transparent reads when the bilinear footprint crosses the valid source bounds.
-        builder.AppendLine("    return imagesharp_layer_sample_bilinear(position);");
-        builder.AppendLine("}");
-        builder.AppendLine();
+        _ = builder.AppendLine("    return imagesharp_layer_sample_bilinear(position);");
+        _ = builder.AppendLine("}");
+        _ = builder.AppendLine();
 
         int userLineStart = CountLines(builder);
 
@@ -268,33 +268,33 @@ internal sealed class WebGPUShaderModuleSource
         for (int i = 0; i < moduleDirectiveEnd; i++)
         {
             char value = userSource[i];
-            builder.Append(value is '\r' or '\n' ? value : ' ');
+            _ = builder.Append(value is '\r' or '\n' ? value : ' ');
         }
 
         // Record the exact wrapper range occupied by user source before appending framework entry
         // points. Masking preserves the original line count, so the immutable source can be counted
         // directly without constructing an intermediate source-body string.
-        builder.Append(userSource[moduleDirectiveEnd..]);
-        builder.AppendLine();
+        _ = builder.Append(userSource[moduleDirectiveEnd..]);
+        _ = builder.AppendLine();
         int userLineCount = CountLines(program.Source);
 
-        builder.AppendLine("@vertex");
-        builder.AppendLine("fn vs_main(@builtin(vertex_index) vertex_index: u32) -> @builtin(position) vec4<f32> {");
-        builder.AppendLine("    let positions = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));");
-        builder.AppendLine("    return vec4<f32>(positions[vertex_index], 0.0, 1.0);");
-        builder.AppendLine("}");
-        builder.AppendLine();
-        builder.AppendLine("@fragment");
-        builder.AppendLine("fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {");
-        builder.AppendLine("    return layer_effect(position.xy);");
-        builder.AppendLine("}");
+        _ = builder.AppendLine("@vertex");
+        _ = builder.AppendLine("fn vs_main(@builtin(vertex_index) vertex_index: u32) -> @builtin(position) vec4<f32> {");
+        _ = builder.AppendLine("    let positions = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));");
+        _ = builder.AppendLine("    return vec4<f32>(positions[vertex_index], 0.0, 1.0);");
+        _ = builder.AppendLine("}");
+        _ = builder.AppendLine();
+        _ = builder.AppendLine("@fragment");
+        _ = builder.AppendLine("fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {");
+        _ = builder.AppendLine("    return layer_effect(position.xy);");
+        _ = builder.AppendLine("}");
 
         string source = builder.ToString();
 
         // Native WebGPU consumes a null-terminated UTF-8 string view. Cache this encoding with the
         // immutable module so pipeline creation performs no repeated string conversion.
         byte[] utf8Source = new byte[Encoding.UTF8.GetByteCount(source) + 1];
-        Encoding.UTF8.GetBytes(source, utf8Source);
+        _ = Encoding.UTF8.GetBytes(source, utf8Source);
         return new WebGPUShaderModuleSource(source, utf8Source, userLineStart, userLineCount);
     }
 
@@ -309,59 +309,59 @@ internal sealed class WebGPUShaderModuleSource
         char axis,
         BorderWrappingMode? borderMode)
     {
-        builder.Append("fn imagesharp_wrap_").Append(axis).AppendLine("(value: i32) -> i32 {");
+        _ = builder.Append("fn imagesharp_wrap_").Append(axis).AppendLine("(value: i32) -> i32 {");
 
         if (!borderMode.HasValue)
         {
             // An unconfigured axis retains layer_sample's public transparent-outside contract.
-            builder.AppendLine("    return value;");
-            builder.AppendLine("}");
-            builder.AppendLine();
+            _ = builder.AppendLine("    return value;");
+            _ = builder.AppendLine("}");
+            _ = builder.AppendLine();
             return;
         }
 
-        builder.Append("    let imagesharp_minimum = imagesharp_framework.imagesharp_valid_min.").Append(axis).AppendLine(";");
-        builder.Append("    let imagesharp_maximum = imagesharp_framework.imagesharp_valid_max.").Append(axis).AppendLine(" - 1;");
+        _ = builder.Append("    let imagesharp_minimum = imagesharp_framework.imagesharp_valid_min.").Append(axis).AppendLine(";");
+        _ = builder.Append("    let imagesharp_maximum = imagesharp_framework.imagesharp_valid_max.").Append(axis).AppendLine(" - 1;");
 
         switch (borderMode.Value)
         {
             case BorderWrappingMode.Repeat:
                 // ImageSharp's Repeat convolution mode extends the nearest border sample.
-                builder.AppendLine("    return clamp(value, imagesharp_minimum, imagesharp_maximum);");
+                _ = builder.AppendLine("    return clamp(value, imagesharp_minimum, imagesharp_maximum);");
                 break;
 
             case BorderWrappingMode.Wrap:
-                builder.AppendLine("    let imagesharp_extent = imagesharp_maximum - imagesharp_minimum + 1;");
-                builder.AppendLine("    let imagesharp_remainder = (value - imagesharp_minimum) % imagesharp_extent;");
-                builder.AppendLine("    let imagesharp_offset = (imagesharp_remainder + imagesharp_extent) % imagesharp_extent;");
-                builder.AppendLine("    return imagesharp_minimum + imagesharp_offset;");
+                _ = builder.AppendLine("    let imagesharp_extent = imagesharp_maximum - imagesharp_minimum + 1;");
+                _ = builder.AppendLine("    let imagesharp_remainder = (value - imagesharp_minimum) % imagesharp_extent;");
+                _ = builder.AppendLine("    let imagesharp_offset = (imagesharp_remainder + imagesharp_extent) % imagesharp_extent;");
+                _ = builder.AppendLine("    return imagesharp_minimum + imagesharp_offset;");
                 break;
 
             case BorderWrappingMode.Mirror:
-                builder.AppendLine("    let imagesharp_extent = imagesharp_maximum - imagesharp_minimum + 1;");
-                builder.AppendLine("    let imagesharp_period = imagesharp_extent * 2;");
-                builder.AppendLine("    let imagesharp_remainder = (value - imagesharp_minimum) % imagesharp_period;");
-                builder.AppendLine("    let imagesharp_offset = (imagesharp_remainder + imagesharp_period) % imagesharp_period;");
-                builder.AppendLine("    let imagesharp_reflected = select(imagesharp_period - 1 - imagesharp_offset, imagesharp_offset, imagesharp_offset < imagesharp_extent);");
-                builder.AppendLine("    return imagesharp_minimum + imagesharp_reflected;");
+                _ = builder.AppendLine("    let imagesharp_extent = imagesharp_maximum - imagesharp_minimum + 1;");
+                _ = builder.AppendLine("    let imagesharp_period = imagesharp_extent * 2;");
+                _ = builder.AppendLine("    let imagesharp_remainder = (value - imagesharp_minimum) % imagesharp_period;");
+                _ = builder.AppendLine("    let imagesharp_offset = (imagesharp_remainder + imagesharp_period) % imagesharp_period;");
+                _ = builder.AppendLine("    let imagesharp_reflected = select(imagesharp_period - 1 - imagesharp_offset, imagesharp_offset, imagesharp_offset < imagesharp_extent);");
+                _ = builder.AppendLine("    return imagesharp_minimum + imagesharp_reflected;");
                 break;
 
             case BorderWrappingMode.Bounce:
-                builder.AppendLine("    let imagesharp_extent = imagesharp_maximum - imagesharp_minimum + 1;");
-                builder.AppendLine("    if (imagesharp_extent == 1) {");
-                builder.AppendLine("        return imagesharp_minimum;");
-                builder.AppendLine("    }");
-                builder.AppendLine();
-                builder.AppendLine("    let imagesharp_period = (imagesharp_extent * 2) - 2;");
-                builder.AppendLine("    let imagesharp_remainder = (value - imagesharp_minimum) % imagesharp_period;");
-                builder.AppendLine("    let imagesharp_offset = (imagesharp_remainder + imagesharp_period) % imagesharp_period;");
-                builder.AppendLine("    let imagesharp_reflected = select(imagesharp_period - imagesharp_offset, imagesharp_offset, imagesharp_offset < imagesharp_extent);");
-                builder.AppendLine("    return imagesharp_minimum + imagesharp_reflected;");
+                _ = builder.AppendLine("    let imagesharp_extent = imagesharp_maximum - imagesharp_minimum + 1;");
+                _ = builder.AppendLine("    if (imagesharp_extent == 1) {");
+                _ = builder.AppendLine("        return imagesharp_minimum;");
+                _ = builder.AppendLine("    }");
+                _ = builder.AppendLine();
+                _ = builder.AppendLine("    let imagesharp_period = (imagesharp_extent * 2) - 2;");
+                _ = builder.AppendLine("    let imagesharp_remainder = (value - imagesharp_minimum) % imagesharp_period;");
+                _ = builder.AppendLine("    let imagesharp_offset = (imagesharp_remainder + imagesharp_period) % imagesharp_period;");
+                _ = builder.AppendLine("    let imagesharp_reflected = select(imagesharp_period - imagesharp_offset, imagesharp_offset, imagesharp_offset < imagesharp_extent);");
+                _ = builder.AppendLine("    return imagesharp_minimum + imagesharp_reflected;");
                 break;
         }
 
-        builder.AppendLine("}");
-        builder.AppendLine();
+        _ = builder.AppendLine("}");
+        _ = builder.AppendLine();
     }
 
     /// <summary>

@@ -128,9 +128,9 @@ internal sealed class TigerViewerScene : RenderScene
             Size = new System.Drawing.Size(350, 100),
             BackColor = System.Drawing.Color.FromArgb(160, 0, 0, 0),
             ForeColor = System.Drawing.Color.White,
-            Font = new System.Drawing.Font(System.Drawing.FontFamily.GenericMonospace, 9F),
+            Font = new Font(FontFamily.GenericMonospace, 9F),
             Padding = new Padding(6),
-            Location = new System.Drawing.Point(6, 6),
+            Location = new Point(6, 6),
         };
 
         renderControl.PaintFrame += (_, _) => statusLabel.Text = this.StatusText;

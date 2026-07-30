@@ -20,12 +20,11 @@ internal static unsafe class WebGPUSurfaceFactory
     /// <param name="instance">The instance that owns the surface.</param>
     /// <param name="source">The native window source.</param>
     /// <returns>The created surface, or <see langword="null"/> on failure.</returns>
-    public static WGPUSurfaceImpl* Create(WebGPU api, WGPUInstanceImpl* instance, INativeWindowSource source)
-    {
+    public static WGPUSurfaceImpl* Create(WebGPU api, WGPUInstanceImpl* instance, INativeWindowSource source) =>
+
         // Every backend entry point supplies an initialized window source. The Silk contract makes
         // Native nullable only for source implementations that have not created their window yet.
-        return Create(api, instance, source.Native!, true);
-    }
+        Create(api, instance, source.Native!, true);
 
     /// <summary>
     /// Creates a WebGPU surface for an externally-owned host.
@@ -34,14 +33,14 @@ internal static unsafe class WebGPUSurfaceFactory
     /// <param name="instance">The instance that owns the surface.</param>
     /// <param name="host">The external native host.</param>
     /// <returns>The created surface, or <see langword="null"/> on failure.</returns>
-    public static WGPUSurfaceImpl* Create(WebGPU api, WGPUInstanceImpl* instance, WebGPUSurfaceHost host)
-    {
+    public static WGPUSurfaceImpl* Create(WebGPU api, WGPUInstanceImpl* instance, WebGPUSurfaceHost host) =>
+
         // External hosts model the descriptors accepted by wgpu-native directly. GLFW and SDL are
         // the only toolkit-level entries and are translated before reaching the native C API.
-        return host.Kind switch
+        host.Kind switch
         {
             WebGPUSurfaceHostKind.Glfw => Create(api, instance, new GlfwNativeWindow(GlfwProvider.GLFW.Value, (WindowHandle*)host.Handle0), false),
-            WebGPUSurfaceHostKind.Sdl => Create(api, instance, new SdlNativeWindow(SdlProvider.SDL.Value, (Silk.NET.SDL.Window*)host.Handle0), false),
+            WebGPUSurfaceHostKind.Sdl => Create(api, instance, new SdlNativeWindow(SdlProvider.SDL.Value, (Window*)host.Handle0), false),
             WebGPUSurfaceHostKind.Win32 => CreateWindowsSurface(api, instance, host.Handle0, host.Handle1),
             WebGPUSurfaceHostKind.X11 => CreateXlibSurface(api, instance, host.Handle0, host.Number0),
             WebGPUSurfaceHostKind.Cocoa => CreateCocoaSurface(api, instance, host.Handle0),
@@ -51,7 +50,6 @@ internal static unsafe class WebGPUSurfaceFactory
             WebGPUSurfaceHostKind.Android => CreateAndroidSurface(api, instance, host.Handle0),
             _ => null,
         };
-    }
 
     /// <summary>
     /// Resolves a Silk native window to one of the platform handles represented by the WebGPU C surface descriptors.

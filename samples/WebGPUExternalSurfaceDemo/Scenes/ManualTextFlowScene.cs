@@ -452,7 +452,7 @@ internal sealed class ManualTextFlowScene : RenderScene
     /// <param name="scanYs">The scanline collection for the current band.</param>
     private static void AddScanY(float y, float bandTop, float bandBottom, List<float> scanYs)
     {
-        const float DuplicateTolerance = 0.5F;
+        const float duplicateTolerance = 0.5F;
 
         // Scanlines exactly on the edge of the row do not tell us whether the
         // row itself is obstructed. The top/bottom samples are added with a small
@@ -467,7 +467,7 @@ internal sealed class ManualTextFlowScene : RenderScene
         // doing far more work than polygons in this demo.
         for (int i = 0; i < scanYs.Count; i++)
         {
-            if (MathF.Abs(scanYs[i] - y) < DuplicateTolerance)
+            if (MathF.Abs(scanYs[i] - y) < duplicateTolerance)
             {
                 return;
             }

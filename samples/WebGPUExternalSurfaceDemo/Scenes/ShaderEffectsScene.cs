@@ -78,12 +78,11 @@ internal sealed class ShaderEffectsScene : RenderScene
     }
 
     /// <inheritdoc />
-    public override void OnHostLoaded(WebGPUDeviceContext deviceContext)
-    {
+    public override void OnHostLoaded(WebGPUDeviceContext deviceContext) =>
+
         // Compile the immutable WGSL program while the first tab is visible. Uniform values
         // change every frame, but every snapshot shares this cached program and pipeline.
         deviceContext.Precompile(this.shaderEffect);
-    }
 
     /// <inheritdoc />
     public override void Paint(DrawingCanvas canvas, TimeSpan deltaTime)
@@ -369,8 +368,8 @@ internal sealed class ShaderEffectsScene : RenderScene
         /// </summary>
         /// <param name="options">The values shared by the WGSL pass and CPU fallback.</param>
         public LivingNebulaShaderEffect(LivingNebulaShaderOptions options)
-            : base(ShaderSource, UniformLayout, CreateFallback(options))
-        {
+            : base(ShaderSource, UniformLayout, CreateFallback(options)) =>
+
             // The base type creates and freezes the pass. The effect supplies only values
             // matching its declared layout, which is the complete custom-shader workflow.
             this.AddShaderPass(uniforms =>
@@ -383,8 +382,6 @@ internal sealed class ShaderEffectsScene : RenderScene
                 uniforms.SetVector2("pulse_origin", options.PulseOrigin);
                 uniforms.SetFloat32("pulse_age", options.PulseAge);
             });
-
-        }
 
         /// <summary>
         /// Creates the CPU image operation that reproduces the procedural WGSL pass.
@@ -450,7 +447,7 @@ internal sealed class ShaderEffectsScene : RenderScene
             density = MathF.Pow(density, 2.1F);
 
             float wave = 0F;
-            if (options.PulseAge >= 0F && options.PulseAge < 2F)
+            if (options.PulseAge is >= 0F and < 2F)
             {
                 // Evaluate the click in the same aspect-correct space as the clouds. Squaring
                 // the signed distance to the expanding radius produces a narrow Gaussian ring.
@@ -608,7 +605,6 @@ internal sealed class ShaderEffectsScene : RenderScene
             return new Vector2(
                 (cosine * position.X) - (sine * position.Y),
                 (sine * position.X) + (cosine * position.Y));
-
         }
 
         /// <summary>

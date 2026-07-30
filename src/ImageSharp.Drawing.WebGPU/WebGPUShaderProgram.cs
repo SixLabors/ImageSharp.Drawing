@@ -19,7 +19,7 @@ internal sealed class WebGPUShaderProgram
 
     // Layouts are normally static declarations owned by an effect type. Weak keys allow dynamically
     // created layouts and their cached programs to be collected together.
-    private static readonly ConditionalWeakTable<WebGPUShaderUniformLayout, ProgramCache> ProgramsByLayout = new();
+    private static readonly ConditionalWeakTable<WebGPUShaderUniformLayout, ProgramCache> ProgramsByLayout = [];
 
     private readonly object moduleSourceSync = new();
     private readonly Dictionary<

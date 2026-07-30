@@ -1234,16 +1234,15 @@ public partial class WebGPUDrawingBackendTests
 
         if (initialImage is not null)
         {
-            using (DrawingCanvas initialCanvas = WebGPUCanvasFactory.CreateCanvas(
+            using DrawingCanvas initialCanvas = WebGPUCanvasFactory.CreateCanvas(
                        configuration,
                        new DrawingOptions(),
                        backend,
                        renderTarget.Bounds,
                        renderTarget.Surface,
-                       renderTarget.Surface.TargetDescriptor))
-            {
-                initialCanvas.DrawImage(initialImage, initialImage.Bounds, targetBounds);
-            }
+                       renderTarget.Surface.TargetDescriptor);
+
+            initialCanvas.DrawImage(initialImage, initialImage.Bounds, targetBounds);
         }
 
         using (DrawingCanvas canvas = WebGPUCanvasFactory.CreateCanvas(
@@ -2128,7 +2127,7 @@ public partial class WebGPUDrawingBackendTests
                 });
         }
 
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => canvas.Dispose());
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(canvas.Dispose);
         Assert.Same(expectedException, exception);
 
         using Image<Rgba32> image = renderTarget.ReadbackImage<Rgba32>();
@@ -2597,7 +2596,7 @@ public partial class WebGPUDrawingBackendTests
 
             // DontFill returns a transparent brush sample outside the gradient. Src still
             // composes that sample, replacing a fully covered backdrop with transparency.
-            Assert.Equal(default(Rgba32), defaultImage[sample.X, sample.Y]);
+            Assert.Equal(default, defaultImage[sample.X, sample.Y]);
             Assert.Equal(defaultImage[sample.X, sample.Y], actual[sample.X, sample.Y]);
         }
     }
@@ -2712,7 +2711,7 @@ public partial class WebGPUDrawingBackendTests
 
         // Radius1 == 0 makes the conical evaluator swap its circles. The restored parameter
         // remains outside the finite cone, so DontFill supplies a transparent Src sample.
-        Assert.Equal(default(Rgba32), defaultImage[0, 0]);
+        Assert.Equal(default, defaultImage[0, 0]);
         Assert.Equal(defaultImage[0, 0], actual[0, 0]);
         Assert.NotEqual(background, actual[17, 16]);
     }

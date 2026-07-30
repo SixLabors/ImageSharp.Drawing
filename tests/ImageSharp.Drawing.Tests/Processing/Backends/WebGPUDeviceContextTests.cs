@@ -3,7 +3,6 @@
 
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
-using SixLabors.ImageSharp.Drawing.Tests;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.Attributes;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.Memory;
@@ -253,7 +252,7 @@ public class WebGPUDeviceContextTests
         // WebGPU and ImageSharp clean allocations both initialize native pixel storage to zero.
         // Preserve those bits: unit formats interpret them as transparent black, while signed-unit
         // formats interpret them as the midpoint of their logical range.
-        Assert.Equal(default(TPixel), readback[target.Width / 2, target.Height / 2]);
+        Assert.Equal(default, readback[target.Width / 2, target.Height / 2]);
     }
 
     private static void AssertAssociatedRenderTarget<TPixel>(WebGPUTextureFormat format)
@@ -282,7 +281,7 @@ public class WebGPUDeviceContextTests
         TPixel actualPixel = typedReadback[target.Width / 2, target.Height / 2];
         Assert.Equal(expectedPixel.ToRgba32(), actualPixel.ToRgba32());
 
-        Assert.Throws<NotSupportedException>(() => target.ReadbackImage<Rgba32>());
+        Assert.Throws<NotSupportedException>(target.ReadbackImage<Rgba32>);
 
         using WebGPURenderTarget child = target.CreateRenderTarget(4, 3);
         Assert.Equal(target.Format, child.Format);

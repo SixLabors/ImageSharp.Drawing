@@ -460,7 +460,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 bool pushed = options is not null;
                 if (pushed)
                 {
-                    this.Save(options!);
+                    _ = this.Save(options!);
                 }
 
                 this.ApplyCore(region, effect.CreateOperation(), effect, effect.WriteBackOptions, effect.WriteBackOffset);
@@ -994,17 +994,13 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     }
 
     /// <inheritdoc />
-    public override void DrawText(
-        GlyphRun glyphRun,
-        RichGlyphOptions options,
-        Brush? brush,
-        Pen? pen)
+    public override void DrawText(ReadOnlySpan<ushort> glyphIds, ReadOnlySpan<Vector2> points, RichGlyphOptions options, Brush? brush, Pen? pen)
     {
         this.EnsureNotDisposed();
-        Guard.NotNull(glyphRun, nameof(glyphRun));
         Guard.NotNull(options, nameof(options));
+        Guard.IsTrue(glyphIds.Length == points.Length, nameof(points), "Glyph id and point counts must match.");
 
-        if (glyphRun.Count == 0)
+        if (glyphIds.IsEmpty)
         {
             return;
         }
@@ -1016,7 +1012,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path: null, pen, brush, this.textCache, this.textOperations);
         TextRenderer renderer = new(glyphRenderer);
-        renderer.Render(glyphRun, options);
+        renderer.Render(glyphIds, points, options);
 
         this.DrawTextOperations(this.BatchGlyphRunOperations(glyphRenderer.DrawingOperations), effectiveOptions);
     }
@@ -1137,7 +1133,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         if (image is Image<TPixel> specificImage)
         {
-            this.DrawImageCore(specificImage, sourceRect, destinationRect, sampler, wrapX, wrapY, ownsSourceImage: false);
+            this.DrawImage(specificImage, sourceRect, destinationRect, wrapX, wrapY, sampler);
             return;
         }
 
@@ -1152,13 +1148,13 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         if (clippedSourceRect == image.Bounds)
         {
             Image<TPixel> convertedImage = image.CloneAs<TPixel>();
-            this.DrawImageCore(convertedImage, sourceRect, destinationRect, sampler, wrapX, wrapY, ownsSourceImage: true);
+            this.DrawImageCore(convertedImage, clippedSourceRect, clippedDestinationRect, sampler, wrapX, wrapY, true);
             return;
         }
 
         using Image croppedSource = image.Clone(ctx => ctx.Crop(clippedSourceRect));
         Image<TPixel> convertedRegion = croppedSource.CloneAs<TPixel>();
-        this.DrawImageCore(convertedRegion, convertedRegion.Bounds, clippedDestinationRect, sampler, wrapX, wrapY, ownsSourceImage: true);
+        this.DrawImageCore(convertedRegion, convertedRegion.Bounds, clippedDestinationRect, sampler, wrapX, wrapY, true);
     }
 
     /// <inheritdoc cref="DrawingCanvas.DrawImage(Image, Rectangle, RectangleF, IResampler?)" />
@@ -1180,7 +1176,13 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     {
         this.EnsureNotDisposed();
         Guard.NotNull(image, nameof(image));
-        this.DrawImageCore(image, sourceRect, destinationRect, sampler, wrapX, wrapY, ownsSourceImage: false);
+
+        if (!TryGetDrawImageClip(sourceRect, destinationRect, image.Bounds, out Rectangle clippedSourceRect, out RectangleF clippedDestinationRect))
+        {
+            return;
+        }
+
+        this.DrawImageCore(image, clippedSourceRect, clippedDestinationRect, sampler, wrapX, wrapY, false);
     }
 
     /// <inheritdoc />
@@ -1260,12 +1262,12 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     }
 
     /// <summary>
-    /// Normalizes an image draw into an image-brush fill: source pixels are cropped/scaled,
+    /// Normalizes a pre-clipped image draw into an image-brush fill: source pixels are cropped/scaled,
     /// then baked through the canvas transform, and the result is queued as a rectangle fill.
     /// </summary>
     /// <param name="image">The source image in the target pixel format.</param>
-    /// <param name="sourceRect">The source rectangle within <paramref name="image"/>.</param>
-    /// <param name="destinationRect">The destination rectangle in local canvas coordinates.</param>
+    /// <param name="clippedSourceRect">The source rectangle, already clipped to the bounds of <paramref name="image"/>.</param>
+    /// <param name="clippedDestinationRect">The destination rectangle matching <paramref name="clippedSourceRect"/>, in local canvas coordinates.</param>
     /// <param name="sampler">Optional resampler used when scaling or transforming the image.</param>
     /// <param name="wrapX">The horizontal wrap mode applied when sampling beyond the destination rectangle.</param>
     /// <param name="wrapY">The vertical wrap mode applied when sampling beyond the destination rectangle.</param>
@@ -1275,8 +1277,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// </param>
     private void DrawImageCore(
         Image<TPixel> image,
-        Rectangle sourceRect,
-        RectangleF destinationRect,
+        Rectangle clippedSourceRect,
+        RectangleF clippedDestinationRect,
         IResampler? sampler,
         WrapMode wrapX,
         WrapMode wrapY,
@@ -1291,11 +1293,6 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         Image<TPixel>? ownedImage = null;
         try
         {
-            if (!TryGetDrawImageClip(sourceRect, destinationRect, image.Bounds, out Rectangle clippedSourceRect, out RectangleF clippedDestinationRect))
-            {
-                return;
-            }
-
             Size scaledSize = new(
                 Math.Max(1, (int)MathF.Ceiling(clippedDestinationRect.Width)),
                 Math.Max(1, (int)MathF.Ceiling(clippedDestinationRect.Height)));

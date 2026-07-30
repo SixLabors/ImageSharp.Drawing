@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Text;
@@ -379,15 +380,12 @@ public abstract partial class DrawingCanvas : IDisposable
     /// <summary>
     /// Draws positioned glyphs onto this canvas.
     /// </summary>
-    /// <param name="glyphRun">The positioned glyphs.</param>
+    /// <param name="glyphIds">The glyph identifiers.</param>
+    /// <param name="points">The absolute glyph origins in pixel units.</param>
     /// <param name="options">The glyph rendering options, including the font and optional glyph paint.</param>
     /// <param name="brush">Default brush used to fill glyphs when <see cref="RichGlyphOptions.Brush"/> is not set.</param>
     /// <param name="pen">Default pen used to outline glyphs when <see cref="RichGlyphOptions.Pen"/> is not set.</param>
-    public abstract void DrawText(
-        GlyphRun glyphRun,
-        RichGlyphOptions options,
-        Brush? brush,
-        Pen? pen);
+    public abstract void DrawText(ReadOnlySpan<ushort> glyphIds, ReadOnlySpan<Vector2> points, RichGlyphOptions options, Brush? brush, Pen? pen);
 
     /// <summary>
     /// Draws layered glyph geometry.
