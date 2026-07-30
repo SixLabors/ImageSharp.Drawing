@@ -27,7 +27,7 @@ jobs:
           git config --global core.longpaths true
 
       - name: Git Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           submodules: recursive
@@ -49,7 +49,7 @@ jobs:
         run: echo "lfs_key=$LFS_KEY" >> "$GITHUB_OUTPUT"
 
       - name: Git Setup LFS Cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .git/lfs
           key: ${{ steps.expose-key.outputs.lfs_key }}
@@ -137,14 +137,14 @@ jobs:
           git config --global core.longpaths true
 
       - name: Git Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           submodules: recursive
 
       # Use the warmed key from WarmLFS. Do not recompute or recreate .lfs-assets-id here.
       - name: Git Setup LFS Cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .git/lfs
           key: ${{ needs.WarmLFS.outputs.lfs_key }}
@@ -157,7 +157,7 @@ jobs:
         uses: NuGet/setup-nuget@v4
 
       - name: NuGet Setup Cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         id: nuget-cache
         with:
           path: ~/.nuget
@@ -216,7 +216,7 @@ jobs:
           path: tests/Images/ActualOutput/
 
       - name: Codecov Update
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         if: matrix.options.codecov == true && startsWith(github.repository, 'SixLabors')
         with:
           flags: unittests
@@ -234,7 +234,7 @@ jobs:
           git config --global core.longpaths true
 
       - name: Git Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           submodules: recursive
@@ -243,7 +243,7 @@ jobs:
         uses: NuGet/setup-nuget@v4
 
       - name: NuGet Setup Cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         id: nuget-cache
         with:
           path: ~/.nuget

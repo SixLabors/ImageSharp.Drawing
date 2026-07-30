@@ -1141,8 +1141,24 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             return;
         }
 
-        Image<TPixel> convertedImage = image.CloneAs<TPixel>();
-        this.DrawImageCore(convertedImage, sourceRect, destinationRect, sampler, wrapX, wrapY, ownsSourceImage: true);
+        // Only the pixels inside the clipped source region are ever sampled by the draw operation.
+        // When that region covers just part of the image, crop it in the source pixel format first so
+        // the per-pixel format conversion runs over the required region instead of the whole image.
+        if (!TryGetDrawImageClip(sourceRect, destinationRect, image.Bounds, out Rectangle clippedSourceRect, out RectangleF clippedDestinationRect))
+        {
+            return;
+        }
+
+        if (clippedSourceRect == image.Bounds)
+        {
+            Image<TPixel> convertedImage = image.CloneAs<TPixel>();
+            this.DrawImageCore(convertedImage, sourceRect, destinationRect, sampler, wrapX, wrapY, ownsSourceImage: true);
+            return;
+        }
+
+        using Image croppedSource = image.Clone(ctx => ctx.Crop(clippedSourceRect));
+        Image<TPixel> convertedRegion = croppedSource.CloneAs<TPixel>();
+        this.DrawImageCore(convertedRegion, convertedRegion.Bounds, clippedDestinationRect, sampler, wrapX, wrapY, ownsSourceImage: true);
     }
 
     /// <inheritdoc cref="DrawingCanvas.DrawImage(Image, Rectangle, RectangleF, IResampler?)" />
@@ -1272,41 +1288,26 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingOptions effectiveOptions = state.Options;
         DrawingOptions commandOptions = effectiveOptions;
 
-        if (sourceRect.Width <= 0 ||
-            sourceRect.Height <= 0 ||
-            destinationRect.Width <= 0 ||
-            destinationRect.Height <= 0)
-        {
-            return;
-        }
-
-        Rectangle clippedSourceRect = Rectangle.Intersect(sourceRect, image.Bounds);
-        if (clippedSourceRect.Width <= 0 || clippedSourceRect.Height <= 0)
-        {
-            return;
-        }
-
-        RectangleF clippedDestinationRect = MapSourceClipToDestination(sourceRect, destinationRect, clippedSourceRect);
-        if (clippedDestinationRect.Width <= 0 || clippedDestinationRect.Height <= 0)
-        {
-            return;
-        }
-
-        Size scaledSize = new(
-            Math.Max(1, (int)MathF.Ceiling(clippedDestinationRect.Width)),
-            Math.Max(1, (int)MathF.Ceiling(clippedDestinationRect.Height)));
-
-        bool requiresScaling =
-            clippedSourceRect.Width != scaledSize.Width ||
-            clippedSourceRect.Height != scaledSize.Height;
-
-        Image<TPixel> brushImage = image;
-        RectangleF brushImageRegion = clippedSourceRect;
-        RectangleF renderDestinationRect = clippedDestinationRect;
         Image<TPixel>? ownedImage = null;
-
         try
         {
+            if (!TryGetDrawImageClip(sourceRect, destinationRect, image.Bounds, out Rectangle clippedSourceRect, out RectangleF clippedDestinationRect))
+            {
+                return;
+            }
+
+            Size scaledSize = new(
+                Math.Max(1, (int)MathF.Ceiling(clippedDestinationRect.Width)),
+                Math.Max(1, (int)MathF.Ceiling(clippedDestinationRect.Height)));
+
+            bool requiresScaling =
+                clippedSourceRect.Width != scaledSize.Width ||
+                clippedSourceRect.Height != scaledSize.Height;
+
+            Image<TPixel> brushImage = image;
+            RectangleF brushImageRegion = clippedSourceRect;
+            RectangleF renderDestinationRect = clippedDestinationRect;
+
             // Phase 1: Prepare source pixels (crop/scale) in image-local space.
             if (requiresScaling)
             {
@@ -2417,6 +2418,44 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             sourceToTarget,
             targetSize,
             sampler ?? KnownResamplers.Bicubic));
+    }
+
+    /// <summary>
+    /// Computes the source and destination rectangles that a draw-image operation will actually
+    /// touch, clipping the requested source rectangle to the image bounds.
+    /// </summary>
+    /// <param name="sourceRect">Requested source rectangle.</param>
+    /// <param name="destinationRect">Requested destination rectangle.</param>
+    /// <param name="imageBounds">Bounds of the source image.</param>
+    /// <param name="clippedSourceRect">Receives the source rectangle clipped to <paramref name="imageBounds"/>.</param>
+    /// <param name="clippedDestinationRect">Receives the destination rectangle matching <paramref name="clippedSourceRect"/>.</param>
+    /// <returns><see langword="true"/> when the operation covers a non-empty region; otherwise <see langword="false"/>.</returns>
+    private static bool TryGetDrawImageClip(
+        Rectangle sourceRect,
+        RectangleF destinationRect,
+        Rectangle imageBounds,
+        out Rectangle clippedSourceRect,
+        out RectangleF clippedDestinationRect)
+    {
+        clippedSourceRect = default;
+        clippedDestinationRect = default;
+
+        // A zero-area source cannot be sampled and would divide by zero when mapping to the destination.
+        if (sourceRect.Width <= 0 || sourceRect.Height <= 0)
+        {
+            return false;
+        }
+
+        clippedSourceRect = Rectangle.Intersect(sourceRect, imageBounds);
+        if (clippedSourceRect.Width <= 0 || clippedSourceRect.Height <= 0)
+        {
+            return false;
+        }
+
+        clippedDestinationRect = MapSourceClipToDestination(sourceRect, destinationRect, clippedSourceRect);
+
+        // A degenerate (empty or inverted) destination maps to nothing to draw.
+        return clippedDestinationRect.Width > 0 && clippedDestinationRect.Height > 0;
     }
 
     /// <summary>
