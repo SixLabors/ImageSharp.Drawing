@@ -4,6 +4,8 @@
 using System.Diagnostics.CodeAnalysis;
 using Silk.NET.Maths;
 using Silk.NET.Windowing;
+using Silk.NET.Windowing.Glfw;
+using Silk.NET.Windowing.Sdl;
 using NativeWindowBorder = Silk.NET.Windowing.WindowBorder;
 using NativeWindowState = Silk.NET.Windowing.WindowState;
 
@@ -25,6 +27,15 @@ public sealed class WebGPUWindow : IDisposable
     private readonly WebGPUSurfaceSession session;
     private readonly WebGPUSurfaceResources resources;
     private bool isDisposed;
+
+    static WebGPUWindow()
+    {
+        // Silk.NET discovers window platforms by scanning assemblies with reflection, which
+        // trimming removes under Native AOT. Registering the shipped platforms explicitly keeps
+        // window creation working in every deployment model.
+        GlfwWindowing.RegisterPlatform();
+        SdlWindowing.RegisterPlatform();
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUWindow"/> class.

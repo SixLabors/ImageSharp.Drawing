@@ -608,9 +608,54 @@ internal static unsafe partial class WebGPURuntime
     /// <returns><see langword="true"/> when both files are available, or on non-Windows platforms.</returns>
     private static bool TryGetDxcPaths(out string dxcPath, out string dxilPath)
     {
-        dxcPath = FilePath.Combine(AppContext.BaseDirectory, "dxcompiler.dll");
-        dxilPath = FilePath.Combine(AppContext.BaseDirectory, "dxil.dll");
-        return !OperatingSystem.IsWindows() || (File.Exists(dxcPath) && File.Exists(dxilPath));
+        dxcPath = string.Empty;
+        dxilPath = string.Empty;
+        if (!OperatingSystem.IsWindows())
+        {
+            return true;
+        }
+
+        // wgpu receives the compiler as a file location rather than binding it as an import,
+        // so resolve it through the host's native-library search. That search already honors
+        // every deployment layout: flat outputs, the NuGet runtimes layout, and
+        // self-contained publishes.
+        if (!NativeLibrary.TryLoad("dxcompiler.dll", typeof(WebGPURuntime).Assembly, null, out IntPtr module))
+        {
+            // A Native AOT shared library hosted by a foreign process probes relative to that
+            // host, so fall back to the directory of this library's own image.
+            if (NativeModuleLocator.TryGetModuleDirectory(out string moduleDirectory))
+            {
+                dxcPath = FilePath.Combine(moduleDirectory, "dxcompiler.dll");
+                dxilPath = FilePath.Combine(moduleDirectory, "dxil.dll");
+                if (File.Exists(dxcPath) && File.Exists(dxilPath))
+                {
+                    return true;
+                }
+            }
+
+            dxcPath = string.Empty;
+            dxilPath = string.Empty;
+            return false;
+        }
+
+        try
+        {
+            dxcPath = NativeModuleLocator.GetModuleFilePath(module);
+        }
+        finally
+        {
+            NativeLibrary.Free(module);
+        }
+
+        if (dxcPath.Length == 0)
+        {
+            return false;
+        }
+
+        // The compiler loads dxil.dll from its own directory to sign shaders, so both files
+        // ship side by side in every layout.
+        dxilPath = FilePath.Combine(FilePath.GetDirectoryName(dxcPath)!, "dxil.dll");
+        return File.Exists(dxilPath);
     }
 
     /// <summary>

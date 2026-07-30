@@ -29,6 +29,16 @@ internal static partial class WebGPUNative
             // This prevents an older same-named dependency from satisfying our generated v29 ABI.
             LibraryHandle = NativeLibrary.Load(libraryPath);
         }
+        else if (NativeModuleLocator.TryGetModuleDirectory(out string moduleDirectory))
+        {
+            // A Native AOT shared library hosted by a foreign process probes relative to that
+            // host, so also look beside this library's own image.
+            string anchoredPath = System.IO.Path.Combine(moduleDirectory, fileName);
+            if (File.Exists(anchoredPath))
+            {
+                LibraryHandle = NativeLibrary.Load(anchoredPath);
+            }
+        }
 
         NativeLibrary.SetDllImportResolver(typeof(WebGPUNative).Assembly, ResolveLibrary);
     }
