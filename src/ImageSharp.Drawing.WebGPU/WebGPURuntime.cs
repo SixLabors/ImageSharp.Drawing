@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -388,25 +389,30 @@ internal static unsafe partial class WebGPURuntime
     }
 
     /// <summary>
-    /// Executes one isolated compute-pipeline creation probe for <see cref="WebGPUEnvironment.ProbeComputePipelineSupport()"/>.
+    /// Executes one isolated compute-pipeline creation and submission-readback probe for
+    /// <see cref="WebGPUEnvironment.ProbeComputePipelineSupport()"/>.
     /// </summary>
     /// <returns>
-    /// <c>0</c> when compute-pipeline creation succeeded; <c>1</c> when the probe completed and reported failure.
+    /// <c>0</c> when pipeline creation and an indexed submission with buffer readback succeeded;
+    /// <c>1</c> when the probe completed and reported failure.
     /// Any other value means the isolated probe process terminated before the probe could return normally.
     /// </returns>
     public static int RunComputePipelineSupportProbe()
     {
         try
         {
-            if (!TryGetOrCreateDevice(out WebGPUDeviceHandle? deviceHandle, out _, out _)
-                || deviceHandle is null)
+            if (!TryGetOrCreateDevice(out WebGPUDeviceHandle? deviceHandle, out WebGPUQueueHandle? queueHandle, out _)
+                || deviceHandle is null
+                || queueHandle is null)
             {
                 return 1;
             }
 
             WebGPU api = GetApi();
             using WebGPUHandle.HandleReference deviceReference = deviceHandle.AcquireReference();
+            using WebGPUHandle.HandleReference queueReference = queueHandle.AcquireReference();
             WGPUDeviceImpl* device = (WGPUDeviceImpl*)deviceReference.Handle;
+            WGPUQueueImpl* queue = (WGPUQueueImpl*)queueReference.Handle;
 
             ReadOnlySpan<byte> probeShader = "@compute @workgroup_size(1) fn main() {}\0"u8;
 
@@ -467,7 +473,12 @@ internal static unsafe partial class WebGPURuntime
                             }
 
                             api.ComputePipelineRelease(pipeline);
-                            return 0;
+
+                            // Pipeline creation and even trivial submissions succeed on adapters
+                            // whose render path later fails natively, so the probe must also prove
+                            // an indexed submission with buffer map and one layered scene render
+                            // with readback before reporting support.
+                            return ProbeSubmissionReadback(api, device, queue) && ProbeSceneRenderReadback() ? 0 : 1;
                         }
                         finally
                         {
@@ -484,6 +495,177 @@ internal static unsafe partial class WebGPURuntime
         catch
         {
             return 1;
+        }
+    }
+
+    /// <summary>
+    /// Exercises one indexed queue submission and buffer readback against the probe device.
+    /// </summary>
+    /// <param name="api">The WebGPU API loader.</param>
+    /// <param name="device">The probe device.</param>
+    /// <param name="queue">The probe device's queue.</param>
+    /// <returns><see langword="true"/> when the submission completed and the readback buffer mapped.</returns>
+    private static bool ProbeSubmissionReadback(WebGPU api, WGPUDeviceImpl* device, WGPUQueueImpl* queue)
+    {
+        // Buffer-to-buffer copies require four-byte multiples; one readback row-alignment unit
+        // keeps the probe within every adapter's minimum resource limits.
+        const ulong probeByteCount = 256;
+
+        WGPUBufferImpl* sourceBuffer = null;
+        WGPUBufferImpl* readbackBuffer = null;
+        WGPUCommandEncoderImpl* commandEncoder = null;
+        WGPUCommandBufferImpl* commandBuffer = null;
+        try
+        {
+            WGPUBufferDescriptor sourceDescriptor = new()
+            {
+                usage = (ulong)BufferUsage.CopySrc,
+                size = probeByteCount,
+                mappedAtCreation = 0U,
+            };
+
+            WGPUBufferDescriptor readbackDescriptor = new()
+            {
+                usage = (ulong)(BufferUsage.CopyDst | BufferUsage.MapRead),
+                size = probeByteCount,
+                mappedAtCreation = 0U,
+            };
+
+            sourceBuffer = api.DeviceCreateBuffer(device, in sourceDescriptor);
+            readbackBuffer = api.DeviceCreateBuffer(device, in readbackDescriptor);
+            if (sourceBuffer is null || readbackBuffer is null)
+            {
+                return false;
+            }
+
+            WGPUCommandEncoderDescriptor encoderDescriptor = default;
+            commandEncoder = api.DeviceCreateCommandEncoder(device, in encoderDescriptor);
+            if (commandEncoder is null)
+            {
+                return false;
+            }
+
+            // The copy is the smallest command whose completion is observable from the host
+            // through a mappable buffer, making the submission's progress provable.
+            api.CommandEncoderCopyBufferToBuffer(commandEncoder, sourceBuffer, 0, readbackBuffer, 0, probeByteCount);
+
+            WGPUCommandBufferDescriptor commandBufferDescriptor = default;
+            commandBuffer = api.CommandEncoderFinish(commandEncoder, in commandBufferDescriptor);
+            if (commandBuffer is null)
+            {
+                return false;
+            }
+
+            ulong submissionIndex = api.QueueSubmitForIndex(queue, 1, ref commandBuffer);
+
+            WGPUMapAsyncStatus mapStatus = default;
+            using ManualResetEventSlim mapReady = new(false);
+            void Callback(WGPUMapAsyncStatus status, void* userData)
+            {
+                _ = userData;
+                mapStatus = status;
+                mapReady.Set();
+            }
+
+            using WebGPUBufferMapCallback callback = WebGPUBufferMapCallback.From(Callback);
+            api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, (nuint)probeByteCount, callback, null);
+
+            // Non-blocking polls scoped to the submission index mirror the renderer's readback
+            // wait, and the managed timeout turns an adapter that never completes the submission
+            // into a probe failure instead of a hang.
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            while (!mapReady.IsSet && stopwatch.ElapsedMilliseconds < CallbackTimeoutMilliseconds)
+            {
+                _ = api.DevicePoll(device, false, &submissionIndex);
+                if (!mapReady.IsSet)
+                {
+                    Thread.Yield();
+                }
+            }
+
+            // The status keeps its default value when the callback never fired, so timeouts and
+            // explicit non-success map results fail through the same check.
+            if (!mapReady.IsSet || mapStatus != WGPUMapAsyncStatus.Success)
+            {
+                return false;
+            }
+
+            void* mapped = api.BufferGetConstMappedRange(readbackBuffer, 0, (nuint)probeByteCount);
+            if (mapped is null)
+            {
+                return false;
+            }
+
+            api.BufferUnmap(readbackBuffer);
+            return true;
+        }
+        finally
+        {
+            if (commandBuffer is not null)
+            {
+                api.CommandBufferRelease(commandBuffer);
+            }
+
+            if (commandEncoder is not null)
+            {
+                api.CommandEncoderRelease(commandEncoder);
+            }
+
+            if (readbackBuffer is not null)
+            {
+                api.BufferRelease(readbackBuffer);
+            }
+
+            if (sourceBuffer is not null)
+            {
+                api.BufferRelease(sourceBuffer);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Renders one small retained scene containing a layer boundary and reads the result back.
+    /// </summary>
+    /// <returns><see langword="true"/> when the render completed and the target read back.</returns>
+    /// <remarks>
+    /// Layered retained scenes drive intermediate targets through the full submission and
+    /// readback pipeline, which is the workload software adapters fail on while passing
+    /// simpler probes.
+    /// </remarks>
+    private static bool ProbeSceneRenderReadback()
+    {
+        try
+        {
+            DrawingBackendScene? scene = null;
+            try
+            {
+                using (WebGPURenderTarget sceneTarget = new(16, 16))
+                using (DrawingCanvas sceneCanvas = sceneTarget.CreateCanvas())
+                {
+                    sceneCanvas.Fill(Brushes.Solid(Color.Red), new RectanglePolygon(2, 2, 12, 12));
+                    sceneCanvas.SaveLayer(new GraphicsOptions { BlendPercentage = 0.65F }, new Rectangle(4, 4, 8, 8));
+                    sceneCanvas.Fill(Brushes.Solid(Color.Blue), new RectanglePolygon(5, 5, 8, 8));
+                    sceneCanvas.Restore();
+                    scene = sceneCanvas.CreateScene();
+                }
+
+                using WebGPURenderTarget renderTarget = new(16, 16);
+                using (DrawingCanvas canvas = renderTarget.CreateCanvas())
+                {
+                    canvas.RenderScene(scene);
+                }
+
+                using Image<PixelFormats.Rgba32> image = renderTarget.ReadbackImage<PixelFormats.Rgba32>();
+                return image.Width == 16;
+            }
+            finally
+            {
+                scene?.Dispose();
+            }
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -735,6 +917,7 @@ internal static unsafe partial class WebGPURuntime
         WGPURequestAdapterOptions options = new()
         {
             compatibleSurface = compatibleSurface,
+            forceFallbackAdapter = environmentOptions.ForceFallbackAdapter ? 1u : 0u,
             powerPreference = environmentOptions.PowerPreference switch
             {
                 WebGPUPowerPreference.Default => WGPUPowerPreference.Undefined,
