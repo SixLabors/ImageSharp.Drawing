@@ -676,6 +676,7 @@ internal static unsafe partial class WebGPURuntime
             WebGPUEnvironmentError.InstanceCreationFailed => "The WebGPU runtime could not create an instance.",
             WebGPUEnvironmentError.AdapterRequestTimedOut => "Timed out while waiting for the WebGPU adapter request callback.",
             WebGPUEnvironmentError.AdapterRequestFailed => "The WebGPU runtime failed to acquire a WebGPU adapter.",
+            WebGPUEnvironmentError.SoftwareAdapterUnsupported => "The only available WebGPU adapter is a software rasterizer, which this backend does not support; use the CPU drawing backend instead.",
             WebGPUEnvironmentError.DeviceRequestTimedOut => "Timed out while waiting for the WebGPU device request callback.",
             WebGPUEnvironmentError.DeviceRequestFailed => "The WebGPU runtime failed to acquire a WebGPU device.",
             WebGPUEnvironmentError.QueueAcquisitionFailed => "The WebGPU runtime acquired a device but could not retrieve its default queue.",
