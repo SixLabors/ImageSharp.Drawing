@@ -1,0 +1,88 @@
+<ContentPage Theme="{StaticResource ScrollPage}" x:Class="ControlCatalog.Pages.DialogsPage"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Header="Dialogs"
+             xmlns:storage="clr-namespace:Avalonia.Platform.Storage;assembly=Avalonia.Base"
+             xmlns:generic="clr-namespace:System.Collections.Generic;assembly=System.Collections">
+  <StackPanel Margin="4"
+              Orientation="Vertical"
+              Spacing="4">
+
+    <TextBlock Text="Windows:" />
+
+    <Expander Header="Window dialogs">
+      <StackPanel Spacing="4">
+        <Button Name="DecoratedWindow">Decorated _window</Button>
+        <Button Name="DecoratedWindowDialog">Decorated w_indow (dialog)</Button>
+        <Button Name="Dialog" ToolTip.Tip="Shows a dialog">_Dialog</Button>
+        <Button Name="DialogNoTaskbar">Dialog (_No taskbar icon)</Button>
+        <Button Name="OwnedWindow">Own_ed window</Button>
+        <Button Name="OwnedWindowNoTaskbar">Owned window (No tas_kbar icon)</Button>
+      </StackPanel>
+    </Expander>
+
+    <TextBlock Margin="0,20,0,0" Text="Pickers:" />
+
+    <Label Target="FilterSelector" Content="Filter" />
+    <ComboBox Name="FilterSelector" SelectedIndex="0">
+      <ComboBoxItem>None</ComboBoxItem>
+      <ComboBoxItem>All + TXT + BinLog</ComboBoxItem>
+      <ComboBoxItem>Binlog</ComboBoxItem>
+      <ComboBoxItem>TXT extension only</ComboBoxItem>
+      <ComboBoxItem>TXT mime only</ComboBoxItem>
+      <ComboBoxItem>TXT apple type id only</ComboBoxItem>
+    </ComboBox>
+    <StackPanel Orientation="Horizontal" Spacing="8">
+      <CheckBox Name="UseSuggestedFilter">Use SuggestedFileType</CheckBox>
+      <ComboBox Name="SuggestedFilterSelector" MinWidth="160">
+        <ComboBoxItem>First filter</ComboBoxItem>
+      </ComboBox>
+    </StackPanel>
+    <Expander Header="FilePicker API">
+      <StackPanel Spacing="4">
+        <CheckBox Name="ForceManaged">Force managed dialog</CheckBox>
+        <CheckBox Name="OpenMultiple">Open multiple</CheckBox>
+        <Button Name="OpenFolderPicker">Select Fo_lder</Button>
+        <Button Name="OpenFilePicker">_Open File</Button>
+        <Button Name="SaveFilePicker">_Save File</Button>
+        <Button Name="SaveFilePickerWithResult">Save File XML or JSON</Button>
+        <Button Name="OpenFileFromBookmark">Open File Bookmark</Button>
+        <Button Name="OpenFolderFromBookmark">Open Folder Bookmark</Button>
+      </StackPanel>
+    </Expander>
+
+    <Expander Header="Launcher dialogs">
+      <StackPanel Spacing="4">
+        <TextBox Name="UriToLaunch" PlaceholderText="Uri to launch" Text="https://avaloniaui.net/" />
+        <Button Name="LaunchUri">Launch Uri</Button>
+        <Button Name="LaunchFile">Launch File</Button>
+        <TextBlock Name="LaunchStatus" />
+      </StackPanel>
+    </Expander>
+
+    <AutoCompleteBox x:Name="CurrentFolderBox" PlaceholderText="Write full path/uri or well known folder name">
+      <AutoCompleteBox.ItemsSource>
+        <generic:List x:TypeArguments="storage:WellKnownFolder">
+          <storage:WellKnownFolder>Desktop</storage:WellKnownFolder>
+          <storage:WellKnownFolder>Documents</storage:WellKnownFolder>
+          <storage:WellKnownFolder>Downloads</storage:WellKnownFolder>
+          <storage:WellKnownFolder>Pictures</storage:WellKnownFolder>
+          <storage:WellKnownFolder>Videos</storage:WellKnownFolder>
+          <storage:WellKnownFolder>Music</storage:WellKnownFolder>
+        </generic:List>
+      </AutoCompleteBox.ItemsSource>
+    </AutoCompleteBox>
+
+    <TextBlock x:Name="PickerLastResultsVisible"
+               Classes="h2"
+               IsVisible="False"
+               Text="Last picker results:" />
+    <ItemsControl x:Name="PickerLastResults" />
+
+    <TextBox Name="BookmarkContainer" PlaceholderText="Bookmark" />
+    <TextBox Name="OpenedFileContent"
+             MaxLines="10"
+             PlaceholderText="Picked file content" />
+
+  </StackPanel>
+</ContentPage>
