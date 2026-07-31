@@ -6,8 +6,9 @@
                 <Configuration>
                     <Format>lcov</Format>
                     <Include>[SixLabors.*]*</Include>
-                    <!-- Generated interop bindings and embedded shader text are not executable product logic. -->
-                    <ExcludeByFile>**/Native/Bindings/Generated/**/*.cs,**/*.g.cs</ExcludeByFile>
+                    <!-- Generated interop bindings and embedded shader text are not executable product
+                         logic; the shared-infrastructure sources are covered by the submodule's own tests. -->
+                    <ExcludeByFile>**/Native/Bindings/Generated/**/*.cs,**/*.g.cs,**/shared-infrastructure/**/*.cs</ExcludeByFile>
                     <UseSourceLink>true</UseSourceLink>
                 </Configuration>
             </DataCollector>
