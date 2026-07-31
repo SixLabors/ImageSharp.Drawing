@@ -669,6 +669,8 @@ internal static unsafe partial class WebGPURuntime
     /// </remarks>
     private static bool ProbeComputeDispatch(WebGPU api, WGPUDeviceImpl* device, WGPUQueueImpl* queue)
     {
+        // The chunk-reset shader's single binding is one bump-allocators block, so the storage
+        // buffer must be exactly that size for the bind-group layout's minimum binding size.
         nuint statusByteCount = (nuint)sizeof(GpuSceneBumpAllocators);
 
         WGPUBufferImpl* storageBuffer = null;
@@ -696,6 +698,8 @@ internal static unsafe partial class WebGPURuntime
                 mappedAtCreation = 0U,
             };
 
+            // The shader writes the storage buffer, the copy drains it into the mappable
+            // readback buffer, and the map proves the whole chain executed on the adapter.
             storageBuffer = api.DeviceCreateBuffer(device, in storageDescriptor);
             readbackBuffer = api.DeviceCreateBuffer(device, in readbackDescriptor);
             if (storageBuffer is null || readbackBuffer is null)
@@ -756,6 +760,7 @@ internal static unsafe partial class WebGPURuntime
                 }
             }
 
+            // Bind-group creation copies the entries during the call, so stack storage is safe.
             WGPUBindGroupEntry* bindEntries = stackalloc WGPUBindGroupEntry[1];
             bindEntries[0] = new WGPUBindGroupEntry
             {
@@ -792,12 +797,16 @@ internal static unsafe partial class WebGPURuntime
                 return false;
             }
 
+            // The pass must be ended and released before the encoder can record the copy;
+            // an open pass makes every later encoder command invalid.
             api.ComputePassEncoderSetPipeline(pass, pipeline);
             api.ComputePassEncoderSetBindGroup(pass, 0, bindGroup, 0, null);
             api.ComputePassEncoderDispatchWorkgroups(pass, ChunkResetComputeShader.GetDispatchX(), 1, 1);
             api.ComputePassEncoderEnd(pass);
             api.ComputePassEncoderRelease(pass);
 
+            // Queue ordering guarantees the dispatch's writes are visible to the copy inside
+            // the same submission, so no host-side synchronization sits between them.
             api.CommandEncoderCopyBufferToBuffer(commandEncoder, storageBuffer, 0, readbackBuffer, 0, statusByteCount);
 
             WGPUCommandBufferDescriptor commandBufferDescriptor = default;
@@ -812,6 +821,7 @@ internal static unsafe partial class WebGPURuntime
         }
         finally
         {
+            // Releases run in reverse creation order so no object outlives one it references.
             if (commandBuffer is not null)
             {
                 api.CommandBufferRelease(commandBuffer);
@@ -875,6 +885,9 @@ internal static unsafe partial class WebGPURuntime
             DrawingBackendScene? scene = null;
             try
             {
+                // A fill plus a blended layer is the smallest scene that records a layer
+                // boundary into the retained command stream, so its replay drives the full
+                // scheduling, fine, and composition pipeline the renderer uses.
                 using (WebGPURenderTarget sceneTarget = new(16, 16))
                 using (DrawingCanvas sceneCanvas = sceneTarget.CreateCanvas())
                 {
