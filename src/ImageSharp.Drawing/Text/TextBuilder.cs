@@ -23,7 +23,7 @@ public static class TextBuilder
     /// </returns>
     public static IPathCollection GeneratePaths(string text, TextOptions textOptions)
     {
-        GlyphBuilder glyphBuilder = new();
+        using GlyphBuilder glyphBuilder = new();
         TextRenderer renderer = new(glyphBuilder);
 
         renderer.Render(text, textOptions);
@@ -43,7 +43,7 @@ public static class TextBuilder
     /// </returns>
     public static IPathCollection GeneratePaths(ReadOnlySpan<ushort> glyphIds, ReadOnlySpan<Vector2> points, GlyphOptions glyphOptions)
     {
-        GlyphBuilder glyphBuilder = new();
+        using GlyphBuilder glyphBuilder = new();
         TextRenderer renderer = new(glyphBuilder);
 
         renderer.Render(glyphIds, points, glyphOptions);
@@ -63,7 +63,7 @@ public static class TextBuilder
     /// </returns>
     public static IReadOnlyList<GlyphPathCollection> GenerateGlyphs(ReadOnlySpan<ushort> glyphIds, ReadOnlySpan<Vector2> points, GlyphOptions glyphOptions)
     {
-        GlyphBuilder glyphBuilder = new();
+        using GlyphBuilder glyphBuilder = new();
         TextRenderer renderer = new(glyphBuilder);
 
         renderer.Render(glyphIds, points, glyphOptions);
@@ -82,7 +82,7 @@ public static class TextBuilder
     /// </returns>
     public static IReadOnlyList<GlyphPathCollection> GenerateGlyphs(string text, TextOptions textOptions)
     {
-        GlyphBuilder glyphBuilder = new();
+        using GlyphBuilder glyphBuilder = new();
         TextRenderer renderer = new(glyphBuilder);
 
         renderer.Render(text, textOptions);
@@ -104,7 +104,7 @@ public static class TextBuilder
     public static IPathCollection GeneratePaths(string text, IPath path, TextOptions textOptions)
     {
         (IPath Path, TextOptions TextOptions) transformed = ConfigureOptions(textOptions, path);
-        GlyphBuilder glyphBuilder = new(transformed.Path);
+        using GlyphBuilder glyphBuilder = new(transformed.Path);
         TextRenderer renderer = new(glyphBuilder);
 
         renderer.Render(text, transformed.TextOptions);
@@ -126,7 +126,7 @@ public static class TextBuilder
     public static IReadOnlyList<GlyphPathCollection> GenerateGlyphs(string text, IPath path, TextOptions textOptions)
     {
         (IPath Path, TextOptions TextOptions) transformed = ConfigureOptions(textOptions, path);
-        GlyphBuilder glyphBuilder = new(transformed.Path);
+        using GlyphBuilder glyphBuilder = new(transformed.Path);
         TextRenderer renderer = new(glyphBuilder);
 
         renderer.Render(text, transformed.TextOptions);

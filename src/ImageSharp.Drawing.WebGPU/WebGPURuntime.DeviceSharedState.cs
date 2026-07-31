@@ -314,7 +314,7 @@ internal static unsafe partial class WebGPURuntime
         /// <summary>
         /// Gets the linear filtering sampler shared by layer-effect shader passes on this device.
         /// </summary>
-        public WGPUSamplerImpl* EffectFilteringSampler { get; }
+        public WGPUSamplerImpl* EffectFilteringSampler { get; private set; }
 
         /// <summary>
         /// Gets a value indicating whether the native runtime has reported this device as lost.
@@ -991,6 +991,7 @@ internal static unsafe partial class WebGPURuntime
             this.effectPipelines.Clear();
 
             this.Api.SamplerRelease(this.EffectFilteringSampler);
+            this.EffectFilteringSampler = null;
 
             lock (this.statusReadbackSync)
             {

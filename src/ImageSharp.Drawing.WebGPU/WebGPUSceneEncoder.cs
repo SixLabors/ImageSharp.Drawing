@@ -3484,6 +3484,7 @@ internal static class WebGPUSceneEncoder
         private readonly IMemoryOwner<uint> stylesOwner;
         private readonly IMemoryOwner<uint>? gradientPixelsOwner;
         private readonly IMemoryOwner<uint>? pathGradientDataOwner;
+        private bool disposed;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SceneEncodingPartition"/> class.
@@ -3805,6 +3806,12 @@ internal static class WebGPUSceneEncoder
         /// </summary>
         public void Dispose()
         {
+            if (this.disposed)
+            {
+                return;
+            }
+
+            this.disposed = true;
             this.pathTagsOwner.Dispose();
             this.pathDataOwner.Dispose();
             this.drawTagsOwner.Dispose();
@@ -7509,7 +7516,7 @@ internal ref struct OwnedStream<T>
     where T : unmanaged
 {
     private readonly MemoryAllocator allocator;
-    private IMemoryOwner<T> owner;
+    private IMemoryOwner<T>? owner;
     private Span<T> span;
 
     /// <summary>
@@ -7590,23 +7597,28 @@ internal ref struct OwnedStream<T>
     public void Advance(int count) => this.Count += count;
 
     /// <summary>
-    /// Disposes the current owner and clears the stream state.
+    /// Disposes the current owner and clears the stream state. The owner slot is nulled so a
+    /// dispose after <see cref="DetachOwner"/> cannot return the transferred owner to the
+    /// allocator a second time.
     /// </summary>
     public void Dispose()
     {
-        this.owner.Dispose();
+        this.owner?.Dispose();
+        this.owner = null;
         this.span = default;
         this.Count = 0;
     }
 
     /// <summary>
-    /// Detaches the current owner from the stream without copying.
+    /// Detaches the current owner from the stream without copying. The owner slot is nulled so
+    /// a later dispose cannot release the transferred owner.
     /// </summary>
     /// <returns>The detached owner.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IMemoryOwner<T> DetachOwner()
     {
-        IMemoryOwner<T> detached = this.owner;
+        IMemoryOwner<T> detached = this.owner!;
+        this.owner = null;
         this.span = default;
         this.Count = 0;
         return detached;
@@ -7627,7 +7639,7 @@ internal ref struct OwnedStream<T>
         // required size when a caller has already pre-reserved a larger single jump.
         IMemoryOwner<T> next = this.allocator.Allocate<T>(Math.Max(requiredCapacity, this.span.Length * 2));
         this.span[..this.Count].CopyTo(next.Memory.Span);
-        this.owner.Dispose();
+        this.owner!.Dispose();
         this.owner = next;
         this.span = next.Memory.Span;
     }

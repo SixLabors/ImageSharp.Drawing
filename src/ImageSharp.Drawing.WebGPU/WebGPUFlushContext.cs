@@ -655,6 +655,11 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             return;
         }
 
+        // The flag is set before any release so a throw mid-teardown cannot leave a
+        // re-runnable context: a second Dispose over the still-populated lists would
+        // release every tracked object twice and double-return pooled rentals.
+        this.disposed = true;
+
         // Ordering: end any open passes before releasing the encoder they were recorded on,
         // then release the encoder before the transient objects it may still reference.
         this.EndComputePassIfOpen();
@@ -732,8 +737,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         this.pooledTextures.Clear();
         this.pooledUniformBuffers.Clear();
-
-        this.disposed = true;
     }
 
     /// <summary>

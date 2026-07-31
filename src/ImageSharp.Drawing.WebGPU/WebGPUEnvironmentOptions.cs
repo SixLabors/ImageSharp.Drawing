@@ -21,11 +21,4 @@ public sealed class WebGPUEnvironmentOptions
     /// Gets or sets the adapter power preference requested for the library-managed device.
     /// </summary>
     public WebGPUPowerPreference PowerPreference { get; set; } = WebGPUPowerPreference.HighPerformance;
-
-    /// <summary>
-    /// Gets or sets a value indicating whether adapter requests are restricted to the platform's
-    /// software fallback adapter, such as WARP on Windows. Software adapters match the rendering
-    /// environment of GPU-less continuous-integration machines.
-    /// </summary>
-    public bool ForceFallbackAdapter { get; set; }
 }

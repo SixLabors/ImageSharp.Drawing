@@ -1093,7 +1093,10 @@ public sealed partial class DefaultDrawingBackend
                 return current;
             }
 
+            // Null before allocating: an allocation throw must not leave the field pointing at
+            // the disposed scratch, or later rows read released memory and Dispose re-releases it.
             current?.Dispose();
+            this.scratch = null;
             this.scratch = DefaultRasterizer.CreateWorkerScratch(this.allocator, requiredWidth);
             return this.scratch;
         }
@@ -1111,7 +1114,9 @@ public sealed partial class DefaultDrawingBackend
                 return current;
             }
 
+            // Null before allocating; see GetOrCreateScratch.
             current?.Dispose();
+            this.pathClipScratch = null;
             this.pathClipScratch = DefaultRasterizer.CreateWorkerScratch(this.allocator, requiredWidth);
             return this.pathClipScratch;
         }
@@ -1126,7 +1131,9 @@ public sealed partial class DefaultDrawingBackend
             IMemoryOwner<float>? current = this.pathClipCoverageOwner;
             if (current is null || current.Memory.Length < requiredLength)
             {
+                // Null before allocating; see GetOrCreateScratch.
                 current?.Dispose();
+                this.pathClipCoverageOwner = null;
                 this.pathClipCoverageOwner = this.allocator.Allocate<float>(requiredLength);
             }
 
@@ -1135,13 +1142,17 @@ public sealed partial class DefaultDrawingBackend
         }
 
         /// <summary>
-        /// Releases the worker-local scratch and brush workspace.
+        /// Releases the worker-local scratch and brush workspace. The scratch fields are nulled
+        /// so a disposed state can never hand out spans over returned pool memory.
         /// </summary>
         public void Dispose()
         {
             this.scratch?.Dispose();
+            this.scratch = null;
             this.pathClipScratch?.Dispose();
+            this.pathClipScratch = null;
             this.pathClipCoverageOwner?.Dispose();
+            this.pathClipCoverageOwner = null;
             this.BrushWorkspace.Dispose();
         }
 

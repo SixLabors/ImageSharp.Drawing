@@ -15,7 +15,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
 /// <summary>
 /// Allows the rendering of rich text configured via <see cref="RichTextOptions"/>.
 /// </summary>
-internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposable
+internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
 {
     // --- Render-pass ordering constants ---
     // Within DrawTextOperations, operations are sorted first by RenderPass so that
@@ -52,7 +52,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     private readonly Brush? defaultBrush;
 
     /// <summary>
-    /// Set once <see cref="Dispose()"/> has run; guards against double disposal.
+    /// Set once this renderer's disposal has run; guards the override independently of the base guard.
     /// </summary>
     private bool isDisposed;
 
@@ -712,31 +712,28 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         this.glyphCache.GetOrAdd(this.currentCacheKey).Add(renderData);
     }
 
-    /// <inheritdoc />
-    public void Dispose() => this.Dispose(true);
-
     /// <summary>
     /// Truncates a floating-point position to the nearest whole pixel toward negative infinity.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Point ClampToPixel(PointF point) => Point.Truncate(point);
 
-    /// <summary>
-    /// Releases managed resources owned by this renderer.
-    /// </summary>
-    /// <param name="disposing"><see langword="true"/> to release managed resources.</param>
-    private void Dispose(bool disposing)
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
     {
-        if (!this.isDisposed)
+        if (this.isDisposed)
         {
-            if (disposing)
-            {
-                // The glyph cache is owned outside this renderer and outlives this draw call.
-                this.DrawingOperations.Clear();
-            }
-
-            this.isDisposed = true;
+            return;
         }
+
+        this.isDisposed = true;
+        if (disposing)
+        {
+            // The glyph cache is owned outside this renderer and outlives this draw call.
+            this.DrawingOperations.Clear();
+        }
+
+        base.Dispose(disposing);
     }
 
     /// <summary>

@@ -93,6 +93,22 @@ internal sealed unsafe class WebGPU
         => WebGPUNative.wgpuAdapterGetLimits(adapter, limits);
 
     /// <summary>
+    /// Queries an adapter's identity and classification.
+    /// </summary>
+    /// <param name="adapter">The adapter to query.</param>
+    /// <param name="info">Receives the adapter info; release with <see cref="AdapterInfoFreeMembers"/>.</param>
+    /// <returns>The query status.</returns>
+    public WGPUStatus AdapterGetInfo(WGPUAdapterImpl* adapter, WGPUAdapterInfo* info)
+        => WebGPUNative.wgpuAdapterGetInfo(adapter, info);
+
+    /// <summary>
+    /// Releases the allocated string members of an adapter info value.
+    /// </summary>
+    /// <param name="info">The adapter info whose members are released.</param>
+    public void AdapterInfoFreeMembers(WGPUAdapterInfo info)
+        => WebGPUNative.wgpuAdapterInfoFreeMembers(info);
+
+    /// <summary>
     /// Releases an adapter reference.
     /// </summary>
     /// <param name="adapter">The adapter to release.</param>

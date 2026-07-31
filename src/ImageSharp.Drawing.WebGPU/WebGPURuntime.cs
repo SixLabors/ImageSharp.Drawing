@@ -381,11 +381,7 @@ internal static unsafe partial class WebGPURuntime
             computePipelineProbeResult = exitCode switch
             {
                 0 => WebGPUEnvironmentError.Success,
-
-                // Codes one through nine are reserved for probe stages that completed and
-                // reported the adapter unsupported; everything else means the isolated
-                // process died mid-probe.
-                >= 1 and <= 9 => WebGPUEnvironmentError.ComputePipelineCreationFailed,
+                1 => WebGPUEnvironmentError.ComputePipelineCreationFailed,
                 _ => WebGPUEnvironmentError.ComputePipelineProbeProcessFailed,
             };
             return computePipelineProbeResult.Value;
@@ -393,13 +389,13 @@ internal static unsafe partial class WebGPURuntime
     }
 
     /// <summary>
-    /// Executes one isolated compute-pipeline creation and submission-readback probe for
+    /// Executes one isolated compute-pipeline creation probe for
     /// <see cref="WebGPUEnvironment.ProbeComputePipelineSupport()"/>.
     /// </summary>
     /// <returns>
-    /// <c>0</c> when pipeline creation and an indexed submission with buffer readback succeeded;
-    /// <c>1</c> when the probe completed and reported failure.
-    /// Any other value means the isolated probe process terminated before the probe could return normally.
+    /// <c>0</c> when pipeline creation succeeded; <c>1</c> when the probe completed and reported
+    /// failure. Any other value means the isolated probe process terminated before the probe
+    /// could return normally.
     /// </returns>
     public static int RunComputePipelineSupportProbe()
     {
@@ -414,9 +410,7 @@ internal static unsafe partial class WebGPURuntime
 
             WebGPU api = GetApi();
             using WebGPUHandle.HandleReference deviceReference = deviceHandle.AcquireReference();
-            using WebGPUHandle.HandleReference queueReference = queueHandle.AcquireReference();
             WGPUDeviceImpl* device = (WGPUDeviceImpl*)deviceReference.Handle;
-            WGPUQueueImpl* queue = (WGPUQueueImpl*)queueReference.Handle;
 
             ReadOnlySpan<byte> probeShader = "@compute @workgroup_size(1) fn main() {}\0"u8;
 
@@ -477,22 +471,7 @@ internal static unsafe partial class WebGPURuntime
                             }
 
                             api.ComputePipelineRelease(pipeline);
-
-                            // Pipeline creation and even trivial submissions succeed on adapters
-                            // whose execution or render path later fails natively, so the probe
-                            // proves each deeper capability in turn. The distinct exit codes name
-                            // the first stage that failed.
-                            if (!ProbeSubmissionReadback(api, device, queue))
-                            {
-                                return 2;
-                            }
-
-                            if (!ProbeComputeDispatch(api, device, queue))
-                            {
-                                return 3;
-                            }
-
-                            return ProbeSceneRenderReadback() ? 0 : 4;
+                            return 0;
                         }
                         finally
                         {
@@ -509,412 +488,6 @@ internal static unsafe partial class WebGPURuntime
         catch
         {
             return 1;
-        }
-    }
-
-    /// <summary>
-    /// Exercises one indexed queue submission and buffer readback against the probe device.
-    /// </summary>
-    /// <param name="api">The WebGPU API loader.</param>
-    /// <param name="device">The probe device.</param>
-    /// <param name="queue">The probe device's queue.</param>
-    /// <returns><see langword="true"/> when the submission completed and the readback buffer mapped.</returns>
-    private static bool ProbeSubmissionReadback(WebGPU api, WGPUDeviceImpl* device, WGPUQueueImpl* queue)
-    {
-        // Buffer-to-buffer copies require four-byte multiples; one readback row-alignment unit
-        // keeps the probe within every adapter's minimum resource limits.
-        const ulong probeByteCount = 256;
-
-        WGPUBufferImpl* sourceBuffer = null;
-        WGPUBufferImpl* readbackBuffer = null;
-        WGPUCommandEncoderImpl* commandEncoder = null;
-        WGPUCommandBufferImpl* commandBuffer = null;
-        try
-        {
-            WGPUBufferDescriptor sourceDescriptor = new()
-            {
-                usage = (ulong)BufferUsage.CopySrc,
-                size = probeByteCount,
-                mappedAtCreation = 0U,
-            };
-
-            WGPUBufferDescriptor readbackDescriptor = new()
-            {
-                usage = (ulong)(BufferUsage.CopyDst | BufferUsage.MapRead),
-                size = probeByteCount,
-                mappedAtCreation = 0U,
-            };
-
-            sourceBuffer = api.DeviceCreateBuffer(device, in sourceDescriptor);
-            readbackBuffer = api.DeviceCreateBuffer(device, in readbackDescriptor);
-            if (sourceBuffer is null || readbackBuffer is null)
-            {
-                return false;
-            }
-
-            WGPUCommandEncoderDescriptor encoderDescriptor = default;
-            commandEncoder = api.DeviceCreateCommandEncoder(device, in encoderDescriptor);
-            if (commandEncoder is null)
-            {
-                return false;
-            }
-
-            // The copy is the smallest command whose completion is observable from the host
-            // through a mappable buffer, making the submission's progress provable.
-            api.CommandEncoderCopyBufferToBuffer(commandEncoder, sourceBuffer, 0, readbackBuffer, 0, probeByteCount);
-
-            WGPUCommandBufferDescriptor commandBufferDescriptor = default;
-            commandBuffer = api.CommandEncoderFinish(commandEncoder, in commandBufferDescriptor);
-            if (commandBuffer is null)
-            {
-                return false;
-            }
-
-            ulong submissionIndex = api.QueueSubmitForIndex(queue, 1, ref commandBuffer);
-            return TryMapProbeBuffer(api, device, readbackBuffer, (nuint)probeByteCount, submissionIndex);
-        }
-        finally
-        {
-            if (commandBuffer is not null)
-            {
-                api.CommandBufferRelease(commandBuffer);
-            }
-
-            if (commandEncoder is not null)
-            {
-                api.CommandEncoderRelease(commandEncoder);
-            }
-
-            if (readbackBuffer is not null)
-            {
-                api.BufferRelease(readbackBuffer);
-            }
-
-            if (sourceBuffer is not null)
-            {
-                api.BufferRelease(sourceBuffer);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Maps a probe readback buffer after its submission and verifies readable bytes.
-    /// </summary>
-    /// <param name="api">The WebGPU API loader.</param>
-    /// <param name="device">The probe device.</param>
-    /// <param name="readbackBuffer">The mappable buffer written by the probe submission.</param>
-    /// <param name="byteCount">The buffer length in bytes.</param>
-    /// <param name="submissionIndex">The submission the map depends on.</param>
-    /// <returns><see langword="true"/> when the buffer mapped with readable data.</returns>
-    private static bool TryMapProbeBuffer(
-        WebGPU api,
-        WGPUDeviceImpl* device,
-        WGPUBufferImpl* readbackBuffer,
-        nuint byteCount,
-        ulong submissionIndex)
-    {
-        WGPUMapAsyncStatus mapStatus = default;
-        using ManualResetEventSlim mapReady = new(false);
-        void Callback(WGPUMapAsyncStatus status, void* userData)
-        {
-            _ = userData;
-            mapStatus = status;
-            mapReady.Set();
-        }
-
-        using WebGPUBufferMapCallback callback = WebGPUBufferMapCallback.From(Callback);
-        api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, byteCount, callback, null);
-
-        // Non-blocking polls scoped to the submission index mirror the renderer's readback
-        // wait, and the managed timeout turns an adapter that never completes the submission
-        // into a probe failure instead of a hang.
-        Stopwatch stopwatch = Stopwatch.StartNew();
-        while (!mapReady.IsSet && stopwatch.ElapsedMilliseconds < CallbackTimeoutMilliseconds)
-        {
-            _ = api.DevicePoll(device, false, &submissionIndex);
-            if (!mapReady.IsSet)
-            {
-                Thread.Yield();
-            }
-        }
-
-        // The status keeps its default value when the callback never fired, so timeouts and
-        // explicit non-success map results fail through the same check.
-        if (!mapReady.IsSet || mapStatus != WGPUMapAsyncStatus.Success)
-        {
-            return false;
-        }
-
-        void* mapped = api.BufferGetConstMappedRange(readbackBuffer, 0, byteCount);
-        if (mapped is null)
-        {
-            return false;
-        }
-
-        api.BufferUnmap(readbackBuffer);
-        return true;
-    }
-
-    /// <summary>
-    /// Executes the chunk-reset production shader once and proves its submission completes.
-    /// </summary>
-    /// <param name="api">The WebGPU API loader.</param>
-    /// <param name="device">The probe device.</param>
-    /// <param name="queue">The probe device's queue.</param>
-    /// <returns><see langword="true"/> when the dispatch completed and the readback mapped.</returns>
-    /// <remarks>
-    /// The chunk-reset stage is the smallest production shader: one workgroup, one thread, one
-    /// storage binding. Executing it proves the adapter can run the full shader compilation
-    /// chain, which pipeline creation alone does not.
-    /// </remarks>
-    private static bool ProbeComputeDispatch(WebGPU api, WGPUDeviceImpl* device, WGPUQueueImpl* queue)
-    {
-        // The chunk-reset shader's single binding is one bump-allocators block, so the storage
-        // buffer must be exactly that size for the bind-group layout's minimum binding size.
-        nuint statusByteCount = (nuint)sizeof(GpuSceneBumpAllocators);
-
-        WGPUBufferImpl* storageBuffer = null;
-        WGPUBufferImpl* readbackBuffer = null;
-        WGPUShaderModuleImpl* shaderModule = null;
-        WGPUBindGroupLayoutImpl* bindGroupLayout = null;
-        WGPUPipelineLayoutImpl* pipelineLayout = null;
-        WGPUComputePipelineImpl* pipeline = null;
-        WGPUBindGroupImpl* bindGroup = null;
-        WGPUCommandEncoderImpl* commandEncoder = null;
-        WGPUCommandBufferImpl* commandBuffer = null;
-        try
-        {
-            WGPUBufferDescriptor storageDescriptor = new()
-            {
-                usage = (ulong)(BufferUsage.Storage | BufferUsage.CopySrc),
-                size = statusByteCount,
-                mappedAtCreation = 0U,
-            };
-
-            WGPUBufferDescriptor readbackDescriptor = new()
-            {
-                usage = (ulong)(BufferUsage.CopyDst | BufferUsage.MapRead),
-                size = statusByteCount,
-                mappedAtCreation = 0U,
-            };
-
-            // The shader writes the storage buffer, the copy drains it into the mappable
-            // readback buffer, and the map proves the whole chain executed on the adapter.
-            storageBuffer = api.DeviceCreateBuffer(device, in storageDescriptor);
-            readbackBuffer = api.DeviceCreateBuffer(device, in readbackDescriptor);
-            if (storageBuffer is null || readbackBuffer is null)
-            {
-                return false;
-            }
-
-            fixed (byte* shaderCodePtr = ChunkResetComputeShader.ShaderCode)
-            {
-                fixed (byte* entryPointPtr = ChunkResetComputeShader.EntryPoint)
-                {
-                    WGPUShaderSourceWGSL wgslDescriptor = new()
-                    {
-                        chain = new WGPUChainedStruct { sType = WGPUSType.ShaderSourceWGSL },
-                        code = shaderCodePtr
-                    };
-
-                    WGPUShaderModuleDescriptor shaderDescriptor = new()
-                    {
-                        nextInChain = (WGPUChainedStruct*)&wgslDescriptor
-                    };
-
-                    shaderModule = api.DeviceCreateShaderModule(device, in shaderDescriptor);
-                    if (shaderModule is null
-                        || !ChunkResetComputeShader.TryCreateBindGroupLayout(api, device, out bindGroupLayout, out _))
-                    {
-                        return false;
-                    }
-
-                    WGPUBindGroupLayoutImpl** layouts = stackalloc WGPUBindGroupLayoutImpl*[1] { bindGroupLayout };
-                    WGPUPipelineLayoutDescriptor layoutDescriptor = new()
-                    {
-                        bindGroupLayoutCount = 1,
-                        bindGroupLayouts = layouts
-                    };
-
-                    pipelineLayout = api.DeviceCreatePipelineLayout(device, in layoutDescriptor);
-                    if (pipelineLayout is null)
-                    {
-                        return false;
-                    }
-
-                    WGPUComputePipelineDescriptor pipelineDescriptor = new()
-                    {
-                        layout = pipelineLayout,
-                        compute = new WGPUComputeState
-                        {
-                            module = shaderModule,
-                            entryPoint = entryPointPtr
-                        }
-                    };
-
-                    pipeline = api.DeviceCreateComputePipeline(device, in pipelineDescriptor);
-                    if (pipeline is null)
-                    {
-                        return false;
-                    }
-                }
-            }
-
-            // Bind-group creation copies the entries during the call, so stack storage is safe.
-            WGPUBindGroupEntry* bindEntries = stackalloc WGPUBindGroupEntry[1];
-            bindEntries[0] = new WGPUBindGroupEntry
-            {
-                binding = 0,
-                buffer = storageBuffer,
-                offset = 0,
-                size = statusByteCount
-            };
-
-            WGPUBindGroupDescriptor bindGroupDescriptor = new()
-            {
-                layout = bindGroupLayout,
-                entryCount = 1,
-                entries = bindEntries
-            };
-
-            bindGroup = api.DeviceCreateBindGroup(device, in bindGroupDescriptor);
-            if (bindGroup is null)
-            {
-                return false;
-            }
-
-            WGPUCommandEncoderDescriptor encoderDescriptor = default;
-            commandEncoder = api.DeviceCreateCommandEncoder(device, in encoderDescriptor);
-            if (commandEncoder is null)
-            {
-                return false;
-            }
-
-            WGPUComputePassDescriptor passDescriptor = default;
-            WGPUComputePassEncoderImpl* pass = api.CommandEncoderBeginComputePass(commandEncoder, in passDescriptor);
-            if (pass is null)
-            {
-                return false;
-            }
-
-            // The pass must be ended and released before the encoder can record the copy;
-            // an open pass makes every later encoder command invalid.
-            api.ComputePassEncoderSetPipeline(pass, pipeline);
-            api.ComputePassEncoderSetBindGroup(pass, 0, bindGroup, 0, null);
-            api.ComputePassEncoderDispatchWorkgroups(pass, ChunkResetComputeShader.GetDispatchX(), 1, 1);
-            api.ComputePassEncoderEnd(pass);
-            api.ComputePassEncoderRelease(pass);
-
-            // Queue ordering guarantees the dispatch's writes are visible to the copy inside
-            // the same submission, so no host-side synchronization sits between them.
-            api.CommandEncoderCopyBufferToBuffer(commandEncoder, storageBuffer, 0, readbackBuffer, 0, statusByteCount);
-
-            WGPUCommandBufferDescriptor commandBufferDescriptor = default;
-            commandBuffer = api.CommandEncoderFinish(commandEncoder, in commandBufferDescriptor);
-            if (commandBuffer is null)
-            {
-                return false;
-            }
-
-            ulong submissionIndex = api.QueueSubmitForIndex(queue, 1, ref commandBuffer);
-            return TryMapProbeBuffer(api, device, readbackBuffer, statusByteCount, submissionIndex);
-        }
-        finally
-        {
-            // Releases run in reverse creation order so no object outlives one it references.
-            if (commandBuffer is not null)
-            {
-                api.CommandBufferRelease(commandBuffer);
-            }
-
-            if (commandEncoder is not null)
-            {
-                api.CommandEncoderRelease(commandEncoder);
-            }
-
-            if (bindGroup is not null)
-            {
-                api.BindGroupRelease(bindGroup);
-            }
-
-            if (pipeline is not null)
-            {
-                api.ComputePipelineRelease(pipeline);
-            }
-
-            if (pipelineLayout is not null)
-            {
-                api.PipelineLayoutRelease(pipelineLayout);
-            }
-
-            if (bindGroupLayout is not null)
-            {
-                api.BindGroupLayoutRelease(bindGroupLayout);
-            }
-
-            if (shaderModule is not null)
-            {
-                api.ShaderModuleRelease(shaderModule);
-            }
-
-            if (readbackBuffer is not null)
-            {
-                api.BufferRelease(readbackBuffer);
-            }
-
-            if (storageBuffer is not null)
-            {
-                api.BufferRelease(storageBuffer);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Renders one small retained scene containing a layer boundary and reads the result back.
-    /// </summary>
-    /// <returns><see langword="true"/> when the render completed and the target read back.</returns>
-    /// <remarks>
-    /// Layered retained scenes drive intermediate targets through the full submission and
-    /// readback pipeline, which is the workload software adapters fail on while passing
-    /// simpler probes.
-    /// </remarks>
-    private static bool ProbeSceneRenderReadback()
-    {
-        try
-        {
-            DrawingBackendScene? scene = null;
-            try
-            {
-                // A fill plus a blended layer is the smallest scene that records a layer
-                // boundary into the retained command stream, so its replay drives the full
-                // scheduling, fine, and composition pipeline the renderer uses.
-                using (WebGPURenderTarget sceneTarget = new(16, 16))
-                using (DrawingCanvas sceneCanvas = sceneTarget.CreateCanvas())
-                {
-                    sceneCanvas.Fill(Brushes.Solid(Color.Red), new RectanglePolygon(2, 2, 12, 12));
-                    sceneCanvas.SaveLayer(new GraphicsOptions { BlendPercentage = 0.65F }, new Rectangle(4, 4, 8, 8));
-                    sceneCanvas.Fill(Brushes.Solid(Color.Blue), new RectanglePolygon(5, 5, 8, 8));
-                    sceneCanvas.Restore();
-                    scene = sceneCanvas.CreateScene();
-                }
-
-                using WebGPURenderTarget renderTarget = new(16, 16);
-                using (DrawingCanvas canvas = renderTarget.CreateCanvas())
-                {
-                    canvas.RenderScene(scene);
-                }
-
-                using Image<PixelFormats.Rgba32> image = renderTarget.ReadbackImage<PixelFormats.Rgba32>();
-                return image.Width == 16;
-            }
-            finally
-            {
-                scene?.Dispose();
-            }
-        }
-        catch
-        {
-            return false;
         }
     }
 
@@ -1166,7 +739,6 @@ internal static unsafe partial class WebGPURuntime
         WGPURequestAdapterOptions options = new()
         {
             compatibleSurface = compatibleSurface,
-            forceFallbackAdapter = environmentOptions.ForceFallbackAdapter ? 1u : 0u,
             powerPreference = environmentOptions.PowerPreference switch
             {
                 WebGPUPowerPreference.Default => WGPUPowerPreference.Undefined,
@@ -1202,6 +774,23 @@ internal static unsafe partial class WebGPURuntime
         {
             errorCode = WebGPUEnvironmentError.AdapterRequestFailed;
             return false;
+        }
+
+        // A software rasterizer cannot run this backend's shader pipeline; GPU-less machines are
+        // served by the CPU drawing backend. Rejecting at adapter selection keeps the check free
+        // of device creation, submissions, and readbacks.
+        WGPUAdapterInfo adapterInfo = default;
+        if (api.AdapterGetInfo(callbackAdapter, &adapterInfo) == WGPUStatus.Success)
+        {
+            WGPUAdapterType adapterType = adapterInfo.adapterType;
+            api.AdapterInfoFreeMembers(adapterInfo);
+            if (adapterType == WGPUAdapterType.CPU)
+            {
+                api.AdapterRelease(callbackAdapter);
+                adapter = null;
+                errorCode = WebGPUEnvironmentError.SoftwareAdapterUnsupported;
+                return false;
+            }
         }
 
         errorCode = WebGPUEnvironmentError.Success;

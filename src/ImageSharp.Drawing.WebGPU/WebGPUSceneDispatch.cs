@@ -229,7 +229,8 @@ internal static class WebGPUSceneDispatch
                     config,
                     default,
                     chunkingRequired ? bindingLimitFailure : BindingLimitFailure.None,
-                    ownsEncodedScene: false);
+                    false,
+                    true);
             }
 
             if (!WebGPUSceneResources.TryCreate<TPixel>(flushContext, encodedScene, config, baseColor, ref resourceArena, out WebGPUSceneResourceSet resources, out error))
@@ -243,7 +244,8 @@ internal static class WebGPUSceneDispatch
                 config,
                 resources,
                 chunkingRequired ? bindingLimitFailure : BindingLimitFailure.None,
-                ownsEncodedScene: false);
+                false,
+                true);
         }
         catch
         {
@@ -1356,7 +1358,7 @@ internal static class WebGPUSceneDispatch
 
                 WebGPUStagedScene chunkScene = stagedScene.Range.HasValue
                     ? new WebGPUStagedScene(flushContext, encodedScene, stagedScene.Range.Value, chunkConfig, stagedScene.Resources, BindingLimitFailure.None)
-                    : new WebGPUStagedScene(flushContext, encodedScene, chunkConfig, stagedScene.Resources, BindingLimitFailure.None);
+                    : new WebGPUStagedScene(flushContext, encodedScene, chunkConfig, stagedScene.Resources, BindingLimitFailure.None, false, false);
 
                 WebGPUSceneSchedulingArena currentArena = EnsureSchedulingArena(
                     flushContext,
@@ -1437,46 +1439,75 @@ internal static class WebGPUSceneDispatch
         WebGPUSceneBufferSizes bufferSizes,
         nuint readbackByteLength)
     {
-        WGPUBufferImpl* binHeaderBuffer = CreateArenaStorageBuffer(flushContext, bufferSizes.BinHeaders.ByteLength);
-        WGPUBufferImpl* indirectCountBuffer = CreateArenaIndirectStorageBuffer(flushContext, bufferSizes.IndirectCount.ByteLength);
-        WGPUBufferImpl* pathRowBuffer = CreateArenaStorageBuffer(flushContext, bufferSizes.PathRows.ByteLength);
-        WGPUBufferImpl* pathTileBuffer = CreateArenaStorageBuffer(flushContext, bufferSizes.PathTiles.ByteLength);
-        WGPUBufferImpl* segCountBuffer = CreateArenaStorageBuffer(flushContext, bufferSizes.SegCounts.ByteLength);
-        WGPUBufferImpl* segmentBuffer = CreateArenaStorageBuffer(flushContext, bufferSizes.Segments.ByteLength);
-        WGPUBufferImpl* blendBuffer = CreateArenaStorageBuffer(flushContext, bufferSizes.BlendSpill.ByteLength);
-        WGPUBufferImpl* ptclBuffer = CreateArenaStorageBuffer(flushContext, bufferSizes.Ptcl.ByteLength);
+        WGPUBufferImpl* binHeaderBuffer = null;
+        WGPUBufferImpl* indirectCountBuffer = null;
+        WGPUBufferImpl* pathRowBuffer = null;
+        WGPUBufferImpl* pathTileBuffer = null;
+        WGPUBufferImpl* segCountBuffer = null;
+        WGPUBufferImpl* segmentBuffer = null;
+        WGPUBufferImpl* blendBuffer = null;
+        WGPUBufferImpl* ptclBuffer = null;
+        WGPUBufferImpl* bumpBuffer = null;
 
-        GpuSceneBumpAllocators bumpAllocators = default;
-        WGPUBufferImpl* bumpBuffer = CreateAndUploadArenaStorageBuffer(flushContext, in bumpAllocators);
-
-        WGPUBufferDescriptor readbackDescriptor = new()
+        try
         {
-            usage = (ulong)(BufferUsage.CopyDst | BufferUsage.MapRead),
-            size = readbackByteLength,
-            mappedAtCreation = 0U,
-        };
+            binHeaderBuffer = CreateArenaStorageBuffer(flushContext, bufferSizes.BinHeaders.ByteLength);
+            indirectCountBuffer = CreateArenaIndirectStorageBuffer(flushContext, bufferSizes.IndirectCount.ByteLength);
+            pathRowBuffer = CreateArenaStorageBuffer(flushContext, bufferSizes.PathRows.ByteLength);
+            pathTileBuffer = CreateArenaStorageBuffer(flushContext, bufferSizes.PathTiles.ByteLength);
+            segCountBuffer = CreateArenaStorageBuffer(flushContext, bufferSizes.SegCounts.ByteLength);
+            segmentBuffer = CreateArenaStorageBuffer(flushContext, bufferSizes.Segments.ByteLength);
+            blendBuffer = CreateArenaStorageBuffer(flushContext, bufferSizes.BlendSpill.ByteLength);
+            ptclBuffer = CreateArenaStorageBuffer(flushContext, bufferSizes.Ptcl.ByteLength);
 
-        WGPUBufferImpl* readbackBuffer;
-        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
-        {
-            readbackBuffer = flushContext.Api.DeviceCreateBuffer((WGPUDeviceImpl*)deviceReference.Handle, in readbackDescriptor);
+            GpuSceneBumpAllocators bumpAllocators = default;
+            bumpBuffer = CreateAndUploadArenaStorageBuffer(flushContext, in bumpAllocators);
+
+            WGPUBufferDescriptor readbackDescriptor = new()
+            {
+                usage = (ulong)(BufferUsage.CopyDst | BufferUsage.MapRead),
+                size = readbackByteLength,
+                mappedAtCreation = 0U,
+            };
+
+            WGPUBufferImpl* readbackBuffer;
+            using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
+            {
+                readbackBuffer = flushContext.Api.DeviceCreateBuffer((WGPUDeviceImpl*)deviceReference.Handle, in readbackDescriptor);
+            }
+
+            return new WebGPUSceneSchedulingArena(
+                flushContext.Api,
+                flushContext.DeviceHandle,
+                bufferSizes,
+                readbackByteLength,
+                binHeaderBuffer,
+                indirectCountBuffer,
+                pathRowBuffer,
+                pathTileBuffer,
+                segCountBuffer,
+                segmentBuffer,
+                blendBuffer,
+                ptclBuffer,
+                bumpBuffer,
+                readbackBuffer);
         }
-
-        return new WebGPUSceneSchedulingArena(
-            flushContext.Api,
-            flushContext.DeviceHandle,
-            bufferSizes,
-            readbackByteLength,
-            binHeaderBuffer,
-            indirectCountBuffer,
-            pathRowBuffer,
-            pathTileBuffer,
-            segCountBuffer,
-            segmentBuffer,
-            blendBuffer,
-            ptclBuffer,
-            bumpBuffer,
-            readbackBuffer);
+        catch
+        {
+            // Nothing owns these buffers until the arena is constructed; a throw mid-sequence
+            // (a closed device handle, checked-size overflow) must release the ones created.
+            WebGPU api = flushContext.Api;
+            WebGPUSceneSchedulingArena.ReleaseArenaBuffer(api, binHeaderBuffer);
+            WebGPUSceneSchedulingArena.ReleaseArenaBuffer(api, indirectCountBuffer);
+            WebGPUSceneSchedulingArena.ReleaseArenaBuffer(api, pathRowBuffer);
+            WebGPUSceneSchedulingArena.ReleaseArenaBuffer(api, pathTileBuffer);
+            WebGPUSceneSchedulingArena.ReleaseArenaBuffer(api, segCountBuffer);
+            WebGPUSceneSchedulingArena.ReleaseArenaBuffer(api, segmentBuffer);
+            WebGPUSceneSchedulingArena.ReleaseArenaBuffer(api, blendBuffer);
+            WebGPUSceneSchedulingArena.ReleaseArenaBuffer(api, ptclBuffer);
+            WebGPUSceneSchedulingArena.ReleaseArenaBuffer(api, bumpBuffer);
+            throw;
+        }
     }
 
     /// <summary>
@@ -1910,7 +1941,7 @@ internal static class WebGPUSceneDispatch
                     // different from the previous chunk if the scene has non-uniform density).
                     WebGPUStagedScene chunkScene = stagedScene.Range.HasValue
                         ? new WebGPUStagedScene(flushContext, encodedScene, stagedScene.Range.Value, chunkConfig, stagedScene.Resources, BindingLimitFailure.None)
-                        : new WebGPUStagedScene(flushContext, encodedScene, chunkConfig, stagedScene.Resources, BindingLimitFailure.None);
+                        : new WebGPUStagedScene(flushContext, encodedScene, chunkConfig, stagedScene.Resources, BindingLimitFailure.None, false, false);
                     WebGPUSceneSchedulingArena currentArena = EnsureSchedulingArena(flushContext, chunkConfig.BufferSizes, readbackByteLength, ref schedulingArena);
                     WGPUBufferImpl* statusReadbackBuffer = deferOverflowCheck ? deferredReadbackBuffer : currentArena.ReadbackBuffer;
 
@@ -3152,13 +3183,24 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        pendingStatus = new WebGPUPendingSchedulingStatus(
-            flushContext.Api,
-            flushContext.DeviceHandle,
-            flushContext.DeviceState,
-            readbackBuffer,
-            stagedScene.Config.BumpSizes,
-            submissionIndex);
+        try
+        {
+            pendingStatus = new WebGPUPendingSchedulingStatus(
+                flushContext.Api,
+                flushContext.DeviceHandle,
+                flushContext.DeviceState,
+                readbackBuffer,
+                stagedScene.Config.BumpSizes,
+                submissionIndex);
+        }
+        catch
+        {
+            // The ctor starts the map, so on a throw the buffer may already have a pending map
+            // and must be released outright rather than recycled through the pool.
+            flushContext.Api.BufferRelease(readbackBuffer);
+            throw;
+        }
+
         return true;
     }
 
@@ -5295,40 +5337,25 @@ internal readonly struct WebGPUStagedScene : IDisposable
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUStagedScene"/> struct for a full scene
-    /// whose encoded payload is owned (and disposed) by the staged scene.
+    /// with explicit encoded-scene and flush-context ownership. Chunk-scoped views over another
+    /// staged scene must own neither: disposing a chunk view would otherwise tear down the outer
+    /// flush mid-render and dispose the caller-owned retained payload.
     /// </summary>
-    /// <param name="flushContext">The flush context owned by this staged scene.</param>
-    /// <param name="encodedScene">The encoded scene payload, disposed with this instance.</param>
-    /// <param name="config">The dispatch and buffer plan for the scene.</param>
-    /// <param name="resources">The flush-scoped GPU resources created for the scene.</param>
-    /// <param name="bindingLimitFailure">The recorded binding-limit overflow, if any.</param>
-    public WebGPUStagedScene(
-        WebGPUFlushContext flushContext,
-        WebGPUEncodedScene encodedScene,
-        WebGPUSceneConfig config,
-        WebGPUSceneResourceSet resources,
-        WebGPUSceneDispatch.BindingLimitFailure bindingLimitFailure)
-        : this(flushContext, encodedScene, config, resources, bindingLimitFailure, ownsEncodedScene: true)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUStagedScene"/> struct for a full scene
-    /// with explicit encoded-scene ownership; the flush context is always owned.
-    /// </summary>
-    /// <param name="flushContext">The flush context owned by this staged scene.</param>
+    /// <param name="flushContext">The flush context recording this staged scene.</param>
     /// <param name="encodedScene">The encoded scene payload.</param>
     /// <param name="config">The dispatch and buffer plan for the scene.</param>
     /// <param name="resources">The flush-scoped GPU resources created for the scene.</param>
     /// <param name="bindingLimitFailure">The recorded binding-limit overflow, if any.</param>
     /// <param name="ownsEncodedScene">Whether disposing this staged scene also disposes <paramref name="encodedScene"/>.</param>
+    /// <param name="ownsFlushContext">Whether disposing this staged scene also disposes <paramref name="flushContext"/>.</param>
     public WebGPUStagedScene(
         WebGPUFlushContext flushContext,
         WebGPUEncodedScene encodedScene,
         WebGPUSceneConfig config,
         WebGPUSceneResourceSet resources,
         WebGPUSceneDispatch.BindingLimitFailure bindingLimitFailure,
-        bool ownsEncodedScene)
+        bool ownsEncodedScene,
+        bool ownsFlushContext)
     {
         this.FlushContext = flushContext;
         this.EncodedScene = encodedScene;
@@ -5337,7 +5364,7 @@ internal readonly struct WebGPUStagedScene : IDisposable
         this.BindingLimitFailure = bindingLimitFailure;
         this.OwnsEncodedScene = ownsEncodedScene;
         this.Range = null;
-        this.OwnsFlushContext = true;
+        this.OwnsFlushContext = ownsFlushContext;
     }
 
     /// <summary>
@@ -5519,6 +5546,8 @@ internal readonly unsafe struct WebGPUSceneSchedulingResources
 /// </remarks>
 internal sealed unsafe class WebGPUSceneSchedulingArena
 {
+    private int disposed;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUSceneSchedulingArena"/> class.
     /// </summary>
@@ -5592,52 +5621,52 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
     /// <summary>
     /// Gets the bin-header scratch buffer.
     /// </summary>
-    public WGPUBufferImpl* BinHeaderBuffer { get; }
+    public WGPUBufferImpl* BinHeaderBuffer { get; private set; }
 
     /// <summary>
     /// Gets the indirect dispatch-count buffer.
     /// </summary>
-    public WGPUBufferImpl* IndirectCountBuffer { get; }
+    public WGPUBufferImpl* IndirectCountBuffer { get; private set; }
 
     /// <summary>
     /// Gets the sparse path-row scratch buffer.
     /// </summary>
-    public WGPUBufferImpl* PathRowBuffer { get; }
+    public WGPUBufferImpl* PathRowBuffer { get; private set; }
 
     /// <summary>
     /// Gets the path-tile scratch buffer.
     /// </summary>
-    public WGPUBufferImpl* PathTileBuffer { get; }
+    public WGPUBufferImpl* PathTileBuffer { get; private set; }
 
     /// <summary>
     /// Gets the segment-count scratch buffer.
     /// </summary>
-    public WGPUBufferImpl* SegCountBuffer { get; }
+    public WGPUBufferImpl* SegCountBuffer { get; private set; }
 
     /// <summary>
     /// Gets the segment scratch buffer.
     /// </summary>
-    public WGPUBufferImpl* SegmentBuffer { get; }
+    public WGPUBufferImpl* SegmentBuffer { get; private set; }
 
     /// <summary>
     /// Gets the blend-spill scratch buffer.
     /// </summary>
-    public WGPUBufferImpl* BlendBuffer { get; }
+    public WGPUBufferImpl* BlendBuffer { get; private set; }
 
     /// <summary>
     /// Gets the PTCL scratch buffer.
     /// </summary>
-    public WGPUBufferImpl* PtclBuffer { get; }
+    public WGPUBufferImpl* PtclBuffer { get; private set; }
 
     /// <summary>
     /// Gets the bump-allocator buffer.
     /// </summary>
-    public WGPUBufferImpl* BumpBuffer { get; }
+    public WGPUBufferImpl* BumpBuffer { get; private set; }
 
     /// <summary>
     /// Gets the map-readable status readback buffer.
     /// </summary>
-    public WGPUBufferImpl* ReadbackBuffer { get; }
+    public WGPUBufferImpl* ReadbackBuffer { get; private set; }
 
     /// <summary>
     /// Returns true if every buffer fits the required sizes for this scene.
@@ -5669,27 +5698,40 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
            readbackByteLength <= this.ReadbackByteLength;
 
     /// <summary>
-    /// Releases all GPU buffers owned by this arena.
+    /// Releases all GPU buffers owned by this arena. Arena caches hand instances between
+    /// owners with atomic exchanges, so disposal can race; the exchanged flag guarantees the
+    /// native buffers are released exactly once, and nulling each handle turns any stale
+    /// reference into a failed <see cref="CanReuse"/> instead of a native use-after-free.
     /// </summary>
     /// <param name="arena">The arena to dispose; <see langword="null"/> is ignored.</param>
     public static void Dispose(WebGPUSceneSchedulingArena? arena)
     {
-        if (arena is null || arena.BinHeaderBuffer is null)
+        if (arena is null || Interlocked.Exchange(ref arena.disposed, 1) == 1)
         {
             return;
         }
 
         WebGPU api = arena.Api;
         ReleaseArenaBuffer(api, arena.ReadbackBuffer);
+        arena.ReadbackBuffer = null;
         ReleaseArenaBuffer(api, arena.BumpBuffer);
+        arena.BumpBuffer = null;
         ReleaseArenaBuffer(api, arena.PtclBuffer);
+        arena.PtclBuffer = null;
         ReleaseArenaBuffer(api, arena.BlendBuffer);
+        arena.BlendBuffer = null;
         ReleaseArenaBuffer(api, arena.SegmentBuffer);
+        arena.SegmentBuffer = null;
         ReleaseArenaBuffer(api, arena.SegCountBuffer);
+        arena.SegCountBuffer = null;
         ReleaseArenaBuffer(api, arena.PathRowBuffer);
+        arena.PathRowBuffer = null;
         ReleaseArenaBuffer(api, arena.PathTileBuffer);
+        arena.PathTileBuffer = null;
         ReleaseArenaBuffer(api, arena.IndirectCountBuffer);
+        arena.IndirectCountBuffer = null;
         ReleaseArenaBuffer(api, arena.BinHeaderBuffer);
+        arena.BinHeaderBuffer = null;
     }
 
     /// <summary>
@@ -5698,7 +5740,7 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
     /// <param name="api">The API facade used to release the buffer.</param>
     /// <param name="buffer">The buffer to release, or <see langword="null"/>.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void ReleaseArenaBuffer(WebGPU api, WGPUBufferImpl* buffer)
+    public static void ReleaseArenaBuffer(WebGPU api, WGPUBufferImpl* buffer)
     {
         if (buffer is not null)
         {

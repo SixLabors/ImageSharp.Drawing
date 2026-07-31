@@ -1922,31 +1922,57 @@ internal static partial class DefaultRasterizer
         {
             int bitVectorCapacity = checked(wordsPerRow * tileCapacity);
             int coverAreaCapacity = checked(coverStride * tileCapacity);
-            IMemoryOwner<nuint> bitVectorsOwner = allocator.Allocate<nuint>(bitVectorCapacity, AllocationOptions.Clean);
-            IMemoryOwner<int> coverAreaOwner = allocator.Allocate<int>(coverAreaCapacity);
-            IMemoryOwner<int> startCoverOwner = allocator.Allocate<int>(tileCapacity, AllocationOptions.Clean);
-            IMemoryOwner<int> rowMinTouchedColumnOwner = allocator.Allocate<int>(tileCapacity);
-            IMemoryOwner<int> rowMaxTouchedColumnOwner = allocator.Allocate<int>(tileCapacity);
-            IMemoryOwner<byte> rowHasBitsOwner = allocator.Allocate<byte>(tileCapacity, AllocationOptions.Clean);
-            IMemoryOwner<byte> rowTouchedOwner = allocator.Allocate<byte>(tileCapacity, AllocationOptions.Clean);
-            IMemoryOwner<int> touchedRowsOwner = allocator.Allocate<int>(tileCapacity);
-            IMemoryOwner<float> scanlineOwner = allocator.Allocate<float>(width);
+            IMemoryOwner<nuint>? bitVectorsOwner = null;
+            IMemoryOwner<int>? coverAreaOwner = null;
+            IMemoryOwner<int>? startCoverOwner = null;
+            IMemoryOwner<int>? rowMinTouchedColumnOwner = null;
+            IMemoryOwner<int>? rowMaxTouchedColumnOwner = null;
+            IMemoryOwner<byte>? rowHasBitsOwner = null;
+            IMemoryOwner<byte>? rowTouchedOwner = null;
+            IMemoryOwner<int>? touchedRowsOwner = null;
 
-            return new WorkerScratch(
-                allocator,
-                wordsPerRow,
-                coverStride,
-                width,
-                tileCapacity,
-                bitVectorsOwner,
-                coverAreaOwner,
-                startCoverOwner,
-                rowMinTouchedColumnOwner,
-                rowMaxTouchedColumnOwner,
-                rowHasBitsOwner,
-                rowTouchedOwner,
-                touchedRowsOwner,
-                scanlineOwner);
+            try
+            {
+                bitVectorsOwner = allocator.Allocate<nuint>(bitVectorCapacity, AllocationOptions.Clean);
+                coverAreaOwner = allocator.Allocate<int>(coverAreaCapacity);
+                startCoverOwner = allocator.Allocate<int>(tileCapacity, AllocationOptions.Clean);
+                rowMinTouchedColumnOwner = allocator.Allocate<int>(tileCapacity);
+                rowMaxTouchedColumnOwner = allocator.Allocate<int>(tileCapacity);
+                rowHasBitsOwner = allocator.Allocate<byte>(tileCapacity, AllocationOptions.Clean);
+                rowTouchedOwner = allocator.Allocate<byte>(tileCapacity, AllocationOptions.Clean);
+                touchedRowsOwner = allocator.Allocate<int>(tileCapacity);
+                IMemoryOwner<float> scanlineOwner = allocator.Allocate<float>(width);
+
+                return new WorkerScratch(
+                    allocator,
+                    wordsPerRow,
+                    coverStride,
+                    width,
+                    tileCapacity,
+                    bitVectorsOwner,
+                    coverAreaOwner,
+                    startCoverOwner,
+                    rowMinTouchedColumnOwner,
+                    rowMaxTouchedColumnOwner,
+                    rowHasBitsOwner,
+                    rowTouchedOwner,
+                    touchedRowsOwner,
+                    scanlineOwner);
+            }
+            catch
+            {
+                // A later allocation throwing strands the earlier rentals: the scratch never
+                // materialized, so nothing else can return them.
+                bitVectorsOwner?.Dispose();
+                coverAreaOwner?.Dispose();
+                startCoverOwner?.Dispose();
+                rowMinTouchedColumnOwner?.Dispose();
+                rowMaxTouchedColumnOwner?.Dispose();
+                rowHasBitsOwner?.Dispose();
+                rowTouchedOwner?.Dispose();
+                touchedRowsOwner?.Dispose();
+                throw;
+            }
         }
 
         /// <summary>

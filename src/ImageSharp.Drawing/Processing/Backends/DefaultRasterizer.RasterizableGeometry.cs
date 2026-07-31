@@ -172,9 +172,12 @@ internal static partial class DefaultRasterizer
                 Array.Clear(this.linesX32);
             }
 
+            // Nulling each entry makes GetCoversForRow return empty after disposal instead of a
+            // span over returned pool memory, and makes a second disposal pass a no-op.
             for (int i = 0; i < this.startCoverTable.Length; i++)
             {
                 this.startCoverTable[i]?.Dispose();
+                this.startCoverTable[i] = null;
             }
         }
     }

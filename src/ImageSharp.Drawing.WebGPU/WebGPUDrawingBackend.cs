@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -547,6 +548,14 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             // must be released immediately instead of being left for final backend disposal.
             WebGPUSceneResourceArena.Dispose(Interlocked.Exchange(ref this.cachedResourceArena, resourceArena));
         }
+
+        // Dispose can drain the cache between the guard above and these stores; sweep again
+        // so an arena parked after that drain cannot outlive the backend.
+        if (this.isDisposed)
+        {
+            WebGPUSceneSchedulingArena.Dispose(Interlocked.Exchange(ref this.cachedSchedulingArena, null));
+            WebGPUSceneResourceArena.Dispose(Interlocked.Exchange(ref this.cachedResourceArena, null));
+        }
     }
 
     /// <summary>
@@ -860,11 +869,17 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         // Retire deferred readbacks before their buffers. Each map is resolved or canceled here;
         // a callback that native WebGPU still owes remains self-rooted after a timeout and is
-        // prevented from entering the disposed readback owner.
-        this.HarvestPendingSchedulingStatuses(scene: null, drainAll: true);
-
-        WebGPUSceneSchedulingArena.Dispose(Interlocked.Exchange(ref this.cachedSchedulingArena, null));
-        WebGPUSceneResourceArena.Dispose(Interlocked.Exchange(ref this.cachedResourceArena, null));
+        // prevented from entering the disposed readback owner. The arena drain must run even
+        // when the harvest throws, or both cached arenas leak with no retry possible.
+        try
+        {
+            this.HarvestPendingSchedulingStatuses(null, true);
+        }
+        finally
+        {
+            WebGPUSceneSchedulingArena.Dispose(Interlocked.Exchange(ref this.cachedSchedulingArena, null));
+            WebGPUSceneResourceArena.Dispose(Interlocked.Exchange(ref this.cachedResourceArena, null));
+        }
     }
 
     /// <summary>
@@ -942,6 +957,11 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             return;
         }
 
+        // Entries were already removed from the queue above, so a failure on one entry must not
+        // abandon the rest: every remaining status would leak its readback buffer and its scene
+        // reference, leaving the scene's deferred teardown permanently blocked. The first
+        // failure is rethrown after every entry has been retired.
+        Exception? firstFailure = null;
         foreach (PendingSchedulingStatusEntry entry in due)
         {
             try
@@ -956,10 +976,20 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                     entry.CorrectiveRender?.Invoke();
                 }
             }
+            catch (Exception failure)
+            {
+                firstFailure ??= failure;
+                entry.Status.Dispose();
+            }
             finally
             {
                 entry.Scene?.ReleaseDeferredRenderReference();
             }
+        }
+
+        if (firstFailure is not null)
+        {
+            ExceptionDispatchInfo.Capture(firstFailure).Throw();
         }
     }
 

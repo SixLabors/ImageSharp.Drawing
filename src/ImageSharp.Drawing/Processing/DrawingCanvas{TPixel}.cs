@@ -42,8 +42,10 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
     /// <summary>
     /// Temporary image resources that must stay alive until queued commands are flushed.
+    /// Shared between the root canvas and its regions: only the root renders the timeline, so
+    /// region-deferred images must survive region disposal and release with the root.
     /// </summary>
-    private readonly List<Image<TPixel>> pendingImageResources = [];
+    private readonly List<Image<TPixel>> pendingImageResources;
 
     /// <summary>
     /// Indicates whether this canvas owns final disposal of the shared batcher.
@@ -249,7 +251,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                     options.GraphicsOptions.AntialiasThreshold),
                 targetFrame.Bounds,
                 targetFrame.Bounds.Location),
-            true)
+            true,
+            [])
     {
     }
 
@@ -265,6 +268,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// <param name="ownsTextCache">Whether this canvas owns clearing the text drawing cache.</param>
     /// <param name="defaultState">The default state used when no scoped state is active.</param>
     /// <param name="ownsBatcher">Whether this canvas owns final disposal of the shared batcher.</param>
+    /// <param name="pendingImageResources">The deferred image-resource list, shared by a root canvas and its regions.</param>
     private DrawingCanvas(
         Configuration configuration,
         IDrawingBackend backend,
@@ -273,7 +277,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingTextCache textCache,
         bool ownsTextCache,
         DrawingCanvasState defaultState,
-        bool ownsBatcher)
+        bool ownsBatcher,
+        List<Image<TPixel>> pendingImageResources)
     {
         Guard.NotNull(configuration, nameof(configuration));
         Guard.NotNull(backend, nameof(backend));
@@ -296,6 +301,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         this.textCommandSortBuffer = textCache.CommandSortScratch;
         this.ownsBatcher = ownsBatcher;
         this.ownsTextCache = ownsTextCache;
+        this.pendingImageResources = pendingImageResources;
 
         // Canvas coordinates are local to the current frame; origin stays at (0,0).
         this.Bounds = new Rectangle(0, 0, targetFrame.Bounds.Width, targetFrame.Bounds.Height);
@@ -564,7 +570,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 IsLayer = currentState.IsLayer,
                 Layer = currentState.Layer,
             },
-            false);
+            false,
+            this.pendingImageResources);
     }
 
     /// <inheritdoc />

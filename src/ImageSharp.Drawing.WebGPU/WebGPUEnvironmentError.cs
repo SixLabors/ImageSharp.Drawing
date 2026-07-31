@@ -38,6 +38,12 @@ public enum WebGPUEnvironmentError
     AdapterRequestFailed,
 
     /// <summary>
+    /// The only available adapter is a software rasterizer. Software adapters are not supported
+    /// by this backend; the CPU drawing backend serves GPU-less environments instead.
+    /// </summary>
+    SoftwareAdapterUnsupported,
+
+    /// <summary>
     /// The device request callback did not complete before the timeout expired.
     /// </summary>
     DeviceRequestTimedOut,

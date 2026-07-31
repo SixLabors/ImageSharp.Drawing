@@ -59,10 +59,21 @@ public sealed unsafe partial class WebGPUDrawingBackend
             resourceArena,
             schedulingArena);
 
-        executor.Execute();
-        currentBumpSizes = executor.BumpSizes;
-        resourceArena = executor.ResourceArena;
-        schedulingArena = executor.SchedulingArena;
+        try
+        {
+            executor.Execute();
+            currentBumpSizes = executor.BumpSizes;
+        }
+        finally
+        {
+            // The executor replaces its arenas in place when a range outgrows them, disposing
+            // the instances these ref slots still name. The copy-back must run on the failure
+            // path too: otherwise the caller's finally returns the disposed originals to the
+            // reuse caches (a later release then frees their buffers twice) and the live
+            // replacements held only by the executor leak.
+            resourceArena = executor.ResourceArena;
+            schedulingArena = executor.SchedulingArena;
+        }
     }
 
     /// <summary>
@@ -193,12 +204,23 @@ public sealed unsafe partial class WebGPUDrawingBackend
                     }
                 }
 
-                this.effectRenderer = new WebGPUEffectRenderer(
-                    flushContext,
-                    encodedScene.MaximumShaderEffectWidth,
-                    encodedScene.MaximumShaderEffectHeight,
-                    encodedScene.MaximumShaderUniformByteLength,
-                    maximumPassCount);
+                try
+                {
+                    this.effectRenderer = new WebGPUEffectRenderer(
+                        flushContext,
+                        encodedScene.MaximumShaderEffectWidth,
+                        encodedScene.MaximumShaderEffectHeight,
+                        encodedScene.MaximumShaderUniformByteLength,
+                        maximumPassCount);
+                }
+                catch
+                {
+                    // A ctor throw means the caller's using never binds, so Dispose cannot retire
+                    // the callback owner and event created above.
+                    this.mapCallback?.Dispose();
+                    this.mapReady?.Dispose();
+                    throw;
+                }
             }
         }
 

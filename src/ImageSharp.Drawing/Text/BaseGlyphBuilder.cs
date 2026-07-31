@@ -13,8 +13,10 @@ namespace SixLabors.ImageSharp.Drawing.Text;
 /// <summary>
 /// Defines a base rendering surface that Fonts can use to generate shapes.
 /// </summary>
-internal class BaseGlyphBuilder : IGlyphRenderer
+internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
 {
+    private bool isDisposed;
+
     /// <summary>
     /// The last point emitted by <c>MoveTo</c> / <c>LineTo</c> / curve commands.
     /// Used as the implicit start of the next segment.
@@ -223,10 +225,19 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     void IGlyphRenderer.EndText()
     {
         // Flush the last held glyph of each decoration window before the grapheme is finalized, so
-        // its carved segments are captured in the grapheme aggregate.
-        this.FlushDecorationLane(TextDecorations.Underline, ref this.underlineLane);
-        this.FlushDecorationLane(TextDecorations.Overline, ref this.overlineLane);
-        this.FlushDecorationLane(TextDecorations.Strikeout, ref this.strikeoutLane);
+        // its carved segments are captured in the grapheme aggregate. A throw from one lane must
+        // still return the pooled buffers of the others.
+        try
+        {
+            this.FlushDecorationLane(TextDecorations.Underline, ref this.underlineLane);
+            this.FlushDecorationLane(TextDecorations.Overline, ref this.overlineLane);
+            this.FlushDecorationLane(TextDecorations.Strikeout, ref this.strikeoutLane);
+        }
+        catch
+        {
+            this.ReleaseDecorationLanes();
+            throw;
+        }
 
         // Finalize the last grapheme, if any:
         if (this.graphemeBuilder is not null && this.graphemePathCount > 0)
@@ -536,7 +547,18 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         // that leaves the window and dispose its pooled buffer.
         if (lane.Current.HasValue)
         {
-            this.CarveDecoration(textDecorations, in lane.Previous, in lane.Current, in incoming, ref lane);
+            try
+            {
+                this.CarveDecoration(textDecorations, in lane.Previous, in lane.Current, in incoming, ref lane);
+            }
+            catch
+            {
+                // Carving reaches user path and pen code; the incoming glyph never entered the
+                // window, so its pooled buffer has no other owner to return it.
+                incoming.Dispose();
+                throw;
+            }
+
             lane.Previous.Dispose();
             lane.Previous = lane.Current;
         }
@@ -555,13 +577,69 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         if (lane.Current.HasValue)
         {
             this.CarveDecoration(textDecorations, in lane.Previous, in lane.Current, in PendingDecoration.None, ref lane);
+
+            // Default each slot with its dispose: a later throw from segment emission must not
+            // leave a disposed value in the lane, or a recovery release returns the same pooled
+            // buffer twice.
             lane.Previous.Dispose();
+            lane.Previous = default;
             lane.Current.Dispose();
+            lane.Current = default;
         }
 
         this.FlushPendingSegment(textDecorations, ref lane);
 
         lane.Previous = default;
+        lane.Current = default;
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        this.isDisposed = true;
+        this.Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases resources owned by this builder. The decoration windows hold pooled ink buffers
+    /// that only reach the pool through <see cref="IGlyphRenderer.EndText"/>, so a render that
+    /// threw before then must return them here.
+    /// </summary>
+    /// <param name="disposing"><see langword="true"/> to release managed resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            this.ReleaseDecorationLanes();
+        }
+    }
+
+    /// <summary>
+    /// Returns the pooled ink buffers of every decoration window without emitting them, for
+    /// disposal paths where rendering never reached <see cref="IGlyphRenderer.EndText"/>.
+    /// </summary>
+    private void ReleaseDecorationLanes()
+    {
+        ReleaseDecorationLane(ref this.underlineLane);
+        ReleaseDecorationLane(ref this.overlineLane);
+        ReleaseDecorationLane(ref this.strikeoutLane);
+    }
+
+    /// <summary>
+    /// Returns one window's pooled ink buffers and clears its slots.
+    /// </summary>
+    /// <param name="lane">The window to release.</param>
+    private static void ReleaseDecorationLane(ref DecorationLane lane)
+    {
+        lane.Previous.Dispose();
+        lane.Previous = default;
+        lane.Current.Dispose();
         lane.Current = default;
     }
 

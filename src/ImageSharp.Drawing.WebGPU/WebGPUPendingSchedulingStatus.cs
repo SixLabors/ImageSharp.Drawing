@@ -400,17 +400,25 @@ internal sealed unsafe class WebGPUPendingSchedulingStatus : IDisposable
         // readback resources twice. The wrapper retains its own root if native still owes a call.
         this.disposed = true;
 
-        if (!this.resolved)
+        try
         {
-            // Give the accepted map a bounded opportunity to finish before releasing its buffer.
-            // A timeout is still safe because retiring the wrapper below suppresses a later call
-            // into this owner while its self-root preserves the native function target.
-            _ = this.TryResolve(out _);
+            if (!this.resolved)
+            {
+                // Give the accepted map a bounded opportunity to finish before releasing its buffer.
+                // A timeout is still safe because retiring the wrapper below suppresses a later call
+                // into this owner while its self-root preserves the native function target.
+                _ = this.TryResolve(out _);
+            }
         }
-
-        this.ReleaseBuffer(unmap: false);
-        this.callback.Dispose();
-        this.mapReady.Dispose();
+        finally
+        {
+            // A resolve throw (device poll or map-range failure) must not skip the retirement:
+            // the flag above already made this the only disposal pass, so the buffer, callback
+            // owner, and event would otherwise leak for the process lifetime.
+            this.ReleaseBuffer(unmap: false);
+            this.callback.Dispose();
+            this.mapReady.Dispose();
+        }
     }
 
     /// <summary>

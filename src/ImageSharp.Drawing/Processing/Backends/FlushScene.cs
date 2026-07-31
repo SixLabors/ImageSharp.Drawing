@@ -14,6 +14,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </summary>
 internal sealed partial class FlushScene : IDisposable
 {
+    private bool isDisposed;
+
     private static readonly FlushScene EmptyScene = new(
         fillItemCount: 0,
         strokeItemCount: 0,
@@ -210,136 +212,185 @@ internal sealed partial class FlushScene : IDisposable
             ? CreatePartitionClipSeeds(scene.Commands, commandCount, partitionCount)
             : null;
 
-        _ = Parallel.For(
-            0,
-            partitionCount,
-            ParallelExecutionHelper.CreateParallelOptions(maxDegreeOfParallelism, partitionCount),
-            partitionIndex =>
-            {
-                // Integer division splits the commands into contiguous half-open ranges,
-                // keeping the partitions balanced while assigning each command exactly once.
-                int partitionCommandStart = (partitionIndex * commandCount) / partitionCount;
-                int partitionCommandEnd = ((partitionIndex + 1) * commandCount) / partitionCount;
+        RowBuilder[] rowBuilders = new RowBuilder[targetRowCount];
+        SceneRow[] sceneRows = [];
+        SceneSegment[] segments = [];
+        bool rowsFinalized = false;
 
-                partitions[partitionIndex] = ProcessPartition(
-                    scene.Commands,
-                    partitionCommandStart,
-                    partitionCommandEnd,
-                    partitionClipSeeds?[partitionIndex],
-                    targetRectangle,
+        try
+        {
+            _ = Parallel.For(
+                0,
+                partitionCount,
+                ParallelExecutionHelper.CreateParallelOptions(maxDegreeOfParallelism, partitionCount),
+                partitionIndex =>
+                {
+                    // Integer division splits the commands into contiguous half-open ranges,
+                    // keeping the partitions balanced while assigning each command exactly once.
+                    int partitionCommandStart = (partitionIndex * commandCount) / partitionCount;
+                    int partitionCommandEnd = ((partitionIndex + 1) * commandCount) / partitionCount;
+
+                    partitions[partitionIndex] = ProcessPartition(
+                        scene.Commands,
+                        partitionCommandStart,
+                        partitionCommandEnd,
+                        partitionClipSeeds?[partitionIndex],
+                        targetRectangle,
+                        firstTargetRowBandIndex,
+                        targetRowCount,
+                        allocator,
+                        fillItems,
+                        strokeItems,
+                        layers,
+                        controlItems);
+                });
+
+            int fillItemCount = 0;
+            int strokeItemCount = 0;
+            long totalEdgeCount = 0;
+            int singleBandItemCount = 0;
+            int smallEdgeItemCount = 0;
+            int currentLayerDepth = 0;
+            int maxLayerDepth = 0;
+
+            // Merge partitions in ascending index order. Partitions cover contiguous ascending command
+            // ranges, so appending their row builders in this order preserves painter's order per row.
+            for (int i = 0; i < partitionCount; i++)
+            {
+                PartitionState partition = partitions[i];
+                fillItemCount += partition.FillItemCount;
+                strokeItemCount += partition.StrokeItemCount;
+                totalEdgeCount += partition.TotalEdgeCount;
+                singleBandItemCount += partition.SingleBandItemCount;
+                smallEdgeItemCount += partition.SmallEdgeItemCount;
+
+                // Partition layer depths are relative to their own command start; offsetting by the
+                // depth accumulated across earlier partitions recovers the absolute nesting depth.
+                maxLayerDepth = Math.Max(maxLayerDepth, currentLayerDepth + partition.MaxLayerDepth);
+                currentLayerDepth += partition.LayerDepthDelta;
+
+                for (int rowSlot = 0; rowSlot < targetRowCount; rowSlot++)
+                {
+                    RowBuilder.AppendBuilder(ref rowBuilders[rowSlot], ref partition.RowBuilders[rowSlot]);
+                }
+            }
+
+            int rowCount = 0;
+            int rowItemCount = 0;
+            for (int i = 0; i < rowBuilders.Length; i++)
+            {
+                if (!rowBuilders[i].IsInitialized)
+                {
+                    continue;
+                }
+
+                rowCount++;
+                rowItemCount += rowBuilders[i].Count;
+            }
+
+            // Apply barriers execute even when no draw work survived clipping, so a scene that
+            // contains them can never collapse to the empty singleton.
+            if (((fillItemCount + strokeItemCount) == 0 || rowItemCount == 0) && !scene.HasApply)
+            {
+                // Retained items whose row operations were all clipped away still own rasterized
+                // geometry and clip state; the empty singleton carries nothing, so release them here.
+                DisposeRetainedItems(fillItems, strokeItems, controlItems);
+                DisposeRows(rowBuilders);
+                return Empty();
+            }
+
+            sceneRows = rowCount == 0
+                ? []
+                : FinalizeRows(rowBuilders, firstTargetRowBandIndex, rowCount);
+            rowsFinalized = true;
+
+            if (scene.HasApply)
+            {
+                segments = CreateApplySegments(
+                    commandCount,
+                    sceneRows,
+                    controlItems,
+                    allocator,
                     firstTargetRowBandIndex,
                     targetRowCount,
-                    allocator,
-                    fillItems,
-                    strokeItems,
-                    layers,
-                    controlItems);
-            });
+                    out rowCount,
+                    out rowItemCount);
 
-        RowBuilder[] rowBuilders = new RowBuilder[targetRowCount];
-        int fillItemCount = 0;
-        int strokeItemCount = 0;
-        long totalEdgeCount = 0;
-        int singleBandItemCount = 0;
-        int smallEdgeItemCount = 0;
-        int currentLayerDepth = 0;
-        int maxLayerDepth = 0;
+                // Segment building copied every row operation into per-segment storage, so the merged
+                // rows are redundant. Apply item ownership also moved into the segments; clearing the
+                // control items prevents Dispose from double-disposing those apply items.
+                for (int i = 0; i < sceneRows.Length; i++)
+                {
+                    sceneRows[i].Dispose();
+                }
 
-        // Merge partitions in ascending index order. Partitions cover contiguous ascending command
-        // ranges, so appending their row builders in this order preserves painter's order per row.
-        for (int i = 0; i < partitionCount; i++)
-        {
-            PartitionState partition = partitions[i];
-            fillItemCount += partition.FillItemCount;
-            strokeItemCount += partition.StrokeItemCount;
-            totalEdgeCount += partition.TotalEdgeCount;
-            singleBandItemCount += partition.SingleBandItemCount;
-            smallEdgeItemCount += partition.SmallEdgeItemCount;
-
-            // Partition layer depths are relative to their own command start; offsetting by the
-            // depth accumulated across earlier partitions recovers the absolute nesting depth.
-            maxLayerDepth = Math.Max(maxLayerDepth, currentLayerDepth + partition.MaxLayerDepth);
-            currentLayerDepth += partition.LayerDepthDelta;
-
-            for (int rowSlot = 0; rowSlot < targetRowCount; rowSlot++)
-            {
-                RowBuilder.AppendBuilder(ref rowBuilders[rowSlot], ref partition.RowBuilders[rowSlot]);
-            }
-        }
-
-        int rowCount = 0;
-        int rowItemCount = 0;
-        for (int i = 0; i < rowBuilders.Length; i++)
-        {
-            if (!rowBuilders[i].IsInitialized)
-            {
-                continue;
+                sceneRows = [];
+                controlItems = [];
             }
 
-            rowCount++;
-            rowItemCount += rowBuilders[i].Count;
-        }
-
-        // Apply barriers execute even when no draw work survived clipping, so a scene that
-        // contains them can never collapse to the empty singleton.
-        if (((fillItemCount + strokeItemCount) == 0 || rowItemCount == 0) && !scene.HasApply)
-        {
-            DisposeRows(rowBuilders);
-            return Empty();
-        }
-
-        SceneRow[] sceneRows = rowCount == 0
-            ? []
-            : FinalizeRows(rowBuilders, firstTargetRowBandIndex, rowCount);
-        SceneSegment[] segments = [];
-
-        if (scene.HasApply)
-        {
-            segments = CreateApplySegments(
-                commandCount,
-                sceneRows,
+            return new FlushScene(
+                fillItemCount,
+                strokeItemCount,
+                rowCount,
+                rowItemCount,
+                totalEdgeCount,
+                singleBandItemCount,
+                smallEdgeItemCount,
+                maxLayerDepth,
+                fillItems,
+                strokeItems,
+                layers,
                 controlItems,
-                allocator,
-                firstTargetRowBandIndex,
-                targetRowCount,
-                out rowCount,
-                out rowItemCount);
+                scene.HasApply,
+                sceneRows,
+                segments);
+        }
+        catch
+        {
+            // A throw anywhere above strands every retained item already written into the shared
+            // arrays. Partition builders emptied by the merge dispose as no-ops, finalized rows
+            // own the block chains the builders shared, and apply items are reachable through the
+            // control items until segment creation succeeds, at which point the segments own them.
+            for (int i = 0; i < partitions.Length; i++)
+            {
+                if (partitions[i].RowBuilders is not null)
+                {
+                    DisposeRows(partitions[i].RowBuilders);
+                }
+            }
 
-            // Segment building copied every row operation into per-segment storage, so the merged
-            // rows are redundant. Apply item ownership also moved into the segments; clearing the
-            // control items prevents Dispose from double-disposing those apply items.
+            if (!rowsFinalized)
+            {
+                DisposeRows(rowBuilders);
+            }
+
             for (int i = 0; i < sceneRows.Length; i++)
             {
                 sceneRows[i].Dispose();
             }
 
-            sceneRows = [];
-            controlItems = [];
-        }
+            for (int i = 0; i < segments.Length; i++)
+            {
+                segments[i].Dispose();
+            }
 
-        return new FlushScene(
-            fillItemCount,
-            strokeItemCount,
-            rowCount,
-            rowItemCount,
-            totalEdgeCount,
-            singleBandItemCount,
-            smallEdgeItemCount,
-            maxLayerDepth,
-            fillItems,
-            strokeItems,
-            layers,
-            controlItems,
-            scene.HasApply,
-            sceneRows,
-            segments);
+            DisposeRetainedItems(fillItems, strokeItems, segments.Length == 0 ? controlItems : []);
+            throw;
+        }
     }
 
     /// <summary>
-    /// Releases retained scene storage.
+    /// Releases retained scene storage. The shared empty singleton is returned for every empty
+    /// batch and must survive any caller's disposal.
     /// </summary>
     public void Dispose()
     {
+        if (this.isDisposed || ReferenceEquals(this, EmptyScene))
+        {
+            return;
+        }
+
+        this.isDisposed = true;
         for (int i = 0; i < this.Rows.Length; i++)
         {
             this.Rows[i].Dispose();
@@ -350,19 +401,34 @@ internal sealed partial class FlushScene : IDisposable
             this.Segments[i].Dispose();
         }
 
-        for (int i = 0; i < this.FillItems.Length; i++)
+        DisposeRetainedItems(this.FillItems, this.StrokeItems, this.ControlItems);
+    }
+
+    /// <summary>
+    /// Releases retained draw items and apply control items that never transferred into a
+    /// constructed scene, or that a constructed scene still owns at disposal.
+    /// </summary>
+    /// <param name="fillItems">The retained fill items indexed by original command index.</param>
+    /// <param name="strokeItems">The retained stroke items indexed by original command index.</param>
+    /// <param name="controlItems">The layer and apply control operations indexed by original command index.</param>
+    private static void DisposeRetainedItems(
+        FillSceneItem?[] fillItems,
+        StrokeSceneItem?[] strokeItems,
+        SceneControlItem?[] controlItems)
+    {
+        for (int i = 0; i < fillItems.Length; i++)
         {
-            this.FillItems[i]?.Dispose();
+            fillItems[i]?.Dispose();
         }
 
-        for (int i = 0; i < this.StrokeItems.Length; i++)
+        for (int i = 0; i < strokeItems.Length; i++)
         {
-            this.StrokeItems[i]?.Dispose();
+            strokeItems[i]?.Dispose();
         }
 
-        for (int i = 0; i < this.ControlItems.Length; i++)
+        for (int i = 0; i < controlItems.Length; i++)
         {
-            if (this.ControlItems[i] is SceneControlItem controlItem &&
+            if (controlItems[i] is SceneControlItem controlItem &&
                 controlItem.Kind == SceneOperationKind.Apply)
             {
                 controlItem.ApplyItem.Dispose();

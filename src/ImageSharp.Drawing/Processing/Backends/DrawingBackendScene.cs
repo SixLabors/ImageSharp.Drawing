@@ -45,9 +45,19 @@ public abstract class DrawingBackendScene : IDisposable
             return;
         }
 
-        this.DisposeCore();
-        this.DisposeOwnedResources();
+        // The flag is set before the releases so a DisposeCore failure can never leave the
+        // scene re-disposable: a second Dispose after a throw would release every owned
+        // resource twice.
         this.isDisposed = true;
+        try
+        {
+            this.DisposeCore();
+        }
+        finally
+        {
+            this.DisposeOwnedResources();
+        }
+
         GC.SuppressFinalize(this);
     }
 
