@@ -208,6 +208,32 @@ jobs:
           SIXLABORS_TESTING_PREVIEW: True
           XUNIT_PATH: .\tests\ImageSharp.Drawing.Tests # Required for xunit
 
+      # Diagnostic capture for the WARP-only native fault: reruns the WebGPU suite with the
+      # support probe bypassed so the fault can occur, collecting crash dumps as artifacts.
+      # Never affects job status; remove once the fault is root-caused upstream.
+      - name: WebGPU WARP Diagnostic
+        if: ${{ runner.os == 'Windows' && matrix.options.sdk-preview != true }}
+        continue-on-error: true
+        timeout-minutes: 12
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force warp-dumps | Out-Null
+          dotnet test tests/ImageSharp.Drawing.Tests -c Release -f ${{matrix.options.framework}} --filter "FullyQualifiedName~WebGPUDrawingBackendTests"
+        env:
+          SIXLABORS_TESTING: True
+          SIXLABORS_WEBGPU_PROBE_BYPASS: 1
+          DOTNET_DbgEnableMiniDump: 1
+          DOTNET_DbgMiniDumpType: 2
+          DOTNET_DbgMiniDumpName: ${{ github.workspace }}\warp-dumps\webgpu-crash-%p.dmp
+
+      - name: Export WebGPU Diagnostic Dumps
+        uses: actions/upload-artifact@v7
+        if: ${{ always() && runner.os == 'Windows' && matrix.options.sdk-preview != true }}
+        with:
+          name: webgpu_warp_dumps_${{ matrix.options.framework }}
+          path: warp-dumps/
+          if-no-files-found: ignore
+
       - name: Export Failed Output
         uses: actions/upload-artifact@v7
         if: failure()

@@ -35,8 +35,13 @@ internal static class WebGPUProbe
     /// <summary>
     /// Gets a value indicating whether WebGPU compute is supported on the current system.
     /// </summary>
+    /// <remarks>
+    /// Setting <c>SIXLABORS_WEBGPU_PROBE_BYPASS=1</c> skips the probe so diagnostic runs can
+    /// execute the suite on adapters the probe rejects, capturing native crash dumps.
+    /// </remarks>
     internal static bool IsComputeSupported
-        => ComputeProbeResult == WebGPUEnvironmentError.Success;
+        => Environment.GetEnvironmentVariable("SIXLABORS_WEBGPU_PROBE_BYPASS") == "1"
+        || ComputeProbeResult == WebGPUEnvironmentError.Success;
 
     /// <summary>
     /// Gets the skip message used when WebGPU compute is unavailable.
