@@ -557,14 +557,19 @@ fn stroke_chain_arc(
         stroke_chain_point(path_ix, last, center + to_offset, transform);
         return;
     }
-    let start_angle = atan2(from_offset.y, from_offset.x);
-    let end_angle = atan2(to_offset.y, to_offset.x);
-    let sweep = stroke_normalize_positive_angle(end_angle - start_angle);
+    // WGSL atan2 is implementation-defined when x is zero, and axis-aligned caps produce
+    // exactly those inputs. The sweep must come from atan2(cross, dot) and interior points
+    // must rotate the start offset; absolute angles of the offsets are not computable here.
+    let cross_ft = (from_offset.x * to_offset.y) - (from_offset.y * to_offset.x);
+    let sweep = stroke_normalize_positive_angle(atan2(cross_ft, dot(from_offset, to_offset)));
     let n = stroke_arc_subdivision_count(radius, sweep, arc_detail_scale);
     let step = sweep / f32(n + 1u);
+    let rot_c = cos(step);
+    let rot_s = sin(step);
+    var offset = from_offset;
     for (var i = 1u; i <= n; i += 1u) {
-        let a = start_angle + (step * f32(i));
-        stroke_chain_point(path_ix, last, center + (vec2(cos(a), sin(a)) * radius), transform);
+        offset = vec2((offset.x * rot_c) - (offset.y * rot_s), (offset.x * rot_s) + (offset.y * rot_c));
+        stroke_chain_point(path_ix, last, center + offset, transform);
     }
     stroke_chain_point(path_ix, last, center + to_offset, transform);
 }
@@ -577,20 +582,22 @@ fn stroke_calc_arc(
     v1: vec2f, o1: vec2f, o2: vec2f,
     half_width: f32, arc_detail_scale: f32, transform: Transform,
 ) {
-    var a1 = atan2(o1.y, o1.x);
-    var a2 = atan2(o2.y, o2.x);
+    // WGSL atan2 is implementation-defined when x is zero, and axis-aligned joins produce
+    // exactly those inputs. The sweep must come from atan2(cross, dot) and interior points
+    // must rotate o1; absolute angles of the offsets are not computable here.
+    let cross_oo = (o1.x * o2.y) - (o1.y * o2.x);
+    let sweep = stroke_normalize_positive_angle(atan2(cross_oo, dot(o1, o2)));
     let da = acos(half_width / (half_width + (0.125 / arc_detail_scale))) * 2.0;
     stroke_chain_point(path_ix, last, v1 + o1, transform);
-    if a1 > a2 {
-        a2 += 6.283185307179586;
-    }
     // Bounded for GPU safety; matches the CPU count for all real detail scales.
-    let n = clamp(i32((a2 - a1) / da), 0, 1024);
-    let step = (a2 - a1) / f32(n + 1);
-    a1 += step;
+    let n = clamp(i32(sweep / da), 0, 1024);
+    let step = sweep / f32(n + 1);
+    let rot_c = cos(step);
+    let rot_s = sin(step);
+    var offset = o1;
     for (var i = 0; i < n; i += 1) {
-        stroke_chain_point(path_ix, last, v1 + (vec2(cos(a1), sin(a1)) * half_width), transform);
-        a1 += step;
+        offset = vec2((offset.x * rot_c) - (offset.y * rot_s), (offset.x * rot_s) + (offset.y * rot_c));
+        stroke_chain_point(path_ix, last, v1 + offset, transform);
     }
     stroke_chain_point(path_ix, last, v1 + o2, transform);
 }
