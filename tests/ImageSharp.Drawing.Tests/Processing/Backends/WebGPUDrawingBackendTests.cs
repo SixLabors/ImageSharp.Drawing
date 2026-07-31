@@ -973,7 +973,7 @@ public partial class WebGPUDrawingBackendTests
 
         // Reference outputs are rendered on one adapter; other conforming adapters round
         // within one LSB across a small fraction of pixels.
-        AssertBackendPairReferenceOutputs(provider, filter, defaultImage, nativeSurfaceImage, 0.01F);
+        AssertBackendPairReferenceOutputs(provider, filter, defaultImage, nativeSurfaceImage, 0.0043F);
     }
 
     [WebGPUTheory]
@@ -2196,7 +2196,7 @@ public partial class WebGPUDrawingBackendTests
 
         // Reference outputs are rendered on one adapter; other conforming adapters round
         // within one LSB across a small fraction of pixels.
-        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.01F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0045F);
     }
 
     [WebGPUTheory]
@@ -4404,6 +4404,6 @@ the evil Galactic Empire.";
 
         // Reference outputs are rendered on one adapter; other conforming adapters differ by
         // rounding and antialiased edge coverage on a small fraction of pixels.
-        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.02F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0098F);
     }
 }
