@@ -1,13 +1,15 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Runtime.CompilerServices;
-using Silk.NET.WebGPU;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// GPU stage that writes final tile-relative segments from counted line slices.
+/// GPU stage that writes the final per-tile path segments: one thread per SegmentCount record
+/// from path-count replays the line's tile-crossing traversal, clips the line to its tile, and
+/// stores the tile-relative segment in the slot range reserved by coarse. Wraps
+/// <c>path_tiling.wgsl</c>.
 /// </summary>
 internal static unsafe class PathTilingComputeShader
 {
@@ -31,23 +33,31 @@ internal static unsafe class PathTilingComputeShader
     /// <returns><see langword="true"/> when the bind-group layout was created successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
-        Device* device,
-        out BindGroupLayout* layout,
+        WGPUDeviceImpl* device,
+        out WGPUBindGroupLayoutImpl* layout,
         out string? error)
     {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[7];
-        entries[0] = SceneShaderBindingLayoutHelper.CreateStorageEntry(0, BufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));
-        entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, BufferBindingType.ReadOnlyStorage);
-        entries[2] = SceneShaderBindingLayoutHelper.CreateStorageEntry(2, BufferBindingType.ReadOnlyStorage);
-        entries[3] = SceneShaderBindingLayoutHelper.CreateStorageEntry(3, BufferBindingType.ReadOnlyStorage);
-        entries[4] = SceneShaderBindingLayoutHelper.CreateStorageEntry(4, BufferBindingType.ReadOnlyStorage);
-        entries[5] = SceneShaderBindingLayoutHelper.CreateStorageEntry(5, BufferBindingType.ReadOnlyStorage);
-        entries[6] = SceneShaderBindingLayoutHelper.CreateStorageEntry(6, BufferBindingType.Storage);
+        // Bindings match path_tiling.wgsl:
+        //   0 bump allocators (read-write because the buffer is atomic; this stage only reads the seg_counts total)
+        //   1 seg_counts (read-only SegmentCount records from path_count)
+        //   2 lines (read-only LineSoup from flatten)
+        //   3 paths (read-only Path records)
+        //   4 rows (read-only sparse PathRow records)
+        //   5 tiles (read-only; segment_count_or_ix holds the inverted segment base index from coarse)
+        //   6 segments (read-write; tile-relative Segment records written for fine)
+        WGPUBindGroupLayoutEntry* entries = stackalloc WGPUBindGroupLayoutEntry[7];
+        entries[0] = SceneShaderBindingLayoutHelper.CreateStorageEntry(0, WGPUBufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));
+        entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, WGPUBufferBindingType.ReadOnlyStorage);
+        entries[2] = SceneShaderBindingLayoutHelper.CreateStorageEntry(2, WGPUBufferBindingType.ReadOnlyStorage);
+        entries[3] = SceneShaderBindingLayoutHelper.CreateStorageEntry(3, WGPUBufferBindingType.ReadOnlyStorage);
+        entries[4] = SceneShaderBindingLayoutHelper.CreateStorageEntry(4, WGPUBufferBindingType.ReadOnlyStorage);
+        entries[5] = SceneShaderBindingLayoutHelper.CreateStorageEntry(5, WGPUBufferBindingType.ReadOnlyStorage);
+        entries[6] = SceneShaderBindingLayoutHelper.CreateStorageEntry(6, WGPUBufferBindingType.Storage);
 
-        BindGroupLayoutDescriptor descriptor = new()
+        WGPUBindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 7,
-            Entries = entries
+            entryCount = 7,
+            entries = entries
         };
 
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);

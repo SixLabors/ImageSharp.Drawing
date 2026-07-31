@@ -1,7 +1,25 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// Finish prefix sum of drawtags, decode draw objects.
+// Draw-tag scan stage. Finishes the prefix sum of draw tags started by
+// draw_reduce, producing an exclusive DrawMonoid for every draw object, then
+// decodes each draw object: brush parameters are materialized into the
+// per-draw info stream and BeginClip/EndClip records are emitted as ClipInp
+// entries for the clip stack stages.
+//
+// Inputs: config uniform; scene stream; reduced (per-workgroup DrawMonoid
+// aggregates from draw_reduce); path_bbox (per-path bounds, draw flags,
+// coverage threshold and raster interest from the path bbox stages).
+// Outputs: draw_monoid (exclusive prefix per draw object); info (per-draw
+// brush info words consumed by coarse and fine); clip_inp (ClipInp records
+// consumed by clip_reduce and clip_leaf).
+//
+// Ported from Vello's draw_leaf.wgsl (linebender/vello,
+// vello_shaders/shader). Local divergences: extra draw tags (recolor,
+// elliptic and path gradients), 9-word transforms carrying a perspective
+// row, coverage-threshold plus raster-interest words appended to
+// visible-fill info entries, and a clip operation (intersection or
+// difference) carried in each ClipInp record.
 
 #import config
 #import clip
@@ -32,6 +50,10 @@ var<storage, read_write> clip_inp: array<ClipInp>;
 
 #import util
 
+// Reads one transform from the scene stream. ImageSharp encodes 9 words per
+// transform (2x2 matrix, translation, perspective row) where Vello encodes
+// 6 affine words. transform_base is the u32 offset of the transform stream
+// within the scene; ix is the transform index.
 fn read_transform(transform_base: u32, ix: u32) -> Transform {
     let base = transform_base + ix * 9u;
     let matrx = vec4<f32>(
@@ -53,6 +75,13 @@ const WG_SIZE = 256u;
 
 var<workgroup> sh_scratch: array<DrawMonoid, WG_SIZE>;
 
+// Completes the draw-monoid prefix sum and decodes draw objects.
+// First the aggregates of all preceding workgroups (reduced) are scanned to
+// obtain this workgroup's starting prefix. Then, for each of this
+// workgroup's blocks: an intra-workgroup scan yields the exclusive prefix m
+// for each draw object, draw_monoid[ix] is written, the brush payload is
+// decoded into info[m.info_offset..], and ClipInp records are emitted for
+// BeginClip/EndClip objects.
 @compute @workgroup_size(256)
 fn main(
     @builtin(local_invocation_id) local_id: vec3<u32>,
@@ -118,12 +147,6 @@ fn main(
         {
             let bbox = path_bbox[m.path_ix];
             let draw_flags = bbox.draw_flags;
-            var transform = transform_identity();
-            if tag_word == DRAWTAG_FILL_LIN_GRADIENT || tag_word == DRAWTAG_FILL_RAD_GRADIENT ||
-                tag_word == DRAWTAG_FILL_ELLIPTIC_GRADIENT || tag_word == DRAWTAG_FILL_SWEEP_GRADIENT
-            {
-                transform = read_transform(config.transform_base, bbox.trans_ix);
-            }
             switch tag_word {
                 case DRAWTAG_FILL_COLOR: {
                     info[di] = draw_flags;
@@ -136,14 +159,22 @@ fn main(
                 }
                 case DRAWTAG_FILL_LIN_GRADIENT: {
                     info[di] = draw_flags;
-                    var p0 = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
-                    var p1 = bitcast<vec2<f32>>(vec2(scene[dd + 3u], scene[dd + 4u]));
-                    p0 = transform_apply(transform, p0);
-                    p1 = transform_apply(transform, p1);
+                    let p0 = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
+                    let p1 = bitcast<vec2<f32>>(vec2(scene[dd + 3u], scene[dd + 4u]));
+                    // Encode the gradient as a line equation so fine can
+                    // evaluate the parameter as t = dot(p, line_xy) + line_c.
                     let dxy = p1 - p0;
-                    let scale = 1.0 / dot(dxy, dxy);
-                    let line_xy = dxy * scale;
-                    let line_c = -dot(p0, line_xy);
+                    let axis_squared = dot(dxy, dxy);
+                    var line_xy = vec2(0.0, 0.0);
+                    var line_c = 1.0;
+                    if axis_squared != 0.0 {
+                        let scale = 1.0 / axis_squared;
+                        line_xy = dxy * scale;
+                        line_c = -dot(p0, line_xy);
+                    }
+
+                    // The CPU brush defines a zero-length axis as the gradient end. The
+                    // initialized equation therefore evaluates t=1 everywhere without NaN.
                     info[di + 1u] = bitcast<u32>(line_xy.x);
                     info[di + 2u] = bitcast<u32>(line_xy.y);
                     info[di + 3u] = bitcast<u32>(line_c);
@@ -158,7 +189,7 @@ fn main(
                     var p1 = bitcast<vec2<f32>>(vec2(scene[dd + 3u], scene[dd + 4u]));
                     var r0 = bitcast<f32>(scene[dd + 5u]);
                     var r1 = bitcast<f32>(scene[dd + 6u]);
-                    let user_to_gradient = transform_inverse(transform);
+                    let user_to_gradient = transform_identity();
                     var xform = transform_identity();
                     var focal_x = 0.0;
                     var radius = 0.0;
@@ -226,45 +257,71 @@ fn main(
                 }
                 case DRAWTAG_FILL_ELLIPTIC_GRADIENT: {
                     info[di] = draw_flags;
-                    var center = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
-                    var axis_end = bitcast<vec2<f32>>(vec2(scene[dd + 3u], scene[dd + 4u]));
-                    var second_end = bitcast<vec2<f32>>(vec2(scene[dd + 5u], scene[dd + 6u]));
-                    center = transform_apply(transform, center);
-                    axis_end = transform_apply(transform, axis_end);
-                    second_end = transform_apply(transform, second_end);
+                    let center = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
+                    let axis_end = bitcast<vec2<f32>>(vec2(scene[dd + 3u], scene[dd + 4u]));
+                    let second_end = bitcast<vec2<f32>>(vec2(scene[dd + 5u], scene[dd + 6u]));
                     let dxy = axis_end - center;
                     let axis = length(dxy);
-                    let inv_axis = 1.0 / axis;
                     let second_axis_len = length(second_end - center);
-                    let transformed_axis_ratio = select(1.0, second_axis_len / axis, axis > 0.0);
-                    let inv_second_axis = inv_axis / transformed_axis_ratio;
-                    let cos_theta = dxy.x * inv_axis;
-                    let sin_theta = dxy.y * inv_axis;
-                    // Map the ellipse to the unit circle so the fill parameter is length(local_xy).
+                    var kind = ELLIPTIC_GRAD_KIND_NORMAL;
+                    var inv_axis = 1.0;
+                    var inv_second_axis = 1.0;
+                    var cos_theta = 1.0;
+                    var sin_theta = 0.0;
+
+                    if axis == 0.0 {
+                        // MathF.Atan2(0, 0) gives the CPU brush an identity rotation. Keep the
+                        // matrix finite; fine reproduces the two zero-radius divisions explicitly.
+                        kind = ELLIPTIC_GRAD_KIND_POINT;
+                    } else {
+                        cos_theta = dxy.x / axis;
+                        sin_theta = dxy.y / axis;
+
+                        if second_axis_len == 0.0 {
+                            // The raw axis vector makes local y the perpendicular dot product.
+                            // Its exact zero is the collapsed-axis test and avoids normalization
+                            // residue changing an undefined CPU sample into an off-axis sample.
+                            kind = ELLIPTIC_GRAD_KIND_LINE;
+                            cos_theta = dxy.x;
+                            sin_theta = dxy.y;
+                        } else {
+                            inv_axis = 1.0 / axis;
+                            inv_second_axis = 1.0 / second_axis_len;
+                        }
+                    }
+
+                    // Normal ellipses map to the unit circle so length(local_xy) is the gradient
+                    // parameter. Every kind uses the NEGATED axis angle, matching the CPU brush;
+                    // degenerate kinds retain the unscaled rotated coordinates for zero tests.
                     let m0 = cos_theta * inv_axis;
-                    let m1 = sin_theta * inv_second_axis;
-                    let m2 = -sin_theta * inv_axis;
+                    let m1 = -sin_theta * inv_second_axis;
+                    let m2 = sin_theta * inv_axis;
                     let m3 = cos_theta * inv_second_axis;
-                    let xlat_x = -(m0 * center.x + m2 * center.y);
-                    let xlat_y = -(m1 * center.x + m3 * center.y);
+                    var xlat_x = center.x;
+                    var xlat_y = center.y;
+
+                    if kind == ELLIPTIC_GRAD_KIND_NORMAL {
+                        xlat_x = -(m0 * center.x + m2 * center.y);
+                        xlat_y = -(m1 * center.x + m3 * center.y);
+                    }
+
                     info[di + 1u] = bitcast<u32>(m0);
                     info[di + 2u] = bitcast<u32>(m1);
                     info[di + 3u] = bitcast<u32>(m2);
                     info[di + 4u] = bitcast<u32>(m3);
                     info[di + 5u] = bitcast<u32>(xlat_x);
                     info[di + 6u] = bitcast<u32>(xlat_y);
+                    info[di + 7u] = kind;
                 }
                 case DRAWTAG_FILL_SWEEP_GRADIENT: {
                     info[di] = draw_flags;
                     let p0 = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
-                    let xform = transform_mul(transform, Transform(vec4(1.0, 0.0, 0.0, 1.0), p0, vec3(0.0, 0.0, 1.0)));
-                    let inv = transform_inverse(xform);
-                    info[di + 1u] = bitcast<u32>(inv.matrx.x);
-                    info[di + 2u] = bitcast<u32>(inv.matrx.y);
-                    info[di + 3u] = bitcast<u32>(inv.matrx.z);
-                    info[di + 4u] = bitcast<u32>(inv.matrx.w);
-                    info[di + 5u] = bitcast<u32>(inv.translate.x);
-                    info[di + 6u] = bitcast<u32>(inv.translate.y);
+                    info[di + 1u] = bitcast<u32>(1.0);
+                    info[di + 2u] = bitcast<u32>(0.0);
+                    info[di + 3u] = bitcast<u32>(0.0);
+                    info[di + 4u] = bitcast<u32>(1.0);
+                    info[di + 5u] = bitcast<u32>(-p0.x);
+                    info[di + 6u] = bitcast<u32>(-p0.y);
                     info[di + 7u] = scene[dd + 3u];
                     info[di + 8u] = scene[dd + 4u];
                 }
@@ -285,13 +342,38 @@ fn main(
                 }
                 default: {}
             }
+
+            // Visible fills and begin clips carry raster interest in the info stream so coarse can
+            // read it without another storage-buffer binding. Bits 6..9 of the tag give the info
+            // word count (matching map_draw_tag); the threshold plus interest block occupies the
+            // final five words of the entry.
+            let tag_info_size = (tag_word >> 6u) & 0xfu;
+            if tag_info_size >= 5u {
+                let interest_offset = di + tag_info_size - 5u;
+                info[interest_offset] = bitcast<u32>(bbox.coverage_threshold);
+                info[interest_offset + 1u] = bitcast<u32>(bbox.interest.x);
+                info[interest_offset + 2u] = bitcast<u32>(bbox.interest.y);
+                info[interest_offset + 3u] = bitcast<u32>(bbox.interest.z);
+                info[interest_offset + 4u] = bitcast<u32>(bbox.interest.w);
+            }
         }
         if tag_word == DRAWTAG_BEGIN_CLIP || tag_word == DRAWTAG_END_CLIP {
+            // EndClip records carry ~ix, matching ClipInp.path_ix's sign-tagged
+            // encoding; clip_leaf recovers ix to rewrite the draw monoid.
             var path_ix = ~ix;
+            var operation = CLIP_OPERATION_INTERSECTION;
             if tag_word == DRAWTAG_BEGIN_CLIP {
                 path_ix = m.path_ix;
+                // ImageSharp carries ClipOperation through the same begin/end records that
+                // Vello uses for ordinary clip stacks. The high bit is masked out again by
+                // coarse/fine when they need the underlying blend marker.
+                operation = select(
+                    CLIP_OPERATION_INTERSECTION,
+                    CLIP_OPERATION_DIFFERENCE,
+                    (scene[dd] & CLIP_DIFFERENCE_MASK_BIT) != 0u);
             }
-            clip_inp[m.clip_ix] = ClipInp(ix, i32(path_ix));
+
+            clip_inp[m.clip_ix] = ClipInp(ix, i32(path_ix), operation);
         }
         block_start += WG_SIZE;
         // break here on end to save monoid aggregation?
@@ -299,6 +381,8 @@ fn main(
     }
 }
 
+// Builds the transform that maps p0 to (0, 0) and p1 to (1, 0). Used to
+// canonicalize two-point conical gradients onto the unit line.
 fn two_point_to_unit_line(p0: vec2<f32>, p1: vec2<f32>) -> Transform {
     let tmp1 = from_poly2(p0, p1);
     let inv = transform_inverse(tmp1);
@@ -306,6 +390,8 @@ fn two_point_to_unit_line(p0: vec2<f32>, p1: vec2<f32>) -> Transform {
     return transform_mul(tmp2, inv);
 }
 
+// Builds the similarity transform that maps (0, 0) to p0 and (0, 1) to p1,
+// with an identity perspective row (Skia-style two-point poly transform).
 fn from_poly2(p0: vec2<f32>, p1: vec2<f32>) -> Transform {
     return Transform(
         vec4(p1.y - p0.y, p0.x - p1.x, p1.x - p0.x, p1.y - p0.y),

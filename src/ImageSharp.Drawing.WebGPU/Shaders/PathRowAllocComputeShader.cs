@@ -2,12 +2,15 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
-using Silk.NET.WebGPU;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// GPU stage that allocates sparse per-path row metadata before line-driven span discovery.
+/// GPU stage that bump-allocates sparse per-path tile-row metadata: one thread per draw object
+/// converts the draw bounds to a chunk-clamped tile bbox, writes the Path record, and resets
+/// each covered row to an empty span before line-driven span discovery. Wraps
+/// <c>path_row_alloc.wgsl</c>.
 /// </summary>
 internal static unsafe class PathRowAllocComputeShader
 {
@@ -23,7 +26,11 @@ internal static unsafe class PathRowAllocComputeShader
 
     /// <summary>
     /// Gets the X workgroup count required to process every path.
+    /// The shader runs one thread per draw object at a workgroup size of 256, so this is
+    /// ceil(<paramref name="pathCount"/> / 256).
     /// </summary>
+    /// <param name="pathCount">The number of paths (draw objects) in the scene.</param>
+    /// <returns>The X dispatch dimension in workgroups.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static uint GetDispatchX(uint pathCount)
         => (pathCount + 255U) / 256U;
@@ -38,22 +45,29 @@ internal static unsafe class PathRowAllocComputeShader
     /// <returns><see langword="true"/> when the bind-group layout was created successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
-        Device* device,
-        out BindGroupLayout* layout,
+        WGPUDeviceImpl* device,
+        out WGPUBindGroupLayoutImpl* layout,
         out string? error)
     {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[6];
+        // Bindings match path_row_alloc.wgsl:
+        //   0 config uniform
+        //   1 scene (read-only draw tags)
+        //   2 draw_bboxes (read-only draw bounds from draw_leaf)
+        //   3 bump allocators (read-write; path_rows bump-allocated, failure bit set on overflow)
+        //   4 paths (read-write; Path record written per draw object)
+        //   5 rows (read-write; PathRow records initialized to empty spans)
+        WGPUBindGroupLayoutEntry* entries = stackalloc WGPUBindGroupLayoutEntry[6];
         entries[0] = SceneShaderBindingLayoutHelper.CreateUniformEntry(0, (nuint)sizeof(GpuSceneConfig));
-        entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, BufferBindingType.ReadOnlyStorage);
-        entries[2] = SceneShaderBindingLayoutHelper.CreateStorageEntry(2, BufferBindingType.ReadOnlyStorage);
-        entries[3] = SceneShaderBindingLayoutHelper.CreateStorageEntry(3, BufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));
-        entries[4] = SceneShaderBindingLayoutHelper.CreateStorageEntry(4, BufferBindingType.Storage);
-        entries[5] = SceneShaderBindingLayoutHelper.CreateStorageEntry(5, BufferBindingType.Storage);
+        entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, WGPUBufferBindingType.ReadOnlyStorage);
+        entries[2] = SceneShaderBindingLayoutHelper.CreateStorageEntry(2, WGPUBufferBindingType.ReadOnlyStorage);
+        entries[3] = SceneShaderBindingLayoutHelper.CreateStorageEntry(3, WGPUBufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));
+        entries[4] = SceneShaderBindingLayoutHelper.CreateStorageEntry(4, WGPUBufferBindingType.Storage);
+        entries[5] = SceneShaderBindingLayoutHelper.CreateStorageEntry(5, WGPUBufferBindingType.Storage);
 
-        BindGroupLayoutDescriptor descriptor = new()
+        WGPUBindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 6,
-            Entries = entries
+            entryCount = 6,
+            entries = entries
         };
 
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);

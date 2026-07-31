@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Silk.NET.WebGPU;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -20,7 +20,7 @@ internal sealed unsafe class WebGPUTextureHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the texture and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUTextureHandle(nint textureHandle, bool ownsHandle)
+    public WebGPUTextureHandle(nint textureHandle, bool ownsHandle)
         : this(ownsHandle ? WebGPURuntime.GetApi() : null, textureHandle, ownsHandle)
     {
     }
@@ -37,7 +37,7 @@ internal sealed unsafe class WebGPUTextureHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the texture and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUTextureHandle(WebGPU? api, nint textureHandle, bool ownsHandle)
+    public WebGPUTextureHandle(WebGPU? api, nint textureHandle, bool ownsHandle)
         : base(textureHandle, ownsHandle)
         => this.api = api;
 
@@ -46,7 +46,7 @@ internal sealed unsafe class WebGPUTextureHandle : WebGPUHandle
     {
         try
         {
-            this.api?.TextureRelease((Texture*)this.handle);
+            this.api?.TextureRelease((WGPUTextureImpl*)this.handle);
             return true;
         }
         catch

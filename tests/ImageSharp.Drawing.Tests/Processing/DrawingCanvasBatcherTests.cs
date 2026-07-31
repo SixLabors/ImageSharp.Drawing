@@ -7,11 +7,73 @@ using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 
 public class DrawingCanvasBatcherTests
 {
+    [Fact]
+    public void Flush_LayerEffect_RetainsEffectIdentity()
+    {
+        Configuration configuration = new();
+        CapturingBackend backend = new();
+        configuration.SetDrawingBackend(backend);
+        using Image<Rgba32> image = new(configuration, 40, 40);
+
+        LayerEffect effect = new BlurLayerEffect(2F);
+        using (DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, new DrawingOptions()))
+        {
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(4, 6, 18, 12), effect);
+            canvas.Fill(Brushes.Solid(Color.Red), new RectanglePolygon(4, 6, 18, 12));
+            canvas.Restore();
+            canvas.Flush();
+        }
+
+        CompositionCommand command = GetSingleApplyCommand(backend);
+        Assert.Same(effect, command.ApplyEffect);
+    }
+
+    [Fact]
+    public void Flush_BackdropLayerEffect_RetainsEffectIdentity()
+    {
+        Configuration configuration = new();
+        CapturingBackend backend = new();
+        configuration.SetDrawingBackend(backend);
+        using Image<Rgba32> image = new(configuration, 40, 40);
+
+        LayerEffect effect = new BackdropBlurLayerEffect(2F);
+        using (DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, new DrawingOptions()))
+        {
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(4, 6, 18, 12), effect);
+            canvas.Restore();
+            canvas.Flush();
+        }
+
+        CompositionCommand command = GetSingleApplyCommand(backend);
+        Assert.Same(effect, command.ApplyEffect);
+    }
+
+    [Fact]
+    public void Flush_DirectApply_RemainsActionOnly()
+    {
+        Configuration configuration = new();
+        CapturingBackend backend = new();
+        configuration.SetDrawingBackend(backend);
+        using Image<Rgba32> image = new(configuration, 40, 40);
+
+        Action<IImageProcessingContext> operation = _ => { };
+        using (DrawingCanvas canvas = image.Frames.RootFrame.CreateCanvas(configuration, new DrawingOptions()))
+        {
+            canvas.Apply(new Rectangle(4, 6, 18, 12), operation);
+            canvas.Flush();
+        }
+
+        CompositionCommand command = GetSingleApplyCommand(backend);
+        Assert.Same(operation, command.ApplyOperation);
+        Assert.Null(command.ApplyEffect);
+    }
+
     [Fact]
     public void Flush_SamePathDifferentBrushes_UsesSingleCoverageDefinition()
     {
@@ -198,6 +260,15 @@ public class DrawingCanvasBatcherTests
         Assert.NotNull(command.Command.Pen);
     }
 
+    private static CompositionCommand GetSingleApplyCommand(CapturingBackend backend)
+    {
+        PathCompositionSceneCommand prepared = Assert.Single(
+            backend.PreparedCommands.OfType<PathCompositionSceneCommand>(),
+            command => command.Command.Kind == CompositionCommandKind.Apply);
+
+        return prepared.Command;
+    }
+
     private sealed class CapturingBackend : IDrawingBackend
     {
         public List<CapturedCoverageDefinition> Definitions { get; } = [];
@@ -212,7 +283,6 @@ public class DrawingCanvasBatcherTests
                 Rectangle.Empty,
                 IntersectionRule.NonZero,
                 RasterizationMode.Aliased,
-                RasterizerSamplingOrigin.PixelBoundary,
                 0.5f),
             default,
             []);
@@ -234,12 +304,14 @@ public class DrawingCanvasBatcherTests
                 }
 
                 CompositionCommand command = pathCommand.Command;
-                IPath sourcePath = command.SourcePath;
-                if (sourcePath is null)
+                if (command.Kind is not (CompositionCommandKind.FillLayer or CompositionCommandKind.Apply))
                 {
+                    // Layer boundaries share the retained composition wrapper but carry no
+                    // rasterizable path, so they cannot contribute a coverage definition.
                     continue;
                 }
 
+                IPath sourcePath = command.SourcePath;
                 RasterizerOptions rasterizerOptions = command.RasterizerOptions;
 
                 CoverageDefinitionKey key = new(command);
@@ -279,6 +351,15 @@ public class DrawingCanvasBatcherTests
         {
         }
 
+        public void CopyPixels<TPixel>(
+            Configuration configuration,
+            ICanvasFrame<TPixel> source,
+            ICanvasFrame<TPixel> target,
+            Rectangle sourceRectangle,
+            Point targetPoint)
+            where TPixel : unmanaged, IPixel<TPixel>
+            => throw new NotSupportedException();
+
         public void ReadRegion<TPixel>(
             Configuration configuration,
             ICanvasFrame<TPixel> target,
@@ -316,7 +397,6 @@ public class DrawingCanvasBatcherTests
             private readonly Rectangle interest;
             private readonly IntersectionRule intersectionRule;
             private readonly RasterizationMode rasterizationMode;
-            private readonly RasterizerSamplingOrigin samplingOrigin;
             private readonly int antialiasThresholdBits;
 
             public CoverageDefinitionKey(CompositionCommand command)
@@ -325,7 +405,6 @@ public class DrawingCanvasBatcherTests
                 this.interest = command.RasterizerOptions.Interest;
                 this.intersectionRule = command.RasterizerOptions.IntersectionRule;
                 this.rasterizationMode = command.RasterizerOptions.RasterizationMode;
-                this.samplingOrigin = command.RasterizerOptions.SamplingOrigin;
                 this.antialiasThresholdBits = BitConverter.SingleToInt32Bits(command.RasterizerOptions.AntialiasThreshold);
             }
 
@@ -334,7 +413,6 @@ public class DrawingCanvasBatcherTests
                    this.interest.Equals(other.interest) &&
                    this.intersectionRule == other.intersectionRule &&
                    this.rasterizationMode == other.rasterizationMode &&
-                   this.samplingOrigin == other.samplingOrigin &&
                    this.antialiasThresholdBits == other.antialiasThresholdBits;
 
             public override bool Equals(object obj)
@@ -346,7 +424,6 @@ public class DrawingCanvasBatcherTests
                     this.interest,
                     (int)this.intersectionRule,
                     (int)this.rasterizationMode,
-                    (int)this.samplingOrigin,
                     this.antialiasThresholdBits);
         }
 

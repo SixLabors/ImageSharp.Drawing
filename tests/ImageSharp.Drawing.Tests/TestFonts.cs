@@ -11,6 +11,11 @@ public static class TestFonts
 
     public const string OpenSans = "OpenSans-Regular.ttf";
 
+    // Inter Light is the weight Avalonia's ControlCatalog renders body text with (the font the sample
+    // shows holes in). Inter draws several glyphs (e.g. 'A', 't') with overlapping contours, so it is a
+    // good repro for glyph-fill winding/overlap holes. SIL OFL licensed, taken from Avalonia.Fonts.Inter.
+    public const string InterLight = "Inter-Light.ttf";
+
     public const string SixLaborsSampleAB = "SixLaborsSampleAB.woff";
 
     public const string TwemojiMozilla = "TwemojiMozilla.ttf";

@@ -43,9 +43,10 @@ public abstract partial class DrawingCanvas
         => this.Fill(brush, new RectanglePolygon(region));
 
     /// <summary>
-    /// Clears the whole canvas using the given brush and clear-style composition options.
+    /// Clears the whole canvas with the given brush using replacement composition: the brush output
+    /// overwrites the covered pixels outright, including their alpha, rather than blending over them.
     /// </summary>
-    /// <param name="brush">Brush used to shade destination pixels during clear.</param>
+    /// <param name="brush">Brush used to shade the destination pixels.</param>
     public void Clear(Brush brush)
     {
         Rectangle bounds = this.Bounds;
@@ -54,9 +55,10 @@ public abstract partial class DrawingCanvas
     }
 
     /// <summary>
-    /// Clears a local region using the given brush and clear-style composition options.
+    /// Clears a local region with the given brush using replacement composition: the brush output
+    /// overwrites the covered pixels outright, including their alpha, rather than blending over them.
     /// </summary>
-    /// <param name="brush">Brush used to shade destination pixels during clear.</param>
+    /// <param name="brush">Brush used to shade the destination pixels.</param>
     /// <param name="region">Region to clear in local coordinates.</param>
     public void Clear(Brush brush, Rectangle region)
         => this.Clear(brush, new RectanglePolygon(region));

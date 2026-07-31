@@ -17,7 +17,9 @@ public sealed partial class WebGPURenderControl : Control
 {
     private const int WM_MOVING = 0x0216;
     private const int WM_EXITSIZEMOVE = 0x0232;
+    private static readonly nint ProcessModuleHandle = GetModuleHandle(null);
 
+    private readonly WebGPUSurfaceSession surfaceSession;
     private WebGPUExternalSurface? surface;
     private Size framebufferSize;
     private bool idleHooked;
@@ -29,8 +31,11 @@ public sealed partial class WebGPURenderControl : Control
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPURenderControl"/> class.
     /// </summary>
-    public WebGPURenderControl()
+    /// <param name="surfaceSession">The session shared by the application's related presentation surfaces.</param>
+    public WebGPURenderControl(WebGPUSurfaceSession surfaceSession)
     {
+        this.surfaceSession = surfaceSession;
+
         // WebGPU presents directly to the native surface. Normal WinForms buffering and background
         // painting would add flicker or unnecessary work, so the control opts into direct user painting.
         this.SetStyle(
@@ -81,12 +86,12 @@ public sealed partial class WebGPURenderControl : Control
             Math.Max(this.framebufferSize.Width, 1),
             Math.Max(this.framebufferSize.Height, 1));
 
-        // The module handle is required by the Win32 surface descriptor. It identifies the process module
-        // that owns the window class backing this control.
-        this.surface = new WebGPUExternalSurface(
+        // WinForms registers its window classes against the process executable module. Use that same
+        // HINSTANCE in the WebGPU descriptor instead of the managed assembly's module handle.
+        this.surface = this.surfaceSession.CreateSurface(
             WebGPUSurfaceHost.Win32(
                 this.Handle,
-                Marshal.GetHINSTANCE(typeof(WebGPURenderControl).Module)),
+                ProcessModuleHandle),
             initialFramebufferSize,
             new WebGPUExternalSurfaceOptions
             {
@@ -321,6 +326,9 @@ public sealed partial class WebGPURenderControl : Control
 
     [LibraryImport("user32.dll", EntryPoint = "PeekMessageW")]
     private static partial int PeekMessage(out NativeMessage msg, nint hWnd, uint messageFilterMin, uint messageFilterMax, uint flags);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial nint GetModuleHandle(string? moduleName);
 
     private static bool IsApplicationIdle() => PeekMessage(out _, 0, 0, 0, 0) == 0;
 }

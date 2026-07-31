@@ -1,11 +1,22 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// Segments laid out for contiguous storage
+// Line segment records flowing between flattening and fine rasterization.
+//
+// Imported by fine.wgsl, flatten.wgsl, path_count.wgsl, path_row_span.wgsl,
+// and path_tiling.wgsl. Ported from Vello's shader/shared/segment.wgsl
+// (linebender/vello).
+
+// Segments laid out for contiguous storage: path_tiling clips each LineSoup
+// line against its tiles and writes one Segment per (tile, line) crossing
+// for fine to integrate.
 struct Segment {
     // Points are relative to tile origin
     point0: vec2<f32>,
     point1: vec2<f32>,
+    // Tile-relative y at which the segment meets the tile's left edge, or
+    // 1e9 if it does not; fine accumulates the implied vertical edge there
+    // to keep winding consistent after clipping.
     y_edge: f32,
 }
 

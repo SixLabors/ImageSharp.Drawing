@@ -192,7 +192,7 @@ public class TextBuilderTests
         DrawingOptions options = new();
 
         DrawingOptions result = options.CloneOrReturnForRules(
-            options.ShapeOptions.IntersectionRule,
+            options.IntersectionRule,
             options.GraphicsOptions.AlphaCompositionMode,
             options.GraphicsOptions.ColorBlendingMode);
 
@@ -213,13 +213,12 @@ public class TextBuilderTests
             PixelColorBlendingMode.Multiply);
 
         Assert.NotSame(options, result);
-        Assert.NotSame(options.ShapeOptions, result.ShapeOptions);
         Assert.NotSame(options.GraphicsOptions, result.GraphicsOptions);
-        Assert.Equal(IntersectionRule.EvenOdd, result.ShapeOptions.IntersectionRule);
+        Assert.Equal(IntersectionRule.EvenOdd, result.IntersectionRule);
         Assert.Equal(PixelAlphaCompositionMode.SrcIn, result.GraphicsOptions.AlphaCompositionMode);
         Assert.Equal(PixelColorBlendingMode.Multiply, result.GraphicsOptions.ColorBlendingMode);
         Assert.Equal(options.Transform, result.Transform);
-        Assert.Equal(IntersectionRule.NonZero, options.ShapeOptions.IntersectionRule);
+        Assert.Equal(IntersectionRule.NonZero, options.IntersectionRule);
         Assert.Equal(PixelAlphaCompositionMode.SrcOver, options.GraphicsOptions.AlphaCompositionMode);
         Assert.Equal(PixelColorBlendingMode.Normal, options.GraphicsOptions.ColorBlendingMode);
     }

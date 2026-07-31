@@ -145,6 +145,7 @@ public static class TestImages
             public const string Hiyamugi = "Jpg/baseline/Hiyamugi.jpg";
             public const string Snake = "Jpg/baseline/Snake.jpg";
             public const string Lake = "Jpg/baseline/Lake.jpg";
+            public const string Balloon = "Jpg/baseline/balloon.jpg";
             public const string Jpeg400 = "Jpg/baseline/jpeg400jfif.jpg";
             public const string Jpeg420Exif = "Jpg/baseline/jpeg420exif.jpg";
             public const string Jpeg444 = "Jpg/baseline/jpeg444.jpg";

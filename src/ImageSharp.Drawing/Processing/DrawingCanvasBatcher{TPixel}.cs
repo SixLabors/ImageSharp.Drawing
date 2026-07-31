@@ -17,6 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// separately and referenced by timeline entry index. During disposal replay, command ranges are
 /// lowered to short-lived backend scenes at the position where the canvas recorded the range.
 /// </remarks>
+/// <typeparam name="TPixel">The pixel format.</typeparam>
 internal sealed class DrawingCanvasBatcher<TPixel>
     where TPixel : unmanaged, IPixel<TPixel>
 {
@@ -32,31 +33,39 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     // sealing instead of letting layer state leak across later command ranges.
     private int layerCommandCount;
     private int sealedLayerCommandCount;
+    private int applyCommandCount;
+    private int sealedApplyCommandCount;
+    private int clipCommandCount;
+    private int sealedClipCommandCount;
 
-    // Clip and dash flags gate whole-buffer command preparation; prepared commands
+    // Dash and brush-transform flags gate whole-buffer command preparation; prepared commands
     // remain in the same command buffer until replay consumes it.
-    private bool hasClips;
     private bool hasDashes;
+    private bool hasBrushTransforms;
 
-    // Timeline entries keep compact indexes into the command, barrier, and retained
+    // Mirrors the physical begin/end-clip command stream. The stream is the single source of
+    // truth for clipping in both backends; the canvas re-anchors it via EnsureClipAnchors when
+    // drawing moves to a differently-offset context (for example a child region).
+    private readonly List<(DrawingClipDescriptor Descriptor, Point AnchorOffset)> openClips = [];
+
+    // Timeline entries keep compact indexes into the command and retained
     // scene buffers while preserving the order recorded by the canvas.
     private DrawingCanvasTimelineEntry[] entries;
-
-    // Apply barriers carry replay-time target read/process/write operations.
-    private ApplyBarrier[] applyBarriers;
-    private int applyBarrierCount;
 
     // These are existing retained scenes recorded through RenderScene, not scenes
     // produced later from this batcher's own command ranges.
     private DrawingBackendScene[] insertedScenes;
     private int insertedSceneCount;
 
-    internal DrawingCanvasBatcher(Configuration configuration)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingCanvasBatcher{TPixel}"/> class.
+    /// </summary>
+    /// <param name="configuration">The configuration providing parallelism settings for command preparation.</param>
+    public DrawingCanvasBatcher(Configuration configuration)
     {
         this.configuration = configuration;
         this.commands = [];
         this.entries = [];
-        this.applyBarriers = [];
         this.insertedScenes = [];
     }
 
@@ -80,15 +89,38 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     /// <param name="composition">The command to queue.</param>
     public void AddComposition(in CompositionCommand composition)
     {
+        switch (composition.Kind)
+        {
+            case CompositionCommandKind.BeginClip:
+                this.openClips.Add((composition.ClipDescriptor, composition.DestinationOffset));
+                break;
+
+            case CompositionCommandKind.EndClip:
+                if (this.openClips.Count > 0)
+                {
+                    this.openClips.RemoveAt(this.openClips.Count - 1);
+                }
+
+                break;
+
+            default:
+                break;
+        }
+
         this.EnsureCommandCapacity(this.commandCount + 1);
         this.commands[this.commandCount++] = new PathCompositionSceneCommand(composition);
 
-        if (composition.Kind is not CompositionCommandKind.FillLayer)
+        if (composition.Kind is CompositionCommandKind.BeginLayer or CompositionCommandKind.EndLayer)
         {
             this.layerCommandCount++;
         }
+        else if (composition.Kind is CompositionCommandKind.BeginClip or CompositionCommandKind.EndClip)
+        {
+            this.clipCommandCount++;
+        }
 
-        this.hasClips |= composition.ClipPaths is not null;
+        this.hasBrushTransforms |= composition.Kind is CompositionCommandKind.FillLayer
+            && composition.Transform != Matrix4x4.Identity;
     }
 
     /// <summary>
@@ -99,8 +131,8 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     {
         this.EnsureCommandCapacity(this.commandCount + 1);
         this.commands[this.commandCount++] = new StrokePathCompositionSceneCommand(command);
-        this.hasClips |= command.ClipPaths is not null;
         this.hasDashes |= command.Pen.StrokePattern.Length >= 2;
+        this.hasBrushTransforms |= command.Transform != Matrix4x4.Identity;
     }
 
     /// <summary>
@@ -111,6 +143,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     {
         this.EnsureCommandCapacity(this.commandCount + 1);
         this.commands[this.commandCount++] = new LineSegmentCompositionSceneCommand(command);
+        this.hasBrushTransforms |= command.Transform != Matrix4x4.Identity;
     }
 
     /// <summary>
@@ -121,6 +154,60 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     {
         this.EnsureCommandCapacity(this.commandCount + 1);
         this.commands[this.commandCount++] = new PolylineCompositionSceneCommand(command);
+        this.hasBrushTransforms |= command.Transform != Matrix4x4.Identity;
+    }
+
+    /// <summary>
+    /// Re-anchors the open ordered clip stream at the consuming state's destination offset.
+    /// </summary>
+    /// <remarks>
+    /// Clip descriptors are recorded in canvas-local coordinates and the begin/end-clip command
+    /// stream is the single source of truth for clipping in both backends. The canvas calls this
+    /// before recording draws so that when drawing moves to a differently-offset context (for
+    /// example a child region inheriting parent clips) the open clip stack is closed and reopened
+    /// anchored at the new offset. Glyph render locations do not participate: the canvas anchors
+    /// at its state's destination offset, not at per-glyph draw offsets.
+    /// </remarks>
+    /// <param name="destinationOffset">The destination offset of the consuming canvas state.</param>
+    public void EnsureClipAnchors(Point destinationOffset)
+    {
+        List<(DrawingClipDescriptor Descriptor, Point AnchorOffset)> clips = this.openClips;
+        int count = clips.Count;
+        if (count == 0)
+        {
+            return;
+        }
+
+        bool anchored = true;
+        for (int i = 0; i < count; i++)
+        {
+            if (clips[i].AnchorOffset != destinationOffset)
+            {
+                anchored = false;
+                break;
+            }
+        }
+
+        if (anchored)
+        {
+            return;
+        }
+
+        DrawingClipDescriptor[] descriptors = new DrawingClipDescriptor[count];
+        for (int i = 0; i < count; i++)
+        {
+            descriptors[i] = clips[i].Descriptor;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            this.AddComposition(CompositionCommand.CreateEndClip());
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            this.AddComposition(CompositionCommand.CreateBeginClip(descriptors[i], destinationOffset));
+        }
     }
 
     /// <summary>
@@ -142,25 +229,25 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         this.entries[this.TimelineEntryCount++] = DrawingCanvasTimelineEntry.CreateCommandRange(
             this.sealedCommandCount,
             count,
-            this.layerCommandCount != this.sealedLayerCommandCount);
+            this.layerCommandCount != this.sealedLayerCommandCount,
+            this.applyCommandCount != this.sealedApplyCommandCount,
+            this.clipCommandCount != this.sealedClipCommandCount);
 
         this.sealedCommandCount = this.commandCount;
         this.sealedLayerCommandCount = this.layerCommandCount;
+        this.sealedApplyCommandCount = this.applyCommandCount;
+        this.sealedClipCommandCount = this.clipCommandCount;
     }
 
     /// <summary>
-    /// Appends an apply barrier to the replay timeline after sealing queued commands.
+    /// Appends an apply barrier to the command stream.
     /// </summary>
     /// <param name="barrier">The apply barrier to append.</param>
-    internal void AddApplyBarrier(ApplyBarrier barrier)
+    public void AddApplyBarrier(ApplyBarrier barrier)
     {
-        this.SealCommands();
-        this.EnsureApplyBarrierCapacity(this.applyBarrierCount + 1);
-
-        int barrierIndex = this.applyBarrierCount;
-        this.applyBarriers[this.applyBarrierCount++] = barrier;
-        this.EnsureEntryCapacity(this.TimelineEntryCount + 1);
-        this.entries[this.TimelineEntryCount++] = DrawingCanvasTimelineEntry.CreateApplyBarrier(barrierIndex);
+        this.EnsureCommandCapacity(this.commandCount + 1);
+        this.commands[this.commandCount++] = new PathCompositionSceneCommand(CompositionCommand.CreateApply(barrier));
+        this.applyCommandCount++;
     }
 
     /// <summary>
@@ -201,11 +288,14 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 
         this.SealAndPrepareCommands();
 
-        return backend.CreateScene(
-            this.configuration,
-            targetBounds,
-            new DrawingCommandBatch(this.commands, this.commandCount, this.layerCommandCount > 0),
-            ownedResources);
+        DrawingCommandBatch commandBatch = this.CreatePreparedCommandBatch(
+            0,
+            this.commandCount,
+            this.layerCommandCount > 0,
+            this.applyCommandCount > 0,
+            this.clipCommandCount > 0);
+
+        return backend.CreateScene(this.configuration, targetBounds, commandBatch, ownedResources);
     }
 
     /// <summary>
@@ -224,7 +314,29 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     /// <param name="entry">The command-range timeline entry.</param>
     /// <returns>The command batch.</returns>
     public DrawingCommandBatch CreateCommandBatch(DrawingCanvasTimelineEntry entry)
-        => new(this.commands, entry.Index, entry.Count, entry.HasLayers);
+        => this.CreatePreparedCommandBatch(
+            entry.Index,
+            entry.Count,
+            entry.HasLayers,
+            entry.HasApply,
+            entry.HasClipControls);
+
+    /// <summary>
+    /// Creates a command batch over a contiguous range of the shared command buffer.
+    /// </summary>
+    /// <param name="startIndex">The first command index.</param>
+    /// <param name="commandCount">The command count.</param>
+    /// <param name="hasLayers">Indicates whether the range contains layer boundary commands.</param>
+    /// <param name="hasApply">Indicates whether the range contains apply barriers.</param>
+    /// <param name="hasClipControls">Indicates whether the range contains ordered clip-control commands.</param>
+    /// <returns>The command batch.</returns>
+    private DrawingCommandBatch CreatePreparedCommandBatch(
+        int startIndex,
+        int commandCount,
+        bool hasLayers,
+        bool hasApply,
+        bool hasClipControls)
+        => new(this.commands, startIndex, commandCount, hasLayers, hasApply, hasClipControls);
 
     /// <summary>
     /// Gets one recorded timeline entry.
@@ -233,14 +345,6 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     /// <returns>The recorded timeline entry.</returns>
     public DrawingCanvasTimelineEntry GetEntry(int index)
         => this.entries[index];
-
-    /// <summary>
-    /// Gets one recorded apply barrier.
-    /// </summary>
-    /// <param name="index">The apply-barrier index.</param>
-    /// <returns>The recorded apply barrier.</returns>
-    internal ApplyBarrier GetApplyBarrier(int index)
-        => this.applyBarriers[index];
 
     /// <summary>
     /// Gets one retained scene reference recorded through <see cref="DrawingCanvas.RenderScene"/>.
@@ -257,17 +361,23 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     {
         Array.Clear(this.commands, 0, this.commandCount);
         Array.Clear(this.entries, 0, this.TimelineEntryCount);
-        Array.Clear(this.applyBarriers, 0, this.applyBarrierCount);
         Array.Clear(this.insertedScenes, 0, this.insertedSceneCount);
         this.commandCount = 0;
         this.sealedCommandCount = 0;
         this.layerCommandCount = 0;
         this.sealedLayerCommandCount = 0;
+        this.applyCommandCount = 0;
+        this.sealedApplyCommandCount = 0;
+        this.clipCommandCount = 0;
+        this.sealedClipCommandCount = 0;
         this.TimelineEntryCount = 0;
-        this.applyBarrierCount = 0;
         this.insertedSceneCount = 0;
-        this.hasClips = false;
         this.hasDashes = false;
+        this.hasBrushTransforms = false;
+
+        // The canvas re-opens its active clip state after clearing, so the mirrored
+        // physical clip stream starts empty alongside the new command buffer.
+        this.openClips.Clear();
     }
 
     /// <summary>
@@ -311,26 +421,6 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     }
 
     /// <summary>
-    /// Ensures that the apply-barrier buffer can store the requested barrier count without reallocating.
-    /// </summary>
-    /// <param name="requiredCapacity">The required barrier capacity.</param>
-    private void EnsureApplyBarrierCapacity(int requiredCapacity)
-    {
-        if (requiredCapacity <= this.applyBarriers.Length)
-        {
-            return;
-        }
-
-        int nextCapacity = this.applyBarriers.Length == 0 ? 2 : this.applyBarriers.Length * 2;
-        if (nextCapacity < requiredCapacity)
-        {
-            nextCapacity = requiredCapacity;
-        }
-
-        Array.Resize(ref this.applyBarriers, nextCapacity);
-    }
-
-    /// <summary>
     /// Ensures that the inserted-scene buffer can store the requested scene count without reallocating.
     /// </summary>
     /// <param name="requiredCapacity">The required scene capacity.</param>
@@ -350,16 +440,20 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         Array.Resize(ref this.insertedScenes, nextCapacity);
     }
 
+    /// <summary>
+    /// Expands dashed strokes and normalizes brush transforms across the whole command buffer.
+    /// </summary>
     private void PrepareCommands()
     {
-        if (!this.hasClips && !this.hasDashes)
+        if (!this.hasDashes && !this.hasBrushTransforms)
         {
             return;
         }
 
-        // If clipping is present we need to apply that now before handing the command
-        // to the backend. This avoids complicating the backend with clipping logic
-        // and allows us to reuse the same optimized backend code for clipped and unclipped paths.
+        // Command preparation is the last canvas-owned normalization boundary. Dashed strokes are
+        // expanded and brush coordinates are normalized here so CPU and WebGPU do not each bake
+        // the transform in their own way. Clipping is not prepared per command: the ordered
+        // begin/end-clip command stream is the single source of truth for both backends.
         int requestedParallelism = this.configuration.MaxDegreeOfParallelism;
         int partitionCount = ParallelExecutionHelper.GetPartitionCount(requestedParallelism, this.commandCount);
 
@@ -370,6 +464,8 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                 PrepareCommand(ref this.commands[i]);
             }
 
+            this.hasDashes = false;
+            this.hasBrushTransforms = false;
             return;
         }
 
@@ -389,93 +485,145 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                     PrepareCommand(ref this.commands[i]);
                 }
             });
+
+        this.hasDashes = false;
+        this.hasBrushTransforms = false;
     }
 
+    /// <summary>
+    /// Prepares one queued command in place: expands dashed stroke geometry and bakes
+    /// non-identity transforms into brush coordinates.
+    /// </summary>
+    /// <param name="command">The command slot to prepare.</param>
     private static void PrepareCommand(ref CompositionSceneCommand command)
     {
         if (command is PathCompositionSceneCommand pathCommand)
         {
             CompositionCommand composition = pathCommand.Command;
-            if (composition.ClipPaths is { Count: > 0 })
+            if (composition.Kind == CompositionCommandKind.FillLayer && composition.Transform != Matrix4x4.Identity)
             {
-                IPath path = composition.SourcePath;
-                DrawingOptions sourceOptions = composition.DrawingOptions;
+                // The batcher is the brush normalization boundary. Backends still use
+                // DrawingOptions.Transform for geometry, but brush coordinates are prepared
+                // here so CPU and WebGPU do not each bake the transform in their own way.
+                // Position-independent brushes return themselves untransformed, and every
+                // glyph command reaches here because its composed transform carries the
+                // sub-pixel fraction, so the rebuild is skipped when nothing changed.
+                Brush brush = composition.Brush.Transform(
+                    composition.Transform,
+                    composition.RasterizerOptions.Interest,
+                    composition.RasterizerOptions.Interest);
 
-                if (sourceOptions.Transform != Matrix4x4.Identity)
+                if (!ReferenceEquals(brush, composition.Brush))
                 {
-                    path = path.Transform(sourceOptions.Transform);
+                    pathCommand.Command = CompositionCommand.Create(
+                        composition.SourcePath,
+                        brush,
+                        composition.DrawingOptions,
+                        composition.RasterizerOptions,
+                        composition.TargetBounds,
+                        composition.DestinationOffset,
+                        composition.OwnerLayer,
+                        composition.SubPixelOffset);
                 }
-
-                path = path.Clip(sourceOptions.ShapeOptions, composition.ClipPaths);
-
-                RasterizerOptions rasterizerOptions = composition.RasterizerOptions;
-                DrawingOptions preparedOptions = WithIdentityTransform(sourceOptions);
-
-                // Update the command with the clipped path.
-                pathCommand.Command = CompositionCommand.Create(
-                    path,
-                    composition.Brush.Transform(sourceOptions.Transform),
-                    preparedOptions,
-                    in rasterizerOptions,
-                    composition.TargetBounds,
-                    composition.DestinationOffset,
-                    null,
-                    composition.IsInsideLayer);
             }
         }
         else if (command is StrokePathCompositionSceneCommand strokePathCommand)
         {
             StrokePathCommand composition = strokePathCommand.Command;
+            Matrix4x4 transform = composition.Transform;
+            bool hasTransform = transform != Matrix4x4.Identity;
+            Brush brush = hasTransform
+                ? composition.Brush.Transform(
+                    transform,
+                    composition.RasterizerOptions.Interest,
+                    composition.RasterizerOptions.Interest)
+                : composition.Brush;
 
-            if (composition.ClipPaths is { Count: > 0 })
+            Pen pen = composition.Pen;
+            IPath sourcePath = composition.SourcePath;
+            bool hasDashes = pen.StrokePattern.Length >= 2;
+            if (hasDashes)
             {
-                IPath path = composition.Pen.GeneratePath(composition.SourcePath);
-                DrawingOptions sourceOptions = composition.DrawingOptions;
-
-                if (sourceOptions.Transform != Matrix4x4.Identity)
-                {
-                    path = path.Transform(sourceOptions.Transform);
-                }
-
-                path = path.Clip(sourceOptions.ShapeOptions, composition.ClipPaths);
-
-                RasterizerOptions rasterizerOptions = composition.RasterizerOptions;
-                DrawingOptions preparedOptions = WithIdentityTransform(sourceOptions);
-
-                command = new PathCompositionSceneCommand(
-                    CompositionCommand.Create(
-                        path,
-                        composition.Brush.Transform(sourceOptions.Transform),
-                        preparedOptions,
-                        in rasterizerOptions,
-                        composition.TargetBounds,
-                        composition.DestinationOffset,
-                        null,
-                        composition.IsInsideLayer));
+                // Dashing changes the subject geometry, so it must be done before the backend
+                // retains raster payload for the stroke command.
+                sourcePath = sourcePath.GenerateDashes(pen.StrokeWidth, pen.StrokePattern.Span, pen.StrokePatternOffset);
             }
-            else
+
+            // Position-independent brushes return themselves untransformed, so only dashing
+            // or a genuinely transformed brush warrants rebuilding the command.
+            if (hasDashes || !ReferenceEquals(brush, composition.Brush))
             {
-                // We need to dash the path here before sending it to the backend.
-                Pen pen = composition.Pen;
-                if (pen.StrokePattern.Length >= 2)
+                strokePathCommand.Command = new StrokePathCommand(
+                    sourcePath,
+                    brush,
+                    composition.DrawingOptions,
+                    composition.RasterizerOptions,
+                    composition.TargetBounds,
+                    composition.DestinationOffset,
+                    composition.Pen,
+                    composition.IsInsideLayer,
+                    composition.OwnerLayer,
+                    composition.SubPixelOffset);
+            }
+        }
+        else if (command is LineSegmentCompositionSceneCommand lineSegmentCommand)
+        {
+            StrokeLineSegmentCommand composition = lineSegmentCommand.Command;
+            Matrix4x4 transform = composition.Transform;
+            if (transform != Matrix4x4.Identity)
+            {
+                Brush brush = composition.Brush.Transform(
+                    transform,
+                    composition.RasterizerOptions.Interest,
+                    composition.RasterizerOptions.Interest);
+
+                // Position-independent brushes return themselves untransformed; skipping the
+                // rebuild also skips allocating a replacement scene command wrapper.
+                if (!ReferenceEquals(brush, composition.Brush))
                 {
-                    strokePathCommand.Command = new StrokePathCommand(
-                        composition.SourcePath.GenerateDashes(pen.StrokeWidth, pen.StrokePattern.Span),
-                        composition.Brush,
-                        composition.DrawingOptions,
-                        composition.RasterizerOptions,
-                        composition.TargetBounds,
-                        composition.DestinationOffset,
-                        composition.Pen,
-                        null,
-                        composition.IsInsideLayer);
+                    command = new LineSegmentCompositionSceneCommand(
+                        new StrokeLineSegmentCommand(
+                            composition.SourceStart,
+                            composition.SourceEnd,
+                            brush,
+                            composition.DrawingOptions,
+                            composition.RasterizerOptions,
+                            composition.TargetBounds,
+                            composition.DestinationOffset,
+                            composition.Pen,
+                            composition.IsInsideLayer,
+                            composition.OwnerLayer));
+                }
+            }
+        }
+        else if (command is PolylineCompositionSceneCommand polylineCommand)
+        {
+            StrokePolylineCommand composition = polylineCommand.Command;
+            Matrix4x4 transform = composition.Transform;
+            if (transform != Matrix4x4.Identity)
+            {
+                Brush brush = composition.Brush.Transform(
+                    transform,
+                    composition.RasterizerOptions.Interest,
+                    composition.RasterizerOptions.Interest);
+
+                // Position-independent brushes return themselves untransformed; skipping the
+                // rebuild also skips allocating a replacement scene command wrapper.
+                if (!ReferenceEquals(brush, composition.Brush))
+                {
+                    command = new PolylineCompositionSceneCommand(
+                        new StrokePolylineCommand(
+                            composition.SourcePoints,
+                            brush,
+                            composition.DrawingOptions,
+                            composition.RasterizerOptions,
+                            composition.TargetBounds,
+                            composition.DestinationOffset,
+                            composition.Pen,
+                            composition.IsInsideLayer,
+                            composition.OwnerLayer));
                 }
             }
         }
     }
-
-    private static DrawingOptions WithIdentityTransform(DrawingOptions source)
-        => source.Transform == Matrix4x4.Identity
-            ? source
-            : new DrawingOptions(source.GraphicsOptions, source.ShapeOptions, Matrix4x4.Identity);
 }

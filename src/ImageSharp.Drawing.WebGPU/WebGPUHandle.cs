@@ -51,7 +51,7 @@ internal abstract class WebGPUHandle : SafeHandle
     /// Callers should keep the returned token in the narrowest possible scope and dispose it
     /// as soon as the native call sequence that uses <see cref="HandleReference.Handle"/> ends.
     /// </remarks>
-    internal HandleReference AcquireReference()
+    public HandleReference AcquireReference()
     {
         bool addRefSucceeded = false;
         this.DangerousAddRef(ref addRefSucceeded);
@@ -79,13 +79,21 @@ internal abstract class WebGPUHandle : SafeHandle
     /// without carrying a separate success flag beside the handle. Disposing it releases the
     /// reference acquired by <see cref="AcquireReference"/>. Modeled after
     /// <see cref="System.Buffers.MemoryHandle"/>: a lightweight scoped value that should not be
-    /// copied or stored beyond the immediate native-call scope.
+    /// copied or stored beyond the immediate native-call scope. Disposal only nulls the owner
+    /// on the copy being disposed, so disposing two copies releases the reference twice and
+    /// corrupts the safe-handle refcount.
     /// </remarks>
     internal struct HandleReference : IDisposable
     {
+        // Nulled by Dispose so a second Dispose on the same copy is a no-op.
         private WebGPUHandle? owner;
 
-        internal HandleReference(WebGPUHandle owner, nint handle)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="HandleReference"/> struct.
+        /// </summary>
+        /// <param name="owner">The safe handle whose reference count was incremented by <see cref="AcquireReference"/>.</param>
+        /// <param name="handle">The raw native handle kept alive by this reference.</param>
+        public HandleReference(WebGPUHandle owner, nint handle)
         {
             this.owner = owner;
             this.Handle = handle;

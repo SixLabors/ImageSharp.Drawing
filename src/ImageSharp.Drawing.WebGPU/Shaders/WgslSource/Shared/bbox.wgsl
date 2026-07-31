@@ -1,23 +1,38 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// The annotated bounding box for a path. It has been transformed,
-// but contains a link to the active transform, mostly for gradients.
+// Per-path device-space bounding box record.
+//
+// Cleared by bbox_clear.wgsl, atomically widened by flatten.wgsl (via its
+// field-compatible AtomicPathBbox view of the same buffer), then consumed by
+// binning.wgsl, clip_reduce.wgsl, clip_leaf.wgsl, and draw_leaf.wgsl.
+// Ported from Vello's shader/shared/bbox.wgsl (linebender/vello) with
+// ImageSharp additions (coverage_threshold, interest).
+
+// The annotated bounding box for a transformed path.
 // Coordinates are integer pixels (for the convenience of atomic update)
 // but will probably become fixed-point fractions for rectangles.
 //
-// TODO: This also carries a `draw_flags` field that contains information that gets propagated to
-// the draw info stream. This is currently only used for the fill rule. If the other bits remain
-// unused we could possibly pack this into some other field, such as the MSB of `trans_ix`.
+// `draw_flags` is propagated to the draw info stream and carries fill-rule, aliasing, and blend state.
+// Field layout must mirror AtomicPathBbox in flatten.wgsl.
 struct PathBbox {
-    x0: i32,
+    x0: i32, // min bounds; i32 max while empty (see bbox_clear)
     y0: i32,
-    x1: i32,
+    x1: i32, // max bounds; x0 > x1 denotes an empty box
     y1: i32,
     draw_flags: u32,
-    trans_ix: u32,
+    trans_ix: u32, // index of the path's transform in the scene stream
+    // Per-fill coverage parameter, propagated from the style record to the fine pass.
+    // For aliased fills this is the quantization cutoff in [0,1]; for antialiased fills it
+    // carries the perceptual coverage boost for text (zero when disabled). The draw-flags
+    // aliased bit selects the interpretation; the two uses are mutually exclusive.
+    coverage_threshold: f32,
+    _padding: u32,
+    interest: vec4<f32>, // raster interest rect (x0, y0, x1, y1) in pixels
 }
 
+// Intersection of two (x0, y0, x1, y1) boxes; may produce an empty or
+// inverted box, which callers must treat as zero area.
 fn bbox_intersect(a: vec4<f32>, b: vec4<f32>) -> vec4<f32> {
     return vec4(max(a.xy, b.xy), min(a.zw, b.zw));
 }

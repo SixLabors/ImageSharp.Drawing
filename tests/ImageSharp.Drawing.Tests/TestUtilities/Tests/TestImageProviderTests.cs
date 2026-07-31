@@ -16,13 +16,13 @@ public class TestImageProviderTests
     public static readonly TheoryData<object> BasicData = new()
     {
         TestImageProvider<Rgba32>.Blank(10, 20),
-        TestImageProvider<HalfVector4>.Blank(10, 20),
+        TestImageProvider<RgbaHalf>.Blank(10, 20),
     };
 
     public static readonly TheoryData<object> FileData = new()
     {
         TestImageProvider<Rgba32>.File(TestImages.Bmp.Car),
-        TestImageProvider<HalfVector4>.File(TestImages.Bmp.F)
+        TestImageProvider<RgbaHalf>.File(TestImages.Bmp.F)
     };
 
     public TestImageProviderTests(ITestOutputHelper output) => this.Output = output;

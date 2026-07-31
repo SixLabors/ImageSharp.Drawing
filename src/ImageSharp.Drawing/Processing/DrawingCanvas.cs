@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Text;
@@ -9,8 +10,14 @@ using SixLabors.ImageSharp.Processing.Processors.Transforms;
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Represents a drawing canvas over a frame target.
+/// Represents a stateful, retained-mode drawing canvas over a frame target.
 /// </summary>
+/// <remarks>
+/// Draw calls are recorded into an ordered command stream rather than rasterized immediately;
+/// the root canvas replays the recorded timeline when it is disposed. Drawing state (options,
+/// transform, clip and layer scope) is managed through the <see cref="Save()"/>/<see cref="Restore"/>
+/// state stack.
+/// </remarks>
 public abstract partial class DrawingCanvas : IDisposable
 {
     /// <summary>
@@ -35,23 +42,19 @@ public abstract partial class DrawingCanvas : IDisposable
     public abstract int Save();
 
     /// <summary>
-    /// Saves the current drawing state and replaces the active state with the provided options and clip paths.
+    /// Saves the current drawing state and replaces the active state with the provided options.
     /// </summary>
     /// <remarks>
     /// The provided <paramref name="options"/> instance is stored by reference.
     /// Mutating it after this call mutates the active/restored state behavior.
     /// </remarks>
     /// <param name="options">Drawing options for the new active state.</param>
-    /// <param name="clipPaths">Clip paths for the new active state.</param>
     /// <returns>The save count after the previous state has been pushed.</returns>
-    public abstract int Save(DrawingOptions options, params IPath[] clipPaths);
+    public abstract int Save(DrawingOptions options);
 
     /// <summary>
-    /// Saves the current drawing state and begins an isolated compositing layer
-    /// bounded to a subregion. Subsequent draw commands are recorded into that isolated
-    /// logical layer. When <see cref="Restore"/> closes the layer, it is recorded into the
-    /// canvas timeline and later composed during <see cref="IDisposable.Dispose"/> using the specified
-    /// <paramref name="layerOptions"/>.
+    /// Saves the current drawing state and begins an isolated compositing layer bounded to a subregion.
+    /// Subsequent draw commands target that layer until <see cref="Restore"/> closes it.
     /// </summary>
     /// <remarks>
     /// The layer bounds are expressed in the current local coordinate system and are
@@ -60,8 +63,7 @@ public abstract partial class DrawingCanvas : IDisposable
     /// system used by commands recorded inside the layer.
     /// </remarks>
     /// <param name="layerOptions">
-    /// Graphics options controlling how the closed layer is composited against the parent canvas
-    /// when the canvas timeline is rendered during <see cref="IDisposable.Dispose"/>.
+    /// Graphics options controlling how the closed layer is composited against the parent canvas.
     /// </param>
     /// <param name="bounds">
     /// The local bounds of the layer. Only this region is allocated and composited.
@@ -70,12 +72,89 @@ public abstract partial class DrawingCanvas : IDisposable
     public abstract int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds);
 
     /// <summary>
+    /// Saves the current drawing state and begins an isolated compositing layer
+    /// using the supplied drawing options for commands recorded into the layer.
+    /// </summary>
+    /// <param name="layerOptions">
+    /// Graphics options controlling how the closed layer is composited against the parent canvas.
+    /// </param>
+    /// <param name="bounds">
+    /// The local bounds of the layer. Only this region is allocated and composited.
+    /// </param>
+    /// <param name="options">Drawing options for the layer contents.</param>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    public abstract int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds, DrawingOptions options);
+
+    /// <summary>
+    /// Saves the current drawing state and begins an isolated compositing layer whose content is
+    /// transformed by an effect when the layer is restored.
+    /// </summary>
+    /// <remarks>
+    /// The layer isolates the content, so the effect operates on exactly what is drawn between
+    /// this call and the matching <see cref="Restore"/>, against transparency; a
+    /// <see cref="DropShadowLayerEffect"/>, for example, slots its shadow beneath that content
+    /// before the layer composites onto the canvas. The bounds are expanded internally by the
+    /// effect's reach so blurred or offset output is not cut off.
+    /// </remarks>
+    /// <param name="layerOptions">
+    /// Graphics options controlling how the closed layer is composited against the parent canvas.
+    /// </param>
+    /// <param name="bounds">The content bounds in local canvas coordinates.</param>
+    /// <param name="effect">The effect applied to the layer content on restore.</param>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    public abstract int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds, LayerEffect effect);
+
+    /// <summary>
+    /// Saves the current drawing state and begins an isolated compositing layer whose content is
+    /// transformed by an effect when the layer is restored, using the supplied drawing options for
+    /// commands recorded into the layer.
+    /// </summary>
+    /// <param name="layerOptions">
+    /// Graphics options controlling how the closed layer is composited against the parent canvas.
+    /// </param>
+    /// <param name="bounds">The content bounds in local canvas coordinates.</param>
+    /// <param name="effect">The effect applied to the layer content on restore.</param>
+    /// <param name="options">Drawing options for the layer contents.</param>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    public abstract int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds, LayerEffect effect, DrawingOptions options);
+
+    /// <summary>
+    /// Saves the current drawing state and begins an isolated compositing layer whose content is
+    /// transformed by an effect confined to a path region when the layer is restored.
+    /// </summary>
+    /// <remarks>
+    /// The effect processes only pixels covered by the supplied path; its output lands on the path
+    /// translated by the effect's offset. The layer bounds are derived from the path and expanded
+    /// by the effect's reach.
+    /// </remarks>
+    /// <param name="layerOptions">
+    /// Graphics options controlling how the closed layer is composited against the parent canvas.
+    /// </param>
+    /// <param name="region">The path region the effect processes, in local coordinates.</param>
+    /// <param name="effect">The effect applied to the layer content on restore.</param>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    public abstract int SaveLayer(GraphicsOptions layerOptions, IPath region, LayerEffect effect);
+
+    /// <summary>
+    /// Saves the current drawing state and begins an isolated compositing layer whose content is
+    /// transformed by an effect confined to a path region when the layer is restored, using the
+    /// supplied drawing options for commands recorded into the layer.
+    /// </summary>
+    /// <param name="layerOptions">
+    /// Graphics options controlling how the closed layer is composited against the parent canvas.
+    /// </param>
+    /// <param name="region">The path region the effect processes, in local coordinates.</param>
+    /// <param name="effect">The effect applied to the layer content on restore.</param>
+    /// <param name="options">Drawing options for the layer contents.</param>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    public abstract int SaveLayer(GraphicsOptions layerOptions, IPath region, LayerEffect effect, DrawingOptions options);
+
+    /// <summary>
     /// Restores the most recently saved state.
     /// </summary>
     /// <remarks>
     /// If the most recently saved state was created by a <c>SaveLayer</c> overload,
-    /// the layer is closed in the recorded timeline. Actual composition happens during
-    /// <see cref="IDisposable.Dispose"/>.
+    /// the layer is closed and becomes part of subsequent rendering.
     /// </remarks>
     public abstract void Restore();
 
@@ -86,8 +165,7 @@ public abstract partial class DrawingCanvas : IDisposable
     /// State frames above <paramref name="saveCount"/> are discarded,
     /// and the last discarded frame becomes the current state.
     /// If any discarded state was created by a <c>SaveLayer</c> overload,
-    /// those layers are closed in the recorded timeline and composed during
-    /// <see cref="IDisposable.Dispose"/>.
+    /// those layers are closed and become part of subsequent rendering.
     /// </remarks>
     /// <param name="saveCount">The save count to restore to.</param>
     public abstract void RestoreTo(int saveCount);
@@ -100,9 +178,10 @@ public abstract partial class DrawingCanvas : IDisposable
     public abstract DrawingCanvas CreateRegion(Rectangle region);
 
     /// <summary>
-    /// Clears a path region using the given brush and clear-style composition options.
+    /// Fills a path region with the given brush using replacement composition: the brush output
+    /// overwrites the covered pixels outright, including their alpha, rather than blending over them.
     /// </summary>
-    /// <param name="brush">Brush used to shade destination pixels during clear.</param>
+    /// <param name="brush">Brush used to shade destination pixels during the clear.</param>
     /// <param name="path">The path region to clear.</param>
     public abstract void Clear(Brush brush, IPath path);
 
@@ -112,6 +191,28 @@ public abstract partial class DrawingCanvas : IDisposable
     /// <param name="brush">Brush used to shade covered pixels.</param>
     /// <param name="path">The path to fill.</param>
     public abstract void Fill(Brush brush, IPath path);
+
+    /// <summary>
+    /// Narrows the current clip region by intersecting it with the supplied clip paths.
+    /// </summary>
+    /// <remarks>
+    /// The clip paths are transformed by the active transform at the point this is called, then
+    /// intersected with the existing clip; clipping only ever narrows. The resulting clip is part of
+    /// the current saved state and is restored by <see cref="Restore"/>. Multiple paths combine as a
+    /// union before intersecting (e.g. a region built from several rectangles).
+    /// </remarks>
+    /// <param name="clipPaths">The clip paths to intersect with the current clip, in local coordinates.</param>
+    public abstract void Clip(params IPath[] clipPaths);
+
+    /// <summary>
+    /// Narrows the current clip region by applying the specified clipping operation with the supplied clip paths.
+    /// </summary>
+    /// <remarks>
+    /// The clip paths are transformed by the active transform at the point this is called.
+    /// </remarks>
+    /// <param name="operation">The operation to apply to the current clip.</param>
+    /// <param name="clipPaths">The clip paths to combine with the current clip, in local coordinates.</param>
+    public abstract void Clip(ClipOperation operation, params IPath[] clipPaths);
 
     /// <summary>
     /// Applies an image-processing operation to a local region.
@@ -136,6 +237,32 @@ public abstract partial class DrawingCanvas : IDisposable
     /// <param name="path">The path region to process.</param>
     /// <param name="operation">The image-processing operation to apply to the region.</param>
     public abstract void Apply(IPath path, Action<IImageProcessingContext> operation);
+
+    /// <summary>
+    /// Applies an image-processing operation to a local region and composites the processed pixels
+    /// back with explicit options, optionally offset from where they were read. The target region
+    /// is untouched while the operation runs, so the processed pixels can be blended against the
+    /// original content; for example a drop shadow composites the tinted, blurred region back
+    /// beneath the content with <see cref="PixelAlphaCompositionMode.DestOver"/> at the shadow offset.
+    /// </summary>
+    /// <param name="region">The local region to process.</param>
+    /// <param name="operation">The image-processing operation to apply to the region.</param>
+    /// <param name="writeBackOptions">The graphics options used to composite the processed pixels back.</param>
+    /// <param name="writeBackOffset">The offset at which the processed pixels are written back.</param>
+    public abstract void Apply(Rectangle region, Action<IImageProcessingContext> operation, GraphicsOptions writeBackOptions, Point writeBackOffset);
+
+    /// <summary>
+    /// Applies an image-processing operation to a path region and composites the processed pixels
+    /// back with explicit options, optionally offset from where they were read.
+    /// </summary>
+    /// <remarks>
+    /// The write-back affects only pixels covered by the supplied path translated by the offset.
+    /// </remarks>
+    /// <param name="path">The path region to process.</param>
+    /// <param name="operation">The image-processing operation to apply to the region.</param>
+    /// <param name="writeBackOptions">The graphics options used to composite the processed pixels back.</param>
+    /// <param name="writeBackOffset">The offset at which the processed pixels are written back.</param>
+    public abstract void Apply(IPath path, Action<IImageProcessingContext> operation, GraphicsOptions writeBackOptions, Point writeBackOffset);
 
     /// <summary>
     /// Draws a polyline outline using the provided pen and drawing options.
@@ -236,6 +363,31 @@ public abstract partial class DrawingCanvas : IDisposable
         Pen? pen);
 
     /// <summary>
+    /// Draws a single glyph, identified by its glyph id, onto this canvas.
+    /// </summary>
+    /// <param name="glyphId">The id of the glyph within the font face referenced by <paramref name="options"/>.</param>
+    /// <param name="options">
+    /// The glyph rendering options, including the font, origin, grapheme index and optional per-glyph paint.
+    /// </param>
+    /// <param name="brush">Default brush used to fill the glyph when <see cref="RichGlyphOptions.Brush"/> is not set.</param>
+    /// <param name="pen">Default pen used to outline the glyph when <see cref="RichGlyphOptions.Pen"/> is not set.</param>
+    public abstract void DrawText(
+        ushort glyphId,
+        RichGlyphOptions options,
+        Brush? brush,
+        Pen? pen);
+
+    /// <summary>
+    /// Draws positioned glyphs onto this canvas.
+    /// </summary>
+    /// <param name="glyphIds">The glyph identifiers.</param>
+    /// <param name="points">The absolute glyph origins in pixel units.</param>
+    /// <param name="options">The glyph rendering options, including the font and optional glyph paint.</param>
+    /// <param name="brush">Default brush used to fill glyphs when <see cref="RichGlyphOptions.Brush"/> is not set.</param>
+    /// <param name="pen">Default pen used to outline glyphs when <see cref="RichGlyphOptions.Pen"/> is not set.</param>
+    public abstract void DrawText(ReadOnlySpan<ushort> glyphIds, ReadOnlySpan<Vector2> points, RichGlyphOptions options, Brush? brush, Pen? pen);
+
+    /// <summary>
     /// Draws layered glyph geometry.
     /// </summary>
     /// <param name="brush">Brush used to fill glyph layers.</param>
@@ -270,22 +422,81 @@ public abstract partial class DrawingCanvas : IDisposable
         IResampler? sampler = null);
 
     /// <summary>
-    /// Creates a retained backend scene from the drawing commands currently queued on this canvas.
+    /// Draws an image source region into a destination rectangle, tiling the painted area by repeating
+    /// the destination rectangle outwards per the supplied <see cref="WrapMode"/>s.
     /// </summary>
-    /// <returns>A retained backend scene.</returns>
+    /// <param name="image">The source image.</param>
+    /// <param name="sourceRect">The source rectangle within <paramref name="image"/>.</param>
+    /// <param name="destinationRect">The destination rectangle in local canvas coordinates (defines a single tile cell).</param>
+    /// <param name="wrapX">The horizontal wrap mode applied when sampling beyond <paramref name="destinationRect"/>.</param>
+    /// <param name="wrapY">The vertical wrap mode applied when sampling beyond <paramref name="destinationRect"/>.</param>
+    /// <param name="sampler">
+    /// Optional resampler used when scaling or transforming the image. Defaults to <see cref="KnownResamplers.Bicubic"/>.
+    /// </param>
+    public abstract void DrawImage(
+        Image image,
+        Rectangle sourceRect,
+        RectangleF destinationRect,
+        WrapMode wrapX,
+        WrapMode wrapY,
+        IResampler? sampler = null);
+
+    /// <summary>
+    /// Copies pixels from another canvas into this canvas.
+    /// </summary>
+    /// <remarks>
+    /// Any queued commands on both canvases are applied before the copy.
+    /// </remarks>
+    /// <param name="source">The source canvas.</param>
+    /// <param name="sourceRectangle">The source rectangle in source-local coordinates.</param>
+    /// <param name="targetPoint">The target point in this canvas' local coordinates.</param>
+    public abstract void CopyPixelsFrom(DrawingCanvas source, Rectangle sourceRectangle, Point targetPoint);
+
+    /// <summary>
+    /// Seals the commands recorded so far into a retained backend scene and clears them from the
+    /// canvas queue.
+    /// </summary>
+    /// <remarks>
+    /// The active clip range is closed before the scene is built and reopened afterwards, so this
+    /// acts as an ordering boundary in the recorded timeline. Image resources retained for the
+    /// sealed commands are transferred to the returned scene, which owns and disposes them.
+    /// </remarks>
+    /// <returns>The created backend scene.</returns>
     public abstract DrawingBackendScene CreateScene();
 
     /// <summary>
-    /// Renders a retained backend scene into this canvas target.
+    /// Records a previously created backend scene into this canvas' command timeline.
     /// </summary>
-    /// <param name="scene">The retained backend scene to render.</param>
+    /// <remarks>
+    /// The active command range is sealed before the scene is inserted so the scene renders in
+    /// submission order relative to the commands recorded around it. Like other recorded work,
+    /// the scene is replayed into the target frame when the root canvas is disposed or otherwise
+    /// flushed, not at the point of this call.
+    /// </remarks>
+    /// <param name="scene">The backend scene to render.</param>
     public abstract void RenderScene(DrawingBackendScene scene);
 
     /// <summary>
-    /// Seals queued drawing commands into the canvas timeline.
+    /// Seals the drawing commands recorded so far into an ordered range so that subsequent
+    /// commands begin a new range.
     /// </summary>
+    /// <remarks>
+    /// This does not rasterize or composite anything into the target frame. Recorded commands
+    /// are replayed into the target only when the root canvas is disposed, or when they are
+    /// lowered explicitly through <see cref="CreateScene"/>, <see cref="RenderScene"/> or
+    /// <see cref="CopyPixelsFrom"/>. Use this to establish an ordering boundary in the recorded
+    /// timeline without ending the canvas.
+    /// </remarks>
     public abstract void Flush();
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases the canvas. Disposing the root canvas closes any open layers and clips and
+    /// replays the recorded command timeline into the target frame; child region canvases
+    /// share the root's command stream and do not flush on disposal.
+    /// </summary>
+    /// <remarks>
+    /// The root canvas also releases image resources retained for deferred draws and, when it
+    /// owns the text drawing cache, clears that cache. Disposal is idempotent.
+    /// </remarks>
     public abstract void Dispose();
 }

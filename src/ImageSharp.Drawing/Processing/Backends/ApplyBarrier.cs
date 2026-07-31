@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.Memory;
-
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -15,30 +13,41 @@ internal sealed class ApplyBarrier
     /// </summary>
     /// <param name="path">The closed path defining the processed region.</param>
     /// <param name="options">The drawing options captured when the barrier was recorded.</param>
-    /// <param name="clipPaths">The active clip paths captured when the barrier was recorded.</param>
     /// <param name="canvasBounds">The canvas-local bounds captured when the barrier was recorded.</param>
     /// <param name="targetBounds">The absolute target bounds captured when the barrier was recorded.</param>
     /// <param name="destinationOffset">The absolute destination offset captured when the barrier was recorded.</param>
-    /// <param name="isInsideLayer">Indicates whether the barrier was recorded inside a layer.</param>
+    /// <param name="ownerLayer">The layer that owned this barrier when it was recorded.</param>
     /// <param name="operation">The processor operation to run against the replay-time snapshot.</param>
-    internal ApplyBarrier(
+    /// <param name="effect">The layer effect represented by the operation, or <see langword="null"/> for a direct Apply operation.</param>
+    /// <param name="writeBackOptions">
+    /// The graphics options used to composite the processed pixels back onto the target, or
+    /// <see langword="null"/> to replace the region outright.
+    /// </param>
+    /// <param name="writeBackOffset">The offset at which the processed pixels are written back.</param>
+    public ApplyBarrier(
         IPath path,
         DrawingOptions options,
-        IReadOnlyList<IPath> clipPaths,
         Rectangle canvasBounds,
         Rectangle targetBounds,
         Point destinationOffset,
-        bool isInsideLayer,
-        Action<IImageProcessingContext> operation)
+        DrawingCanvasLayer? ownerLayer,
+        Action<IImageProcessingContext> operation,
+        LayerEffect? effect,
+        GraphicsOptions? writeBackOptions,
+        Point writeBackOffset)
     {
         this.Path = path;
+        this.OutputBounds = path.Bounds;
+
         this.Options = options;
-        this.ClipPaths = clipPaths;
         this.CanvasBounds = canvasBounds;
         this.TargetBounds = targetBounds;
         this.DestinationOffset = destinationOffset;
-        this.IsInsideLayer = isInsideLayer;
+        this.OwnerLayer = ownerLayer;
         this.Operation = operation;
+        this.Effect = effect;
+        this.WriteBackOptions = writeBackOptions;
+        this.WriteBackOffset = writeBackOffset;
     }
 
     /// <summary>
@@ -47,14 +56,14 @@ internal sealed class ApplyBarrier
     public IPath Path { get; }
 
     /// <summary>
+    /// Gets the local bounds within which the processed output is written.
+    /// </summary>
+    public RectangleF OutputBounds { get; }
+
+    /// <summary>
     /// Gets the drawing options captured when the barrier was recorded.
     /// </summary>
     public DrawingOptions Options { get; }
-
-    /// <summary>
-    /// Gets the active clip paths captured when the barrier was recorded.
-    /// </summary>
-    public IReadOnlyList<IPath> ClipPaths { get; }
 
     /// <summary>
     /// Gets the canvas-local bounds captured when the barrier was recorded.
@@ -74,7 +83,12 @@ internal sealed class ApplyBarrier
     /// <summary>
     /// Gets a value indicating whether the barrier was recorded inside a layer.
     /// </summary>
-    public bool IsInsideLayer { get; }
+    public bool IsInsideLayer => this.OwnerLayer is not null;
+
+    /// <summary>
+    /// Gets the layer that owned this barrier when it was recorded.
+    /// </summary>
+    public DrawingCanvasLayer? OwnerLayer { get; }
 
     /// <summary>
     /// Gets the processor operation to run against the replay-time snapshot.
@@ -82,91 +96,19 @@ internal sealed class ApplyBarrier
     public Action<IImageProcessingContext> Operation { get; }
 
     /// <summary>
-    /// Creates the transient image-brush draw command that writes this barrier's processed snapshot back to the target.
+    /// Gets the layer effect represented by the operation, or <see langword="null"/> for a direct Apply operation.
     /// </summary>
-    /// <typeparam name="TPixel">The pixel format.</typeparam>
-    /// <param name="configuration">The active processing configuration.</param>
-    /// <param name="backend">The backend used to read the replay-time target pixels.</param>
-    /// <param name="target">The target frame.</param>
-    /// <param name="ownedResource">The image resource that must stay alive while the returned command batch is rendered.</param>
-    /// <returns>The transient write-back command batch, or <see langword="null"/> when the barrier has no target coverage.</returns>
-    public DrawingCommandBatch? CreateWriteBackBatch<TPixel>(
-        Configuration configuration,
-        IDrawingBackend backend,
-        ICanvasFrame<TPixel> target,
-        out IDisposable? ownedResource)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        RectangleF rawBounds = RectangleF.Transform(this.Path.Bounds, this.Options.Transform);
-        Rectangle sourceRect = ToConservativeBounds(rawBounds);
-        sourceRect = Rectangle.Intersect(this.CanvasBounds, sourceRect);
+    public LayerEffect? Effect { get; }
 
-        if (sourceRect.Width <= 0 || sourceRect.Height <= 0)
-        {
-            ownedResource = null;
-            return null;
-        }
+    /// <summary>
+    /// Gets the graphics options used to composite the processed pixels back onto the target.
+    /// When <see langword="null"/> the processed pixels replace the region outright.
+    /// </summary>
+    public GraphicsOptions? WriteBackOptions { get; }
 
-        Image<TPixel> sourceImage = new(configuration, sourceRect.Width, sourceRect.Height);
-        try
-        {
-            backend.ReadRegion(
-                configuration,
-                target,
-                sourceRect,
-                sourceImage.Frames.RootFrame.PixelBuffer.GetRegion());
-
-            sourceImage.Mutate(this.Operation);
-
-            Point brushOffset = new(
-                sourceRect.X - (int)MathF.Floor(rawBounds.Left),
-                sourceRect.Y - (int)MathF.Floor(rawBounds.Top));
-
-            ImageBrush<TPixel> brush = new(sourceImage, sourceImage.Bounds, brushOffset);
-            GraphicsOptions graphicsOptions = this.Options.GraphicsOptions;
-            RasterizationMode rasterizationMode = graphicsOptions.Antialias
-                ? RasterizationMode.Antialiased
-                : RasterizationMode.Aliased;
-
-            RectangleF pathBounds = this.Path.Bounds;
-            Rectangle interest = Rectangle.FromLTRB(
-                (int)MathF.Floor(pathBounds.Left),
-                (int)MathF.Floor(pathBounds.Top),
-                (int)MathF.Ceiling(pathBounds.Right),
-                (int)MathF.Ceiling(pathBounds.Bottom));
-
-            RasterizerOptions rasterizerOptions = new(
-                interest,
-                this.Options.ShapeOptions.IntersectionRule,
-                rasterizationMode,
-                RasterizerSamplingOrigin.PixelBoundary,
-                graphicsOptions.AntialiasThreshold);
-
-            CompositionCommand command = CompositionCommand.Create(
-                this.Path,
-                brush,
-                this.Options,
-                in rasterizerOptions,
-                this.TargetBounds,
-                this.DestinationOffset,
-                this.ClipPaths,
-                this.IsInsideLayer);
-
-            ownedResource = sourceImage;
-            CompositionSceneCommand[] commands = [new PathCompositionSceneCommand(command)];
-            return new DrawingCommandBatch(commands, hasLayers: false);
-        }
-        catch
-        {
-            sourceImage.Dispose();
-            throw;
-        }
-    }
-
-    private static Rectangle ToConservativeBounds(RectangleF bounds)
-        => Rectangle.FromLTRB(
-            (int)MathF.Floor(bounds.Left),
-            (int)MathF.Floor(bounds.Top),
-            (int)MathF.Ceiling(bounds.Right),
-            (int)MathF.Ceiling(bounds.Bottom));
+    /// <summary>
+    /// Gets the offset, in device pixels, at which the processed pixels are written back relative
+    /// to the region they were read from.
+    /// </summary>
+    public Point WriteBackOffset { get; }
 }

@@ -16,13 +16,17 @@ public static class DrawingOptionsDefaultsExtensions
     /// <param name="context">The image processing context to retrieve defaults from.</param>
     /// <returns>The globally configured default options.</returns>
     public static DrawingOptions GetDrawingOptions(this IImageProcessingContext context)
-        => new(context.GetGraphicsOptions(), new ShapeOptions(), Matrix4x4.Identity);
+        => new(context.GetGraphicsOptions(), IntersectionRule.NonZero, Matrix4x4.Identity, DrawingOptions.DefaultTextContrast);
 
     /// <summary>
-    /// Clones the path graphic options and applies changes required to force clearing.
+    /// Clones the drawing options and applies changes required to force clearing.
     /// </summary>
-    /// <param name="drawingOptions">The drawing options to clone</param>
-    /// <returns>A clone of shapeOptions with ColorBlendingMode, AlphaCompositionMode, and BlendPercentage set</returns>
+    /// <param name="drawingOptions">The drawing options to clone.</param>
+    /// <returns>
+    /// A clone of <paramref name="drawingOptions"/> with <see cref="GraphicsOptions.ColorBlendingMode"/>,
+    /// <see cref="GraphicsOptions.AlphaCompositionMode"/>, and <see cref="GraphicsOptions.BlendPercentage"/>
+    /// forced so the source replaces the destination.
+    /// </returns>
     internal static DrawingOptions CloneForClearOperation(this DrawingOptions drawingOptions)
     {
         GraphicsOptions options = drawingOptions.GraphicsOptions.DeepClone();
@@ -30,6 +34,6 @@ public static class DrawingOptionsDefaultsExtensions
         options.AlphaCompositionMode = PixelAlphaCompositionMode.Src;
         options.BlendPercentage = 1F;
 
-        return new DrawingOptions(options, drawingOptions.ShapeOptions, drawingOptions.Transform);
+        return new DrawingOptions(options, drawingOptions.IntersectionRule, drawingOptions.Transform, drawingOptions.TextContrast);
     }
 }

@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Silk.NET.WebGPU;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -20,7 +20,7 @@ internal sealed unsafe class WebGPUQueueHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the queue and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUQueueHandle(nint queueHandle, bool ownsHandle)
+    public WebGPUQueueHandle(nint queueHandle, bool ownsHandle)
         : this(ownsHandle ? WebGPURuntime.GetApi() : null, queueHandle, ownsHandle)
     {
     }
@@ -37,7 +37,7 @@ internal sealed unsafe class WebGPUQueueHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the queue and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUQueueHandle(WebGPU? api, nint queueHandle, bool ownsHandle)
+    public WebGPUQueueHandle(WebGPU? api, nint queueHandle, bool ownsHandle)
         : base(queueHandle, ownsHandle)
         => this.api = api;
 
@@ -46,7 +46,7 @@ internal sealed unsafe class WebGPUQueueHandle : WebGPUHandle
     {
         try
         {
-            this.api?.QueueRelease((Queue*)this.handle);
+            this.api?.QueueRelease((WGPUQueueImpl*)this.handle);
             return true;
         }
         catch

@@ -4,8 +4,16 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Base type for retained drawing backend scenes.
+/// Base type for a retained backend scene: the lowered, reusable form of a batch of drawing
+/// commands produced by <see cref="IDrawingBackend.CreateScene"/> and later rendered into a
+/// target through <see cref="IDrawingBackend.RenderScene{TPixel}"/>.
 /// </summary>
+/// <remarks>
+/// A scene captures everything a backend needs to replay the commands, including any resources
+/// (such as image-brush sources) that must remain alive until the scene is disposed. Disposing
+/// the scene releases backend-specific state through <see cref="DisposeCore"/> and then the
+/// retained owned resources.
+/// </remarks>
 public abstract class DrawingBackendScene : IDisposable
 {
     private readonly IReadOnlyList<IDisposable>? ownedResources;
@@ -37,9 +45,19 @@ public abstract class DrawingBackendScene : IDisposable
             return;
         }
 
-        this.DisposeCore();
-        this.DisposeOwnedResources();
+        // The flag is set before the releases so a DisposeCore failure can never leave the
+        // scene re-disposable: a second Dispose after a throw would release every owned
+        // resource twice.
         this.isDisposed = true;
+        try
+        {
+            this.DisposeCore();
+        }
+        finally
+        {
+            this.DisposeOwnedResources();
+        }
+
         GC.SuppressFinalize(this);
     }
 

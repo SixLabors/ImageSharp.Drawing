@@ -6,9 +6,9 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
-/// An elliptical shape made up of a single path made up of one of more <see cref="ILineSegment"/>s.
+/// An elliptical shape made up of a single path made up of one or more <see cref="ILineSegment"/>s.
 /// </summary>
-public sealed class EllipsePolygon : Polygon, IPathInternals
+public sealed class EllipsePolygon : Polygon
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="EllipsePolygon" /> class.
@@ -24,7 +24,7 @@ public sealed class EllipsePolygon : Polygon, IPathInternals
     /// Initializes a new instance of the <see cref="EllipsePolygon" /> class.
     /// </summary>
     /// <param name="location">The location the center of the circle will be placed.</param>
-    /// <param name="radius">The radius final circle.</param>
+    /// <param name="radius">The radius of the final circle.</param>
     public EllipsePolygon(PointF location, float radius)
         : this(location, new SizeF(radius * 2, radius * 2))
     {
@@ -42,6 +42,11 @@ public sealed class EllipsePolygon : Polygon, IPathInternals
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="EllipsePolygon"/> class.
+    /// Used by <see cref="Transform(Matrix4x4)"/> to wrap already-transformed segments.
+    /// </summary>
+    /// <param name="segments">The transformed segments; ownership passes to the new instance.</param>
     private EllipsePolygon(ILineSegment[] segments)
         : base(segments, true)
     {
@@ -52,7 +57,7 @@ public sealed class EllipsePolygon : Polygon, IPathInternals
     /// </summary>
     /// <param name="x">The x-coordinate of the center of the circle.</param>
     /// <param name="y">The y-coordinate of the center of the circle.</param>
-    /// <param name="radius">The radius final circle.</param>
+    /// <param name="radius">The radius of the final circle.</param>
     public EllipsePolygon(float x, float y, float radius)
         : this(new PointF(x, y), new SizeF(radius * 2, radius * 2))
     {
@@ -76,11 +81,13 @@ public sealed class EllipsePolygon : Polygon, IPathInternals
         return new EllipsePolygon(segments);
     }
 
-    /// <inheritdoc />
-    // TODO switch this out to a calculated algorithm
-    SegmentInfo IPathInternals.PointAlongPath(float distance)
-        => this.InnerPath.PointAlongPath(distance);
-
+    /// <summary>
+    /// Builds the closed four-arc cubic bezier approximation of the ellipse using the
+    /// standard kappa constant.
+    /// </summary>
+    /// <param name="location">The center of the ellipse.</param>
+    /// <param name="size">The width and height of the ellipse.</param>
+    /// <returns>The bezier segment describing the ellipse.</returns>
     private static CubicBezierLineSegment CreateSegment(Vector2 location, SizeF size)
     {
         Guard.MustBeGreaterThan(size.Width, 0, "width");

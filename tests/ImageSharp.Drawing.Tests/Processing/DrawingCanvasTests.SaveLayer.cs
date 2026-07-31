@@ -5,6 +5,7 @@ using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 
@@ -268,5 +269,135 @@ public partial class DrawingCanvasTests
 
         Rgba32 pixel = target[32, 32];
         Assert.Equal(new Rgba32(0, 128, 0, 255), pixel);
+    }
+
+    [Theory]
+    [WithBlankImage(120, 120, PixelTypes.Rgba32)]
+    public void SaveLayer_Apply_ProcessesLayerTarget<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> target = provider.GetImage();
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(20, 20, 80, 80));
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(20, 20, 80, 80));
+            canvas.Fill(Brushes.Solid(Color.Blue), new Rectangle(42, 42, 24, 24));
+            canvas.Apply(new Rectangle(20, 20, 80, 80), x => x.Invert());
+            canvas.Restore();
+        }
+
+        target.DebugSave(provider, appendSourceFileOrDescription: false);
+
+        Assert.Equal(Color.Cyan.ToPixel<TPixel>(), target[24, 24]);
+        Assert.Equal(Color.Yellow.ToPixel<TPixel>(), target[48, 48]);
+        Assert.Equal(Color.White.ToPixel<TPixel>(), target[8, 8]);
+    }
+
+    [Theory]
+    [WithBlankImage(120, 120, PixelTypes.Rgba32)]
+    public void SaveLayer_Apply_RespectsLayerBounds<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> target = provider.GetImage();
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(30, 30, 50, 50));
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(0, 0, 120, 120));
+            canvas.Apply(new Rectangle(0, 0, 120, 120), x => x.Invert());
+            canvas.Restore();
+        }
+
+        target.DebugSave(provider, appendSourceFileOrDescription: false);
+
+        Assert.Equal(Color.Cyan.ToPixel<TPixel>(), target[34, 34]);
+        Assert.Equal(Color.White.ToPixel<TPixel>(), target[24, 24]);
+        Assert.Equal(Color.White.ToPixel<TPixel>(), target[84, 84]);
+    }
+
+    [Theory]
+    [WithBlankImage(120, 120, PixelTypes.Rgba32)]
+    public void SaveLayer_Apply_ProcessesNestedLayer<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> target = provider.GetImage();
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+
+            canvas.SaveLayer();
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(0, 0, 120, 120));
+
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(30, 30, 50, 50));
+            canvas.Fill(Brushes.Solid(Color.Blue), new Rectangle(30, 30, 50, 50));
+            canvas.Apply(new Rectangle(30, 30, 50, 50), x => x.Invert());
+            canvas.Restore();
+
+            canvas.Restore();
+        }
+
+        target.DebugSave(provider, appendSourceFileOrDescription: false);
+
+        Assert.Equal(Color.Red.ToPixel<TPixel>(), target[20, 20]);
+        Assert.Equal(Color.Yellow.ToPixel<TPixel>(), target[40, 40]);
+        Assert.Equal(Color.Red.ToPixel<TPixel>(), target[100, 100]);
+    }
+
+    [Theory]
+    [WithBlankImage(120, 120, PixelTypes.Rgba32)]
+    public void SaveLayer_Apply_CompositesLayerOpacityAfterProcessing<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> target = provider.GetImage();
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+
+            canvas.SaveLayer(new GraphicsOptions { BlendPercentage = 0.5F }, new Rectangle(20, 20, 80, 80));
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(20, 20, 80, 80));
+            canvas.Apply(new Rectangle(20, 20, 80, 80), x => x.Invert());
+            canvas.Restore();
+        }
+
+        target.DebugSave(provider, appendSourceFileOrDescription: false);
+
+        Rgba32 blended = target[40, 40].ToRgba32();
+        Assert.InRange(blended.R, 126, 129);
+        Assert.Equal(255, blended.G);
+        Assert.Equal(255, blended.B);
+        Assert.Equal(255, blended.A);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(240, 160, nameof(Color.White), PixelTypes.Rgba32)]
+    public void SaveLayer_BlurEffect_OutputReachesBeyondContentBounds<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> target = provider.GetImage();
+
+        // The box-shadow pattern: a blur effect layer whose bounds equal the shadow geometry
+        // exactly, relying on the canvas to expand the effect region by the blur's reach.
+        Rectangle content = new(60, 40, 120, 80);
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.SaveLayer(new GraphicsOptions(), content, new BlurLayerEffect(6F));
+            canvas.Fill(Brushes.Solid(Color.Black), new RectanglePolygon((RectangleF)content));
+            canvas.Restore();
+        }
+
+        target.DebugSave(provider, appendSourceFileOrDescription: false);
+
+        // Blurred ink must spill outside the content rectangle, and the boundary column must
+        // no longer be a hard edge: without reach expansion the output clamps to the content
+        // bounds, leaving pure white one pixel outside and pure black one pixel inside.
+        Rgba32 outside = target[content.Right + 4, content.Top + (content.Height / 2)].ToRgba32();
+        Assert.True(outside.R < 250, $"Expected blurred ink beyond the content edge but found {outside}.");
+
+        Rgba32 edge = target[content.Right - 1, content.Top + (content.Height / 2)].ToRgba32();
+        Assert.True(edge.R > 5, $"Expected the content edge to feather but found {edge}.");
     }
 }

@@ -41,6 +41,18 @@ public struct PenOptions
     /// <summary>
     /// Initializes a new instance of the <see cref="PenOptions"/> struct.
     /// </summary>
+    /// <param name="color">The color.</param>
+    /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
+    /// <param name="strokePattern">The stroke pattern.</param>
+    /// <param name="strokePatternOffset">The distance into the stroke pattern, expressed as a multiple of <paramref name="strokeWidth"/>.</param>
+    public PenOptions(Color color, float strokeWidth, float[] strokePattern, float strokePatternOffset)
+        : this(new SolidBrush(color), strokeWidth, strokePattern, strokePatternOffset)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PenOptions"/> struct.
+    /// </summary>
     /// <param name="strokeFill">The brush used to fill the stroke outline.</param>
     /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
     /// <param name="strokePattern">The stroke pattern.</param>
@@ -51,7 +63,21 @@ public struct PenOptions
         this.StrokeFill = strokeFill;
         this.StrokeWidth = strokeWidth;
         this.StrokePattern = strokePattern ?? Pens.EmptyPattern;
+        this.StrokePatternOffset = 0;
         this.StrokeOptions = new StrokeOptions();
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PenOptions"/> struct.
+    /// </summary>
+    /// <param name="strokeFill">The brush used to fill the stroke outline.</param>
+    /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
+    /// <param name="strokePattern">The stroke pattern.</param>
+    /// <param name="strokePatternOffset">The distance into the stroke pattern, expressed as a multiple of <paramref name="strokeWidth"/>.</param>
+    public PenOptions(Brush strokeFill, float strokeWidth, float[] strokePattern, float strokePatternOffset)
+        : this(strokeFill, strokeWidth, strokePattern)
+    {
+        this.StrokePatternOffset = strokePatternOffset;
     }
 
     /// <summary>
@@ -65,9 +91,16 @@ public struct PenOptions
     public float StrokeWidth { get; }
 
     /// <summary>
-    /// Gets the stroke pattern.
+    /// Gets the stroke pattern: alternating filled and empty segment lengths expressed as
+    /// multiples of <see cref="StrokeWidth"/>, starting with a filled segment.
+    /// An empty pattern produces a continuous stroke.
     /// </summary>
     public float[] StrokePattern { get; }
+
+    /// <summary>
+    /// Gets or sets the distance into the stroke pattern, expressed as a multiple of <see cref="StrokeWidth"/>.
+    /// </summary>
+    public float StrokePatternOffset { get; set; }
 
     /// <summary>
     /// Gets or sets the stroke geometry options used to stroke paths drawn with this pen.

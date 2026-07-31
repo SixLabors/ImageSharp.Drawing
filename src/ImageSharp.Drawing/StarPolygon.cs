@@ -62,6 +62,16 @@ public sealed class StarPolygon : Polygon
     {
     }
 
+    /// <summary>
+    /// Places two vertices per prong, alternating between the inner and outer radii at equal
+    /// angular steps around the center.
+    /// </summary>
+    /// <param name="location">The center point of the star.</param>
+    /// <param name="innerRadii">The inner star radius.</param>
+    /// <param name="outerRadii">The outer star radius.</param>
+    /// <param name="prongs">The number of star prongs; at least 3 are required.</param>
+    /// <param name="angle">The angle of rotation in degrees.</param>
+    /// <returns>The linear segment describing the star outline.</returns>
     private static LinearLineSegment CreateSegment(Vector2 location, float innerRadii, float outerRadii, int prongs, float angle)
     {
         Guard.MustBeGreaterThan(prongs, 2, nameof(prongs));

@@ -1,13 +1,17 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Silk.NET.WebGPU;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
 /// WebGPU native drawing surface exposed through the backend-agnostic <see cref="NativeSurface"/> base type.
 /// </summary>
+/// <remarks>
+/// The surface never releases the wrapped handles; its creator (for example <see cref="WebGPURenderTarget"/> or a
+/// surface frame) owns them and must keep them valid for the lifetime of the surface.
+/// </remarks>
 internal sealed class WebGPUNativeSurface : NativeSurface
 {
     /// <summary>
@@ -17,17 +21,23 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     /// <param name="queueHandle">The wrapped queue handle used to submit work against the target texture.</param>
     /// <param name="targetTextureHandle">The wrapped target texture handle.</param>
     /// <param name="targetTextureViewHandle">The wrapped target texture-view handle.</param>
-    /// <param name="targetFormat">The target texture format.</param>
-    /// <param name="width">The surface width in pixels.</param>
-    /// <param name="height">The surface height in pixels.</param>
+    /// <param name="targetDescriptor">The target texture format and alpha representation.</param>
+    /// <param name="width">The full backing texture width in pixels.</param>
+    /// <param name="height">The full backing texture height in pixels.</param>
+    /// <param name="textureCoordinateOffset">The offset added when converting canvas-local coordinates to absolute texture coordinates.</param>
+    /// <param name="isPresentationSurface">Whether the target texture is presented to screen after the flush that renders it.</param>
+    /// <param name="requiresPresentationCopies">Whether the target lacks the sampling and storage usages required by the drawing pipeline.</param>
     public WebGPUNativeSurface(
         WebGPUDeviceHandle deviceHandle,
         WebGPUQueueHandle queueHandle,
         WebGPUTextureHandle targetTextureHandle,
         WebGPUTextureViewHandle targetTextureViewHandle,
-        WebGPUTextureFormat targetFormat,
+        WebGPUTargetDescriptor targetDescriptor,
         int width,
-        int height)
+        int height,
+        Point textureCoordinateOffset,
+        bool isPresentationSurface,
+        bool requiresPresentationCopies)
     {
         Guard.NotNull(deviceHandle, nameof(deviceHandle));
         Guard.NotNull(queueHandle, nameof(queueHandle));
@@ -38,9 +48,12 @@ internal sealed class WebGPUNativeSurface : NativeSurface
         this.QueueHandle = queueHandle;
         this.TargetTextureHandle = targetTextureHandle;
         this.TargetTextureViewHandle = targetTextureViewHandle;
-        this.TargetFormat = targetFormat;
+        this.TargetDescriptor = targetDescriptor;
         this.Width = width;
         this.Height = height;
+        this.TextureCoordinateOffset = textureCoordinateOffset;
+        this.IsPresentationSurface = isPresentationSurface;
+        this.RequiresPresentationCopies = requiresPresentationCopies;
     }
 
     /// <summary>
@@ -64,19 +77,44 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     public WebGPUTextureViewHandle TargetTextureViewHandle { get; }
 
     /// <summary>
-    /// Gets the native render target texture format identifier.
+    /// Gets the target texture format and alpha representation.
     /// </summary>
-    public WebGPUTextureFormat TargetFormat { get; }
+    public WebGPUTargetDescriptor TargetDescriptor { get; }
 
     /// <summary>
-    /// Gets the surface width in pixels.
+    /// Gets the full backing texture width in pixels. Absolute texture coordinates are clipped against
+    /// (0, 0, <see cref="Width"/>, <see cref="Height"/>).
     /// </summary>
     public int Width { get; }
 
     /// <summary>
-    /// Gets the surface height in pixels.
+    /// Gets the full backing texture height in pixels. Absolute texture coordinates are clipped against
+    /// (0, 0, <see cref="Width"/>, <see cref="Height"/>).
     /// </summary>
     public int Height { get; }
+
+    /// <summary>
+    /// Gets the offset added when converting canvas-local coordinates to absolute texture coordinates:
+    /// absolute texel = frame bounds origin + this offset + canvas-local coordinate.
+    /// Non-zero when the canvas addresses a sub-region of the <see cref="Width"/> x <see cref="Height"/> texture
+    /// rather than starting at its origin.
+    /// </summary>
+    public Point TextureCoordinateOffset { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the target texture is presented to screen after the flush
+    /// that renders it. Presentation targets are re-rendered every frame, so the backend may defer
+    /// the scratch-overflow check for the flush instead of blocking on the GPU: a rare overflowed
+    /// frame presents once with incomplete coverage and the next frame renders with grown buffers.
+    /// Non-presentation targets (offscreen render targets, image readback) keep the synchronous
+    /// check so their output is always complete when the flush returns.
+    /// </summary>
+    public bool IsPresentationSurface { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether rendering must copy through an ImageSharp-owned texture because the target cannot be sampled or storage-bound directly.
+    /// </summary>
+    public bool RequiresPresentationCopies { get; }
 
     /// <summary>
     /// Allocates a WebGPU render target and creates a native surface over the owned texture handles.
@@ -84,21 +122,25 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     /// <param name="api">The WebGPU API instance used to allocate native resources.</param>
     /// <param name="deviceHandle">The wrapped <c>WGPUDevice*</c> handle.</param>
     /// <param name="queueHandle">The wrapped <c>WGPUQueue*</c> handle.</param>
-    /// <param name="format">The target texture format.</param>
+    /// <param name="targetDescriptor">The target texture format and alpha representation.</param>
     /// <param name="width">The texture width in pixels.</param>
     /// <param name="height">The texture height in pixels.</param>
-    /// <param name="textureHandle">Receives the allocated wrapped <c>WGPUTexture*</c> handle.</param>
-    /// <param name="textureViewHandle">Receives the allocated wrapped <c>WGPUTextureView*</c> handle.</param>
+    /// <param name="textureHandle">Receives the allocated wrapped <c>WGPUTexture*</c> handle. The caller owns it and must dispose it.</param>
+    /// <param name="textureViewHandle">Receives the allocated wrapped <c>WGPUTextureView*</c> handle. The caller owns it and must dispose it.</param>
+    /// <param name="textureCoordinateOffset">The offset added when converting canvas-local coordinates to absolute texture coordinates.</param>
+    /// <param name="isPresentationSurface">Whether the target texture is presented to screen after the flush that renders it.</param>
     /// <returns>The native surface wrapping the allocated texture.</returns>
-    internal static unsafe WebGPUNativeSurface Create(
+    public static unsafe WebGPUNativeSurface Create(
         WebGPU api,
         WebGPUDeviceHandle deviceHandle,
         WebGPUQueueHandle queueHandle,
-        WebGPUTextureFormat format,
+        WebGPUTargetDescriptor targetDescriptor,
         int width,
         int height,
         out WebGPUTextureHandle textureHandle,
-        out WebGPUTextureViewHandle textureViewHandle)
+        out WebGPUTextureViewHandle textureViewHandle,
+        Point textureCoordinateOffset,
+        bool isPresentationSurface)
     {
         if (deviceHandle.IsInvalid)
         {
@@ -113,45 +155,45 @@ internal sealed class WebGPUNativeSurface : NativeSurface
         Guard.MustBeGreaterThan(width, 0, nameof(width));
         Guard.MustBeGreaterThan(height, 0, nameof(height));
 
-        WebGPUDrawingBackend.GetCompositeTextureFormatInfo(format, out TextureFormat textureFormat, out FeatureName requiredFeature);
+        WebGPUDrawingBackend.GetCompositeTextureFormatInfo(targetDescriptor.Format, out WGPUTextureFormat textureFormat, out WGPUFeatureName requiredFeature);
 
         using WebGPUHandle.HandleReference deviceReference = deviceHandle.AcquireReference();
 
-        Device* device = (Device*)deviceReference.Handle;
-        if (requiredFeature != FeatureName.Undefined &&
+        WGPUDeviceImpl* device = (WGPUDeviceImpl*)deviceReference.Handle;
+        if (requiredFeature != default &&
             !WebGPURuntime.GetOrCreateDeviceState(api, deviceHandle).HasFeature(requiredFeature))
         {
-            throw new NotSupportedException($"The WebGPU device does not support required feature '{requiredFeature}' for texture format '{format}'.");
+            throw new NotSupportedException($"The WebGPU device does not support required feature '{requiredFeature}' for texture format '{targetDescriptor.Format}'.");
         }
 
-        TextureDescriptor textureDescriptor = new()
+        WGPUTextureDescriptor textureDescriptor = new()
         {
-            Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst | TextureUsage.TextureBinding | TextureUsage.StorageBinding,
-            Dimension = TextureDimension.Dimension2D,
-            Size = new Extent3D((uint)width, (uint)height, 1),
-            Format = textureFormat,
-            MipLevelCount = 1,
-            SampleCount = 1,
+            usage = (ulong)(TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst | TextureUsage.TextureBinding | TextureUsage.StorageBinding),
+            dimension = WGPUTextureDimension._2D,
+            size = new WGPUExtent3D((uint)width, (uint)height, 1),
+            format = textureFormat,
+            mipLevelCount = 1,
+            sampleCount = 1,
         };
 
-        Texture* texture = api.DeviceCreateTexture(device, in textureDescriptor);
+        WGPUTextureImpl* texture = api.DeviceCreateTexture(device, in textureDescriptor);
         if (texture is null)
         {
             throw new InvalidOperationException("The WebGPU device could not create a render-target texture.");
         }
 
-        TextureViewDescriptor textureViewDescriptor = new()
+        WGPUTextureViewDescriptor textureViewDescriptor = new()
         {
-            Format = textureFormat,
-            Dimension = TextureViewDimension.Dimension2D,
-            BaseMipLevel = 0,
-            MipLevelCount = 1,
-            BaseArrayLayer = 0,
-            ArrayLayerCount = 1,
-            Aspect = TextureAspect.All,
+            format = textureFormat,
+            dimension = WGPUTextureViewDimension._2D,
+            baseMipLevel = 0,
+            mipLevelCount = 1,
+            baseArrayLayer = 0,
+            arrayLayerCount = 1,
+            aspect = WGPUTextureAspect.All,
         };
 
-        TextureView* textureView = api.TextureCreateView(texture, in textureViewDescriptor);
+        WGPUTextureViewImpl* textureView = api.TextureCreateView(texture, &textureViewDescriptor);
         if (textureView is null)
         {
             api.TextureRelease(texture);
@@ -164,14 +206,18 @@ internal sealed class WebGPUNativeSurface : NativeSurface
         {
             createdTextureHandle = new WebGPUTextureHandle(api, (nint)texture, ownsHandle: true);
             createdTextureViewHandle = new WebGPUTextureViewHandle(api, (nint)textureView, ownsHandle: true);
+
             WebGPUNativeSurface surface = Create(
                 deviceHandle,
                 queueHandle,
                 createdTextureHandle,
                 createdTextureViewHandle,
-                format,
+                targetDescriptor,
                 width,
-                height);
+                height,
+                textureCoordinateOffset,
+                isPresentationSurface,
+                requiresPresentationCopies: false);
 
             textureHandle = createdTextureHandle;
             textureViewHandle = createdTextureViewHandle;
@@ -182,6 +228,7 @@ internal sealed class WebGPUNativeSurface : NativeSurface
             createdTextureViewHandle?.Dispose();
             createdTextureHandle?.Dispose();
 
+            // Raw pointers are released directly only when wrapping into an owning handle never happened.
             if (createdTextureViewHandle is null)
             {
                 api.TextureViewRelease(textureView);
@@ -197,16 +244,31 @@ internal sealed class WebGPUNativeSurface : NativeSurface
     }
 
     /// <summary>
-    /// Creates a native surface over wrapped WebGPU texture handles.
+    /// Creates a native surface over wrapped WebGPU texture handles after validating them.
+    /// The caller retains ownership of every handle.
     /// </summary>
-    internal static WebGPUNativeSurface Create(
+    /// <param name="deviceHandle">The wrapped device handle that owns the target texture.</param>
+    /// <param name="queueHandle">The wrapped queue handle used to submit work against the target texture.</param>
+    /// <param name="targetTextureHandle">The wrapped target texture handle.</param>
+    /// <param name="targetTextureViewHandle">The wrapped target texture-view handle.</param>
+    /// <param name="targetDescriptor">The target texture format and alpha representation.</param>
+    /// <param name="width">The full backing texture width in pixels.</param>
+    /// <param name="height">The full backing texture height in pixels.</param>
+    /// <param name="textureCoordinateOffset">The offset added when converting canvas-local coordinates to absolute texture coordinates.</param>
+    /// <param name="isPresentationSurface">Whether the target texture is presented to screen after the flush that renders it.</param>
+    /// <param name="requiresPresentationCopies">Whether the target lacks the sampling and storage usages required by the drawing pipeline.</param>
+    /// <returns>The native surface wrapping the supplied handles.</returns>
+    public static WebGPUNativeSurface Create(
         WebGPUDeviceHandle deviceHandle,
         WebGPUQueueHandle queueHandle,
         WebGPUTextureHandle targetTextureHandle,
         WebGPUTextureViewHandle targetTextureViewHandle,
-        WebGPUTextureFormat targetFormat,
+        WebGPUTargetDescriptor targetDescriptor,
         int width,
-        int height)
+        int height,
+        Point textureCoordinateOffset,
+        bool isPresentationSurface,
+        bool requiresPresentationCopies)
     {
         Guard.NotNull(deviceHandle, nameof(deviceHandle));
         Guard.NotNull(queueHandle, nameof(queueHandle));
@@ -221,8 +283,11 @@ internal sealed class WebGPUNativeSurface : NativeSurface
             queueHandle,
             targetTextureHandle,
             targetTextureViewHandle,
-            targetFormat,
+            targetDescriptor,
             width,
-            height);
+            height,
+            textureCoordinateOffset,
+            isPresentationSurface,
+            requiresPresentationCopies);
     }
 }

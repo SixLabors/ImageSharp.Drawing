@@ -8,11 +8,15 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// One stroked path command queued by the canvas batcher.
 /// </summary>
+/// <remarks>
+/// Stroke commands carry pen geometry only; they do not carry clip state. Backends resolve
+/// the active clip stack from the begin/end-clip commands surrounding each draw in the stream.
+/// </remarks>
 public readonly struct StrokePathCommand
 {
     private readonly IPath sourcePath;
     private readonly DrawingOptions drawingOptions;
-    private readonly IReadOnlyList<IPath>? clipPaths;
+    private readonly DrawingCanvasLayer? ownerLayer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StrokePathCommand"/> struct.
@@ -24,9 +28,8 @@ public readonly struct StrokePathCommand
     /// <param name="targetBounds">The absolute bounds of the logical target.</param>
     /// <param name="destinationOffset">The absolute destination offset of the command.</param>
     /// <param name="pen">The stroke metadata.</param>
-    /// <param name="clipPaths">Optional clip paths supplied with the command.</param>
     /// <param name="isInsideLayer">True if the command was recorded inside a layer.</param>
-    public StrokePathCommand(
+    internal StrokePathCommand(
         IPath sourcePath,
         Brush brush,
         DrawingOptions drawingOptions,
@@ -34,18 +37,92 @@ public readonly struct StrokePathCommand
         Rectangle targetBounds,
         Point destinationOffset,
         Pen pen,
-        IReadOnlyList<IPath>? clipPaths,
         bool isInsideLayer)
+        : this(
+            sourcePath,
+            brush,
+            drawingOptions,
+            in rasterizerOptions,
+            targetBounds,
+            destinationOffset,
+            pen,
+            isInsideLayer,
+            null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StrokePathCommand"/> struct with the owning layer state recorded by the canvas.
+    /// </summary>
+    /// <param name="sourcePath">The source stroke path.</param>
+    /// <param name="brush">The brush used to shade the stroke.</param>
+    /// <param name="drawingOptions">The drawing options (graphics, shape, transform) used during composition.</param>
+    /// <param name="rasterizerOptions">The rasterizer options used to generate coverage.</param>
+    /// <param name="targetBounds">The absolute bounds of the logical target.</param>
+    /// <param name="destinationOffset">The absolute destination offset of the command.</param>
+    /// <param name="pen">The stroke metadata.</param>
+    /// <param name="isInsideLayer">True if the command was recorded inside a layer.</param>
+    /// <param name="ownerLayer">The layer that owned this command when it was recorded.</param>
+    internal StrokePathCommand(
+        IPath sourcePath,
+        Brush brush,
+        DrawingOptions drawingOptions,
+        in RasterizerOptions rasterizerOptions,
+        Rectangle targetBounds,
+        Point destinationOffset,
+        Pen pen,
+        bool isInsideLayer,
+        DrawingCanvasLayer? ownerLayer)
+        : this(
+            sourcePath,
+            brush,
+            drawingOptions,
+            in rasterizerOptions,
+            targetBounds,
+            destinationOffset,
+            pen,
+            isInsideLayer,
+            ownerLayer,
+            Vector2.Zero)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StrokePathCommand"/> struct carrying a
+    /// sub-pixel translation alongside the owning layer state recorded by the canvas.
+    /// </summary>
+    /// <param name="sourcePath">The source stroke path.</param>
+    /// <param name="brush">The brush used to shade the stroke.</param>
+    /// <param name="drawingOptions">The drawing options (graphics, shape, transform) used during composition.</param>
+    /// <param name="rasterizerOptions">The rasterizer options used to generate coverage.</param>
+    /// <param name="targetBounds">The absolute bounds of the logical target.</param>
+    /// <param name="destinationOffset">The absolute destination offset of the command.</param>
+    /// <param name="pen">The stroke metadata.</param>
+    /// <param name="isInsideLayer">True if the command was recorded inside a layer.</param>
+    /// <param name="ownerLayer">The layer that owned this command when it was recorded.</param>
+    /// <param name="subPixelOffset">The fractional translation composed into <see cref="Transform"/>.</param>
+    internal StrokePathCommand(
+        IPath sourcePath,
+        Brush brush,
+        DrawingOptions drawingOptions,
+        in RasterizerOptions rasterizerOptions,
+        Rectangle targetBounds,
+        Point destinationOffset,
+        Pen pen,
+        bool isInsideLayer,
+        DrawingCanvasLayer? ownerLayer,
+        Vector2 subPixelOffset)
     {
         this.sourcePath = sourcePath;
         this.drawingOptions = drawingOptions;
-        this.clipPaths = clipPaths;
+        this.ownerLayer = ownerLayer;
         this.Brush = brush;
         this.RasterizerOptions = rasterizerOptions;
         this.TargetBounds = targetBounds;
         this.DestinationOffset = destinationOffset;
         this.Pen = pen;
         this.IsInsideLayer = isInsideLayer;
+        this.SubPixelOffset = subPixelOffset;
     }
 
     /// <summary>
@@ -89,22 +166,39 @@ public readonly struct StrokePathCommand
     public IPath SourcePath => this.sourcePath;
 
     /// <summary>
-    /// Gets the drawing transform.
+    /// Gets the fractional translation applied after the drawing options transform. Glyph
+    /// geometry rides an integer destination offset; the sub-pixel remainder travels here so
+    /// the queued command does not need per-operation drawing options to carry it.
     /// </summary>
-    public Matrix4x4 Transform => this.drawingOptions.Transform;
+    public Vector2 SubPixelOffset { get; }
 
     /// <summary>
-    /// Gets the optional clip paths carried by the command.
+    /// Gets the drawing transform: the drawing options transform followed by the sub-pixel
+    /// translation.
     /// </summary>
-    public IReadOnlyList<IPath>? ClipPaths => this.clipPaths;
+    public Matrix4x4 Transform
+    {
+        get
+        {
+            Matrix4x4 transform = this.drawingOptions.Transform;
+            if (this.SubPixelOffset == Vector2.Zero)
+            {
+                return transform;
+            }
 
-    /// <summary>
-    /// Gets the shape options carried by the command.
-    /// </summary>
-    public ShapeOptions ShapeOptions => this.drawingOptions.ShapeOptions;
+            return transform.IsIdentity
+                ? Matrix4x4.CreateTranslation(this.SubPixelOffset.X, this.SubPixelOffset.Y, 0F)
+                : transform * Matrix4x4.CreateTranslation(this.SubPixelOffset.X, this.SubPixelOffset.Y, 0F);
+        }
+    }
 
     /// <summary>
     /// Gets a value indicating whether the command was recorded inside a layer.
     /// </summary>
     public bool IsInsideLayer { get; }
+
+    /// <summary>
+    /// Gets the layer state for the layer that owned this command when it was recorded.
+    /// </summary>
+    internal DrawingCanvasLayer? OwnerLayer => this.ownerLayer;
 }

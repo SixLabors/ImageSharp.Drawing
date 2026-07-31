@@ -14,11 +14,6 @@ internal enum DrawingCanvasTimelineEntryKind
     CommandRange,
 
     /// <summary>
-    /// An apply barrier.
-    /// </summary>
-    ApplyBarrier,
-
-    /// <summary>
     /// An existing retained scene recorded through <see cref="DrawingCanvas.RenderScene"/>.
     /// </summary>
     Scene
@@ -29,21 +24,34 @@ internal enum DrawingCanvasTimelineEntryKind
 /// </summary>
 /// <remarks>
 /// Command ranges reference contiguous draw commands; they are not backend scene objects yet.
-/// Apply barriers and retained scene references point into side buffers by index, keeping this
-/// type compact while preserving the exact order in which the canvas recorded replay work.
+/// Retained scene references point into a side buffer by index, keeping this type compact while
+/// preserving the exact order in which the canvas recorded replay work.
 /// </remarks>
 internal readonly struct DrawingCanvasTimelineEntry
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingCanvasTimelineEntry"/> struct.
+    /// </summary>
+    /// <param name="kind">The kind of replay item.</param>
+    /// <param name="index">The command start index for command ranges, or the retained-scene buffer index for scene entries.</param>
+    /// <param name="count">The number of commands for command-range entries.</param>
+    /// <param name="hasLayers">Indicates whether the command range contains layer boundary commands.</param>
+    /// <param name="hasApply">Indicates whether the command range contains apply barriers.</param>
+    /// <param name="hasClipControls">Indicates whether the command range contains ordered clip-control commands.</param>
     private DrawingCanvasTimelineEntry(
         DrawingCanvasTimelineEntryKind kind,
         int index,
         int count,
-        bool hasLayers)
+        bool hasLayers,
+        bool hasApply,
+        bool hasClipControls)
     {
         this.Kind = kind;
         this.Index = index;
         this.Count = count;
         this.HasLayers = hasLayers;
+        this.HasApply = hasApply;
+        this.HasClipControls = hasClipControls;
     }
 
     /// <summary>
@@ -52,7 +60,7 @@ internal readonly struct DrawingCanvasTimelineEntry
     public DrawingCanvasTimelineEntryKind Kind { get; }
 
     /// <summary>
-    /// Gets the command start index for command ranges, or the side-buffer index for barriers and scenes.
+    /// Gets the command start index for command ranges, or the retained-scene buffer index for scene entries.
     /// </summary>
     public int Index { get; }
 
@@ -67,22 +75,31 @@ internal readonly struct DrawingCanvasTimelineEntry
     public bool HasLayers { get; }
 
     /// <summary>
+    /// Gets a value indicating whether the command range contains apply barriers.
+    /// </summary>
+    public bool HasApply { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the command range contains ordered clip-control commands.
+    /// </summary>
+    public bool HasClipControls { get; }
+
+    /// <summary>
     /// Creates a command-range entry.
     /// </summary>
     /// <param name="startIndex">The first command index.</param>
     /// <param name="count">The command count.</param>
     /// <param name="hasLayers">Indicates whether the command range contains layer boundary commands.</param>
+    /// <param name="hasApply">Indicates whether the command range contains apply barriers.</param>
+    /// <param name="hasClipControls">Indicates whether the command range contains ordered clip-control commands.</param>
     /// <returns>The command-range entry.</returns>
-    public static DrawingCanvasTimelineEntry CreateCommandRange(int startIndex, int count, bool hasLayers)
-        => new(DrawingCanvasTimelineEntryKind.CommandRange, startIndex, count, hasLayers);
-
-    /// <summary>
-    /// Creates an apply-barrier entry.
-    /// </summary>
-    /// <param name="index">The apply-barrier index.</param>
-    /// <returns>The apply-barrier entry.</returns>
-    public static DrawingCanvasTimelineEntry CreateApplyBarrier(int index)
-        => new(DrawingCanvasTimelineEntryKind.ApplyBarrier, index, 0, false);
+    public static DrawingCanvasTimelineEntry CreateCommandRange(
+        int startIndex,
+        int count,
+        bool hasLayers,
+        bool hasApply,
+        bool hasClipControls)
+        => new(DrawingCanvasTimelineEntryKind.CommandRange, startIndex, count, hasLayers, hasApply, hasClipControls);
 
     /// <summary>
     /// Creates an entry for an existing retained scene recorded through <see cref="DrawingCanvas.RenderScene"/>.
@@ -90,5 +107,5 @@ internal readonly struct DrawingCanvasTimelineEntry
     /// <param name="index">The retained-scene reference index.</param>
     /// <returns>The retained-scene entry.</returns>
     public static DrawingCanvasTimelineEntry CreateScene(int index)
-        => new(DrawingCanvasTimelineEntryKind.Scene, index, 0, false);
+        => new(DrawingCanvasTimelineEntryKind.Scene, index, 0, false, false, false);
 }

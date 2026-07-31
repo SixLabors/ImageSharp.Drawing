@@ -58,14 +58,6 @@ public class InternalPathTests
         Assert.Equal(5, path.Bounds.Bottom);
     }
 
-    private static InternalPath Create(PointF location, SizeF size, bool closed = true)
-    {
-        LinearLineSegment seg1 = new(location, location + new PointF(size.Width, 0));
-        LinearLineSegment seg2 = new(location + new PointF(size.Width, size.Height), location + new PointF(0, size.Height));
-
-        return new InternalPath([seg1, seg2], closed);
-    }
-
     public static TheoryData<TestPoint, TestSize, TestPoint, bool> PointInPolygonTheoryData { get; }
         = new()
         {
@@ -82,23 +74,4 @@ public class InternalPathTests
                 false
             },
         };
-
-    private const float HalfPi = (float)(Math.PI / 2);
-    private const float Pi = (float)Math.PI;
-
-    [Theory]
-    [InlineData(0, 50, 50, Pi)]
-    [InlineData(100, 150, 50, Pi)]
-    [InlineData(200, 250, 50, -HalfPi)]
-    [InlineData(259, 250, 109, -HalfPi)]
-    [InlineData(261, 249, 110, 0)]
-    [InlineData(620, 150, 50, Pi)] // wrap about end of path
-    public void PointOnPath(float distance, float expectedX, float expectedY, float expectedAngle)
-    {
-        InternalPath shape = Create(new PointF(50, 50), new Size(200, 60));
-        SegmentInfo point = shape.PointAlongPath(distance);
-        Assert.Equal(expectedX, point.Point.X, 4F);
-        Assert.Equal(expectedY, point.Point.Y, 4F);
-        Assert.Equal(expectedAngle, point.Angle, 4F);
-    }
 }

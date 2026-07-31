@@ -8,17 +8,53 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </summary>
 internal enum WebGPUSurfaceHostKind
 {
+    /// <summary>
+    /// A GLFW-owned window (<c>GLFWwindow*</c> in <see cref="WebGPUSurfaceHost.Handle0"/>).
+    /// </summary>
     Glfw,
+
+    /// <summary>
+    /// An SDL-owned window (<c>SDL_Window*</c> in <see cref="WebGPUSurfaceHost.Handle0"/>).
+    /// </summary>
     Sdl,
+
+    /// <summary>
+    /// A Win32 window (<c>HWND</c> in <see cref="WebGPUSurfaceHost.Handle0"/> and <c>HINSTANCE</c> in
+    /// <see cref="WebGPUSurfaceHost.Handle1"/>).
+    /// </summary>
     Win32,
+
+    /// <summary>
+    /// An X11 window (<c>Display*</c> in <see cref="WebGPUSurfaceHost.Handle0"/>, window id in
+    /// <see cref="WebGPUSurfaceHost.Number0"/>).
+    /// </summary>
     X11,
+
+    /// <summary>
+    /// A Cocoa window (<c>NSWindow*</c> in <see cref="WebGPUSurfaceHost.Handle0"/>).
+    /// </summary>
     Cocoa,
-    UIKit,
+
+    /// <summary>
+    /// A Core Animation metal layer (<c>CAMetalLayer*</c> in <see cref="WebGPUSurfaceHost.Handle0"/>).
+    /// </summary>
+    MetalLayer,
+
+    /// <summary>
+    /// A Wayland surface (<c>wl_display*</c> in <see cref="WebGPUSurfaceHost.Handle0"/>, <c>wl_surface*</c> in
+    /// <see cref="WebGPUSurfaceHost.Handle1"/>).
+    /// </summary>
     Wayland,
-    WinRT,
+
+    /// <summary>
+    /// A WinUI swap-chain panel (<c>ISwapChainPanelNative*</c> in <see cref="WebGPUSurfaceHost.Handle0"/>).
+    /// </summary>
+    SwapChainPanel,
+
+    /// <summary>
+    /// An Android native window (<c>ANativeWindow*</c> in <see cref="WebGPUSurfaceHost.Handle0"/>).
+    /// </summary>
     Android,
-    Vivante,
-    EGL,
 }
 
 /// <summary>
@@ -28,6 +64,8 @@ internal enum WebGPUSurfaceHostKind
 /// <remarks>
 /// Construct via the platform-specific factory methods. The caller retains ownership of the underlying handles;
 /// the external surface never releases them.
+/// GLFW and SDL handles are translated to their underlying platform source during surface creation. The remaining
+/// factories correspond directly to surface source descriptors accepted by the bundled wgpu-native API.
 /// </remarks>
 public readonly struct WebGPUSurfaceHost
 {
@@ -35,47 +73,47 @@ public readonly struct WebGPUSurfaceHost
     // to the internal surface adapter, keeping backend windowing details out of the public API.
     private readonly nint handle0;
     private readonly nint handle1;
-    private readonly nint handle2;
     private readonly nuint number0;
-    private readonly uint number1;
-    private readonly uint number2;
-    private readonly uint number3;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUSurfaceHost"/> struct. Only the slots meaningful
+    /// for <paramref name="kind"/> are populated; see the public factory methods for the per-platform mapping.
+    /// </summary>
+    /// <param name="kind">The native platform surface kind.</param>
+    /// <param name="handle0">The first pointer-sized handle slot.</param>
+    /// <param name="handle1">The second pointer-sized handle slot.</param>
+    /// <param name="number0">The pointer-sized numeric slot.</param>
     private WebGPUSurfaceHost(
         WebGPUSurfaceHostKind kind,
         nint handle0 = 0,
         nint handle1 = 0,
-        nint handle2 = 0,
-        nuint number0 = 0,
-        uint number1 = 0,
-        uint number2 = 0,
-        uint number3 = 0)
+        nuint number0 = 0)
     {
         this.Kind = kind;
         this.handle0 = handle0;
         this.handle1 = handle1;
-        this.handle2 = handle2;
         this.number0 = number0;
-        this.number1 = number1;
-        this.number2 = number2;
-        this.number3 = number3;
     }
 
+    /// <summary>
+    /// Gets the native platform surface kind that defines how the handle and number slots are interpreted.
+    /// </summary>
     internal WebGPUSurfaceHostKind Kind { get; }
 
+    /// <summary>
+    /// Gets the first pointer-sized handle slot; its meaning depends on <see cref="Kind"/>.
+    /// </summary>
     internal nint Handle0 => this.handle0;
 
+    /// <summary>
+    /// Gets the second pointer-sized handle slot; its meaning depends on <see cref="Kind"/>.
+    /// </summary>
     internal nint Handle1 => this.handle1;
 
-    internal nint Handle2 => this.handle2;
-
+    /// <summary>
+    /// Gets the pointer-sized numeric slot; its meaning depends on <see cref="Kind"/>.
+    /// </summary>
     internal nuint Number0 => this.number0;
-
-    internal uint Number1 => this.number1;
-
-    internal uint Number2 => this.number2;
-
-    internal uint Number3 => this.number3;
 
     /// <summary>
     /// Creates a host descriptor for a GLFW-owned window.
@@ -94,15 +132,13 @@ public readonly struct WebGPUSurfaceHost
         => new(WebGPUSurfaceHostKind.Sdl, handle0: sdlWindow);
 
     /// <summary>
-    /// Creates a host descriptor for a Win32 window. The device context handle is optional; when omitted,
-    /// the surface layer derives one from the window as needed.
+    /// Creates a host descriptor for a Win32 window.
     /// </summary>
     /// <param name="hwnd">The Win32 window handle (<c>HWND</c>).</param>
     /// <param name="hinstance">The module instance handle (<c>HINSTANCE</c>) associated with the window.</param>
-    /// <param name="hdc">The device context handle (<c>HDC</c>); pass <see cref="nint.Zero"/> if unavailable.</param>
     /// <returns>A Win32 host descriptor.</returns>
-    public static WebGPUSurfaceHost Win32(nint hwnd, nint hinstance, nint hdc = 0)
-        => new(WebGPUSurfaceHostKind.Win32, handle0: hwnd, handle1: hdc, handle2: hinstance);
+    public static WebGPUSurfaceHost Win32(nint hwnd, nint hinstance)
+        => new(WebGPUSurfaceHostKind.Win32, handle0: hwnd, handle1: hinstance);
 
     /// <summary>
     /// Creates a host descriptor for an X11 window.
@@ -122,15 +158,13 @@ public readonly struct WebGPUSurfaceHost
         => new(WebGPUSurfaceHostKind.Cocoa, handle0: nsWindow);
 
     /// <summary>
-    /// Creates a host descriptor for a UIKit window with its framebuffer objects.
+    /// Creates a host descriptor for a Core Animation metal layer.
     /// </summary>
-    /// <param name="uiWindow">The UIKit window pointer (<c>UIWindow*</c>).</param>
-    /// <param name="framebuffer">The framebuffer object id.</param>
-    /// <param name="colorbuffer">The color buffer object id.</param>
-    /// <param name="resolveFramebuffer">The resolve framebuffer object id.</param>
-    /// <returns>A UIKit host descriptor.</returns>
-    public static WebGPUSurfaceHost UIKit(nint uiWindow, uint framebuffer, uint colorbuffer, uint resolveFramebuffer)
-        => new(WebGPUSurfaceHostKind.UIKit, handle0: uiWindow, number1: framebuffer, number2: colorbuffer, number3: resolveFramebuffer);
+    /// <param name="metalLayer">The Core Animation metal layer pointer (<c>CAMetalLayer*</c>).</param>
+    /// <returns>A metal-layer host descriptor.</returns>
+    /// <remarks>The caller owns the layer and must keep it valid for the lifetime of the external surface.</remarks>
+    public static WebGPUSurfaceHost MetalLayer(nint metalLayer)
+        => new(WebGPUSurfaceHostKind.MetalLayer, handle0: metalLayer);
 
     /// <summary>
     /// Creates a host descriptor for a Wayland surface.
@@ -142,37 +176,19 @@ public readonly struct WebGPUSurfaceHost
         => new(WebGPUSurfaceHostKind.Wayland, handle0: display, handle1: surface);
 
     /// <summary>
-    /// Creates a host descriptor for a WinRT window.
+    /// Creates a host descriptor for a WinUI swap-chain panel.
     /// </summary>
-    /// <param name="inspectable">The WinRT window's <c>IInspectable*</c>.</param>
-    /// <returns>A WinRT host descriptor.</returns>
-    public static WebGPUSurfaceHost WinRT(nint inspectable)
-        => new(WebGPUSurfaceHostKind.WinRT, handle0: inspectable);
+    /// <param name="panelNative">The swap-chain panel's <c>ISwapChainPanelNative*</c> interface pointer.</param>
+    /// <returns>A swap-chain-panel host descriptor.</returns>
+    /// <remarks>The caller owns the interface pointer and must keep it valid for the lifetime of the external surface.</remarks>
+    public static WebGPUSurfaceHost SwapChainPanel(nint panelNative)
+        => new(WebGPUSurfaceHostKind.SwapChainPanel, handle0: panelNative);
 
     /// <summary>
     /// Creates a host descriptor for an Android native window.
     /// </summary>
     /// <param name="aNativeWindow">The Android native window pointer (<c>ANativeWindow*</c>).</param>
-    /// <param name="eglSurface">The associated EGL surface (optional).</param>
     /// <returns>An Android host descriptor.</returns>
-    public static WebGPUSurfaceHost Android(nint aNativeWindow, nint eglSurface = 0)
-        => new(WebGPUSurfaceHostKind.Android, handle0: aNativeWindow, handle1: eglSurface);
-
-    /// <summary>
-    /// Creates a host descriptor for a Vivante-backed window.
-    /// </summary>
-    /// <param name="display">The Vivante EGL display type (<c>EGLNativeDisplayType</c>).</param>
-    /// <param name="window">The Vivante EGL window type (<c>EGLNativeWindowType</c>).</param>
-    /// <returns>A Vivante host descriptor.</returns>
-    public static WebGPUSurfaceHost Vivante(nint display, nint window)
-        => new(WebGPUSurfaceHostKind.Vivante, handle0: display, handle1: window);
-
-    /// <summary>
-    /// Creates a host descriptor for an EGL display and surface.
-    /// </summary>
-    /// <param name="eglDisplay">The EGL display handle (<see cref="nint.Zero"/> if unspecified).</param>
-    /// <param name="eglSurface">The EGL surface handle (<see cref="nint.Zero"/> if unspecified).</param>
-    /// <returns>An EGL host descriptor.</returns>
-    public static WebGPUSurfaceHost EGL(nint eglDisplay, nint eglSurface)
-        => new(WebGPUSurfaceHostKind.EGL, handle0: eglDisplay, handle1: eglSurface);
+    public static WebGPUSurfaceHost Android(nint aNativeWindow)
+        => new(WebGPUSurfaceHostKind.Android, handle0: aNativeWindow);
 }

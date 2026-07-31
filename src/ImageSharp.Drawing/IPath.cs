@@ -35,6 +35,69 @@ public interface IPath
     public LinearGeometry ToLinearGeometry(Vector2 scale);
 
     /// <summary>
+    /// Calculates the path length after flattening curves at the supplied scale.
+    /// </summary>
+    /// <param name="scale">The X/Y scale at which curves are flattened for length measurement.</param>
+    /// <returns>The path length.</returns>
+    public float ComputeLength(Vector2 scale);
+
+    /// <summary>
+    /// Calculates the non-negative path area after flattening curves at the supplied scale.
+    /// </summary>
+    /// <param name="scale">The X/Y scale at which curves are flattened for area measurement.</param>
+    /// <returns>The path area.</returns>
+    public float ComputeArea(Vector2 scale);
+
+    /// <summary>
+    /// Returns whether the supplied point is inside the path.
+    /// </summary>
+    /// <param name="point">The point to test.</param>
+    /// <param name="intersectionRule">The fill rule used for containment.</param>
+    /// <param name="scale">The X/Y scale at which curves are flattened for the containment test.</param>
+    /// <returns><see langword="true"/> when the point is inside or on the path boundary.</returns>
+    public bool Contains(PointF point, IntersectionRule intersectionRule, Vector2 scale);
+
+    /// <summary>
+    /// Gets path information at the specified distance along the path.
+    /// </summary>
+    /// <param name="distance">The distance along the path.</param>
+    /// <param name="scale">The X/Y scale at which curves are flattened for distance measurement.</param>
+    /// <param name="pathPoint">When this method returns, contains the path information at <paramref name="distance"/> if the distance resolves to a point on the path; otherwise, the default value.</param>
+    /// <returns>
+    /// <see langword="true"/> if <paramref name="distance"/> resolves to a point on the path;
+    /// otherwise, <see langword="false"/>.
+    /// </returns>
+    public bool TryGetPathPointAtDistance(float distance, Vector2 scale, out PathPoint pathPoint);
+
+    /// <summary>
+    /// Gets path information at the specified distance along the path, extrapolating along the
+    /// boundary tangents when the distance falls before the start or beyond the end of an open path.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="TryGetPathPointAtDistance(float, Vector2, out PathPoint)"/>, out-of-range
+    /// distances resolve to a point on the virtual straight-line continuation of the path's first
+    /// or last segment. Text layout uses this to place aligned glyphs that overflow their layout
+    /// path. The method returns <see langword="false"/> only when the distance is not a finite
+    /// number or the path has no measurable length.
+    /// </remarks>
+    /// <param name="distance">The distance along the path.</param>
+    /// <param name="scale">The X/Y scale at which curves are flattened for distance measurement.</param>
+    /// <param name="pathPoint">When this method returns, contains the path information at <paramref name="distance"/> if the path is measurable; otherwise, the default value.</param>
+    /// <returns><see langword="true"/> if the point could be resolved; otherwise, <see langword="false"/>.</returns>
+    public bool TryGetPathPointAtDistanceUnbounded(float distance, Vector2 scale, out PathPoint pathPoint);
+
+    /// <summary>
+    /// Creates a path segment between two distances along the path.
+    /// </summary>
+    /// <param name="startDistance">The segment start distance.</param>
+    /// <param name="stopDistance">The segment stop distance.</param>
+    /// <param name="startOnBeginFigure">Whether the returned segment starts a new figure at the first segment point.</param>
+    /// <param name="scale">The X/Y scale at which curves are flattened for segment extraction.</param>
+    /// <param name="path">When this method returns, contains the segment path if one was created; otherwise, an empty path.</param>
+    /// <returns><see langword="true"/> when a segment path was created.</returns>
+    public bool TryGetSegment(float startDistance, float stopDistance, bool startOnBeginFigure, Vector2 scale, out IPath path);
+
+    /// <summary>
     /// Transforms the path using the specified matrix.
     /// </summary>
     /// <param name="matrix">The matrix.</param>
@@ -44,6 +107,6 @@ public interface IPath
     /// <summary>
     /// Returns this path with all figures closed.
     /// </summary>
-    /// <returns>A new close <see cref="IPath"/>.</returns>
+    /// <returns>A new closed <see cref="IPath"/>.</returns>
     public IPath AsClosedPath();
 }

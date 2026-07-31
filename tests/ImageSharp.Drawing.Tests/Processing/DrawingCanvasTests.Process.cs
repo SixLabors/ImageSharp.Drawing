@@ -2,9 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
-using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -58,39 +56,6 @@ public partial class DrawingCanvasTests
             canvas.Flush();
         }
 
-        target.DebugSave(provider, appendSourceFileOrDescription: false);
-        target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
-    }
-
-    [Theory]
-    [WithBlankImage(220, 160, PixelTypes.Rgba32)]
-    public void Process_NoCpuFrame_UsesBackendReadback_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        using Image<TPixel> target = provider.GetImage();
-        IPath blurPath = CreateBlurEllipsePath();
-        IPath pixelatePath = CreatePixelateTrianglePath();
-
-        MemoryCanvasFrame<TPixel> proxyFrame = new(target.Frames.RootFrame.PixelBuffer.GetRegion());
-        MirroringCpuReadbackTestBackend<TPixel> mirroringBackend = new(proxyFrame, target);
-
-        NativeSurface nativeSurface = new UnsupportedNativeSurface();
-        Configuration configuration = provider.Configuration.Clone();
-        configuration.SetDrawingBackend(mirroringBackend);
-
-        using (DrawingCanvas<TPixel> canvas = new(
-                   configuration,
-                   new DrawingOptions(),
-                   new NativeCanvasFrame<TPixel>(target.Bounds, nativeSurface)))
-        {
-            DrawProcessScenario(canvas);
-            canvas.Apply(blurPath, ctx => ctx.GaussianBlur(6F));
-            canvas.Apply(pixelatePath, ctx => ctx.Pixelate(10));
-            canvas.Flush();
-        }
-
-        Assert.True(mirroringBackend.ReadbackCallCount > 0);
-        Assert.Same(configuration, mirroringBackend.LastReadbackConfiguration);
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
     }
@@ -156,85 +121,5 @@ public partial class DrawingCanvasTests
         pathBuilder.AddLine(165, 160, 110, 80);
         pathBuilder.CloseAllFigures();
         return pathBuilder.Build();
-    }
-
-    private sealed class UnsupportedNativeSurface : NativeSurface
-    {
-    }
-
-    /// <summary>
-    /// Test backend that mirrors composition output into a CPU frame and optionally serves readback
-    /// from a backing image for process-path tests.
-    /// </summary>
-    private sealed class MirroringCpuReadbackTestBackend<TPixel> : IDrawingBackend
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        private readonly ICanvasFrame<TPixel> proxyFrame;
-        private readonly Image<TPixel>? readbackSource;
-
-        public MirroringCpuReadbackTestBackend(ICanvasFrame<TPixel> proxyFrame, Image<TPixel>? readbackSource = null)
-        {
-            this.proxyFrame = proxyFrame;
-            this.readbackSource = readbackSource;
-        }
-
-        public int ReadbackCallCount { get; private set; }
-
-        public Configuration? LastReadbackConfiguration { get; private set; }
-
-        public DrawingBackendScene CreateScene(
-            Configuration configuration,
-            Rectangle targetBounds,
-            DrawingCommandBatch commandBatch,
-            IReadOnlyList<IDisposable>? ownedResources = null)
-            => DefaultDrawingBackend.Instance.CreateScene(configuration, targetBounds, commandBatch, ownedResources);
-
-        public void RenderScene<TTargetPixel>(
-            Configuration configuration,
-            ICanvasFrame<TTargetPixel> target,
-            DrawingBackendScene scene)
-            where TTargetPixel : unmanaged, IPixel<TTargetPixel>
-        {
-            if (this.proxyFrame is not ICanvasFrame<TTargetPixel> typedProxyFrame)
-            {
-                throw new NotSupportedException("Mirroring test backend pixel format mismatch.");
-            }
-
-            DefaultDrawingBackend.Instance.RenderScene(configuration, typedProxyFrame, scene);
-        }
-
-        public void ReadRegion<TTargetPixel>(
-            Configuration configuration,
-            ICanvasFrame<TTargetPixel> target,
-            Rectangle sourceRectangle,
-            Buffer2DRegion<TTargetPixel> destination)
-            where TTargetPixel : unmanaged, IPixel<TTargetPixel>
-        {
-            this.LastReadbackConfiguration = configuration;
-
-            if (this.readbackSource is null)
-            {
-                throw new NotSupportedException();
-            }
-
-            this.ReadbackCallCount++;
-
-            Rectangle clipped = Rectangle.Intersect(this.readbackSource.Bounds, sourceRectangle);
-            if (clipped.Width <= 0 || clipped.Height <= 0)
-            {
-                throw new ArgumentException("The requested readback rectangle does not intersect the target bounds.", nameof(sourceRectangle));
-            }
-
-            using Image<TPixel> cropped = this.readbackSource.Clone(ctx => ctx.Crop(clipped));
-            using Image<TTargetPixel> converted = cropped.CloneAs<TTargetPixel>();
-            Buffer2D<TTargetPixel> source = converted.Frames.RootFrame.PixelBuffer;
-            int copyWidth = Math.Min(source.Width, destination.Width);
-            int copyHeight = Math.Min(source.Height, destination.Height);
-
-            for (int y = 0; y < copyHeight; y++)
-            {
-                source.DangerousGetRowSpan(y).Slice(0, copyWidth).CopyTo(destination.DangerousGetRowSpan(y));
-            }
-        }
     }
 }

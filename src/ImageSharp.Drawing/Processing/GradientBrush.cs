@@ -6,12 +6,17 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Base class for Gradient brushes
+/// Base class for gradient brushes.
+/// Derived brushes define a parameterization that maps each point to a scalar gradient
+/// position; this base class maps that position to a color via the sorted color stops
+/// and the <see cref="GradientRepetitionMode"/>.
 /// </summary>
 public abstract class GradientBrush : Brush
 {
-    /// <inheritdoc cref="Brush"/>
-    /// <param name="repetitionMode">Defines how the colors are repeated beyond the interval [0..1]</param>
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GradientBrush"/> class.
+    /// </summary>
+    /// <param name="repetitionMode">Defines how the colors are repeated beyond the interval [0..1].</param>
     /// <param name="colorStops">The gradient colors.</param>
     protected GradientBrush(GradientRepetitionMode repetitionMode, params ColorStop[] colorStops)
     {
@@ -57,6 +62,9 @@ public abstract class GradientBrush : Brush
     /// <see cref="Array.Sort{T}(T[], Comparison{T})"/> is not stable and can reorder
     /// equal-ratio color stops, producing non-deterministic gradient results.
     /// </summary>
+    /// <typeparam name="T">The element type of the collection.</typeparam>
+    /// <param name="collection">The array to sort in place.</param>
+    /// <param name="comparison">The comparison used to order the elements.</param>
     private static void InsertionSort<T>(T[] collection, Comparison<T> comparison)
     {
         int count = collection.Length;
@@ -75,20 +83,22 @@ public abstract class GradientBrush : Brush
     }
 
     /// <summary>
-    /// Base class for gradient brush applicators
+    /// Base class for gradient brush applicators.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    internal abstract class GradientBrushRenderer<TPixel> : BrushRenderer<TPixel>
+    /// <typeparam name="TEncoder">The destination representation encoder.</typeparam>
+    internal abstract class GradientBrushRenderer<TPixel, TEncoder> : BrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
+        where TEncoder : struct, IGradientPixelEncoder<TPixel>
     {
         private static readonly TPixel Transparent = Color.Transparent.ToPixel<TPixel>();
 
-        private readonly ColorStop[] colorStops;
+        private readonly GradientColorStop[] colorStops;
 
         private readonly GradientRepetitionMode repetitionMode;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="GradientBrushRenderer{TPixel}"/> class.
+        /// Initializes a new instance of the <see cref="GradientBrushRenderer{TPixel, TEncoder}"/> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
@@ -103,17 +113,38 @@ public abstract class GradientBrush : Brush
             GradientRepetitionMode repetitionMode)
             : base(configuration, options, canvasWidth)
         {
-            this.colorStops = colorStops;
+            this.colorStops = new GradientColorStop[colorStops.Length];
+
+            // CSS Color 4 requires alpha to be premultiplied before color interpolation.
+            // Cache associated stop vectors once so the result is independent of TPixel storage
+            // and the per-pixel interpolation loop does not repeat the conversion.
+            // https://www.w3.org/TR/css-color-4/#interpolation-alpha
+            for (int i = 0; i < colorStops.Length; i++)
+            {
+                ColorStop stop = colorStops[i];
+                this.colorStops[i] = new GradientColorStop(stop.Ratio, stop.Color.ToScaledVector4(PixelAlphaRepresentation.Associated));
+            }
+
             this.repetitionMode = repetitionMode;
         }
 
+        /// <summary>
+        /// Gets the gradient color for the pixel at the given device coordinate.
+        /// </summary>
+        /// <param name="x">The x-coordinate of the pixel in device space.</param>
+        /// <param name="y">The y-coordinate of the pixel in device space.</param>
+        /// <returns>The blended gradient color converted to <typeparamref name="TPixel"/>.</returns>
         internal TPixel this[int x, int y]
         {
             get
             {
+                // Evaluate at pixel centers so gradient sampling lines up with the
+                // rasterized coverage positions.
                 float fx = x + 0.5f;
                 float fy = y + 0.5f;
 
+                // NaN signals that the parameterization is undefined at this point
+                // (e.g. outside the valid branch of a conic); such pixels stay transparent.
                 float positionOnCompleteGradient = this.PositionOnGradient(fx, fy);
                 if (float.IsNaN(positionOnCompleteGradient))
                 {
@@ -126,6 +157,8 @@ public abstract class GradientBrush : Brush
                         positionOnCompleteGradient %= 1;
                         break;
                     case GradientRepetitionMode.Reflect:
+                        // Fold every second period back on itself so alternating
+                        // repetitions run the stops in reverse order.
                         positionOnCompleteGradient %= 2;
                         if (positionOnCompleteGradient > 1)
                         {
@@ -147,21 +180,16 @@ public abstract class GradientBrush : Brush
                         break;
                 }
 
-                (ColorStop from, ColorStop to) = this.GetGradientSegment(positionOnCompleteGradient);
+                (GradientColorStop from, GradientColorStop to) = this.GetGradientSegment(positionOnCompleteGradient);
 
-                if (from.Color.Equals(to.Color))
+                if (from.Color == to.Color)
                 {
-                    return from.Color.ToPixel<TPixel>();
+                    return TEncoder.Encode(from.Color);
                 }
 
                 float onLocalGradient = (positionOnCompleteGradient - from.Ratio) / (to.Ratio - from.Ratio);
 
-                // TODO: This should use premultiplied vectors to avoid bad blends e.g. red -> brown <- green.
-                return Color.FromScaledVector(
-                    Vector4.Lerp(
-                        from.Color.ToScaledVector4(),
-                        to.Color.ToScaledVector4(),
-                        onLocalGradient)).ToPixel<TPixel>();
+                return TEncoder.Encode(Vector4.Lerp(from.Color, to.Color, onLocalGradient));
             }
         }
 
@@ -173,40 +201,27 @@ public abstract class GradientBrush : Brush
             int y,
             BrushWorkspace<TPixel> workspace)
         {
-            Span<float> amounts = workspace.GetAmounts(scanline.Length);
             Span<TPixel> overlays = workspace.GetOverlays(scanline.Length);
-            float blendPercentage = this.Options.BlendPercentage;
 
             // TODO: Remove bounds checks.
-            if (blendPercentage < 1)
+            for (int i = 0; i < scanline.Length; i++)
             {
-                for (int i = 0; i < scanline.Length; i++)
-                {
-                    amounts[i] = scanline[i] * blendPercentage;
-                    overlays[i] = this[x + i, y];
-                }
-            }
-            else
-            {
-                for (int i = 0; i < scanline.Length; i++)
-                {
-                    amounts[i] = scanline[i];
-                    overlays[i] = this[x + i, y];
-                }
+                overlays[i] = this[x + i, y];
             }
 
-            this.Blender.Blend(
+            this.Blender.BlendWithCoverage<TPixel>(
                 this.Configuration,
                 destinationRow,
                 destinationRow,
                 overlays,
-                amounts,
+                this.Options.BlendPercentage,
+                scanline,
                 workspace.GetBlendScratch(scanline.Length, 3));
         }
 
         /// <summary>
         /// Calculates the position on the gradient for a given point.
-        /// This method is abstract as it's content depends on the shape of the gradient.
+        /// This method is abstract as its content depends on the shape of the gradient.
         /// </summary>
         /// <param name="x">The x-coordinate of the point.</param>
         /// <param name="y">The y-coordinate of the point.</param>
@@ -218,12 +233,21 @@ public abstract class GradientBrush : Brush
         /// </returns>
         protected abstract float PositionOnGradient(float x, float y);
 
-        private (ColorStop From, ColorStop To) GetGradientSegment(float positionOnCompleteGradient)
+        /// <summary>
+        /// Finds the pair of adjacent color stops bracketing the given gradient position.
+        /// Positions before the first stop return the first stop twice; positions after the
+        /// last stop return the last stop twice, which yields the stable edge colors used
+        /// by <see cref="GradientRepetitionMode.None"/>.
+        /// </summary>
+        /// <param name="positionOnCompleteGradient">The position on the gradient, after repetition handling.</param>
+        /// <returns>The bracketing stops; equal when the position lies outside the stop range.</returns>
+        private (GradientColorStop From, GradientColorStop To) GetGradientSegment(float positionOnCompleteGradient)
         {
-            ColorStop localGradientFrom = this.colorStops[0];
-            ColorStop localGradientTo = default;
+            // Stop counts are tiny, so a linear scan over the sorted stops beats a binary search.
+            GradientColorStop localGradientFrom = this.colorStops[0];
+            GradientColorStop localGradientTo = default;
 
-            foreach (ColorStop colorStop in this.colorStops)
+            foreach (GradientColorStop colorStop in this.colorStops)
             {
                 localGradientTo = colorStop;
 
@@ -237,6 +261,24 @@ public abstract class GradientBrush : Brush
             }
 
             return (localGradientFrom, localGradientTo);
+        }
+
+        /// <summary>
+        /// Stores one gradient stop in the associated representation used for interpolation.
+        /// </summary>
+        /// <param name="ratio">The stop position.</param>
+        /// <param name="color">The associated stop color.</param>
+        private readonly struct GradientColorStop(float ratio, Vector4 color)
+        {
+            /// <summary>
+            /// Gets the stop position.
+            /// </summary>
+            public float Ratio { get; } = ratio;
+
+            /// <summary>
+            /// Gets the associated stop color.
+            /// </summary>
+            public Vector4 Color { get; } = color;
         }
     }
 }

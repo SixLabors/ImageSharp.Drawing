@@ -52,6 +52,10 @@ internal sealed class CanvasRegionFrame<TPixel> : ICanvasFrame<TPixel>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Native surfaces cannot be sub-sliced, so the parent surface is returned as-is;
+    /// consumers address the subregion through the absolute <see cref="Bounds"/> instead.
+    /// </remarks>
     public bool TryGetNativeSurface([NotNullWhen(true)] out NativeSurface? surface)
         => this.parent.TryGetNativeSurface(out surface);
 }

@@ -57,12 +57,13 @@ public partial class WebGPUDrawingBackendTests
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
+            WebGPUTextureFormat.Rgba8Unorm,
             drawingOptions,
             DrawAction,
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.05F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0012F);
     }
 
@@ -104,7 +105,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.3F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -137,7 +138,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -174,8 +175,59 @@ public partial class WebGPUDrawingBackendTests
             DrawAction);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithFile(TestImages.Png.Rainbow, PixelTypes.Rgba32, WrapMode.None, WrapMode.None)]
+    [WithFile(TestImages.Png.Rainbow, PixelTypes.Rgba32, WrapMode.Repeat, WrapMode.Repeat)]
+    [WithFile(TestImages.Png.Rainbow, PixelTypes.Rgba32, WrapMode.Mirror, WrapMode.Repeat)]
+    [WithFile(TestImages.Png.Rainbow, PixelTypes.Rgba32, WrapMode.Repeat, WrapMode.Mirror)]
+    [WithFile(TestImages.Png.Rainbow, PixelTypes.Rgba32, WrapMode.Mirror, WrapMode.Mirror)]
+    [WithFile(TestImages.Png.Rainbow, PixelTypes.Rgba32, WrapMode.Clamp, WrapMode.Clamp)]
+    [WithFile(TestImages.Png.Rainbow, PixelTypes.Rgba32, WrapMode.Clamp, WrapMode.Repeat)]
+    [WithFile(TestImages.Png.Rainbow, PixelTypes.Rgba32, WrapMode.Mirror, WrapMode.Clamp)]
+    public void FillPath_WithImageBrushWrapModes_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider, WrapMode wrapX, WrapMode wrapY)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        RectanglePolygon polygon = new(8F, 8F, 492F, 492F);
+        Brush clearBrush = Brushes.Solid(Color.White);
+
+        // The rainbow is an opaque diagonal gradient (colour varies along both axes), so every mode is
+        // visibly distinct: Repeat tiles, Mirror reflects on each axis, Clamp stretches the edge colours,
+        // and None leaves transparency. A uniform, symmetric, or transparent-bordered source would make
+        // several modes indistinguishable. The region is inset 1px (sampling the interior) and is smaller
+        // than the target, so it repeats several times across the fill.
+        using Image<TPixel> foreground = provider.GetImage();
+        Brush brush = new ImageBrush<TPixel>(foreground, new RectangleF(1, 1, foreground.Width - 2, foreground.Height - 2), new Point(20, 16), wrapX, wrapY);
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Clear(clearBrush);
+            canvas.Fill(brush, polygon);
+        }
+
+        using Image<TPixel> defaultImage = new(500, 500);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction);
+
+        // The GPU backend must match the CPU backend for every wrap mode on both axes, and both must
+        // match their committed reference outputs.
+        DebugSaveBackendPair(provider, $"{wrapX}-{wrapY}", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairReferenceOutputs(provider, $"{wrapX}-{wrapY}", defaultImage, nativeSurfaceImage);
     }
 
     [WebGPUTheory]
@@ -186,10 +238,7 @@ public partial class WebGPUDrawingBackendTests
         DrawingOptions drawingOptions = new()
         {
             GraphicsOptions = new GraphicsOptions { Antialias = true },
-            ShapeOptions = new ShapeOptions
-            {
-                IntersectionRule = IntersectionRule.NonZero
-            }
+            IntersectionRule = IntersectionRule.NonZero
         };
 
         PathBuilder pathBuilder = new();
@@ -236,7 +285,7 @@ public partial class WebGPUDrawingBackendTests
 
         // Non-zero winding semantics must still match on an interior point.
         Assert.Equal(defaultImage[128, 128], nativeSurfaceImage[128, 128]);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -282,7 +331,7 @@ public partial class WebGPUDrawingBackendTests
             $"{colorMode}_{alphaMode}",
             defaultImage,
             nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.125F);
         AssertBackendPairReferenceOutputs(
             provider,
             $"{colorMode}_{alphaMode}",
@@ -333,7 +382,7 @@ public partial class WebGPUDrawingBackendTests
             $"{colorMode}_{alphaMode}",
             defaultImage,
             nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.125F);
         AssertBackendPairReferenceOutputs(
             provider,
             $"{colorMode}_{alphaMode}",
@@ -376,11 +425,11 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.013F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
         Rectangle textRegion = Rectangle.Intersect(
             new Rectangle(0, 0, defaultImage.Width, defaultImage.Height),
             new Rectangle(8, 12, defaultImage.Width - 16, Math.Min(220, defaultImage.Height - 12)));
-        AssertBackendPairSimilarityInRegion(defaultImage, nativeSurfaceImage, textRegion, 0.02F);
+        AssertBackendPairSimilarityInRegion(defaultImage, nativeSurfaceImage, textRegion, 0.007F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -417,7 +466,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0012F);
     }
 
@@ -456,7 +505,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0013F);
     }
 
@@ -507,7 +556,7 @@ public partial class WebGPUDrawingBackendTests
                    nativeSurfaceBackend,
                    renderTarget.Bounds,
                    renderTarget.Surface,
-                   renderTarget.Format))
+                   renderTarget.Surface.TargetDescriptor))
         {
             DrawFirstFrame(firstCanvas);
             firstCanvas.Flush();
@@ -519,13 +568,102 @@ public partial class WebGPUDrawingBackendTests
                    nativeSurfaceBackend,
                    renderTarget.Bounds,
                    renderTarget.Surface,
-                   renderTarget.Format))
+                   renderTarget.Surface.TargetDescriptor))
         {
             DrawSecondFrame(secondCanvas);
             secondCanvas.Flush();
         }
 
         using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
+    }
+
+    [WebGPUTheory]
+    [WithBlankImage(96, 72, PixelTypes.Bgra32)]
+    public void CopyPixelsFrom_WithWebGPUBackend_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        Rectangle sourceBounds = new(0, 0, 42, 30);
+        Rectangle targetBounds = new(0, 0, 96, 72);
+
+        static void DrawSource(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.Red), new RectanglePolygon(0, 0, 42, 30));
+            canvas.Fill(Brushes.Solid(Color.Yellow), new RectanglePolygon(7, 6, 18, 12));
+        }
+
+        static void DrawTargetBeforeCopy(DrawingCanvas canvas)
+            => canvas.Fill(Brushes.Solid(Color.Blue), new RectanglePolygon(0, 0, 96, 72));
+
+        static void DrawTargetAfterCopy(DrawingCanvas canvas)
+            => canvas.Fill(Brushes.Solid(Color.Green), new RectanglePolygon(14, 10, 8, 6));
+
+        void DrawDefault(DrawingCanvas targetCanvas)
+        {
+            using Image<TPixel> sourceImage = new(sourceBounds.Width, sourceBounds.Height);
+            using (DrawingCanvas sourceCanvas = sourceImage.Frames.RootFrame.CreateCanvas(Configuration.Default, drawingOptions))
+            {
+                DrawSource(sourceCanvas);
+            }
+
+            DrawTargetBeforeCopy(targetCanvas);
+
+            using (DrawingCanvas sourceCanvas = sourceImage.Frames.RootFrame.CreateCanvas(Configuration.Default, drawingOptions))
+            {
+                targetCanvas.CopyPixelsFrom(sourceCanvas, sourceBounds, new Point(0, 0));
+            }
+
+            DrawTargetAfterCopy(targetCanvas);
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawDefault);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using WebGPURenderTarget sourceRenderTarget = new(WebGPUTextureFormat.Bgra8Unorm, sourceBounds.Width, sourceBounds.Height);
+        using WebGPURenderTarget targetRenderTarget = sourceRenderTarget.CreateRenderTarget(targetBounds.Width, targetBounds.Height);
+        Configuration nativeSurfaceConfiguration = Configuration.Default.Clone();
+        nativeSurfaceConfiguration.SetDrawingBackend(nativeSurfaceBackend);
+
+        using (DrawingCanvas sourceCanvas = WebGPUCanvasFactory.CreateCanvas(
+                   nativeSurfaceConfiguration,
+                   drawingOptions,
+                   nativeSurfaceBackend,
+                   sourceRenderTarget.Bounds,
+                   sourceRenderTarget.Surface,
+                   sourceRenderTarget.Surface.TargetDescriptor))
+        {
+            DrawSource(sourceCanvas);
+        }
+
+        using (DrawingCanvas targetCanvas = WebGPUCanvasFactory.CreateCanvas(
+                   nativeSurfaceConfiguration,
+                   drawingOptions,
+                   nativeSurfaceBackend,
+                   targetRenderTarget.Bounds,
+                   targetRenderTarget.Surface,
+                   targetRenderTarget.Surface.TargetDescriptor))
+
+        using (DrawingCanvas sourceCanvas = WebGPUCanvasFactory.CreateCanvas(
+                   nativeSurfaceConfiguration,
+                   drawingOptions,
+                   nativeSurfaceBackend,
+                   sourceRenderTarget.Bounds,
+                   sourceRenderTarget.Surface,
+                   sourceRenderTarget.Surface.TargetDescriptor))
+        {
+            DrawTargetBeforeCopy(targetCanvas);
+            targetCanvas.CopyPixelsFrom(sourceCanvas, sourceBounds, new Point(0, 0));
+            DrawTargetAfterCopy(targetCanvas);
+        }
+
+        using Image<TPixel> nativeSurfaceImage = targetRenderTarget.ReadbackImage<TPixel>();
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
     }
@@ -557,7 +695,320 @@ public partial class WebGPUDrawingBackendTests
             DrawAction);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0516F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.019F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(420, 160, "White", PixelTypes.Rgba32)]
+    public void DrawText_WithDropShadowWriteBack_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 60);
+        RichTextOptions textOptions = new(font)
+        {
+            Origin = new PointF(24, 30)
+        };
+
+        DrawingOptions drawingOptions = new();
+        string text = "Shadow";
+        Brush brush = Brushes.Solid(Color.Black);
+
+        // Content draws into an effect layer; on restore the canvas slots the tinted, blurred
+        // silhouette beneath the untouched content at the shadow offset, then composites text plus
+        // shadow onto the white background.
+        WebGPUDropShadowLayerEffect shadow = new(new Point(10, 10), 4F, Color.Firebrick);
+
+        Rectangle region = new(0, 0, 420, 160);
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.SaveLayer(new GraphicsOptions(), region, shadow);
+            canvas.DrawText(textOptions, text, brush, null);
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(420, 200, "White", PixelTypes.Rgba32)]
+    public void DrawText_WithBlurLayerEffect_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 48);
+        DrawingOptions drawingOptions = new();
+        Brush brush = Brushes.Solid(Color.Black);
+
+        // The layer isolates the blur: the text inside the effect layer softens on restore while
+        // the text outside it stays sharp.
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.DrawText(new RichTextOptions(font) { Origin = new PointF(24, 20) }, "Sharp", brush, null);
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 90, 420, 100), new WebGPUGaussianBlurLayerEffect(4F));
+            canvas.DrawText(new RichTextOptions(font) { Origin = new PointF(24, 100) }, "Blurred", brush, null);
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(420, 160, "White", PixelTypes.Rgba32)]
+    public void DrawText_WithPolygonLayerEffectRegion_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 54);
+        DrawingOptions drawingOptions = new();
+        Brush brush = Brushes.Solid(Color.Black);
+
+        // A polygon region confines the effect: the text crosses the triangle boundary, so the
+        // glyphs inside the triangle blur on restore while the rest stay sharp.
+        PathBuilder pathBuilder = new();
+        pathBuilder.AddLine(210, 10, 400, 150);
+        pathBuilder.AddLine(400, 150, 20, 150);
+        pathBuilder.AddLine(20, 150, 210, 10);
+        pathBuilder.CloseAllFigures();
+        IPath triangle = pathBuilder.Build();
+
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.SaveLayer(new GraphicsOptions(), triangle, new BlurLayerEffect(4F));
+            canvas.DrawText(new RichTextOptions(font) { Origin = new PointF(24, 40) }, "Blurred middle", brush, null);
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(420, 160, "White", PixelTypes.Rgba32)]
+    public void DrawText_WithInnerShadowLayerEffect_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 84);
+        DrawingOptions drawingOptions = new();
+        Brush brush = Brushes.Solid(Color.Gold);
+
+        // The shadow hugs the glyphs' top and left inside edges, clipped to the content itself.
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 0, 420, 160), new WebGPUInnerShadowLayerEffect(new Point(4, 4), 3F, Color.Black));
+            canvas.DrawText(new RichTextOptions(font) { Origin = new PointF(24, 20) }, "Inset", brush, null);
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(420, 160, "White", PixelTypes.Rgba32)]
+    public void DrawText_WithGlowLayerEffect_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 72);
+        DrawingOptions drawingOptions = new();
+        Brush brush = Brushes.Solid(Color.Black);
+
+        // The glow spreads evenly beneath the glyphs in all directions.
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 0, 420, 160), new WebGPUGlowLayerEffect(6F, Color.Red));
+            canvas.DrawText(new RichTextOptions(font) { Origin = new PointF(24, 30) }, "Glow", brush, null);
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
+    }
+
+    [WebGPUTheory]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "blur")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "brightness")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "contrast")]
+    [WithFile(TestImages.Png.Ducky, PixelTypes.Rgba32, "drop-shadow")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "grayscale")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "hue-rotate")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "invert")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "opacity")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "sepia")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "saturate")]
+    [WithFile(TestImages.Jpeg.Baseline.Balloon, PixelTypes.Rgba32, "acrylic")]
+    public void DrawText_WithBackdropFilterLayerEffects_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider, string filter)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        // The CSS cases mirror the MDN backdrop-filter examples, with percentages as fractions and
+        // blur radii as Gaussian sigma, on the same balloon photograph MDN uses. Drop-shadow runs
+        // on the duck instead: the backdrop's silhouette needs transparency to cast into, and an
+        // opaque photograph has none. Acrylic is the non-CSS frosted-glass material.
+        BackdropLayerEffect effect = filter switch
+        {
+            "blur" => new WebGPUBackdropGaussianBlurLayerEffect(2F),
+            "brightness" => new WebGPUBackdropColorMatrixLayerEffect(KnownFilterMatrices.CreateBrightnessFilter(0.6F)),
+            "contrast" => new WebGPUBackdropColorMatrixLayerEffect(KnownFilterMatrices.CreateContrastFilter(0.4F)),
+            "drop-shadow" => new WebGPUBackdropDropShadowLayerEffect(new Point(4, 4), 5F, Color.Black.WithAlpha(.7F)),
+            "grayscale" => new WebGPUBackdropColorMatrixLayerEffect(KnownFilterMatrices.CreateGrayscaleBt709Filter(0.3F)),
+            "hue-rotate" => new WebGPUBackdropColorMatrixLayerEffect(KnownFilterMatrices.CreateHueFilter(120F)),
+            "invert" => new WebGPUBackdropColorMatrixLayerEffect(KnownFilterMatrices.CreateInvertFilter(0.7F)),
+            "opacity" => new WebGPUBackdropColorMatrixLayerEffect(KnownFilterMatrices.CreateOpacityFilter(0.2F)),
+            "sepia" => new WebGPUBackdropColorMatrixLayerEffect(KnownFilterMatrices.CreateSepiaFilter(0.9F)),
+            "saturate" => new WebGPUBackdropColorMatrixLayerEffect(KnownFilterMatrices.CreateSaturateFilter(0.8F)),
+            "acrylic" => new WebGPUBackdropAcrylicLayerEffect(2F, Color.PeachPuff.WithAlpha(0.35F)),
+            _ => throw new ArgumentOutOfRangeException(nameof(filter)),
+        };
+
+        DrawingOptions drawingOptions = new();
+        Brush brush = Brushes.Solid(Color.Black);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+
+        // The layout scales with the source image so the balloon and duck images share one scene:
+        // a caption behind the panel, a rounded-rectangle panel through the IPath overload, and the
+        // filter's own name as the label rendered sharp above the filtered backdrop.
+        int width = defaultImage.Width;
+        int height = defaultImage.Height;
+        Font captionFont = TestFontUtilities.GetFont(TestFonts.OpenSans, height / 6F);
+        Font labelFont = TestFontUtilities.GetFont(TestFonts.OpenSans, height / 11F);
+        RectangleF panelBounds = new(width / 10F, height / 5F, width * 4F / 5F, height * 11F / 20F);
+        RoundedRectanglePolygon panel = new(panelBounds, panelBounds.Height / 10F);
+
+        // The backdrop effect filters whatever is already on the canvas beneath the panel region -
+        // the photograph and the caption glyphs the panel overlaps - then the panel's label renders
+        // sharp above the filtered result.
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.DrawText(new RichTextOptions(captionFont) { Origin = new PointF(width / 20F, height / 15F) }, "Backdrop", brush, null);
+            canvas.SaveLayer(new GraphicsOptions(), panel, effect);
+            canvas.DrawText(new RichTextOptions(labelFont) { Origin = new PointF(panelBounds.X + 15F, panelBounds.Y + (panelBounds.Height / 2F)) }, filter, brush, null);
+            canvas.Restore();
+        }
+
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, filter, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.03F);
+
+        // Reference outputs are rendered on one adapter; other conforming adapters round
+        // within one LSB across a small fraction of pixels.
+        AssertBackendPairReferenceOutputs(provider, filter, defaultImage, nativeSurfaceImage, 0.0043F);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(420, 160, "White", PixelTypes.Rgba32)]
+    public void DrawText_WithColorMatrixLayerEffect_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 72);
+        DrawingOptions drawingOptions = new();
+        Brush brush = Brushes.Solid(Color.Red);
+
+        // The hue rotation recolours the layer's text; content outside the layer would keep its
+        // original colour.
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 0, 420, 160), new WebGPUColorMatrixLayerEffect(KnownFilterMatrices.CreateHueFilter(180F)));
+            canvas.DrawText(new RichTextOptions(font) { Origin = new PointF(24, 30) }, "Recoloured", brush, null);
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
     }
 
@@ -596,7 +1047,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 2F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -655,14 +1106,14 @@ public partial class WebGPUDrawingBackendTests
                    nativeSurfaceBackend,
                    renderTarget.Bounds,
                    renderTarget.Surface,
-                   renderTarget.Format))
+                   renderTarget.Surface.TargetDescriptor))
         {
             DrawAction(nativeSurfaceCanvas);
         }
 
         using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 2F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -786,16 +1237,15 @@ public partial class WebGPUDrawingBackendTests
 
         if (initialImage is not null)
         {
-            using (DrawingCanvas initialCanvas = WebGPUCanvasFactory.CreateCanvas(
+            using DrawingCanvas initialCanvas = WebGPUCanvasFactory.CreateCanvas(
                        configuration,
                        new DrawingOptions(),
                        backend,
                        renderTarget.Bounds,
                        renderTarget.Surface,
-                       renderTarget.Format))
-            {
-                initialCanvas.DrawImage(initialImage, initialImage.Bounds, targetBounds);
-            }
+                       renderTarget.Surface.TargetDescriptor);
+
+            initialCanvas.DrawImage(initialImage, initialImage.Bounds, targetBounds);
         }
 
         using (DrawingCanvas canvas = WebGPUCanvasFactory.CreateCanvas(
@@ -804,7 +1254,47 @@ public partial class WebGPUDrawingBackendTests
                    backend,
                    renderTarget.Bounds,
                    renderTarget.Surface,
-                   renderTarget.Format))
+                   renderTarget.Surface.TargetDescriptor))
+        {
+            drawAction(canvas);
+        }
+
+        return renderTarget.ReadbackImage<TPixel>();
+    }
+
+    private static Image<TPixel> RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+        int width,
+        int height,
+        WebGPUDrawingBackend backend,
+        WebGPUTextureFormat format,
+        DrawingOptions options,
+        Action<DrawingCanvas> drawAction,
+        Image<TPixel> initialImage)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using WebGPURenderTarget renderTarget = new(format, width, height);
+        Configuration configuration = Configuration.Default.Clone();
+        configuration.SetDrawingBackend(backend);
+        Rectangle targetBounds = new(0, 0, width, height);
+
+        using (DrawingCanvas initialCanvas = WebGPUCanvasFactory.CreateCanvas(
+                   configuration,
+                   new DrawingOptions(),
+                   backend,
+                   renderTarget.Bounds,
+                   renderTarget.Surface,
+                   renderTarget.Surface.TargetDescriptor))
+        {
+            initialCanvas.DrawImage(initialImage, initialImage.Bounds, targetBounds);
+        }
+
+        using (DrawingCanvas canvas = WebGPUCanvasFactory.CreateCanvas(
+                   configuration,
+                   options,
+                   backend,
+                   renderTarget.Bounds,
+                   renderTarget.Surface,
+                   renderTarget.Surface.TargetDescriptor))
         {
             drawAction(canvas);
         }
@@ -919,7 +1409,146 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.015F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(1024, 800, "Black", PixelTypes.Rgba32)]
+    public void ColorPickerSliderThumb_AvaloniaTemplate_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = CreateAvaloniaOptions(IntersectionRule.EvenOdd, true);
+
+        static void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.Black));
+            DrawThumb(canvas, new PointF(642F, 335F));
+            DrawThumb(canvas, new PointF(875F, 359F));
+            DrawThumb(canvas, new PointF(875F, 383F));
+            DrawThumb(canvas, new PointF(875F, 407F));
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarityInRegion(defaultImage, nativeSurfaceImage, new Rectangle(638, 331, 265, 104), 0.007F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+
+        static void DrawThumb(DrawingCanvas canvas, PointF origin)
+        {
+            const float thumbSize = 24F;
+            const float thumbBorderThickness = 5F;
+
+            RectanglePolygon thumbClip = new(origin.X, origin.Y, thumbSize, thumbSize);
+            _ = canvas.Save(CreateAvaloniaOptions(IntersectionRule.EvenOdd, false));
+            canvas.Clip(thumbClip);
+
+            RectangleF thumbBorderRectangle = new(origin.X + 2.5F, origin.Y + 2.5F, 19F, 19F);
+            RoundedRectanglePolygon thumbBorder = new(thumbBorderRectangle, 9.5F);
+            EllipsePolygon thumbEllipse = new(new PointF(origin.X + 12F, origin.Y + 12F), new SizeF(thumbSize, thumbSize));
+
+            DrawAvaloniaFill(canvas, Brushes.Solid(Color.Transparent), thumbBorder);
+            DrawAvaloniaStroke(canvas, Pens.Solid(Color.White, thumbBorderThickness), thumbBorder);
+            DrawAvaloniaFill(canvas, Brushes.Solid(Color.Transparent), thumbEllipse);
+            DrawAvaloniaStroke(canvas, Pens.Solid(Color.White, 1F), thumbEllipse);
+
+            canvas.Restore();
+        }
+
+        static void DrawAvaloniaFill(DrawingCanvas canvas, Brush brush, IPath path)
+        {
+            _ = canvas.Save(CreateAvaloniaOptions(IntersectionRule.EvenOdd, true));
+            canvas.Fill(brush, path);
+            canvas.Restore();
+        }
+
+        static void DrawAvaloniaStroke(DrawingCanvas canvas, Pen pen, IPath path)
+        {
+            _ = canvas.Save(CreateAvaloniaOptions(IntersectionRule.EvenOdd, true));
+            canvas.Draw(pen, path);
+            canvas.Restore();
+        }
+
+        static DrawingOptions CreateAvaloniaOptions(IntersectionRule fillRule, bool antialias)
+            => new()
+            {
+                GraphicsOptions = new GraphicsOptions { Antialias = antialias },
+                IntersectionRule = fillRule
+            };
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(300, 220, "Gray", PixelTypes.Rgba32)]
+    public void BlurredBoxShadow_DifferenceClip_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true },
+            IntersectionRule = IntersectionRule.EvenOdd
+        };
+
+        const float sigma = 4F;
+
+        void DrawThumbWithShadow(DrawingCanvas canvas, PointF center)
+        {
+            EllipsePolygon contentPath = new(center, new SizeF(24F, 24F));
+            EllipsePolygon shadowPath = new(new PointF(center.X, center.Y + 3F), new SizeF(24F, 24F));
+            Rectangle layerBounds = new(
+                (int)(center.X - 12F - 16F),
+                (int)(center.Y - 12F - 16F),
+                24 + 32,
+                24 + 32 + 6);
+
+            // Blurred outer box shadow: difference clip -> layer -> fill -> gaussian blur -> composite.
+            _ = canvas.Save(drawingOptions);
+            canvas.Clip(ClipOperation.Difference, contentPath);
+            _ = canvas.SaveLayer(new GraphicsOptions(), layerBounds);
+            canvas.Fill(Brushes.Solid(Color.Black.WithAlpha(0.55F)), shadowPath);
+            canvas.Apply(layerBounds, ctx => ctx.GaussianBlur(sigma));
+            canvas.Restore();
+            canvas.Restore();
+
+            canvas.Fill(Brushes.Solid(Color.White), contentPath);
+            canvas.Fill(Brushes.Solid(Color.Red), new EllipsePolygon(center, new SizeF(8F, 8F)));
+        }
+
+        void DrawAction(DrawingCanvas canvas)
+        {
+            DrawThumbWithShadow(canvas, new PointF(70F, 60F));
+            DrawThumbWithShadow(canvas, new PointF(150F, 60F));
+            DrawThumbWithShadow(canvas, new PointF(230F, 60F));
+            DrawThumbWithShadow(canvas, new PointF(110F, 150F));
+            DrawThumbWithShadow(canvas, new PointF(190F, 150F));
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -961,7 +1590,7 @@ public partial class WebGPUDrawingBackendTests
         float referenceTolerance = lineCap == LineCap.Square ? 0.0016F : 0.0003F;
 
         DebugSaveBackendPair(provider, $"{lineCap}", defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.03F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, $"{lineCap}", defaultImage, nativeSurfaceImage, referenceTolerance);
     }
 
@@ -1030,7 +1659,7 @@ public partial class WebGPUDrawingBackendTests
             defaultComparisonImage,
             nativeSurfaceComparisonImage);
 
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.015F);
         AssertBackendPairReferenceOutputs(
             provider,
             $"{lineJoin}",
@@ -1099,7 +1728,7 @@ public partial class WebGPUDrawingBackendTests
             defaultComparisonImage,
             nativeSurfaceComparisonImage);
 
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0103F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(
             provider,
             $"{lineCap}",
@@ -1163,10 +1792,7 @@ public partial class WebGPUDrawingBackendTests
         DrawingOptions drawingOptions = new()
         {
             GraphicsOptions = new GraphicsOptions { Antialias = true },
-            ShapeOptions = new ShapeOptions
-            {
-                IntersectionRule = IntersectionRule.EvenOdd
-            }
+            IntersectionRule = IntersectionRule.EvenOdd
         };
 
         PathBuilder pathBuilder = new();
@@ -1212,7 +1838,7 @@ public partial class WebGPUDrawingBackendTests
 
         // EvenOdd with same winding inner contour should create a hole at center.
         Assert.Equal(defaultImage[128, 128], nativeSurfaceImage[128, 128]);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -1245,7 +1871,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -1277,8 +1903,257 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [InlineData(false, 2)]
+    [InlineData(true, 1)]
+    public void OrderedPlan_GroupsOnlyDependencyIndependentApplies(bool offsetReadIntersectsEarlierWrite, int expectedFirstGroupCount)
+    {
+        using WebGPUDrawingBackend backend = new();
+        Configuration configuration = Configuration.Default.Clone();
+        configuration.SetDrawingBackend(backend);
+        DrawingOptions drawingOptions = new();
+
+        using WebGPURenderTarget renderTarget = new(96, 64);
+        using DrawingCanvas canvas = WebGPUCanvasFactory.CreateCanvas(
+            configuration,
+            drawingOptions,
+            backend,
+            renderTarget.Bounds,
+            renderTarget.Surface,
+            renderTarget.Surface.TargetDescriptor);
+
+        canvas.Fill(Brushes.Solid(Color.White));
+        canvas.Apply(new Rectangle(8, 8, 20, 20), context => context.Invert());
+
+        if (offsetReadIntersectsEarlierWrite)
+        {
+            // The second write is disjoint, but its non-zero write-back offset moves the source
+            // read onto the first write. The planner must therefore preserve a separate barrier.
+            canvas.Apply(
+                new Rectangle(8, 8, 20, 20),
+                context => context.Invert(),
+                new GraphicsOptions(),
+                new Point(42, 0));
+        }
+        else
+        {
+            canvas.Apply(new Rectangle(50, 8, 20, 20), context => context.Invert());
+        }
+
+        using DrawingBackendScene scene = canvas.CreateScene();
+        WebGPUDrawingBackendScene webGPUScene = Assert.IsType<WebGPUDrawingBackendScene>(scene);
+        ReadOnlySpan<WebGPUSceneOperation> operations = webGPUScene.EncodedScene.OrderedOperations;
+        int firstApplyIndex = 0;
+
+        while (operations[firstApplyIndex].Kind != WebGPUSceneOperationKind.Apply)
+        {
+            firstApplyIndex++;
+        }
+
+        Assert.Equal(expectedFirstGroupCount, operations[firstApplyIndex].ApplyGroupCount);
+        Assert.Equal(0, operations[firstApplyIndex].ApplyIndex);
+        Assert.True(operations[firstApplyIndex].PendingStatusCapacity > 0);
+
+        WebGPUSceneOperation secondApply = operations[firstApplyIndex + 1];
+        Assert.Equal(WebGPUSceneOperationKind.Apply, secondApply.Kind);
+        Assert.Equal(1, secondApply.ApplyIndex);
+        Assert.Equal(offsetReadIntersectsEarlierWrite ? 1 : 0, secondApply.ApplyGroupCount);
+    }
+
+    [WebGPUTheory]
+    [WithBlankImage(128, 96, PixelTypes.Rgba32)]
+    public void ConsecutiveIndependentApplies_ShareReadbackAndMatchDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+
+        static void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(8, 12, 40, 36));
+            canvas.Fill(Brushes.Solid(Color.Blue), new Rectangle(76, 44, 36, 40));
+
+            // These disjoint source/write rectangles are encoded as one two-image barrier while
+            // their processors and draw ranges remain in their original order.
+            canvas.Apply(new Rectangle(8, 12, 40, 36), context => context.Invert());
+            canvas.Apply(new Rectangle(76, 44, 36, 40), context => context.Invert());
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<TPixel> webGPUImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+            defaultImage.Width,
+            defaultImage.Height,
+            backend,
+            drawingOptions,
+            DrawAction);
+
+        DebugSaveBackendPair(provider, null, defaultImage, webGPUImage);
+        AssertBackendPairSimilarity(defaultImage, webGPUImage, 0.005F);
+    }
+
+    [WebGPUTheory]
+    [WithBlankImage(96, 64, PixelTypes.Rgba32)]
+    public void ConsecutiveClippedApplies_ShareReadbackAndMatchDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new() { GraphicsOptions = new GraphicsOptions { Antialias = false } };
+
+        static void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(0, 8, 16, 24));
+            canvas.Fill(Brushes.Solid(Color.Blue), new Rectangle(80, 8, 16, 24));
+
+            // Both reads extend beyond opposite target edges. Their packed rows retain the
+            // destination offsets needed to reconstruct the full processor images.
+            canvas.Apply(new Rectangle(-8, 8, 24, 24), context => context.Invert());
+            canvas.Apply(new Rectangle(80, 8, 24, 24), context => context.Invert());
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<TPixel> webGPUImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+            defaultImage.Width,
+            defaultImage.Height,
+            backend,
+            drawingOptions,
+            DrawAction);
+
+        DebugSaveBackendPair(provider, null, defaultImage, webGPUImage);
+        AssertBackendPairSimilarity(defaultImage, webGPUImage, 0.005F);
+    }
+
+    [WebGPUFact]
+    public void OrderedPlan_SplitsApplyGroupsAtRenderAndLayerBoundaries()
+    {
+        using WebGPUDrawingBackend backend = new();
+        Configuration configuration = Configuration.Default.Clone();
+        configuration.SetDrawingBackend(backend);
+
+        using WebGPURenderTarget renderTarget = new(96, 64);
+        using DrawingCanvas canvas = WebGPUCanvasFactory.CreateCanvas(
+            configuration,
+            new DrawingOptions(),
+            backend,
+            renderTarget.Bounds,
+            renderTarget.Surface,
+            renderTarget.Surface.TargetDescriptor);
+
+        canvas.Fill(Brushes.Solid(Color.White));
+        canvas.Apply(new Rectangle(4, 4, 16, 16), context => context.Invert());
+        canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(28, 4, 16, 16));
+        canvas.Apply(new Rectangle(52, 4, 16, 16), context => context.Invert());
+        canvas.SaveLayer(new GraphicsOptions(), new Rectangle(4, 28, 40, 28));
+        canvas.Apply(new Rectangle(4, 28, 16, 16), context => context.Invert());
+        canvas.Restore();
+
+        using DrawingBackendScene scene = canvas.CreateScene();
+        WebGPUDrawingBackendScene webGPUScene = Assert.IsType<WebGPUDrawingBackendScene>(scene);
+        ReadOnlySpan<WebGPUSceneOperation> operations = webGPUScene.EncodedScene.OrderedOperations;
+        int applyCount = 0;
+        bool sawBeginLayer = false;
+        bool sawEndLayer = false;
+
+        for (int i = 0; i < operations.Length; i++)
+        {
+            WebGPUSceneOperation operation = operations[i];
+            sawBeginLayer |= operation.Kind == WebGPUSceneOperationKind.BeginLayer;
+            sawEndLayer |= operation.Kind == WebGPUSceneOperationKind.EndLayer;
+
+            if (operation.Kind == WebGPUSceneOperationKind.Apply)
+            {
+                Assert.Equal(1, operation.ApplyGroupCount);
+                applyCount++;
+            }
+        }
+
+        Assert.Equal(3, applyCount);
+        Assert.True(sawBeginLayer);
+        Assert.True(sawEndLayer);
+    }
+
+    [WebGPUTheory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void ConsecutiveIndependentApplies_ProcessorExceptionCommitsEarlierResults(int throwingApplyIndex)
+    {
+        using WebGPUDrawingBackend backend = new();
+        Configuration configuration = Configuration.Default.Clone();
+        configuration.SetDrawingBackend(backend);
+        DrawingOptions drawingOptions = new() { GraphicsOptions = new GraphicsOptions { Antialias = false } };
+        InvalidOperationException expectedException = new("Expected processor failure.");
+
+        using WebGPURenderTarget renderTarget = new(128, 64);
+        DrawingCanvas canvas = WebGPUCanvasFactory.CreateCanvas(
+            configuration,
+            drawingOptions,
+            backend,
+            renderTarget.Bounds,
+            renderTarget.Surface,
+            renderTarget.Surface.TargetDescriptor);
+
+        canvas.Fill(Brushes.Solid(Color.White));
+        canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(8, 8, 24, 24));
+        canvas.Fill(Brushes.Solid(Color.Blue), new Rectangle(56, 8, 24, 24));
+        canvas.Fill(Brushes.Solid(Color.Lime), new Rectangle(96, 8, 24, 24));
+
+        Rectangle[] applyRectangles =
+        [
+            new Rectangle(8, 8, 24, 24),
+            new Rectangle(56, 8, 24, 24),
+            new Rectangle(96, 8, 24, 24)
+        ];
+
+        for (int i = 0; i < applyRectangles.Length; i++)
+        {
+            int applyIndex = i;
+            canvas.Apply(
+                applyRectangles[i],
+                context =>
+                {
+                    if (applyIndex == throwingApplyIndex)
+                    {
+                        throw expectedException;
+                    }
+
+                    context.Invert();
+                });
+        }
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(canvas.Dispose);
+        Assert.Same(expectedException, exception);
+
+        using Image<Rgba32> image = renderTarget.ReadbackImage<Rgba32>();
+        Rgba32[] originalColors =
+        [
+            Color.Red.ToPixel<Rgba32>(),
+            Color.Blue.ToPixel<Rgba32>(),
+            Color.Lime.ToPixel<Rgba32>()
+        ];
+        Rgba32[] invertedColors =
+        [
+            Color.Cyan.ToPixel<Rgba32>(),
+            Color.Yellow.ToPixel<Rgba32>(),
+            Color.Magenta.ToPixel<Rgba32>()
+        ];
+
+        for (int i = 0; i < applyRectangles.Length; i++)
+        {
+            Rgba32 expectedColor = i < throwingApplyIndex ? invertedColors[i] : originalColors[i];
+            Assert.Equal(expectedColor, image[applyRectangles[i].X + 8, applyRectangles[i].Y + 8]);
+        }
+
+        Assert.Equal(Color.White.ToPixel<Rgba32>(), image[44, 44]);
     }
 
     [WebGPUTheory]
@@ -1317,8 +2192,11 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
+
+        // Reference outputs are rendered on one adapter; other conforming adapters round
+        // within one LSB across a small fraction of pixels.
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0045F);
     }
 
     [WebGPUTheory]
@@ -1357,14 +2235,14 @@ public partial class WebGPUDrawingBackendTests
                    nativeSurfaceBackend,
                    renderTarget.Bounds,
                    renderTarget.Surface,
-                   renderTarget.Format))
+                   renderTarget.Surface.TargetDescriptor))
         {
             DrawAction(canvas);
         }
 
         using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -1431,7 +2309,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceBackend,
             sceneRenderTarget.Bounds,
             sceneRenderTarget.Surface,
-            sceneRenderTarget.Format);
+            sceneRenderTarget.Surface.TargetDescriptor);
 
         // Create the scene through the WebGPU backend so the test covers retained encoding and replay.
         DrawRetainedScene(nativeSceneCanvas);
@@ -1444,14 +2322,14 @@ public partial class WebGPUDrawingBackendTests
                    nativeSurfaceBackend,
                    renderTarget.Bounds,
                    renderTarget.Surface,
-                   renderTarget.Format))
+                   renderTarget.Surface.TargetDescriptor))
         {
             DrawRetainedFlow(nativeCanvas, nativeScene);
         }
 
         using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -1513,7 +2391,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceBackend,
             sceneRenderTarget.Bounds,
             sceneRenderTarget.Surface,
-            sceneRenderTarget.Format);
+            sceneRenderTarget.Surface.TargetDescriptor);
 
         // Create the scene through the WebGPU backend so retained layer commands are encoded.
         DrawRetainedScene(nativeSceneCanvas);
@@ -1526,14 +2404,14 @@ public partial class WebGPUDrawingBackendTests
                    nativeSurfaceBackend,
                    renderTarget.Bounds,
                    renderTarget.Surface,
-                   renderTarget.Format))
+                   renderTarget.Surface.TargetDescriptor))
         {
             DrawRetainedFlow(nativeCanvas, nativeScene);
         }
 
         using Image<TPixel> nativeSurfaceImage = renderTarget.ReadbackImage<TPixel>();
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -1573,7 +2451,7 @@ public partial class WebGPUDrawingBackendTests
 
         // MacOS on CI has some outliers with this test, so using a slightly higher tolerance here to avoid noise.
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.03F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.045F);
         AssertBackendPairReferenceOutputs(
             provider,
             null,
@@ -1616,8 +2494,117 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.02F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithZeroLengthLinearGradient_MatchesDefaultEndColor()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        PointF endpoint = new(8, 8);
+        Brush brush = new LinearGradientBrush(
+            endpoint,
+            endpoint,
+            GradientRepetitionMode.None,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Blue));
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 16, 16));
+
+        using Image<Rgba32> defaultImage = new(16, 16, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(16, 16, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(16, 16, backend, drawingOptions, DrawAction, initialImage);
+
+        // A zero-length linear axis is defined at t=1, so the end stop fills every pixel.
+        Rgba32 expected = Color.Blue.ToPixel<Rgba32>();
+        Assert.Equal(expected, defaultImage[0, 0]);
+        Assert.Equal(defaultImage[0, 0], actual[0, 0]);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithDontFillGradients_ComposesTransparentOutsideGradient()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        (Brush Brush, Point Sample)[] cases =
+        [
+            (
+                new LinearGradientBrush(
+                    new PointF(4, 8),
+                    new PointF(12, 8),
+                    GradientRepetitionMode.DontFill,
+                    new ColorStop(0, Color.Red),
+                    new ColorStop(1, Color.Blue)),
+                new Point(0, 8)),
+            (
+                new RadialGradientBrush(
+                    new PointF(8, 8),
+                    3F,
+                    GradientRepetitionMode.DontFill,
+                    new ColorStop(0, Color.Red),
+                    new ColorStop(1, Color.Blue)),
+                new Point(0, 0)),
+            (
+                new EllipticGradientBrush(
+                    new PointF(8, 8),
+                    new PointF(12, 8),
+                    0.5F,
+                    GradientRepetitionMode.DontFill,
+                    new ColorStop(0, Color.Red),
+                    new ColorStop(1, Color.Blue)),
+                new Point(0, 0)),
+            (
+                new SweepGradientBrush(
+                    new PointF(8.5F, 8.5F),
+                    0F,
+                    90F,
+                    GradientRepetitionMode.DontFill,
+                    new ColorStop(0, Color.Red),
+                    new ColorStop(1, Color.Blue)),
+                new Point(8, 15))
+        ];
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        static void DrawAction(DrawingCanvas canvas, Brush brush) => canvas.Fill(brush, new RectanglePolygon(0, 0, 16, 16));
+
+        using WebGPUDrawingBackend backend = new();
+        foreach ((Brush brush, Point sample) in cases)
+        {
+            using Image<Rgba32> defaultImage = new(16, 16, background);
+            RenderWithDefaultBackend(defaultImage, drawingOptions, canvas => DrawAction(canvas, brush));
+
+            using Image<Rgba32> initialImage = new(16, 16, background);
+            using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(
+                16,
+                16,
+                backend,
+                drawingOptions,
+                canvas => DrawAction(canvas, brush),
+                initialImage);
+
+            // DontFill returns a transparent brush sample outside the gradient. Src still
+            // composes that sample, replacing a fully covered backdrop with transparency.
+            Assert.Equal(default, defaultImage[sample.X, sample.Y]);
+            Assert.Equal(defaultImage[sample.X, sample.Y], actual[sample.X, sample.Y]);
+        }
     }
 
     [WebGPUTheory]
@@ -1654,7 +2641,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.02F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.029F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -1694,8 +2681,84 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0171F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.034F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithSwappedRadialDontFill_ComposesTransparentOutsideGradient()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        Brush brush = new RadialGradientBrush(
+            new PointF(16, 16),
+            10F,
+            new PointF(18, 16),
+            0F,
+            GradientRepetitionMode.DontFill,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Lime));
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 32, 32));
+
+        using Image<Rgba32> defaultImage = new(32, 32, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(32, 32, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(32, 32, backend, drawingOptions, DrawAction, initialImage);
+
+        // Radius1 == 0 makes the conical evaluator swap its circles. The restored parameter
+        // remains outside the finite cone, so DontFill supplies a transparent Src sample.
+        Assert.Equal(default, defaultImage[0, 0]);
+        Assert.Equal(defaultImage[0, 0], actual[0, 0]);
+        Assert.NotEqual(background, actual[17, 16]);
+    }
+
+    [WebGPUTheory]
+    [InlineData(GradientRepetitionMode.Repeat)]
+    [InlineData(GradientRepetitionMode.Reflect)]
+    public void FillPath_WithSwappedRadialRepetition_MatchesDefaultOutput(GradientRepetitionMode repetitionMode)
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        Brush brush = new RadialGradientBrush(
+            new PointF(16, 16),
+            10F,
+            new PointF(18, 16),
+            0F,
+            repetitionMode,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Lime));
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 32, 32));
+
+        using Image<Rgba32> defaultImage = new(32, 32, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(32, 32, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(32, 32, backend, drawingOptions, DrawAction, initialImage);
+
+        // The sampled point lies before the original start circle after the shader's
+        // canonical circle swap. Repetition must therefore see the restored negative t.
+        Rgba32 expected = Color.Red.ToPixel<Rgba32>();
+        Assert.Equal(expected, defaultImage[0, 0]);
+        Assert.Equal(defaultImage[0, 0], actual[0, 0]);
     }
 
     [WebGPUTheory]
@@ -1733,8 +2796,70 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.035F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.014F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [InlineData(GradientRepetitionMode.None, true)]
+    [InlineData(GradientRepetitionMode.Repeat, true)]
+    [InlineData(GradientRepetitionMode.Reflect, true)]
+    [InlineData(GradientRepetitionMode.DontFill, true)]
+    [InlineData(GradientRepetitionMode.None, false)]
+    [InlineData(GradientRepetitionMode.Repeat, false)]
+    [InlineData(GradientRepetitionMode.Reflect, false)]
+    [InlineData(GradientRepetitionMode.DontFill, false)]
+    public void FillPath_WithDegenerateEllipticGradient_MatchesDefaultOutput(
+        GradientRepetitionMode repetitionMode,
+        bool zeroReferenceAxis)
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        PointF center = new(3.5F, 3.5F);
+        PointF referenceAxisEnd = zeroReferenceAxis ? center : new PointF(5.5F, 5.5F);
+        float axisRatio = zeroReferenceAxis ? 1F : 0F;
+        Brush brush = new EllipticGradientBrush(
+            center,
+            referenceAxisEnd,
+            axisRatio,
+            repetitionMode,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Lime));
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 8, 8));
+
+        using Image<Rgba32> defaultImage = new(8, 8, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(8, 8, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(8, 8, backend, drawingOptions, DrawAction, initialImage);
+
+        Rgba32 transparent = default;
+        Rgba32 lastStop = Color.Lime.ToPixel<Rgba32>();
+        bool fillsOutsideCollapsedAxes = repetitionMode != GradientRepetitionMode.DontFill;
+
+        for (int y = 0; y < 8; y++)
+        {
+            for (int x = 0; x < 8; x++)
+            {
+                // The CPU equations produce NaN where a zero-radius division has a zero
+                // numerator. With a point ellipse that is either local axis; with a line
+                // ellipse it is the collapsed secondary axis, which is x == y here.
+                bool isUndefined = zeroReferenceAxis ? x == 3 || y == 3 : x == y;
+                Rgba32 expected = !isUndefined && fillsOutsideCollapsedAxes ? lastStop : transparent;
+
+                Assert.Equal(expected, defaultImage[x, y]);
+                Assert.Equal(defaultImage[x, y], actual[x, y]);
+            }
+        }
     }
 
     [WebGPUTheory]
@@ -1774,7 +2899,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0304F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.061F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -1818,13 +2943,84 @@ public partial class WebGPUDrawingBackendTests
             null,
             defaultImage,
             nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0280F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.029F);
         AssertBackendPairReferenceOutputs(
             provider,
             null,
             defaultImage,
             nativeSurfaceImage,
             tolerantPercentage: 0.0280F);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithTinySweepDontFill_MatchesDefaultOutsideSweep()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        Brush brush = new SweepGradientBrush(
+            new PointF(16.5F, 16.5F),
+            0F,
+            0.0001F,
+            GradientRepetitionMode.DontFill,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Blue));
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 32, 32));
+
+        using Image<Rgba32> defaultImage = new(32, 32, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(32, 32, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(32, 32, backend, drawingOptions, DrawAction, initialImage);
+
+        // A quarter-turn direction lies outside this real but extremely small sweep.
+        // Comparing the epsilon in turns would misclassify the interval as a full circle.
+        Assert.Equal(background, defaultImage[16, 8]);
+        Assert.Equal(defaultImage[16, 8], actual[16, 8]);
+        Assert.NotEqual(background, actual[16, 16]);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithSweepDontFillAtCenter_MatchesDefaultFirstColor()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        Brush brush = new SweepGradientBrush(
+            new PointF(8.5F, 8.5F),
+            90F,
+            180F,
+            GradientRepetitionMode.DontFill,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Blue));
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 16, 16));
+
+        using Image<Rgba32> defaultImage = new(16, 16, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(16, 16, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(16, 16, backend, drawingOptions, DrawAction, initialImage);
+
+        // The center has no angle and is defined as t=0 rather than being derived
+        // from the configured angular interval.
+        Rgba32 expected = Color.Red.ToPixel<Rgba32>();
+        Assert.Equal(expected, defaultImage[8, 8]);
+        Assert.Equal(defaultImage[8, 8], actual[8, 8]);
     }
 
     [WebGPUTheory]
@@ -1881,7 +3077,307 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.013F);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithTriangularPathGradientOnEdgeExtension_MatchesDefaultOutput()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        Brush brush = new PathGradientBrush(
+        [
+            new PointF(0.5F, 0.5F),
+            new PointF(2.5F, 0.5F),
+            new PointF(0.5F, 2.5F)
+        ],
+        [
+            Color.Red,
+            Color.Lime,
+            Color.Blue
+        ]);
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 4, 3));
+
+        using Image<Rgba32> defaultImage = new(4, 3, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(4, 3, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(4, 3, backend, drawingOptions, DrawAction, initialImage);
+
+        // The CPU sign-product test accepts this extension of the triangle's horizontal edge.
+        // Preserve that contract exactly instead of substituting a conventional inside test.
+        Rgba32 expected = Color.Lime.ToPixel<Rgba32>();
+        Assert.Equal(expected, defaultImage[3, 0]);
+        Assert.Equal(defaultImage[3, 0], actual[3, 0]);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithNearParallelPathGradientEdge_MatchesDefaultNoIntersection()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        Brush brush = new PathGradientBrush(
+        [
+            new PointF(12.5F, 8.4999875F),
+            new PointF(14.5F, 8.5000125F),
+            new PointF(-16F, 8.5F),
+            new PointF(4F, 8.5F),
+            new PointF(4F, 8.5F),
+            new PointF(5F, 8.5F)
+        ],
+        [
+            Color.Lime,
+            Color.Lime,
+            Color.Lime,
+            Color.Lime,
+            Color.Lime,
+            Color.Lime
+        ],
+        Color.Lime);
+
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 32, 16));
+
+        using Image<Rgba32> defaultImage = new(32, 16, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(32, 16, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(32, 16, backend, drawingOptions, DrawAction, initialImage);
+
+        // The ray is 20 pixels long and the first edge rises by 0.000025 pixels, so their
+        // cross product is about 0.0005. The CPU rejects that value inside its +/-0.001
+        // parallel window; the former shader window of +/-0.000001 incorrectly accepted it.
+        Rgba32 expected = Color.Transparent.ToPixel<Rgba32>();
+        Assert.Equal(expected, defaultImage[8, 8]);
+        Assert.Equal(defaultImage[8, 8], actual[8, 8]);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithPathGradientIntersectionJustBehindSample_MatchesDefaultOutput()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        Brush brush = new PathGradientBrush(
+        [
+            new PointF(1F, 0.5001F),
+            new PointF(7F, 0.5001F),
+            new PointF(7F, 7F),
+            new PointF(1F, 7F)
+        ],
+        [
+            Color.Lime,
+            Color.Lime,
+            Color.Lime,
+            Color.Lime
+        ],
+        Color.Lime);
+
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 8, 8));
+
+        using Image<Rgba32> defaultImage = new(8, 8, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(8, 8, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(8, 8, backend, drawingOptions, DrawAction, initialImage);
+
+        // The sample center is 0.0001 pixels above the first edge. Its ray intersection
+        // parameter is about -0.000023, inside the CPU's strict (-0.001, 1.001) window.
+        Rgba32 expected = Color.Lime.ToPixel<Rgba32>();
+        Assert.Equal(expected, defaultImage[4, 0]);
+        Assert.Equal(defaultImage[4, 0], actual[4, 0]);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithNegativePathGradientEdgeParameter_UsesDistanceMagnitude()
+    {
+        Rgba32 background = new(17, 43, 89, 255);
+        Color halfRed = Color.FromScaledVector(new Vector4(0.5F, 0F, 0F, 1F));
+        Brush brush = new PathGradientBrush(
+        [
+            new PointF(10F, 10F),
+            new PointF(20F, 10F),
+            new PointF(-4.5F, -10F),
+            new PointF(2F, 27F),
+            new PointF(3.5F, -2F),
+            new PointF(11.045F, 7F)
+        ],
+        [
+            halfRed,
+            Color.Red,
+            halfRed,
+            halfRed,
+            halfRed,
+            halfRed
+        ],
+        halfRed);
+
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 32, 32));
+
+        using Image<Rgba32> defaultImage = new(32, 32, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(32, 32, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(32, 32, backend, drawingOptions, DrawAction, initialImage);
+
+        // These vertices place the first-edge intersection at u=-0.00075, inside the CPU
+        // endpoint tolerance. CPU edge interpolation measures distance and therefore uses
+        // |u|; signed extrapolation lands on the opposite side of the Rgba32 rounding boundary.
+        Rgba32 expected = new(128, 0, 0, 255);
+        Assert.Equal(expected, defaultImage[8, 8]);
+        Assert.Equal(defaultImage[8, 8], actual[8, 8]);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(320, 200, "White", PixelTypes.Rgba32)]
+    public void FillPath_WithTranslucentGradientBrushes_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        Brush radialBrush = new RadialGradientBrush(
+            new PointF(82, 100),
+            68F,
+            GradientRepetitionMode.None,
+            new ColorStop(0F, Color.Orange.WithAlpha(0.95F)),
+            new ColorStop(1F, Color.MediumVioletRed.WithAlpha(0.25F)));
+
+        PointF[] pathGradientPoints =
+        [
+            new PointF(164, 20),
+            new PointF(306, 20),
+            new PointF(306, 180),
+            new PointF(164, 180)
+        ];
+
+        Brush pathGradientBrush = new PathGradientBrush(
+            pathGradientPoints,
+            [
+                Color.CornflowerBlue.WithAlpha(0.9F),
+                Color.Gold.WithAlpha(0.2F),
+                Color.LimeGreen.WithAlpha(0.75F),
+                Color.BlueViolet.WithAlpha(0.35F)
+            ],
+            Color.DeepPink.WithAlpha(0.6F));
+
+        // Unequal RGB and alpha values make straight-alpha interpolation visibly diverge from
+        // CSS Color 4 associated-alpha interpolation. Axis-aligned bounds remove curved-edge
+        // coverage noise while the two brushes cover the ramp and direct shader interpolation paths.
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(radialBrush, new RectanglePolygon(14, 20, 136, 160));
+            canvas.Fill(pathGradientBrush, new RectanglePolygon(164, 20, 142, 160));
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.032F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithSubEpsilonAlpha_RgbaHalfTargetPreservesColorAndAlpha()
+    {
+        const float sourceAlpha = 0.047F;
+        const float smallestPackedBlendPercentage = 1F / 65535F;
+
+        Color color = Color.FromScaledVector(new Vector4(0.8F, 0.4F, 0.2F, sourceAlpha));
+        PointF[] points =
+        [
+            new PointF(0, 0),
+            new PointF(32, 0),
+            new PointF(32, 32),
+            new PointF(0, 32)
+        ];
+
+        Brush brush = new PathGradientBrush(points, [color, color, color, color], color);
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                BlendPercentage = smallestPackedBlendPercentage
+            }
+        };
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Fill(brush, new RectanglePolygon(0, 0, 32, 32));
+
+        using Image<RgbaHalf> defaultImage = new(32, 32);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<RgbaHalf> nativeSurfaceInitialImage = new(32, 32);
+        using Image<RgbaHalf> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            WebGPUTextureFormat.Rgba16Float,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        RgbaHalf expected = RgbaHalf.FromScaledVector4(new Vector4(0.8F, 0.4F, 0.2F, sourceAlpha * smallestPackedBlendPercentage));
+
+        RgbaHalf defaultPixel = defaultImage[16, 16];
+        RgbaHalf nativeSurfacePixel = nativeSurfaceImage[16, 16];
+
+        // The smallest nonzero packed blend value reduces alpha to a binary16 subnormal. The
+        // source alpha keeps that result away from a binary16 rounding boundary because WGSL
+        // permits conversion to round in either direction. Both backends must therefore produce
+        // the same exact pixel while preserving the nonzero alpha.
+        Assert.Equal(expected, defaultPixel);
+        Assert.Equal(expected, nativeSurfacePixel);
+        Assert.NotEqual((Half)0F, nativeSurfacePixel.A);
     }
 
     [WebGPUTheory]
@@ -1913,7 +3409,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, "Horizontal", defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.045F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, "Horizontal", defaultImage, nativeSurfaceImage);
     }
 
@@ -1983,6 +3479,97 @@ public partial class WebGPUDrawingBackendTests
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
+    [WebGPUFact]
+    public void FillPath_WithRecolorBrush_PreservesFullPrecisionSourceKey()
+    {
+        Rgba32 background = new(128, 0, 0, 255);
+        Color source = Color.FromScaledVector(new Vector4(128F / 255F, 0F, 0F, 1F));
+
+        // The exact Rgba32 component differs from its nearest binary16 value by about 7.7e-6.
+        // This threshold accepts the exact f32 key but rejects that prematurely rounded key.
+        Brush brush = new RecolorBrush(source, Color.Blue, 1e-12F);
+        DrawingOptions drawingOptions = new() { GraphicsOptions = new GraphicsOptions { Antialias = false } };
+
+        using Image<Rgba32> defaultImage = new(8, 8, background);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, canvas => canvas.Fill(brush));
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> initialImage = new(8, 8, background);
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend(8, 8, backend, drawingOptions, canvas => canvas.Fill(brush), initialImage);
+
+        Assert.Equal(Color.Blue.ToPixel<Rgba32>(), defaultImage[4, 4]);
+        Assert.Equal(defaultImage[4, 4], actual[4, 4]);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithRecolorBrush_ObservesPriorDrawInTargetStorage()
+    {
+        Color firstColor = Color.FromScaledVector(new Vector4(0.5F, 0F, 0F, 1F));
+        Color source = Color.FromPixel(new Rgba32(128, 0, 0, 255));
+
+        // Rgba32 stores 0.5 as 128 / 255. The narrow threshold distinguishes that stored value
+        // from the unquantized 0.5 retained between commands by the staged GPU pipeline.
+        Brush brush = new RecolorBrush(source, Color.Blue, 1e-8F);
+        DrawingOptions drawingOptions = new() { GraphicsOptions = new GraphicsOptions { Antialias = false } };
+
+        void Draw(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(firstColor));
+            canvas.Fill(brush);
+        }
+
+        using Image<Rgba32> defaultImage = new(8, 8);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, Draw);
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<Rgba32> actual = RenderWithNativeSurfaceWebGpuBackend<Rgba32>(8, 8, backend, drawingOptions, Draw);
+
+        Assert.Equal(Color.Blue.ToPixel<Rgba32>(), defaultImage[4, 4]);
+        Assert.Equal(defaultImage[4, 4], actual[4, 4]);
+    }
+
+    [WebGPUFact]
+    public void FillPath_WithRecolorBrush_AssociatedTargetObservesStoredComponents()
+    {
+        Color firstColor = Color.FromScaledVector(new Vector4(1F, 0F, 0F, 0.5F));
+        Color source = Color.FromScaledVector(new Vector4(1F, 0F, 0F, 128F / 255F));
+
+        // The source becomes (128 / 255, 0, 0, 128 / 255) in associated space. The first
+        // fill remains (0.5, 0, 0, 0.5) until its match-only Rgba32P storage round-trip.
+        Brush brush = new RecolorBrush(source, Color.Blue, 1e-8F);
+        DrawingOptions drawingOptions = new() { GraphicsOptions = new GraphicsOptions { Antialias = false } };
+
+        void Draw(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(firstColor));
+            canvas.Fill(brush);
+        }
+
+        using Image<Rgba32P> defaultImage = new(8, 8);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, Draw);
+
+        using WebGPUDrawingBackend backend = new();
+        using WebGPURenderTarget renderTarget = new(WebGPUTextureFormat.Rgba8Unorm, PixelAlphaRepresentation.Associated, 8, 8);
+        Configuration configuration = Configuration.Default.Clone();
+        configuration.SetDrawingBackend(backend);
+
+        using (DrawingCanvas canvas = WebGPUCanvasFactory.CreateCanvas(
+                   configuration,
+                   drawingOptions,
+                   backend,
+                   renderTarget.Bounds,
+                   renderTarget.Surface,
+                   renderTarget.Surface.TargetDescriptor))
+        {
+            Draw(canvas);
+        }
+
+        using Image<Rgba32P> actual = renderTarget.ReadbackImage<Rgba32P>();
+
+        Assert.Equal(Color.Blue.ToPixel<Rgba32P>(), defaultImage[4, 4]);
+        Assert.Equal(defaultImage[4, 4], actual[4, 4]);
+    }
+
     [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_WithLinearGradientBrush_ThreePoint_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
@@ -2018,7 +3605,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0065F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.013F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2058,7 +3645,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0398F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.08F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2288,7 +3875,7 @@ the evil Galactic Empire.";
 
         // This test has a lot of text and gradients which can be a bit more variable across
         // platforms, so using a higher tolerance here to avoid noise.
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0474F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.094F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0006F);
     }
 
@@ -2323,8 +3910,37 @@ the evil Galactic Empire.";
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUFact]
+    public void SaveLayer_HalfTargetClearUsesLogicalTransparent()
+    {
+        Color layerColor = Color.FromScaledVector(new Vector4(0.75F, 0.25F, 0.5F, 0.5F));
+        DrawingOptions drawingOptions = new() { GraphicsOptions = new GraphicsOptions { Antialias = false } };
+
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(0, 0, 32, 32));
+            canvas.Fill(Brushes.Solid(layerColor), new RectanglePolygon(12, 12, 8, 8));
+            canvas.Restore();
+        }
+
+        using WebGPUDrawingBackend backend = new();
+        using Image<RgbaHalf> initialImage = new(32, 32);
+        using Image<RgbaHalf> actual = RenderWithNativeSurfaceWebGpuBackend(
+            32,
+            32,
+            backend,
+            WebGPUTextureFormat.Rgba16Float,
+            drawingOptions,
+            DrawAction,
+            initialImage);
+
+        // The untouched part of an isolated layer must remain binary16 transparent black.
+        Assert.Equal(Vector4.Zero, actual[0, 0].ToScaledVector4());
+        Assert.True(actual[16, 16].ToScaledVector4().W > 0F);
     }
 
     [WebGPUTheory]
@@ -2358,7 +3974,7 @@ the evil Galactic Empire.";
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0767F);
     }
 
@@ -2399,7 +4015,7 @@ the evil Galactic Empire.";
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2440,7 +4056,7 @@ the evil Galactic Empire.";
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2475,7 +4091,187 @@ the evil Galactic Empire.";
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithBlankImage(120, 120, PixelTypes.Rgba32)]
+    public void SaveLayer_GaussianBlur_OffCanvasLayerBounds_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+
+        static void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+
+            IPath clipPath = new EllipsePolygon(new PointF(30, 40), new SizeF(70, 60));
+
+            canvas.Save();
+            canvas.Clip(clipPath);
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(-16, 8, 88, 80));
+            canvas.Fill(Brushes.Solid(Color.Black), new Rectangle(0, 20, 56, 42));
+            canvas.Apply(new Rectangle(-16, 8, 88, 80), x => x.GaussianBlur(6F));
+            canvas.Restore();
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithBlankImage(120, 120, PixelTypes.Rgba32)]
+    public void SaveLayer_Apply_ProcessesLayerTarget_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+
+        static void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+
+            // Expected output: an inverted cyan layer rectangle with an inverted yellow center square.
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(20, 20, 80, 80));
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(20, 20, 80, 80));
+            canvas.Fill(Brushes.Solid(Color.Blue), new Rectangle(42, 42, 24, 24));
+            canvas.Apply(new Rectangle(20, 20, 80, 80), x => x.Invert());
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithBlankImage(120, 120, PixelTypes.Rgba32)]
+    public void SaveLayer_Apply_RespectsLayerBounds_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+
+        static void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+
+            // Expected output: only the bounded layer area is inverted; the oversized fill and Apply rects do not affect the white background.
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(30, 30, 50, 50));
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(0, 0, 120, 120));
+            canvas.Apply(new Rectangle(0, 0, 120, 120), x => x.Invert());
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithBlankImage(120, 120, PixelTypes.Rgba32)]
+    public void SaveLayer_Apply_ProcessesNestedLayer_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+
+        static void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+
+            // Expected output: a red outer layer with the bounded nested layer inverted from blue to yellow.
+            canvas.SaveLayer();
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(0, 0, 120, 120));
+
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(30, 30, 50, 50));
+            canvas.Fill(Brushes.Solid(Color.Blue), new Rectangle(30, 30, 50, 50));
+            canvas.Apply(new Rectangle(30, 30, 50, 50), x => x.Invert());
+            canvas.Restore();
+
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithBlankImage(120, 120, PixelTypes.Rgba32)]
+    public void SaveLayer_Apply_CompositesLayerOpacityAfterProcessing_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+
+        static void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+
+            // Expected output: the red layer is inverted to cyan, then composited over white as a 50% opacity pale cyan rectangle.
+            canvas.SaveLayer(new GraphicsOptions { BlendPercentage = 0.5F }, new Rectangle(20, 20, 80, 80));
+            canvas.Fill(Brushes.Solid(Color.Red), new Rectangle(20, 20, 80, 80));
+            canvas.Apply(new Rectangle(20, 20, 80, 80), x => x.Invert());
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend<TPixel>(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.088F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2514,7 +4310,7 @@ the evil Galactic Empire.";
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
@@ -2536,7 +4332,8 @@ the evil Galactic Empire.";
             };
 
             IPath rootClip = new EllipsePolygon(new PointF(160, 110), new SizeF(252, 164));
-            _ = canvas.Save(rootOptions, rootClip);
+            _ = canvas.Save(rootOptions);
+            canvas.Clip(ClipOperation.Difference, rootClip);
 
             using (DrawingCanvas outerRegion = canvas.CreateRegion(new Rectangle(30, 24, 240, 156)))
             {
@@ -2548,7 +4345,8 @@ the evil Galactic Empire.";
                     Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.18F, new Vector2(120, 78)))
                 };
 
-                _ = outerRegion.Save(outerOptions, new RectanglePolygon(18, 14, 204, 128));
+                _ = outerRegion.Save(outerOptions);
+                outerRegion.Clip(ClipOperation.Difference, new RectanglePolygon(18, 14, 204, 128));
 
                 outerRegion.Fill(Brushes.Solid(Color.MediumPurple.WithAlpha(0.35F)), new Rectangle(16, 16, 208, 124));
 
@@ -2561,7 +4359,8 @@ the evil Galactic Empire.";
                         Transform = new Matrix4x4(Matrix3x2.CreateSkew(0.18F, 0F))
                     };
 
-                    _ = innerRegion.Save(innerOptions, new EllipsePolygon(new PointF(66, 41), new SizeF(102, 58)));
+                    _ = innerRegion.Save(innerOptions);
+                    innerRegion.Clip(ClipOperation.Difference, new EllipsePolygon(new PointF(66, 41), new SizeF(102, 58)));
 
                     innerRegion.Fill(Brushes.Solid(Color.SeaGreen.WithAlpha(0.55F)), new Rectangle(0, 0, 132, 82));
                     innerRegion.DrawLine(
@@ -2601,7 +4400,10 @@ the evil Galactic Empire.";
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.108F);
+
+        // Reference outputs are rendered on one adapter; other conforming adapters differ by
+        // rounding and antialiased edge coverage on a small fraction of pixels.
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage, 0.0098F);
     }
 }

@@ -850,7 +850,8 @@ public partial class ProcessWithDrawingCanvasTests
             FallbackFontFamilies = [fallback.Family],
             WrappingLength = 300,
             LayoutMode = LayoutMode.VerticalLeftRight,
-            TextRuns = [new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }
+            TextRuns = [
+                new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }
             ]
         };
 
@@ -879,13 +880,15 @@ public partial class ProcessWithDrawingCanvasTests
             FallbackFontFamilies = [fallback.Family],
             WrappingLength = 400,
             LayoutMode = LayoutMode.VerticalMixedLeftRight,
-            TextRuns = [new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }
+            LineSpacing = 1.4F,
+            TextRuns = [
+                new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }
             ]
         };
 
         IPathCollection glyphs = TextBuilder.GeneratePaths(text, textOptions);
 
-        DrawingOptions options = new() { ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.NonZero } };
+        DrawingOptions options = new() { IntersectionRule = IntersectionRule.NonZero };
 
         provider.RunValidatingProcessorTest(
             c =>
@@ -1086,6 +1089,127 @@ public partial class ProcessWithDrawingCanvasTests
                                     .Paint(canvas => canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null))),
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(320, 120, nameof(Color.White), PixelTypes.Rgba32)]
+    public void DrawTextUnderlineSkipsInk<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> auto = RenderDecoratedText(provider, "jogging", TextDecorationSkipInk.Auto);
+        using Image<TPixel> none = RenderDecoratedText(provider, "jogging", TextDecorationSkipInk.None);
+
+        auto.DebugSave(provider, "auto", appendSourceFileOrDescription: false);
+        none.DebugSave(provider, "none", appendSourceFileOrDescription: false);
+        auto.CompareToReferenceOutput(TextDrawingComparer, provider, "auto", appendSourceFileOrDescription: false);
+        none.CompareToReferenceOutput(TextDrawingComparer, provider, "none", appendSourceFileOrDescription: false);
+
+        // Descenders cross the underline band, so skipping must change the output.
+        Assert.Throws<ImageDifferenceIsOverThresholdException>(() => ImageComparer.Exact.VerifySimilarity(auto, none));
+    }
+
+    [Theory]
+    [WithSolidFilledImages(320, 120, nameof(Color.White), PixelTypes.Rgba32)]
+    public void DrawTextUnderlineWithoutInkDoesNotSkip<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> auto = RenderDecoratedText(provider, "HOME", TextDecorationSkipInk.Auto);
+        using Image<TPixel> none = RenderDecoratedText(provider, "HOME", TextDecorationSkipInk.None);
+
+        auto.DebugSave(provider, appendSourceFileOrDescription: false);
+        auto.CompareToReferenceOutput(TextDrawingComparer, provider, appendSourceFileOrDescription: false);
+
+        // No ink reaches the underline band, so skipping must be a no-op.
+        ImageComparer.Exact.VerifySimilarity(auto, none);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(320, 120, nameof(Color.White), PixelTypes.Rgba32)]
+    public void DrawTextStrikethroughIgnoresSkipInk<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> auto = RenderDecoratedText(provider, "jogging", TextDecorationSkipInk.Auto, TextDecorations.Strikeout);
+        using Image<TPixel> none = RenderDecoratedText(provider, "jogging", TextDecorationSkipInk.None, TextDecorations.Strikeout);
+
+        auto.DebugSave(provider, appendSourceFileOrDescription: false);
+        auto.CompareToReferenceOutput(TextDrawingComparer, provider, appendSourceFileOrDescription: false);
+
+        // Strikethrough crosses ink by definition and never skips.
+        ImageComparer.Exact.VerifySimilarity(auto, none);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(320, 120, nameof(Color.White), PixelTypes.Rgba32)]
+    public void DrawTextUnderlinePenSkipsInk<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        // A thick underline pen must still be broken by skip-ink where the descenders cross it.
+        // The gap is sized from the pen's stroke width, so it clears the width that is drawn.
+        using Image<TPixel> auto = RenderPennedUnderline(provider, "jogging", TextDecorationSkipInk.Auto, 8F);
+        using Image<TPixel> none = RenderPennedUnderline(provider, "jogging", TextDecorationSkipInk.None, 8F);
+
+        auto.DebugSave(provider, "auto", appendSourceFileOrDescription: false);
+        none.DebugSave(provider, "none", appendSourceFileOrDescription: false);
+
+        // Descenders cross the thick underline, so skipping ink must change the output.
+        Assert.Throws<ImageDifferenceIsOverThresholdException>(() => ImageComparer.Exact.VerifySimilarity(auto, none));
+    }
+
+    private static Image<TPixel> RenderDecoratedText<TPixel>(
+        TestImageProvider<TPixel> provider,
+        string text,
+        TextDecorationSkipInk skipInk,
+        TextDecorations decorations = TextDecorations.Underline)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Font font = CreateFont(TestFonts.OpenSans, 48);
+        RichTextOptions textOptions = new(font)
+        {
+            Origin = new PointF(10, 20),
+            TextDecorationSkipInk = skipInk,
+            TextRuns =
+            [
+                new RichTextRun
+                {
+                    Start = 0,
+                    End = text.Length,
+                    TextDecorations = decorations
+                }
+            ]
+        };
+
+        Image<TPixel> image = provider.GetImage();
+        image.Mutate(context => context.Paint(canvas => canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null)));
+        return image;
+    }
+
+    private static Image<TPixel> RenderPennedUnderline<TPixel>(
+        TestImageProvider<TPixel> provider,
+        string text,
+        TextDecorationSkipInk skipInk,
+        float penWidth)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Font font = CreateFont(TestFonts.OpenSans, 48);
+        RichTextOptions textOptions = new(font)
+        {
+            Origin = new PointF(10, 20),
+            TextDecorationSkipInk = skipInk,
+            TextRuns =
+            [
+                new RichTextRun
+                {
+                    Start = 0,
+                    End = text.Length,
+                    TextDecorations = TextDecorations.Underline,
+                    UnderlinePen = Pens.Solid(Color.Black, penWidth)
+                }
+            ]
+        };
+
+        Image<TPixel> image = provider.GetImage();
+        image.Mutate(context => context.Paint(canvas => canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null)));
+        return image;
     }
 
     private static RichTextOptions CreateTextOptionsAt(Font font, PointF origin)

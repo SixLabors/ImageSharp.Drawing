@@ -10,28 +10,33 @@ namespace SixLabors.ImageSharp.Drawing;
 /// </summary>
 public sealed class EmptyPath : IPath
 {
+    /// <summary>
+    /// The shared zero-content geometry returned for every scale.
+    /// </summary>
     private static readonly LinearGeometry EmptyGeometry = new(
         new LinearGeometryInfo
         {
             Bounds = RectangleF.Empty,
             ContourCount = 0,
             PointCount = 0,
-            SegmentCount = 0,
-            NonHorizontalSegmentCountPixelBoundary = 0,
-            NonHorizontalSegmentCountPixelCenter = 0
+            SegmentCount = 0
         },
         [],
         []);
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="EmptyPath"/> class.
+    /// </summary>
+    /// <param name="pathType">The path type the empty path reports.</param>
     private EmptyPath(PathTypes pathType) => this.PathType = pathType;
 
     /// <summary>
-    /// Gets the closed path instance of the empty path
+    /// Gets the closed path instance of the empty path.
     /// </summary>
     public static EmptyPath ClosedPath { get; } = new(PathTypes.Closed);
 
     /// <summary>
-    /// Gets the open path instance of the empty path
+    /// Gets the open path instance of the empty path.
     /// </summary>
     public static EmptyPath OpenPath { get; } = new(PathTypes.Open);
 
@@ -49,6 +54,36 @@ public sealed class EmptyPath : IPath
 
     /// <inheritdoc />
     public LinearGeometry ToLinearGeometry(Vector2 scale) => EmptyGeometry;
+
+    /// <inheritdoc />
+    public float ComputeLength(Vector2 scale) => 0;
+
+    /// <inheritdoc />
+    public float ComputeArea(Vector2 scale) => 0;
+
+    /// <inheritdoc />
+    public bool Contains(PointF point, IntersectionRule intersectionRule, Vector2 scale) => false;
+
+    /// <inheritdoc />
+    public bool TryGetPathPointAtDistance(float distance, Vector2 scale, out PathPoint pathPoint)
+    {
+        pathPoint = default;
+        return false;
+    }
+
+    /// <inheritdoc />
+    public bool TryGetPathPointAtDistanceUnbounded(float distance, Vector2 scale, out PathPoint pathPoint)
+    {
+        pathPoint = default;
+        return false;
+    }
+
+    /// <inheritdoc />
+    public bool TryGetSegment(float startDistance, float stopDistance, bool startOnBeginFigure, Vector2 scale, out IPath path)
+    {
+        path = this;
+        return false;
+    }
 
     /// <inheritdoc />
     public IPath Transform(Matrix4x4 matrix) => this;

@@ -6,19 +6,19 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
-/// Represents a logic path that can be drawn
+/// Represents a collection of paths that can be enumerated and transformed as a single unit.
 /// </summary>
 public interface IPathCollection : IEnumerable<IPath>
 {
     /// <summary>
-    /// Gets the bounds enclosing the path
+    /// Gets the bounds enclosing all paths in the collection.
     /// </summary>
     public RectangleF Bounds { get; }
 
     /// <summary>
-    /// Transforms the path using the specified matrix.
+    /// Transforms all paths in the collection using the specified matrix.
     /// </summary>
-    /// <param name="matrix">The matrix.</param>
+    /// <param name="matrix">The transformation matrix.</param>
     /// <returns>A new path collection with the matrix applied to it.</returns>
     public IPathCollection Transform(Matrix4x4 matrix);
 }

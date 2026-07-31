@@ -1,6 +1,6 @@
 # DefaultRasterizer
 
-`DefaultRasterizer` is the CPU polygon scanner used by the retained fill path in ImageSharp.Drawing. Its job is narrow but central: take already-prepared geometry, convert that geometry into fixed-point edge contributions, and emit coverage rows that the CPU backend can turn into pixels.
+`DefaultRasterizer` is the CPU polygon scanner used by the retained fill and stroke paths in ImageSharp.Drawing. Its job is narrow but central: take already-prepared geometry, convert that geometry into fixed-point edge contributions, and emit coverage rows that the CPU backend can turn into pixels.
 
 This rasterizer is based on ideas and implementation techniques from the Blaze project:
 
@@ -62,7 +62,7 @@ If that distinction is clear, the code becomes much easier to follow.
 
 ### Rasterizer
 
-`DefaultRasterizer` is the geometry-to-coverage engine.
+`DefaultRasterizer` is the geometry-to-coverage engine. It is a static class: all mutable state lives in worker-owned scratch, so the static members are safe to call from parallel workers without synchronization.
 
 It is responsible for:
 
@@ -87,32 +87,32 @@ In this codebase, retained geometry means:
 
 "the fixed-point, band-local line data and start-cover seeds needed to rasterize one prepared shape later without revisiting its original contour data"
 
-That retained form is stored in `RasterizableGeometry`.
+That retained form is stored in `RasterizableGeometry` for fills and `StrokeRasterizableGeometry` for strokes.
 
 ### Band
 
-A band is one small vertical slice of a shape's retained geometry.
+A band is one small vertical slice of a shape's retained geometry, `DefaultTileHeight` (16) pixels tall and aligned to an absolute tile grid.
 
-The rasterizer does not keep one giant scene-wide edge table. It stores data in row bands so execution can stay local and bounded.
+The rasterizer does not keep one giant scene-wide edge table. It stores data in row bands so execution can stay local and bounded, and so the backend can execute bands in parallel.
 
 ### Rasterizable Geometry
 
-`RasterizableGeometry` is the retained representation of one prepared shape.
+`RasterizableGeometry` is the retained representation of one prepared fill shape.
 
 It stores:
 
-- clipped local bounds
-- band-local metadata
-- retained line arrays
-- optional start-cover seeds for bands that need carry-in winding
+- the first row-band index and band count covered by the clipped shape
+- per-band metadata (`RasterizableBandInfo`)
+- retained line block chains for each band
+- optional start-cover arrays for bands that need carry-in winding
 
 This is the retained object that the CPU backend keeps in `FlushScene`.
 
-### Rasterizable Band
+### Rasterizable Item
 
-A `RasterizableBand` is the execution-time view over one retained band of one retained shape.
+A `RasterizableItem` is the execution-time view over one retained band of one retained shape: the retained geometry plus a local row index. `StrokeRasterizableItem` is the stroke equivalent.
 
-It is the immediate input to `ExecuteRasterizableBand(...)`.
+Together with the band's `RasterizableBandInfo`, it is the immediate input to `ExecuteRasterizableItem(...)` and `ExecuteStrokeRasterizableItem(...)`.
 
 ### Context
 
@@ -124,7 +124,7 @@ It is a `ref struct` because it is tied directly to worker-owned scratch spans a
 
 Coverage is the rasterizer's output.
 
-The rasterizer does not decide final pixel colors. It decides how much geometric coverage each pixel receives. The backend later passes that coverage to a `BrushRenderer<TPixel>`, which decides how the destination pixels should be shaded.
+The rasterizer does not decide final pixel colors. It decides how much geometric coverage each pixel receives. The backend later passes that coverage, after clip narrowing, to a `BrushRenderer<TPixel>`, which decides how the destination pixels should be shaded.
 
 ## Pipeline Placement
 
@@ -132,21 +132,21 @@ The rasterizer sits in the middle of the CPU backend pipeline.
 
 Upstream:
 
-- `CompositionCommand` preparation produces prepared geometry
+- command preparation produces prepared geometry
 - the typed canvas implementation and `DrawingCanvasBatcher<TPixel>` have already selected and called the CPU backend
 - `FlushScene` decides which items are visible and when they execute
 
 Downstream:
 
 - the rasterizer emits row coverage
-- `DefaultDrawingBackend` routes that coverage into `BrushRenderer<TPixel>.Apply(...)`
+- `DefaultDrawingBackend` routes that coverage through the clip stack into `BrushRenderer<TPixel>.Apply(...)`
 
 ```mermaid
 flowchart TD
     A[Prepared geometry] --> B[DefaultRasterizer.CreateRasterizableGeometry]
     B --> C[RasterizableGeometry]
-    C --> D[Build RasterizableBand view]
-    D --> E[ExecuteRasterizableBand]
+    C --> D[Build RasterizableItem per band]
+    D --> E[ExecuteRasterizableItem]
     E --> F[Coverage rows]
     F --> G[Brush renderer]
 ```
@@ -172,29 +172,35 @@ This phase:
 - records visible line pieces into retained line storage
 - records left-of-band winding influence into start-cover tables
 
-The output is `RasterizableGeometry`.
+The output is `RasterizableGeometry`. The stroke builders (`CreatePathStrokeRasterizableGeometry`, `CreateLineSegmentStrokeRasterizableGeometry`) produce `StrokeRasterizableGeometry` the same way.
 
 ### Phase 2: band execution
 
-`ExecuteRasterizableBand(...)` is the hot execution entry point.
+`ExecuteRasterizableItem(...)` is the hot execution entry point for fills; `ExecuteStrokeRasterizableItem(...)` is the stroke equivalent.
 
-It does not revisit the original contour data. It receives a `RasterizableBand` view over retained data and performs the minimum work needed to emit coverage rows for that band.
+It does not revisit the original contour data. It receives a `RasterizableItem` over retained data plus the band's `RasterizableBandInfo` and performs the minimum work needed to emit coverage rows for that band.
 
 ```mermaid
 sequenceDiagram
-    participant Exec as ExecuteRasterizableBand
+    participant Exec as ExecuteRasterizableItem
     participant Ctx as Context
     participant Emit as Coverage Row Handler
 
     Exec->>Ctx: Reconfigure(...)
     Exec->>Ctx: SeedStartCovers(...)
-    Exec->>Ctx: Rasterize retained lines
+    Exec->>Ctx: Iterate retained line blocks
     Exec->>Ctx: EmitCoverageRows(...)
     Ctx-->>Emit: coverage rows
     Exec->>Ctx: ResetTouchedRows()
 ```
 
-That separation is one of the key reasons the retained fill path performs well. Expensive geometry work happens once; execution consumes compact band-local data.
+That separation is one of the key reasons the retained path performs well. Expensive geometry work happens once; execution consumes compact band-local data.
+
+## Parallel Execution Model
+
+Execution is parallel across row bands. The drawing backend runs a `Parallel.For` over scene rows (or over a single geometry's row bands for apply items), and each worker replays the retained items that touch its band sequentially into a worker-local `Context`.
+
+All static members of the rasterizer are stateless; every piece of mutable state lives in a `WorkerScratch` owned by exactly one worker. The scratch is created through `CreateWorkerScratch(...)`, sized for the widest item the worker will execute, and reused across bands by reconfiguration rather than reallocation. No synchronization is required because each scene row owns a disjoint destination band.
 
 ## Fixed-Point Precision
 
@@ -223,7 +229,7 @@ This gives the backend several important properties:
 - execution only touches the band it is currently composing
 - left-of-band winding can be precomputed
 - scratch requirements stay bounded
-- row-oriented execution consumes compact band-local payloads
+- row-oriented parallel execution consumes compact band-local payloads
 
 ```mermaid
 flowchart TD
@@ -240,21 +246,18 @@ flowchart TD
 
 That includes:
 
-- the local bounds of the prepared shape
-- band count and band-local metadata
-- retained line arrays for each band
+- the clipped band placement of the prepared shape (first row-band index, band count, width)
+- per-band metadata in `RasterizableBandInfo` (line counts, destination placement, fill rule, rasterization mode)
+- retained line block chains for each band
 - optional start-cover arrays for bands that need carry-in winding
 
-The retained line arrays use specialized storage formats such as:
-
-- `LineArrayX16Y16`
-- `LineArrayX32Y16`
+The retained line data uses specialized storage formats: `LineArrayX16Y16` and `LineArrayX32Y16` collect lines during building, and their retained block chains (`LineArrayX16Y16Block`, `LineArrayX32Y16Block`) are what execution iterates. Narrow geometries (band width below 128 pixels) pack both X endpoints into one 32-bit word, halving retained line memory.
 
 These are storage-oriented types. They exist to retain compact fixed-point line segments so execution does not need to revisit contour data.
 
 ## The Linearizer
 
-The linearizer is the retained-geometry builder. It is generic over line-array storage, but the conceptual work is the same across variants.
+The linearizer is the retained-geometry builder. `Linearizer<TL>` is generic over line-array storage with concrete `LinearizerX16Y16` and `LinearizerX32Y16` variants, but the conceptual work is the same across them.
 
 Its responsibilities are:
 
@@ -270,9 +273,9 @@ For a newcomer, the most important thing to understand is that the linearizer is
 
 ### Residual transform application
 
-The prepared `LinearGeometry` passed to `CreateRasterizableGeometry(...)` carries scale-baked points — the effective X/Y scale of the drawing matrix has already been absorbed into the flattened contour, so curve subdivision happens at device-scale precision. The remaining rotation, shear, translation, and perspective is handed to the rasterizer as a separate `Matrix4x4 residual`, which the linearizer applies per-point where the contour is read: at segment emission time in `ProcessContained` / `ProcessUncontained` for fills, and at bounds / closure / contour-segment construction sites in the stroke linearizer.
+The prepared `LinearGeometry` passed to `CreateRasterizableGeometry(...)` carries scale-baked points: the effective X/Y scale of the drawing matrix (extracted with `MatrixUtilities.GetScale`) has already been absorbed into the flattened contour, so curve subdivision happens at device-scale precision. The remaining rotation, shear, translation, and perspective is handed to the rasterizer as a separate `Matrix4x4` residual (`MatrixUtilities.GetResidual`), which the linearizer applies per-point where the contour is read: at segment emission time in `ProcessContained` and `ProcessUncontained` for fills, and at the point-reading sites of the stroke linearizer.
 
-This split keeps the scale-baked geometry cacheable across frames (text and panning workloads reuse the same bake at a fixed zoom) while letting per-frame rotation or translation ride through the rasterizer without re-subdividing curves.
+This split keeps the scale-baked geometry cacheable across frames (text and panning workloads reuse the same bake at a fixed zoom, cached on the `IPath` per scale) while letting per-frame rotation or translation ride through the rasterizer without re-subdividing curves.
 
 ### Contained lines
 
@@ -290,6 +293,17 @@ This is one of the most important ideas in the retained design:
 
 - visible geometry becomes retained lines
 - invisible left-of-band winding becomes retained start-cover seeds
+
+## Stroke Rasterization
+
+Strokes reach the rasterizer as centerline geometry plus a pen; they are not pre-expanded to fill paths by the canvas.
+
+`StrokeRasterizableGeometry` wraps a retained stroke payload (`StrokeRasterData`) that rasterizes one band at execution time. There are two payload strategies:
+
+- `RetainedStrokeRasterData` holds a fill-style `RasterizableGeometry` produced by the stroke linearizer, which expands the centerline into an outline (joins, miters, arcs, caps) once during building. Band execution then replays that outline exactly like a fill.
+- `LineSegmentStrokeRasterData` retains just the two endpoints of a solid line segment and rasterizes the band directly through `DirectLineSegmentBandRasterizer`, which supersamples four vertical positions per pixel row instead of building an edge table.
+
+The stroke width is scaled separately by the transform's isotropic width scale so expansion runs in device-space pixels. `ExecuteStrokeRasterizableItem(...)` reconfigures the shared `Context` and delegates to the payload's `ExecuteBand(...)`.
 
 ## The Execution Context
 
@@ -333,7 +347,7 @@ Rows also track sparse touched-column information through bit vectors, so the em
 ```mermaid
 flowchart TD
     A[Rasterize fixed-point line] --> B[Decompose into touched cells]
-    B --> C["AddCell(row, column, deltaCover, deltaArea)"]
+    B --> C["AddCell(row, column, delta, area)"]
     C --> D[Update coverArea]
     C --> E[Mark bitVectors]
     C --> F[Track touched rows and bounds]
@@ -352,12 +366,12 @@ For each touched row, the emitter:
 
 1. starts from the seeded `startCover`
 2. walks the row's touched columns using the bit vectors
-3. updates the running cover from `deltaCover`
-4. combines running cover and `deltaArea` into signed area
+3. updates the running cover from the accumulated cover deltas
+4. combines running cover and accumulated area into signed area
 5. converts signed area into normalized coverage using the selected fill rule
-6. coalesces equal-coverage spans
-7. writes only non-zero spans into the reusable scanline buffer
-8. invokes the row callback
+6. coalesces equal-coverage spans and buffers contiguous non-zero runs
+7. writes only non-zero coverage into the reusable scanline buffer
+8. invokes the row callback once per contiguous non-zero run
 
 ```mermaid
 flowchart LR
@@ -420,6 +434,7 @@ The backend decides:
 - which scene items execute
 - which retained band is being scanned
 - which destination slice receives the coverage
+- which clips narrow the coverage
 - which brush renderer consumes the emitted spans
 
 That separation is one of the main architectural advantages of the current CPU path.
@@ -435,9 +450,9 @@ If you are new to this part of the library, read the rasterizer in this order:
 5. `FlushScene.cs`
 6. `CreateRasterizableGeometry(...)` in `DefaultRasterizer.cs`
 7. `Linearizer<TL>` and the concrete linearizers in `DefaultRasterizer.Linearizer.cs`
-8. retained line types in `DefaultRasterizer.RetainedTypes.cs`
-9. `ExecuteRasterizableBand(...)` in `DefaultRasterizer.cs`
-10. `Context` in `DefaultRasterizer.cs`
+8. retained line and item types in `DefaultRasterizer.RetainedTypes.cs` and `DefaultRasterizer.RasterizableGeometry.cs`
+9. `ExecuteRasterizableItem(...)` and `Context` in `DefaultRasterizer.cs`
+10. stroke payloads in `DefaultRasterizer.Stroke.cs` and `DefaultRasterizer.StrokeLinearizer.cs`
 
 That order mirrors the data lifecycle:
 

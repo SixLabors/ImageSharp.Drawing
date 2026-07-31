@@ -23,6 +23,11 @@ public readonly struct LinearContour
     public required int PointCount { get; init; }
 
     /// <summary>
+    /// Gets the bounds of the stored contour points.
+    /// </summary>
+    public required RectangleF Bounds { get; init; }
+
+    /// <summary>
     /// Gets the zero-based index of the first derived segment belonging to this contour.
     /// </summary>
     public required int SegmentStart { get; init; }

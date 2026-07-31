@@ -9,6 +9,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// <summary>
 /// Provides an implementation of a brush for painting gradients between multiple color positions in 2D coordinates.
 /// </summary>
+/// <remarks>
+/// Colors are assigned to the polygon points in order; if fewer colors than points are
+/// supplied the colors are reused cyclically.
+/// </remarks>
 public sealed class PathGradientBrush : Brush
 {
     private readonly PointF[] points;
@@ -77,7 +81,7 @@ public sealed class PathGradientBrush : Brush
     public bool HasExplicitCenterColor { get; }
 
     /// <inheritdoc/>
-    public override Brush Transform(Matrix4x4 matrix)
+    public override Brush Transform(Matrix4x4 matrix, Rectangle sourceInterest, Rectangle preparedInterest)
     {
         if (matrix.IsIdentity)
         {
@@ -118,36 +122,57 @@ public sealed class PathGradientBrush : Brush
         GraphicsOptions options,
         int canvasWidth,
         RectangleF region)
-        => new PathGradientBrushRenderer<TPixel>(
+    {
+        if (TPixel.GetPixelTypeInfo().AlphaRepresentation == PixelAlphaRepresentation.Associated)
+        {
+            return new PathGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(
+                configuration,
+                options,
+                canvasWidth,
+                this.edges,
+                this.CenterColor,
+                this.HasExplicitCenterColor);
+        }
+
+        return new PathGradientBrushRenderer<TPixel, UnassociatedGradientPixelEncoder<TPixel>>(
             configuration,
             options,
             canvasWidth,
             this.edges,
             this.CenterColor,
             this.HasExplicitCenterColor);
+    }
 
+    /// <summary>
+    /// Computes the default center color as the arithmetic mean of the point colors
+    /// in scaled vector space.
+    /// </summary>
+    /// <param name="colors">The point colors to average.</param>
+    /// <returns>The averaged color.</returns>
     private static Color CalculateCenterColor(Color[] colors)
     {
         Guard.NotNull(colors, nameof(colors));
         Guard.MustBeGreaterThan(colors.Length, 0, nameof(colors));
 
-        return Color.FromScaledVector(colors.Select(c => c.ToScaledVector4()).Aggregate((p1, p2) => p1 + p2) / colors.Length);
-    }
-
-    private static float DistanceBetween(Vector2 p1, Vector2 p2) => (p2 - p1).Length();
-
-    private readonly struct Intersection
-    {
-        public Intersection(PointF point, float distance)
+        Vector4 sum = Vector4.Zero;
+        foreach (Color color in colors)
         {
-            this.Point = point;
-            this.Distance = distance;
+            // CSS Color 4 requires alpha to be premultiplied before color interpolation. The
+            // implicit center therefore averages associated values just like the rendered gradient.
+            // https://www.w3.org/TR/css-color-4/#interpolation-alpha
+            sum += color.ToScaledVector4(PixelAlphaRepresentation.Associated);
         }
 
-        public PointF Point { get; }
-
-        public float Distance { get; }
+        return Color.FromScaledVector(sum / colors.Length, PixelAlphaRepresentation.Associated);
     }
+
+    /// <summary>
+    /// Computes the Euclidean distance between two points.
+    /// </summary>
+    /// <param name="p1">The first point.</param>
+    /// <param name="p2">The second point.</param>
+    /// <returns>The distance between the points.</returns>
+    private static float DistanceBetween(Vector2 p1, Vector2 p2) => (p2 - p1).Length();
 
     /// <summary>
     /// An edge of the polygon that represents the gradient area.
@@ -156,39 +181,68 @@ public sealed class PathGradientBrush : Brush
     {
         private readonly float length;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Edge"/> class.
+        /// </summary>
+        /// <param name="start">The start point of the edge.</param>
+        /// <param name="end">The end point of the edge.</param>
+        /// <param name="startColor">The color at the start point.</param>
+        /// <param name="endColor">The color at the end point.</param>
         public Edge(Vector2 start, Vector2 end, Color startColor, Color endColor)
         {
             this.Start = start;
             this.End = end;
-            this.StartColor = startColor.ToScaledVector4();
-            this.EndColor = endColor.ToScaledVector4();
+            this.StartColor = startColor;
+            this.EndColor = endColor;
 
             this.length = DistanceBetween(this.End, this.Start);
         }
 
+        /// <summary>
+        /// Gets the start point of the edge.
+        /// </summary>
         public Vector2 Start { get; }
 
+        /// <summary>
+        /// Gets the end point of the edge.
+        /// </summary>
         public Vector2 End { get; }
 
-        public Vector4 StartColor { get; }
+        /// <summary>
+        /// Gets the color at the start point.
+        /// </summary>
+        public Color StartColor { get; }
 
-        public Vector4 EndColor { get; }
+        /// <summary>
+        /// Gets the color at the end point.
+        /// </summary>
+        public Color EndColor { get; }
 
+        /// <summary>
+        /// Tests whether the segment from <paramref name="start"/> to <paramref name="end"/>
+        /// intersects this edge, ignoring collinear overlaps.
+        /// </summary>
+        /// <param name="start">The start point of the query segment.</param>
+        /// <param name="end">The end point of the query segment.</param>
+        /// <param name="ip">Receives the intersection point when the segments intersect.</param>
+        /// <returns><see langword="true"/> if the segments intersect; otherwise <see langword="false"/>.</returns>
         public bool Intersect(
             Vector2 start,
             Vector2 end,
             ref Vector2 ip) =>
             PolygonUtilities.LineSegmentToLineSegmentIgnoreCollinear(start, end, this.Start, this.End, ref ip);
 
-        public Vector4 ColorAt(float distance)
-        {
-            float ratio = this.length > 0 ? distance / this.length : 0;
+        /// <summary>
+        /// Gets the interpolation ratio at the given point, measured by its distance from the edge start.
+        /// </summary>
+        /// <param name="point">The point on or near the edge.</param>
+        /// <returns>The interpolation ratio from the edge start to the edge end.</returns>
+        public float GetInterpolationRatio(PointF point)
 
-            return Vector4.Lerp(this.StartColor, this.EndColor, ratio);
-        }
+            // Zero-length edges have no gradient direction; use the start color.
+            => this.length > 0 ? DistanceBetween(point, this.Start) / this.length : 0;
 
-        public Vector4 ColorAt(PointF point) => this.ColorAt(DistanceBetween(point, this.Start));
-
+        /// <inheritdoc/>
         public bool Equals(Edge? other)
             => other != null &&
                other.Start == this.Start &&
@@ -196,8 +250,10 @@ public sealed class PathGradientBrush : Brush
                other.StartColor.Equals(this.StartColor) &&
                other.EndColor.Equals(this.EndColor);
 
+        /// <inheritdoc/>
         public override bool Equals(object? obj) => this.Equals(obj as Edge);
 
+        /// <inheritdoc/>
         public override int GetHashCode()
             => HashCode.Combine(this.Start, this.End, this.StartColor, this.EndColor);
     }
@@ -206,8 +262,10 @@ public sealed class PathGradientBrush : Brush
     /// The path gradient brush applicator.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private sealed class PathGradientBrushRenderer<TPixel> : BrushRenderer<TPixel>
+    /// <typeparam name="TEncoder">The destination representation encoder.</typeparam>
+    private sealed class PathGradientBrushRenderer<TPixel, TEncoder> : BrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
+        where TEncoder : struct, IGradientPixelEncoder<TPixel>
     {
         private readonly Vector2 center;
 
@@ -219,12 +277,14 @@ public sealed class PathGradientBrush : Brush
 
         private readonly IList<Edge> edges;
 
+        private readonly (Vector4 StartColor, Vector4 EndColor)[] edgeColors;
+
         private readonly TPixel centerPixel;
 
         private readonly TPixel transparentPixel;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="PathGradientBrushRenderer{TPixel}"/> class.
+        /// Initializes a new instance of the <see cref="PathGradientBrushRenderer{TPixel, TEncoder}"/> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
@@ -242,16 +302,34 @@ public sealed class PathGradientBrush : Brush
             : base(configuration, options, canvasWidth)
         {
             this.edges = edges;
+            this.edgeColors = new (Vector4 StartColor, Vector4 EndColor)[edges.Count];
             Vector2[] points = [.. edges.Select(s => s.Start)];
 
+            // CSS Color 4 requires alpha to be premultiplied before color interpolation. Cache
+            // associated inputs without packing through TPixel so destination storage cannot
+            // change the gradient and conversion remains outside the hot loop.
+            // https://www.w3.org/TR/css-color-4/#interpolation-alpha
+            for (int i = 0; i < edges.Count; i++)
+            {
+                this.edgeColors[i] = (
+                    edges[i].StartColor.ToScaledVector4(PixelAlphaRepresentation.Associated),
+                    edges[i].EndColor.ToScaledVector4(PixelAlphaRepresentation.Associated));
+            }
+
             this.center = points.Aggregate((p1, p2) => p1 + p2) / edges.Count;
-            this.centerColor = centerColor.ToScaledVector4();
             this.hasSpecialCenterColor = hasSpecialCenterColor;
-            this.centerPixel = centerColor.ToPixel<TPixel>();
+            this.centerColor = centerColor.ToScaledVector4(PixelAlphaRepresentation.Associated);
+            this.centerPixel = TEncoder.Encode(this.centerColor);
             this.maxDistance = points.Select(p => p - this.center).Max(d => d.Length());
             this.transparentPixel = Color.Transparent.ToPixel<TPixel>();
         }
 
+        /// <summary>
+        /// Gets the gradient color for the pixel at the given device coordinate.
+        /// </summary>
+        /// <param name="x">The x-coordinate of the pixel in device space.</param>
+        /// <param name="y">The y-coordinate of the pixel in device space.</param>
+        /// <returns>The gradient color, or transparent where the gradient is undefined.</returns>
         internal TPixel this[int x, int y]
         {
             get
@@ -264,6 +342,8 @@ public sealed class PathGradientBrush : Brush
                     return this.centerPixel;
                 }
 
+                // Triangles without an explicit center color can be shaded exactly
+                // with barycentric interpolation of the three vertex colors.
                 if (this.edges.Count == 3 && !this.hasSpecialCenterColor)
                 {
                     if (!FindPointOnTriangle(
@@ -277,17 +357,21 @@ public sealed class PathGradientBrush : Brush
                         return this.transparentPixel;
                     }
 
-                    Vector4 pointColor = ((1 - u - v) * this.edges[0].StartColor)
-                        + (u * this.edges[0].EndColor)
-                        + (v * this.edges[2].StartColor);
+                    Vector4 pointColor = ((1 - u - v) * this.edgeColors[0].StartColor)
+                        + (u * this.edgeColors[0].EndColor)
+                        + (v * this.edgeColors[2].StartColor);
 
-                    return TPixel.FromScaledVector4(pointColor);
+                    return TEncoder.Encode(pointColor);
                 }
 
+                // General case: cast a ray from the sample point away from the center and
+                // find the closest edge it hits. The final color interpolates twice:
+                // along the edge for the boundary color, then between that boundary color
+                // and the center color by the point's relative distance to the center.
                 Vector2 direction = Vector2.Normalize(point - this.center);
                 Vector2 end = point + (direction * this.maxDistance);
 
-                (Edge Edge, Vector2 Point)? isc = this.FindIntersection(point, end);
+                (Edge Edge, int EdgeIndex, Vector2 Point)? isc = this.FindIntersection(point, end);
 
                 if (!isc.HasValue)
                 {
@@ -295,14 +379,18 @@ public sealed class PathGradientBrush : Brush
                 }
 
                 Vector2 intersection = isc.Value.Point;
-                Vector4 edgeColor = isc.Value.Edge.ColorAt(intersection);
+                int edgeIndex = isc.Value.EdgeIndex;
+                (Vector4 startColor, Vector4 endColor) = this.edgeColors[edgeIndex];
 
+                Vector4 edgeColor = Vector4.Lerp(startColor, endColor, isc.Value.Edge.GetInterpolationRatio(intersection));
+
+                // ratio is 0 on the boundary (edge color) and 1 at the center (center color).
                 float length = DistanceBetween(intersection, this.center);
                 float ratio = length > 0 ? DistanceBetween(intersection, point) / length : 0;
 
                 Vector4 color = Vector4.Lerp(edgeColor, this.centerColor, ratio);
 
-                return TPixel.FromScaledVector4(color);
+                return TEncoder.Encode(color);
             }
         }
 
@@ -314,47 +402,43 @@ public sealed class PathGradientBrush : Brush
             int y,
             BrushWorkspace<TPixel> workspace)
         {
-            Span<float> amounts = workspace.GetAmounts(scanline.Length);
             Span<TPixel> overlays = workspace.GetOverlays(scanline.Length);
-            float blendPercentage = this.Options.BlendPercentage;
 
             // TODO: Remove bounds checks.
-            if (blendPercentage < 1)
+            for (int i = 0; i < scanline.Length; i++)
             {
-                for (int i = 0; i < scanline.Length; i++)
-                {
-                    amounts[i] = scanline[i] * blendPercentage;
-                    overlays[i] = this[x + i, y];
-                }
-            }
-            else
-            {
-                for (int i = 0; i < scanline.Length; i++)
-                {
-                    amounts[i] = scanline[i];
-                    overlays[i] = this[x + i, y];
-                }
+                overlays[i] = this[x + i, y];
             }
 
-            this.Blender.Blend(
+            this.Blender.BlendWithCoverage<TPixel>(
                 this.Configuration,
                 destinationRow,
                 destinationRow,
                 overlays,
-                amounts,
+                this.Options.BlendPercentage,
+                scanline,
                 workspace.GetBlendScratch(scanline.Length, 3));
         }
 
-        private (Edge Edge, Vector2 Point)? FindIntersection(
-            PointF start,
-            PointF end)
+        /// <summary>
+        /// Finds the polygon edge whose intersection with the given segment lies
+        /// closest to the segment start.
+        /// </summary>
+        /// <param name="start">The start point of the query segment.</param>
+        /// <param name="end">The end point of the query segment.</param>
+        /// <returns>The closest intersected edge, its index, and the intersection point, or <see langword="null"/> when no edge is hit.</returns>
+        private (Edge Edge, int EdgeIndex, Vector2 Point)? FindIntersection(PointF start, PointF end)
         {
             Vector2 ip = default;
             Vector2 closestIntersection = default;
             Edge? closestEdge = null;
+            int closestEdgeIndex = 0;
             float minDistance = float.MaxValue;
-            foreach (Edge edge in this.edges)
+
+            for (int i = 0; i < this.edges.Count; i++)
             {
+                Edge edge = this.edges[i];
+
                 if (!edge.Intersect(start, end, ref ip))
                 {
                     continue;
@@ -365,13 +449,25 @@ public sealed class PathGradientBrush : Brush
                 {
                     minDistance = d;
                     closestEdge = edge;
+                    closestEdgeIndex = i;
                     closestIntersection = ip;
                 }
             }
 
-            return closestEdge != null ? (closestEdge, closestIntersection) : null;
+            return closestEdge != null ? (closestEdge, closestEdgeIndex, closestIntersection) : null;
         }
 
+        /// <summary>
+        /// Computes the barycentric coordinates of a point relative to a triangle,
+        /// rejecting points that lie outside it.
+        /// </summary>
+        /// <param name="v1">The first triangle vertex.</param>
+        /// <param name="v2">The second triangle vertex.</param>
+        /// <param name="v3">The third triangle vertex.</param>
+        /// <param name="point">The point to test.</param>
+        /// <param name="u">Receives the barycentric weight of <paramref name="v2"/>.</param>
+        /// <param name="v">Receives the barycentric weight of <paramref name="v3"/>.</param>
+        /// <returns><see langword="true"/> if the point lies inside the triangle; otherwise <see langword="false"/>.</returns>
         private static bool FindPointOnTriangle(Vector2 v1, Vector2 v2, Vector2 v3, Vector2 point, out float u, out float v)
         {
             Vector2 e1 = v2 - v1;
@@ -382,6 +478,8 @@ public sealed class PathGradientBrush : Brush
             Vector2 pv2 = point - v2;
             Vector2 pv3 = point - v3;
 
+            // The z-components of these cross products give the point's side of each
+            // edge; mixed signs mean the point is outside the triangle.
             Vector3 d1 = Vector3.Cross(new Vector3(e1.X, e1.Y, 0), new Vector3(pv1.X, pv1.Y, 0));
             Vector3 d2 = Vector3.Cross(new Vector3(e2.X, e2.Y, 0), new Vector3(pv2.X, pv2.Y, 0));
             Vector3 d3 = Vector3.Cross(new Vector3(e3.X, e3.Y, 0), new Vector3(pv3.X, pv3.Y, 0));

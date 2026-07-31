@@ -62,6 +62,10 @@ public sealed class PathCompositionSceneCommand : CompositionSceneCommand
     /// <summary>
     /// Gets the wrapped composition command.
     /// </summary>
+    /// <remarks>
+    /// The internal setter lets the batcher rewrite the command in place during flush
+    /// preparation (for example brush normalization) without reallocating the scene node.
+    /// </remarks>
     public CompositionCommand Command { get; internal set; }
 
     /// <inheritdoc />
@@ -83,6 +87,10 @@ public sealed class StrokePathCompositionSceneCommand : CompositionSceneCommand
     /// <summary>
     /// Gets the wrapped stroke path command.
     /// </summary>
+    /// <remarks>
+    /// The internal setter lets the batcher rewrite the command in place during flush
+    /// preparation (for example dash or transform expansion) without reallocating the scene node.
+    /// </remarks>
     public StrokePathCommand Command { get; internal set; }
 
     /// <inheritdoc />

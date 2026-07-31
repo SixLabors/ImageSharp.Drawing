@@ -157,24 +157,15 @@ public static class Program
 
             canvas.Fill(Brushes.Solid(Color.SeaGreen), shorelineShape);
 
-            // Clipping demo: canvas.Save accepts a clip path plus DrawingOptions whose
-            // BooleanOperation controls how the new clip combines with the existing one. Using
-            // Intersection means subsequent draws are masked to the oval highlight shape, so a
-            // rectangular gradient fill can be reused without re-shaping it as an ellipse.
             EllipsePolygon lakeHighlight = new(725, 512, 285, 86);
-            DrawingOptions lakeHighlightClipOptions = new()
-            {
-                ShapeOptions = new ShapeOptions
-                {
-                    BooleanOperation = BooleanOperation.Intersection
-                }
-            };
 
             RectangleF lakeHighlightBounds = lakeHighlight.Bounds;
 
-            // Save pushes a clipping state; Restore pops it. Anything drawn between the two is
+            // Save pushes a state; Clip narrows it. Anything drawn between the two is
             // confined to lakeHighlight even though the brush spans its full bounding rectangle.
-            canvas.Save(lakeHighlightClipOptions, lakeHighlight);
+            canvas.Save();
+            canvas.Clip(lakeHighlight);
+
             canvas.Fill(Brushes.ForwardDiagonal(Color.White.WithAlpha(.36F), Color.Transparent), new RectanglePolygon(lakeHighlightBounds));
             canvas.Restore();
 
@@ -910,7 +901,7 @@ public static class Program
 
             canvas.DrawText(
                 new RichTextOptions(subtitleFont) { Origin = new PointF(40, 66) },
-                "Apply() runs a processor inside an IPath, ImageBrush fills one with a photo, and Save() clips drawing to one.",
+                "Apply() runs a processor inside an IPath, ImageBrush fills one with a photo, and Clip() limits drawing to one.",
                 Brushes.Solid(secondaryColor),
                 pen: null);
 
@@ -1068,20 +1059,15 @@ public static class Program
                     imageArea.Y + ((imageArea.Height - textBounds.Height) / 2F) - textBounds.Y),
             };
 
-            // GeneratePaths returns one IPath per glyph. canvas.Save accepts params IPath[] so
-            // the whole collection becomes a compound clip, but ShapeOptions.BooleanOperation
-            // must be set to Intersection: the default Difference would cut the glyph shapes
-            // OUT of the photograph, the opposite of "image inside text".
+            // GeneratePaths returns one IPath per glyph. Clip accepts params IPath[] so
+            // the whole collection becomes one compound clip for the photograph.
             IPathCollection letters = TextBuilder.GeneratePaths("MASK", glyphOptions);
             IPath[] glyphClips = [.. letters];
 
-            DrawingOptions clipToGlyphs = new()
-            {
-                ShapeOptions = new ShapeOptions { BooleanOperation = BooleanOperation.Intersection },
-            };
-
             canvas.Fill(Brushes.Solid(Color.ParseHex("#E2DCC2")), new RectanglePolygon(imageArea));
-            canvas.Save(clipToGlyphs, glyphClips);
+            canvas.Save();
+            canvas.Clip(glyphClips);
+
             canvas.DrawImage(source, source.Bounds, imageArea, null);
             canvas.Restore();
 

@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Silk.NET.WebGPU;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -20,7 +20,7 @@ internal sealed unsafe class WebGPUDeviceHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the device and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUDeviceHandle(nint deviceHandle, bool ownsHandle)
+    public WebGPUDeviceHandle(nint deviceHandle, bool ownsHandle)
         : this(ownsHandle ? WebGPURuntime.GetApi() : null, deviceHandle, ownsHandle)
     {
     }
@@ -37,7 +37,7 @@ internal sealed unsafe class WebGPUDeviceHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the device and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUDeviceHandle(WebGPU? api, nint deviceHandle, bool ownsHandle)
+    public WebGPUDeviceHandle(WebGPU? api, nint deviceHandle, bool ownsHandle)
         : base(deviceHandle, ownsHandle)
         => this.api = api;
 
@@ -46,7 +46,7 @@ internal sealed unsafe class WebGPUDeviceHandle : WebGPUHandle
     {
         try
         {
-            this.api?.DeviceRelease((Device*)this.handle);
+            this.api?.DeviceRelease((WGPUDeviceImpl*)this.handle);
             return true;
         }
         catch

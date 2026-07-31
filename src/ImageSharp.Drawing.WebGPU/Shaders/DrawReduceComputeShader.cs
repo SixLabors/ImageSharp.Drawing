@@ -1,12 +1,14 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Silk.NET.WebGPU;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// GPU stage that scans draw tags into draw-object offsets and counts.
+/// GPU stage that runs the first pass of the two-pass prefix sum over the draw-tag stream:
+/// each workgroup reduces its assigned draw tags to a single DrawMonoid aggregate that
+/// draw-leaf later combines into a full exclusive prefix sum. Wraps <c>draw_reduce.wgsl</c>.
 /// </summary>
 internal static unsafe class DrawReduceComputeShader
 {
@@ -23,21 +25,30 @@ internal static unsafe class DrawReduceComputeShader
     /// <summary>
     /// Creates the bind-group layout required by the draw-reduce stage.
     /// </summary>
+    /// <param name="api">The WebGPU API facade.</param>
+    /// <param name="device">The device that owns the staged-scene pipelines.</param>
+    /// <param name="layout">Receives the created bind-group layout on success.</param>
+    /// <param name="error">Receives the creation failure reason when layout creation fails.</param>
+    /// <returns><see langword="true"/> when the bind-group layout was created successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
-        Device* device,
-        out BindGroupLayout* layout,
+        WGPUDeviceImpl* device,
+        out WGPUBindGroupLayoutImpl* layout,
         out string? error)
     {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[3];
+        // Bindings match draw_reduce.wgsl:
+        //   0 config uniform
+        //   1 scene (read-only; draw tags read at config.drawtag_base)
+        //   2 reduced (read-write; one DrawMonoid aggregate written per workgroup)
+        WGPUBindGroupLayoutEntry* entries = stackalloc WGPUBindGroupLayoutEntry[3];
         entries[0] = SceneShaderBindingLayoutHelper.CreateUniformEntry(0, (nuint)sizeof(GpuSceneConfig));
-        entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, BufferBindingType.ReadOnlyStorage);
-        entries[2] = SceneShaderBindingLayoutHelper.CreateStorageEntry(2, BufferBindingType.Storage);
+        entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, WGPUBufferBindingType.ReadOnlyStorage);
+        entries[2] = SceneShaderBindingLayoutHelper.CreateStorageEntry(2, WGPUBufferBindingType.Storage);
 
-        BindGroupLayoutDescriptor descriptor = new()
+        WGPUBindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 3,
-            Entries = entries
+            entryCount = 3,
+            entries = entries
         };
 
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);

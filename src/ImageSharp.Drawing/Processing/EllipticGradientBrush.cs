@@ -13,7 +13,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// </summary>
 public sealed class EllipticGradientBrush : GradientBrush
 {
-    /// <inheritdoc cref="GradientBrush" />
+    /// <summary>
+    /// Initializes a new instance of the <see cref="EllipticGradientBrush"/> class.
+    /// </summary>
     /// <param name="center">The center of the elliptical gradient and 0 for the color stops.</param>
     /// <param name="referenceAxisEnd">The end point of the reference axis of the ellipse.</param>
     /// <param name="axisRatio">
@@ -52,7 +54,7 @@ public sealed class EllipticGradientBrush : GradientBrush
     public float AxisRatio { get; }
 
     /// <inheritdoc/>
-    public override Brush Transform(Matrix4x4 matrix)
+    public override Brush Transform(Matrix4x4 matrix, Rectangle sourceInterest, Rectangle preparedInterest)
     {
         PointF tc = PointF.Transform(this.Center, matrix);
         PointF tRef = PointF.Transform(this.ReferenceAxisEnd, matrix);
@@ -84,18 +86,36 @@ public sealed class EllipticGradientBrush : GradientBrush
         Configuration configuration,
         GraphicsOptions options,
         int canvasWidth,
-        RectangleF region) =>
-        new EllipticGradientBrushRenderer<TPixel>(
+        RectangleF region)
+    {
+        if (TPixel.GetPixelTypeInfo().AlphaRepresentation == PixelAlphaRepresentation.Associated)
+        {
+            return new EllipticGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(
+                configuration,
+                options,
+                canvasWidth,
+                this,
+                this.ColorStopsArray,
+                this.RepetitionMode);
+        }
+
+        return new EllipticGradientBrushRenderer<TPixel, UnassociatedGradientPixelEncoder<TPixel>>(
             configuration,
             options,
             canvasWidth,
             this,
             this.ColorStopsArray,
             this.RepetitionMode);
+    }
 
-    /// <inheritdoc />
-    private sealed class EllipticGradientBrushRenderer<TPixel> : GradientBrushRenderer<TPixel>
+    /// <summary>
+    /// The elliptic gradient brush applicator.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <typeparam name="TEncoder">The destination representation encoder.</typeparam>
+    private sealed class EllipticGradientBrushRenderer<TPixel, TEncoder> : GradientBrushRenderer<TPixel, TEncoder>
         where TPixel : unmanaged, IPixel<TPixel>
+        where TEncoder : struct, IGradientPixelEncoder<TPixel>
     {
         private readonly PointF center;
 
@@ -108,7 +128,7 @@ public sealed class EllipticGradientBrush : GradientBrush
         private readonly float secondRadiusSquared;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="EllipticGradientBrushRenderer{TPixel}" /> class.
+        /// Initializes a new instance of the <see cref="EllipticGradientBrushRenderer{TPixel, TEncoder}" /> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
@@ -142,15 +162,20 @@ public sealed class EllipticGradientBrush : GradientBrush
         /// <inheritdoc />
         protected override float PositionOnGradient(float x, float y)
         {
+            // Translate the sample into center-relative coordinates, then rotate it by the
+            // negated reference-axis angle so the reference axis aligns with local x before
+            // measuring against the axis radii. Rotating by the positive angle instead would
+            // mirror the ellipse for any orientation that is not a multiple of 90 degrees.
             float x0 = x - this.center.X;
             float y0 = y - this.center.Y;
 
-            float xR = (x0 * this.cosRotation) - (y0 * this.sinRotation);
-            float yR = (x0 * this.sinRotation) + (y0 * this.cosRotation);
+            float xR = (x0 * this.cosRotation) + (y0 * this.sinRotation);
+            float yR = (y0 * this.cosRotation) - (x0 * this.sinRotation);
 
             float xSquared = xR * xR;
             float ySquared = yR * yR;
 
+            // Normalized elliptical distance: sqrt((x/a)^2 + (y/b)^2), 0 at the center.
             return MathF.Sqrt((xSquared / this.referenceRadiusSquared) + (ySquared / this.secondRadiusSquared));
         }
     }

@@ -63,12 +63,14 @@ public class TestUtilityExtensionsTests
     [InlineData(PixelTypes.Rgba32, typeof(Rgba32))]
     [InlineData(PixelTypes.Argb32, typeof(Argb32))]
     [InlineData(PixelTypes.HalfVector4, typeof(HalfVector4))]
+    [InlineData(PixelTypes.RgbaHalf, typeof(RgbaHalf))]
     public void ToType(PixelTypes pt, Type expectedType)
         => Assert.Equal(pt.GetClrType(), expectedType);
 
     [Theory]
     [InlineData(typeof(Rgba32), PixelTypes.Rgba32)]
     [InlineData(typeof(Argb32), PixelTypes.Argb32)]
+    [InlineData(typeof(RgbaHalf), PixelTypes.RgbaHalf)]
     public void GetPixelType(Type clrType, PixelTypes expectedPixelType)
         => Assert.Equal(expectedPixelType, clrType.GetPixelType());
 

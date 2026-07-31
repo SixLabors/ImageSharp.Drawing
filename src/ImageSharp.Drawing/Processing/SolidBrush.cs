@@ -83,34 +83,16 @@ public sealed class SolidBrush : Brush
                 scanline = scanline[..destinationRow.Length];
             }
 
-            Configuration configuration = this.Configuration;
-            if (this.Options.BlendPercentage == 1F)
-            {
-                this.Blender.Blend(
-                    configuration,
-                    destinationRow,
-                    destinationRow,
-                    this.color,
-                    scanline,
-                    workspace.GetBlendScratch(scanline.Length, 2));
-            }
-            else
-            {
-                Span<float> amounts = workspace.GetAmounts(scanline.Length);
-
-                for (int i = 0; i < scanline.Length; i++)
-                {
-                    amounts[i] = scanline[i] * this.Options.BlendPercentage;
-                }
-
-                this.Blender.Blend(
-                    configuration,
-                    destinationRow,
-                    destinationRow,
-                    this.color,
-                    amounts,
-                    workspace.GetBlendScratch(scanline.Length, 2));
-            }
+            // The single-color overlay overload only needs two Vector4 scratch rows,
+            // unlike the per-pixel overlay path which needs three.
+            this.Blender.BlendWithCoverage(
+                this.Configuration,
+                destinationRow,
+                destinationRow,
+                this.color,
+                this.Options.BlendPercentage,
+                scanline,
+                workspace.GetBlendScratch(scanline.Length, 2));
         }
     }
 }

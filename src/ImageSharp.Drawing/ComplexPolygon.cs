@@ -8,23 +8,41 @@ namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
 /// Represents a complex polygon made up of one or more shapes overlayed on each other,
-/// where overlaps causes holes.
+/// where overlaps cause holes.
 /// </summary>
 /// <seealso cref="IPath" />
-public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
+public sealed class ComplexPolygon : IPath, IInternalPathOwner
 {
+    /// <summary>
+    /// The child paths that make up the shape.
+    /// </summary>
     private readonly IPath[] paths;
+
+    /// <summary>
+    /// The lazily initialized internal representation of each flattened ring.
+    /// </summary>
     private List<InternalPath>? internalPaths;
-    private float length;
+
+    /// <summary>
+    /// The lazily computed union of the child path bounds.
+    /// </summary>
     private RectangleF? bounds;
+
+    /// <summary>
+    /// The cached result of <see cref="AsClosedPath"/>.
+    /// </summary>
     private IPath? closedPath;
+
+    /// <summary>
+    /// The per-scale cache of retained linear geometry.
+    /// </summary>
     private LinearGeometryCache geometryCache;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ComplexPolygon"/> class.
     /// </summary>
-    /// <param name="contour">The contour path.</param>
-    /// <param name="hole">The hole path.</param>
+    /// <param name="contour">The points defining the outer contour.</param>
+    /// <param name="hole">The points defining the hole.</param>
     public ComplexPolygon(PointF[] contour, PointF[] hole)
         : this(new Path(new LinearLineSegment(contour)), new Path(new LinearLineSegment(hole)))
     {
@@ -105,13 +123,33 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
             ? hit
             : this.geometryCache.Store(scale, this.BuildLinearGeometry(scale));
 
+    /// <inheritdoc/>
+    public float ComputeLength(Vector2 scale)
+        => this.ToLinearGeometry(scale).ComputeLength();
+
+    /// <inheritdoc/>
+    public float ComputeArea(Vector2 scale)
+        => this.ToLinearGeometry(scale).ComputeArea();
+
+    /// <inheritdoc/>
+    public bool Contains(PointF point, IntersectionRule intersectionRule, Vector2 scale)
+    {
+        PointF scaledPoint = new(point.X * scale.X, point.Y * scale.Y);
+
+        return this.ToLinearGeometry(scale).Contains(scaledPoint, intersectionRule);
+    }
+
+    /// <summary>
+    /// Concatenates the child path geometries into a single retained geometry, rebasing each
+    /// child's point, contour and segment indices onto the combined arrays.
+    /// </summary>
+    /// <param name="scale">The X/Y scale at which curves are flattened.</param>
+    /// <returns>The combined linear geometry.</returns>
     private LinearGeometry BuildLinearGeometry(Vector2 scale)
     {
         int pointCount = 0;
         int contourCount = 0;
         int segmentCount = 0;
-        int nonHorizontalSegmentCountPixelBoundary = 0;
-        int nonHorizontalSegmentCountPixelCenter = 0;
 
         bool hasBounds = false;
         float minX = float.MaxValue;
@@ -138,8 +176,6 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
             pointCount += geometry.Info.PointCount;
             contourCount += geometry.Info.ContourCount;
             segmentCount += geometry.Info.SegmentCount;
-            nonHorizontalSegmentCountPixelBoundary += geometry.Info.NonHorizontalSegmentCountPixelBoundary;
-            nonHorizontalSegmentCountPixelCenter += geometry.Info.NonHorizontalSegmentCountPixelCenter;
         }
 
         PointF[] points = new PointF[pointCount];
@@ -168,6 +204,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
                 {
                     PointStart = pointStart + contour.PointStart,
                     PointCount = contour.PointCount,
+                    Bounds = contour.Bounds,
                     SegmentStart = segmentStart + contour.SegmentStart,
                     SegmentCount = contour.SegmentCount,
                     IsClosed = contour.IsClosed
@@ -187,9 +224,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
                 Bounds = bounds,
                 ContourCount = contours.Length,
                 PointCount = points.Length,
-                SegmentCount = segmentCount,
-                NonHorizontalSegmentCountPixelBoundary = nonHorizontalSegmentCountPixelBoundary,
-                NonHorizontalSegmentCountPixelCenter = nonHorizontalSegmentCountPixelCenter
+                SegmentCount = segmentCount
             },
             contours,
             points);
@@ -219,25 +254,16 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     }
 
     /// <inheritdoc/>
-    SegmentInfo IPathInternals.PointAlongPath(float distance)
-    {
-        this.EnsureInternalPaths();
+    public bool TryGetPathPointAtDistance(float distance, Vector2 scale, out PathPoint pathPoint)
+        => this.ToLinearGeometry(scale).TryGetPathPointAtDistance(distance, out pathPoint);
 
-        distance %= this.length;
-        foreach (InternalPath p in this.internalPaths)
-        {
-            if (p.Length >= distance)
-            {
-                return p.PointAlongPath(distance);
-            }
+    /// <inheritdoc/>
+    public bool TryGetPathPointAtDistanceUnbounded(float distance, Vector2 scale, out PathPoint pathPoint)
+        => this.ToLinearGeometry(scale).TryGetPathPointAtDistanceUnbounded(distance, out pathPoint);
 
-            // Reduce it before trying the next path
-            distance -= p.Length;
-        }
-
-        ThrowOutOfRange();
-        return default;
-    }
+    /// <inheritdoc/>
+    public bool TryGetSegment(float startDistance, float stopDistance, bool startOnBeginFigure, Vector2 scale, out IPath path)
+        => this.ToLinearGeometry(scale).TryGetSegment(startDistance, stopDistance, startOnBeginFigure, out path);
 
     /// <inheritdoc/>
     IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
@@ -246,6 +272,9 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
         return this.internalPaths;
     }
 
+    /// <summary>
+    /// Ensures <see cref="internalPaths"/> is initialized.
+    /// </summary>
     [MemberNotNull(nameof(internalPaths))]
     private void EnsureInternalPaths()
     {
@@ -258,25 +287,27 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     }
 
     /// <summary>
-    /// Initializes <see cref="internalPaths"/> and <see cref="length"/>.
+    /// Initializes <see cref="internalPaths"/>.
     /// </summary>
     [MemberNotNull(nameof(internalPaths))]
     private void InitInternalPaths()
     {
         this.internalPaths = new List<InternalPath>(this.paths.Length);
-        this.length = 0;
 
         foreach (IPath p in this.paths)
         {
             foreach (ISimplePath s in p.Flatten())
             {
                 InternalPath ip = new(s.Points, s.IsClosed);
-                this.length += ip.Length;
                 this.internalPaths.Add(ip);
             }
         }
     }
 
+    /// <summary>
+    /// Computes the union of the child path bounds.
+    /// </summary>
+    /// <returns>The axis-aligned bounds enclosing all child paths.</returns>
     private RectangleF CalcBounds()
     {
         float minX = float.MaxValue;
@@ -296,6 +327,4 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
 
         return new RectangleF(minX, minY, maxX - minX, maxY - minY);
     }
-
-    private static InvalidOperationException ThrowOutOfRange() => new("Should not be possible to reach this line");
 }

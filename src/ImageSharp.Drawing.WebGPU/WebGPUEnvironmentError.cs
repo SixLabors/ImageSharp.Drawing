@@ -18,7 +18,7 @@ public enum WebGPUEnvironmentError
     Success = 0,
 
     /// <summary>
-    /// The shared WebGPU API loader or required extension could not be initialized.
+    /// The shared WebGPU API loader could not be initialized.
     /// </summary>
     ApiInitializationFailed,
 
@@ -36,6 +36,12 @@ public enum WebGPUEnvironmentError
     /// The runtime failed to acquire a WebGPU adapter.
     /// </summary>
     AdapterRequestFailed,
+
+    /// <summary>
+    /// The only available adapter is a software rasterizer. Software adapters are not supported
+    /// by this backend; the CPU drawing backend serves GPU-less environments instead.
+    /// </summary>
+    SoftwareAdapterUnsupported,
 
     /// <summary>
     /// The device request callback did not complete before the timeout expired.
@@ -66,4 +72,14 @@ public enum WebGPUEnvironmentError
     /// The isolated compute-pipeline probe process terminated before it could report a normal result.
     /// </summary>
     ComputePipelineProbeProcessFailed,
+
+    /// <summary>
+    /// The required WGPU extension is unavailable.
+    /// </summary>
+    WgpuExtensionUnavailable,
+
+    /// <summary>
+    /// The DirectX Shader Compiler required by the Windows WebGPU backend is unavailable.
+    /// </summary>
+    DxcUnavailable
 }

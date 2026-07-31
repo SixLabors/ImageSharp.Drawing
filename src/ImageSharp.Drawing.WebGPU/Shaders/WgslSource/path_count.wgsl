@@ -1,7 +1,22 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// Stage to compute counts of number of segments in each tile
+// Counts, per tile, how many line segments from the flattened line soup
+// cross it. One thread per line: walks the line's tile boundary crossings,
+// atomically increments the crossed tile's segment count, accumulates
+// top-edge winding deltas into tile backdrops, and emits one SegmentCount
+// record per crossing so path_tiling can later write the clipped segments.
+//
+// Inputs: config uniform, bump (lines counter, seg_counts allocator),
+// lines (LineSoup from flatten), paths (Path records from path_row_alloc),
+// rows (PathRow spans finalized by tile_alloc).
+// Outputs: tile (backdrop and segment_count_or_ix, atomically updated),
+// seg_counts (one record per line/tile crossing), bump.seg_counts.
+//
+// Ported from Vello's path_count.wgsl, modified for the local sparse
+// tile-row model: tiles are addressed through per-row PathRow records
+// (row.tiles + x - row.x0) instead of a dense per-path bbox grid, and
+// crossings outside a row's allocated column span are skipped.
 
 #import bump
 #import config
@@ -34,13 +49,27 @@ var<storage, read_write> tile: array<AtomicTile>;
 @group(0) @binding(6)
 var<storage, read_write> seg_counts: array<SegmentCount>;
 
+// Returns the number of tile grid cells spanned by the interval [a, b]
+// (in tile units), with a minimum of 1.
 fn span(a: f32, b: f32) -> u32 {
     return u32(max(ceil(max(a, b)) - floor(min(a, b)), 1.0));
 }
 
+// Largest f32 strictly less than 1.0; clamping b below 1 keeps the first
+// floor(a * i + b) evaluation from overshooting a boundary.
 const ONE_MINUS_ULP: f32 = 0.99999994;
+// Slope nudge applied when accumulated rounding in floor(a * i + b)
+// disagrees with the exact crossing count for the full line.
 const ROBUST_EPSILON: f32 = 2e-7;
 
+// Walks one line across the tile grid and records its crossings.
+//
+// The line is first normalized to point downward (is_down), then
+// parameterized by crossing index i in [imin, imax): each step crosses
+// exactly one tile boundary, and z = floor(a * i + b) is the number of
+// x-boundary crossings after i steps, giving the tile coordinate
+// (x0 + x_sign * z, y0 + i - z). imin/imax clip the traversal to the
+// path's tile bbox; delta is the winding direction (+1 up, -1 down).
 @compute @workgroup_size(256)
 fn main(
     @builtin(global_invocation_id) global_id: vec3<u32>,
@@ -63,9 +92,13 @@ fn main(
 
     let dx = abs(s1.x - s0.x);
     let dy = s1.y - s0.y;
+    // Zero-length segment, drop it. This could be culled in the flattening
+    // stage, but letting one slip through here would be much worse.
     if dx + dy == 0.0 {
         return;
     }
+    // A horizontal line lying exactly on a tile boundary crosses no
+    // horizontal scanline, so it contributes no winding; drop it.
     if dy == 0.0 && floor(s0.y) == s0.y {
         return;
     }
@@ -155,13 +188,13 @@ fn main(
         let top_edge = select(last_z == z, y0 == s0.y, i == 0u);
 
         // Top-edge backdrop propagation must fire even when the crossing
-        // column itself lies outside the sparse row's allocated column span —
-        // for example, a line entering from the left of bbox (x < bbox.x).
+        // column itself lies outside the sparse row's allocated column span,
+        // for example a line entering from the left of bbox (x < bbox.x).
         // path_row_span already clamped x_bump to bbox.x and expanded row.x0
         // accordingly, so clamp the bump target to row.x0 here to route the
         // winding into the row's leftmost allocated tile. Skipping this (as
         // the old in-range-only path did) left fills whose left edges crossed
-        // the bbox boundary with zero-backdrop interior tiles — rendering
+        // the bbox boundary with zero-backdrop interior tiles, rendering
         // horizontal row-aligned gaps.
         if top_edge && row.x0 < row.x1 && x + 1 < i32(row.x1) {
             let x_bump = max(x + 1, i32(row.x0));
@@ -169,6 +202,8 @@ fn main(
             atomicAdd(&tile[bump_ix].backdrop, delta);
         }
 
+        // No tile is allocated for columns outside the row's sparse span;
+        // the crossing still advanced last_z for top-edge detection above.
         if u32(x) < row.x0 || u32(x) >= row.x1 {
             last_z = z;
             continue;

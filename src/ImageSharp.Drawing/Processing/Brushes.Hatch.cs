@@ -10,6 +10,10 @@ public static partial class Brushes
 {
     // These hatch arrays were derived using the GDI+ pixel extraction technique described at
     // https://web.archive.org/web/20221228174326/https://www.codeproject.com/Articles/5350583/Recreating-Gdiplus-hatches-with-SkiaSharp.
+    // Each table is an 8x8 tile indexed [row, column] that PatternBrush repeats across the
+    // filled area anchored to the canvas origin; true selects the foreground color and
+    // false the background color. The layouts intentionally match the GDI+ HatchStyle
+    // bitmaps pixel for pixel, so do not "clean up" apparent irregularities.
     private static readonly bool[,] HorizontalPattern =
     {
         { true,  true,  true,  true,  true,  true,  true,  true, },

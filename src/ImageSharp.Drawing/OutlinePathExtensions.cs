@@ -16,7 +16,7 @@ public static class OutlinePathExtensions
     /// <summary>
     /// Generates an outline of the path.
     /// </summary>
-    /// <param name="path">The path to outline</param>
+    /// <param name="path">The path to outline.</param>
     /// <param name="width">The outline width.</param>
     /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
     public static IPath GenerateOutline(this IPath path, float width)
@@ -25,7 +25,7 @@ public static class OutlinePathExtensions
     /// <summary>
     /// Generates an outline of the path.
     /// </summary>
-    /// <param name="path">The path to outline</param>
+    /// <param name="path">The path to outline.</param>
     /// <param name="width">The outline width.</param>
     /// <param name="strokeOptions">The stroke geometry options.</param>
     /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
@@ -42,7 +42,7 @@ public static class OutlinePathExtensions
     /// <summary>
     /// Generates an outline of the path with alternating on and off segments based on the pattern.
     /// </summary>
-    /// <param name="path">The path to outline</param>
+    /// <param name="path">The path to outline.</param>
     /// <param name="width">The outline width.</param>
     /// <param name="pattern">The pattern made of multiples of the width.</param>
     /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
@@ -52,7 +52,18 @@ public static class OutlinePathExtensions
     /// <summary>
     /// Generates an outline of the path with alternating on and off segments based on the pattern.
     /// </summary>
-    /// <param name="path">The path to outline</param>
+    /// <param name="path">The path to outline.</param>
+    /// <param name="width">The outline width.</param>
+    /// <param name="pattern">The pattern made of multiples of the width.</param>
+    /// <param name="offset">The distance into the dash pattern, expressed as a multiple of <paramref name="width"/>.</param>
+    /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
+    public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, float offset)
+        => path.GenerateOutline(width, pattern, false, offset);
+
+    /// <summary>
+    /// Generates an outline of the path with alternating on and off segments based on the pattern.
+    /// </summary>
+    /// <param name="path">The path to outline.</param>
     /// <param name="width">The outline width.</param>
     /// <param name="pattern">The pattern made of multiples of the width.</param>
     /// <param name="strokeOptions">The stroke geometry options.</param>
@@ -63,7 +74,24 @@ public static class OutlinePathExtensions
     /// <summary>
     /// Generates an outline of the path with alternating on and off segments based on the pattern.
     /// </summary>
-    /// <param name="path">The path to outline</param>
+    /// <param name="path">The path to outline.</param>
+    /// <param name="width">The outline width.</param>
+    /// <param name="pattern">The pattern made of multiples of the width.</param>
+    /// <param name="offset">The distance into the dash pattern, expressed as a multiple of <paramref name="width"/>.</param>
+    /// <param name="strokeOptions">The stroke geometry options.</param>
+    /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
+    public static IPath GenerateOutline(
+        this IPath path,
+        float width,
+        ReadOnlySpan<float> pattern,
+        float offset,
+        StrokeOptions strokeOptions)
+        => GenerateOutline(path, width, pattern, false, offset, strokeOptions);
+
+    /// <summary>
+    /// Generates an outline of the path with alternating on and off segments based on the pattern.
+    /// </summary>
+    /// <param name="path">The path to outline.</param>
     /// <param name="width">The outline width.</param>
     /// <param name="pattern">The pattern made of multiples of the width.</param>
     /// <param name="startOff">Whether the first item in the pattern is on or off.</param>
@@ -74,7 +102,19 @@ public static class OutlinePathExtensions
     /// <summary>
     /// Generates an outline of the path with alternating on and off segments based on the pattern.
     /// </summary>
-    /// <param name="path">The path to outline</param>
+    /// <param name="path">The path to outline.</param>
+    /// <param name="width">The outline width.</param>
+    /// <param name="pattern">The pattern made of multiples of the width.</param>
+    /// <param name="startOff">Whether the first item in the pattern is on or off.</param>
+    /// <param name="offset">The distance into the dash pattern, expressed as a multiple of <paramref name="width"/>.</param>
+    /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
+    public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff, float offset)
+        => GenerateOutline(path, width, pattern, startOff, offset, DefaultOptions);
+
+    /// <summary>
+    /// Generates an outline of the path with alternating on and off segments based on the pattern.
+    /// </summary>
+    /// <param name="path">The path to outline.</param>
     /// <param name="width">The outline width.</param>
     /// <param name="pattern">The pattern made of multiples of the width.</param>
     /// <param name="startOff">Whether the first item in the pattern is on or off.</param>
@@ -85,6 +125,25 @@ public static class OutlinePathExtensions
         float width,
         ReadOnlySpan<float> pattern,
         bool startOff,
+        StrokeOptions strokeOptions)
+        => GenerateOutline(path, width, pattern, startOff, 0, strokeOptions);
+
+    /// <summary>
+    /// Generates an outline of the path with alternating on and off segments based on the pattern.
+    /// </summary>
+    /// <param name="path">The path to outline.</param>
+    /// <param name="width">The outline width.</param>
+    /// <param name="pattern">The pattern made of multiples of the width.</param>
+    /// <param name="startOff">Whether the first item in the pattern is on or off.</param>
+    /// <param name="offset">The distance into the dash pattern, expressed as a multiple of <paramref name="width"/>.</param>
+    /// <param name="strokeOptions">The stroke geometry options.</param>
+    /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
+    public static IPath GenerateOutline(
+        this IPath path,
+        float width,
+        ReadOnlySpan<float> pattern,
+        bool startOff,
+        float offset,
         StrokeOptions strokeOptions)
     {
         if (width <= 0)
@@ -97,7 +156,7 @@ public static class OutlinePathExtensions
             return path.GenerateOutline(width, strokeOptions);
         }
 
-        IPath dashed = path.GenerateDashes(width, pattern, startOff);
+        IPath dashed = path.GenerateDashes(width, pattern, startOff, offset);
 
         // GenerateDashes returns the original path when the pattern is degenerate
         // or when segmentation would exceed safety limits; stroke it as solid.

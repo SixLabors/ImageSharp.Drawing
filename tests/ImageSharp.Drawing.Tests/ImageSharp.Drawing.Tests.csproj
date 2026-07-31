@@ -28,11 +28,6 @@
     <PackageReference Include="Microsoft.DotNet.XUnitExtensions" />
     <PackageReference Include="Moq" />
     <PackageReference Include="GeoJSON.Net"/>
-    <PackageReference Include="Silk.NET.WebGPU" Version="2.23.0" />
-    <PackageReference Include="Silk.NET.WebGPU.Extensions.WGPU" Version="2.23.0" />
-    <PackageReference Include="Silk.NET.WebGPU.Native.WGPU" Version="2.23.0" />
-
-
     <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Condition="'$(IsLinux)'=='true'" />
@@ -58,13 +53,4 @@
     <ProjectReference Include="..\..\src\ImageSharp.Drawing\ImageSharp.Drawing.csproj" />
   </ItemGroup>
 
-  <!--Get the tests to run in CI.-->
-  <!--https://github.com/dotnet/Silk.NET/issues/2465-->
-  <Target Name="CopyNativeLibraries" AfterTargets="Build">
-    <ItemGroup>
-      <NativeLibs Include="@(RuntimeTargetsCopyLocalItems)" Condition="'%(RuntimeTargetsCopyLocalItems.AssetType)' == 'native'" />
-    </ItemGroup>
-    <Copy SourceFiles="@(NativeLibs)" DestinationFolder="$(OutputPath)" />
-  </Target>
-  
 </Project>

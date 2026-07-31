@@ -7,11 +7,18 @@ using System.Runtime.CompilerServices;
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
-/// Represents a line segment that contains radii and angles that will be rendered as a elliptical arc.
+/// Represents a line segment that contains radii and angles that will be rendered as an elliptical arc.
 /// </summary>
 public class ArcLineSegment : ILineSegment
 {
+    /// <summary>
+    /// The tolerance below which radii and squared distances are treated as zero.
+    /// </summary>
     private const float ZeroTolerance = 1e-05F;
+
+    /// <summary>
+    /// The retained linearized arc points, baked in local space at construction.
+    /// </summary>
     private readonly PointF[] linePoints;
 
     /// <summary>
@@ -84,6 +91,11 @@ public class ArcLineSegment : ILineSegment
         this.Bounds = CalculateBounds(this.linePoints);
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ArcLineSegment"/> class.
+    /// Used to wrap pre-linearized points produced by <see cref="Transform(Matrix4x4)"/>.
+    /// </summary>
+    /// <param name="linePoints">The retained linearized arc points.</param>
     private ArcLineSegment(PointF[] linePoints)
     {
         this.linePoints = linePoints;
@@ -147,6 +159,8 @@ public class ArcLineSegment : ILineSegment
     /// <summary>
     /// Computes the bounds for the retained linearized arc points.
     /// </summary>
+    /// <param name="points">The linearized arc points.</param>
+    /// <returns>The axis-aligned bounds enclosing the points.</returns>
     private static RectangleF CalculateBounds(ReadOnlySpan<PointF> points)
     {
         float minX = float.MaxValue;
@@ -166,6 +180,17 @@ public class ArcLineSegment : ILineSegment
         return RectangleF.FromLTRB(minX, minY, maxX, maxY);
     }
 
+    /// <summary>
+    /// Linearizes an elliptical arc described in SVG endpoint parameterization. Degenerate arcs
+    /// (coincident endpoints or zero radii) collapse to a straight line between the endpoints.
+    /// </summary>
+    /// <param name="from">The arc start point.</param>
+    /// <param name="to">The arc end point.</param>
+    /// <param name="radius">The ellipse radii.</param>
+    /// <param name="rotation">The ellipse x-axis rotation, in radians.</param>
+    /// <param name="largeArc">Whether the arc spans more than 180 degrees.</param>
+    /// <param name="sweep">Whether the arc sweeps through increasing angles.</param>
+    /// <returns>The linearized arc points.</returns>
     private static PointF[] EllipticArcFromEndParams(
         PointF from,
         PointF to,
@@ -185,6 +210,14 @@ public class ArcLineSegment : ILineSegment
         return EllipticArcToBezierCurve(from, center, absRadius, rotation, angles.X, angles.Y);
     }
 
+    /// <summary>
+    /// Detects the SVG F.6.2 out-of-range cases where the endpoint arc parameters cannot
+    /// describe an arc and the segment degenerates to a straight line.
+    /// </summary>
+    /// <param name="from">The arc start point.</param>
+    /// <param name="to">The arc end point.</param>
+    /// <param name="radius">The ellipse radii.</param>
+    /// <returns><see langword="true"/> when the parameters are out of range; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool EllipticArcOutOfRange(Vector2 from, Vector2 to, Vector2 radius)
     {
@@ -204,18 +237,44 @@ public class ArcLineSegment : ILineSegment
         return false;
     }
 
+    /// <summary>
+    /// Computes the derivative of the rotated ellipse parameterization at angle <paramref name="t"/>.
+    /// </summary>
+    /// <param name="r">The ellipse radii.</param>
+    /// <param name="xAngle">The ellipse x-axis rotation, in radians.</param>
+    /// <param name="t">The parametric angle, in radians.</param>
+    /// <returns>The tangent vector at the given angle.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector2 EllipticArcDerivative(Vector2 r, float xAngle, float t)
         => new(
             (-r.X * MathF.Cos(xAngle) * MathF.Sin(t)) - (r.Y * MathF.Sin(xAngle) * MathF.Cos(t)),
             (-r.X * MathF.Sin(xAngle) * MathF.Sin(t)) + (r.Y * MathF.Cos(xAngle) * MathF.Cos(t)));
 
+    /// <summary>
+    /// Evaluates the rotated ellipse parameterization at angle <paramref name="t"/>.
+    /// </summary>
+    /// <param name="c">The ellipse center.</param>
+    /// <param name="r">The ellipse radii.</param>
+    /// <param name="xAngle">The ellipse x-axis rotation, in radians.</param>
+    /// <param name="t">The parametric angle, in radians.</param>
+    /// <returns>The point on the ellipse at the given angle.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector2 EllipticArcPoint(Vector2 c, Vector2 r, float xAngle, float t)
         => new(
             c.X + (r.X * MathF.Cos(xAngle) * MathF.Cos(t)) - (r.Y * MathF.Sin(xAngle) * MathF.Sin(t)),
             c.Y + (r.X * MathF.Sin(xAngle) * MathF.Cos(t)) + (r.Y * MathF.Cos(xAngle) * MathF.Sin(t)));
 
+    /// <summary>
+    /// Approximates the elliptical arc with cubic bezier spans of at most 45 degrees each and
+    /// flattens those spans into a single contiguous point run.
+    /// </summary>
+    /// <param name="from">The arc start point.</param>
+    /// <param name="center">The ellipse center.</param>
+    /// <param name="radius">The ellipse radii.</param>
+    /// <param name="xAngle">The ellipse x-axis rotation, in radians.</param>
+    /// <param name="startAngle">The arc start angle, in radians.</param>
+    /// <param name="sweepAngle">The signed arc sweep, in radians.</param>
+    /// <returns>The linearized arc points.</returns>
     private static PointF[] EllipticArcToBezierCurve(Vector2 from, Vector2 center, Vector2 radius, float xAngle, float startAngle, float sweepAngle)
     {
         float s = startAngle;
@@ -260,6 +319,18 @@ public class ArcLineSegment : ILineSegment
         return points.Detach();
     }
 
+    /// <summary>
+    /// Converts SVG endpoint arc parameterization to center parameterization following
+    /// SVG spec section F.6.5, scaling up too-small radii as required by F.6.6.
+    /// </summary>
+    /// <param name="p1">The arc start point.</param>
+    /// <param name="p2">The arc end point.</param>
+    /// <param name="r">The ellipse radii; scaled up on return when too small to span both endpoints.</param>
+    /// <param name="xRotation">The ellipse x-axis rotation, in radians.</param>
+    /// <param name="flagA">The large arc flag.</param>
+    /// <param name="flagS">The sweep flag.</param>
+    /// <param name="center">When this method returns, contains the ellipse center.</param>
+    /// <param name="angles">When this method returns, contains the start angle (X) and sweep delta (Y), in radians.</param>
     private static void EndpointToCenterArcParams(
         Vector2 p1,
         Vector2 p2,
@@ -335,6 +406,13 @@ public class ArcLineSegment : ILineSegment
         angles = new Vector2((float)theta, (float)delta);
     }
 
+    /// <summary>
+    /// Clamps <paramref name="val"/> to the inclusive range [<paramref name="min"/>, <paramref name="max"/>].
+    /// </summary>
+    /// <param name="val">The value to clamp.</param>
+    /// <param name="min">The minimum allowed value.</param>
+    /// <param name="max">The maximum allowed value.</param>
+    /// <returns>The clamped value.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static float Clamp(float val, float min, float max)
     {
@@ -352,6 +430,14 @@ public class ArcLineSegment : ILineSegment
         }
     }
 
+    /// <summary>
+    /// Computes the signed angle between two vectors as defined by SVG spec equation F.6.5.4.
+    /// </summary>
+    /// <param name="ux">The x-component of the first vector.</param>
+    /// <param name="uy">The y-component of the first vector.</param>
+    /// <param name="vx">The x-component of the second vector.</param>
+    /// <param name="vy">The y-component of the second vector.</param>
+    /// <returns>The signed angle, in radians.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static float SvgAngle(double ux, double uy, double vx, double vy)
     {

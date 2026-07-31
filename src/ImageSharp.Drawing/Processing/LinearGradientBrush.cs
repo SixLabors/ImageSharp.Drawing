@@ -65,7 +65,7 @@ public sealed class LinearGradientBrush : GradientBrush
     public PointF EndPoint { get; }
 
     /// <inheritdoc/>
-    public override Brush Transform(Matrix4x4 matrix)
+    public override Brush Transform(Matrix4x4 matrix, Rectangle sourceInterest, Rectangle preparedInterest)
         => new LinearGradientBrush(
             PointF.Transform(this.StartPoint, matrix),
             PointF.Transform(this.EndPoint, matrix),
@@ -136,20 +136,35 @@ public sealed class LinearGradientBrush : GradientBrush
         GraphicsOptions options,
         int canvasWidth,
         RectangleF region)
-        => new LinearGradientBrushRenderer<TPixel>(
+    {
+        if (TPixel.GetPixelTypeInfo().AlphaRepresentation == PixelAlphaRepresentation.Associated)
+        {
+            return new LinearGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(
+                configuration,
+                options,
+                canvasWidth,
+                this,
+                this.ColorStopsArray,
+                this.RepetitionMode);
+        }
+
+        return new LinearGradientBrushRenderer<TPixel, UnassociatedGradientPixelEncoder<TPixel>>(
             configuration,
             options,
             canvasWidth,
             this,
             this.ColorStopsArray,
             this.RepetitionMode);
+    }
 
     /// <summary>
     /// Implements the gradient application logic for <see cref="LinearGradientBrush"/>.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private sealed class LinearGradientBrushRenderer<TPixel> : GradientBrushRenderer<TPixel>
+    /// <typeparam name="TEncoder">The destination representation encoder.</typeparam>
+    private sealed class LinearGradientBrushRenderer<TPixel, TEncoder> : GradientBrushRenderer<TPixel, TEncoder>
         where TPixel : unmanaged, IPixel<TPixel>
+        where TEncoder : struct, IGradientPixelEncoder<TPixel>
     {
         private readonly PointF start;
         private readonly float alongX;
@@ -157,7 +172,7 @@ public sealed class LinearGradientBrush : GradientBrush
         private readonly float alongsSquared;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="LinearGradientBrushRenderer{TPixel}"/> class.
+        /// Initializes a new instance of the <see cref="LinearGradientBrushRenderer{TPixel, TEncoder}"/> class.
         /// </summary>
         /// <param name="configuration">The ImageSharp configuration.</param>
         /// <param name="options">The graphics options.</param>
@@ -186,9 +201,13 @@ public sealed class LinearGradientBrush : GradientBrush
         {
             if (this.alongsSquared == 0f)
             {
+                // Degenerate zero-length axis: treat every point as sitting at the gradient end.
                 return 1f;
             }
 
+            // Scalar projection onto the gradient axis:
+            // t = dot(p - start, axis) / |axis|^2, giving 0 at the start point and 1 at the
+            // end point. Values outside [0..1] are handled by the repetition mode.
             float deltaX = x - this.start.X;
             float deltaY = y - this.start.Y;
             return ((deltaX * this.alongX) + (deltaY * this.alongY)) / this.alongsSquared;

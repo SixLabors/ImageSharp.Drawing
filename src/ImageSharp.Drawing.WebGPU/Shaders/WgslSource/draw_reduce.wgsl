@@ -1,6 +1,18 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+// Draw-tag reduction stage. First pass of the two-pass prefix sum over the
+// scene's draw-tag stream: each workgroup maps its assigned draw tags to
+// DrawMonoid values and reduces them to a single aggregate. draw_leaf later
+// combines these per-workgroup aggregates into a full exclusive prefix sum.
+//
+// Inputs: config uniform; scene stream (draw tags read at
+// config.drawtag_base via read_draw_tag_from_scene).
+// Outputs: reduced[wg] holds the combined DrawMonoid of workgroup wg's blocks.
+//
+// Ported from Vello's draw_reduce.wgsl (linebender/vello,
+// vello_shaders/shader).
+
 #import config
 #import drawtag
 
@@ -19,6 +31,11 @@ var<workgroup> sh_scratch: array<DrawMonoid, WG_SIZE>;
 
 #import util
 
+// Reduces this workgroup's blocks of draw tags to a single DrawMonoid.
+// Each thread serially accumulates one lane across its strided block reads,
+// then a workgroup tree reduction folds the lane values together; thread 0
+// writes the workgroup aggregate to reduced[wg_id.x]. Out-of-range reads
+// yield DRAWTAG_NOP, which maps to the monoid identity.
 @compute @workgroup_size(256)
 fn main(
     @builtin(local_invocation_id) local_id: vec3<u32>,

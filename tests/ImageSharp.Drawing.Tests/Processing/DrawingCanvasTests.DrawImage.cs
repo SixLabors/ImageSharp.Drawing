@@ -87,7 +87,9 @@ public partial class DrawingCanvasTests
             canvas.Clear(Brushes.Solid(Color.White));
             canvas.Fill(Brushes.Solid(Color.LightGray.WithAlpha(0.45F)), new Rectangle(18, 16, 324, 208));
 
-            _ = canvas.Save(transformedOptions, clipPath);
+            _ = canvas.Save(transformedOptions);
+            canvas.Clip(ClipOperation.Difference, clipPath);
+
             canvas.DrawImage(
                 foreground,
                 new Rectangle(10, 8, 234, 180),
@@ -105,6 +107,7 @@ public partial class DrawingCanvasTests
         }
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
+
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
     }
 

@@ -20,22 +20,6 @@ public enum RasterizationMode
 }
 
 /// <summary>
-/// Describes where sample coverage is aligned relative to destination pixels.
-/// </summary>
-public enum RasterizerSamplingOrigin
-{
-    /// <summary>
-    /// Samples are aligned to pixel boundaries.
-    /// </summary>
-    PixelBoundary = 0,
-
-    /// <summary>
-    /// Samples are aligned to pixel centers.
-    /// </summary>
-    PixelCenter = 1
-}
-
-/// <summary>
 /// Immutable options used by rasterizers when scan-converting vector geometry.
 /// </summary>
 public readonly struct RasterizerOptions
@@ -46,20 +30,20 @@ public readonly struct RasterizerOptions
     /// <param name="interest">Destination bounds to rasterize into.</param>
     /// <param name="intersectionRule">Polygon intersection rule.</param>
     /// <param name="rasterizationMode">Rasterization coverage mode.</param>
-    /// <param name="samplingOrigin">Sampling origin alignment.</param>
     /// <param name="antialiasThreshold">Coverage threshold for aliased mode (0 to 1).</param>
+    /// <param name="coverageBoost">Perceptual coverage boost for antialiased mode (0 disables).</param>
     public RasterizerOptions(
         Rectangle interest,
         IntersectionRule intersectionRule,
         RasterizationMode rasterizationMode,
-        RasterizerSamplingOrigin samplingOrigin,
-        float antialiasThreshold)
+        float antialiasThreshold,
+        float coverageBoost = 0F)
     {
         this.Interest = interest;
         this.IntersectionRule = intersectionRule;
         this.RasterizationMode = rasterizationMode;
-        this.SamplingOrigin = samplingOrigin;
         this.AntialiasThreshold = antialiasThreshold;
+        this.CoverageBoost = coverageBoost;
     }
 
     /// <summary>
@@ -78,15 +62,20 @@ public readonly struct RasterizerOptions
     public RasterizationMode RasterizationMode { get; }
 
     /// <summary>
-    /// Gets the sampling origin alignment.
-    /// </summary>
-    public RasterizerSamplingOrigin SamplingOrigin { get; }
-
-    /// <summary>
     /// Gets the coverage threshold used when <see cref="RasterizationMode"/> is <see cref="RasterizationMode.Aliased"/>.
-    /// Pixels with coverage above this value are rendered as fully opaque; pixels below are discarded.
+    /// Pixels whose coverage is greater than or equal to this value are rendered as fully opaque; pixels below it are discarded.
     /// </summary>
     public float AntialiasThreshold { get; }
+
+    /// <summary>
+    /// Gets the perceptual coverage boost used when <see cref="RasterizationMode"/> is
+    /// <see cref="RasterizationMode.Antialiased"/>. Partial coverage values are remapped by
+    /// the S-curve <c>a + boost * a * (1 - a) * (2a - 1)</c>, darkening mostly covered pixels
+    /// and lightening mostly empty ones while 0, 0.5, and 1 stay fixed; at <c>1</c> the remap
+    /// is exactly smoothstep. <c>0</c> disables the boost. Text rendering uses this to counter
+    /// the soft, washed-out appearance of small blended glyphs.
+    /// </summary>
+    public float CoverageBoost { get; }
 
     /// <summary>
     /// Creates a copy of the current options with a different interest rectangle.
@@ -94,5 +83,5 @@ public readonly struct RasterizerOptions
     /// <param name="interest">The replacement interest rectangle.</param>
     /// <returns>A new <see cref="RasterizerOptions"/> value.</returns>
     public RasterizerOptions WithInterest(Rectangle interest)
-        => new(interest, this.IntersectionRule, this.RasterizationMode, this.SamplingOrigin, this.AntialiasThreshold);
+        => new(interest, this.IntersectionRule, this.RasterizationMode, this.AntialiasThreshold, this.CoverageBoost);
 }

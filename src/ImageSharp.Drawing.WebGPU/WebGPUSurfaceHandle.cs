@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Silk.NET.WebGPU;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -15,19 +15,6 @@ internal sealed unsafe class WebGPUSurfaceHandle : WebGPUHandle
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUSurfaceHandle"/> class.
     /// </summary>
-    /// <param name="surfaceHandle">The WebGPU surface handle value.</param>
-    /// <param name="ownsHandle">
-    /// <see langword="true"/> when this wrapper owns the surface and must release it;
-    /// <see langword="false"/> when the caller retains ownership.
-    /// </param>
-    internal WebGPUSurfaceHandle(nint surfaceHandle, bool ownsHandle)
-        : this(ownsHandle ? WebGPURuntime.GetApi() : null, surfaceHandle, ownsHandle)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="WebGPUSurfaceHandle"/> class.
-    /// </summary>
     /// <param name="api">
     /// The WebGPU API facade used to release the handle when this wrapper owns it,
     /// or <see langword="null"/> when the wrapper is non-owning.
@@ -37,7 +24,7 @@ internal sealed unsafe class WebGPUSurfaceHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the surface and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUSurfaceHandle(WebGPU? api, nint surfaceHandle, bool ownsHandle)
+    public WebGPUSurfaceHandle(WebGPU? api, nint surfaceHandle, bool ownsHandle)
         : base(surfaceHandle, ownsHandle)
         => this.api = api;
 
@@ -46,7 +33,7 @@ internal sealed unsafe class WebGPUSurfaceHandle : WebGPUHandle
     {
         try
         {
-            this.api?.SurfaceRelease((Surface*)this.handle);
+            this.api?.SurfaceRelease((WGPUSurfaceImpl*)this.handle);
             return true;
         }
         catch

@@ -103,6 +103,7 @@ internal static partial class DefaultRasterizer
         /// <param name="intersectionRule">The fill rule used when resolving accumulated winding.</param>
         /// <param name="rasterizationMode">The rasterization mode used by the band.</param>
         /// <param name="antialiasThreshold">The aliased threshold used when the band runs in aliased mode.</param>
+        /// <param name="coverageBoost">The perceptual coverage boost used when the band runs in antialiased mode.</param>
         /// <param name="hasStartCovers">Indicates whether the band has non-zero start-cover seeds.</param>
         public RasterizableBandInfo(
             int lineCount,
@@ -115,6 +116,7 @@ internal static partial class DefaultRasterizer
             IntersectionRule intersectionRule,
             RasterizationMode rasterizationMode,
             float antialiasThreshold,
+            float coverageBoost,
             bool hasStartCovers)
         {
             this.LineCount = lineCount;
@@ -127,6 +129,7 @@ internal static partial class DefaultRasterizer
             this.IntersectionRule = intersectionRule;
             this.RasterizationMode = rasterizationMode;
             this.AntialiasThreshold = antialiasThreshold;
+            this.CoverageBoost = coverageBoost;
             this.HasStartCovers = hasStartCovers;
         }
 
@@ -171,7 +174,7 @@ internal static partial class DefaultRasterizer
         public IntersectionRule IntersectionRule { get; }
 
         /// <summary>
-        /// Gets the coverage mode used by the band.
+        /// Gets the rasterization mode used by the band.
         /// </summary>
         public RasterizationMode RasterizationMode { get; }
 
@@ -179,6 +182,13 @@ internal static partial class DefaultRasterizer
         /// Gets the aliased threshold used when the band runs in aliased mode.
         /// </summary>
         public float AntialiasThreshold { get; }
+
+        /// <summary>
+        /// Gets the perceptual coverage boost used when the band runs in antialiased mode.
+        /// Partial coverage is remapped by the S-curve <c>a + boost * a * (1 - a) * (2a - 1)</c>;
+        /// zero disables it.
+        /// </summary>
+        public float CoverageBoost { get; }
 
         /// <summary>
         /// Gets a value indicating whether the band has non-zero start-cover seeds.
@@ -197,6 +207,9 @@ internal static partial class DefaultRasterizer
     internal sealed class LineArrayX32Y16
     {
         private LineArrayX32Y16Block? current;
+
+        // Starting at full capacity forces the first AppendLine to allocate the front block,
+        // so empty rows never pay for a block allocation.
         private int count = LineArrayX32Y16Block.LineCount;
 
         /// <summary>
@@ -220,6 +233,7 @@ internal static partial class DefaultRasterizer
         /// <param name="y1">The ending Y coordinate in 24.8 fixed-point.</param>
         public void AppendLine(int x0, int y0, int x1, int y1)
         {
+            // Horizontal segments never change scanline winding, so they carry no raster payload.
             if (y0 == y1)
             {
                 return;
@@ -338,17 +352,17 @@ internal static partial class DefaultRasterizer
         private struct PackedLineX32Y16
         {
             /// <summary>
-            /// Gets or sets the packed Y endpoints.
+            /// The packed signed 16-bit Y endpoints.
             /// </summary>
             public int PackedY0Y1;
 
             /// <summary>
-            /// Gets or sets the starting X coordinate.
+            /// The starting X coordinate in 24.8 fixed-point.
             /// </summary>
             public int X0;
 
             /// <summary>
-            /// Gets or sets the ending X coordinate.
+            /// The ending X coordinate in 24.8 fixed-point.
             /// </summary>
             public int X1;
         }
@@ -369,6 +383,9 @@ internal static partial class DefaultRasterizer
     internal sealed class LineArrayX16Y16
     {
         private LineArrayX16Y16Block? current;
+
+        // Starting at full capacity forces the first AppendLine to allocate the front block,
+        // so empty rows never pay for a block allocation.
         private int count = LineArrayX16Y16Block.LineCount;
 
         /// <summary>
@@ -392,6 +409,7 @@ internal static partial class DefaultRasterizer
         /// <param name="y1">The ending Y coordinate in 24.8 fixed-point.</param>
         public void AppendLine(int x0, int y0, int x1, int y1)
         {
+            // Horizontal segments never change scanline winding, so they carry no raster payload.
             if (y0 == y1)
             {
                 return;
@@ -513,12 +531,12 @@ internal static partial class DefaultRasterizer
         private struct PackedLineX16Y16
         {
             /// <summary>
-            /// Gets or sets the packed Y endpoints.
+            /// The packed signed 16-bit Y endpoints.
             /// </summary>
             public int PackedY0Y1;
 
             /// <summary>
-            /// Gets or sets the packed X endpoints.
+            /// The packed signed 16-bit X endpoints.
             /// </summary>
             public int PackedX0X1;
         }

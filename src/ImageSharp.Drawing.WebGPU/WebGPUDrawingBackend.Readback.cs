@@ -4,19 +4,22 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Silk.NET.WebGPU;
-using Silk.NET.WebGPU.Extensions.WGPU;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
-using WgpuBuffer = Silk.NET.WebGPU.Buffer;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <content>
-/// GPU readback helpers.
+/// GPU readback helpers. Readback is strictly typed to the surface format by design: the
+/// requested pixel type must match the target's native texture format exactly, otherwise the
+/// operation throws. Callers that need a different pixel layout must read the native format
+/// and convert on the CPU.
 /// </content>
 public sealed unsafe partial class WebGPUDrawingBackend
 {
+    // Upper bound on the blocking wait for the buffer map-async callback. Prevents a lost or
+    // never-dispatched callback (for example after device loss) from hanging the caller forever.
     private const int ReadbackCallbackTimeoutMilliseconds = 5000;
 
     /// <inheritdoc />
@@ -32,6 +35,11 @@ public sealed unsafe partial class WebGPUDrawingBackend
         Guard.NotNull(target, nameof(target));
         Guard.NotNull(destination.Buffer, nameof(destination));
 
+        // CPU reads observe content as final, so every deferred overflow readback must be
+        // resolved first: an overflowed offscreen flush is corrected by its parked re-render
+        // before the copy below is recorded, and queue ordering makes the copy see the fix.
+        this.HarvestPendingSchedulingStatuses(scene: null, drainAll: true);
+
         // Readback is only available for native WebGPU targets with valid interop handles.
         if (!target.TryGetNativeSurface(out NativeSurface? nativeSurface) || nativeSurface is not WebGPUNativeSurface nativeTarget)
         {
@@ -43,20 +51,22 @@ public sealed unsafe partial class WebGPUDrawingBackend
             throw new NotSupportedException("The target does not expose valid WebGPU device, queue, and texture handles for readback.");
         }
 
-        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormat expectedFormat, out FeatureName requiredFeature))
+        if (!TryGetCompositeTargetDescriptor<TPixel>(out WebGPUTargetDescriptor expectedTargetDescriptor, out WGPUFeatureName requiredFeature))
         {
             throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' cannot be read back from a WebGPU target.");
         }
 
-        if (nativeTarget.TargetFormat != expectedFormat)
+        // Strict-format contract: no pixel conversion is performed on this path. The requested
+        // pixel type must be the surface's own native format.
+        if (nativeTarget.TargetDescriptor != expectedTargetDescriptor)
         {
-            throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' does not match WebGPU target format '{nativeTarget.TargetFormat}'.");
+            throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' does not match the WebGPU target descriptor.");
         }
 
         // Convert canvas-local source coordinates to absolute native-surface coordinates.
         Rectangle absoluteSource = new(
-            target.Bounds.X + sourceRectangle.X,
-            target.Bounds.Y + sourceRectangle.Y,
+            target.Bounds.X + nativeTarget.TextureCoordinateOffset.X + sourceRectangle.X,
+            target.Bounds.Y + nativeTarget.TextureCoordinateOffset.Y + sourceRectangle.Y,
             sourceRectangle.Width,
             sourceRectangle.Height);
 
@@ -69,21 +79,22 @@ public sealed unsafe partial class WebGPUDrawingBackend
         }
 
         WebGPU api = WebGPURuntime.GetApi();
-        Wgpu wgpuExtension = WebGPURuntime.GetWgpuExtension();
         using WebGPUHandle.HandleReference deviceReference = nativeTarget.DeviceHandle.AcquireReference();
         using WebGPUHandle.HandleReference queueReference = nativeTarget.QueueHandle.AcquireReference();
         using WebGPUHandle.HandleReference textureReference = nativeTarget.TargetTextureHandle.AcquireReference();
 
-        Device* device = (Device*)deviceReference.Handle;
+        WGPUDeviceImpl* device = (WGPUDeviceImpl*)deviceReference.Handle;
 
-        if (requiredFeature != FeatureName.Undefined
+        // Feature gate: some formats (for example Bgra8Unorm) require an optional device
+        // feature before they can participate in composite I/O.
+        if (requiredFeature != default
             && !WebGPURuntime.GetOrCreateDeviceState(api, nativeTarget.DeviceHandle).HasFeature(requiredFeature))
         {
             throw new NotSupportedException($"The target device does not support WebGPU feature '{requiredFeature}' required to read back pixel type '{typeof(TPixel).Name}'.");
         }
 
-        Queue* queue = (Queue*)queueReference.Handle;
-        Texture* texture = (Texture*)textureReference.Handle;
+        WGPUQueueImpl* queue = (WGPUQueueImpl*)queueReference.Handle;
+        WGPUTextureImpl* texture = (WGPUTextureImpl*)textureReference.Handle;
 
         int pixelSizeInBytes = Unsafe.SizeOf<TPixel>();
         int packedRowBytes = checked(source.Width * pixelSizeInBytes);
@@ -92,20 +103,20 @@ public sealed unsafe partial class WebGPUDrawingBackend
         int readbackRowBytes = Align(packedRowBytes, 256);
         ulong readbackByteCount = checked((ulong)readbackRowBytes * (ulong)source.Height);
 
-        WgpuBuffer* readbackBuffer = null;
-        CommandEncoder* commandEncoder = null;
-        CommandBuffer* commandBuffer = null;
+        WGPUBufferImpl* readbackBuffer = null;
+        WGPUCommandEncoderImpl* commandEncoder = null;
+        WGPUCommandBufferImpl* commandBuffer = null;
         try
         {
-            BufferDescriptor bufferDescriptor = new()
+            WGPUBufferDescriptor bufferDescriptor = new()
             {
-                Usage = BufferUsage.CopyDst | BufferUsage.MapRead,
-                Size = readbackByteCount,
-                MappedAtCreation = false
+                usage = (ulong)(BufferUsage.CopyDst | BufferUsage.MapRead),
+                size = readbackByteCount,
+                mappedAtCreation = 0U,
             };
 
             readbackBuffer = api.DeviceCreateBuffer(device, in bufferDescriptor);
-            CommandEncoderDescriptor encoderDescriptor = default;
+            WGPUCommandEncoderDescriptor encoderDescriptor = default;
             commandEncoder = api.DeviceCreateCommandEncoder(device, in encoderDescriptor);
             if (commandEncoder is null)
             {
@@ -113,54 +124,55 @@ public sealed unsafe partial class WebGPUDrawingBackend
             }
 
             // Copy only the requested source rect from the target texture into the readback buffer.
-            ImageCopyTexture sourceCopy = new()
+            WGPUTexelCopyTextureInfo sourceCopy = new()
             {
-                Texture = texture,
-                MipLevel = 0,
-                Origin = new Origin3D((uint)source.X, (uint)source.Y, 0),
-                Aspect = TextureAspect.All
+                texture = texture,
+                mipLevel = 0,
+                origin = new WGPUOrigin3D((uint)source.X, (uint)source.Y, 0),
+                aspect = WGPUTextureAspect.All
             };
 
-            ImageCopyBuffer destinationCopy = new()
+            WGPUTexelCopyBufferInfo destinationCopy = new()
             {
-                Buffer = readbackBuffer,
-                Layout = new TextureDataLayout
+                buffer = readbackBuffer,
+                layout = new WGPUTexelCopyBufferLayout
                 {
-                    Offset = 0,
-                    BytesPerRow = (uint)readbackRowBytes,
-                    RowsPerImage = (uint)source.Height
+                    offset = 0,
+                    bytesPerRow = (uint)readbackRowBytes,
+                    rowsPerImage = (uint)source.Height
                 }
             };
 
-            Extent3D copySize = new((uint)source.Width, (uint)source.Height, 1);
+            WGPUExtent3D copySize = new((uint)source.Width, (uint)source.Height, 1);
             api.CommandEncoderCopyTextureToBuffer(commandEncoder, in sourceCopy, in destinationCopy, in copySize);
 
-            CommandBufferDescriptor commandBufferDescriptor = default;
+            WGPUCommandBufferDescriptor commandBufferDescriptor = default;
             commandBuffer = api.CommandEncoderFinish(commandEncoder, in commandBufferDescriptor);
             if (commandBuffer is null)
             {
                 throw new InvalidOperationException("The WebGPU device could not finalize the readback command buffer.");
             }
 
-            api.QueueSubmit(queue, 1, ref commandBuffer);
+            ulong readbackSubmissionIndex = api.QueueSubmitForIndex(queue, 1, ref commandBuffer);
+
             api.CommandBufferRelease(commandBuffer);
             commandBuffer = null;
             api.CommandEncoderRelease(commandEncoder);
             commandEncoder = null;
 
             // Map the GPU buffer and wait for completion before reading host-visible bytes.
-            BufferMapAsyncStatus mapStatus = BufferMapAsyncStatus.Unknown;
+            WGPUMapAsyncStatus mapStatus = default;
             using ManualResetEventSlim mapReady = new(false);
-            void Callback(BufferMapAsyncStatus status, void* userData)
+            void Callback(WGPUMapAsyncStatus status, void* userData)
             {
                 _ = userData;
                 mapStatus = status;
                 mapReady.Set();
             }
 
-            using PfnBufferMapCallback callback = PfnBufferMapCallback.From(Callback);
+            using WebGPUBufferMapCallback callback = WebGPUBufferMapCallback.From(Callback);
             api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, (nuint)readbackByteCount, callback, null);
-            if (!WaitForMapSignal(wgpuExtension, device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
+            if (!WaitForMapSignal(api, device, mapReady, readbackSubmissionIndex) || mapStatus != WGPUMapAsyncStatus.Success)
             {
                 throw new InvalidOperationException($"The WebGPU device could not map the readback buffer. Status: '{mapStatus}'.");
             }
@@ -223,24 +235,29 @@ public sealed unsafe partial class WebGPUDrawingBackend
         => ((value + alignment - 1) / alignment) * alignment;
 
     /// <summary>
-    /// Waits for the asynchronous readback map callback, pumping the native device when available.
+    /// Waits for the asynchronous readback map callback while pumping the native device.
     /// </summary>
-    /// <param name="extension">The optional native WGPU extension used for device polling.</param>
+    /// <param name="api">The WebGPU API used for device polling.</param>
     /// <param name="device">The device that owns the mapped buffer.</param>
     /// <param name="signal">The event signaled by the map callback.</param>
+    /// <param name="submissionIndex">The queue submission index for this map attempt.</param>
     /// <returns><see langword="true"/> when the callback completed before the timeout; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool WaitForMapSignal(Wgpu? extension, Device* device, ManualResetEventSlim signal)
+    private static bool WaitForMapSignal(WebGPU api, WGPUDeviceImpl* device, ManualResetEventSlim signal, ulong submissionIndex)
     {
-        if (extension is null)
-        {
-            return signal.Wait(ReadbackCallbackTimeoutMilliseconds);
-        }
-
+        // Poll the exact submission without allowing one native call to block past the managed
+        // timeout. Keeping the submission index is required when another thread can interleave a
+        // later submit; replacing it with a queue-wide poll would broaden this readback's target.
         Stopwatch stopwatch = Stopwatch.StartNew();
+
         while (!signal.IsSet && stopwatch.ElapsedMilliseconds < ReadbackCallbackTimeoutMilliseconds)
         {
-            _ = extension.DevicePoll(device, true, (WrappedSubmissionIndex*)null);
+            _ = api.DevicePoll(device, false, &submissionIndex);
+
+            if (!signal.IsSet)
+            {
+                Thread.Yield();
+            }
         }
 
         return signal.IsSet;

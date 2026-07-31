@@ -76,7 +76,7 @@ internal static class RemoteExecutor
     /// <summary>
     /// Gets a value indicating whether this remote executor is supported on the current platform.
     /// </summary>
-    internal static bool IsSupported { get; } =
+    public static bool IsSupported { get; } =
         !RuntimeInformation.IsOSPlatform(OSPlatform.Create("IOS")) &&
         !RuntimeInformation.IsOSPlatform(OSPlatform.Create("ANDROID")) &&
         !RuntimeInformation.IsOSPlatform(OSPlatform.Create("BROWSER")) &&
@@ -91,7 +91,7 @@ internal static class RemoteExecutor
     /// <param name="method">A static method returning <see cref="int"/> (the exit code).</param>
     /// <param name="timeoutMilliseconds">Maximum time to wait for the child process.</param>
     /// <returns>The exit code from the child process, or -1 on failure.</returns>
-    internal static int Invoke(Func<int> method, int timeoutMilliseconds = 30_000)
+    public static int Invoke(Func<int> method, int timeoutMilliseconds = 30_000)
     {
         if (!IsSupported || AssemblyPath is null || HostRunner is null)
         {

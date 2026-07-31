@@ -1,9 +1,13 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// This file defines utility functions that interact with host-shareable buffer objects. It should
-// be imported once following the resource binding declarations in the shader module that access
-// them.
+// Utility functions that interact with host-shareable buffer objects.
+//
+// Unlike the other shared modules, this one references bindings by name, so
+// it must be imported once, after the resource binding declarations, in the
+// shader module that accesses them. Imported by draw_leaf.wgsl and
+// draw_reduce.wgsl. Ported from Vello's shader/shared/util.wgsl
+// (linebender/vello).
 
 // Reads a draw tag from the scene buffer, defaulting to DRAWTAG_NOP if the given `ix` is beyond the
 // range of valid draw objects (e.g this can happen if `ix` is derived from an invocation ID in a

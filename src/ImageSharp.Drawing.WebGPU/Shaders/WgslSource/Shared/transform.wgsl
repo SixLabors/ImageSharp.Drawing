@@ -3,6 +3,11 @@
 
 // Helpers for working with projective 2D transforms.
 //
+// Imported by draw_leaf.wgsl, which reads transforms from the scene stream to
+// compute gradient and image inverse matrices. Replaces Vello's affine-only
+// shader/shared/transform.wgsl with a projective form so ImageSharp's
+// Matrix4x4-based transforms (including perspective) round-trip exactly.
+//
 // Each transform stores the 9 elements of a 3x3 projective matrix extracted
 // from a Matrix4x4 with z=0:
 //   X = x*M11 + y*M21 + M41
@@ -20,6 +25,7 @@ struct Transform {
 
 // Matches TransformUtilities.ProjectiveTransform2D from ImageSharp:
 // Vector4.Transform(new Vector4(x, y, 0, 1), matrix) then divide by W.
+// The divisor is clamped away from zero to avoid infinities at the horizon.
 fn transform_apply(transform: Transform, p: vec2<f32>) -> vec2<f32> {
     let x = fma(transform.matrx.x, p.x, fma(transform.matrx.z, p.y, transform.translate.x));
     let y = fma(transform.matrx.y, p.x, fma(transform.matrx.w, p.y, transform.translate.y));
@@ -27,6 +33,7 @@ fn transform_apply(transform: Transform, p: vec2<f32>) -> vec2<f32> {
     return vec2(x, y) / max(w, 0.0000001);
 }
 
+// The identity transform.
 fn transform_identity() -> Transform {
     return Transform(vec4(1.0, 0.0, 0.0, 1.0), vec2(0.0), vec3(0.0, 0.0, 1.0));
 }

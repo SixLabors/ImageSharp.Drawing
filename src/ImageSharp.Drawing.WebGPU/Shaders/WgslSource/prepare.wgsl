@@ -1,15 +1,21 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#import config
+// First stage of a scheduling run: clears every bump allocator counter and
+// the failure mask on the GPU so the pipeline starts from a clean slate
+// without a CPU buffer write.
+//
+// Inputs/outputs: bump (all counters and the failed mask zeroed).
+//
+// Local addition; no Vello shader of this name exists (Vello clears the
+// bump buffer with a recorded buffer clear instead).
+
 #import bump
 
 @group(0) @binding(0)
-var<storage, read_write> config: Config;
-
-@group(0) @binding(1)
 var<storage, read_write> bump: BumpAllocators;
 
+// Single-thread stage that zeroes all bump state.
 @compute @workgroup_size(1)
 fn main() {
     // Never cancel. Let all stages run so the bump allocators report the true

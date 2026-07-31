@@ -2,19 +2,33 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
 /// A closed rectangular path defined by four straight edges.
 /// </summary>
-public sealed class RectanglePolygon : IPath, ISimplePath, IPathInternals
+public sealed class RectanglePolygon : IPath, ISimplePath
 {
+    /// <summary>
+    /// The top-left corner of the rectangle.
+    /// </summary>
     private readonly Vector2 topLeft;
+
+    /// <summary>
+    /// The bottom-right corner of the rectangle.
+    /// </summary>
     private readonly Vector2 bottomRight;
+
+    /// <summary>
+    /// The four corner points in clockwise order starting at the top-left.
+    /// </summary>
     private readonly PointF[] points;
-    private readonly float halfLength;
-    private readonly float length;
+
+    /// <summary>
+    /// The per-scale cache of retained linear geometry.
+    /// </summary>
     private LinearGeometryCache geometryCache;
 
     /// <summary>
@@ -53,8 +67,6 @@ public sealed class RectanglePolygon : IPath, ISimplePath, IPathInternals
             new Vector2(this.topLeft.X, this.bottomRight.Y)
         ];
 
-        this.halfLength = this.Size.Width + this.Size.Height;
-        this.length = this.halfLength * 2;
         this.Bounds = new RectangleF(this.Location, this.Size);
     }
 
@@ -82,7 +94,7 @@ public sealed class RectanglePolygon : IPath, ISimplePath, IPathInternals
     }
 
     /// <summary>
-    /// Gets the location.
+    /// Gets the top-left location of the rectangle.
     /// </summary>
     public PointF Location { get; }
 
@@ -92,7 +104,7 @@ public sealed class RectanglePolygon : IPath, ISimplePath, IPathInternals
     public float Left => this.X;
 
     /// <summary>
-    /// Gets the x-coordinate.
+    /// Gets the x-coordinate of the top-left corner.
     /// </summary>
     public float X => this.topLeft.X;
 
@@ -107,7 +119,7 @@ public sealed class RectanglePolygon : IPath, ISimplePath, IPathInternals
     public float Top => this.Y;
 
     /// <summary>
-    /// Gets the y-coordinate.
+    /// Gets the y-coordinate of the top-left corner.
     /// </summary>
     public float Y => this.topLeft.Y;
 
@@ -152,6 +164,7 @@ public sealed class RectanglePolygon : IPath, ISimplePath, IPathInternals
     /// Converts a polygon to a rectangle polygon from its bounds.
     /// </summary>
     /// <param name="polygon">The polygon to convert.</param>
+    /// <returns>The rectangle polygon covering the source polygon's bounds.</returns>
     public static explicit operator RectanglePolygon(Polygon polygon)
         => new(polygon.Bounds.X, polygon.Bounds.Y, polygon.Bounds.Width, polygon.Bounds.Height);
 
@@ -163,53 +176,30 @@ public sealed class RectanglePolygon : IPath, ISimplePath, IPathInternals
             return this;
         }
 
-        // Rectangles may be rotated and skewed which means they will then need representing by a polygon
+        if (MatrixUtilities.PreservesAxisAlignedRectangles(matrix))
+        {
+            // Keep the rectangle type when possible so later clip/scissor code can still
+            // recognize the shape without flattening a generic polygon.
+            Vector2 topRight = new(this.bottomRight.X, this.topLeft.Y);
+            Vector2 bottomLeft = new(this.topLeft.X, this.bottomRight.Y);
+
+            // Transform all four corners rather than transforming location/size. Negative
+            // scales and axis swaps can invert edges, so the bounds must be recomputed.
+            Vector2 p0 = Vector2.Transform(this.topLeft, matrix);
+            Vector2 p1 = Vector2.Transform(topRight, matrix);
+            Vector2 p2 = Vector2.Transform(this.bottomRight, matrix);
+            Vector2 p3 = Vector2.Transform(bottomLeft, matrix);
+
+            float left = MathF.Min(MathF.Min(p0.X, p1.X), MathF.Min(p2.X, p3.X));
+            float top = MathF.Min(MathF.Min(p0.Y, p1.Y), MathF.Min(p2.Y, p3.Y));
+            float right = MathF.Max(MathF.Max(p0.X, p1.X), MathF.Max(p2.X, p3.X));
+            float bottom = MathF.Max(MathF.Max(p0.Y, p1.Y), MathF.Max(p2.Y, p3.Y));
+
+            return new RectanglePolygon(RectangleF.FromLTRB(left, top, right, bottom));
+        }
+
+        // Skewed or freely rotated rectangles need polygon geometry to preserve their edges.
         return new Polygon(new LinearLineSegment(this.points).Transform(matrix));
-    }
-
-    /// <inheritdoc />
-    SegmentInfo IPathInternals.PointAlongPath(float distance)
-    {
-        distance %= this.length;
-
-        if (distance < this.Width)
-        {
-            // we are on the top stretch
-            return new SegmentInfo
-            {
-                Point = new Vector2(this.Left + distance, this.Top),
-                Angle = MathF.PI
-            };
-        }
-
-        distance -= this.Width;
-        if (distance < this.Height)
-        {
-            // down on right
-            return new SegmentInfo
-            {
-                Point = new Vector2(this.Right, this.Top + distance),
-                Angle = -MathF.PI / 2
-            };
-        }
-
-        distance -= this.Height;
-        if (distance < this.Width)
-        {
-            // bottom right to left
-            return new SegmentInfo
-            {
-                Point = new Vector2(this.Right - distance, this.Bottom),
-                Angle = 0
-            };
-        }
-
-        distance -= this.Width;
-        return new SegmentInfo
-        {
-            Point = new Vector2(this.Left, this.Bottom - distance),
-            Angle = (float)(Math.PI / 2)
-        };
     }
 
     /// <inheritdoc/>
@@ -224,6 +214,39 @@ public sealed class RectanglePolygon : IPath, ISimplePath, IPathInternals
             ? hit
             : this.geometryCache.Store(scale, this.BuildLinearGeometry(scale));
 
+    /// <inheritdoc/>
+    public float ComputeLength(Vector2 scale)
+        => this.ToLinearGeometry(scale).ComputeLength();
+
+    /// <inheritdoc/>
+    public float ComputeArea(Vector2 scale)
+        => this.ToLinearGeometry(scale).ComputeArea();
+
+    /// <inheritdoc/>
+    public bool Contains(PointF point, IntersectionRule intersectionRule, Vector2 scale)
+    {
+        PointF scaledPoint = new(point.X * scale.X, point.Y * scale.Y);
+
+        return this.ToLinearGeometry(scale).Contains(scaledPoint, intersectionRule);
+    }
+
+    /// <inheritdoc />
+    public bool TryGetPathPointAtDistance(float distance, Vector2 scale, out PathPoint pathPoint)
+        => this.ToLinearGeometry(scale).TryGetPathPointAtDistance(distance, out pathPoint);
+
+    /// <inheritdoc />
+    public bool TryGetPathPointAtDistanceUnbounded(float distance, Vector2 scale, out PathPoint pathPoint)
+        => this.ToLinearGeometry(scale).TryGetPathPointAtDistanceUnbounded(distance, out pathPoint);
+
+    /// <inheritdoc/>
+    public bool TryGetSegment(float startDistance, float stopDistance, bool startOnBeginFigure, Vector2 scale, out IPath path)
+        => this.ToLinearGeometry(scale).TryGetSegment(startDistance, stopDistance, startOnBeginFigure, out path);
+
+    /// <summary>
+    /// Builds the retained four-point closed contour, scaling each corner by <paramref name="scale"/>.
+    /// </summary>
+    /// <param name="scale">The X/Y scale applied to the corner points.</param>
+    /// <returns>The retained linear geometry.</returns>
     private LinearGeometry BuildLinearGeometry(Vector2 scale)
     {
         PointF p0 = new(this.points[0].X * scale.X, this.points[0].Y * scale.Y);
@@ -237,37 +260,26 @@ public sealed class RectanglePolygon : IPath, ISimplePath, IPathInternals
         float minY = MathF.Min(MathF.Min(p0.Y, p1.Y), MathF.Min(p2.Y, p3.Y));
         float maxX = MathF.Max(MathF.Max(p0.X, p1.X), MathF.Max(p2.X, p3.X));
         float maxY = MathF.Max(MathF.Max(p0.Y, p1.Y), MathF.Max(p2.Y, p3.Y));
-
-        // Any rotation or shear in the transform can turn the axis-aligned edges into slanted ones,
-        // so count each edge individually rather than assuming the axis-aligned case.
-        int nonHorizontalSegmentCountPixelBoundary = 0;
-        int nonHorizontalSegmentCountPixelCenter = 0;
-        for (int i = 0; i < 4; i++)
-        {
-            PointF a = points[i];
-            PointF b = points[(i + 1) % 4];
-            if (MathF.Floor(a.Y) != MathF.Floor(b.Y))
-            {
-                nonHorizontalSegmentCountPixelBoundary++;
-            }
-
-            if (MathF.Floor(a.Y + 0.5F) != MathF.Floor(b.Y + 0.5F))
-            {
-                nonHorizontalSegmentCountPixelCenter++;
-            }
-        }
+        RectangleF bounds = RectangleF.FromLTRB(minX, minY, maxX, maxY);
 
         return new LinearGeometry(
             new LinearGeometryInfo
             {
-                Bounds = RectangleF.FromLTRB(minX, minY, maxX, maxY),
+                Bounds = bounds,
                 ContourCount = 1,
                 PointCount = 4,
-                SegmentCount = 4,
-                NonHorizontalSegmentCountPixelBoundary = nonHorizontalSegmentCountPixelBoundary,
-                NonHorizontalSegmentCountPixelCenter = nonHorizontalSegmentCountPixelCenter
+                SegmentCount = 4
             },
-            [new LinearContour { PointStart = 0, PointCount = 4, SegmentStart = 0, SegmentCount = 4, IsClosed = true }],
+            [new LinearContour
+            {
+                PointStart = 0,
+                PointCount = 4,
+                Bounds = bounds,
+                SegmentStart = 0,
+                SegmentCount = 4,
+                IsClosed = true
+            }
+            ],
             points);
     }
 

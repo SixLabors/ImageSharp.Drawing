@@ -152,7 +152,7 @@ public partial class ProcessWithDrawingCanvasTests
 
         DrawingOptions options = new()
         {
-            ShapeOptions = new ShapeOptions { IntersectionRule = intersectionRule }
+            IntersectionRule = intersectionRule
         };
 
         provider.RunValidatingProcessorTest(
@@ -200,7 +200,7 @@ public partial class ProcessWithDrawingCanvasTests
     {
         EllipsePolygon circle = new(32, 32, 30);
         StarPolygon star = new(32, 32, 7, 10, 27);
-        IPath shape = circle.Clip(star);
+        IPath shape = circle.Clip(BooleanOperation.Difference, star);
 
         provider.RunValidatingProcessorTest(
             c => c.Paint(canvas => canvas.Fill(Brushes.Solid(Color.White), shape)),
@@ -220,12 +220,10 @@ public partial class ProcessWithDrawingCanvasTests
         StarPolygon star = new(64, 64, 5, 24, 64);
 
         // See http://www.angusj.com/clipper2/Docs/Units/Clipper/Types/ClipType.htm for reference.
-        ShapeOptions shapeOptions = new() { BooleanOperation = operation };
-        IPath shape = star.Clip(shapeOptions, circle);
-        DrawingOptions options = new() { ShapeOptions = shapeOptions };
+        IPath shape = star.Clip(operation, circle);
 
         provider.RunValidatingProcessorTest(
-            c => c.Paint(options, canvas =>
+            c => c.Paint(canvas =>
             {
                 canvas.Fill(Brushes.Solid(Color.DeepPink), circle);
                 canvas.Fill(Brushes.Solid(Color.LightGray), star);
@@ -349,7 +347,7 @@ public partial class ProcessWithDrawingCanvasTests
         Color color = Color.Azure;
         DrawingOptions options = new()
         {
-            ShapeOptions = new ShapeOptions { IntersectionRule = intersectionRule }
+            IntersectionRule = intersectionRule
         };
 
         provider.RunValidatingProcessorTest(
@@ -379,7 +377,7 @@ public partial class ProcessWithDrawingCanvasTests
 
         DrawingOptions options = new()
         {
-            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.EvenOdd }
+            IntersectionRule = IntersectionRule.EvenOdd
         };
 
         provider.RunValidatingProcessorTest(
@@ -408,7 +406,7 @@ public partial class ProcessWithDrawingCanvasTests
 
         DrawingOptions options = new()
         {
-            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.NonZero }
+            IntersectionRule = IntersectionRule.NonZero
         };
 
         provider.RunValidatingProcessorTest(

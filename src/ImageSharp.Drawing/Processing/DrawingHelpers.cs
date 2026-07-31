@@ -3,6 +3,9 @@
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
+/// <summary>
+/// Provides internal helper methods for drawing operations.
+/// </summary>
 internal static class DrawingHelpers
 {
     /// <summary>
@@ -10,6 +13,7 @@ internal static class DrawingHelpers
     /// </summary>
     /// <typeparam name="TPixel">The type of pixel format.</typeparam>
     /// <param name="colorMatrix">The color matrix.</param>
+    /// <returns>A matrix of the same dimensions with each color converted to <typeparamref name="TPixel"/>.</returns>
     public static DenseMatrix<TPixel> ToPixelMatrix<TPixel>(this DenseMatrix<Color> colorMatrix)
         where TPixel : unmanaged, IPixel<TPixel>
     {

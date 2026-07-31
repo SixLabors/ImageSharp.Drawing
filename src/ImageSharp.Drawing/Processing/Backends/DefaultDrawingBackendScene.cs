@@ -22,11 +22,11 @@ public sealed class DefaultDrawingBackendScene : DrawingBackendScene
         => this.Scene = scene;
 
     /// <summary>
-    /// Gets the retained CPU flush scene when this is a leaf scene.
+    /// Gets the retained CPU flush scene executed by <see cref="DefaultDrawingBackend"/>.
     /// </summary>
-    internal FlushScene? Scene { get; }
+    internal FlushScene Scene { get; }
 
     /// <inheritdoc />
     protected override void DisposeCore()
-        => this.Scene?.Dispose();
+        => this.Scene.Dispose();
 }

@@ -2,12 +2,14 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
-using Silk.NET.WebGPU;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// GPU stage that resets bump counters and can cancel later stages when the prior run already proved the current scratch sizes are too small.
+/// GPU stage that starts a scheduling run by zeroing every bump allocator counter and the
+/// failure mask on the GPU, avoiding a CPU buffer write. It never cancels later stages; all
+/// stages run so the allocators report true demand in a single pass. Wraps <c>prepare.wgsl</c>.
 /// </summary>
 internal static unsafe class PrepareComputeShader
 {
@@ -23,27 +25,35 @@ internal static unsafe class PrepareComputeShader
 
     /// <summary>
     /// Gets the fixed X workgroup count required by the prepare stage.
+    /// The stage runs as a single workgroup of one thread, so the count is always 1.
     /// </summary>
+    /// <returns>The X dispatch dimension in workgroups; always 1.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static uint GetDispatchX() => 1;
 
     /// <summary>
     /// Creates the bind-group layout required by the prepare stage.
     /// </summary>
+    /// <param name="api">The WebGPU API facade.</param>
+    /// <param name="device">The device that owns the staged-scene pipelines.</param>
+    /// <param name="layout">Receives the created bind-group layout on success.</param>
+    /// <param name="error">Receives the creation failure reason when layout creation fails.</param>
+    /// <returns><see langword="true"/> when the bind-group layout was created successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
-        Device* device,
-        out BindGroupLayout* layout,
+        WGPUDeviceImpl* device,
+        out WGPUBindGroupLayoutImpl* layout,
         out string? error)
     {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[2];
-        entries[0] = SceneShaderBindingLayoutHelper.CreateStorageEntry(0, BufferBindingType.Storage, (nuint)sizeof(GpuSceneConfig));
-        entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, BufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));
+        // Bindings match prepare.wgsl:
+        //   0 bump allocators (read-write; all counters and the failure mask zeroed)
+        WGPUBindGroupLayoutEntry* entries = stackalloc WGPUBindGroupLayoutEntry[1];
+        entries[0] = SceneShaderBindingLayoutHelper.CreateStorageEntry(0, WGPUBufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));
 
-        BindGroupLayoutDescriptor descriptor = new()
+        WGPUBindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 2,
-            Entries = entries
+            entryCount = 1,
+            entries = entries
         };
 
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);

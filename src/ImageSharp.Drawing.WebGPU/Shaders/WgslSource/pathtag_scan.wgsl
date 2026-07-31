@@ -1,6 +1,22 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+// Final stage of the path tag monoid scan: writes, for every 4-byte tag
+// word, the exclusive prefix TagMonoid (counts of transforms, segments,
+// segment data words, styles and paths preceding that word). Flatten uses
+// these prefixes to locate each path element's data in the scene buffer.
+//
+// Two compile-time variants exist, selected by the "small" define:
+// - small: reduced holds per-workgroup totals from pathtag_reduce; this
+//   shader scans them in shared memory to get the carry-in per workgroup.
+// - large: reduced holds per-workgroup exclusive prefixes precomputed by
+//   pathtag_scan1, read directly.
+//
+// Inputs: config uniform, scene tag words, reduced (see variants above).
+// Outputs: tag_monoids (exclusive prefix per tag word).
+//
+// Ported from Vello's pathtag_scan.wgsl.
+
 #import config
 #import pathtag
 
@@ -22,9 +38,16 @@ const WG_SIZE = 256u;
 #ifdef small
 var<workgroup> sh_parent: array<TagMonoid, WG_SIZE>;
 #endif
-// These could be combined?
+// Note: sh_parent and sh_monoid could potentially share storage.
 var<workgroup> sh_monoid: array<TagMonoid, WG_SIZE>;
 
+// Computes the exclusive prefix monoid for each tag word in this
+// workgroup's slice. In the small variant, first suffix-reduces the
+// per-workgroup totals of all preceding workgroups into sh_parent[0] to
+// form the carry-in; the large variant reads the carry-in directly from
+// reduced[wg_id.x]. Then performs an inclusive Hillis-Steele scan of this
+// slice's tag monoids in shared memory and combines carry-in with the
+// preceding thread's inclusive value to produce the exclusive prefix.
 @compute @workgroup_size(256)
 fn main(
     @builtin(global_invocation_id) global_id: vec3<u32>,

@@ -11,6 +11,10 @@ public readonly struct DrawingCommandBatch
     /// <summary>
     /// Initializes a new instance of the <see cref="DrawingCommandBatch"/> struct.
     /// </summary>
+    /// <remarks>
+    /// Batches created through this constructor never contain apply barriers or clip controls;
+    /// those commands are only produced by the internal canvas batcher.
+    /// </remarks>
     /// <param name="commands">The draw-order scene commands.</param>
     /// <param name="hasLayers">Indicates whether the command stream contains layer boundaries.</param>
     public DrawingCommandBatch(
@@ -19,6 +23,8 @@ public readonly struct DrawingCommandBatch
     {
         this.Commands = commands;
         this.HasLayers = hasLayers;
+        this.HasApply = false;
+        this.HasClipControls = false;
     }
 
     /// <summary>
@@ -27,12 +33,19 @@ public readonly struct DrawingCommandBatch
     /// <param name="commands">The backing command buffer.</param>
     /// <param name="commandCount">The number of commands in the prepared batch.</param>
     /// <param name="hasLayers">Indicates whether the command stream contains layer boundaries.</param>
+    /// <param name="hasApply">Indicates whether the command stream contains apply barriers.</param>
+    /// <param name="hasClipControls">Indicates whether the command stream contains clip controls.</param>
     internal DrawingCommandBatch(
         CompositionSceneCommand[] commands,
         int commandCount,
-        bool hasLayers)
-        : this(new ArraySegment<CompositionSceneCommand>(commands, 0, commandCount), hasLayers)
+        bool hasLayers,
+        bool hasApply,
+        bool hasClipControls)
     {
+        this.Commands = new ArraySegment<CompositionSceneCommand>(commands, 0, commandCount);
+        this.HasLayers = hasLayers;
+        this.HasApply = hasApply;
+        this.HasClipControls = hasClipControls;
     }
 
     /// <summary>
@@ -42,13 +55,20 @@ public readonly struct DrawingCommandBatch
     /// <param name="startIndex">The first command index.</param>
     /// <param name="commandCount">The number of commands in the prepared batch.</param>
     /// <param name="hasLayers">Indicates whether the command stream contains layer boundaries.</param>
+    /// <param name="hasApply">Indicates whether the command stream contains apply barriers.</param>
+    /// <param name="hasClipControls">Indicates whether the command stream contains clip controls.</param>
     internal DrawingCommandBatch(
         CompositionSceneCommand[] commands,
         int startIndex,
         int commandCount,
-        bool hasLayers)
-        : this(new ArraySegment<CompositionSceneCommand>(commands, startIndex, commandCount), hasLayers)
+        bool hasLayers,
+        bool hasApply,
+        bool hasClipControls)
     {
+        this.Commands = new ArraySegment<CompositionSceneCommand>(commands, startIndex, commandCount);
+        this.HasLayers = hasLayers;
+        this.HasApply = hasApply;
+        this.HasClipControls = hasClipControls;
     }
 
     /// <summary>
@@ -65,4 +85,14 @@ public readonly struct DrawingCommandBatch
     /// Gets a value indicating whether this scene contains inline layer commands.
     /// </summary>
     public bool HasLayers { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this scene contains apply barriers.
+    /// </summary>
+    public bool HasApply { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this scene contains clip control commands.
+    /// </summary>
+    public bool HasClipControls { get; }
 }

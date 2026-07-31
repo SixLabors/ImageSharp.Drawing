@@ -109,8 +109,7 @@ public class PolygonClippingTests
     [Fact]
     public void ClippingRectanglesCreateCorrectNumberOfPoints()
     {
-        IEnumerable<ISimplePath> paths = new RectanglePolygon(10, 10, 40, 40)
-            .Clip(new RectanglePolygon(20, 0, 20, 20))
+        IEnumerable<ISimplePath> paths = Clip(new RectanglePolygon(10, 10, 40, 40), new RectanglePolygon(20, 0, 20, 20))
             .Flatten();
 
         Assert.Single(paths);

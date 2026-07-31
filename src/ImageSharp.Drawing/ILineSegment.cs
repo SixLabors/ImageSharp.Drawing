@@ -6,7 +6,7 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
-/// Represents a simple path segment
+/// Represents a simple path segment.
 /// </summary>
 public interface ILineSegment
 {
@@ -46,9 +46,9 @@ public interface ILineSegment
     public void CopyTo(Span<PointF> destination, bool skipFirstPoint, Vector2 scale);
 
     /// <summary>
-    /// Transforms the current LineSegment using specified matrix.
+    /// Transforms the current line segment using the specified matrix.
     /// </summary>
-    /// <param name="matrix">The matrix.</param>
+    /// <param name="matrix">The transformation matrix.</param>
     /// <returns>A line segment with the matrix applied to it.</returns>
     public ILineSegment Transform(Matrix4x4 matrix);
 }

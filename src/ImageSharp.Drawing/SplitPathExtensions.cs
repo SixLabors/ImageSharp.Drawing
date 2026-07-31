@@ -25,7 +25,19 @@ public static class SplitPathExtensions
     /// <param name="pattern">The dash pattern. Each element is a multiple of <paramref name="strokeWidth"/>.</param>
     /// <returns>A path containing the "on" dash segments.</returns>
     public static IPath GenerateDashes(this IPath path, float strokeWidth, ReadOnlySpan<float> pattern)
-        => path.GenerateDashes(strokeWidth, pattern, startOff: false);
+        => path.GenerateDashes(strokeWidth, pattern, startOff: false, offset: 0);
+
+    /// <summary>
+    /// Splits the given path into dash segments based on the provided pattern.
+    /// Returns a composite path containing only the "on" segments as open sub-paths.
+    /// </summary>
+    /// <param name="path">The centerline path to split.</param>
+    /// <param name="strokeWidth">The stroke width (pattern elements are multiples of this).</param>
+    /// <param name="pattern">The dash pattern. Each element is a multiple of <paramref name="strokeWidth"/>.</param>
+    /// <param name="offset">The distance into the dash pattern, expressed as a multiple of <paramref name="strokeWidth"/>.</param>
+    /// <returns>A path containing the "on" dash segments.</returns>
+    public static IPath GenerateDashes(this IPath path, float strokeWidth, ReadOnlySpan<float> pattern, float offset)
+        => path.GenerateDashes(strokeWidth, pattern, false, offset);
 
     /// <summary>
     /// Splits the given path into dash segments based on the provided pattern.
@@ -37,6 +49,19 @@ public static class SplitPathExtensions
     /// <param name="startOff">Whether the first item in the pattern is off rather than on.</param>
     /// <returns>A path containing the "on" dash segments.</returns>
     public static IPath GenerateDashes(this IPath path, float strokeWidth, ReadOnlySpan<float> pattern, bool startOff)
+        => path.GenerateDashes(strokeWidth, pattern, startOff, offset: 0);
+
+    /// <summary>
+    /// Splits the given path into dash segments based on the provided pattern.
+    /// Returns a composite path containing only the "on" segments as open sub-paths.
+    /// </summary>
+    /// <param name="path">The centerline path to split.</param>
+    /// <param name="strokeWidth">The stroke width (pattern elements are multiples of this).</param>
+    /// <param name="pattern">The dash pattern. Each element is a multiple of <paramref name="strokeWidth"/>.</param>
+    /// <param name="startOff">Whether the first item in the pattern is off rather than on.</param>
+    /// <param name="offset">The distance into the dash pattern, expressed as a multiple of <paramref name="strokeWidth"/>.</param>
+    /// <returns>A path containing the "on" dash segments.</returns>
+    public static IPath GenerateDashes(this IPath path, float strokeWidth, ReadOnlySpan<float> pattern, bool startOff, float offset)
     {
         if (pattern.Length < 2)
         {
@@ -58,6 +83,12 @@ public static class SplitPathExtensions
             return path;
         }
 
+        float patternOffset = (offset * strokeWidth) % patternLength;
+        if (patternOffset < 0)
+        {
+            patternOffset += patternLength;
+        }
+
         IEnumerable<ISimplePath> simplePaths = path.Flatten();
         List<IPath> segments = [];
         List<PointF> buffer = new(64);
@@ -66,7 +97,24 @@ public static class SplitPathExtensions
         {
             bool online = !startOff;
             int patternPos = 0;
-            float targetLength = pattern[patternPos] * strokeWidth;
+            float currentOffset = patternOffset;
+
+            // Phase is normalized once per contour so the main walker can keep
+            // the existing single-pass split logic.
+            while (currentOffset > eps)
+            {
+                float patternElementLength = MathF.Abs(pattern[patternPos]) * strokeWidth;
+                if (currentOffset + eps < patternElementLength)
+                {
+                    break;
+                }
+
+                currentOffset -= patternElementLength;
+                online = !online;
+                patternPos = (patternPos + 1) % pattern.Length;
+            }
+
+            float targetLength = (MathF.Abs(pattern[patternPos]) * strokeWidth) - currentOffset;
 
             ReadOnlySpan<PointF> pts = p.Points.Span;
             if (pts.Length < 2)
@@ -143,7 +191,7 @@ public static class SplitPathExtensions
                     current = next;
                     ei++;
                     patternPos = (patternPos + 1) % pattern.Length;
-                    targetLength = pattern[patternPos] * strokeWidth;
+                    targetLength = MathF.Abs(pattern[patternPos]) * strokeWidth;
                     continue;
                 }
 
@@ -162,7 +210,7 @@ public static class SplitPathExtensions
                 online = !online;
                 current = split; // continue along the same geometric segment
                 patternPos = (patternPos + 1) % pattern.Length;
-                targetLength = pattern[patternPos] * strokeWidth;
+                targetLength = MathF.Abs(pattern[patternPos]) * strokeWidth;
             }
 
             // Flush the tail of the last dash span, if any.
@@ -180,7 +228,7 @@ public static class SplitPathExtensions
 
         if (segments.Count == 0)
         {
-            return path;
+            return Path.Empty;
         }
 
         if (segments.Count == 1)
@@ -191,8 +239,15 @@ public static class SplitPathExtensions
         return new ComplexPolygon(segments);
     }
 
+    /// <summary>
+    /// Emits the buffered dash span as an open sub-path.
+    /// </summary>
+    /// <param name="buffer">The accumulated dash span points.</param>
+    /// <param name="segments">The list receiving the emitted sub-paths.</param>
     private static void FlushBuffer(List<PointF> buffer, List<IPath> segments)
     {
+        // Spans whose first and last points coincide have no drawable extent
+        // (or would form a degenerate loop), so they are dropped.
         if (buffer.Count >= 2 && buffer[0] != buffer[^1])
         {
             segments.Add(new Path(new LinearLineSegment([.. buffer])));

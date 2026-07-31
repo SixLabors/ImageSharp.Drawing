@@ -7,7 +7,8 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
-/// Allow you to derivatively build shapes and paths.
+/// Provides a fluent API for incrementally building complex shapes and paths
+/// from figures composed of lines, arcs, and bezier curves.
 /// </summary>
 public class PathBuilder
 {
@@ -29,7 +30,10 @@ public class PathBuilder
     /// <summary>
     /// Initializes a new instance of the <see cref="PathBuilder"/> class.
     /// </summary>
-    /// <param name="defaultTransform">The default transform.</param>
+    /// <param name="defaultTransform">
+    /// The default transform. This is always composed with any transform set via
+    /// <see cref="SetTransform(Matrix4x4)"/> or <see cref="SetOrigin(PointF)"/>.
+    /// </param>
     public PathBuilder(Matrix4x4 defaultTransform)
     {
         this.defaultTransform = defaultTransform;
@@ -49,9 +53,10 @@ public class PathBuilder
     public Matrix4x4 Transform => this.currentTransform;
 
     /// <summary>
-    /// Sets the translation to be applied to all items to follow being applied to the <see cref="PathBuilder"/>.
+    /// Sets the transform to apply to all subsequently added segments.
+    /// The supplied transform is composed with the default transform provided at construction.
     /// </summary>
-    /// <param name="transform">The transform.</param>
+    /// <param name="transform">The transform to apply.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder SetTransform(Matrix4x4 transform)
     {
@@ -61,7 +66,7 @@ public class PathBuilder
     }
 
     /// <summary>
-    /// Sets the origin all subsequent point should be relative to.
+    /// Sets the origin that all subsequent points are relative to.
     /// </summary>
     /// <param name="origin">The origin.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
@@ -99,9 +104,9 @@ public class PathBuilder
     }
 
     /// <summary>
-    /// Moves to current point to the supplied vector.
+    /// Moves the current point to the supplied point, starting a new figure.
     /// </summary>
-    /// <param name="point">The point.</param>
+    /// <param name="point">The point to move to.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder MoveTo(PointF point)
     {
@@ -111,55 +116,55 @@ public class PathBuilder
     }
 
     /// <summary>
-    /// Moves to current point to the supplied vector.
+    /// Moves the current point to the supplied point, starting a new figure.
     /// </summary>
-    /// <param name="x">The x-coordinate.</param>
-    /// <param name="y">The y-coordinate.</param>
+    /// <param name="x">The x-coordinate of the point to move to.</param>
+    /// <param name="y">The y-coordinate of the point to move to.</param>
     /// <returns>The <see cref="PathBuilder"/></returns>
     public PathBuilder MoveTo(float x, float y)
         => this.MoveTo(new PointF(x, y));
 
     /// <summary>
-    /// Draws the line connecting the current the current point to the new point.
+    /// Draws a line connecting the current point to the new point.
     /// </summary>
-    /// <param name="point">The point.</param>
+    /// <param name="point">The end point of the line.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder LineTo(PointF point)
         => this.AddLine(this.currentPoint, point);
 
     /// <summary>
-    /// Draws the line connecting the current the current point to the new point.
+    /// Draws a line connecting the current point to the new point.
     /// </summary>
-    /// <param name="x">The x.</param>
-    /// <param name="y">The y.</param>
+    /// <param name="x">The x-coordinate of the end point.</param>
+    /// <param name="y">The y-coordinate of the end point.</param>
     /// <returns>The <see cref="PathBuilder"/></returns>
     public PathBuilder LineTo(float x, float y)
         => this.LineTo(new PointF(x, y));
 
     /// <summary>
-    /// Adds the line connecting the current point to the new point.
+    /// Adds a line segment connecting the two points to the current figure.
     /// </summary>
-    /// <param name="start">The start.</param>
-    /// <param name="end">The end.</param>
+    /// <param name="start">The start point of the line.</param>
+    /// <param name="end">The end point of the line.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder AddLine(PointF start, PointF end)
         => this.AddSegment(new LinearLineSegment(start, end));
 
     /// <summary>
-    /// Adds the line connecting the current point to the new point.
+    /// Adds a line segment connecting the two points to the current figure.
     /// </summary>
-    /// <param name="x1">The x1.</param>
-    /// <param name="y1">The y1.</param>
-    /// <param name="x2">The x2.</param>
-    /// <param name="y2">The y2.</param>
+    /// <param name="x1">The x-coordinate of the start point.</param>
+    /// <param name="y1">The y-coordinate of the start point.</param>
+    /// <param name="x2">The x-coordinate of the end point.</param>
+    /// <param name="y2">The y-coordinate of the end point.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder AddLine(float x1, float y1, float x2, float y2)
         => this.AddLine(new PointF(x1, y1), new PointF(x2, y2));
 
     /// <summary>
-    /// Adds a series of line segments connecting the current point to the new points.
+    /// Adds a series of line segments connecting the supplied points to the current figure.
     /// </summary>
-    /// <param name="points">The points.</param>
+    /// <param name="points">The points to connect.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder AddLines(IEnumerable<PointF> points)
     {
@@ -168,9 +173,9 @@ public class PathBuilder
     }
 
     /// <summary>
-    /// Adds a series of line segments connecting the current point to the new points.
+    /// Adds a series of line segments connecting the supplied points to the current figure.
     /// </summary>
-    /// <param name="points">The points.</param>
+    /// <param name="points">The points to connect.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder AddLines(params PointF[] points)
     {
@@ -179,9 +184,10 @@ public class PathBuilder
     }
 
     /// <summary>
-    /// Adds the segment.
+    /// Adds a segment to the current figure. The segment is transformed by the current transform
+    /// and the current point is moved to the segment end point.
     /// </summary>
-    /// <param name="segment">The segment.</param>
+    /// <param name="segment">The segment to add.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder AddSegment(ILineSegment segment)
     {
@@ -196,18 +202,18 @@ public class PathBuilder
     /// <summary>
     /// Draws a quadratic bezier from the current point to the <paramref name="point"/>
     /// </summary>
-    /// <param name="secondControlPoint">The second control point.</param>
-    /// <param name="point">The point.</param>
+    /// <param name="secondControlPoint">The second control point. The current point acts as the first.</param>
+    /// <param name="point">The end point of the curve.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder QuadraticBezierTo(Vector2 secondControlPoint, Vector2 point)
         => this.AddQuadraticBezier(this.currentPoint, secondControlPoint, point);
 
     /// <summary>
-    /// Draws a quadratic bezier from the current point to the <paramref name="point"/>
+    /// Draws a cubic bezier from the current point to the <paramref name="point"/>
     /// </summary>
-    /// <param name="secondControlPoint">The second control point.</param>
+    /// <param name="secondControlPoint">The second control point. The current point acts as the first.</param>
     /// <param name="thirdControlPoint">The third control point.</param>
-    /// <param name="point">The point.</param>
+    /// <param name="point">The end point of the curve.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder CubicBezierTo(Vector2 secondControlPoint, Vector2 thirdControlPoint, Vector2 point)
         => this.AddCubicBezier(this.currentPoint, secondControlPoint, thirdControlPoint, point);
@@ -216,7 +222,7 @@ public class PathBuilder
     /// Adds a quadratic bezier curve to the current figure joining the <paramref name="startPoint"/> point to the <paramref name="endPoint"/>.
     /// </summary>
     /// <param name="startPoint">The start point.</param>
-    /// <param name="controlPoint">The control point1.</param>
+    /// <param name="controlPoint">The control point.</param>
     /// <param name="endPoint">The end point.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder AddQuadraticBezier(PointF startPoint, PointF controlPoint, PointF endPoint)
@@ -225,6 +231,8 @@ public class PathBuilder
         Vector2 controlPointVector = controlPoint;
         Vector2 endPointVector = endPoint;
 
+        // Exact degree elevation: a quadratic bezier is representable as a cubic whose inner
+        // control points sit two thirds of the way from each end point to the quadratic control point.
         Vector2 c1 = ((controlPointVector - startPointVector) * 2 / 3) + startPointVector;
         Vector2 c2 = ((controlPointVector - endPointVector) * 2 / 3) + endPointVector;
 
@@ -235,8 +243,8 @@ public class PathBuilder
     /// Adds a cubic bezier curve to the current figure joining the <paramref name="startPoint"/> point to the <paramref name="endPoint"/>.
     /// </summary>
     /// <param name="startPoint">The start point.</param>
-    /// <param name="controlPoint1">The control point1.</param>
-    /// <param name="controlPoint2">The control point2.</param>
+    /// <param name="controlPoint1">The first control point.</param>
+    /// <param name="controlPoint2">The second control point.</param>
     /// <param name="endPoint">The end point.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder AddCubicBezier(PointF startPoint, PointF controlPoint1, PointF controlPoint2, PointF endPoint)
@@ -254,8 +262,8 @@ public class PathBuilder
     /// are greater than zero but too small to describe an arc.
     /// </para>
     /// </summary>
-    /// <param name="radiusX">The x-radius of the ellipsis.</param>
-    /// <param name="radiusY">The y-radius of the ellipsis.</param>
+    /// <param name="radiusX">The x-radius of the ellipse.</param>
+    /// <param name="radiusY">The y-radius of the ellipse.</param>
     /// <param name="rotation">The rotation along the X-axis; measured in degrees clockwise.</param>
     /// <param name="largeArc">
     /// The large arc flag, and is <see langword="false"/> if an arc spanning less than or equal to 180 degrees
@@ -283,8 +291,8 @@ public class PathBuilder
     /// </para>
     /// </summary>
     /// <param name="startPoint">The start point of the arc.</param>
-    /// <param name="radiusX">The x-radius of the ellipsis.</param>
-    /// <param name="radiusY">The y-radius of the ellipsis.</param>
+    /// <param name="radiusX">The x-radius of the ellipse.</param>
+    /// <param name="radiusY">The y-radius of the ellipse.</param>
     /// <param name="rotation">The rotation along the X-axis; measured in degrees clockwise.</param>
     /// <param name="largeArc">
     /// The large arc flag, and is <see langword="false"/> if an arc spanning less than or equal to 180 degrees
@@ -329,8 +337,8 @@ public class PathBuilder
     /// Adds an elliptical arc to the current figure.
     /// </summary>
     /// <param name="center">The center <see cref="PointF"/> of the ellipse from which the arc is taken.</param>
-    /// <param name="radiusX">The x-radius of the ellipsis.</param>
-    /// <param name="radiusY">The y-radius of the ellipsis.</param>
+    /// <param name="radiusX">The x-radius of the ellipse.</param>
+    /// <param name="radiusY">The y-radius of the ellipse.</param>
     /// <param name="rotation">The angle, in degrees, from the x-axis of the current coordinate system to the x-axis of the ellipse.</param>
     /// <param name="startAngle">
     /// The start angle of the elliptical arc prior to the stretch and rotate operations. (0 is at the 3 o'clock position of the arc's circle).
@@ -344,8 +352,8 @@ public class PathBuilder
     /// Adds an elliptical arc to the current figure.
     /// </summary>
     /// <param name="center">The center <see cref="Point"/> of the ellipse from which the arc is taken.</param>
-    /// <param name="radiusX">The x-radius of the ellipsis.</param>
-    /// <param name="radiusY">The y-radius of the ellipsis.</param>
+    /// <param name="radiusX">The x-radius of the ellipse.</param>
+    /// <param name="radiusY">The y-radius of the ellipse.</param>
     /// <param name="rotation">The angle, in degrees, from the x-axis of the current coordinate system to the x-axis of the ellipse.</param>
     /// <param name="startAngle">
     /// The start angle of the elliptical arc prior to the stretch and rotate operations. (0 is at the 3 o'clock position of the arc's circle).
@@ -360,8 +368,8 @@ public class PathBuilder
     /// </summary>
     /// <param name="x">The x-coordinate of the center point of the ellipse from which the arc is taken.</param>
     /// <param name="y">The y-coordinate of the center point of the ellipse from which the arc is taken.</param>
-    /// <param name="radiusX">The x-radius of the ellipsis.</param>
-    /// <param name="radiusY">The y-radius of the ellipsis.</param>
+    /// <param name="radiusX">The x-radius of the ellipse.</param>
+    /// <param name="radiusY">The y-radius of the ellipse.</param>
     /// <param name="rotation">The angle, in degrees, from the x-axis of the current coordinate system to the x-axis of the ellipse.</param>
     /// <param name="startAngle">
     /// The start angle of the elliptical arc prior to the stretch and rotate operations. (0 is at the 3 o'clock position of the arc's circle).
@@ -376,8 +384,8 @@ public class PathBuilder
     /// </summary>
     /// <param name="x">The x-coordinate of the center point of the ellipse from which the arc is taken.</param>
     /// <param name="y">The y-coordinate of the center point of the ellipse from which the arc is taken.</param>
-    /// <param name="radiusX">The x-radius of the ellipsis.</param>
-    /// <param name="radiusY">The y-radius of the ellipsis.</param>
+    /// <param name="radiusX">The x-radius of the ellipse.</param>
+    /// <param name="radiusY">The y-radius of the ellipse.</param>
     /// <param name="rotation">The angle, in degrees, from the x-axis of the current coordinate system to the x-axis of the ellipse.</param>
     /// <param name="startAngle">
     /// The start angle of the elliptical arc prior to the stretch and rotate operations. (0 is at the 3 o'clock position of the arc's circle).
@@ -694,6 +702,8 @@ public class PathBuilder
         }
         else
         {
+            // Reuse the empty figure but clear any closed flag left by CloseFigure so
+            // repeated Start/Close calls cannot produce a closed empty figure.
             this.currentFigure.IsClosed = false;
         }
 
@@ -713,7 +723,7 @@ public class PathBuilder
     }
 
     /// <summary>
-    /// Closes the current figure.
+    /// Closes all figures in the path, including the current figure.
     /// </summary>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder CloseAllFigures()
@@ -729,9 +739,12 @@ public class PathBuilder
     }
 
     /// <summary>
-    /// Builds a complex polygon from the current working set of working operations.
+    /// Builds a path from the current working set of figures.
     /// </summary>
-    /// <returns>The current set of operations as a complex polygon</returns>
+    /// <returns>
+    /// The built <see cref="IPath"/>. A single non-empty figure is returned directly;
+    /// multiple figures are combined into a <see cref="ComplexPolygon"/>.
+    /// </returns>
     public IPath Build()
     {
         IPath[] paths = [.. this.figures.Where(x => !x.IsEmpty).Select(x => x.Build())];
@@ -757,7 +770,7 @@ public class PathBuilder
     }
 
     /// <summary>
-    /// Clears all drawn paths, Leaving any applied transforms.
+    /// Clears all drawn paths, leaving any applied transforms.
     /// </summary>
     [MemberNotNull(nameof(currentFigure))]
     public void Clear()
@@ -767,16 +780,33 @@ public class PathBuilder
         this.figures.Add(this.currentFigure);
     }
 
+    /// <summary>
+    /// Represents one figure under construction: an ordered list of pre-transformed segments.
+    /// </summary>
     private class Figure
     {
         private readonly List<ILineSegment> segments = [];
 
+        /// <summary>
+        /// Gets or sets a value indicating whether the figure is closed.
+        /// </summary>
         public bool IsClosed { get; set; }
 
+        /// <summary>
+        /// Gets a value indicating whether the figure contains no segments.
+        /// </summary>
         public bool IsEmpty => this.segments.Count == 0;
 
+        /// <summary>
+        /// Appends a segment to the figure.
+        /// </summary>
+        /// <param name="segment">The segment to append. It must already be transformed.</param>
         public void AddSegment(ILineSegment segment) => this.segments.Add(segment);
 
+        /// <summary>
+        /// Builds the figure into a path.
+        /// </summary>
+        /// <returns>A closed <see cref="Polygon"/> or an open <see cref="Path"/>.</returns>
         public IPath Build()
             => this.IsClosed
             ? new Polygon([.. this.segments], true)

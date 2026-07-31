@@ -6,7 +6,7 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
-/// A shape made up of a single path made up of one of more <see cref="ILineSegment"/>s
+/// A regular polygon with a configurable number of equally spaced vertices placed on a circumscribing circle.
 /// </summary>
 public class RegularPolygon : Polygon
 {
@@ -58,6 +58,15 @@ public class RegularPolygon : Polygon
     {
     }
 
+    /// <summary>
+    /// Places the vertices at equal angular steps on the circumscribing circle,
+    /// starting from the rotated downward radius vector.
+    /// </summary>
+    /// <param name="location">The center of the polygon.</param>
+    /// <param name="radius">The radius of the circumscribing circle.</param>
+    /// <param name="vertices">The number of vertices; at least 3 are required.</param>
+    /// <param name="angle">The angle of rotation in degrees.</param>
+    /// <returns>The linear segment describing the polygon outline.</returns>
     private static LinearLineSegment CreateSegment(PointF location, float radius, int vertices, float angle)
     {
         Guard.MustBeGreaterThan(vertices, 2, nameof(vertices));

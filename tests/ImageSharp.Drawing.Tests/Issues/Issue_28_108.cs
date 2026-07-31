@@ -10,13 +10,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues;
 public class Issue_28_108
 {
     [Theory]
-    [InlineData(1F)]
-    [InlineData(1.5F)]
-    [InlineData(2F)]
-    [InlineData(3F)]
-    public void DrawingLineAtTopShouldDisplay(float stroke)
+    [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, 1F)]
+    [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, 1.5F)]
+    [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, 2F)]
+    [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, 3F)]
+    public void DrawingLineAtTopShouldDisplay<TPixel>(TestImageProvider<TPixel> provider, float stroke)
+        where TPixel : unmanaged, IPixel<TPixel>
     {
-        using Image<Rgba32> image = new(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
+        using Image<TPixel> image = provider.GetImage();
         DrawingOptions options = CreateAliasedDrawingOptions();
         image.Mutate(x => x.Paint(
             options,
@@ -25,18 +26,21 @@ public class Issue_28_108
                 new PointF(0, 0),
                 new PointF(100, 0))));
 
+        image.DebugSave(provider, $"stroke-{stroke}", appendSourceFileOrDescription: false);
+
         IEnumerable<(int X, int Y)> locations = Enumerable.Range(0, 100).Select(i => (x: i, y: 0));
-        Assert.All(locations, l => Assert.Equal(Color.Red.ToPixel<Rgba32>(), image[l.X, l.Y]));
+        Assert.All(locations, l => Assert.Equal(Color.Red.ToPixel<TPixel>(), image[l.X, l.Y]));
     }
 
     [Theory]
-    [InlineData(1F)]
-    [InlineData(1.5F)]
-    [InlineData(2F)]
-    [InlineData(3F)]
-    public void DrawingLineAtBottomShouldDisplay(float stroke)
+    [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, 1F)]
+    [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, 1.5F)]
+    [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, 2F)]
+    [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, 3F)]
+    public void DrawingLineAtBottomShouldDisplay<TPixel>(TestImageProvider<TPixel> provider, float stroke)
+        where TPixel : unmanaged, IPixel<TPixel>
     {
-        using Image<Rgba32> image = new(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
+        using Image<TPixel> image = provider.GetImage();
         DrawingOptions options = CreateAliasedDrawingOptions();
         image.Mutate(x => x.Paint(
             options,
@@ -45,48 +49,56 @@ public class Issue_28_108
                 new PointF(0, 99),
                 new PointF(100, 99))));
 
+        image.DebugSave(provider, $"stroke-{stroke}", appendSourceFileOrDescription: false);
+
         IEnumerable<(int X, int Y)> locations = Enumerable.Range(0, 100).Select(i => (x: i, y: 99));
-        Assert.All(locations, l => Assert.Equal(Color.Red.ToPixel<Rgba32>(), image[l.X, l.Y]));
+        Assert.All(locations, l => Assert.Equal(Color.Red.ToPixel<TPixel>(), image[l.X, l.Y]));
     }
 
     [Theory]
-    [InlineData(1F)]
-    [InlineData(1.5F)]
-    [InlineData(2F)]
-    [InlineData(3F)]
-    public void DrawingLineAtLeftShouldDisplay(float stroke)
+    [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, 1F)]
+    [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, 1.5F)]
+    [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, 2F)]
+    [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, 3F)]
+    public void DrawingLineAtLeftShouldDisplay<TPixel>(TestImageProvider<TPixel> provider, float stroke)
+        where TPixel : unmanaged, IPixel<TPixel>
     {
-        using Image<Rgba32> image = new(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
+        using Image<TPixel> image = provider.GetImage();
         DrawingOptions options = CreateAliasedDrawingOptions();
         image.Mutate(x => x.Paint(
             options,
             canvas => canvas.DrawLine(
                 Pens.Solid(Color.Red, stroke),
                 new PointF(0, 0),
-                new PointF(0, 99))));
+                new PointF(0, 100))));
+
+        image.DebugSave(provider, $"stroke-{stroke}", appendSourceFileOrDescription: false);
 
         IEnumerable<(int X, int Y)> locations = Enumerable.Range(0, 100).Select(i => (x: 0, y: i));
-        Assert.All(locations, l => Assert.Equal(Color.Red.ToPixel<Rgba32>(), image[l.X, l.Y]));
+        Assert.All(locations, l => Assert.Equal(Color.Red.ToPixel<TPixel>(), image[l.X, l.Y]));
     }
 
     [Theory]
-    [InlineData(1F)]
-    [InlineData(1.5F)]
-    [InlineData(2F)]
-    [InlineData(3F)]
-    public void DrawingLineAtRightShouldDisplay(float stroke)
+    [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, 1F)]
+    [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, 1.5F)]
+    [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, 2F)]
+    [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, 3F)]
+    public void DrawingLineAtRightShouldDisplay<TPixel>(TestImageProvider<TPixel> provider, float stroke)
+        where TPixel : unmanaged, IPixel<TPixel>
     {
-        using Image<Rgba32> image = new(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
+        using Image<TPixel> image = provider.GetImage();
         DrawingOptions options = CreateAliasedDrawingOptions();
         image.Mutate(x => x.Paint(
             options,
             canvas => canvas.DrawLine(
                 Pens.Solid(Color.Red, stroke),
                 new PointF(99, 0),
-                new PointF(99, 99))));
+                new PointF(99, 100))));
+
+        image.DebugSave(provider, $"stroke-{stroke}", appendSourceFileOrDescription: false);
 
         IEnumerable<(int X, int Y)> locations = Enumerable.Range(0, 100).Select(i => (x: 99, y: i));
-        Assert.All(locations, l => Assert.Equal(Color.Red.ToPixel<Rgba32>(), image[l.X, l.Y]));
+        Assert.All(locations, l => Assert.Equal(Color.Red.ToPixel<TPixel>(), image[l.X, l.Y]));
     }
 
     private static DrawingOptions CreateAliasedDrawingOptions() =>

@@ -1,7 +1,23 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// Color mixing modes
+// Color mixing and compositing math for layer blending.
+//
+// Imported by fine.wgsl, which calls blend_mix_compose when popping a clip or
+// layer (CMD_END_CLIP) to combine the layer contents with its backdrop. The
+// math mirrors the CPU drawing backend's blending so both backends produce
+// the same output for a given GraphicsOptions.
+//
+// Ported from Vello's shader/shared/blend.wgsl (linebender/vello).
+
+// Color mixing modes.
+//
+// These are the high byte of the packed blend-mode word ((mix << 8) | compose)
+// produced by WebGPUSceneEncoder.PackBlendMode, so every value documents the
+// wire format shared with the C# encoder even where no WGSL code names it.
+// The values mirror the CSS mix-blend-mode list from Vello; the C# encoder
+// currently emits only NORMAL, MULTIPLY, SCREEN, OVERLAY, DARKEN, LIGHTEN,
+// HARD_LIGHT, ADD, and SUBTRACT.
 
 const MIX_NORMAL = 0u;
 const MIX_MULTIPLY = 1u;
@@ -21,12 +37,20 @@ const MIX_HUE = 12u;
 const MIX_SATURATION = 13u;
 const MIX_COLOR = 14u;
 const MIX_LUMINOSITY = 15u;
+// Wire value written by the C# encoder (WebGPUSceneEncoder.ClipBlendMode) to
+// mark a pure clip layer. As the mix half of the packed word it occupies bit
+// 15, which blend_mix_compose masks off so clip layers take the plain
+// src-over fast path. No WGSL code names this constant; it documents the
+// wire format shared with the encoder.
 const MIX_CLIP = 128u;
 
+// Screen blend: inverted multiply of the inverted channels.
 fn screen(cb: vec3<f32>, cs: vec3<f32>) -> vec3<f32> {
     return cb + cs - (cb * cs);
 }
 
+// Per-channel color-dodge blend. The zero and one cases are handled
+// explicitly to avoid the division blowing up.
 fn color_dodge(cb: f32, cs: f32) -> f32 {
     if cb == 0.0 {
         return 0.0;
@@ -37,6 +61,7 @@ fn color_dodge(cb: f32, cs: f32) -> f32 {
     }
 }
 
+// Per-channel color-burn blend, the dual of color_dodge.
 fn color_burn(cb: f32, cs: f32) -> f32 {
     if cb == 1.0 {
         return 1.0;
@@ -47,6 +72,8 @@ fn color_burn(cb: f32, cs: f32) -> f32 {
     }
 }
 
+// Hard-light blend: multiply for dark source channels, screen for light ones.
+// Overlay is implemented as hard_light with the operands swapped.
 fn hard_light(cb: vec3<f32>, cs: vec3<f32>) -> vec3<f32> {
     return select(
         screen(cb, 2.0 * cs - 1.0),
@@ -55,6 +82,8 @@ fn hard_light(cb: vec3<f32>, cs: vec3<f32>) -> vec3<f32> {
     );
 }
 
+// Soft-light blend per the W3C compositing spec, using the piecewise
+// polynomial approximation of the darkening curve for cb <= 0.25.
 fn soft_light(cb: vec3<f32>, cs: vec3<f32>) -> vec3<f32> {
     let d = select(
         sqrt(cb),
@@ -68,20 +97,27 @@ fn soft_light(cb: vec3<f32>, cs: vec3<f32>) -> vec3<f32> {
     );
 }
 
+// Saturation of a color: the spread between its largest and smallest channel.
 fn sat(c: vec3<f32>) -> f32 {
     return max(c.x, max(c.y, c.z)) - min(c.x, min(c.y, c.z));
 }
 
+// Luminosity using the NTSC weights specified by the W3C compositing spec
+// for the non-separable blend modes.
 fn lum(c: vec3<f32>) -> f32 {
     let f = vec3(0.3, 0.59, 0.11);
     return dot(c, f);
 }
 
+// Luminance using the SVG/Rec. 709 coefficients. Used by fine.wgsl to build
+// luminance masks for hard-mask clips rather than for blending.
 fn svg_lum(c: vec3<f32>) -> f32 {
     let f = vec3(0.2125, 0.7154, 0.0721);
     return dot(c, f);
 }
 
+// Clamps an out-of-gamut color back into [0, 1] by scaling its channels
+// toward the luminosity, preserving perceived lightness (spec ClipColor).
 fn clip_color(c_in: vec3<f32>) -> vec3<f32> {
     var c = c_in;
     let l = lum(c);
@@ -96,10 +132,13 @@ fn clip_color(c_in: vec3<f32>) -> vec3<f32> {
     return c;
 }
 
+// Shifts a color to the target luminosity, then re-clips into gamut.
 fn set_lum(c: vec3<f32>, l: f32) -> vec3<f32> {
     return clip_color(c + (l - lum(c)));
 }
 
+// Rescales three channel values, already ordered min/mid/max, so that the
+// spread becomes s while the mid channel keeps its relative position.
 fn set_sat_inner(
     cmin: ptr<function, f32>,
     cmid: ptr<function, f32>,
@@ -116,6 +155,8 @@ fn set_sat_inner(
     *cmin = 0.0;
 }
 
+// Sets the saturation of a color to s (spec SetSat). The branch ladder
+// orders the channels so set_sat_inner receives them as min/mid/max.
 fn set_sat(c: vec3<f32>, s: f32) -> vec3<f32> {
     var r = c.r;
     var g = c.g;
@@ -144,8 +185,9 @@ fn set_sat(c: vec3<f32>, s: f32) -> vec3<f32> {
     return vec3(r, g, b);
 }
 
-// Blends two RGB colors together. The colors are assumed to be in sRGB
-// color space, and this function does not take alpha into account.
+// Blends two RGB colors together using the given MIX_* mode. The colors are
+// assumed to be in sRGB color space, and this function does not take alpha
+// into account; unknown modes (including MIX_NORMAL) return the source.
 fn blend_mix(cb: vec3<f32>, cs: vec3<f32>, mode: u32) -> vec3<f32> {
     var b = vec3(0.0);
     switch mode {
@@ -207,7 +249,12 @@ fn blend_mix(cb: vec3<f32>, cs: vec3<f32>, mode: u32) -> vec3<f32> {
     return b;
 }
 
-// Composition modes
+// Composition modes.
+//
+// Porter-Duff style alpha composition operators. These are the low byte of
+// the packed blend-mode word and match the values produced by the C# encoder
+// (WebGPUSceneEncoder.MapAlphaCompositionMode), so unused-looking entries
+// still document the shared wire format.
 
 const COMPOSE_CLEAR = 0u;
 const COMPOSE_COPY = 1u;
@@ -226,6 +273,8 @@ const COMPOSE_PLUS_LIGHTER = 13u;
 
 // Apply general compositing operation.
 // Inputs are separated colors and alpha, output is premultiplied.
+// fa/fb are the Porter-Duff source and backdrop fractions for the mode;
+// COMPOSE_CLEAR falls through the default with fa = fb = 0.
 fn blend_compose(
     cb: vec3<f32>,
     cs: vec3<f32>,
@@ -296,6 +345,7 @@ fn blend_compose(
     return vec4(co, min(as_fa + ab_fb, 1.0));
 }
 
+// Converts a premultiplied color to separated RGB by dividing out alpha.
 fn unpremultiply(color: vec4<f32>) -> vec3<f32> {
     let EPSILON = 1e-15;
     // Max with a small epsilon to avoid NaNs.
@@ -304,14 +354,16 @@ fn unpremultiply(color: vec4<f32>) -> vec3<f32> {
 }
 
 // Apply color mixing and composition. Both input and output colors are
-// premultiplied RGB.
+// premultiplied RGB. `mode` is the packed word (mix << 8) | compose written
+// by the C# encoder's PackBlendMode.
 fn blend_mix_compose(backdrop: vec4<f32>, src: vec4<f32>, mode: u32) -> vec4<f32> {
     let BLEND_DEFAULT = ((MIX_NORMAL << 8u) | COMPOSE_SRC_OVER);
+    // The 0x7fff mask strips bit 15, the MIX_CLIP marker, so both the plain
+    // normal+src_over blend and the pure clip case take this fast path.
     if (mode & 0x7fffu) == BLEND_DEFAULT {
-        // Both normal+src_over blend and clip case
         return backdrop * (1.0 - src.a) + src;
     }
-    // Un-premultiply colors for blending. 
+    // Un-premultiply colors for blending.
     var cs = unpremultiply(src);
     let cb = unpremultiply(backdrop);
     let mix_mode = mode >> 8u;

@@ -13,11 +13,30 @@ namespace SixLabors.ImageSharp.Drawing;
 /// </remarks>
 public ref struct SegmentEnumerator
 {
+    /// <summary>
+    /// The geometry whose derived segments are enumerated.
+    /// </summary>
     private readonly LinearGeometry geometry;
+
+    /// <summary>
+    /// The zero-based index of the contour currently being enumerated.
+    /// </summary>
     private int contourIndex;
+
+    /// <summary>
+    /// The zero-based index of the next segment to yield within the current contour.
+    /// </summary>
     private int segmentIndexInContour;
+
+    /// <summary>
+    /// The most recently yielded segment.
+    /// </summary>
     private LinearSegment current;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SegmentEnumerator"/> struct positioned before the first segment.
+    /// </summary>
+    /// <param name="geometry">The geometry whose derived segments are enumerated.</param>
     internal SegmentEnumerator(LinearGeometry geometry)
     {
         this.geometry = geometry;
@@ -48,11 +67,15 @@ public ref struct SegmentEnumerator
                 int pointIndex = pointStart + this.segmentIndexInContour;
 
                 PointF start = this.geometry.Points[pointIndex];
+
+                // Closed contours have SegmentCount == PointCount, so the final index wraps back to
+                // the first stored point and forms the closing segment. Open contours have
+                // SegmentCount == PointCount - 1 and never reach the wrapping branch.
                 PointF end = this.segmentIndexInContour == contour.PointCount - 1
                     ? this.geometry.Points[pointStart]
                     : this.geometry.Points[pointIndex + 1];
 
-                this.current = CreateSegment(start, end);
+                this.current = CreateSegment(start, end, this.contourIndex);
                 this.segmentIndexInContour++;
                 return true;
             }
@@ -64,11 +87,19 @@ public ref struct SegmentEnumerator
         return false;
     }
 
-    private static LinearSegment CreateSegment(PointF start, PointF end)
+    /// <summary>
+    /// Creates a segment with its precomputed per-segment metadata.
+    /// </summary>
+    /// <param name="start">The segment start point.</param>
+    /// <param name="end">The segment end point.</param>
+    /// <param name="contourIndex">The zero-based index of the owning contour.</param>
+    /// <returns>The derived <see cref="LinearSegment"/>.</returns>
+    private static LinearSegment CreateSegment(PointF start, PointF end, int contourIndex)
         => new()
         {
             Start = start,
             End = end,
+            ContourIndex = contourIndex,
             MinY = MathF.Min(start.Y, end.Y),
             MaxY = MathF.Max(start.Y, end.Y),
             IsHorizontal = start.Y == end.Y

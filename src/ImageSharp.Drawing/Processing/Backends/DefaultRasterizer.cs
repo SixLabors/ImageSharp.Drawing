@@ -12,34 +12,88 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// Fixed-point rasterizer that converts retained fill geometry into per-row coverage.
 /// </summary>
 /// <remarks>
-/// The rasterizer works in scene-aligned row bands. Each retained band stores compact line blocks
-/// plus optional start-cover seeds, and execution replays that retained payload directly against
-/// worker-local scratch without rebuilding geometry on every row.
+/// <para>
+/// The rasterizer works in scene-aligned row bands of <see cref="DefaultTileHeight"/> pixels. Each
+/// retained band stores compact line blocks plus optional start-cover seeds, and execution replays
+/// that retained payload directly against worker-local scratch without rebuilding geometry on every row.
+/// </para>
+/// <para>
+/// Execution is parallel across row bands: the drawing backend runs a Parallel.For over scene rows
+/// (or over a single geometry's row bands), and each worker replays the retained items that touch
+/// its band sequentially into a worker-local <see cref="Context"/>. All static members here are
+/// stateless; every piece of mutable state lives in a <see cref="WorkerScratch"/> owned by exactly
+/// one worker, so no synchronization is required.
+/// </para>
 /// </remarks>
 internal static partial class DefaultRasterizer
 {
-    // Tile height used by the parallel row-tiling pipeline.
-    internal const int DefaultTileHeight = 16;
+    /// <summary>
+    /// Tile height, in pixels, of one row band in the parallel row-tiling pipeline.
+    /// </summary>
+    public const int DefaultTileHeight = 16;
 
+    /// <summary>
+    /// Number of fractional bits in the 24.8 fixed-point coordinate format.
+    /// </summary>
     private const int FixedShift = 8;
+
+    /// <summary>
+    /// The value 1.0 in 24.8 fixed-point, i.e. one pixel cell.
+    /// </summary>
     private const int FixedOne = 1 << FixedShift;
+
+    /// <summary>
+    /// Maximum per-segment coordinate delta (2048 pixels in 24.8 fixed-point) accepted by the
+    /// linearizer before it splits a segment, keeping DDA intermediate products inside 32 bits.
+    /// </summary>
     private const int MaximumDelta = 2048 << FixedShift;
+
+    /// <summary>
+    /// Number of bits in one native machine word; bitset rows are sized in these units.
+    /// </summary>
     private static readonly int WordBitCount = nint.Size * 8;
+
+    /// <summary>
+    /// Right-shift that converts an accumulated doubled cell area (max 2 * 256 * 256) down to the
+    /// 0..256 coverage step domain used by <see cref="Context.AreaToCoverage"/>.
+    /// </summary>
     private const int AreaToCoverageShift = 9;
+
+    /// <summary>
+    /// Number of discrete coverage steps per fully covered pixel (one 24.8 unit of winding).
+    /// </summary>
     private const int CoverageStepCount = 256;
+
+    /// <summary>
+    /// Bitmask implementing modulo 2 * <see cref="CoverageStepCount"/> for even-odd wrapping.
+    /// </summary>
     private const int EvenOddMask = (CoverageStepCount * 2) - 1;
+
+    /// <summary>
+    /// Length of one even-odd winding period; values past the midpoint mirror back down.
+    /// </summary>
     private const int EvenOddPeriod = CoverageStepCount * 2;
+
+    /// <summary>
+    /// Multiplier converting integer coverage steps to normalized [0, 1] coverage.
+    /// </summary>
     private const float CoverageScale = 1F / CoverageStepCount;
 
     /// <summary>
     /// Gets the preferred scene row height used by the CPU rasterizer.
     /// </summary>
-    internal static int PreferredRowHeight => DefaultTileHeight;
+    public static int PreferredRowHeight => DefaultTileHeight;
 
     /// <summary>
     /// Executes one retained rasterizable row item against a reusable scanner context.
     /// </summary>
-    internal static void ExecuteRasterizableItem<TRowHandler>(
+    /// <typeparam name="TRowHandler">The struct coverage handler type; constrained to a value type so calls devirtualize.</typeparam>
+    /// <param name="context">The worker-local scanner context to replay the item into.</param>
+    /// <param name="item">The retained fill row item to execute.</param>
+    /// <param name="bandInfo">The retained metadata describing the destination band.</param>
+    /// <param name="scanline">Reusable scanline scratch used to materialize emitted coverage spans.</param>
+    /// <param name="rowHandler">The coverage callback invoked for each emitted non-zero span.</param>
+    public static void ExecuteRasterizableItem<TRowHandler>(
         ref Context context,
         in RasterizableItem item,
         in RasterizableBandInfo bandInfo,
@@ -54,7 +108,8 @@ internal static partial class DefaultRasterizer
             bandInfo.BandHeight,
             bandInfo.IntersectionRule,
             bandInfo.RasterizationMode,
-            bandInfo.AntialiasThreshold);
+            bandInfo.AntialiasThreshold,
+            bandInfo.CoverageBoost);
 
         context.SeedStartCovers(item.GetActualCovers());
         if (item.Rasterizable.IsX16)
@@ -75,7 +130,14 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Executes one retained stroke row item against a reusable scanner context.
     /// </summary>
-    internal static void ExecuteStrokeRasterizableItem<TRowHandler>(
+    /// <typeparam name="TRowHandler">The struct coverage handler type; constrained to a value type so calls devirtualize.</typeparam>
+    /// <param name="context">The worker-local scanner context to replay the item into.</param>
+    /// <param name="item">The retained stroke row item to execute.</param>
+    /// <param name="bandInfo">The retained metadata describing the destination band.</param>
+    /// <param name="scanline">Reusable scanline scratch used to materialize emitted coverage spans.</param>
+    /// <param name="strokeBandCoverage">Reusable per-band stroke coverage scratch used by the direct stroke path.</param>
+    /// <param name="rowHandler">The coverage callback invoked for each emitted non-zero span.</param>
+    public static void ExecuteStrokeRasterizableItem<TRowHandler>(
         ref Context context,
         in StrokeRasterizableItem item,
         in RasterizableBandInfo bandInfo,
@@ -91,7 +153,8 @@ internal static partial class DefaultRasterizer
             bandInfo.BandHeight,
             bandInfo.IntersectionRule,
             bandInfo.RasterizationMode,
-            bandInfo.AntialiasThreshold);
+            bandInfo.AntialiasThreshold,
+            bandInfo.CoverageBoost);
 
         item.Rasterizable.ExecuteBand(ref context, in bandInfo, scanline, strokeBandCoverage, ref rowHandler);
     }
@@ -99,16 +162,26 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Converts bit count to the number of machine words needed to hold the bitset row.
     /// </summary>
+    /// <param name="maxBitCount">The maximum number of bits the row must represent.</param>
+    /// <returns>The number of machine words required, rounded up.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int BitVectorsForMaxBitCount(int maxBitCount) => (maxBitCount + WordBitCount - 1) / WordBitCount;
 
+    /// <summary>
+    /// Allocates worker-local scratch sized for the default band configuration at the given width.
+    /// </summary>
+    /// <param name="allocator">The memory allocator that owns the scratch buffers.</param>
+    /// <param name="width">The maximum band width, in pixels, the scratch must support.</param>
+    /// <returns>A new <see cref="WorkerScratch"/> instance.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static WorkerScratch CreateWorkerScratch(MemoryAllocator allocator, int width)
+    public static WorkerScratch CreateWorkerScratch(MemoryAllocator allocator, int width)
         => WorkerScratch.Create(allocator, BitVectorsForMaxBitCount(width), checked(width << 1), width, PreferredRowHeight);
 
     /// <summary>
     /// Converts a float coordinate to signed 24.8 fixed-point.
     /// </summary>
+    /// <param name="value">The floating-point coordinate to convert.</param>
+    /// <returns>The rounded 24.8 fixed-point value.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int FloatToFixed24Dot8(float value) => (int)MathF.Round(value * FixedOne);
 
@@ -116,9 +189,14 @@ internal static partial class DefaultRasterizer
     /// Returns one when a fixed-point value lies exactly on a cell boundary at or below zero.
     /// This is used to keep edge ownership consistent for vertical lines.
     /// </summary>
+    /// <param name="value">The 24.8 fixed-point coordinate to test.</param>
+    /// <returns>One when the value is a non-positive exact cell boundary; otherwise zero.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int FindAdjustment(int value)
     {
+        // Branchless: sign-extend (value - 1) so lte0 is 1 for value <= 0, and test the low
+        // fractional bits for an exact multiple of FixedOne the same way. The product of the two
+        // flags nudges boundary-sitting vertical edges into the cell to their left.
         int lte0 = ~((value - 1) >> 31) & 1;
         int divisibleBy256 = (((value & (FixedOne - 1)) - 1) >> 31) & 1;
         return lte0 & divisibleBy256;
@@ -127,6 +205,8 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Machine-word trailing zero count used for sparse bitset iteration.
     /// </summary>
+    /// <param name="value">The word to scan.</param>
+    /// <returns>The number of trailing zero bits in <paramref name="value"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int TrailingZeroCount(nuint value)
         => nint.Size == sizeof(ulong)
@@ -136,6 +216,7 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Throws when the requested raster interest exceeds the scanner's indexing limits.
     /// </summary>
+    /// <exception cref="ImageProcessingException">Always thrown.</exception>
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ThrowInterestBoundsTooLarge()
         => throw new ImageProcessingException("The rasterizer interest bounds are too large for DefaultRasterizer buffers.");
@@ -143,7 +224,14 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Creates retained row-local raster payload for one lowered geometry.
     /// </summary>
-    internal static RasterizableGeometry? CreateRasterizableGeometry(
+    /// <param name="geometry">The lowered linear geometry to linearize into retained line blocks.</param>
+    /// <param name="residual">The residual transform to apply to the geometry before rasterization.</param>
+    /// <param name="translateX">The integer X translation applied after the residual transform.</param>
+    /// <param name="translateY">The integer Y translation applied after the residual transform.</param>
+    /// <param name="options">The rasterizer options carrying interest bounds, fill rule, and antialias settings.</param>
+    /// <param name="allocator">The memory allocator used for retained start-cover storage.</param>
+    /// <returns>The retained geometry payload, or <see langword="null"/> when nothing is visible.</returns>
+    public static RasterizableGeometry? CreateRasterizableGeometry(
         LinearGeometry geometry,
         Matrix4x4 residual,
         int translateX,
@@ -151,11 +239,8 @@ internal static partial class DefaultRasterizer
         in RasterizerOptions options,
         MemoryAllocator allocator)
     {
-        float samplingOffsetX = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
-        float samplingOffsetY = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
-
         RectangleF translatedBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
-        translatedBounds.Offset(translateX + samplingOffsetX, translateY + samplingOffsetY);
+        translatedBounds.Offset(translateX, translateY);
 
         // The retained clipper ignores segments at the maximum X edge,
         // so extend the right bound by one pixel to keep closing vertical edges available.
@@ -184,6 +269,8 @@ internal static partial class DefaultRasterizer
             ThrowInterestBoundsTooLarge();
         }
 
+        // Narrow geometries pack both X endpoints into one 32-bit word: band-local 24.8 X values
+        // stay below 128 * 256 = 32768, so they fit signed 16 bits and halve retained line memory.
         if (width < 128)
         {
             LinearizerX16Y16 linearizer = new(
@@ -197,8 +284,6 @@ internal static partial class DefaultRasterizer
                 height,
                 firstRowBandIndex,
                 rowBandCount,
-                samplingOffsetX,
-                samplingOffsetY,
                 allocator);
 
             if (!linearizer.TryProcess(out LinearizedRasterData<LineArrayX16Y16Block> result))
@@ -222,6 +307,7 @@ internal static partial class DefaultRasterizer
                     options.IntersectionRule,
                     options.RasterizationMode,
                     options.AntialiasThreshold,
+                    options.CoverageBoost,
                     hasStartCovers);
             }
 
@@ -252,8 +338,6 @@ internal static partial class DefaultRasterizer
                 height,
                 firstRowBandIndex,
                 rowBandCount,
-                samplingOffsetX,
-                samplingOffsetY,
                 allocator);
 
             if (!linearizer.TryProcess(out LinearizedRasterData<LineArrayX32Y16Block> result))
@@ -277,6 +361,7 @@ internal static partial class DefaultRasterizer
                     options.IntersectionRule,
                     options.RasterizationMode,
                     options.AntialiasThreshold,
+                    options.CoverageBoost,
                     hasStartCovers);
             }
 
@@ -296,6 +381,13 @@ internal static partial class DefaultRasterizer
         }
     }
 
+    /// <summary>
+    /// Counts the total retained lines in a block chain.
+    /// </summary>
+    /// <typeparam name="TLineBlock">The retained line block type.</typeparam>
+    /// <param name="firstLineBlock">The front block of the chain, or <see langword="null"/> when the chain is empty.</param>
+    /// <param name="firstBlockLineCount">The number of valid lines in the front block.</param>
+    /// <returns>The total line count across the chain.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int CountLines<TLineBlock>(TLineBlock? firstLineBlock, int firstBlockLineCount)
         where TLineBlock : class, ILineBlock<TLineBlock>
@@ -305,6 +397,8 @@ internal static partial class DefaultRasterizer
             return 0;
         }
 
+        // Only the front block is partially filled; every block behind it is full by construction
+        // because the collectors allocate a new front block only after the previous one overflows.
         int count = firstBlockLineCount;
         TLineBlock? block = firstLineBlock.Next;
         while (block is not null)
@@ -339,6 +433,7 @@ internal static partial class DefaultRasterizer
         private IntersectionRule intersectionRule;
         private RasterizationMode rasterizationMode;
         private float antialiasThreshold;
+        private float coverageBoost;
         private int touchedRowCount;
 
         /// <summary>
@@ -383,6 +478,7 @@ internal static partial class DefaultRasterizer
             this.intersectionRule = intersectionRule;
             this.rasterizationMode = rasterizationMode;
             this.antialiasThreshold = antialiasThreshold;
+            this.coverageBoost = 0F;
             this.touchedRowCount = 0;
         }
 
@@ -396,6 +492,7 @@ internal static partial class DefaultRasterizer
         /// <param name="intersectionRule">The fill rule used when converting accumulated winding/coverage into final alpha.</param>
         /// <param name="rasterizationMode">The rasterization mode that controls how antialiasing thresholds are interpreted.</param>
         /// <param name="antialiasThreshold">The threshold used when antialiasing is conditionally reduced or disabled.</param>
+        /// <param name="coverageBoost">The perceptual coverage boost applied to antialiased coverage; zero disables it.</param>
         public void Reconfigure(
             int width,
             int wordsPerRow,
@@ -403,7 +500,8 @@ internal static partial class DefaultRasterizer
             int height,
             IntersectionRule intersectionRule,
             RasterizationMode rasterizationMode,
-            float antialiasThreshold)
+            float antialiasThreshold,
+            float coverageBoost)
         {
             this.width = width;
             this.height = height;
@@ -412,6 +510,7 @@ internal static partial class DefaultRasterizer
             this.intersectionRule = intersectionRule;
             this.rasterizationMode = rasterizationMode;
             this.antialiasThreshold = antialiasThreshold;
+            this.coverageBoost = coverageBoost;
         }
 
         /// <summary>
@@ -446,6 +545,9 @@ internal static partial class DefaultRasterizer
                 return;
             }
 
+            // Sign convention mirrors CellVertical's delta = y0 - y1: downward intervals subtract
+            // winding and upward intervals add it, so left-of-band edges stay consistent with
+            // edges rasterized through the cell tables.
             if (y0 < y1)
             {
                 int rowIndex0 = y0 >> FixedShift;
@@ -502,6 +604,7 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Converts accumulated cover/area tables into non-zero coverage span callbacks.
         /// </summary>
+        /// <typeparam name="TRowHandler">The struct coverage handler type; constrained to a value type so calls devirtualize.</typeparam>
         /// <param name="destinationTop">Absolute destination Y corresponding to row zero in this context.</param>
         /// <param name="destinationLeft">Absolute destination X corresponding to column zero in this context.</param>
         /// <param name="scanline">Reusable scanline scratch buffer used to materialize emitted spans.</param>
@@ -588,6 +691,7 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits one row by iterating touched columns and coalescing equal-coverage spans.
         /// </summary>
+        /// <typeparam name="TRowHandler">The struct coverage handler type; constrained to a value type so calls devirtualize.</typeparam>
         /// <param name="rowBitVectors">Bitset words indicating touched columns in this row.</param>
         /// <param name="row">Row index inside the context.</param>
         /// <param name="cover">Initial carry cover value from x less than zero contributions.</param>
@@ -742,6 +846,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Converts accumulated signed area to normalized coverage under the selected fill rule.
         /// </summary>
+        /// <param name="area">
+        /// The accumulated doubled signed area in fixed-point cell units; a fully covered pixel
+        /// corresponds to 2 * 256 * 256, which <see cref="AreaToCoverageShift"/> maps to <see cref="CoverageStepCount"/>.
+        /// </param>
+        /// <returns>The normalized coverage value in [0, 1].</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private readonly float AreaToCoverage(int area)
         {
@@ -780,12 +889,27 @@ internal static partial class DefaultRasterizer
                 return coverage >= this.antialiasThreshold ? 1F : 0F;
             }
 
+            if (this.coverageBoost != 0F)
+            {
+                // Perceptual contrast boost for text: an S-curve that darkens coverage above
+                // one half and lightens it below, so stems solidify while nearly-open counters
+                // stay bright. 0, 0.5, and 1 are fixed points; at full strength the remap is
+                // exactly smoothstep (3a^2 - 2a^3), so the boost blends identity to smoothstep.
+                coverage += this.coverageBoost * coverage * (1F - coverage) * ((2F * coverage) - 1F);
+            }
+
             return coverage;
         }
 
         /// <summary>
         /// Buffers one non-zero span into the current contiguous row run.
         /// </summary>
+        /// <param name="scanline">The scratch scanline that stores per-pixel coverage for the buffered run.</param>
+        /// <param name="start">The inclusive start column of the span.</param>
+        /// <param name="end">The exclusive end column of the span.</param>
+        /// <param name="coverage">The constant coverage value for the span.</param>
+        /// <param name="runStart">The inclusive start column of the buffered run; negative when no run is open.</param>
+        /// <param name="runEnd">The exclusive end column of the buffered run.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void BufferSpan(
             Span<float> scanline,
@@ -819,6 +943,13 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits the currently buffered contiguous run, if any.
         /// </summary>
+        /// <typeparam name="TRowHandler">The struct coverage handler type; constrained to a value type so calls devirtualize.</typeparam>
+        /// <param name="rowHandler">The coverage callback receiving the run.</param>
+        /// <param name="destinationY">Absolute destination Y for the emitted row.</param>
+        /// <param name="destinationLeft">Absolute destination X corresponding to column zero in this context.</param>
+        /// <param name="scanline">The scratch scanline containing the buffered per-pixel coverage.</param>
+        /// <param name="runStart">The inclusive start column of the buffered run; reset to -1 after flushing.</param>
+        /// <param name="runEnd">The exclusive end column of the buffered run; reset to -1 after flushing.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void FlushBufferedRun<TRowHandler>(
             ref TRowHandler rowHandler,
@@ -842,6 +973,10 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Sets a row/column bit and reports whether it was newly set.
         /// </summary>
+        /// <param name="row">The band-local row index.</param>
+        /// <param name="column">The band-local column index.</param>
+        /// <param name="rowHadBits">Receives whether the row already had any bit-vector backed cell data.</param>
+        /// <returns><see langword="true"/> when the bit was newly set; otherwise <see langword="false"/>.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private readonly bool ConditionalSetBit(int row, int column, out bool rowHadBits)
         {
@@ -866,6 +1001,10 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Adds one cell contribution into cover/area accumulators.
         /// </summary>
+        /// <param name="row">The band-local row index; out-of-range rows are ignored.</param>
+        /// <param name="column">The band-local column index; negative columns fold into the row carry.</param>
+        /// <param name="delta">The signed winding delta contributed by the edge crossing this cell.</param>
+        /// <param name="area">The signed doubled area contributed inside this cell.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void AddCell(int row, int column, int delta, int area)
         {
@@ -924,6 +1063,8 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Adds one start-cover delta for a touched row.
         /// </summary>
+        /// <param name="row">The band-local row index; out-of-range rows are ignored.</param>
+        /// <param name="delta">The signed winding delta carried into the row from left of the band.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void AddStartCoverCell(int row, int delta)
         {
@@ -939,6 +1080,7 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Marks a row as touched once so sparse reset can clear it later.
         /// </summary>
+        /// <param name="row">The band-local row index to mark.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void MarkRowTouched(int row)
         {
@@ -954,9 +1096,17 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits one vertical cell contribution.
         /// </summary>
+        /// <param name="px">The band-local column index of the cell.</param>
+        /// <param name="py">The band-local row index of the cell.</param>
+        /// <param name="x">The cell-local X coordinate of the vertical edge (0 to <see cref="FixedOne"/>).</param>
+        /// <param name="y0">The cell-local starting Y coordinate.</param>
+        /// <param name="y1">The cell-local ending Y coordinate.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void CellVertical(int px, int py, int x, int y0, int y1)
         {
+            // Signed winding is y0 - y1; area is twice the trapezoid between the edge and the
+            // cell's right boundary, keeping the math integral by deferring the divide by two
+            // until AreaToCoverage shifts it out.
             int delta = y0 - y1;
             int area = delta * ((FixedOne * 2) - x - x);
             this.AddCell(py, px, delta, area);
@@ -965,9 +1115,17 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits one general cell contribution.
         /// </summary>
+        /// <param name="row">The band-local row index of the cell.</param>
+        /// <param name="px">The band-local column index of the cell.</param>
+        /// <param name="x0">The cell-local starting X coordinate (0 to <see cref="FixedOne"/>).</param>
+        /// <param name="y0">The cell-local starting Y coordinate.</param>
+        /// <param name="x1">The cell-local ending X coordinate (0 to <see cref="FixedOne"/>).</param>
+        /// <param name="y1">The cell-local ending Y coordinate.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void Cell(int row, int px, int x0, int y0, int x1, int y1)
         {
+            // Same doubled trapezoid formulation as CellVertical, using the average of the two
+            // X endpoints as the edge position within the cell.
             int delta = y0 - y1;
             int area = delta * ((FixedOne * 2) - x0 - x1);
             this.AddCell(row, px, delta, area);
@@ -976,6 +1134,10 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Rasterizes a downward vertical edge segment.
         /// </summary>
+        /// <param name="columnIndex">The band-local column index owning the edge.</param>
+        /// <param name="y0">The starting Y coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="y1">The ending Y coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="x">The X coordinate of the edge in 24.8 fixed-point band-local space.</param>
         private void VerticalDown(int columnIndex, int y0, int y1, int x)
         {
             int rowIndex0 = y0 >> FixedShift;
@@ -1005,6 +1167,10 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Rasterizes an upward vertical edge segment.
         /// </summary>
+        /// <param name="columnIndex">The band-local column index owning the edge.</param>
+        /// <param name="y0">The starting Y coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="y1">The ending Y coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="x">The X coordinate of the edge in 24.8 fixed-point band-local space.</param>
         private void VerticalUp(int columnIndex, int y0, int y1, int x)
         {
             int rowIndex0 = (y0 - 1) >> FixedShift;
@@ -1037,6 +1203,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Rasterizes a downward, left-to-right segment within a single row.
         /// </summary>
+        /// <param name="rowIndex">The band-local row index containing the segment.</param>
+        /// <param name="p0x">The starting X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="p0y">The starting Y coordinate in 24.8 fixed-point row-local space.</param>
+        /// <param name="p1x">The ending X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="p1y">The ending Y coordinate in 24.8 fixed-point row-local space.</param>
         private void RowDownR(int rowIndex, int p0x, int p0y, int p1x, int p1y)
         {
             int columnIndex0 = p0x >> FixedShift;
@@ -1050,6 +1221,8 @@ internal static partial class DefaultRasterizer
                 return;
             }
 
+            // pp/mod/lift/rem implement an integer DDA that advances y at column boundaries
+            // without accumulating rounding error; the remainder carries the exact fraction.
             int dx = p1x - p0x;
             int dy = p1y - p0y;
             int pp = (FixedOne - fx0) * dy;
@@ -1088,6 +1261,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// RowDownR variant that handles perfectly vertical edge ownership consistently.
         /// </summary>
+        /// <param name="rowIndex">The band-local row index containing the segment.</param>
+        /// <param name="p0x">The starting X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="p0y">The starting Y coordinate in 24.8 fixed-point row-local space.</param>
+        /// <param name="p1x">The ending X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="p1y">The ending Y coordinate in 24.8 fixed-point row-local space.</param>
         private void RowDownR_V(int rowIndex, int p0x, int p0y, int p1x, int p1y)
         {
             if (p0x < p1x)
@@ -1105,6 +1283,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Rasterizes an upward, left-to-right segment within a single row.
         /// </summary>
+        /// <param name="rowIndex">The band-local row index containing the segment.</param>
+        /// <param name="p0x">The starting X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="p0y">The starting Y coordinate in 24.8 fixed-point row-local space.</param>
+        /// <param name="p1x">The ending X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="p1y">The ending Y coordinate in 24.8 fixed-point row-local space.</param>
         private void RowUpR(int rowIndex, int p0x, int p0y, int p1x, int p1y)
         {
             int columnIndex0 = p0x >> FixedShift;
@@ -1156,6 +1339,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// RowUpR variant that handles perfectly vertical edge ownership consistently.
         /// </summary>
+        /// <param name="rowIndex">The band-local row index containing the segment.</param>
+        /// <param name="p0x">The starting X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="p0y">The starting Y coordinate in 24.8 fixed-point row-local space.</param>
+        /// <param name="p1x">The ending X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="p1y">The ending Y coordinate in 24.8 fixed-point row-local space.</param>
         private void RowUpR_V(int rowIndex, int p0x, int p0y, int p1x, int p1y)
         {
             if (p0x < p1x)
@@ -1173,6 +1361,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Rasterizes a downward, right-to-left segment within a single row.
         /// </summary>
+        /// <param name="rowIndex">The band-local row index containing the segment.</param>
+        /// <param name="p0x">The starting X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="p0y">The starting Y coordinate in 24.8 fixed-point row-local space.</param>
+        /// <param name="p1x">The ending X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="p1y">The ending Y coordinate in 24.8 fixed-point row-local space.</param>
         private void RowDownL(int rowIndex, int p0x, int p0y, int p1x, int p1y)
         {
             int columnIndex0 = (p0x - 1) >> FixedShift;
@@ -1224,6 +1417,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// RowDownL variant that handles perfectly vertical edge ownership consistently.
         /// </summary>
+        /// <param name="rowIndex">The band-local row index containing the segment.</param>
+        /// <param name="p0x">The starting X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="p0y">The starting Y coordinate in 24.8 fixed-point row-local space.</param>
+        /// <param name="p1x">The ending X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="p1y">The ending Y coordinate in 24.8 fixed-point row-local space.</param>
         private void RowDownL_V(int rowIndex, int p0x, int p0y, int p1x, int p1y)
         {
             if (p0x > p1x)
@@ -1241,6 +1439,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Rasterizes an upward, right-to-left segment within a single row.
         /// </summary>
+        /// <param name="rowIndex">The band-local row index containing the segment.</param>
+        /// <param name="p0x">The starting X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="p0y">The starting Y coordinate in 24.8 fixed-point row-local space.</param>
+        /// <param name="p1x">The ending X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="p1y">The ending Y coordinate in 24.8 fixed-point row-local space.</param>
         private void RowUpL(int rowIndex, int p0x, int p0y, int p1x, int p1y)
         {
             int columnIndex0 = (p0x - 1) >> FixedShift;
@@ -1292,6 +1495,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// RowUpL variant that handles perfectly vertical edge ownership consistently.
         /// </summary>
+        /// <param name="rowIndex">The band-local row index containing the segment.</param>
+        /// <param name="p0x">The starting X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="p0y">The starting Y coordinate in 24.8 fixed-point row-local space.</param>
+        /// <param name="p1x">The ending X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="p1y">The ending Y coordinate in 24.8 fixed-point row-local space.</param>
         private void RowUpL_V(int rowIndex, int p0x, int p0y, int p1x, int p1y)
         {
             if (p0x > p1x)
@@ -1309,6 +1517,12 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Rasterizes a downward, left-to-right segment spanning multiple rows.
         /// </summary>
+        /// <param name="rowIndex0">The band-local index of the first touched row.</param>
+        /// <param name="rowIndex1">The band-local index of the last touched row.</param>
+        /// <param name="x0">The starting X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="y0">The starting Y coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="x1">The ending X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="y1">The ending Y coordinate in 24.8 fixed-point band-local space.</param>
         private void LineDownR(int rowIndex0, int rowIndex1, int x0, int y0, int x1, int y1)
         {
             int dx = x1 - x0;
@@ -1355,6 +1569,12 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Rasterizes an upward, left-to-right segment spanning multiple rows.
         /// </summary>
+        /// <param name="rowIndex0">The band-local index of the first touched row.</param>
+        /// <param name="rowIndex1">The band-local index of the last touched row.</param>
+        /// <param name="x0">The starting X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="y0">The starting Y coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="x1">The ending X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="y1">The ending Y coordinate in 24.8 fixed-point band-local space.</param>
         private void LineUpR(int rowIndex0, int rowIndex1, int x0, int y0, int x1, int y1)
         {
             int dx = x1 - x0;
@@ -1399,6 +1619,12 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Rasterizes a downward, right-to-left segment spanning multiple rows.
         /// </summary>
+        /// <param name="rowIndex0">The band-local index of the first touched row.</param>
+        /// <param name="rowIndex1">The band-local index of the last touched row.</param>
+        /// <param name="x0">The starting X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="y0">The starting Y coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="x1">The ending X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="y1">The ending Y coordinate in 24.8 fixed-point band-local space.</param>
         private void LineDownL(int rowIndex0, int rowIndex1, int x0, int y0, int x1, int y1)
         {
             int dx = x0 - x1;
@@ -1443,6 +1669,12 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Rasterizes an upward, right-to-left segment spanning multiple rows.
         /// </summary>
+        /// <param name="rowIndex0">The band-local index of the first touched row.</param>
+        /// <param name="rowIndex1">The band-local index of the last touched row.</param>
+        /// <param name="x0">The starting X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="y0">The starting Y coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="x1">The ending X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="y1">The ending Y coordinate in 24.8 fixed-point band-local space.</param>
         private void LineUpL(int rowIndex0, int rowIndex1, int x0, int y0, int x1, int y1)
         {
             int dx = x0 - x1;
@@ -1487,6 +1719,10 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Dispatches a clipped edge to the correct directional fixed-point walker.
         /// </summary>
+        /// <param name="x0">The starting X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="y0">The starting Y coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="x1">The ending X coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="y1">The ending Y coordinate in 24.8 fixed-point band-local space.</param>
         private void RasterizeLine(int x0, int y0, int x1, int y1)
         {
             if (x0 == x1)
@@ -1567,48 +1803,6 @@ internal static partial class DefaultRasterizer
     }
 
     /// <summary>
-    /// Immutable scanner-local edge record (16 bytes).
-    /// </summary>
-    /// <remarks>
-    /// All coordinates are stored as signed 24.8 fixed-point integers for predictable hot-path
-    /// access without per-read unpacking. Row bounds are computed inline from Y coordinates
-    /// where needed.
-    /// </remarks>
-    internal readonly struct EdgeData
-    {
-        /// <summary>
-        /// Gets edge start X in scanner-local coordinates (24.8 fixed-point).
-        /// </summary>
-        public readonly int X0;
-
-        /// <summary>
-        /// Gets edge start Y in scanner-local coordinates (24.8 fixed-point).
-        /// </summary>
-        public readonly int Y0;
-
-        /// <summary>
-        /// Gets edge end X in scanner-local coordinates (24.8 fixed-point).
-        /// </summary>
-        public readonly int X1;
-
-        /// <summary>
-        /// Gets edge end Y in scanner-local coordinates (24.8 fixed-point).
-        /// </summary>
-        public readonly int Y1;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="EdgeData"/> struct.
-        /// </summary>
-        public EdgeData(int x0, int y0, int x1, int y1)
-        {
-            this.X0 = x0;
-            this.Y0 = y0;
-            this.X1 = x1;
-            this.Y1 = y1;
-        }
-    }
-
-    /// <summary>
     /// Reusable per-worker scratch buffers used by raster band execution.
     /// </summary>
     internal sealed class WorkerScratch : IDisposable
@@ -1629,6 +1823,23 @@ internal static partial class DefaultRasterizer
         private readonly IMemoryOwner<float> scanlineOwner;
         private IMemoryOwner<float>? strokeBandCoverageOwner;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="WorkerScratch"/> class taking ownership of the supplied buffers.
+        /// </summary>
+        /// <param name="allocator">The allocator used for lazily created stroke coverage scratch.</param>
+        /// <param name="wordsPerRow">The bit-vector row width, in machine words, this scratch supports.</param>
+        /// <param name="coverStride">The cover/area stride, in cells, this scratch supports.</param>
+        /// <param name="width">The maximum band width, in pixels, this scratch supports.</param>
+        /// <param name="tileCapacity">The maximum band height, in rows, this scratch supports.</param>
+        /// <param name="bitVectorsOwner">The owned bit-vector storage.</param>
+        /// <param name="coverAreaOwner">The owned cover/area cell storage.</param>
+        /// <param name="startCoverOwner">The owned per-row start-cover storage.</param>
+        /// <param name="rowMinTouchedColumnOwner">The owned per-row minimum touched column storage.</param>
+        /// <param name="rowMaxTouchedColumnOwner">The owned per-row maximum touched column storage.</param>
+        /// <param name="rowHasBitsOwner">The owned per-row bit-data flag storage.</param>
+        /// <param name="rowTouchedOwner">The owned per-row touched flag storage.</param>
+        /// <param name="touchedRowsOwner">The owned touched-row index list storage.</param>
+        /// <param name="scanlineOwner">The owned scanline scratch storage.</param>
         private WorkerScratch(
             MemoryAllocator allocator,
             int wordsPerRow,
@@ -1678,7 +1889,12 @@ internal static partial class DefaultRasterizer
         /// Returns <see langword="true"/> when this scratch has compatible dimensions and sufficient
         /// capacity for the requested parameters, making it safe to reuse without reallocation.
         /// </summary>
-        internal bool CanReuse(int requiredWordsPerRow, int requiredCoverStride, int requiredWidth, int minCapacity)
+        /// <param name="requiredWordsPerRow">The bit-vector row width, in machine words, the caller needs.</param>
+        /// <param name="requiredCoverStride">The cover/area stride, in cells, the caller needs.</param>
+        /// <param name="requiredWidth">The band width, in pixels, the caller needs.</param>
+        /// <param name="minCapacity">The minimum band height, in rows, the caller needs.</param>
+        /// <returns><see langword="true"/> when reuse is safe; otherwise <see langword="false"/>.</returns>
+        private bool CanReuse(int requiredWordsPerRow, int requiredCoverStride, int requiredWidth, int minCapacity)
             => this.wordsPerRow >= requiredWordsPerRow
             && this.coverStride >= requiredCoverStride
             && this.width >= requiredWidth
@@ -1688,46 +1904,84 @@ internal static partial class DefaultRasterizer
         /// Returns <see langword="true"/> when this scratch can be reused for the default band configuration
         /// at the requested width.
         /// </summary>
-        internal bool CanReuse(int requiredWidth)
+        /// <param name="requiredWidth">The band width, in pixels, the caller needs.</param>
+        /// <returns><see langword="true"/> when reuse is safe; otherwise <see langword="false"/>.</returns>
+        public bool CanReuse(int requiredWidth)
             => this.CanReuse(BitVectorsForMaxBitCount(requiredWidth), checked(requiredWidth << 1), requiredWidth, PreferredRowHeight);
 
         /// <summary>
         /// Allocates worker-local scratch sized for the configured tile/band capacity.
         /// </summary>
+        /// <param name="allocator">The memory allocator that owns the scratch buffers.</param>
+        /// <param name="wordsPerRow">The bit-vector row width in machine words.</param>
+        /// <param name="coverStride">The cover/area stride in cells (two cells per pixel).</param>
+        /// <param name="width">The maximum band width in pixels.</param>
+        /// <param name="tileCapacity">The maximum band height in rows.</param>
+        /// <returns>A new <see cref="WorkerScratch"/> instance.</returns>
         public static WorkerScratch Create(MemoryAllocator allocator, int wordsPerRow, int coverStride, int width, int tileCapacity)
         {
             int bitVectorCapacity = checked(wordsPerRow * tileCapacity);
             int coverAreaCapacity = checked(coverStride * tileCapacity);
-            IMemoryOwner<nuint> bitVectorsOwner = allocator.Allocate<nuint>(bitVectorCapacity, AllocationOptions.Clean);
-            IMemoryOwner<int> coverAreaOwner = allocator.Allocate<int>(coverAreaCapacity);
-            IMemoryOwner<int> startCoverOwner = allocator.Allocate<int>(tileCapacity, AllocationOptions.Clean);
-            IMemoryOwner<int> rowMinTouchedColumnOwner = allocator.Allocate<int>(tileCapacity);
-            IMemoryOwner<int> rowMaxTouchedColumnOwner = allocator.Allocate<int>(tileCapacity);
-            IMemoryOwner<byte> rowHasBitsOwner = allocator.Allocate<byte>(tileCapacity, AllocationOptions.Clean);
-            IMemoryOwner<byte> rowTouchedOwner = allocator.Allocate<byte>(tileCapacity, AllocationOptions.Clean);
-            IMemoryOwner<int> touchedRowsOwner = allocator.Allocate<int>(tileCapacity);
-            IMemoryOwner<float> scanlineOwner = allocator.Allocate<float>(width);
+            IMemoryOwner<nuint>? bitVectorsOwner = null;
+            IMemoryOwner<int>? coverAreaOwner = null;
+            IMemoryOwner<int>? startCoverOwner = null;
+            IMemoryOwner<int>? rowMinTouchedColumnOwner = null;
+            IMemoryOwner<int>? rowMaxTouchedColumnOwner = null;
+            IMemoryOwner<byte>? rowHasBitsOwner = null;
+            IMemoryOwner<byte>? rowTouchedOwner = null;
+            IMemoryOwner<int>? touchedRowsOwner = null;
 
-            return new WorkerScratch(
-                allocator,
-                wordsPerRow,
-                coverStride,
-                width,
-                tileCapacity,
-                bitVectorsOwner,
-                coverAreaOwner,
-                startCoverOwner,
-                rowMinTouchedColumnOwner,
-                rowMaxTouchedColumnOwner,
-                rowHasBitsOwner,
-                rowTouchedOwner,
-                touchedRowsOwner,
-                scanlineOwner);
+            try
+            {
+                bitVectorsOwner = allocator.Allocate<nuint>(bitVectorCapacity, AllocationOptions.Clean);
+                coverAreaOwner = allocator.Allocate<int>(coverAreaCapacity);
+                startCoverOwner = allocator.Allocate<int>(tileCapacity, AllocationOptions.Clean);
+                rowMinTouchedColumnOwner = allocator.Allocate<int>(tileCapacity);
+                rowMaxTouchedColumnOwner = allocator.Allocate<int>(tileCapacity);
+                rowHasBitsOwner = allocator.Allocate<byte>(tileCapacity, AllocationOptions.Clean);
+                rowTouchedOwner = allocator.Allocate<byte>(tileCapacity, AllocationOptions.Clean);
+                touchedRowsOwner = allocator.Allocate<int>(tileCapacity);
+                IMemoryOwner<float> scanlineOwner = allocator.Allocate<float>(width);
+
+                return new WorkerScratch(
+                    allocator,
+                    wordsPerRow,
+                    coverStride,
+                    width,
+                    tileCapacity,
+                    bitVectorsOwner,
+                    coverAreaOwner,
+                    startCoverOwner,
+                    rowMinTouchedColumnOwner,
+                    rowMaxTouchedColumnOwner,
+                    rowHasBitsOwner,
+                    rowTouchedOwner,
+                    touchedRowsOwner,
+                    scanlineOwner);
+            }
+            catch
+            {
+                // A later allocation throwing strands the earlier rentals: the scratch never
+                // materialized, so nothing else can return them.
+                bitVectorsOwner?.Dispose();
+                coverAreaOwner?.Dispose();
+                startCoverOwner?.Dispose();
+                rowMinTouchedColumnOwner?.Dispose();
+                rowMaxTouchedColumnOwner?.Dispose();
+                rowHasBitsOwner?.Dispose();
+                rowTouchedOwner?.Dispose();
+                touchedRowsOwner?.Dispose();
+                throw;
+            }
         }
 
         /// <summary>
         /// Creates a context view over a compatible prefix of this scratch for the requested geometry width.
         /// </summary>
+        /// <param name="intersectionRule">The fill rule used when converting accumulated winding/coverage into final alpha.</param>
+        /// <param name="rasterizationMode">The rasterization mode that controls how antialiasing thresholds are interpreted.</param>
+        /// <param name="antialiasThreshold">The threshold used when antialiasing is conditionally reduced or disabled.</param>
+        /// <returns>A <see cref="Context"/> backed by this scratch; the caller must not use two contexts over the same scratch concurrently.</returns>
         public Context CreateContext(
             IntersectionRule intersectionRule,
             RasterizationMode rasterizationMode,

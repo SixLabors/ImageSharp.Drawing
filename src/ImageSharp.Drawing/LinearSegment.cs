@@ -23,6 +23,11 @@ public readonly struct LinearSegment
     public required PointF End { get; init; }
 
     /// <summary>
+    /// Gets the zero-based index of the contour that owns this segment.
+    /// </summary>
+    public required int ContourIndex { get; init; }
+
+    /// <summary>
     /// Gets the smaller of <see cref="Start"/>.<see cref="PointF.Y"/> and <see cref="End"/>.<see cref="PointF.Y"/>.
     /// </summary>
     public required float MinY { get; init; }

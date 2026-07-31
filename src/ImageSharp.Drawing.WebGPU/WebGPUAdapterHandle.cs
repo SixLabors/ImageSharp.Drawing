@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Silk.NET.WebGPU;
+using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -24,7 +24,7 @@ internal sealed unsafe class WebGPUAdapterHandle : WebGPUHandle
     /// <see langword="true"/> when this wrapper owns the adapter and must release it;
     /// <see langword="false"/> when the caller retains ownership.
     /// </param>
-    internal WebGPUAdapterHandle(WebGPU? api, nint adapterHandle, bool ownsHandle)
+    public WebGPUAdapterHandle(WebGPU? api, nint adapterHandle, bool ownsHandle)
         : base(adapterHandle, ownsHandle)
         => this.api = api;
 
@@ -33,7 +33,7 @@ internal sealed unsafe class WebGPUAdapterHandle : WebGPUHandle
     {
         try
         {
-            this.api?.AdapterRelease((Adapter*)this.handle);
+            this.api?.AdapterRelease((WGPUAdapterImpl*)this.handle);
             return true;
         }
         catch

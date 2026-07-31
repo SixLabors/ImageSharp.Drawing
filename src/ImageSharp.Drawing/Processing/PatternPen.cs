@@ -4,14 +4,14 @@
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Defines a pen that can apply a pattern to a line with a set brush and thickness
+/// Defines a pen that can apply a pattern to a line with a set brush and thickness.
 /// </summary>
 /// <remarks>
-/// The pattern will be in to the form of
+/// The pattern is expressed in the form
 /// <code>
-/// new float[]{ 1f, 2f, 0.5f}
+/// [1f, 2f, 0.5f]
 /// </code>
-/// this will be converted into a pattern that is 3.5 times longer that the width with 3 sections.
+/// this will be converted into a pattern that is 3.5 times longer than the width with 3 sections.
 /// <list type="bullet">
 /// <item>Section 1 will be width long (making a square) and will be filled by the brush.</item>
 /// <item>Section 2 will be width * 2 long and will be empty.</item>
@@ -35,10 +35,33 @@ public class PatternPen : Pen
     /// Initializes a new instance of the <see cref="PatternPen"/> class.
     /// </summary>
     /// <param name="color">The color.</param>
+    /// <param name="strokePattern">The stroke pattern.</param>
+    /// <param name="strokePatternOffset">The distance into the stroke pattern, expressed as a multiple of the stroke width.</param>
+    public PatternPen(Color color, float[] strokePattern, float strokePatternOffset)
+        : base(new PenOptions(color, 1, strokePattern, strokePatternOffset))
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PatternPen"/> class.
+    /// </summary>
+    /// <param name="color">The color.</param>
     /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
     /// <param name="strokePattern">The stroke pattern.</param>
     public PatternPen(Color color, float strokeWidth, float[] strokePattern)
         : base(new SolidBrush(color), strokeWidth, strokePattern)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PatternPen"/> class.
+    /// </summary>
+    /// <param name="color">The color.</param>
+    /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
+    /// <param name="strokePattern">The stroke pattern.</param>
+    /// <param name="strokePatternOffset">The distance into the stroke pattern, expressed as a multiple of <paramref name="strokeWidth"/>.</param>
+    public PatternPen(Color color, float strokeWidth, float[] strokePattern, float strokePatternOffset)
+        : base(new PenOptions(color, strokeWidth, strokePattern, strokePatternOffset))
     {
     }
 
@@ -50,6 +73,18 @@ public class PatternPen : Pen
     /// <param name="strokePattern">The stroke pattern.</param>
     public PatternPen(Brush strokeFill, float strokeWidth, float[] strokePattern)
         : base(strokeFill, strokeWidth, strokePattern)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PatternPen"/> class.
+    /// </summary>
+    /// <param name="strokeFill">The brush used to fill the stroke outline.</param>
+    /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
+    /// <param name="strokePattern">The stroke pattern.</param>
+    /// <param name="strokePatternOffset">The distance into the stroke pattern, expressed as a multiple of <paramref name="strokeWidth"/>.</param>
+    public PatternPen(Brush strokeFill, float strokeWidth, float[] strokePattern, float strokePatternOffset)
+        : base(new PenOptions(strokeFill, strokeWidth, strokePattern, strokePatternOffset))
     {
     }
 
@@ -75,5 +110,5 @@ public class PatternPen : Pen
 
     /// <inheritdoc />
     public override IPath GeneratePath(IPath path, float strokeWidth)
-        => path.GenerateOutline(strokeWidth, this.StrokePattern.Span, this.StrokeOptions);
+        => path.GenerateOutline(strokeWidth, this.StrokePattern.Span, this.StrokePatternOffset, this.StrokeOptions);
 }

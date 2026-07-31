@@ -8,6 +8,7 @@ In this codebase, the WebGPU rasterizer is not a single type with one scan-conve
 - `WebGPUSceneConfig`
 - `WebGPUSceneResources`
 - `WebGPUSceneDispatch`
+- `GpuSceneDrawTag`, `GpuSceneDrawMonoid`, and the packed GPU scene structs
 - the WGSL shader set under `Shaders/WgslSource`
 
 Together, these types turn one retained encoded scene into staged GPU work, schedule that scene into tile-relative work, run the fine raster pass, and write final pixels.
@@ -50,6 +51,7 @@ That split explains the major responsibilities:
 - `WebGPUSceneConfig` owns planning
 - `WebGPUSceneResources` owns flush-scoped buffers and textures
 - `WebGPUSceneDispatch` owns pass ordering and submission
+- the `GpuScene*` format types own the CPU-side constants and structs that mirror WGSL scene layout
 
 ## The Most Important Terms
 
@@ -76,10 +78,14 @@ It tells the rasterizer:
 This includes:
 
 - the packed scene buffer
-- the config buffer
-- the scheduling scratch buffers
+- the config (header) buffer
+- the scene-derived intermediate buffers (path monoids, path/draw/clip bboxes, draw monoids, the combined info/bin-data buffer, paths, lines)
 - the gradient texture
-- the image atlas texture
+- the image atlas texture, optionally sampling an external texture view (used by scoped-layer compositing)
+
+The bump-allocated scheduling scratch (bin headers, path rows, path tiles, segment counts, segments, blend spill, PTCL, the bump buffer, and the status readback buffer) lives in a separate scheduling arena owned by the dispatch layer.
+
+It does not own the draw-tag contract itself. `GpuSceneDrawTag` and `GpuSceneDrawMonoid` live in files named for those types. The remaining shader-visible record structs are still grouped in `WebGPUSceneResources.cs` near the resource set they back.
 
 ### Scheduling Passes
 
@@ -138,13 +144,35 @@ The encoder first builds several logical streams such as:
 - transforms
 - styles
 - gradient ramp pixels
+- path-gradient edge data
 - deferred image atlas descriptors
 
 Those streams are then packed into the final scene word buffer plus separate gradient and image payloads.
 
+The draw-tag words and draw-info flag bits are defined by `GpuSceneDrawTag` and must match `Shaders/WgslSource/Shared/drawtag.wgsl`. The encoder chooses which tag or flag to write; the format type owns the numeric shader contract. The clip mask bits (`CLIP_DIFFERENCE_MASK_BIT`, `CLIP_HARD_MASK_BIT`) are declared once in `drawtag.wgsl` and set by the encoder in the high bits of the clip blend word.
+
 Explicit layers are part of this encoding step too. `BeginLayer` and `EndLayer` stay in the prepared command stream until `WebGPUSceneEncoder` lowers them into `BeginClip` and `EndClip` draw records inside the encoded scene.
 
-That split matters because the shaders consume offsets into one shared packed scene layout. The encoder therefore separates "append logical scene data" from "pack the final GPU-facing layout".
+The stream split matters because the shaders consume offsets into one shared packed scene layout. The encoder therefore separates "append logical scene data" from "pack the final GPU-facing layout".
+
+Three geometry rules the encoder applies matter downstream:
+
+- fill geometry is pre-flattened on the CPU, so only line segments reach the flatten stage for fills; curve handling on the GPU exists but is not exercised by fills in practice
+- stroke geometry is not expanded on the CPU. The encoder emits the stroke's segment list after collapsing micro-segments shorter than 1/64 px (mirroring the CPU stroker's preprocessing), and reuses quad-to path tags as stroke tangent markers rather than curves; the GPU stroker in `flatten.wgsl` does the expansion
+- clip paths carry a full-target raster interest rectangle; a clipped interest would make binning intersect the clip coverage away
+
+Per-draw rasterization state is also encoded here: each visible fill carries its own coverage threshold and raster interest rectangle, and an aliased fill sets `DRAW_INFO_FLAGS_ALIASED_BIT` in its draw flags. Antialiased and aliased fills therefore coexist in one scene.
+
+### Parallel Encoding
+
+Large batches are planned and encoded in parallel over contiguous command-range partitions:
+
+- a single sequential prescan (`CreatePartitionCommandRanges`) records, for each partition boundary, the stack of clip scopes opened by earlier partitions
+- each partition replays those seed clips before its range and closes every open clip after it, so the concatenated partitions form one balanced clip stream and clipped scenes encode fully parallel
+- layer scopes composite their contents as one group when they close, so a boundary may not cut through an open layer; boundaries snap forward to the next command index where the layer depth is zero, which can leave empty trailing partitions that simply encode nothing
+- the partitions are concatenated by partition index, preserving timeline order
+
+Batches containing Apply are encoded by `TryEncodeOrdered(...)` instead: Apply reads pixels back mid-scene, so those scenes encode sequentially into an ordered operation list (render ranges, Apply items, scoped layers) that the backend walks at render time. The backend document describes that model.
 
 ## Stage 2: Planning
 
@@ -166,10 +194,7 @@ This check answers:
 
 "can the planned staged scene be bound legally on this device"
 
-If not, the dispatch layer decides whether the scene:
-
-- must fail back out to the backend
-- or can be routed into the chunked oversized-scene path
+If not, the failure is classified by buffer (`BindingLimitBuffer`): overflows of the tile-dependent buffers (path rows, path tiles, segment counts, segments, blend spill, PTCL) route the scene into the chunked oversized-scene path, while any other failure fails the flush.
 
 This validation happens before the expensive dispatch work begins.
 
@@ -180,8 +205,8 @@ This validation happens before the expensive dispatch work begins.
 That includes:
 
 - the packed scene buffer
-- the scene config buffer
-- the scheduling scratch buffers
+- the scene config (header) buffer
+- the scene-derived intermediate buffers
 - the gradient texture
 - the image atlas texture
 
@@ -189,7 +214,7 @@ That includes:
 flowchart TD
     A[Encoded scene and config] --> B[Create scene buffer]
     A --> C[Create config buffer]
-    A --> D[Create scheduling scratch buffers]
+    A --> D[Create scene-derived intermediate buffers]
     A --> E[Upload gradient texture]
     A --> F[Create image atlas texture]
     B --> G[WebGPUSceneResourceSet]
@@ -199,7 +224,9 @@ flowchart TD
     F --> G
 ```
 
-The resource contents are flush-scoped, but the underlying allocations can be leased from backend-cached arenas and returned there after submission. That reuse keeps later flushes from recreating the same large GPU buffers when the current backend instance can keep reusing them safely.
+The bump-allocated scheduling scratch buffers are created separately by the dispatch layer's scheduling arena when the staged scene renders.
+
+The resource contents are flush-scoped, but the underlying buffer allocations can be leased from backend-cached arenas and returned there after submission; the textures are scene-dependent and not pooled. That reuse keeps later flushes from recreating the same large GPU buffers when the current backend instance can keep reusing them safely.
 
 ## Stage 5: Scheduling Passes
 
@@ -207,7 +234,9 @@ The scheduling passes transform the packed scene into tile-relative raster work.
 
 Their purpose is structural. They:
 
+- reset the GPU bump allocators (prepare)
 - scan the packed path and draw streams
+- flatten path segments into a device-space line soup, expanding strokes on the GPU
 - build path and clip metadata
 - bin work into tiles
 - allocate sparse per-path row metadata from clipped draw bounds
@@ -220,15 +249,16 @@ The result is not final pixels. It is the scene structure needed by the final ra
 
 ```mermaid
 flowchart TD
-    A[PathtagReduce] --> B[PathtagReduce2 if needed]
+    Z[Prepare] --> A[PathtagReduce]
+    A --> B[PathtagReduce2 if needed]
     B --> C[PathtagScan1 if needed]
     C --> D[PathtagScan]
     D --> E[BboxClear]
     E --> F[Flatten]
     F --> G[DrawReduce]
     G --> H[DrawLeaf]
-    H --> I[ClipReduce]
-    I --> J[ClipLeaf]
+    H --> I[ClipReduce if needed]
+    I --> J[ClipLeaf if clips exist]
     J --> K[Binning]
     K --> L[PathRowAlloc]
     L --> M[PathCountSetup]
@@ -241,35 +271,85 @@ flowchart TD
     S --> T[PathTiling]
 ```
 
+A few stage details worth knowing:
+
+- `prepare.wgsl` binds only the bump buffer. It zeroes every bump-allocator counter and the failure mask on the GPU, and the pipeline never cancels mid-flush: all stages run so the counters report the true demand for every scratch buffer in a single pass
+- the pathtag scan computes a prefix sum of a four-word `TagMonoid` (`trans_ix`, `pathseg_offset`, `style_ix`, `path_ix`) so flatten can locate each segment's points, transform, and style in O(1)
+- `bbox_clear` is dispatched over the scene's path count and resets each atomic path bbox to an inverted empty state before flatten accumulates into it
+- `clip_reduce`/`clip_leaf` are skipped entirely when the scene has no clip records, and `clip_reduce` is skipped when the clip stream fits one 256-element partition
+
+### Flatten: Fills And GPU Stroking
+
+`flatten.wgsl` converts encoded path segments into the device-space line soup consumed by the later stages, and it is where strokes become geometry.
+
+For fills, every segment type routes through `flatten_euler` exactly as in upstream Vello: `read_path_segment` lowers lines to degenerate cubics and the Euler-spiral math resolves them through its low-curvature path. Because the C# encoder pre-flattens fill curves on the CPU, only line segments arrive for fills in practice.
+
+Stroke expansion diverges from upstream Vello. It is a direct port of the CPU `PolygonStroker`: `stroke_chain_point` walks the offset chain, `stroke_side_join` dispatches per-join handling, and `stroke_calc_miter` and `stroke_calc_arc` produce miters and round joins/caps. Caps, joins, and arcs are all generated on the GPU. The encoder supports this with two conventions: micro-segments shorter than 1/64 px are collapsed CPU-side before encoding (matching the CPU stroker's preprocessing), and quad-to path tags in a stroke are tangent markers for the stroker, not curve segments. Stroking never falls back to the CPU.
+
 ## Stage 6: Fine Raster Pass
 
 The fine pass is where the scheduled scene becomes final pixel writes.
 
-Two fine shaders exist:
+A single fine shader (`FineAreaComputeShader`) handles every flush; its pipeline is cached per
+output texture format. It computes analytic area coverage and, per fill, quantizes that
+coverage against the fill's own threshold when the fill carries the aliased bit in
+`CmdFill.size_and_rule`. The per-fill threshold travels in the `CmdFill` command itself and
+overrides the scene-wide `config.fine_coverage_threshold` fallback. Antialiased and aliased
+fills therefore coexist within one flush, matching the CPU rasterizer's per-fill
+`RasterizationMode`. Each fill also carries a raster interest rectangle; coverage outside it
+is zeroed.
 
-- `FineAreaComputeShader`
-- `FineAliasedThresholdComputeShader`
-
-Only one is selected for a flush.
+For antialiased fills the `CmdFill.coverage_threshold` word is reused to carry the perceptual
+coverage boost for text (the two uses are mutually exclusive, so no extra command word is
+needed). When non-zero, fine remaps partial coverage with the S-curve
+`f(a) = a + boost * a * (1 - a) * (2a - 1)`, equivalently a blend
+`(1 - boost) * a + boost * smoothstep(a)`: coverage above one half darkens and coverage below
+it lightens, so stems solidify while counters stay bright. The remap is monotone and range
+preserving, no pixel moves by more than `0.0962 * boost` coverage, and faint fringes keep at
+least `(1 - boost)` of their value, which bounds erosion of sub-half-pixel features. Only text
+fills carry a non-zero boost (`DrawingOptions.TextContrast`); plain vector fills, strokes, and
+clips always encode zero. This matches the CPU rasterizer's `AreaToCoverage` boost; the full
+derivation and the rationale versus Skia's mask-gamma remap live in
+`ImageSharp.Drawing/Processing/DRAWING_CANVAS.md` under "The TextContrast curve".
 
 The fine pass consumes data such as:
 
 - the segment buffer
 - the PTCL buffer
-- info and bin data
+- the info stream (shared with bin data)
 - blend-spill storage
-- gradient and image textures
-- the target backdrop input
+- gradient and image atlas textures
+- the backdrop texture holding the existing target contents
 
-and writes the result into the output texture.
+and writes the result into the output texture with straight (unpremultiplied) alpha.
 
-That is also where explicit layers are composited. The fine shader handles `BeginClip` and `EndClip` records inline by saving the current tile color, rendering the isolated layer contents, and then blending that isolated result back into the saved backdrop with the layer's stored blend mode and alpha.
+The PTCL command set extends Vello's. Alongside the fill, color, gradient, image, clip, and
+jump commands, the fine pass interprets `CMD_RECOLOR` (the `RecolorBrush`), `CMD_ELLIPTIC_GRAD`,
+and `CMD_PATH_GRAD`. Brush evaluation is deliberately matched to the CPU brushes, including
+gradient extend behavior; the recolor threshold is pre-transformed by the encoder
+(`Threshold * 4`) into the shader's squared-color-distance domain so the shader compares
+distances directly.
 
-## Stage 7: Copy And Submit
+That is also where explicit layers are composited. The fine shader handles `BeginClip` and `EndClip` records inline by saving the current tile color, rendering the isolated layer contents, and then blending that isolated result back into the saved backdrop with the layer's stored blend mode and alpha. The clip blend word's high bits select clip variants: `CLIP_DIFFERENCE_MASK_BIT` inverts the mask coverage for Difference clips and `CLIP_HARD_MASK_BIT` marks a hard-edge (aliased) clip mask.
 
-After the fine pass completes, the rasterizer copies the output texture to the target texture and submits the command buffer.
+## Stage 7: Readback, Copy, And Submit
+
+Scheduling, fine, and the bump-allocator status readback are recorded into one command encoder and submitted together; mapping the readback buffer blocks until the GPU finishes.
+
+The CPU then inspects the bump counters. If any allocator exceeded its capacity the fine output is discarded and the attempt reports the grown sizes back to the backend for a retry (see the next section). Otherwise the rasterizer copies the output texture to the target texture, submits the final copy, and reports the actual GPU usage so the caller can cache known-good sizes for later renders.
 
 At that point the staged scene has completed and the per-flush resource contents can be discarded while any reusable arena allocations are returned to the backend cache.
+
+## Scratch Overflow And Retry
+
+The scratch buffers written by the scheduling passes (lines, binning, path rows, path tiles, segment counts, segments, blend spill, PTCL) are allocated by GPU bump allocators sized from cached estimates. The overflow protocol is:
+
+- `prepare.wgsl` zeroes every bump counter and the failure mask at the start of each attempt and the pipeline never cancels: every stage runs and reports its true demand even after an overflow, so one readback can expose as much growth as possible
+- an overflowing stage stops writing past its capacity but keeps counting, and sets the failure mask so the CPU knows the attempt's output is invalid
+- the CPU readback detects the overflow and the backend retries the whole attempt with grown sizes
+- earlier overflows can still hide later-stage demand, so the backend bounds the loop at roughly one failed pass per tracked allocator plus a safety margin
+
+There is no CPU-side pre-validation of scratch capacities; the GPU counters are the single source of truth.
 
 ## Chunked Oversized-Scene Execution
 
@@ -279,7 +359,14 @@ The chunked path exists for that case.
 
 The important design point is that chunking does not re-clip or re-encode the scene on the CPU. The encoded scene remains whole. What changes is the GPU consumption window.
 
-The dispatch layer executes the staged pipeline in chunk-local tile-row windows so each chunk stays within device limits while still using the same encoded scene.
+The dispatch layer executes the staged pipeline in chunk-local tile-row windows so each chunk stays within device limits while still using the same encoded scene. The mechanics are:
+
+- the output texture is seeded with the current target contents first, so pixels no chunk writes keep their original values when the full rectangle is copied back
+- the chunk-invariant stages (prepare through binning) run exactly once per flush; each chunk then replays only the chunk-local stages, with `chunk_reset` clearing the chunk-local bump counters while preserving the shared flatten/binning state
+- each chunk window is validated against the binding limits before dispatch; if a chunk's buffers still exceed the limit the window shrinks and validation repeats
+- a chunk attempt that fails after passing binding validation fails the flush, because shrinking cannot cure it and retrying would re-record the identical chunk forever
+- every chunk copies its bump-allocator status into a distinct offset of one readback buffer; all chunks are checked in a single batch readback at the end, and any overflow feeds the same grow-and-retry loop as the monolithic path
+- the backend caches the largest successful chunk height per binding category and target size as an advisory first guess for later flushes
 
 That keeps the normal fast path unchanged and reserves chunking for the oversized path only.
 
@@ -313,14 +400,15 @@ That separation is why it helps to document them separately.
 If you want to understand the staged rasterizer itself, read the code in this order:
 
 1. `WebGPUSceneEncoder.cs`
-2. `WebGPUSceneConfig.cs`
-3. `WebGPUSceneResources.cs`
-4. `WebGPUSceneDispatch.cs`
-5. `Shaders`
+2. `GpuSceneDrawTag.cs` and `GpuSceneDrawMonoid.cs`
+3. `WebGPUSceneConfig.cs`
+4. `WebGPUSceneResources.cs` for resource creation and the remaining packed GPU record structs
+5. `WebGPUSceneDispatch.cs`
+6. `Shaders`
 
 That order mirrors the data lifecycle:
 
-encoded scene -> planning -> resources -> staged execution -> shader contract
+encoded scene -> draw-tag format -> planning -> resources and record layout -> staged execution -> WGSL
 
 ## The Mental Model To Keep
 
@@ -331,6 +419,7 @@ it is a staged scene pipeline. It stages one retained encoded scene, plans the w
 If that model is clear, the major types fall into place:
 
 - `WebGPUSceneEncoder` encodes
+- `GpuScene*` types define the packed CPU/WGSL scene contract
 - `WebGPUSceneConfig` plans
 - `WebGPUSceneResources` creates flush-scoped resources
 - `WebGPUSceneDispatch` records and submits the staged pipeline
