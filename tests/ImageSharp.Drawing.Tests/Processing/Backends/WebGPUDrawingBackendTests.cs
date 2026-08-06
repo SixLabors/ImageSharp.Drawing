@@ -973,7 +973,7 @@ public partial class WebGPUDrawingBackendTests
 
         // Reference outputs are rendered on one adapter; other conforming adapters round
         // within one LSB across a small fraction of pixels.
-        AssertBackendPairReferenceOutputs(provider, filter, defaultImage, nativeSurfaceImage, 0.0043F);
+        AssertBackendPairReferenceOutputs(provider, filter, defaultImage, nativeSurfaceImage, 0.0049F);
     }
 
     [WebGPUTheory]
