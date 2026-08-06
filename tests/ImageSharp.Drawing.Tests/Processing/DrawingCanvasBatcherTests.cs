@@ -282,8 +282,7 @@ public class DrawingCanvasBatcherTests
             new RasterizerOptions(
                 Rectangle.Empty,
                 IntersectionRule.NonZero,
-                RasterizationMode.Aliased,
-                0.5f),
+                RasterizationMode.Aliased),
             default,
             []);
 
@@ -397,7 +396,7 @@ public class DrawingCanvasBatcherTests
             private readonly Rectangle interest;
             private readonly IntersectionRule intersectionRule;
             private readonly RasterizationMode rasterizationMode;
-            private readonly int antialiasThresholdBits;
+            private readonly int coverageBoostBits;
 
             public CoverageDefinitionKey(CompositionCommand command)
             {
@@ -405,7 +404,7 @@ public class DrawingCanvasBatcherTests
                 this.interest = command.RasterizerOptions.Interest;
                 this.intersectionRule = command.RasterizerOptions.IntersectionRule;
                 this.rasterizationMode = command.RasterizerOptions.RasterizationMode;
-                this.antialiasThresholdBits = BitConverter.SingleToInt32Bits(command.RasterizerOptions.AntialiasThreshold);
+                this.coverageBoostBits = BitConverter.SingleToInt32Bits(command.RasterizerOptions.CoverageBoost);
             }
 
             public bool Equals(CoverageDefinitionKey other)
@@ -413,7 +412,7 @@ public class DrawingCanvasBatcherTests
                    this.interest.Equals(other.interest) &&
                    this.intersectionRule == other.intersectionRule &&
                    this.rasterizationMode == other.rasterizationMode &&
-                   this.antialiasThresholdBits == other.antialiasThresholdBits;
+                   this.coverageBoostBits == other.coverageBoostBits;
 
             public override bool Equals(object obj)
                 => obj is CoverageDefinitionKey other && this.Equals(other);
@@ -424,7 +423,7 @@ public class DrawingCanvasBatcherTests
                     this.interest,
                     (int)this.intersectionRule,
                     (int)this.rasterizationMode,
-                    this.antialiasThresholdBits);
+                    this.coverageBoostBits);
         }
 
         private sealed class CapturedScene : DrawingBackendScene

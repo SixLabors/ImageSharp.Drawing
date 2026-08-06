@@ -15,16 +15,10 @@ public sealed class CubicBezierLineSegment : ILineSegment
     // Code for this taken from <see href="http://devmag.org.za/2011/04/05/bzier-curves-a-tutorial/"/>
 
     /// <summary>
-    /// The squared distance between span endpoints below which subdivision stops.
+    /// The squared midpoint-to-chord error accepted by the curve flattener. The linear geometry
+    /// must locate pixel-centre crossings to within one sixty-fourth of a device pixel.
     /// </summary>
-    private const float MinimumSqrDistance = 1.75f;
-
-    /// <summary>
-    /// The dot-product threshold used to decide whether a span is flat enough. Directions from the
-    /// midpoint to each endpoint are nearly opposite (dot close to -1) when the span is straight;
-    /// values above this threshold indicate curvature that requires further subdivision.
-    /// </summary>
-    private const float DivisionThreshold = -.9995f;
+    private const float FlatnessSqrTolerance = (1F / 64F) * (1F / 64F);
 
     /// <summary>
     /// The bezier control points; the length is a multiple of 3 plus 1.
@@ -179,7 +173,7 @@ public sealed class CubicBezierLineSegment : ILineSegment
                 output.Add((PointF)p0);
             }
 
-            SubdivideAndAppend(0F, 1F, p0, p1, p2, p3, ref output, 0);
+            SubdivideAndAppend(0F, 1F, p0, p3, p0, p1, p2, p3, ref output, 0);
             output.Add((PointF)p3);
         }
 
@@ -191,6 +185,8 @@ public sealed class CubicBezierLineSegment : ILineSegment
     /// </summary>
     /// <param name="t0">The curve parameter at the start of the span.</param>
     /// <param name="t1">The curve parameter at the end of the span.</param>
+    /// <param name="left">The curve point at <paramref name="t0"/>, carried down so each level evaluates one new point.</param>
+    /// <param name="right">The curve point at <paramref name="t1"/>, carried down likewise.</param>
     /// <param name="p0">The start point of the cubic.</param>
     /// <param name="p1">The first control point of the cubic.</param>
     /// <param name="p2">The second control point of the cubic.</param>
@@ -200,6 +196,8 @@ public sealed class CubicBezierLineSegment : ILineSegment
     private static void SubdivideAndAppend(
         float t0,
         float t1,
+        Vector2 left,
+        Vector2 right,
         Vector2 p0,
         Vector2 p1,
         Vector2 p2,
@@ -207,15 +205,9 @@ public sealed class CubicBezierLineSegment : ILineSegment
         ref FlattenedPointBuilder output,
         int depth)
     {
-        if (depth > 999)
-        {
-            return;
-        }
-
-        Vector2 left = CalculateBezierPoint(t0, p0, p1, p2, p3);
-        Vector2 right = CalculateBezierPoint(t1, p0, p1, p2, p3);
-
-        if ((left - right).LengthSquared() < MinimumSqrDistance)
+        // Normal finite curves reach the flatness test first. The limit prevents unbounded
+        // recursion for extreme input.
+        if (depth > 20)
         {
             return;
         }
@@ -223,15 +215,18 @@ public sealed class CubicBezierLineSegment : ILineSegment
         float midT = (t0 + t1) / 2;
         Vector2 mid = CalculateBezierPoint(midT, p0, p1, p2, p3);
 
-        Vector2 leftDirection = Vector2.Normalize(left - mid);
-        Vector2 rightDirection = Vector2.Normalize(right - mid);
-
-        if (Vector2.Dot(leftDirection, rightDirection) > DivisionThreshold || Math.Abs(midT - 0.5f) < 0.0001f)
+        // Compare the curve midpoint with the midpoint of the candidate line. An S-shaped cubic
+        // can cross its chord at the root midpoint while still bending on both sides. Subdivide the
+        // root once before trusting this test so the two bends are tested separately.
+        Vector2 chordMid = (left + right) * 0.5F;
+        if (depth > 0 && (mid - chordMid).LengthSquared() <= FlatnessSqrTolerance)
         {
-            SubdivideAndAppend(t0, midT, p0, p1, p2, p3, ref output, depth + 1);
-            output.Add((PointF)mid);
-            SubdivideAndAppend(midT, t1, p0, p1, p2, p3, ref output, depth + 1);
+            return;
         }
+
+        SubdivideAndAppend(t0, midT, left, mid, p0, p1, p2, p3, ref output, depth + 1);
+        output.Add((PointF)mid);
+        SubdivideAndAppend(midT, t1, mid, right, p0, p1, p2, p3, ref output, depth + 1);
     }
 
     /// <summary>

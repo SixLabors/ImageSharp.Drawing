@@ -55,9 +55,16 @@ struct Config {
     segments_size: u32,
     blend_size: u32,
     ptcl_size: u32,
-    // Scene-wide coverage cutoff consumed by the aliased fine pass; per-fill
-    // thresholds (CmdFill.coverage_threshold) override it where set.
-    fine_coverage_threshold: f32,
+
+    // Word offset of the segment-profile tag table, or zero when the table is absent. Each encoded
+    // point pair has one slot, which lets a fill segment find its X and Y profile identifiers.
+    profile_slots_base: u32,
+    // Word offset of the profile record table, or zero when the table is absent. The table starts
+    // with the X and Y record counts. Each record then stores two axis limits and one contour link.
+    profile_records_base: u32,
+    profile_pad0: u32,
+    profile_pad1: u32,
+    profile_pad2: u32,
 }
 
 // Geometry of tiles and bins

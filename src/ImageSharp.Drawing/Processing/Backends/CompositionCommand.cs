@@ -520,7 +520,6 @@ public readonly struct CompositionCommand
         return new RasterizerOptions(
             interest,
             options.IntersectionRule,
-            rasterizationMode,
-            graphicsOptions.AntialiasThreshold);
+            rasterizationMode);
     }
 }

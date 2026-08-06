@@ -102,7 +102,6 @@ internal static partial class DefaultRasterizer
         /// <param name="destinationTop">The absolute destination Y coordinate of the band's top row.</param>
         /// <param name="intersectionRule">The fill rule used when resolving accumulated winding.</param>
         /// <param name="rasterizationMode">The rasterization mode used by the band.</param>
-        /// <param name="antialiasThreshold">The aliased threshold used when the band runs in aliased mode.</param>
         /// <param name="coverageBoost">The perceptual coverage boost used when the band runs in antialiased mode.</param>
         /// <param name="hasStartCovers">Indicates whether the band has non-zero start-cover seeds.</param>
         public RasterizableBandInfo(
@@ -115,7 +114,6 @@ internal static partial class DefaultRasterizer
             int destinationTop,
             IntersectionRule intersectionRule,
             RasterizationMode rasterizationMode,
-            float antialiasThreshold,
             float coverageBoost,
             bool hasStartCovers)
         {
@@ -128,7 +126,6 @@ internal static partial class DefaultRasterizer
             this.DestinationTop = destinationTop;
             this.IntersectionRule = intersectionRule;
             this.RasterizationMode = rasterizationMode;
-            this.AntialiasThreshold = antialiasThreshold;
             this.CoverageBoost = coverageBoost;
             this.HasStartCovers = hasStartCovers;
         }
@@ -179,11 +176,6 @@ internal static partial class DefaultRasterizer
         public RasterizationMode RasterizationMode { get; }
 
         /// <summary>
-        /// Gets the aliased threshold used when the band runs in aliased mode.
-        /// </summary>
-        public float AntialiasThreshold { get; }
-
-        /// <summary>
         /// Gets the perceptual coverage boost used when the band runs in antialiased mode.
         /// Partial coverage is remapped by the S-curve <c>a + boost * a * (1 - a) * (2a - 1)</c>;
         /// zero disables it.
@@ -206,11 +198,21 @@ internal static partial class DefaultRasterizer
     /// </summary>
     internal sealed class LineArrayX32Y16
     {
+        private readonly bool retainTags;
         private LineArrayX32Y16Block? current;
 
         // Starting at full capacity forces the first AppendLine to allocate the front block,
         // so empty rows never pay for a block allocation.
         private int count = LineArrayX32Y16Block.LineCount;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="LineArrayX32Y16"/> class.
+        /// </summary>
+        /// <param name="retainTags">
+        /// Whether each line stores a profile tag. Only aliased fills need tags. Antialiased fills
+        /// and strokes therefore use the smaller base block and do not allocate tag storage.
+        /// </param>
+        public LineArrayX32Y16(bool retainTags) => this.retainTags = retainTags;
 
         /// <summary>
         /// Gets the front block in the retained line chain.
@@ -231,26 +233,42 @@ internal static partial class DefaultRasterizer
         /// <param name="y0">The starting Y coordinate in 24.8 fixed-point.</param>
         /// <param name="x1">The ending X coordinate in 24.8 fixed-point.</param>
         /// <param name="y1">The ending Y coordinate in 24.8 fixed-point.</param>
-        public void AppendLine(int x0, int y0, int x1, int y1)
+        /// <param name="tag">The segment profile tag.</param>
+        public void AppendLine(int x0, int y0, int x1, int y1, uint tag)
         {
-            // Horizontal segments never change scanline winding, so they carry no raster payload.
-            if (y0 == y1)
-            {
-                return;
-            }
-
             int packedY0Y1 = Pack(y0, y1);
             LineArrayX32Y16Block? block = this.current;
             int currentCount = this.count;
             if (currentCount < LineArrayX32Y16Block.LineCount)
             {
-                block!.Set(currentCount, packedY0Y1, x0, x1);
+                // retainTags does not change during the collector's lifetime. When it is true,
+                // every block in this chain was created as the tagged derived type.
+                if (this.retainTags)
+                {
+                    ((TaggedLineArrayX32Y16Block)block!).SetTagged(currentCount, packedY0Y1, x0, x1, tag);
+                }
+                else
+                {
+                    block!.Set(currentCount, packedY0Y1, x0, x1);
+                }
+
                 this.count = currentCount + 1;
             }
             else
             {
-                LineArrayX32Y16Block next = new(block);
-                next.Set(0, packedY0Y1, x0, x1);
+                LineArrayX32Y16Block next;
+                if (this.retainTags)
+                {
+                    TaggedLineArrayX32Y16Block tagged = new(block);
+                    tagged.SetTagged(0, packedY0Y1, x0, x1, tag);
+                    next = tagged;
+                }
+                else
+                {
+                    next = new LineArrayX32Y16Block(block);
+                    next.Set(0, packedY0Y1, x0, x1);
+                }
+
                 this.current = next;
                 this.count = 1;
             }
@@ -269,7 +287,7 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Represents one retained 32-bit-X line block.
     /// </summary>
-    internal sealed class LineArrayX32Y16Block : ILineBlock<LineArrayX32Y16Block>
+    internal class LineArrayX32Y16Block : ILineBlock<LineArrayX32Y16Block>
     {
         private const int BlockLineCount = 32;
         private PackedLineX32Y16Buffer lines;
@@ -313,6 +331,20 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <inheritdoc />
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void RasterizeTagged(int count, ref Context context)
+        {
+            // This method is used only for a chain created with retainTags. The base block keeps
+            // the common line data so other rasterization modes do not store unused tags.
+            ReadOnlySpan<uint> tags = ((TaggedLineArrayX32Y16Block)this).Tags;
+            for (int i = 0; i < count; i++)
+            {
+                PackedLineX32Y16 line = this.lines[i];
+                context.RasterizeLineSegment(line.X0, UnpackLo(line.PackedY0Y1), line.X1, UnpackHi(line.PackedY0Y1), tags[i]);
+            }
+        }
+
         /// <summary>
         /// Iterates the retained block chain and rasterizes each block in sequence.
         /// </summary>
@@ -325,6 +357,23 @@ internal static partial class DefaultRasterizer
             while (lineBlock is not null)
             {
                 lineBlock.Rasterize(count, ref context);
+                lineBlock = lineBlock.Next;
+                count = LineCount;
+            }
+        }
+
+        /// <summary>
+        /// Iterates a tagged retained block chain and supplies each line's profile tag.
+        /// </summary>
+        /// <param name="firstBlockLineCount">The number of valid lines stored in the front block.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
+        public void IterateTagged(int firstBlockLineCount, ref Context context)
+        {
+            int count = firstBlockLineCount;
+            LineArrayX32Y16Block? lineBlock = this;
+            while (lineBlock is not null)
+            {
+                lineBlock.RasterizeTagged(count, ref context);
                 lineBlock = lineBlock.Next;
                 count = LineCount;
             }
@@ -378,15 +427,71 @@ internal static partial class DefaultRasterizer
     }
 
     /// <summary>
+    /// Retains profile tags inline with a 32-bit-X line block for aliased replay.
+    /// </summary>
+    internal sealed class TaggedLineArrayX32Y16Block : LineArrayX32Y16Block
+    {
+        private TagBuffer tags;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="TaggedLineArrayX32Y16Block"/> class.
+        /// </summary>
+        /// <param name="next">The next block in the retained chain.</param>
+        public TaggedLineArrayX32Y16Block(LineArrayX32Y16Block? next)
+            : base(next)
+        {
+        }
+
+        /// <summary>
+        /// Gets the block's profile tags for aliased replay.
+        /// </summary>
+        public ReadOnlySpan<uint> Tags => this.tags;
+
+        /// <summary>
+        /// Stores one retained line and its profile tag into the block.
+        /// </summary>
+        /// <param name="index">The block-local line index.</param>
+        /// <param name="packedY0Y1">The packed 16-bit Y endpoints.</param>
+        /// <param name="x0">The starting X coordinate in 24.8 fixed-point.</param>
+        /// <param name="x1">The ending X coordinate in 24.8 fixed-point.</param>
+        /// <param name="tag">The segment profile tag.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetTagged(int index, int packedY0Y1, int x0, int x1, uint tag)
+        {
+            this.Set(index, packedY0Y1, x0, x1);
+            this.tags[index] = tag;
+        }
+
+        /// <summary>
+        /// Holds the fixed-capacity profile tags inline with an aliased line block.
+        /// </summary>
+        [InlineArray(32)]
+        private struct TagBuffer
+        {
+            private uint element0;
+        }
+    }
+
+    /// <summary>
     /// Collects retained line segments whose X coordinates fit in packed 16-bit storage.
     /// </summary>
     internal sealed class LineArrayX16Y16
     {
+        private readonly bool retainTags;
         private LineArrayX16Y16Block? current;
 
         // Starting at full capacity forces the first AppendLine to allocate the front block,
         // so empty rows never pay for a block allocation.
         private int count = LineArrayX16Y16Block.LineCount;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="LineArrayX16Y16"/> class.
+        /// </summary>
+        /// <param name="retainTags">
+        /// Whether each line stores a profile tag. Only aliased fills need tags. Antialiased fills
+        /// and strokes therefore use the smaller base block and do not allocate tag storage.
+        /// </param>
+        public LineArrayX16Y16(bool retainTags) => this.retainTags = retainTags;
 
         /// <summary>
         /// Gets the front block in the retained line chain.
@@ -407,27 +512,43 @@ internal static partial class DefaultRasterizer
         /// <param name="y0">The starting Y coordinate in 24.8 fixed-point.</param>
         /// <param name="x1">The ending X coordinate in 24.8 fixed-point.</param>
         /// <param name="y1">The ending Y coordinate in 24.8 fixed-point.</param>
-        public void AppendLine(int x0, int y0, int x1, int y1)
+        /// <param name="tag">The segment profile tag.</param>
+        public void AppendLine(int x0, int y0, int x1, int y1, uint tag)
         {
-            // Horizontal segments never change scanline winding, so they carry no raster payload.
-            if (y0 == y1)
-            {
-                return;
-            }
-
             int packedY0Y1 = Pack(y0, y1);
             int packedX0X1 = Pack(x0, x1);
             LineArrayX16Y16Block? block = this.current;
             int currentCount = this.count;
             if (currentCount < LineArrayX16Y16Block.LineCount)
             {
-                block!.Set(currentCount, packedY0Y1, packedX0X1);
+                // retainTags does not change during the collector's lifetime. When it is true,
+                // every block in this chain was created as the tagged derived type.
+                if (this.retainTags)
+                {
+                    ((TaggedLineArrayX16Y16Block)block!).SetTagged(currentCount, packedY0Y1, packedX0X1, tag);
+                }
+                else
+                {
+                    block!.Set(currentCount, packedY0Y1, packedX0X1);
+                }
+
                 this.count = currentCount + 1;
             }
             else
             {
-                LineArrayX16Y16Block next = new(block);
-                next.Set(0, packedY0Y1, packedX0X1);
+                LineArrayX16Y16Block next;
+                if (this.retainTags)
+                {
+                    TaggedLineArrayX16Y16Block tagged = new(block);
+                    tagged.SetTagged(0, packedY0Y1, packedX0X1, tag);
+                    next = tagged;
+                }
+                else
+                {
+                    next = new LineArrayX16Y16Block(block);
+                    next.Set(0, packedY0Y1, packedX0X1);
+                }
+
                 this.current = next;
                 this.count = 1;
             }
@@ -446,7 +567,7 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Represents one retained 16-bit-X line block.
     /// </summary>
-    internal sealed class LineArrayX16Y16Block : ILineBlock<LineArrayX16Y16Block>
+    internal class LineArrayX16Y16Block : ILineBlock<LineArrayX16Y16Block>
     {
         private const int BlockLineCount = 32;
         private PackedLineX16Y16Buffer lines;
@@ -492,6 +613,25 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <inheritdoc />
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void RasterizeTagged(int count, ref Context context)
+        {
+            // This method is used only for a chain created with retainTags. The base block keeps
+            // the common line data so other rasterization modes do not store unused tags.
+            ReadOnlySpan<uint> tags = ((TaggedLineArrayX16Y16Block)this).Tags;
+            for (int i = 0; i < count; i++)
+            {
+                PackedLineX16Y16 line = this.lines[i];
+                context.RasterizeLineSegment(
+                    UnpackLo(line.PackedX0X1),
+                    UnpackLo(line.PackedY0Y1),
+                    UnpackHi(line.PackedX0X1),
+                    UnpackHi(line.PackedY0Y1),
+                    tags[i]);
+            }
+        }
+
         /// <summary>
         /// Iterates the retained block chain and rasterizes each block in sequence.
         /// </summary>
@@ -504,6 +644,23 @@ internal static partial class DefaultRasterizer
             while (lineBlock is not null)
             {
                 lineBlock.Rasterize(count, ref context);
+                lineBlock = lineBlock.Next;
+                count = LineCount;
+            }
+        }
+
+        /// <summary>
+        /// Iterates a tagged retained block chain and supplies each line's profile tag.
+        /// </summary>
+        /// <param name="firstBlockLineCount">The number of valid lines stored in the front block.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
+        public void IterateTagged(int firstBlockLineCount, ref Context context)
+        {
+            int count = firstBlockLineCount;
+            LineArrayX16Y16Block? lineBlock = this;
+            while (lineBlock is not null)
+            {
+                lineBlock.RasterizeTagged(count, ref context);
                 lineBlock = lineBlock.Next;
                 count = LineCount;
             }
@@ -548,6 +705,51 @@ internal static partial class DefaultRasterizer
         private struct PackedLineX16Y16Buffer
         {
             private PackedLineX16Y16 element0;
+        }
+    }
+
+    /// <summary>
+    /// Retains profile tags inline with a 16-bit-X line block for aliased replay.
+    /// </summary>
+    internal sealed class TaggedLineArrayX16Y16Block : LineArrayX16Y16Block
+    {
+        private TagBuffer tags;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="TaggedLineArrayX16Y16Block"/> class.
+        /// </summary>
+        /// <param name="next">The next block in the retained chain.</param>
+        public TaggedLineArrayX16Y16Block(LineArrayX16Y16Block? next)
+            : base(next)
+        {
+        }
+
+        /// <summary>
+        /// Gets the block's profile tags for aliased replay.
+        /// </summary>
+        public ReadOnlySpan<uint> Tags => this.tags;
+
+        /// <summary>
+        /// Stores one retained line and its profile tag into the block.
+        /// </summary>
+        /// <param name="index">The block-local line index.</param>
+        /// <param name="packedY0Y1">The packed 16-bit Y endpoints.</param>
+        /// <param name="packedX0X1">The packed 16-bit X endpoints.</param>
+        /// <param name="tag">The segment profile tag.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetTagged(int index, int packedY0Y1, int packedX0X1, uint tag)
+        {
+            this.Set(index, packedY0Y1, packedX0X1);
+            this.tags[index] = tag;
+        }
+
+        /// <summary>
+        /// Holds the fixed-capacity profile tags inline with an aliased line block.
+        /// </summary>
+        [InlineArray(32)]
+        private struct TagBuffer
+        {
+            private uint element0;
         }
     }
 }

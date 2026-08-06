@@ -99,12 +99,6 @@ internal static class WebGPUSceneEncoder
     private const uint ClipDifferenceMaskBit = 0x80000000U;
 
     /// <summary>
-    /// Bit of the clip blend word marking a hard-edge (aliased) clip mask.
-    /// Must match CLIP_HARD_MASK_BIT in drawtag.wgsl.
-    /// </summary>
-    private const uint ClipHardMaskBit = 0x40000000U;
-
-    /// <summary>
     /// Bit of the clip blend word marking an isolated group (a layer). Isolated groups seed
     /// transparent on the GPU and composite back as a unit; canvas clips leave this clear and
     /// render as coverage masks over the live tile content, matching the CPU backend's
@@ -146,7 +140,7 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     /// <remarks>
     /// Cap styles are stored as two two-bit fields: end caps in bits 24-25 and start caps
-    /// in bits 26-27. The flatten shader shifts the start-cap field down before decoding it.
+    /// in bits 26-27. The path-lowering shader shifts the start-cap field down before decoding it.
     /// </remarks>
     [Flags]
     private enum StyleFlags : uint
@@ -283,12 +277,6 @@ internal static class WebGPUSceneEncoder
                 fillCount += partitions[i]!.FillCount;
             }
 
-            // Rasterization mode and the aliased coverage threshold are carried per fill, so partitions
-            // impose no flush-wide rasterization constraint. These scene-wide values are retained only
-            // as encoded-scene metadata and are no longer consumed by the fine pass.
-            RasterizationMode fineRasterizationMode = RasterizationMode.Antialiased;
-            float fineCoverageThreshold = 0F;
-
             if (fillCount == 0)
             {
                 DisposePartitions(partitions);
@@ -299,7 +287,7 @@ internal static class WebGPUSceneEncoder
 
             try
             {
-                encodedScene = SupportedSubsetSceneResolver.Resolve(partitions, targetBounds, allocator, fineRasterizationMode, fineCoverageThreshold);
+                encodedScene = SupportedSubsetSceneResolver.Resolve(partitions, targetBounds, allocator);
                 error = null;
                 return true;
             }
@@ -802,8 +790,7 @@ internal static class WebGPUSceneEncoder
         return new RasterizerOptions(
             interest,
             options.IntersectionRule,
-            rasterizationMode,
-            graphicsOptions.AntialiasThreshold);
+            rasterizationMode);
     }
 
     /// <summary>
@@ -1595,10 +1582,12 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     private ref struct SupportedSubsetSceneEncoding
     {
+        private readonly MemoryAllocator allocator;
         private bool hasLastStyle;
         private bool streamsDetached;
         private bool gradientPixelsDetached;
         private bool pathGradientDataDetached;
+        private bool profileStorageDetached;
         private long estimatedPathRowCount;
 
         // CPU-side scratch-demand estimates accumulated per draw so the first GPU attempt can be
@@ -1636,7 +1625,10 @@ internal static class WebGPUSceneEncoder
             in Rectangle rootTargetBounds,
             in SceneEncodingPlan plan)
         {
+            this.allocator = allocator;
             this.PathTags = new OwnedStream<byte>(allocator, plan.PathTagCapacity);
+            this.ProfileFills = null;
+            this.ProfileStorage = null;
             this.PathData = new OwnedStream<uint>(allocator, plan.PathDataWordCapacity);
             this.DrawTags = new OwnedStream<uint>(allocator, plan.DrawTagCapacity);
             this.DrawData = new OwnedStream<uint>(allocator, plan.DrawDataWordCapacity);
@@ -1658,6 +1650,7 @@ internal static class WebGPUSceneEncoder
             this.streamsDetached = false;
             this.gradientPixelsDetached = false;
             this.pathGradientDataDetached = false;
+            this.profileStorageDetached = false;
             this.lastStyle0 = 0;
             this.lastStyle1 = 0;
             this.lastStyle2 = 0;
@@ -1676,8 +1669,6 @@ internal static class WebGPUSceneEncoder
             this.estimatedTileCrossings = 0;
             this.estimatedBinFootprint = 0;
             this.VisibleFillCount = 0;
-            this.FineRasterizationMode = RasterizationMode.Antialiased;
-            this.FineCoverageThreshold = 0F;
 
             this.PathTags.Add(PackPathTag(PathTag.Transform));
             AppendIdentityTransform(ref this.Transforms);
@@ -1687,6 +1678,21 @@ internal static class WebGPUSceneEncoder
         /// Gets or sets the encoded path-tag byte stream.
         /// </summary>
         public OwnedStream<byte> PathTags;
+
+        /// <summary>
+        /// Aliased fills that need profile tags, in path-data order.
+        /// </summary>
+        /// <remarks>
+        /// A partition creates at most one list. Each list element is a value type that stores a
+        /// geometry reference, a view into the partition profile arena, and a translation. Repeated
+        /// geometry uses the same arena entry, and no profile buffer is created for each fill.
+        /// </remarks>
+        public List<GpuProfileFillRecord>? ProfileFills;
+
+        /// <summary>
+        /// Gets or sets the partition-owned profile arena created by the first compatible aliased fill.
+        /// </summary>
+        public LinearGeometryProfileStorage? ProfileStorage;
 
         /// <summary>
         /// Gets or sets the encoded path-coordinate stream.
@@ -1775,7 +1781,7 @@ internal static class WebGPUSceneEncoder
 
         /// <summary>
         /// Gets the CPU-side upper-bound estimate of tile-boundary crossings produced by the
-        /// scene's flattened lines. Bounds the GPU segment, segment-count, and path-tile demand.
+        /// scene's final lines. Bounds the GPU segment, segment-count, and path-tile demand.
         /// </summary>
         public readonly long EstimatedTileCrossings => this.estimatedTileCrossings;
 
@@ -1783,16 +1789,6 @@ internal static class WebGPUSceneEncoder
         /// Gets the CPU-side upper-bound estimate of per-(draw, bin) binning records.
         /// </summary>
         public readonly long EstimatedBinFootprint => this.estimatedBinFootprint;
-
-        /// <summary>
-        /// Gets the flush-wide fine rasterization mode selected while encoding visible fills.
-        /// </summary>
-        public RasterizationMode FineRasterizationMode { get; private set; }
-
-        /// <summary>
-        /// Gets the aliased coverage threshold consumed by the fine pass when aliased mode is selected.
-        /// </summary>
-        public float FineCoverageThreshold { get; private set; }
 
         /// <summary>
         /// Gets a value indicating whether the encoding produced no fill work.
@@ -1848,7 +1844,7 @@ internal static class WebGPUSceneEncoder
             this.BeginIndependentRange(targetBounds);
             SceneEncodingCheckpoint checkpoint = this.CaptureCheckpoint();
 
-            // Each packed range is scanned from its own path-tag base, but flatten.wgsl
+            // Each packed range is scanned from its own path-tag base, but path_lowering.wgsl
             // still rebases transform indices by the implicit identity transform. Emit
             // that identity inside the range so range-local identity paths resolve to
             // transform index zero instead of underflowing into unrelated transform data.
@@ -1987,6 +1983,11 @@ internal static class WebGPUSceneEncoder
         /// </summary>
         public void Dispose()
         {
+            if (!this.profileStorageDetached)
+            {
+                this.ProfileStorage?.Dispose();
+            }
+
             if (!this.gradientPixelsDetached)
             {
                 this.GradientPixels.Dispose();
@@ -2022,6 +2023,11 @@ internal static class WebGPUSceneEncoder
         /// Marks the path-gradient payload stream as detached so disposal does not free it twice.
         /// </summary>
         public void MarkPathGradientDataDetached() => this.pathGradientDataDetached = true;
+
+        /// <summary>
+        /// Marks the profile arena as detached so disposal does not release partition-owned data twice.
+        /// </summary>
+        public void MarkProfileStorageDetached() => this.profileStorageDetached = true;
 
         /// <summary>
         /// Appends all supported scene operations into the mutable scene streams.
@@ -2236,7 +2242,7 @@ internal static class WebGPUSceneEncoder
         /// <param name="rasterizerOptions">Local rasterizer options used to generate coverage.</param>
         /// <param name="destinationOffset">Absolute destination offset where coverage is composited.</param>
         /// <param name="targetBounds">Absolute target bounds that own the composited pixels.</param>
-        /// <param name="geometry">Optional pre-flattened geometry for <paramref name="path"/>.</param>
+        /// <param name="geometry">Optional pre-linearized geometry for <paramref name="path"/>.</param>
         /// <param name="error">The error message when the command cannot be encoded.</param>
         /// <returns><see langword="true"/> when the command was encoded.</returns>
         public bool TryAppendExternalTextureFill(
@@ -2420,10 +2426,8 @@ internal static class WebGPUSceneEncoder
         {
             this.VisibleFillCount++;
 
-            // Both the rasterization mode (draw-flags aliased bit) and the aliased coverage threshold
-            // (the per-fill coverage word in CMD_FILL) travel to the fine pass per fill, matching the
-            // CPU rasterizer exactly. A flush may freely mix antialiased and aliased fills with any
-            // thresholds, so no flush-wide constraint remains.
+            // The draw-flags aliased bit carries the rasterization mode per fill. A flush can mix
+            // antialiased and centre-sampled fills without a flush-wide rasterization state.
             _ = options;
             error = null;
             return true;
@@ -2490,6 +2494,16 @@ internal static class WebGPUSceneEncoder
             paddedTags.Clear();
             this.PathTags.Advance(paddedTags.Length);
         }
+
+        /// <summary>
+        /// Returns whether the transform preserves the coordinate axes with unit scale, the
+        /// condition under which geometry-space profile extents translate directly into
+        /// absolute target space.
+        /// </summary>
+        /// <param name="transform">The scene transform to classify.</param>
+        /// <returns><see langword="true"/> when the transform is a pure translation; otherwise <see langword="false"/>.</returns>
+        private static bool IsProfileCompatibleTransform(in GpuSceneTransform transform)
+            => transform.M11 == 1F && transform.M22 == 1F && transform.M12 == 0F && transform.M21 == 0F && transform.M14 == 0F && transform.M24 == 0F && transform.M44 == 1F;
 
         /// <summary>
         /// Encodes one visible fill command into the path, draw, style, and auxiliary payload streams.
@@ -2589,6 +2603,22 @@ internal static class WebGPUSceneEncoder
             this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest, geometryLineCount, geometryTileCrossings);
             this.FillCount++;
             this.PathCount += encodedPathCount;
+
+            // Profile ranges use the geometry's original X and Y axes. A translation can be added
+            // when the scene is packed. Scale, rotation, or shear would require new ranges, so
+            // those draws keep sentinel tags and do not apply the terminating-tip test.
+            if (command.RasterizerOptions.RasterizationMode == RasterizationMode.Aliased && IsProfileCompatibleTransform(this.lastTransform))
+            {
+                LinearGeometryProfiles profiles = (this.ProfileStorage ??= new LinearGeometryProfileStorage(this.allocator)).GetOrAdd(geometry);
+                (this.ProfileFills ??= []).Add(
+                    new GpuProfileFillRecord(
+                        pathDataCheckpoint,
+                        geometry,
+                        profiles,
+                        this.lastTransform.Tx + (pathDataOffset.X - this.rootTargetBounds.X),
+                        this.lastTransform.Ty + (pathDataOffset.Y - this.rootTargetBounds.Y)));
+            }
+
             this.LineCount += geometryLineCount;
             this.InfoWordCount += (int)drawTagMonoid.InfoOffset;
             this.DrawTags.Add(drawTag);
@@ -2694,8 +2724,7 @@ internal static class WebGPUSceneEncoder
                 this.rootTargetBounds,
                 ref this.PathTags,
                 ref this.PathData,
-                out int geometryLineCount,
-                out long geometryTileCrossings);
+                out int geometryLineCount);
 
             if (encodedPathCount == 0)
             {
@@ -2715,7 +2744,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest, geometryLineCount, geometryTileCrossings);
+            this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest, geometryLineCount, -1);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -2814,8 +2843,7 @@ internal static class WebGPUSceneEncoder
                 this.rootTargetBounds,
                 ref this.PathTags,
                 ref this.PathData,
-                out int geometryLineCount,
-                out long geometryTileCrossings);
+                out int geometryLineCount);
 
             if (encodedPathCount == 0)
             {
@@ -2835,7 +2863,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, geometryTileCrossings);
+            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, -1);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -2936,8 +2964,7 @@ internal static class WebGPUSceneEncoder
                 this.rootTargetBounds,
                 ref this.PathTags,
                 ref this.PathData,
-                out int geometryLineCount,
-                out long geometryTileCrossings);
+                out int geometryLineCount);
 
             if (encodedPathCount == 0)
             {
@@ -2957,7 +2984,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, geometryTileCrossings);
+            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, -1);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -3011,7 +3038,9 @@ internal static class WebGPUSceneEncoder
 
             uint style0 = descriptor.IntersectionRule == IntersectionRule.EvenOdd ? (uint)StyleFlags.Fill : 0U;
             const uint style1 = 0U;
-            const uint style2 = 0U;
+            uint style2 = descriptor.EdgeMode == DrawingClipEdgeMode.Hard
+                ? GpuSceneDrawTag.FillInfoFlagsAliasedBit
+                : 0U;
             const uint style3 = 0U;
             const uint style4 = 0U;
             const uint style5 = 0U;
@@ -3286,7 +3315,7 @@ internal static class WebGPUSceneEncoder
             this.LineCount += clipLineCount;
             this.InfoWordCount += (int)GpuSceneDrawTag.Map(GpuSceneDrawTag.BeginClip).InfoOffset;
             this.DrawTags.Add(GpuSceneDrawTag.BeginClip);
-            AppendClipBeginData(descriptor.Operation, descriptor.EdgeMode, descriptor.AntialiasThreshold, clipBlendMode, ref this.DrawData);
+            AppendClipBeginData(descriptor.Operation, clipBlendMode, ref this.DrawData);
             this.ClipCount++;
             return true;
         }
@@ -3383,9 +3412,9 @@ internal static class WebGPUSceneEncoder
         /// Adds one draw object's target-space interest rectangle to the sparse scratch estimates after converting it to root-target-local coordinates.
         /// </summary>
         /// <param name="absoluteInterest">The draw object's absolute raster interest bounds.</param>
-        /// <param name="lineCount">The draw object's flattened (or GPU-expansion estimated) line count.</param>
+        /// <param name="lineCount">The draw object's linearized or GPU-expanded line count.</param>
         /// <param name="tileCrossings">
-        /// The exact summed per-line tile-crossing bound when the caller flattened the geometry on the CPU
+        /// The exact summed per-line tile-crossing bound when the caller linearized the geometry on the CPU
         /// (fills), or a negative value to fall back to the bounding-box diagonal bound (strokes, clips).
         /// </param>
         private void AccumulateDrawRowEstimate(Rectangle absoluteInterest, int lineCount, long tileCrossings = -1)
@@ -3397,9 +3426,9 @@ internal static class WebGPUSceneEncoder
         /// bin footprint for binning records.
         /// </summary>
         /// <param name="localBounds">The draw object's root-target-local raster interest bounds.</param>
-        /// <param name="lineCount">The draw object's flattened (or GPU-expansion estimated) line count.</param>
+        /// <param name="lineCount">The draw object's linearized or GPU-expanded line count.</param>
         /// <param name="tileCrossings">
-        /// The exact summed per-line tile-crossing bound when the caller flattened the geometry on the CPU
+        /// The exact summed per-line tile-crossing bound when the caller linearized the geometry on the CPU
         /// (fills), or a negative value to fall back to the bounding-box diagonal bound (strokes, clips).
         /// </param>
         private void AccumulateDrawRowEstimateLocal(Rectangle localBounds, int lineCount, long tileCrossings = -1)
@@ -3484,6 +3513,7 @@ internal static class WebGPUSceneEncoder
         private readonly IMemoryOwner<uint> stylesOwner;
         private readonly IMemoryOwner<uint>? gradientPixelsOwner;
         private readonly IMemoryOwner<uint>? pathGradientDataOwner;
+        private readonly LinearGeometryProfileStorage? profileStorage;
         private bool disposed;
 
         /// <summary>
@@ -3516,8 +3546,8 @@ internal static class WebGPUSceneEncoder
         /// <param name="transformWordCount">The transform word count.</param>
         /// <param name="styleWordCount">The style word count.</param>
         /// <param name="pathGradientDataWordCount">The path-gradient payload word count.</param>
-        /// <param name="fineRasterizationMode">The fine-pass rasterization mode selected by the partition.</param>
-        /// <param name="fineCoverageThreshold">The aliased coverage threshold selected by the partition.</param>
+        /// <param name="profileStorage">The detached partition-owned profile arena.</param>
+        /// <param name="profileFills">The aliased fills that have profile data.</param>
         private SceneEncodingPartition(
             IMemoryOwner<byte> pathTagsOwner,
             IMemoryOwner<uint> pathDataOwner,
@@ -3546,8 +3576,8 @@ internal static class WebGPUSceneEncoder
             int transformWordCount,
             int styleWordCount,
             int pathGradientDataWordCount,
-            RasterizationMode fineRasterizationMode,
-            float fineCoverageThreshold)
+            LinearGeometryProfileStorage? profileStorage,
+            List<GpuProfileFillRecord>? profileFills)
         {
             this.pathTagsOwner = pathTagsOwner;
             this.pathDataOwner = pathDataOwner;
@@ -3557,6 +3587,7 @@ internal static class WebGPUSceneEncoder
             this.stylesOwner = stylesOwner;
             this.gradientPixelsOwner = gradientPixelsOwner;
             this.pathGradientDataOwner = pathGradientDataOwner;
+            this.profileStorage = profileStorage;
             this.Images = images;
             this.Recolors = recolors;
             this.FillCount = fillCount;
@@ -3576,9 +3607,14 @@ internal static class WebGPUSceneEncoder
             this.TransformWordCount = transformWordCount;
             this.StyleWordCount = styleWordCount;
             this.PathGradientDataWordCount = pathGradientDataWordCount;
-            this.FineRasterizationMode = fineRasterizationMode;
-            this.FineCoverageThreshold = fineCoverageThreshold;
+            this.ProfileFills = profileFills;
         }
+
+        /// <summary>
+        /// Gets the aliased fills that have profile data. Their offsets are relative to this
+        /// partition's path-data stream.
+        /// </summary>
+        public List<GpuProfileFillRecord>? ProfileFills { get; }
 
         /// <summary>
         /// Gets the encoded path-tag bytes.
@@ -3722,16 +3758,6 @@ internal static class WebGPUSceneEncoder
         public int PathGradientDataWordCount { get; }
 
         /// <summary>
-        /// Gets the fine-pass rasterization mode selected by this partition.
-        /// </summary>
-        public RasterizationMode FineRasterizationMode { get; }
-
-        /// <summary>
-        /// Gets the aliased coverage threshold selected by this partition.
-        /// </summary>
-        public float FineCoverageThreshold { get; }
-
-        /// <summary>
         /// Detaches all retained streams from a mutable partition encoder.
         /// </summary>
         /// <param name="encoding">The mutable partition encoding.</param>
@@ -3754,6 +3780,7 @@ internal static class WebGPUSceneEncoder
             IMemoryOwner<uint> transformsOwner = encoding.Transforms.DetachOwner();
             IMemoryOwner<uint> stylesOwner = encoding.Styles.DetachOwner();
             encoding.MarkStreamsDetached();
+            encoding.MarkProfileStorageDetached();
 
             IMemoryOwner<uint>? gradientPixelsOwner = null;
             if (gradientRowCount > 0)
@@ -3797,8 +3824,8 @@ internal static class WebGPUSceneEncoder
                 transformWordCount,
                 styleWordCount,
                 pathGradientDataWordCount,
-                encoding.FineRasterizationMode,
-                encoding.FineCoverageThreshold);
+                encoding.ProfileStorage,
+                encoding.ProfileFills);
         }
 
         /// <summary>
@@ -3820,6 +3847,7 @@ internal static class WebGPUSceneEncoder
             this.stylesOwner.Dispose();
             this.gradientPixelsOwner?.Dispose();
             this.pathGradientDataOwner?.Dispose();
+            this.profileStorage?.Dispose();
         }
     }
 
@@ -3858,6 +3886,27 @@ internal static class WebGPUSceneEncoder
             int transformBase = drawDataBase + drawDataWordCount;
             int styleBase = transformBase + transformWordCount;
             int sceneWordCount = styleBase + styleWordCount;
+            List<GpuProfileFillRecord>? profileFills = encoding.ProfileFills;
+            int profileSlotWordCount = 0;
+            int xProfileCount = 0;
+            int yProfileCount = 0;
+            int profileSlotsBase = 0;
+            int profileRecordsBase = 0;
+            if (profileFills is not null)
+            {
+                GetProfileRegionLayout(
+                    profileFills,
+                    pathTagWordCount,
+                    pathDataWordCount,
+                    out profileSlotWordCount,
+                    out xProfileCount,
+                    out yProfileCount);
+
+                profileSlotsBase = sceneWordCount;
+                profileRecordsBase = checked(profileSlotsBase + profileSlotWordCount);
+                sceneWordCount = checked(profileRecordsBase + 2 + ((xProfileCount + yProfileCount) * 3));
+            }
+
             GpuSceneLayout layout = new(
                 (uint)drawTagCount,
                 (uint)encoding.PathCount,
@@ -3884,9 +3933,22 @@ internal static class WebGPUSceneEncoder
                     encoding.DrawData.WrittenSpan,
                     encoding.Transforms.WrittenSpan,
                     encoding.Styles.WrittenSpan,
-                    sceneDataOwner.Memory.Span[..sceneWordCount]);
+                    sceneDataOwner.Memory.Span[..(profileSlotsBase == 0 ? sceneWordCount : profileSlotsBase)]);
 
-                return new WebGPUEncodedScene(
+                if (profileFills is not null)
+                {
+                    WriteProfileRegions(
+                        sceneDataOwner.Memory.Span[..sceneWordCount],
+                        profileFills,
+                        pathTagWordCount,
+                        profileSlotsBase,
+                        profileSlotWordCount,
+                        profileRecordsBase,
+                        xProfileCount,
+                        yProfileCount);
+                }
+
+                WebGPUEncodedScene resolvedScene = new(
                     targetBounds.Size,
                     encoding.InfoWordCount,
                     sceneDataOwner,
@@ -3913,11 +3975,12 @@ internal static class WebGPUSceneEncoder
                     Math.Max(encoding.EstimatedPathRowCount, encoding.PathCount),
                     DivideRoundUp(targetBounds.Width, TileWidth),
                     DivideRoundUp(targetBounds.Height, TileHeight),
-                    encoding.FineRasterizationMode,
-                    encoding.FineCoverageThreshold,
                     encoding.EstimatedTileCrossings,
                     encoding.EstimatedBinFootprint,
                     operations);
+
+                resolvedScene.SetProfileRegions((uint)profileSlotsBase, (uint)profileRecordsBase);
+                return resolvedScene;
             }
             catch
             {
@@ -3927,20 +3990,358 @@ internal static class WebGPUSceneEncoder
         }
 
         /// <summary>
+        /// Calculates the segment-to-profile table size and the number of profile records.
+        /// </summary>
+        /// <param name="fills">The aliased fills that have profile data.</param>
+        /// <param name="dataRegionBase">The word offset of path data in the scene.</param>
+        /// <param name="dataWordCount">The path-data length in words.</param>
+        /// <param name="slotWordCount">Receives the segment-to-profile table length in words.</param>
+        /// <param name="xProfileCount">Receives the addressable X-profile count.</param>
+        /// <param name="yProfileCount">Receives the addressable Y-profile count.</param>
+        private static void GetProfileRegionLayout(
+            List<GpuProfileFillRecord> fills,
+            int dataRegionBase,
+            int dataWordCount,
+            out int slotWordCount,
+            out int xProfileCount,
+            out int yProfileCount)
+        {
+            // Every line starts at a two-word point. The shader divides that point's absolute scene
+            // offset by two to find its profile tag. Include the words before path data so a scene
+            // rendered in several ranges still uses one stable index.
+            slotWordCount = (dataRegionBase + dataWordCount + 1) >> 1;
+            xProfileCount = 0;
+            yProfileCount = 0;
+            for (int fillIndex = 0; fillIndex < fills.Count; fillIndex++)
+            {
+                LinearGeometryProfiles profiles = fills[fillIndex].Profiles;
+
+                // Each axis identifier has 16 bits. The largest value means "no profile", so the
+                // record count stops before that value.
+                xProfileCount = (int)Math.Min((long)xProfileCount + profiles.XProfileCount, LinearGeometryProfiles.SentinelId);
+                yProfileCount = (int)Math.Min((long)yProfileCount + profiles.YProfileCount, LinearGeometryProfiles.SentinelId);
+            }
+        }
+
+        /// <summary>
+        /// Calculates profile storage for ordered partitions without copying their fill lists.
+        /// </summary>
+        /// <param name="partitions">The ordered partition encodings.</param>
+        /// <param name="dataRegionBase">The word offset of path data in the scene.</param>
+        /// <param name="dataWordCount">The path-data length in words.</param>
+        /// <param name="slotWordCount">Receives the segment-to-profile table length in words.</param>
+        /// <param name="xProfileCount">Receives the addressable X-profile count.</param>
+        /// <param name="yProfileCount">Receives the addressable Y-profile count.</param>
+        private static void GetProfileRegionLayout(
+            SceneEncodingPartition?[] partitions,
+            int dataRegionBase,
+            int dataWordCount,
+            out int slotWordCount,
+            out int xProfileCount,
+            out int yProfileCount)
+        {
+            slotWordCount = (dataRegionBase + dataWordCount + 1) >> 1;
+            xProfileCount = 0;
+            yProfileCount = 0;
+            for (int partitionIndex = 0; partitionIndex < partitions.Length; partitionIndex++)
+            {
+                List<GpuProfileFillRecord>? fills = partitions[partitionIndex]!.ProfileFills;
+                if (fills is null)
+                {
+                    continue;
+                }
+
+                for (int fillIndex = 0; fillIndex < fills.Count; fillIndex++)
+                {
+                    LinearGeometryProfiles profiles = fills[fillIndex].Profiles;
+
+                    // Profile identifiers are scene-wide because all render ranges share these
+                    // records. The largest 16-bit value remains reserved for "no profile".
+                    xProfileCount = (int)Math.Min((long)xProfileCount + profiles.XProfileCount, LinearGeometryProfiles.SentinelId);
+                    yProfileCount = (int)Math.Min((long)yProfileCount + profiles.YProfileCount, LinearGeometryProfiles.SentinelId);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Writes one axis of profile records in scene-global identifier order.
+        /// </summary>
+        /// <param name="records">The destination record list.</param>
+        /// <param name="profiles">The geometry-space profile data.</param>
+        /// <param name="xAxis">Whether to write the X-axis profile table.</param>
+        /// <param name="count">The number of addressable records to write.</param>
+        /// <param name="idBase">The scene-global identifier base for this fill's axis profiles.</param>
+        /// <param name="translate">The translation from geometry space to absolute target space.</param>
+        private static void WriteProfileRecords(
+            Span<uint> records,
+            LinearGeometryProfiles profiles,
+            bool xAxis,
+            int count,
+            int idBase,
+            float translate)
+        {
+            if (xAxis)
+            {
+                // Select the source table outside the loop so this hot packing pass does not test
+                // the axis again for every record.
+                for (int i = 0; i < count; i++)
+                {
+                    profiles.GetXProfile(i, out float minimum, out float maximum, out int link);
+                    WriteProfileRecord(records, i, minimum, maximum, link, idBase, translate);
+                }
+
+                return;
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                profiles.GetYProfile(i, out float minimum, out float maximum, out int link);
+                WriteProfileRecord(records, i, minimum, maximum, link, idBase, translate);
+            }
+        }
+
+        /// <summary>
+        /// Writes one three-word profile record.
+        /// </summary>
+        /// <param name="records">The destination record list.</param>
+        /// <param name="index">The destination profile index.</param>
+        /// <param name="minimum">The lowest coordinate reached by the profile.</param>
+        /// <param name="maximum">The highest coordinate reached by the profile.</param>
+        /// <param name="link">The profile's contour connection data.</param>
+        /// <param name="idBase">The scene-global identifier base.</param>
+        /// <param name="translate">The translation from geometry space to absolute target space.</param>
+        private static void WriteProfileRecord(
+            Span<uint> records,
+            int index,
+            float minimum,
+            float maximum,
+            int link,
+            int idBase,
+            float translate)
+        {
+            // Words 0 and 1 are the inclusive axis range in absolute target-space 24.8 format.
+            records[index * 3] = unchecked((uint)FloatToProfileFixed(minimum + translate));
+            records[(index * 3) + 1] = unchecked((uint)FloatToProfileFixed(maximum + translate));
+
+            // Bit 0 records a connection to the previous profile. Bits 1..31 contain the one-based
+            // identifier joined across a closed contour's final point. Rebase only that identifier;
+            // zero continues to mean that there is no closing connection.
+            int partner = link >> 1;
+            if (partner != 0)
+            {
+                partner += idBase;
+            }
+
+            records[(index * 3) + 2] = unchecked((uint)((link & 1) | (partner << 1)));
+        }
+
+        /// <summary>
+        /// Converts a geometry-local segment tag to scene-global profile identifiers.
+        /// </summary>
+        /// <param name="tag">The per-geometry profile tag.</param>
+        /// <param name="xBase">The scene-global x identifier base.</param>
+        /// <param name="yBase">The scene-global y identifier base.</param>
+        /// <returns>The rebased tag.</returns>
+        private static uint RebaseProfileTag(uint tag, int xBase, int yBase)
+        {
+            uint sentinel = LinearGeometryProfiles.SentinelId;
+            uint xId = tag & sentinel;
+            uint yId = tag >> 16;
+
+            // Adding the shared-table base also preserves an existing sentinel: the sum remains at
+            // or above the reserved value and is replaced with the same sentinel.
+            xId = xId + (uint)xBase >= sentinel ? sentinel : xId + (uint)xBase;
+            yId = yId + (uint)yBase >= sentinel ? sentinel : yId + (uint)yBase;
+            return xId | (yId << 16);
+        }
+
+        /// <summary>
+        /// Converts one geometry-space coordinate to absolute target-space 24.8 fixed-point with
+        /// the same clamp and rounding the CPU rasterizer's profile tables use.
+        /// </summary>
+        /// <param name="value">The coordinate to convert.</param>
+        /// <returns>The 24.8 fixed-point value.</returns>
+        private static int FloatToProfileFixed(float value) => (int)MathF.Round(Math.Clamp(value, -8388608F, 8388607F) * 256F);
+
+        /// <summary>
+        /// Writes both profile tables for a single encoding stream.
+        /// </summary>
+        /// <param name="sceneWords">The full scene word span.</param>
+        /// <param name="fills">The aliased fills that have profile data, in path-data order.</param>
+        /// <param name="dataRegionBase">The word offset of path data in the scene.</param>
+        /// <param name="slotsBase">The word offset of the segment-to-profile table.</param>
+        /// <param name="slotWordCount">The segment-to-profile table length in words.</param>
+        /// <param name="recordsBase">The word offset of the profile range and contour-link table.</param>
+        /// <param name="xProfileCount">The addressable X-profile count.</param>
+        /// <param name="yProfileCount">The addressable Y-profile count.</param>
+        private static void WriteProfileRegions(
+            Span<uint> sceneWords,
+            List<GpuProfileFillRecord> fills,
+            int dataRegionBase,
+            int slotsBase,
+            int slotWordCount,
+            int recordsBase,
+            int xProfileCount,
+            int yProfileCount)
+        {
+            Span<uint> slots = sceneWords.Slice(slotsBase, slotWordCount);
+
+            // Not every encoded point starts a line. Mark all point pairs as having no profile,
+            // then write tags only at the line starts of the recorded aliased fills.
+            slots.Fill(uint.MaxValue);
+            sceneWords[recordsBase] = (uint)xProfileCount;
+            sceneWords[recordsBase + 1] = (uint)yProfileCount;
+
+            int xBase = 0;
+            int yBase = 0;
+            int xRecordOffset = recordsBase + 2;
+            int yRecordOffset = xRecordOffset + (xProfileCount * 3);
+            for (int fillIndex = 0; fillIndex < fills.Count; fillIndex++)
+            {
+                GpuProfileFillRecord fill = fills[fillIndex];
+                WriteProfileFill(
+                    sceneWords,
+                    slots,
+                    fill,
+                    dataRegionBase + fill.PathDataOffset,
+                    xProfileCount,
+                    yProfileCount,
+                    ref xBase,
+                    ref yBase,
+                    ref xRecordOffset,
+                    ref yRecordOffset);
+            }
+        }
+
+        /// <summary>
+        /// Writes both profile tables from ordered partitions without copying their fill lists.
+        /// </summary>
+        /// <param name="sceneWords">The full scene word span.</param>
+        /// <param name="partitions">The ordered partition encodings.</param>
+        /// <param name="dataRegionBase">The word offset of path data in the scene.</param>
+        /// <param name="slotsBase">The word offset of the segment-to-profile table.</param>
+        /// <param name="slotWordCount">The segment-to-profile table length in words.</param>
+        /// <param name="recordsBase">The word offset of the profile range and contour-link table.</param>
+        /// <param name="xProfileCount">The addressable X-profile count.</param>
+        /// <param name="yProfileCount">The addressable Y-profile count.</param>
+        private static void WriteProfileRegions(
+            Span<uint> sceneWords,
+            SceneEncodingPartition?[] partitions,
+            int dataRegionBase,
+            int slotsBase,
+            int slotWordCount,
+            int recordsBase,
+            int xProfileCount,
+            int yProfileCount)
+        {
+            Span<uint> slots = sceneWords.Slice(slotsBase, slotWordCount);
+
+            // All partitions share one table indexed by absolute scene position. Initialize
+            // padding, non-line points, and fills without profiles to the sentinel tag.
+            slots.Fill(uint.MaxValue);
+            sceneWords[recordsBase] = (uint)xProfileCount;
+            sceneWords[recordsBase + 1] = (uint)yProfileCount;
+
+            int xBase = 0;
+            int yBase = 0;
+            int xRecordOffset = recordsBase + 2;
+            int yRecordOffset = xRecordOffset + (xProfileCount * 3);
+            int partitionDataOffset = 0;
+            for (int partitionIndex = 0; partitionIndex < partitions.Length; partitionIndex++)
+            {
+                SceneEncodingPartition partition = partitions[partitionIndex]!;
+                List<GpuProfileFillRecord>? fills = partition.ProfileFills;
+                if (fills is not null)
+                {
+                    for (int fillIndex = 0; fillIndex < fills.Count; fillIndex++)
+                    {
+                        GpuProfileFillRecord fill = fills[fillIndex];
+                        WriteProfileFill(
+                            sceneWords,
+                            slots,
+                            fill,
+                            dataRegionBase + partitionDataOffset + fill.PathDataOffset,
+                            xProfileCount,
+                            yProfileCount,
+                            ref xBase,
+                            ref yBase,
+                            ref xRecordOffset,
+                            ref yRecordOffset);
+                    }
+                }
+
+                partitionDataOffset += partition.PathDataWordCount;
+            }
+        }
+
+        /// <summary>
+        /// Writes one fill's profile records and maps each line start to its profile identifiers.
+        /// </summary>
+        /// <param name="sceneWords">The full scene word span.</param>
+        /// <param name="slots">The segment-to-profile table.</param>
+        /// <param name="fill">The aliased fill that has profile data.</param>
+        /// <param name="contourStart">The fill's first absolute path-data word.</param>
+        /// <param name="xProfileCount">The addressable X-profile count.</param>
+        /// <param name="yProfileCount">The addressable Y-profile count.</param>
+        /// <param name="xBase">The next scene-global X-profile identifier.</param>
+        /// <param name="yBase">The next scene-global Y-profile identifier.</param>
+        /// <param name="xRecordOffset">The next X-profile record word offset.</param>
+        /// <param name="yRecordOffset">The next Y-profile record word offset.</param>
+        private static void WriteProfileFill(
+            Span<uint> sceneWords,
+            Span<uint> slots,
+            in GpuProfileFillRecord fill,
+            int contourStart,
+            int xProfileCount,
+            int yProfileCount,
+            ref int xBase,
+            ref int yBase,
+            ref int xRecordOffset,
+            ref int yRecordOffset)
+        {
+            LinearGeometryProfiles profiles = fill.Profiles;
+
+            // The scene-wide 16-bit limit can truncate the final fill's profile tables. Tags for
+            // records beyond the limit become sentinels when they are rebased below.
+            int xCount = Math.Min(profiles.XProfileCount, xProfileCount - xBase);
+            int yCount = Math.Min(profiles.YProfileCount, yProfileCount - yBase);
+            WriteProfileRecords(sceneWords.Slice(xRecordOffset, xCount * 3), profiles, xAxis: true, xCount, xBase, fill.TranslateX);
+            WriteProfileRecords(sceneWords.Slice(yRecordOffset, yCount * 3), profiles, xAxis: false, yCount, yBase, fill.TranslateY);
+
+            int segmentOrdinal = 0;
+            LinearContour[] contours = (LinearContour[])fill.Geometry.Contours;
+
+            // A profile tag is stored at the start-point pair of its line. Walk the contour layout
+            // to find those pairs and write directly to the final table. This second linear pass
+            // avoids a separate offset array for every fill.
+            for (int contourIndex = 0; contourIndex < contours.Length; contourIndex++)
+            {
+                LinearContour contour = contours[contourIndex];
+                for (int j = 0; j < contour.SegmentCount; j++)
+                {
+                    slots[(contourStart >> 1) + j] = RebaseProfileTag(profiles.GetSegmentTag(segmentOrdinal++), xBase, yBase);
+                }
+
+                contourStart += 2 + (contour.SegmentCount * 2);
+            }
+
+            xBase += xCount;
+            yBase += yCount;
+            xRecordOffset += xCount * 3;
+            yRecordOffset += yCount * 3;
+        }
+
+        /// <summary>
         /// Resolves ordered partition encodings into the final packed scene buffers.
         /// </summary>
         /// <param name="partitions">The ordered partition encodings.</param>
         /// <param name="targetBounds">The target bounds.</param>
         /// <param name="allocator">The allocator used for scene buffers.</param>
-        /// <param name="fineRasterizationMode">The fine-pass rasterization mode.</param>
-        /// <param name="fineCoverageThreshold">The scene-wide aliased coverage threshold.</param>
         /// <returns>The resolved encoded scene.</returns>
         public static WebGPUEncodedScene Resolve(
             SceneEncodingPartition?[] partitions,
             in Rectangle targetBounds,
-            MemoryAllocator allocator,
-            RasterizationMode fineRasterizationMode,
-            float fineCoverageThreshold)
+            MemoryAllocator allocator)
         {
             int pathTagByteCount = 0;
             int pathDataWordCount = 0;
@@ -3957,6 +4358,7 @@ internal static class WebGPUSceneEncoder
             int lineCount = 0;
             int infoWordCount = 0;
             int clipCount = 0;
+            int profileFillCount = 0;
             long estimatedPathRowCount = 0;
             long estimatedTileCrossings = 0;
             long estimatedBinFootprint = 0;
@@ -3979,6 +4381,7 @@ internal static class WebGPUSceneEncoder
                 lineCount += partition.LineCount;
                 infoWordCount += partition.InfoWordCount;
                 clipCount += partition.ClipCount;
+                profileFillCount += partition.ProfileFills?.Count ?? 0;
                 estimatedPathRowCount = Math.Min(estimatedPathRowCount + partition.EstimatedPathRowCount, int.MaxValue);
                 estimatedTileCrossings += partition.EstimatedTileCrossings;
                 estimatedBinFootprint += partition.EstimatedBinFootprint;
@@ -3992,6 +4395,27 @@ internal static class WebGPUSceneEncoder
             int transformBase = drawDataBase + drawDataWordCount;
             int styleBase = transformBase + transformWordCount;
             int sceneWordCount = styleBase + styleWordCount;
+
+            int profileSlotWordCount = 0;
+            int xProfileCount = 0;
+            int yProfileCount = 0;
+            int profileSlotsBase = 0;
+            int profileRecordsBase = 0;
+            if (profileFillCount != 0)
+            {
+                GetProfileRegionLayout(
+                    partitions,
+                    pathTagWordCount,
+                    pathDataWordCount,
+                    out profileSlotWordCount,
+                    out xProfileCount,
+                    out yProfileCount);
+
+                profileSlotsBase = sceneWordCount;
+                profileRecordsBase = checked(profileSlotsBase + profileSlotWordCount);
+                sceneWordCount = checked(profileRecordsBase + 2 + ((xProfileCount + yProfileCount) * 3));
+            }
+
             GpuSceneLayout layout = new(
                 (uint)drawTagCount,
                 (uint)pathCount,
@@ -4084,6 +4508,19 @@ internal static class WebGPUSceneEncoder
                 }
 
                 sceneBytes[pathTagByteCount..(pathTagWordCount * sizeof(uint))].Clear();
+                if (profileFillCount != 0)
+                {
+                    WriteProfileRegions(
+                        sceneWords,
+                        partitions,
+                        pathTagWordCount,
+                        profileSlotsBase,
+                        profileSlotWordCount,
+                        profileRecordsBase,
+                        xProfileCount,
+                        yProfileCount);
+                }
+
                 WebGPUEncodedScene resolved = new(
                     targetBounds.Size,
                     infoWordCount,
@@ -4111,12 +4548,11 @@ internal static class WebGPUSceneEncoder
                     Math.Max((int)estimatedPathRowCount, pathCount),
                     DivideRoundUp(targetBounds.Width, TileWidth),
                     DivideRoundUp(targetBounds.Height, TileHeight),
-                    fineRasterizationMode,
-                    fineCoverageThreshold,
                     estimatedTileCrossings,
                     estimatedBinFootprint,
                     []);
 
+                resolved.SetProfileRegions((uint)profileSlotsBase, (uint)profileRecordsBase);
                 sceneDataOwner = null;
                 gradientPixelsOwner = null;
                 pathGradientDataOwner = null;
@@ -4440,7 +4876,6 @@ internal static class WebGPUSceneEncoder
             clippedDestination,
             options.IntersectionRule,
             options.RasterizationMode,
-            options.AntialiasThreshold,
             options.CoverageBoost);
 
         brushBounds = absoluteInterest;
@@ -4733,7 +5168,7 @@ internal static class WebGPUSceneEncoder
     /// Encodes a lowered path into path-tag and path-data streams in target-local space.
     /// </summary>
     /// <param name="destinationOffset">The absolute destination offset applied to every point.</param>
-    /// <param name="geometry">The flattened geometry to encode.</param>
+    /// <param name="geometry">The linear geometry to encode.</param>
     /// <param name="rootTargetBounds">The root target bounds used for target-local conversion.</param>
     /// <param name="pathTags">The path-tag stream.</param>
     /// <param name="pathData">The path-data stream.</param>
@@ -4844,42 +5279,21 @@ internal static class WebGPUSceneEncoder
         => Vector128.Sum(value.AsVector128());
 
     /// <summary>
-    /// Scales a stroke centerline's tile-crossing count up to a conservative bound on the tiles the GPU
-    /// stroker's emitted geometry covers. The stroker expands each centerline into two offset sides plus
-    /// joins and caps, and a stroke of the given width spreads each side across roughly one extra tile per
-    /// 16 pixels, so the centerline count alone under-seeds the segment and path-tile scratch buffers.
-    /// </summary>
-    /// <param name="centerlineCrossings">The summed centerline tile-crossing count.</param>
-    /// <param name="lineCount">The estimated emitted stroke line count, including joins, caps and arcs.</param>
-    /// <param name="strokeWidth">The transform-scaled stroke width in pixels.</param>
-    /// <returns>The conservative emitted-stroke tile-crossing bound.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static long ScaleStrokeTileCrossings(long centerlineCrossings, int lineCount, float strokeWidth)
-    {
-        long widthTiles = 1 + (long)MathF.Ceiling(MathF.Max(strokeWidth, 0F) / TileWidth);
-        return (centerlineCrossings + Math.Max(lineCount, 1)) * widthTiles;
-    }
-
-    /// <summary>
-    /// Encodes a stroke centerline into Vello-style path tags and path data in target-local space,
-    /// applying the CPU stroker's contour preprocessing so the GPU stroker consumes the same
-    /// segment list the CPU stroker strokes.
+    /// Encodes the final line segments of a stroke centreline in target-local space.
     /// </summary>
     /// <remarks>
-    /// This ports <c>DefaultRasterizer.StrokeLinearizer.BuildContourSegments</c> (exact-duplicate
-    /// and 1/64 px micro-segment collapse) and <c>IsContourClosedForEmission</c> (closed-contour
-    /// normalization) to encode time. The GPU shader then expands clean segments with the ported
-    /// CPU join and cap geometry; it never sees a degenerate-tangent segment.
+    /// The encoder removes duplicate and sub-1/64-pixel segments and applies the same open/closed
+    /// contour rules as the CPU stroker. The shader receives lines only and expands those lines into
+    /// stroke bodies, joins, and caps.
     /// </remarks>
-    /// <param name="geometry">The flattened centerline geometry to encode.</param>
+    /// <param name="geometry">The linear centreline geometry to encode.</param>
     /// <param name="destinationOffset">The absolute destination offset applied to every point.</param>
     /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
     /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
     /// <param name="rootTargetBounds">The root target bounds used for target-local conversion.</param>
     /// <param name="pathTags">The path-tag stream.</param>
     /// <param name="pathData">The path-data stream.</param>
-    /// <param name="lineCount">Receives the estimated flattened line workload for the stroke.</param>
-    /// <param name="tileCrossings">Receives the conservative emitted-stroke tile-crossing bound used to seed the scratch buffers.</param>
+    /// <param name="lineCount">Receives the estimated final line workload for the stroke.</param>
     /// <returns>The number of encoded path objects: 1, or 0 when no contour survived preprocessing.</returns>
     private static int EncodeStrokePath(
         LinearGeometry geometry,
@@ -4889,162 +5303,164 @@ internal static class WebGPUSceneEncoder
         in Rectangle rootTargetBounds,
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
-        out int lineCount,
-        out long tileCrossings)
+        out int lineCount)
     {
         float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
         float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
-        Vector2 translate = new(pointTranslateX, pointTranslateY);
         lineCount = EstimateStrokeLineCount(geometry, pen, widthScale);
-        tileCrossings = 0;
         float strokeWidth = pen.StrokeWidth * widthScale;
         int encodedContourCount = 0;
-        IReadOnlyList<PointF> geometryPoints = geometry.Points;
+        LinearContour[] contours = (LinearContour[])geometry.Contours;
+        PointF[] geometryPoints = (PointF[])geometry.Points;
 
-        for (int i = 0; i < geometry.Contours.Count; i++)
+        for (int i = 0; i < contours.Length; i++)
         {
-            LinearContour contour = geometry.Contours[i];
+            LinearContour contour = contours[i];
             if (contour.PointCount == 0)
             {
                 continue;
             }
 
-            PointF[] kept = ArrayPool<PointF>.Shared.Rent(contour.PointCount);
-            try
+            ReadOnlySpan<PointF> contourPoints = geometryPoints.AsSpan(contour.PointStart, contour.PointCount);
+            PointF firstPoint = contourPoints[0];
+            PointF previousKept = firstPoint;
+            PointF pointLike = firstPoint;
+            PointF secondPoint = default;
+            PointF lastKept = firstPoint;
+            int pointIndex = 1;
+            int keptCount = 1;
+
+            // Count the filtered points and retain only the few values needed to classify the
+            // contour. The second pass writes them directly to the scene streams, so no temporary
+            // point buffer is rented for each stroke geometry.
+            while (TryGetNextStrokePoint(contourPoints, ref pointIndex, ref previousKept, ref pointLike, out PointF point))
             {
-                // CPU stroker preprocessing: collapse exact duplicates and micro-segments below
-                // 1/64 px forward onto the last kept point.
-                int keptCount = 0;
-                PointF firstPoint = geometryPoints[contour.PointStart];
-                kept[keptCount++] = firstPoint;
-                PointF pointLike = firstPoint;
-                for (int j = 1; j < contour.PointCount; j++)
+                if (keptCount == 1)
                 {
-                    PointF point = geometryPoints[contour.PointStart + j];
-                    PointF previous = kept[keptCount - 1];
-                    if (point == previous)
-                    {
-                        continue;
-                    }
-
-                    if (Vector2.DistanceSquared(previous, point) > StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon)
-                    {
-                        kept[keptCount++] = point;
-                    }
-
-                    pointLike = point;
+                    secondPoint = point;
                 }
 
-                int segmentCount = keptCount - 1;
+                lastKept = point;
+                keptCount++;
+            }
 
-                // CPU stroker closed-contour normalization.
-                bool isClosed = false;
-                if (contour.PointCount >= 3)
+            int segmentCount = keptCount - 1;
+
+            // Match the CPU closure rule. A contour with at least three source points is closed
+            // when it is declared closed or its endpoints are within one scaled stroke width.
+            bool isClosed = false;
+            if (contourPoints.Length >= 3)
+            {
+                PointF last = contourPoints[^1];
+                float closeThreshold = MathF.Max(strokeWidth, 1E-3F);
+                isClosed = contour.IsClosed ||
+                    firstPoint == last ||
+                    Vector2.DistanceSquared(firstPoint, last) <= closeThreshold * closeThreshold;
+            }
+
+            bool duplicateClosingPoint = keptCount > 1 && lastKept == firstPoint;
+            int distinctPointCount = keptCount - (isClosed && duplicateClosingPoint ? 1 : 0);
+
+            if (segmentCount == 0)
+            {
+                EncodePointStrokeContour(pointLike, pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
+                encodedContourCount++;
+                continue;
+            }
+
+            if (segmentCount == 1 || distinctPointCount == 2)
+            {
+                // The CPU stroker emits these as one capped open segment even when declared closed.
+                Span<PointF> segmentPoints = [firstPoint, secondPoint];
+                EncodeOpenStrokeContour(segmentPoints, pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
+                encodedContourCount++;
+                continue;
+            }
+
+            if (isClosed)
+            {
+                int emitCount = duplicateClosingPoint ? keptCount - 1 : keptCount;
+
+                // Emit the final line back to the first point only when that gap survived the
+                // micro-segment filter. A smaller gap is closed by the join alone.
+                bool closingSegment = duplicateClosingPoint ||
+                    (segmentCount > 1 &&
+                     Vector2.DistanceSquared(lastKept, firstPoint) > StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon);
+
+                int linetoCount = (emitCount - 1) + (closingSegment ? 1 : 0);
+                Span<uint> contourData = pathData.GetAppendSpan(2 + (linetoCount * 2) + 2);
+                Span<byte> contourTags = pathTags.GetAppendSpan(linetoCount + 1);
+
+                int dataIndex = 0;
+                int tagIndex = 0;
+                contourData[dataIndex++] = BitcastSingle(firstPoint.X + pointTranslateX);
+                contourData[dataIndex++] = BitcastSingle(firstPoint.Y + pointTranslateY);
+
+                previousKept = firstPoint;
+                pointLike = firstPoint;
+                pointIndex = 1;
+                PointF lastEndpoint = firstPoint;
+                for (int j = 1; j < emitCount; j++)
                 {
-                    PointF last = geometryPoints[contour.PointStart + contour.PointCount - 1];
-                    float closeThreshold = MathF.Max(strokeWidth, 1E-3F);
-                    isClosed = contour.IsClosed ||
-                        firstPoint == last ||
-                        Vector2.DistanceSquared(firstPoint, last) <= closeThreshold * closeThreshold;
+                    _ = TryGetNextStrokePoint(contourPoints, ref pointIndex, ref previousKept, ref pointLike, out PointF point);
+                    contourData[dataIndex++] = BitcastSingle(point.X + pointTranslateX);
+                    contourData[dataIndex++] = BitcastSingle(point.Y + pointTranslateY);
+                    contourTags[tagIndex++] = PackPathTag(PathTag.LineToF32);
+                    lastEndpoint = point;
                 }
 
-                bool duplicateClosingPoint = keptCount > 1 && kept[keptCount - 1] == kept[0];
-                int distinctPointCount = keptCount - (isClosed && duplicateClosingPoint ? 1 : 0);
-
-                if (segmentCount == 0)
+                if (closingSegment)
                 {
-                    EncodePointStrokeContour(pointLike, pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
-                    Vector2 pointCenter = (Vector2)pointLike + translate;
-                    Vector2 pointHalf = new(PointStrokeSegmentHalfLength, 0F);
-                    tileCrossings += CountLineTileCrossings(pointCenter - pointHalf, pointCenter + pointHalf);
-
-                    encodedContourCount++;
-                    continue;
+                    contourData[dataIndex++] = BitcastSingle(firstPoint.X + pointTranslateX);
+                    contourData[dataIndex++] = BitcastSingle(firstPoint.Y + pointTranslateY);
+                    contourTags[tagIndex++] = PackPathTag(PathTag.LineToF32);
+                    lastEndpoint = firstPoint;
                 }
 
-                if (segmentCount == 1 || distinctPointCount == 2)
-                {
-                    // The CPU stroker emits these as one capped open segment even when declared closed.
-                    EncodeOpenStrokeContour(kept.AsSpan(0, 2), pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
-                    tileCrossings += CountLineTileCrossings((Vector2)kept[0] + translate, (Vector2)kept[1] + translate);
+                // The closing marker extends from the last emitted endpoint in the direction of
+                // the first segment. The shader uses this synthetic line only to calculate the
+                // wrap join; it does not emit another stroke body.
+                contourData[dataIndex++] = BitcastSingle(lastEndpoint.X + (secondPoint.X - firstPoint.X) + pointTranslateX);
+                contourData[dataIndex] = BitcastSingle(lastEndpoint.Y + (secondPoint.Y - firstPoint.Y) + pointTranslateY);
+                contourTags[tagIndex] = PackPathTag(PathTag.LineToF32 | PathTag.SubpathEnd);
 
-                    encodedContourCount++;
-                    continue;
-                }
-
-                if (isClosed)
-                {
-                    int emitCount = duplicateClosingPoint ? keptCount - 1 : keptCount;
-
-                    // A closing segment exists when the contour ends exactly on its first point or
-                    // the gap back to it is a real (non micro) segment; a sub-1/64 gap is bridged
-                    // by the wrap join, matching the CPU stroker.
-                    bool closingSegment = duplicateClosingPoint ||
-                        (segmentCount > 1 &&
-                         Vector2.DistanceSquared(kept[keptCount - 1], kept[0]) > StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon);
-
-                    int linetoCount = (emitCount - 1) + (closingSegment ? 1 : 0);
-                    Span<uint> contourData = pathData.GetAppendSpan(2 + (linetoCount * 2) + 2);
-                    Span<byte> contourTags = pathTags.GetAppendSpan(linetoCount + 1);
-
-                    int dataIndex = 0;
-                    int tagIndex = 0;
-                    contourData[dataIndex++] = BitcastSingle(kept[0].X + pointTranslateX);
-                    contourData[dataIndex++] = BitcastSingle(kept[0].Y + pointTranslateY);
-                    for (int j = 1; j < emitCount; j++)
-                    {
-                        contourData[dataIndex++] = BitcastSingle(kept[j].X + pointTranslateX);
-                        contourData[dataIndex++] = BitcastSingle(kept[j].Y + pointTranslateY);
-                        contourTags[tagIndex++] = PackPathTag(PathTag.LineToF32);
-                    }
-
-                    PointF lastEndpoint = kept[emitCount - 1];
-                    if (closingSegment)
-                    {
-                        contourData[dataIndex++] = BitcastSingle(kept[0].X + pointTranslateX);
-                        contourData[dataIndex++] = BitcastSingle(kept[0].Y + pointTranslateY);
-                        contourTags[tagIndex++] = PackPathTag(PathTag.LineToF32);
-                        lastEndpoint = kept[0];
-                    }
-
-                    // Closed-stroke marker: carries the first segment's tangent and length so the
-                    // wrap join at the closing corner matches the CPU stroker's join arguments.
-                    contourData[dataIndex++] = BitcastSingle(lastEndpoint.X + (kept[1].X - kept[0].X) + pointTranslateX);
-                    contourData[dataIndex] = BitcastSingle(lastEndpoint.Y + (kept[1].Y - kept[0].Y) + pointTranslateY);
-                    contourTags[tagIndex] = PackPathTag(PathTag.LineToF32 | PathTag.SubpathEnd);
-
-                    pathData.Advance(contourData.Length);
-                    pathTags.Advance(contourTags.Length);
-
-                    Vector2 current = (Vector2)kept[0] + translate;
-                    for (int j = 1; j < emitCount; j++)
-                    {
-                        Vector2 next = (Vector2)kept[j] + translate;
-                        tileCrossings += CountLineTileCrossings(current, next);
-                        current = next;
-                    }
-
-                    if (closingSegment)
-                    {
-                        tileCrossings += CountLineTileCrossings(current, (Vector2)kept[0] + translate);
-                    }
-
-                    encodedContourCount++;
-                    continue;
-                }
-
-                EncodeOpenStrokeContour(kept.AsSpan(0, keptCount), pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
-                for (int j = 0; j < keptCount - 1; j++)
-                {
-                    tileCrossings += CountLineTileCrossings((Vector2)kept[j] + translate, (Vector2)kept[j + 1] + translate);
-                }
+                pathData.Advance(contourData.Length);
+                pathTags.Advance(contourTags.Length);
 
                 encodedContourCount++;
+                continue;
             }
-            finally
+
+            int openLinetoCount = keptCount - 1;
+            Span<uint> openData = pathData.GetAppendSpan(2 + (openLinetoCount * 2) + 4);
+            Span<byte> openTags = pathTags.GetAppendSpan(openLinetoCount + 1);
+            int openDataIndex = 0;
+            int openTagIndex = 0;
+            openData[openDataIndex++] = BitcastSingle(firstPoint.X + pointTranslateX);
+            openData[openDataIndex++] = BitcastSingle(firstPoint.Y + pointTranslateY);
+
+            previousKept = firstPoint;
+            pointLike = firstPoint;
+            pointIndex = 1;
+            while (TryGetNextStrokePoint(contourPoints, ref pointIndex, ref previousKept, ref pointLike, out PointF point))
             {
-                ArrayPool<PointF>.Shared.Return(kept);
+                openData[openDataIndex++] = BitcastSingle(point.X + pointTranslateX);
+                openData[openDataIndex++] = BitcastSingle(point.Y + pointTranslateY);
+                openTags[openTagIndex++] = PackPathTag(PathTag.LineToF32);
             }
+
+            // The open marker stores the start point and one point on its outgoing tangent. QuadTo
+            // selects this four-word marker layout; it does not represent a curve in the shader.
+            PointF tangentPoint = GetStrokeMarkerTangentPoint(firstPoint, secondPoint);
+            openData[openDataIndex++] = BitcastSingle(firstPoint.X + pointTranslateX);
+            openData[openDataIndex++] = BitcastSingle(firstPoint.Y + pointTranslateY);
+            openData[openDataIndex++] = BitcastSingle(tangentPoint.X + pointTranslateX);
+            openData[openDataIndex] = BitcastSingle(tangentPoint.Y + pointTranslateY);
+            openTags[openTagIndex] = PackPathTag(PathTag.QuadToF32 | PathTag.SubpathEnd);
+
+            pathData.Advance(openData.Length);
+            pathTags.Advance(openTags.Length);
+            encodedContourCount++;
         }
 
         if (encodedContourCount == 0)
@@ -5052,11 +5468,52 @@ internal static class WebGPUSceneEncoder
             return 0;
         }
 
-        // The loop counted centerline tiles; the GPU stroker emits offset sides, joins and caps, so
-        // scale the count up to the emitted geometry to avoid under-seeding the segment scratch.
-        tileCrossings = ScaleStrokeTileCrossings(tileCrossings, lineCount, strokeWidth);
         pathTags.Add(PackPathTag(PathTag.Path));
         return 1;
+    }
+
+    /// <summary>
+    /// Gets the next stroke contour point that survives exact-duplicate and micro-segment collapse.
+    /// </summary>
+    /// <param name="points">The source contour points.</param>
+    /// <param name="index">The next source point index.</param>
+    /// <param name="previousKept">The last point that survived filtering.</param>
+    /// <param name="pointLike">The last non-duplicate source point, used when the contour collapses to a point.</param>
+    /// <param name="point">Receives the next retained point.</param>
+    /// <returns><see langword="true"/> when another point survives filtering.</returns>
+    private static bool TryGetNextStrokePoint(
+        ReadOnlySpan<PointF> points,
+        ref int index,
+        ref PointF previousKept,
+        ref PointF pointLike,
+        out PointF point)
+    {
+        while (index < points.Length)
+        {
+            point = points[index++];
+
+            // Exact duplicates do not update pointLike because they provide no direction and do
+            // not change the location represented by a fully collapsed contour.
+            if (point == previousKept)
+            {
+                continue;
+            }
+
+            pointLike = point;
+
+            // A non-duplicate micro segment updates the representative point but does not become
+            // a stroke segment. Measure the next candidate from the last point that was retained.
+            if (Vector2.DistanceSquared(previousKept, point) <= StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon)
+            {
+                continue;
+            }
+
+            previousKept = point;
+            return true;
+        }
+
+        point = default;
+        return false;
     }
 
     /// <summary>
@@ -5089,7 +5546,8 @@ internal static class WebGPUSceneEncoder
             contourTags[tagIndex++] = PackPathTag(PathTag.LineToF32);
         }
 
-        // Open-stroke cap marker: stores the subpath start point and its outgoing tangent point.
+        // QuadTo selects the open-marker layout. These two points define a line tangent; no curve
+        // reaches the shader.
         PointF tangentPoint = GetStrokeMarkerTangentPoint(points[0], points[1]);
         contourData[dataIndex++] = BitcastSingle(points[0].X + pointTranslateX);
         contourData[dataIndex++] = BitcastSingle(points[0].Y + pointTranslateY);
@@ -5116,6 +5574,8 @@ internal static class WebGPUSceneEncoder
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData)
     {
+        // A zero-length centreline has no tangent. Use the same short horizontal segment as the
+        // CPU point-stroke path so cap construction has a stable direction.
         PointF start = new(point.X - PointStrokeSegmentHalfLength, point.Y);
         PointF end = new(point.X + PointStrokeSegmentHalfLength, point.Y);
         PointF tangentEnd = GetStrokeMarkerTangentPoint(start, end);
@@ -5147,8 +5607,7 @@ internal static class WebGPUSceneEncoder
     /// <param name="rootTargetBounds">The root target bounds used for target-local conversion.</param>
     /// <param name="pathTags">The path-tag stream.</param>
     /// <param name="pathData">The path-data stream.</param>
-    /// <param name="lineCount">Receives the estimated flattened line workload for the stroke.</param>
-    /// <param name="tileCrossings">Receives the conservative emitted-stroke tile-crossing bound used to seed the scratch buffers.</param>
+    /// <param name="lineCount">Receives the estimated final line workload for the stroke.</param>
     /// <returns>The number of encoded path objects; always 1.</returns>
     private static int EncodeOpenSegmentStrokePath(
         PointF start,
@@ -5159,8 +5618,7 @@ internal static class WebGPUSceneEncoder
         in Rectangle rootTargetBounds,
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
-        out int lineCount,
-        out long tileCrossings)
+        out int lineCount)
     {
         float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
         float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
@@ -5169,12 +5627,6 @@ internal static class WebGPUSceneEncoder
         EncodeOpenStrokeContour(segmentPoints, pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
         pathTags.Add(PackPathTag(PathTag.Path));
         lineCount = EstimateStrokeLineCountForOpenSegment(pen, widthScale);
-        Vector2 translate = new(pointTranslateX, pointTranslateY);
-        tileCrossings = ScaleStrokeTileCrossings(
-            CountLineTileCrossings((Vector2)start + translate, (Vector2)end + translate),
-            lineCount,
-            pen.StrokeWidth * widthScale);
-
         return 1;
     }
 
@@ -5664,7 +6116,7 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Estimates the flattened line workload for one stroke.
+    /// Estimates the final line workload for one stroke.
     /// </summary>
     /// <param name="geometry">The centerline geometry to estimate.</param>
     /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
@@ -5697,7 +6149,7 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Estimates the flattened line workload for one explicit open two-point stroke segment.
+    /// Estimates the final line workload for one explicit open two-point stroke segment.
     /// </summary>
     /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
     /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
@@ -5707,7 +6159,7 @@ internal static class WebGPUSceneEncoder
         => Math.Max(2 + (GetStrokeCapLineCost(pen, widthScale) * 2), 1);
 
     /// <summary>
-    /// Returns the conservative flattened line cost of one stroke join.
+    /// Returns the conservative final line cost of one stroke join.
     /// </summary>
     /// <param name="pen">The pen that defines the join style.</param>
     /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
@@ -5728,7 +6180,7 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Returns the conservative flattened line cost of one stroke cap.
+    /// Returns the conservative final line cost of one stroke cap.
     /// </summary>
     /// <param name="pen">The pen that defines the cap style.</param>
     /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
@@ -5746,7 +6198,7 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Returns the conservative flattened line cost of one round arc in the stroke shaders.
+    /// Returns the conservative final line cost of one round arc in the stroke shaders.
     /// </summary>
     /// <param name="radius">The arc radius in pixels.</param>
     /// <param name="angle">The swept angle in radians.</param>
@@ -5913,12 +6365,10 @@ internal static class WebGPUSceneEncoder
     /// Packs the style words that describe stroke behavior for one draw record.
     /// </summary>
     /// <remarks>
-    /// Word layout consumed by flatten.wgsl: 0 = style flags, 1 = device-space stroke width,
-    /// 2 = packed draw flags, 3 = miter limit, 4 = arc detail scale, 5 = coverage parameter,
+    /// Word layout consumed by path_lowering.wgsl: 0 = style flags, 1 = device-space stroke width,
+    /// 2 = packed draw flags, 3 = miter limit, 4 = arc detail scale, 5 = zero,
     /// 6-9 = target-local interest rectangle as left, top, right, bottom.
-    /// The coverage parameter carries the quantization threshold for aliased strokes and zero
-    /// for antialiased strokes: fine interprets the antialiased slot as the perceptual coverage
-    /// boost, which never applies to strokes.
+    /// Strokes do not use antialiased text coverage boost data, so word 5 is zero in both modes.
     /// </remarks>
     /// <param name="options">The graphics options used for blending.</param>
     /// <param name="pen">The pen that defines stroke width, joins, caps, and miter limit.</param>
@@ -5952,7 +6402,7 @@ internal static class WebGPUSceneEncoder
             PackStyleDrawFlags(options),
             BitcastSingle((float)pen.StrokeOptions.MiterLimit),
             BitcastSingle((float)pen.StrokeOptions.ArcDetailScale),
-            BitcastSingle(options.Antialias ? 0F : options.AntialiasThreshold),
+            0U,
             BitcastSingle(interestBounds.Left),
             BitcastSingle(interestBounds.Top),
             BitcastSingle(interestBounds.Right),
@@ -5981,7 +6431,7 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Packs the stroke join flags consumed by the staged flatten shader.
+    /// Packs the stroke join flags consumed by the staged path-lowering shader.
     /// </summary>
     /// <param name="lineJoin">The pen join style.</param>
     /// <returns>The join style flags.</returns>
@@ -5997,7 +6447,7 @@ internal static class WebGPUSceneEncoder
         };
 
     /// <summary>
-    /// Packs the start and end cap flags consumed by the staged flatten shader.
+    /// Packs the start and end cap flags consumed by the staged path-lowering shader.
     /// </summary>
     /// <param name="lineCap">The pen cap style, applied to both segment ends.</param>
     /// <returns>The cap style flags.</returns>
@@ -6017,9 +6467,8 @@ internal static class WebGPUSceneEncoder
     /// Shares the stroke style word layout with the stroke-only words zeroed: 0 = style flags
     /// (the fill bit selects even-odd), 2 = packed draw flags, 5 = coverage parameter,
     /// 6-9 = target-local interest rectangle as left, top, right, bottom.
-    /// The coverage parameter is mode-dependent because the two uses are mutually exclusive:
-    /// aliased fills carry the quantization threshold, antialiased fills carry the perceptual
-    /// coverage boost applied by fine (zero for plain fills, non-zero only for text).
+    /// Antialiased fills carry the perceptual coverage boost applied by fine in word 5
+    /// (zero for plain fills, non-zero only for text). Aliased fills leave word 5 zero.
     /// </remarks>
     /// <param name="options">The graphics options used for blending.</param>
     /// <param name="intersectionRule">The fill rule for self-intersecting geometry.</param>
@@ -6044,14 +6493,19 @@ internal static class WebGPUSceneEncoder
         float coverageBoost = 0F)
     {
         StyleFlags styleFlags = intersectionRule == IntersectionRule.EvenOdd ? StyleFlags.Fill : StyleFlags.None;
-        float coverageParam = options.Antialias ? coverageBoost : options.AntialiasThreshold;
+
+        // Antialiased fills carry the perceptual coverage boost as a float. Aliased fills sample
+        // the shape at pixel centres, a rule with no threshold and no boost, so their coverage
+        // word carries nothing.
+        uint coverageWord = options.Antialias ? BitcastSingle(coverageBoost) : 0U;
+
         return (
             (uint)styleFlags,
             0U,
             PackStyleDrawFlags(options),
             0U,
             0U,
-            BitcastSingle(coverageParam),
+            coverageWord,
             BitcastSingle(interestBounds.Left),
             BitcastSingle(interestBounds.Top),
             BitcastSingle(interestBounds.Right),
@@ -6059,7 +6513,7 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Packs the draw-flags word carried through flatten into coarse and fine.
+    /// Packs the draw-flags word carried through path lowering into coarse and fine.
     /// </summary>
     /// <param name="options">The graphics options supplying blend mode, blend percentage, and antialiasing.</param>
     /// <returns>The packed draw-flags word: blend mode in bits 1-13, alpha in bits 14-29, and the aliased bit.</returns>
@@ -6251,14 +6705,10 @@ internal static class WebGPUSceneEncoder
     /// Appends the draw-data payload for an ordinary clip record.
     /// </summary>
     /// <param name="operation">The clip set operation; Difference sets the mask-inversion bit.</param>
-    /// <param name="edgeMode">The clip edge mode; hard edges set the hard-mask bit.</param>
-    /// <param name="antialiasThreshold">The coverage threshold used for hard-edge clips.</param>
     /// <param name="clipBlendMode">The base clip blend word.</param>
     /// <param name="drawData">The draw-data stream.</param>
     private static void AppendClipBeginData(
         ClipOperation operation,
-        DrawingClipEdgeMode edgeMode,
-        float antialiasThreshold,
         uint clipBlendMode,
         ref OwnedStream<uint> drawData)
     {
@@ -6268,13 +6718,8 @@ internal static class WebGPUSceneEncoder
             ? clipBlendMode | ClipDifferenceMaskBit
             : clipBlendMode;
 
-        if (edgeMode == DrawingClipEdgeMode.Hard)
-        {
-            blendMode |= ClipHardMaskBit;
-        }
-
         drawData.Add(blendMode);
-        drawData.Add(BitcastSingle(edgeMode == DrawingClipEdgeMode.Hard ? antialiasThreshold : 1F));
+        drawData.Add(BitcastSingle(1F));
     }
 
     /// <summary>
@@ -6709,6 +7154,27 @@ internal static class WebGPUSceneEncoder
 internal sealed class WebGPUEncodedScene : IDisposable
 {
     /// <summary>
+    /// Gets the word offset of the segment-to-profile table, or zero when absent.
+    /// </summary>
+    public uint ProfileSlotsBase { get; private set; }
+
+    /// <summary>
+    /// Gets the word offset of the profile range and contour-link table, or zero when absent.
+    /// </summary>
+    public uint ProfileRecordsBase { get; private set; }
+
+    /// <summary>
+    /// Sets the two profile-table offsets for the encoded scene.
+    /// </summary>
+    /// <param name="slotsBase">The word offset of the segment-to-profile table.</param>
+    /// <param name="recordsBase">The word offset of the profile range and contour-link table.</param>
+    public void SetProfileRegions(uint slotsBase, uint recordsBase)
+    {
+        this.ProfileSlotsBase = slotsBase;
+        this.ProfileRecordsBase = recordsBase;
+    }
+
+    /// <summary>
     /// Gets the empty encoded scene instance.
     /// </summary>
     public static WebGPUEncodedScene Empty { get; } = new(
@@ -6738,8 +7204,6 @@ internal sealed class WebGPUEncodedScene : IDisposable
         0,
         0,
         0,
-        RasterizationMode.Antialiased,
-        0F,
         0L,
         0L,
         []);
@@ -6781,8 +7245,6 @@ internal sealed class WebGPUEncodedScene : IDisposable
     /// <param name="totalPathRowCount">The total scheduled path-row count.</param>
     /// <param name="tileCountX">The horizontal tile count.</param>
     /// <param name="tileCountY">The vertical tile count.</param>
-    /// <param name="fineRasterizationMode">The fine-pass rasterization mode.</param>
-    /// <param name="fineCoverageThreshold">The scene-wide aliased coverage threshold.</param>
     /// <param name="estimatedTileCrossings">The CPU-side upper bound for tile-boundary crossings.</param>
     /// <param name="estimatedBinFootprint">The CPU-side upper bound for per-(draw, bin) binning records.</param>
     /// <param name="operations">The scene operations associated with the encoded payload.</param>
@@ -6813,8 +7275,6 @@ internal sealed class WebGPUEncodedScene : IDisposable
         int totalPathRowCount,
         int tileCountX,
         int tileCountY,
-        RasterizationMode fineRasterizationMode,
-        float fineCoverageThreshold,
         long estimatedTileCrossings,
         long estimatedBinFootprint,
         WebGPUSceneOperation[] operations)
@@ -6846,8 +7306,6 @@ internal sealed class WebGPUEncodedScene : IDisposable
         this.TotalPathRowCount = totalPathRowCount;
         this.TileCountX = tileCountX;
         this.TileCountY = tileCountY;
-        this.FineRasterizationMode = fineRasterizationMode;
-        this.FineCoverageThreshold = fineCoverageThreshold;
         this.EstimatedTileCrossings = estimatedTileCrossings;
         this.EstimatedBinFootprint = estimatedBinFootprint;
 
@@ -6931,7 +7389,7 @@ internal sealed class WebGPUEncodedScene : IDisposable
 
     /// <summary>
     /// Gets the CPU-side upper-bound estimate of tile-boundary crossings produced by the scene's
-    /// flattened lines. Bounds the GPU segment, segment-count, and path-tile demand.
+    /// final lines. Bounds the GPU segment, segment-count, and path-tile demand.
     /// </summary>
     public long EstimatedTileCrossings { get; }
 
@@ -7133,16 +7591,6 @@ internal sealed class WebGPUEncodedScene : IDisposable
     /// Gets the tile count on the Y axis.
     /// </summary>
     public int TileCountY { get; }
-
-    /// <summary>
-    /// Gets the fine-pass rasterization mode selected for this flush.
-    /// </summary>
-    public RasterizationMode FineRasterizationMode { get; }
-
-    /// <summary>
-    /// Gets the scene-wide aliased coverage threshold consumed by the fine pass.
-    /// </summary>
-    public float FineCoverageThreshold { get; }
 
     /// <summary>
     /// Gets the total tile count.
@@ -7383,8 +7831,58 @@ internal readonly struct GpuRecolorDescriptor
 }
 
 /// <summary>
-/// Represents one 2D affine transform encoded in the GPU scene format.
+/// Identifies one aliased fill that needs profile data in the final GPU scene.
 /// </summary>
+internal readonly struct GpuProfileFillRecord
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GpuProfileFillRecord"/> struct.
+    /// </summary>
+    /// <param name="pathDataOffset">The fill's first path-data word, relative to its partition's path-data stream.</param>
+    /// <param name="geometry">The fill's linear geometry.</param>
+    /// <param name="profiles">The fill's partition-owned profile view.</param>
+    /// <param name="translateX">The X translation from geometry space to absolute target space.</param>
+    /// <param name="translateY">The Y translation from geometry space to absolute target space.</param>
+    public GpuProfileFillRecord(
+        int pathDataOffset,
+        LinearGeometry geometry,
+        LinearGeometryProfiles profiles,
+        float translateX,
+        float translateY)
+    {
+        this.PathDataOffset = pathDataOffset;
+        this.Geometry = geometry;
+        this.Profiles = profiles;
+        this.TranslateX = translateX;
+        this.TranslateY = translateY;
+    }
+
+    /// <summary>
+    /// Gets the fill's first path-data word, relative to its partition's path-data stream.
+    /// </summary>
+    public int PathDataOffset { get; }
+
+    /// <summary>
+    /// Gets the fill's linear geometry.
+    /// </summary>
+    public LinearGeometry Geometry { get; }
+
+    /// <summary>
+    /// Gets the fill's profile data in its partition-owned arena.
+    /// </summary>
+    public LinearGeometryProfiles Profiles { get; }
+
+    /// <summary>
+    /// Gets the X translation from geometry space to absolute target space.
+    /// </summary>
+    public float TranslateX { get; }
+
+    /// <summary>
+    /// Gets the Y translation from geometry space to absolute target space.
+    /// </summary>
+    public float TranslateY { get; }
+}
+
 internal readonly struct GpuSceneTransform : IEquatable<GpuSceneTransform>
 {
     /// <summary>

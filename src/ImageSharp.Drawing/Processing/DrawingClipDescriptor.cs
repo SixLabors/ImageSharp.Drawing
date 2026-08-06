@@ -35,7 +35,6 @@ public sealed class DrawingClipDescriptor
     /// <param name="operation">The operation used to combine this descriptor with the existing clip.</param>
     /// <param name="intersectionRule">The fill rule used for path geometry.</param>
     /// <param name="edgeMode">The clip edge mode.</param>
-    /// <param name="antialiasThreshold">The coverage threshold used for hard clip edges.</param>
     private DrawingClipDescriptor(
         DrawingClipKind kind,
         RectangleF rectangle,
@@ -46,8 +45,7 @@ public sealed class DrawingClipDescriptor
         Matrix4x4 pathTransform,
         ClipOperation operation,
         IntersectionRule intersectionRule,
-        DrawingClipEdgeMode edgeMode,
-        float antialiasThreshold)
+        DrawingClipEdgeMode edgeMode)
     {
         this.Kind = kind;
         this.Rectangle = rectangle;
@@ -59,7 +57,6 @@ public sealed class DrawingClipDescriptor
         this.Operation = operation;
         this.IntersectionRule = intersectionRule;
         this.EdgeMode = edgeMode;
-        this.AntialiasThreshold = antialiasThreshold;
     }
 
     /// <summary>
@@ -81,11 +78,6 @@ public sealed class DrawingClipDescriptor
     /// Gets the edge mode used by rectangle and region clips.
     /// </summary>
     public DrawingClipEdgeMode EdgeMode { get; }
-
-    /// <summary>
-    /// Gets the coverage threshold used when the clip edge mode is hard.
-    /// </summary>
-    public float AntialiasThreshold { get; }
 
     /// <summary>
     /// Gets the rectangle for a rectangle clip.
@@ -123,13 +115,11 @@ public sealed class DrawingClipDescriptor
     /// <param name="rectangle">The rectangle in canvas-local coordinates.</param>
     /// <param name="operation">The operation used to combine the rectangle with the existing clip.</param>
     /// <param name="edgeMode">The clip edge mode.</param>
-    /// <param name="antialiasThreshold">The coverage threshold used for hard clip edges.</param>
     /// <returns>The descriptor.</returns>
     public static DrawingClipDescriptor CreateRectangle(
         RectangleF rectangle,
         ClipOperation operation,
-        DrawingClipEdgeMode edgeMode,
-        float antialiasThreshold)
+        DrawingClipEdgeMode edgeMode)
         => new(
             DrawingClipKind.Rectangle,
             rectangle,
@@ -140,20 +130,17 @@ public sealed class DrawingClipDescriptor
             Matrix4x4.Identity,
             operation,
             IntersectionRule.NonZero,
-            edgeMode,
-            antialiasThreshold);
+            edgeMode);
 
     /// <summary>
     /// Creates an integer region clip descriptor.
     /// </summary>
     /// <param name="rectangles">The region rectangles in canvas-local coordinates.</param>
     /// <param name="operation">The operation used to combine the region with the existing clip.</param>
-    /// <param name="antialiasThreshold">The coverage threshold used for hard clip edges.</param>
     /// <returns>The descriptor.</returns>
     public static DrawingClipDescriptor CreateIntegerRegion(
         IReadOnlyList<Rectangle> rectangles,
-        ClipOperation operation,
-        float antialiasThreshold)
+        ClipOperation operation)
         => new(
             DrawingClipKind.IntegerRegion,
             default,
@@ -164,8 +151,7 @@ public sealed class DrawingClipDescriptor
             Matrix4x4.Identity,
             operation,
             IntersectionRule.NonZero,
-            DrawingClipEdgeMode.Hard,
-            antialiasThreshold);
+            DrawingClipEdgeMode.Hard);
 
     /// <summary>
     /// Creates a floating-point region clip descriptor.
@@ -173,13 +159,11 @@ public sealed class DrawingClipDescriptor
     /// <param name="rectangles">The region rectangles in canvas-local coordinates.</param>
     /// <param name="operation">The operation used to combine the region with the existing clip.</param>
     /// <param name="edgeMode">The clip edge mode.</param>
-    /// <param name="antialiasThreshold">The coverage threshold used for hard clip edges.</param>
     /// <returns>The descriptor.</returns>
     public static DrawingClipDescriptor CreateRegion(
         IReadOnlyList<RectangleF> rectangles,
         ClipOperation operation,
-        DrawingClipEdgeMode edgeMode,
-        float antialiasThreshold)
+        DrawingClipEdgeMode edgeMode)
         => new(
             DrawingClipKind.Region,
             default,
@@ -190,8 +174,7 @@ public sealed class DrawingClipDescriptor
             Matrix4x4.Identity,
             operation,
             IntersectionRule.NonZero,
-            edgeMode,
-            antialiasThreshold);
+            edgeMode);
 
     /// <summary>
     /// Creates a path clip descriptor.
@@ -199,14 +182,12 @@ public sealed class DrawingClipDescriptor
     /// <param name="paths">The path operands interpreted as one clip region.</param>
     /// <param name="operation">The operation used to combine the paths with the existing clip.</param>
     /// <param name="edgeMode">The clip edge mode.</param>
-    /// <param name="antialiasThreshold">The coverage threshold used for hard clip edges.</param>
     /// <returns>The descriptor.</returns>
     public static DrawingClipDescriptor CreatePath(
         IReadOnlyList<IPath> paths,
         ClipOperation operation,
-        DrawingClipEdgeMode edgeMode,
-        float antialiasThreshold)
-        => CreatePath(paths, Vector2.One, Matrix4x4.Identity, operation, IntersectionRule.NonZero, edgeMode, antialiasThreshold);
+        DrawingClipEdgeMode edgeMode)
+        => CreatePath(paths, Vector2.One, Matrix4x4.Identity, operation, IntersectionRule.NonZero, edgeMode);
 
     /// <summary>
     /// Creates a path descriptor from operands plus the transform split used by path lowering.
@@ -217,7 +198,6 @@ public sealed class DrawingClipDescriptor
     /// <param name="operation">The operation used to combine the paths with the existing clip.</param>
     /// <param name="intersectionRule">The fill rule used for the path geometry.</param>
     /// <param name="edgeMode">The clip edge mode.</param>
-    /// <param name="antialiasThreshold">The coverage threshold used for hard clip edges.</param>
     /// <returns>The descriptor.</returns>
     private static DrawingClipDescriptor CreatePath(
         IReadOnlyList<IPath> paths,
@@ -225,8 +205,7 @@ public sealed class DrawingClipDescriptor
         Matrix4x4 transform,
         ClipOperation operation,
         IntersectionRule intersectionRule,
-        DrawingClipEdgeMode edgeMode,
-        float antialiasThreshold)
+        DrawingClipEdgeMode edgeMode)
         => new(
             DrawingClipKind.Path,
             default,
@@ -237,8 +216,7 @@ public sealed class DrawingClipDescriptor
             transform,
             operation,
             intersectionRule,
-            edgeMode,
-            antialiasThreshold);
+            edgeMode);
 
     /// <summary>
     /// Converts one incoming path to a clip descriptor.
@@ -246,25 +224,23 @@ public sealed class DrawingClipDescriptor
     /// <param name="path">The incoming path.</param>
     /// <param name="operation">The operation used to combine the path with the existing clip.</param>
     /// <param name="edgeMode">The clip edge mode.</param>
-    /// <param name="antialiasThreshold">The coverage threshold used for hard clip edges.</param>
     /// <returns>The descriptor.</returns>
     public static DrawingClipDescriptor FromPath(
         IPath path,
         ClipOperation operation,
-        DrawingClipEdgeMode edgeMode,
-        float antialiasThreshold)
+        DrawingClipEdgeMode edgeMode)
     {
         if (path is IRegionPath regionPath)
         {
-            return CreateIntegerRegion(regionPath.Rectangles, operation, antialiasThreshold);
+            return CreateIntegerRegion(regionPath.Rectangles, operation);
         }
 
         if (TryGetRectangle(path, out RectangleF rectangle))
         {
-            return CreateRectangle(rectangle, operation, edgeMode, antialiasThreshold);
+            return CreateRectangle(rectangle, operation, edgeMode);
         }
 
-        return CreatePath([path], operation, edgeMode, antialiasThreshold);
+        return CreatePath([path], operation, edgeMode);
     }
 
     /// <summary>
@@ -285,7 +261,7 @@ public sealed class DrawingClipDescriptor
             {
                 RectangleF translated = this.Rectangle;
                 translated.Offset(offset.X, offset.Y);
-                return CreateRectangle(translated, this.Operation, this.EdgeMode, this.AntialiasThreshold);
+                return CreateRectangle(translated, this.Operation, this.EdgeMode);
             }
 
             case DrawingClipKind.IntegerRegion:
@@ -301,7 +277,7 @@ public sealed class DrawingClipDescriptor
                         translated[i].Offset(pointOffset);
                     }
 
-                    return CreateIntegerRegion(translated, this.Operation, this.AntialiasThreshold);
+                    return CreateIntegerRegion(translated, this.Operation);
                 }
 
                 RectangleF[] translatedRegion = new RectangleF[source.Count];
@@ -311,7 +287,7 @@ public sealed class DrawingClipDescriptor
                     translatedRegion[i] = new RectangleF(rectangle.X + offset.X, rectangle.Y + offset.Y, rectangle.Width, rectangle.Height);
                 }
 
-                return CreateRegion(translatedRegion, this.Operation, DrawingClipEdgeMode.Hard, this.AntialiasThreshold);
+                return CreateRegion(translatedRegion, this.Operation, DrawingClipEdgeMode.Hard);
             }
 
             case DrawingClipKind.Region:
@@ -324,7 +300,7 @@ public sealed class DrawingClipDescriptor
                     translated[i].Offset(offset.X, offset.Y);
                 }
 
-                return CreateRegion(translated, this.Operation, this.EdgeMode, this.AntialiasThreshold);
+                return CreateRegion(translated, this.Operation, this.EdgeMode);
             }
 
             default:
@@ -336,7 +312,7 @@ public sealed class DrawingClipDescriptor
                 Vector2 scale = MatrixUtilities.GetScale(translated);
                 Matrix4x4 residual = MatrixUtilities.GetResidual(scale, translated);
 
-                return CreatePath(this.Paths, scale, residual, this.Operation, this.IntersectionRule, this.EdgeMode, this.AntialiasThreshold);
+                return CreatePath(this.Paths, scale, residual, this.Operation, this.IntersectionRule, this.EdgeMode);
             }
         }
     }
@@ -357,7 +333,7 @@ public sealed class DrawingClipDescriptor
         {
             if (this.Kind == DrawingClipKind.Rectangle)
             {
-                return CreateRectangle(TransformRectangle(this.Rectangle, matrix), this.Operation, this.EdgeMode, this.AntialiasThreshold);
+                return CreateRectangle(TransformRectangle(this.Rectangle, matrix), this.Operation, this.EdgeMode);
             }
 
             if (this.Kind == DrawingClipKind.IntegerRegion)
@@ -373,7 +349,7 @@ public sealed class DrawingClipDescriptor
                 }
 
                 SortRegionRectangles(transformed);
-                return CreateRegion(transformed, this.Operation, DrawingClipEdgeMode.Hard, this.AntialiasThreshold);
+                return CreateRegion(transformed, this.Operation, DrawingClipEdgeMode.Hard);
             }
 
             if (this.Kind == DrawingClipKind.Region)
@@ -386,7 +362,7 @@ public sealed class DrawingClipDescriptor
                 }
 
                 SortRegionRectangles(transformed);
-                return CreateRegion(transformed, this.Operation, this.EdgeMode, this.AntialiasThreshold);
+                return CreateRegion(transformed, this.Operation, this.EdgeMode);
             }
         }
 
@@ -397,7 +373,7 @@ public sealed class DrawingClipDescriptor
         Matrix4x4 residual = MatrixUtilities.GetResidual(scale, pathMatrix);
         IReadOnlyList<IPath> sourcePaths = this.Kind == DrawingClipKind.Path ? this.Paths : [this.ToPath()];
 
-        return CreatePath(sourcePaths, scale, residual, this.Operation, this.IntersectionRule, this.EdgeMode, this.AntialiasThreshold);
+        return CreatePath(sourcePaths, scale, residual, this.Operation, this.IntersectionRule, this.EdgeMode);
     }
 
     /// <summary>

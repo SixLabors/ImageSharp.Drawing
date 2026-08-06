@@ -32,12 +32,16 @@ public class TextBuilderTests
 
         Assert.Equal(measuredBounds.X, builderBounds.X);
         Assert.Equal(measuredBounds.Y, builderBounds.Y);
-        Assert.Equal(measuredBounds.Width, builderBounds.Width);
+
+        // Outline geometry is quantized to the 26.6 fixed-point grid while the measurer works in
+        // unquantized metrics, so the widths agree only to within one grid step of 1/64 pixel.
+        Assert.True(MathF.Abs(measuredBounds.Width - builderBounds.Width) <= 1F / 64F);
 
         // TextMeasurer will measure the full lineheight of the string.
         // TextBuilder does not include line gaps following the descender since there
-        // is no path to include.
-        Assert.True(measuredBounds.Height >= builderBounds.Height);
+        // is no path to include; quantized outline geometry can still poke one 26.6
+        // grid step past the unquantized measurement.
+        Assert.True(measuredBounds.Height >= builderBounds.Height - (1F / 64F));
     }
 
     [Fact]
@@ -62,12 +66,16 @@ public class TextBuilderTests
 
         Assert.Equal(measuredBounds.X, builderBounds.X);
         Assert.Equal(measuredBounds.Y, builderBounds.Y);
-        Assert.Equal(measuredBounds.Width, builderBounds.Width);
+
+        // Outline geometry is quantized to the 26.6 fixed-point grid while the measurer works in
+        // unquantized metrics, so the widths agree only to within one grid step of 1/64 pixel.
+        Assert.True(MathF.Abs(measuredBounds.Width - builderBounds.Width) <= 1F / 64F);
 
         // TextMeasurer will measure the full lineheight of the string.
         // TextBuilder does not include line gaps following the descender since there
-        // is no path to include.
-        Assert.True(measuredBounds.Height >= builderBounds.Height);
+        // is no path to include; quantized outline geometry can still poke one 26.6
+        // grid step past the unquantized measurement.
+        Assert.True(measuredBounds.Height >= builderBounds.Height - (1F / 64F));
     }
 
     [Fact]

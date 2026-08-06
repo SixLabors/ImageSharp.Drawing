@@ -4,7 +4,7 @@
 // Draw tag stream decoding: the draw monoid, tag values, and draw-flag bits.
 //
 // Imported by binning.wgsl, clip_leaf.wgsl, coarse.wgsl, draw_leaf.wgsl,
-// draw_reduce.wgsl, fine.wgsl, flatten.wgsl, and path_row_alloc.wgsl.
+// draw_reduce.wgsl, fine.wgsl, path_lowering.wgsl, and path_row_alloc.wgsl.
 // Ported from Vello's shader/shared/drawtag.wgsl (linebender/vello) with
 // ImageSharp additions (recolor, elliptic and path gradient tags, the
 // aliased-coverage bit, and the blend mode/alpha draw-flag fields).
@@ -28,7 +28,7 @@ struct DrawMonoid {
 // Each draw object has a 32-bit draw tag, which is a bit-packed
 // version of the draw monoid: bit 0 = clip count, bits 2..4 = scene words,
 // bits 6..9 = info words (see map_draw_tag).
-// Visible-fill draw tags carry five extra info words: coverage threshold plus raster interest.
+// Visible-fill draw tags carry five extra info words: coverage data plus raster interest.
 const DRAWTAG_NOP = 0u;
 const DRAWTAG_FILL_COLOR = 0x188u;
 const DRAWTAG_FILL_RECOLOR = 0x184u;
@@ -45,9 +45,8 @@ const DRAWTAG_END_CLIP = 0x21u;
 // draw object stream but is used after the draw objects have been reduced on the GPU.
 // 0 represents a non-zero fill. 1 represents an even-odd fill.
 const DRAW_INFO_FLAGS_FILL_RULE_BIT = 1u;
-// Per-fill coverage rule. When set, the fill is rasterized aliased (coverage quantized against
-// config.fine_coverage_threshold) instead of using analytic area coverage. Carried in a free
-// high bit of the draw-flags word alongside the fill-rule bit.
+// Per-fill coverage rule. When set, the fill is rasterized using exact centre sampling instead
+// of analytic area coverage. Carried in a free high bit alongside the fill-rule bit.
 const DRAW_INFO_FLAGS_ALIASED_BIT = 0x40000000u;
 // Blend state packed into the draw-flags word by the C# encoder
 // (WebGPUSceneEncoder.PackStyleDrawFlags): bits 1..13 hold the (mix << 8) | compose
@@ -59,10 +58,8 @@ const DRAW_FLAGS_BLEND_ALPHA_MASK = 0x3fffc000u;
 
 // Flag bits carried in the high bits of the clip blend word, set by the C# encoder
 // (WebGPUSceneEncoder.AppendClipBeginData). DIFFERENCE marks an ImageSharp Difference
-// clip so fine inverts the mask; HARD marks a hard-edge (aliased) clip mask. Declared
-// here because every consumer (draw_leaf, coarse, fine) imports this module.
+// clip so fine inverts the mask. Declared here because every consumer imports this module.
 const CLIP_DIFFERENCE_MASK_BIT = 0x80000000u;
-const CLIP_HARD_MASK_BIT = 0x40000000u;
 // Marks an ISOLATED group (a layer). Isolated groups seed with transparent content and
 // composite back with blend_mix_compose, matching the CPU backend's clean layer targets.
 // Non-isolated groups (canvas clips) seed with a copy of the current tile content and pop

@@ -2,7 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 // Computes the indirect dispatch size for the per-line stages. Divides the
-// flattened line count (bump.lines) by the workgroup size, or dispatches
+// final line count (bump.lines) by the workgroup size, or dispatches
 // zero workgroups when an earlier stage recorded an allocation failure.
 //
 // Inputs: bump (lines counter, failed mask).

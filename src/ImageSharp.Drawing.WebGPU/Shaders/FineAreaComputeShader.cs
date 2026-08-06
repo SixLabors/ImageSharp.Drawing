@@ -103,7 +103,9 @@ internal static class FineAreaComputeShader
         //   6 gradients (sampled gradient ramp texture)
         //   7 image_atlas (sampled image atlas texture)
         //   8 backdrop_texture (sampled existing target contents)
-        WGPUBindGroupLayoutEntry* entries = stackalloc WGPUBindGroupLayoutEntry[9];
+        //   9 scene_data (read-only profile ranges and contour links in the packed scene stream)
+        //   10 path_tiles (read-only neighboring segment-slice indices for aliased row halos)
+        WGPUBindGroupLayoutEntry* entries = stackalloc WGPUBindGroupLayoutEntry[11];
         entries[0] = CreateUniformEntry(0, (nuint)sizeof(GpuSceneConfig));
         entries[1] = CreateStorageEntry(1, WGPUBufferBindingType.ReadOnlyStorage, 0);
         entries[2] = CreateStorageEntry(2, WGPUBufferBindingType.ReadOnlyStorage, 0);
@@ -113,10 +115,12 @@ internal static class FineAreaComputeShader
         entries[6] = CreateSampledTextureEntry(6);
         entries[7] = CreateSampledTextureEntry(7);
         entries[8] = CreateSampledTextureEntry(8);
+        entries[9] = CreateStorageEntry(9, WGPUBufferBindingType.ReadOnlyStorage, 0);
+        entries[10] = CreateStorageEntry(10, WGPUBufferBindingType.ReadOnlyStorage, 0);
 
         WGPUBindGroupLayoutDescriptor descriptor = new()
         {
-            entryCount = 9,
+            entryCount = 11,
             entries = entries
         };
 

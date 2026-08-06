@@ -6,7 +6,7 @@ using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// GPU stage that derives sparse per-row tile column spans from the flattened line stream:
+/// GPU stage that derives sparse per-row tile column spans from the final line stream:
 /// one thread per line replays the tile-crossing traversal, atomically growing each touched
 /// row's span and accumulating per-row winding backdrops for tile-alloc. Wraps
 /// <c>path_row_span.wgsl</c>.
@@ -40,7 +40,7 @@ internal static unsafe class PathRowSpanComputeShader
         // Bindings match path_row_span.wgsl:
         //   0 config uniform
         //   1 bump allocators (read-write because the buffer is atomic; this stage only reads the lines counter)
-        //   2 lines (read-only LineSoup from flatten)
+        //   2 lines (read-only LineSoup from path lowering)
         //   3 paths (read-only Path records from path_row_alloc)
         //   4 rows (read-write; spans, backdrops and flags accumulated atomically)
         WGPUBindGroupLayoutEntry* entries = stackalloc WGPUBindGroupLayoutEntry[5];

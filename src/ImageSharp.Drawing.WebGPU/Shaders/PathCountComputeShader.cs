@@ -7,7 +7,7 @@ using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// GPU stage that counts, per tile, how many flattened line segments cross it: one thread per
+/// GPU stage that counts, per tile, how many final line segments cross it: one thread per
 /// line walks the line's tile crossings, bumps tile segment counts and backdrops, and emits one
 /// SegmentCount record per crossing for path-tiling. Wraps <c>path_count.wgsl</c>.
 /// </summary>
@@ -29,7 +29,7 @@ internal static unsafe class PathCountComputeShader
     /// ceil(<paramref name="lineCount"/> / 256). At runtime the stage is normally driven by
     /// the indirect count written by path-count-setup using the same divisor.
     /// </summary>
-    /// <param name="lineCount">The number of flattened lines.</param>
+    /// <param name="lineCount">The number of final lines.</param>
     /// <returns>The X dispatch dimension in workgroups.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static uint GetDispatchX(uint lineCount)
@@ -52,7 +52,7 @@ internal static unsafe class PathCountComputeShader
         // Bindings match path_count.wgsl:
         //   0 config uniform
         //   1 bump allocators (read-write; lines read, seg_counts bump-allocated)
-        //   2 lines (read-only LineSoup from flatten)
+        //   2 lines (read-only LineSoup from path lowering)
         //   3 paths (read-only Path records from path_row_alloc)
         //   4 rows (read-only PathRow spans finalized by tile_alloc)
         //   5 tile (read-write; backdrop and segment counts updated atomically)

@@ -116,7 +116,7 @@ public partial class WebGPUDrawingBackendTests
     {
         DrawingOptions drawingOptions = new()
         {
-            GraphicsOptions = new GraphicsOptions { Antialias = false, AntialiasThreshold = 0.25F }
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
         };
 
         EllipsePolygon ellipse = new(256, 256, 200, 150);
@@ -1049,6 +1049,59 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
+    /// <summary>
+    /// Verifies exact CPU and GPU agreement for small, fully hinted, aliased text.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel type.</typeparam>
+    /// <param name="provider">The test image provider.</param>
+    // Small glyphs contain thin horizontal and vertical parts that can fall between pixel-centre
+    // lines. The varied origins also place glyph edges on tile boundaries. Use an opaque canvas so
+    // transparent pixels cannot hide colour-channel differences.
+    [WebGPUTheory]
+    [WithSolidFilledImages(560, 200, 255, 255, 255, PixelTypes.Rgba32)]
+    public void DrawText_AliasedFullHintingLadder_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        Brush brush = Brushes.Solid(Color.Black);
+        void DrawAction(DrawingCanvas canvas)
+        {
+            float y = 3F;
+            for (int size = 6; size <= 16; size++)
+            {
+                Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, size);
+                RichTextOptions textOptions = new(font)
+                {
+                    Origin = new PointF(3F + (size % 3), y),
+                    HintingMode = HintingMode.Full,
+                };
+
+                canvas.DrawText(textOptions, "The quick brown fox jumps over the lazy dog.", brush, null);
+                y += size + 5F;
+            }
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0F);
     }
 
     [WebGPUTheory]

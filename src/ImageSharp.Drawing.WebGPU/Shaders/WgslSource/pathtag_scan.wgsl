@@ -3,7 +3,7 @@
 
 // Final stage of the path tag monoid scan: writes, for every 4-byte tag
 // word, the exclusive prefix TagMonoid (counts of transforms, segments,
-// segment data words, styles and paths preceding that word). Flatten uses
+// segment data words, styles and paths preceding that word). Path lowering uses
 // these prefixes to locate each path element's data in the scene buffer.
 //
 // Two compile-time variants exist, selected by the "small" define:

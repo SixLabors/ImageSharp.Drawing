@@ -7,16 +7,16 @@ using SixLabors.ImageSharp.Drawing.Processing.Backends.Native;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// GPU stage that flattens encoded path segments into a device-space line soup, expands
-/// strokes via the CPU PolygonStroker port, and accumulates per-path bounding boxes for the
-/// downstream stages. Wraps <c>flatten.wgsl</c>.
+/// GPU stage that lowers encoded path segments into device-space lines and expands strokes
+/// with the CPU PolygonStroker port. The stage also accumulates per-path bounding boxes for
+/// downstream stages. It wraps <c>path_lowering.wgsl</c>.
 /// </summary>
-internal static unsafe class FlattenComputeShader
+internal static unsafe class PathLoweringComputeShader
 {
     /// <summary>
-    /// Gets the generated WGSL source bytes for the flatten stage.
+    /// Gets the generated WGSL source bytes for the path-lowering stage.
     /// </summary>
-    public static ReadOnlySpan<byte> ShaderCode => GeneratedWgslShaderSources.FlattenCode;
+    public static ReadOnlySpan<byte> ShaderCode => GeneratedWgslShaderSources.PathLoweringCode;
 
     /// <summary>
     /// Gets the WGSL entry point used by this shader.
@@ -35,7 +35,7 @@ internal static unsafe class FlattenComputeShader
         => (pathTagCount + 255U) / 256U;
 
     /// <summary>
-    /// Creates the bind-group layout required by the flatten stage.
+    /// Creates the bind-group layout required by the path-lowering stage.
     /// </summary>
     /// <param name="api">The WebGPU API facade.</param>
     /// <param name="device">The device that owns the staged-scene pipelines.</param>
@@ -48,7 +48,7 @@ internal static unsafe class FlattenComputeShader
         out WGPUBindGroupLayoutImpl* layout,
         out string? error)
     {
-        // Bindings match flatten.wgsl:
+        // Bindings match path_lowering.wgsl:
         //   0 config uniform
         //   1 scene (read-only path tags, points, styles and transforms)
         //   2 tag_monoids (read-only pathtag prefix sums from the scan stages)
@@ -72,7 +72,7 @@ internal static unsafe class FlattenComputeShader
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
         if (layout is null)
         {
-            error = "Failed to create the flatten bind-group layout.";
+            error = "Failed to create the path-lowering bind-group layout.";
             return false;
         }
 

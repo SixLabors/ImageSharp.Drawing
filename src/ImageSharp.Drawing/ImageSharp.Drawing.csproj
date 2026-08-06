@@ -40,7 +40,11 @@
     <None Include="..\..\shared-infrastructure\branding\icons\imagesharp.drawing\sixlabors.imagesharp.drawing.128.png" Pack="true" PackagePath="" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="SixLabors.Fonts" Version="3.0.1-alpha.0.15" />
+    <!-- The WebGPU backend consumes the shared profile analyzer without duplicating its internal storage types. -->
+    <InternalsVisibleTo Include="SixLabors.ImageSharp.Drawing.WebGPU" Key="$(SixLaborsPublicKey)" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="SixLabors.Fonts" Version="3.0.1-alpha.0.16" />
     <PackageReference Include="SixLabors.ImageSharp" Version="4.0.1-alpha.0.20" />
     <PackageReference Include="SixLabors.PolygonClipper" Version="1.0.1-alpha.0.6" />
   </ItemGroup>

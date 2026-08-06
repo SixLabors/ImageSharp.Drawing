@@ -2,7 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 // Initializes the per-path bounding boxes to an empty (inverted) box so
-// that later stages (flatten) can accumulate extents with atomic min/max.
+// that path_lowering can accumulate extents with atomic min/max.
 //
 // Inputs: config uniform (n_path).
 // Outputs: path_bboxes, one PathBbox per path with min fields set to the

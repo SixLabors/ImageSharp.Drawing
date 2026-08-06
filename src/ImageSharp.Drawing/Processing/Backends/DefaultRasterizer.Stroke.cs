@@ -12,7 +12,7 @@ internal static partial class DefaultRasterizer
 {
     /// <summary>
     /// The length threshold below which a segment direction, arc radius, or edge extent is treated as degenerate.
-    /// Mirrored on the GPU as <c>TANGENT_THRESH</c> in <c>flatten.wgsl</c>; the two must stay in lockstep.
+    /// Mirrored on the GPU as <c>TANGENT_THRESH</c> in <c>path_lowering.wgsl</c>; the two must stay in lockstep.
     /// </summary>
     private const float StrokeDirectionEpsilon = 1e-6F;
 
@@ -26,6 +26,12 @@ internal static partial class DefaultRasterizer
     /// The number of vertical supersamples taken per pixel row by <see cref="DirectLineSegmentBandRasterizer"/>.
     /// </summary>
     private const int DirectStrokeVerticalSampleCount = 4;
+
+    // Two-point aliased strokes share this immutable centreline. A value-type residual maps its
+    // unit X segment onto each requested line. This avoids one LinearGeometry object and its two
+    // backing arrays for every draw item.
+    private static readonly LinearGeometry CanonicalLineGeometry =
+        LinearGeometry.CreateOpenPolyline([new PointF(0F, 0F), new PointF(1F, 0F)]);
 
     /// <summary>
     /// Creates retained row-local raster payload for one stroked centerline geometry.
@@ -92,6 +98,38 @@ internal static partial class DefaultRasterizer
         }
 
         StrokeStyle strokeStyle = new(pen, widthScale);
+        if (options.RasterizationMode == RasterizationMode.Aliased)
+        {
+            // Aliased strokes use the same retained outline and centre-sampled row/column
+            // walks as aliased fills. Map the shared unit centreline to these endpoints; stroke
+            // expansion happens after this transform, so its width remains in device pixels.
+            Matrix4x4 residual = new(
+                end.X - start.X,
+                end.Y - start.Y,
+                0F,
+                0F,
+                0F,
+                1F,
+                0F,
+                0F,
+                0F,
+                0F,
+                1F,
+                0F,
+                start.X,
+                start.Y,
+                0F,
+                1F);
+
+            return CreateRetainedStrokeRasterizableGeometry(
+                CanonicalLineGeometry,
+                residual,
+                strokeStyle,
+                translateX,
+                translateY,
+                in options,
+                allocator);
+        }
 
         RectangleF bounds = RectangleF.FromLTRB(
             MathF.Min(start.X, end.X),
@@ -142,7 +180,6 @@ internal static partial class DefaultRasterizer
                 bandTop,
                 options.IntersectionRule,
                 options.RasterizationMode,
-                options.AntialiasThreshold,
                 coverageBoost: 0F,
                 hasStartCovers: false);
         }
@@ -233,6 +270,7 @@ internal static partial class DefaultRasterizer
                 height,
                 firstRowBandIndex,
                 rowBandCount,
+                options.RasterizationMode == RasterizationMode.Aliased,
                 allocator);
 
             if (!linearizer.TryProcess(out LinearizedRasterData<LineArrayX16Y16Block> result))
@@ -263,6 +301,7 @@ internal static partial class DefaultRasterizer
             height,
             firstRowBandIndex,
             rowBandCount,
+            options.RasterizationMode == RasterizationMode.Aliased,
             allocator);
 
         if (!wideLinearizer.TryProcess(out LinearizedRasterData<LineArrayX32Y16Block> wideResult))
@@ -318,7 +357,6 @@ internal static partial class DefaultRasterizer
                 bandTop,
                 options.IntersectionRule,
                 options.RasterizationMode,
-                options.AntialiasThreshold,
                 coverageBoost: 0F,
                 hasStartCovers);
         }
@@ -335,7 +373,10 @@ internal static partial class DefaultRasterizer
             result.Lines,
             null,
             result.FirstBlockLineCounts,
-            result.StartCoverTable);
+            result.StartCoverTable,
+            result.Profiles,
+            result.ProfileTranslateX,
+            result.ProfileTranslateY);
 
         return new StrokeRasterizableGeometry(
             retained.FirstRowBandIndex,
@@ -386,7 +427,6 @@ internal static partial class DefaultRasterizer
                 bandTop,
                 options.IntersectionRule,
                 options.RasterizationMode,
-                options.AntialiasThreshold,
                 coverageBoost: 0F,
                 hasStartCovers);
         }
@@ -403,7 +443,10 @@ internal static partial class DefaultRasterizer
             null,
             result.Lines,
             result.FirstBlockLineCounts,
-            result.StartCoverTable);
+            result.StartCoverTable,
+            result.Profiles,
+            result.ProfileTranslateX,
+            result.ProfileTranslateY);
 
         return new StrokeRasterizableGeometry(
             retained.FirstRowBandIndex,
@@ -778,8 +821,6 @@ internal static partial class DefaultRasterizer
         private readonly int height;
         private readonly int destinationLeft;
         private readonly int destinationTop;
-        private readonly RasterizationMode rasterizationMode;
-        private readonly float antialiasThreshold;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DirectLineSegmentBandRasterizer"/> struct.
@@ -809,8 +850,6 @@ internal static partial class DefaultRasterizer
             this.height = bandInfo.BandHeight;
             this.destinationLeft = bandInfo.DestinationLeft;
             this.destinationTop = bandInfo.DestinationTop;
-            this.rasterizationMode = bandInfo.RasterizationMode;
-            this.antialiasThreshold = bandInfo.AntialiasThreshold;
         }
 
         /// <summary>
@@ -1170,7 +1209,7 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
-        /// Applies the selected rasterization mode and emits the non-zero runs for one row.
+        /// Emits the non-zero antialiased runs for one row.
         /// </summary>
         /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
         /// <param name="row">The band-local row index.</param>
@@ -1184,14 +1223,6 @@ internal static partial class DefaultRasterizer
             ref TRowHandler rowHandler)
             where TRowHandler : struct, IRasterizerCoverageRowHandler
         {
-            if (this.rasterizationMode == RasterizationMode.Aliased)
-            {
-                for (int i = 0; i < rowCoverage.Length; i++)
-                {
-                    rowCoverage[i] = rowCoverage[i] >= this.antialiasThreshold ? 1F : 0F;
-                }
-            }
-
             EmitCoverageRuns(rowCoverage, startColumn, this.destinationLeft, this.destinationTop + row, ref rowHandler);
         }
 
@@ -1424,7 +1455,7 @@ internal static partial class DefaultRasterizer
 
     /// <summary>
     /// Returns the tessellation segment count used for one round join or cap arc.
-    /// Ported to the GPU as <c>stroke_arc_subdivision_count</c> in <c>flatten.wgsl</c>;
+    /// Ported to the GPU as <c>stroke_arc_subdivision_count</c> in <c>path_lowering.wgsl</c>;
     /// changes here must be mirrored there.
     /// </summary>
     /// <param name="radius">The arc radius.</param>
@@ -1520,7 +1551,7 @@ internal static partial class DefaultRasterizer
 
     /// <summary>
     /// Normalizes an angle into the inclusive-exclusive range [0, 2 * PI).
-    /// Ported to the GPU as <c>stroke_normalize_positive_angle</c> in <c>flatten.wgsl</c>.
+    /// Ported to the GPU as <c>stroke_normalize_positive_angle</c> in <c>path_lowering.wgsl</c>.
     /// </summary>
     /// <param name="angle">The angle to normalize.</param>
     /// <returns>The normalized angle.</returns>

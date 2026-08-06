@@ -247,8 +247,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 DrawingClipState.FromPaths(
                     clipPaths,
                     ClipOperation.Intersection,
-                    options.GraphicsOptions.Antialias ? DrawingClipEdgeMode.Antialiased : DrawingClipEdgeMode.Hard,
-                    options.GraphicsOptions.AntialiasThreshold),
+                    options.GraphicsOptions.Antialias ? DrawingClipEdgeMode.Antialiased : DrawingClipEdgeMode.Hard),
                 targetFrame.Bounds,
                 targetFrame.Bounds.Location),
             true,
@@ -617,8 +616,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             clipPaths,
             transform,
             operation,
-            state.Options.GraphicsOptions.Antialias ? DrawingClipEdgeMode.Antialiased : DrawingClipEdgeMode.Hard,
-            state.Options.GraphicsOptions.AntialiasThreshold);
+            state.Options.GraphicsOptions.Antialias ? DrawingClipEdgeMode.Antialiased : DrawingClipEdgeMode.Hard);
 
         this.AppendBeginClips(incomingState, state.DestinationOffset);
 
@@ -1437,8 +1435,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         RasterizerOptions rasterizerOptions = new(
             interest,
             options.IntersectionRule,
-            rasterizationMode,
-            graphicsOptions.AntialiasThreshold);
+            rasterizationMode);
 
         DrawingCanvasState state = this.ResolveState();
 
@@ -1504,8 +1501,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         RasterizerOptions rasterizerOptions = new(
             interest,
             options.IntersectionRule,
-            rasterizationMode,
-            graphicsOptions.AntialiasThreshold);
+            rasterizationMode);
 
         DrawingCanvasState state = this.ResolveState();
         this.batcher.EnsureClipAnchors(state.DestinationOffset);
@@ -1550,8 +1546,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         RasterizerOptions rasterizerOptions = new(
             interest,
             options.IntersectionRule,
-            rasterizationMode,
-            graphicsOptions.AntialiasThreshold);
+            rasterizationMode);
 
         DrawingCanvasState state = this.ResolveState();
         this.batcher.EnsureClipAnchors(state.DestinationOffset);
@@ -2209,16 +2204,14 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         Rectangle interest = ToRasterizerInterest(bounds);
 
         // Text opts into the perceptual coverage boost here; generic vector fills and strokes
-        // never carry one. The boost only applies to antialiased coverage.
-        float coverageBoost = rasterizationMode == RasterizationMode.Antialiased
-            ? Math.Clamp(drawingOptions.TextContrast, 0F, 1F)
-            : 0F;
+        // never carry one. Only antialiased coverage uses this remap. Aliased coverage comes
+        // from the independent centre-sampled scan conversion.
+        float coverageBoost = Math.Clamp(drawingOptions.TextContrast, 0F, 1F);
 
         RasterizerOptions rasterizerOptions = new(
             interest,
             intersectionRule,
             rasterizationMode,
-            graphicsOptions.AntialiasThreshold,
             coverageBoost);
 
         // Glyph paths arrive pre-laid-out, so the queued command carries identity-transform
@@ -2492,20 +2485,17 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// <param name="transform">Canvas transform to apply to the clip state.</param>
     /// <param name="operation">The operation used to combine the paths with the existing clip.</param>
     /// <param name="edgeMode">The clip edge mode.</param>
-    /// <param name="antialiasThreshold">The coverage threshold used for hard clip edges.</param>
     /// <returns>The transformed clip state.</returns>
     private static DrawingClipState CreateClipState(
         IPath[] clipPaths,
         Matrix4x4 transform,
         ClipOperation operation,
-        DrawingClipEdgeMode edgeMode,
-        float antialiasThreshold)
+        DrawingClipEdgeMode edgeMode)
     {
         DrawingClipState clipState = DrawingClipState.FromPaths(
             clipPaths,
             operation,
-            edgeMode,
-            antialiasThreshold);
+            edgeMode);
 
         // Transform after descriptor creation. DrawingClipDescriptor.Transform has the
         // rectangle/region-specific logic needed to preserve cheap clip primitives.

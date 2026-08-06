@@ -188,7 +188,7 @@ public sealed partial class DefaultDrawingBackend
             Span<TPixel> destination,
             Span<float> coverage)
         {
-            float yCoverage = GetAxisCoverage(y, rectangle.Top, rectangle.Bottom, descriptor.EdgeMode, descriptor.AntialiasThreshold);
+            float yCoverage = GetAxisCoverage(y, rectangle.Top, rectangle.Bottom, descriptor.EdgeMode);
             if (yCoverage <= 0F)
             {
                 return;
@@ -223,7 +223,7 @@ public sealed partial class DefaultDrawingBackend
             Span<TPixel> destination,
             Span<float> coverage)
         {
-            float yCoverage = GetAxisCoverage(y, rectangle.Top, rectangle.Bottom, descriptor.EdgeMode, descriptor.AntialiasThreshold);
+            float yCoverage = GetAxisCoverage(y, rectangle.Top, rectangle.Bottom, descriptor.EdgeMode);
             if (yCoverage <= 0F)
             {
                 this.ApplyClipDescriptors(clipIndex + 1, y, startX, destination, coverage);
@@ -274,13 +274,13 @@ public sealed partial class DefaultDrawingBackend
             int x = clipStart;
             while (x < clipEnd)
             {
-                float xCoverage = GetAxisCoverage(x, rectangle.Left, rectangle.Right, descriptor.EdgeMode, descriptor.AntialiasThreshold);
+                float xCoverage = GetAxisCoverage(x, rectangle.Left, rectangle.Right, descriptor.EdgeMode);
                 int runStart = x++;
                 float multiplier = xCoverage * yCoverage;
 
                 // Rectangle edge coverage is constant across interior pixels and only changes
                 // at the left/right edge pixels, so collapse adjacent equal-coverage columns.
-                while (x < clipEnd && GetAxisCoverage(x, rectangle.Left, rectangle.Right, descriptor.EdgeMode, descriptor.AntialiasThreshold) == xCoverage)
+                while (x < clipEnd && GetAxisCoverage(x, rectangle.Left, rectangle.Right, descriptor.EdgeMode) == xCoverage)
                 {
                     x++;
                 }
@@ -317,13 +317,13 @@ public sealed partial class DefaultDrawingBackend
             int x = clipStart;
             while (x < clipEnd)
             {
-                float xCoverage = GetAxisCoverage(x, rectangle.Left, rectangle.Right, descriptor.EdgeMode, descriptor.AntialiasThreshold);
+                float xCoverage = GetAxisCoverage(x, rectangle.Left, rectangle.Right, descriptor.EdgeMode);
                 int runStart = x++;
                 float multiplier = 1F - (xCoverage * yCoverage);
 
                 // Subtraction uses the inverse coverage of the rectangle, but the same run
                 // coalescing applies: edge pixels differ, interior pixels share one value.
-                while (x < clipEnd && GetAxisCoverage(x, rectangle.Left, rectangle.Right, descriptor.EdgeMode, descriptor.AntialiasThreshold) == xCoverage)
+                while (x < clipEnd && GetAxisCoverage(x, rectangle.Left, rectangle.Right, descriptor.EdgeMode) == xCoverage)
                 {
                     x++;
                 }
@@ -455,7 +455,7 @@ public sealed partial class DefaultDrawingBackend
                 RectangleF rectangle = rectangles[i];
                 rectangle.Offset(this.destinationOffset.X, this.destinationOffset.Y);
 
-                float yCoverage = GetAxisCoverage(y, rectangle.Top, rectangle.Bottom, descriptor.EdgeMode, descriptor.AntialiasThreshold);
+                float yCoverage = GetAxisCoverage(y, rectangle.Top, rectangle.Bottom, descriptor.EdgeMode);
                 if (yCoverage <= 0F)
                 {
                     continue;
@@ -534,7 +534,7 @@ public sealed partial class DefaultDrawingBackend
             DefaultRasterizer.Context context = scratch.CreateContext(
                 bandInfo.IntersectionRule,
                 bandInfo.RasterizationMode,
-                bandInfo.AntialiasThreshold);
+                bandInfo.LineCount);
 
             PathClipCoverageRowHandler<TPixel> rowHandler = new(
                 this.workerState,
@@ -694,23 +694,23 @@ public sealed partial class DefaultDrawingBackend
         /// </summary>
         /// <param name="pixel">The integer pixel coordinate.</param>
         /// <param name="clipStart">The inclusive clip interval start.</param>
-        /// <param name="clipEnd">The exclusive clip interval end.</param>
-        /// <param name="edgeMode">The edge mode used to quantize coverage.</param>
-        /// <param name="antialiasThreshold">The hard-edge threshold used when <paramref name="edgeMode"/> is hard.</param>
+        /// <param name="clipEnd">The inclusive clip interval end for centre sampling.</param>
+        /// <param name="edgeMode">The edge mode used to select continuous or centre-sampled coverage.</param>
         /// <returns>The coverage contribution for the pixel.</returns>
         private static float GetAxisCoverage(
             int pixel,
             float clipStart,
             float clipEnd,
-            DrawingClipEdgeMode edgeMode,
-            float antialiasThreshold)
+            DrawingClipEdgeMode edgeMode)
         {
-            float coverage = MathF.Min(pixel + 1F, clipEnd) - MathF.Max(pixel, clipStart);
-            coverage = Math.Clamp(coverage, 0F, 1F);
+            if (edgeMode == DrawingClipEdgeMode.Hard)
+            {
+                float pixelCentre = pixel + 0.5F;
+                return pixelCentre >= clipStart && pixelCentre <= clipEnd ? 1F : 0F;
+            }
 
-            return edgeMode == DrawingClipEdgeMode.Hard
-                ? coverage > antialiasThreshold ? 1F : 0F
-                : coverage;
+            float coverage = MathF.Min(pixel + 1F, clipEnd) - MathF.Max(pixel, clipStart);
+            return Math.Clamp(coverage, 0F, 1F);
         }
     }
 
@@ -1070,7 +1070,7 @@ public sealed partial class DefaultDrawingBackend
                     return;
                 }
 
-                trimmed = Pool.ToArray();
+                trimmed = [.. Pool];
                 Pool.Clear();
             }
 
