@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// Derives sparse per-row tile spans from the flattened line stream. One
+// Derives sparse per-row tile spans from the final line stream. One
 // thread per line: replays the same tile-crossing traversal as path_count
 // and, for every tile row the line touches, atomically grows that row's
 // column span (rows[].x0/x1), accumulates a per-row winding backdrop for
@@ -9,8 +9,8 @@
 // rows where activity extends past the right bbox edge so tile_alloc can
 // widen the span to cover the fill interior.
 //
-// Inputs: config uniform, bump (lines counter), lines (LineSoup from
-// flatten), paths (Path records from path_row_alloc).
+// Inputs: config uniform, bump (lines counter), lines (LineSoup from path
+// lowering), paths (Path records from path_row_alloc).
 // Outputs: rows (AtomicPathRow spans, backdrops and flags), consumed by
 // tile_alloc.
 //

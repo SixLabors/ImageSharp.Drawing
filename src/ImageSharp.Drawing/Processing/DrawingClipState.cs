@@ -15,8 +15,7 @@ public readonly struct DrawingClipState
     private static readonly DrawingClipDescriptor EmptyDescriptor = DrawingClipDescriptor.CreateRectangle(
         default,
         ClipOperation.Intersection,
-        DrawingClipEdgeMode.Hard,
-        0F);
+        DrawingClipEdgeMode.Hard);
 
     // Most clip stacks in UI redraws are shallow: a dirty region plus one or two control clips.
     // Keep that path allocation-free and only spill to an array for unusually deep nesting.
@@ -127,13 +126,11 @@ public readonly struct DrawingClipState
     /// <param name="paths">The clip paths.</param>
     /// <param name="operation">The operation used to combine the paths with the existing clip.</param>
     /// <param name="edgeMode">The clip edge mode.</param>
-    /// <param name="antialiasThreshold">The coverage threshold used for hard clip edges.</param>
     /// <returns>The normalized clip state.</returns>
     public static DrawingClipState FromPaths(
         IReadOnlyList<IPath> paths,
         ClipOperation operation,
-        DrawingClipEdgeMode edgeMode,
-        float antialiasThreshold)
+        DrawingClipEdgeMode edgeMode)
     {
         if (paths.Count == 0)
         {
@@ -141,8 +138,8 @@ public readonly struct DrawingClipState
         }
 
         DrawingClipDescriptor descriptor = paths.Count == 1
-            ? DrawingClipDescriptor.FromPath(paths[0], operation, edgeMode, antialiasThreshold)
-            : DrawingClipDescriptor.CreatePath(paths, operation, edgeMode, antialiasThreshold);
+            ? DrawingClipDescriptor.FromPath(paths[0], operation, edgeMode)
+            : DrawingClipDescriptor.CreatePath(paths, operation, edgeMode);
 
         // Multiple paths supplied in one Clip call are one clip operand. They are not separate
         // stack entries because the operation applies to the combined incoming shape.

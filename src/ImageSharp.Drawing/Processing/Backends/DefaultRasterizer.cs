@@ -4,6 +4,7 @@
 using System.Buffers;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -60,6 +61,43 @@ internal static partial class DefaultRasterizer
     private const int AreaToCoverageShift = 9;
 
     /// <summary>
+    /// Half of <see cref="FixedOne"/>, the offset from a pixel's left edge to its centre.
+    /// </summary>
+    private const int FixedHalf = FixedOne >> 1;
+
+    /// <summary>
+    /// Maximum number of crossings stored for one column in a 16-row band. Later crossings do not
+    /// take part in the secondary column pass. The primary row result is unchanged.
+    /// </summary>
+    private const int ColumnCrossingCapacity = 16;
+
+    /// <summary>
+    /// Maximum number of pixels produced by the secondary column pass for one band. The fixed
+    /// bound keeps this temporary list on the stack.
+    /// </summary>
+    private const int MaxColumnDropoutsPerBand = 256;
+
+    /// <summary>
+    /// Number of low bits reserved for a crossing's profile identifier.
+    /// </summary>
+    private const int ProfileIdBits = 16;
+
+    /// <summary>
+    /// Mask for the low sixteen-bit profile field in a packed crossing.
+    /// </summary>
+    private const int ProfileIdMask = (1 << ProfileIdBits) - 1;
+
+    /// <summary>
+    /// The bit inside a packed crossing that records a positive crossing direction.
+    /// </summary>
+    private const long CrossingDirectionBit = 1L << ProfileIdBits;
+
+    /// <summary>
+    /// The left shift that positions a crossing coordinate above its direction and profile bits.
+    /// </summary>
+    private const int CrossingShift = ProfileIdBits + 1;
+
+    /// <summary>
     /// Number of discrete coverage steps per fully covered pixel (one 24.8 unit of winding).
     /// </summary>
     private const int CoverageStepCount = 256;
@@ -108,11 +146,28 @@ internal static partial class DefaultRasterizer
             bandInfo.BandHeight,
             bandInfo.IntersectionRule,
             bandInfo.RasterizationMode,
-            bandInfo.AntialiasThreshold,
             bandInfo.CoverageBoost);
 
         context.SeedStartCovers(item.GetActualCovers());
-        if (item.Rasterizable.IsX16)
+        if (bandInfo.RasterizationMode == RasterizationMode.Aliased)
+        {
+            context.SetProfileTables(
+                item.Rasterizable.Profiles,
+                item.Rasterizable.ProfileTranslateX,
+                item.Rasterizable.ProfileTranslateY);
+
+            if (item.Rasterizable.IsX16)
+            {
+                LineArrayX16Y16Block? lines = item.GetLineArrayX16();
+                lines?.IterateTagged(item.GetFirstBlockLineCount(), ref context);
+            }
+            else
+            {
+                LineArrayX32Y16Block? lines = item.GetLineArrayX32();
+                lines?.IterateTagged(item.GetFirstBlockLineCount(), ref context);
+            }
+        }
+        else if (item.Rasterizable.IsX16)
         {
             LineArrayX16Y16Block? lines = item.GetLineArrayX16();
             lines?.Iterate(item.GetFirstBlockLineCount(), ref context);
@@ -153,9 +208,11 @@ internal static partial class DefaultRasterizer
             bandInfo.BandHeight,
             bandInfo.IntersectionRule,
             bandInfo.RasterizationMode,
-            bandInfo.AntialiasThreshold,
             bandInfo.CoverageBoost);
 
+        // Stroke outline edges have no source profiles. Clear the previous fill's profile data so
+        // a stroke cannot use it when classifying a centre-free interval.
+        context.SetProfileTables(default, 0F, 0F);
         item.Rasterizable.ExecuteBand(ref context, in bandInfo, scanline, strokeBandCoverage, ref rowHandler);
     }
 
@@ -230,6 +287,7 @@ internal static partial class DefaultRasterizer
     /// <param name="translateY">The integer Y translation applied after the residual transform.</param>
     /// <param name="options">The rasterizer options carrying interest bounds, fill rule, and antialias settings.</param>
     /// <param name="allocator">The memory allocator used for retained start-cover storage.</param>
+    /// <param name="profileStorage">The partition-owned profile arena used by aliased fills.</param>
     /// <returns>The retained geometry payload, or <see langword="null"/> when nothing is visible.</returns>
     public static RasterizableGeometry? CreateRasterizableGeometry(
         LinearGeometry geometry,
@@ -237,7 +295,8 @@ internal static partial class DefaultRasterizer
         int translateX,
         int translateY,
         in RasterizerOptions options,
-        MemoryAllocator allocator)
+        MemoryAllocator allocator,
+        LinearGeometryProfileStorage profileStorage)
     {
         RectangleF translatedBounds = residual.IsIdentity ? geometry.Info.Bounds : RectangleF.Transform(geometry.Info.Bounds, residual);
         translatedBounds.Offset(translateX, translateY);
@@ -284,7 +343,9 @@ internal static partial class DefaultRasterizer
                 height,
                 firstRowBandIndex,
                 rowBandCount,
-                allocator);
+                allocator,
+                profileStorage,
+                options.RasterizationMode == RasterizationMode.Aliased);
 
             if (!linearizer.TryProcess(out LinearizedRasterData<LineArrayX16Y16Block> result))
             {
@@ -306,7 +367,6 @@ internal static partial class DefaultRasterizer
                     bandTop,
                     options.IntersectionRule,
                     options.RasterizationMode,
-                    options.AntialiasThreshold,
                     options.CoverageBoost,
                     hasStartCovers);
             }
@@ -323,7 +383,10 @@ internal static partial class DefaultRasterizer
                 result.Lines,
                 null,
                 result.FirstBlockLineCounts,
-                result.StartCoverTable);
+                result.StartCoverTable,
+                result.Profiles,
+                result.ProfileTranslateX,
+                result.ProfileTranslateY);
         }
         else
         {
@@ -338,7 +401,9 @@ internal static partial class DefaultRasterizer
                 height,
                 firstRowBandIndex,
                 rowBandCount,
-                allocator);
+                allocator,
+                profileStorage,
+                options.RasterizationMode == RasterizationMode.Aliased);
 
             if (!linearizer.TryProcess(out LinearizedRasterData<LineArrayX32Y16Block> result))
             {
@@ -360,7 +425,6 @@ internal static partial class DefaultRasterizer
                     bandTop,
                     options.IntersectionRule,
                     options.RasterizationMode,
-                    options.AntialiasThreshold,
                     options.CoverageBoost,
                     hasStartCovers);
             }
@@ -377,7 +441,10 @@ internal static partial class DefaultRasterizer
                 null,
                 result.Lines,
                 result.FirstBlockLineCounts,
-                result.StartCoverTable);
+                result.StartCoverTable,
+                result.Profiles,
+                result.ProfileTranslateX,
+                result.ProfileTranslateY);
         }
     }
 
@@ -426,13 +493,22 @@ internal static partial class DefaultRasterizer
         private readonly Span<byte> rowHasBits;
         private readonly Span<byte> rowTouched;
         private readonly Span<int> touchedRows;
+        private readonly Span<long> crossings;
+        private readonly Span<int> crossingCounts;
+        private readonly Span<uint> columnCrossings;
+        private readonly Span<int> columnCrossingCounts;
+        private readonly Span<int> touchedColumns;
+        private LinearGeometryProfiles profiles;
+        private float columnProfileTranslate;
+        private float rowProfileTranslate;
+        private int touchedColumnCount;
+        private readonly int crossingStride;
         private int width;
         private int height;
         private int wordsPerRow;
         private int coverStride;
         private IntersectionRule intersectionRule;
         private RasterizationMode rasterizationMode;
-        private float antialiasThreshold;
         private float coverageBoost;
         private int touchedRowCount;
 
@@ -447,9 +523,14 @@ internal static partial class DefaultRasterizer
         /// <param name="rowHasBits">Scratch flags indicating whether a row has any bit-vector backed cell data.</param>
         /// <param name="rowTouched">Scratch flags indicating whether a row has received any contribution in the current band.</param>
         /// <param name="touchedRows">Scratch list of rows touched in the current band so emission can skip untouched rows.</param>
+        /// <param name="crossings">Scratch storage for where the outline crosses each scanline's centre line.</param>
+        /// <param name="crossingCounts">Scratch storage for the number of crossings recorded on each row.</param>
+        /// <param name="columnCrossings">Scratch storage for where the outline crosses each column's centre line.</param>
+        /// <param name="columnCrossingCounts">Scratch storage for the number of crossings recorded on each column.</param>
+        /// <param name="touchedColumns">Scratch list of columns that received centre line crossings.</param>
+        /// <param name="crossingStride">The exact per-row crossing capacity for the retained band.</param>
         /// <param name="intersectionRule">The fill rule used when converting accumulated winding/coverage into final alpha.</param>
-        /// <param name="rasterizationMode">The rasterization mode that controls how antialiasing thresholds are interpreted.</param>
-        /// <param name="antialiasThreshold">The threshold used when antialiasing is conditionally reduced or disabled.</param>
+        /// <param name="rasterizationMode">The rasterization mode that selects continuous or centre-sampled coverage.</param>
         public Context(
             Span<nuint> bitVectors,
             Span<int> coverArea,
@@ -459,10 +540,25 @@ internal static partial class DefaultRasterizer
             Span<byte> rowHasBits,
             Span<byte> rowTouched,
             Span<int> touchedRows,
+            Span<long> crossings,
+            Span<int> crossingCounts,
+            Span<uint> columnCrossings,
+            Span<int> columnCrossingCounts,
+            Span<int> touchedColumns,
+            int crossingStride,
             IntersectionRule intersectionRule,
-            RasterizationMode rasterizationMode,
-            float antialiasThreshold)
+            RasterizationMode rasterizationMode)
         {
+            this.crossings = crossings;
+            this.crossingCounts = crossingCounts;
+            this.columnCrossings = columnCrossings;
+            this.columnCrossingCounts = columnCrossingCounts;
+            this.touchedColumns = touchedColumns;
+            this.profiles = default;
+            this.columnProfileTranslate = 0F;
+            this.rowProfileTranslate = 0F;
+            this.touchedColumnCount = 0;
+            this.crossingStride = crossingStride;
             this.bitVectors = bitVectors;
             this.coverArea = coverArea;
             this.startCover = startCover;
@@ -477,7 +573,6 @@ internal static partial class DefaultRasterizer
             this.coverStride = 0;
             this.intersectionRule = intersectionRule;
             this.rasterizationMode = rasterizationMode;
-            this.antialiasThreshold = antialiasThreshold;
             this.coverageBoost = 0F;
             this.touchedRowCount = 0;
         }
@@ -490,8 +585,7 @@ internal static partial class DefaultRasterizer
         /// <param name="coverStride">The stride, in cells, between rows in the cover/area table.</param>
         /// <param name="height">The height, in pixels, of the current destination band.</param>
         /// <param name="intersectionRule">The fill rule used when converting accumulated winding/coverage into final alpha.</param>
-        /// <param name="rasterizationMode">The rasterization mode that controls how antialiasing thresholds are interpreted.</param>
-        /// <param name="antialiasThreshold">The threshold used when antialiasing is conditionally reduced or disabled.</param>
+        /// <param name="rasterizationMode">The rasterization mode that selects continuous or centre-sampled coverage.</param>
         /// <param name="coverageBoost">The perceptual coverage boost applied to antialiased coverage; zero disables it.</param>
         public void Reconfigure(
             int width,
@@ -500,7 +594,6 @@ internal static partial class DefaultRasterizer
             int height,
             IntersectionRule intersectionRule,
             RasterizationMode rasterizationMode,
-            float antialiasThreshold,
             float coverageBoost)
         {
             this.width = width;
@@ -509,7 +602,6 @@ internal static partial class DefaultRasterizer
             this.coverStride = coverStride;
             this.intersectionRule = intersectionRule;
             this.rasterizationMode = rasterizationMode;
-            this.antialiasThreshold = antialiasThreshold;
             this.coverageBoost = coverageBoost;
         }
 
@@ -599,7 +691,18 @@ internal static partial class DefaultRasterizer
         /// <param name="x1">The ending X coordinate in 24.8 fixed-point destination space.</param>
         /// <param name="y1">The ending Y coordinate in 24.8 fixed-point destination space.</param>
         public void RasterizeLineSegment(int x0, int y0, int x1, int y1)
-            => this.RasterizeLine(x0, y0, x1, y1);
+            => this.RasterizeLine(x0, y0, x1, y1, LinearGeometryProfiles.SentinelTag);
+
+        /// <summary>
+        /// Rasterizes one line segment and retains its profile identifiers for aliased tip classification.
+        /// </summary>
+        /// <param name="x0">The starting X coordinate in 24.8 fixed-point destination space.</param>
+        /// <param name="y0">The starting Y coordinate in 24.8 fixed-point destination space.</param>
+        /// <param name="x1">The ending X coordinate in 24.8 fixed-point destination space.</param>
+        /// <param name="y1">The ending Y coordinate in 24.8 fixed-point destination space.</param>
+        /// <param name="tag">The segment's profile tag.</param>
+        public void RasterizeLineSegment(int x0, int y0, int x1, int y1, uint tag)
+            => this.RasterizeLine(x0, y0, x1, y1, tag);
 
         /// <summary>
         /// Converts accumulated cover/area tables into non-zero coverage span callbacks.
@@ -610,6 +713,30 @@ internal static partial class DefaultRasterizer
         /// <param name="scanline">Reusable scanline scratch buffer used to materialize emitted spans.</param>
         /// <param name="rowHandler">Coverage callback invoked for each emitted non-zero span.</param>
         public readonly void EmitCoverageRows<TRowHandler>(
+            int destinationTop,
+            int destinationLeft,
+            Span<float> scanline,
+            ref TRowHandler rowHandler)
+            where TRowHandler : struct, IRasterizerCoverageRowHandler
+        {
+            if (this.rasterizationMode == RasterizationMode.Aliased)
+            {
+                this.EmitCentreSampledRows(destinationTop, destinationLeft, scanline, ref rowHandler);
+                return;
+            }
+
+            this.EmitRows(destinationTop, destinationLeft, scanline, ref rowHandler);
+        }
+
+        /// <summary>
+        /// Walks every touched row and hands its spans to the supplied handler.
+        /// </summary>
+        /// <typeparam name="TRowHandler">The struct coverage handler type; constrained to a value type so calls devirtualize.</typeparam>
+        /// <param name="destinationTop">Absolute destination Y corresponding to row zero in this context.</param>
+        /// <param name="destinationLeft">Absolute destination X corresponding to column zero in this context.</param>
+        /// <param name="scanline">Reusable scanline scratch buffer used to materialize emitted spans.</param>
+        /// <param name="rowHandler">Coverage callback invoked for each emitted non-zero span.</param>
+        private readonly void EmitRows<TRowHandler>(
             int destinationTop,
             int destinationLeft,
             Span<float> scanline,
@@ -656,6 +783,19 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
+        /// Selects the profile data used to classify thin intervals in the next retained geometry.
+        /// </summary>
+        /// <param name="profiles">The geometry-space profile data, or an empty value.</param>
+        /// <param name="translateX">The X translation from geometry space to destination space.</param>
+        /// <param name="translateY">The Y translation from geometry space to destination space.</param>
+        public void SetProfileTables(LinearGeometryProfiles profiles, float translateX, float translateY)
+        {
+            this.profiles = profiles;
+            this.columnProfileTranslate = translateX;
+            this.rowProfileTranslate = translateY;
+        }
+
+        /// <summary>
         /// Clears only rows touched during the previous rasterization pass.
         /// </summary>
         /// <remarks>
@@ -665,11 +805,17 @@ internal static partial class DefaultRasterizer
         {
             // Reset only rows that received contributions in this band. This avoids clearing
             // full temporary buffers when geometry is sparse relative to the interest bounds.
+            bool hasCrossings = !this.crossingCounts.IsEmpty;
             for (int i = 0; i < this.touchedRowCount; i++)
             {
                 int row = this.touchedRows[i];
                 this.startCover[row] = 0;
                 this.rowTouched[row] = 0;
+
+                if (hasCrossings)
+                {
+                    this.crossingCounts[row] = 0;
+                }
 
                 if (this.rowHasBits[row] == 0)
                 {
@@ -686,6 +832,15 @@ internal static partial class DefaultRasterizer
             }
 
             this.touchedRowCount = 0;
+
+            // Column crossing scratch is pooled alongside the row scratch, so the columns this
+            // pass touched must be cleared the same sparse way before the next pass reuses it.
+            for (int i = 0; i < this.touchedColumnCount; i++)
+            {
+                this.columnCrossingCounts[this.touchedColumns[i]] = 0;
+            }
+
+            this.touchedColumnCount = 0;
         }
 
         /// <summary>
@@ -844,6 +999,628 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
+        /// Emits an aliased band by setting each pixel whose centre the shape covers.
+        /// </summary>
+        /// <typeparam name="TRowHandler">The struct coverage handler type; constrained to a value type so calls devirtualize.</typeparam>
+        /// <param name="destinationTop">Absolute destination Y corresponding to row zero in this context.</param>
+        /// <param name="destinationLeft">Absolute destination X corresponding to column zero in this context.</param>
+        /// <param name="scanline">Reusable scanline scratch buffer used to materialize emitted spans.</param>
+        /// <param name="rowHandler">Coverage callback invoked for each emitted run.</param>
+        private readonly void EmitCentreSampledRows<TRowHandler>(
+            int destinationTop,
+            int destinationLeft,
+            Span<float> scanline,
+            ref TRowHandler rowHandler)
+            where TRowHandler : struct, IRasterizerCoverageRowHandler
+        {
+            // The main pass walks horizontal centre lines. It cannot see a horizontal feature that
+            // lies completely between two row centres. The column pass finds those features first.
+            // For each closed vertical interval that contains no row centre, it records the pixel
+            // containing the interval midpoint. Packing row and column into one integer lets one
+            // sort group the results by row and then by column.
+            Span<int> columnDropouts = stackalloc int[MaxColumnDropoutsPerBand];
+            int columnDropoutCount = this.CollectColumnDropouts(columnDropouts, destinationLeft);
+            columnDropouts = columnDropouts[..columnDropoutCount];
+            columnDropouts.Sort();
+
+            for (int i = 0; i < this.touchedRowCount; i++)
+            {
+                int row = this.touchedRows[i];
+                int count = this.crossingCounts[row];
+
+                // startCover contains signed vertical cover from edges left of this band. One full
+                // pixel of cover represents one crossing, so round it to the winding at the first
+                // pixel centre before processing the retained crossings.
+                int winding = NearestCrossingCount(this.startCover[row]);
+                if (this.intersectionRule == IntersectionRule.EvenOdd)
+                {
+                    winding &= 1;
+                }
+
+                if (count == 0)
+                {
+                    if (winding != 0)
+                    {
+                        scanline[..this.width].Fill(1F);
+                        rowHandler.Handle(destinationTop + row, destinationLeft, scanline[..this.width]);
+                    }
+
+                    continue;
+                }
+
+                Span<long> rowCrossings = this.crossings.Slice(row * this.crossingStride, count);
+                rowCrossings.Sort();
+
+                // Binary searches select this row's range from the sorted column-pass results.
+                // Results covered by a normal row interval are discarded below. The remaining
+                // results are inserted as one-pixel intervals.
+                int rowKey = row << 16;
+                int dropoutStart = LowerBound(columnDropouts, rowKey);
+                int dropoutEnd = LowerBound(columnDropouts, rowKey + (1 << 16));
+
+                int intervalStart = 0;
+                long intervalStartCrossing = long.MinValue;
+                int runStart = -1;
+                int runEnd = -1;
+
+                for (int c = 0; c <= count; c++)
+                {
+                    int x;
+                    long currentCrossing = long.MinValue;
+                    int previousWinding = winding;
+
+                    if (c < count)
+                    {
+                        long crossing = rowCrossings[c];
+                        currentCrossing = crossing;
+                        x = (int)(crossing >> CrossingShift);
+                        winding = this.intersectionRule == IntersectionRule.NonZero
+                            ? winding + (((crossing & CrossingDirectionBit) != 0) ? 1 : -1)
+                            : winding ^ 1;
+                    }
+                    else
+                    {
+                        // A non-zero winding after the last retained crossing means the fill
+                        // continues through the right clip edge. Close that interval at the edge.
+                        if (previousWinding == 0)
+                        {
+                            break;
+                        }
+
+                        x = this.width << FixedShift;
+                        winding = 0;
+                    }
+
+                    if (previousWinding == 0 && winding != 0)
+                    {
+                        intervalStart = x;
+                        intervalStartCrossing = currentCrossing;
+                        continue;
+                    }
+
+                    if (previousWinding == 0 || winding != 0)
+                    {
+                        continue;
+                    }
+
+                    // Coverage is closed at both ends. CeilingPixel finds the first centre at or
+                    // after the start; FloorPixel finds the last centre at or before the end.
+                    int first = CeilingPixel(intervalStart);
+                    int last = FloorPixel(x);
+                    if (last < first)
+                    {
+                        // This interval contains no pixel centre. Normally, preserve the thin
+                        // feature by lighting the pixel that contains its midpoint. Do not light it
+                        // when the two boundary profiles identify a terminating contour tip.
+                        if (intervalStartCrossing != long.MinValue && currentCrossing != long.MinValue && IsStubInterval(
+                                this.profiles,
+                                xAxis: false,
+                                this.rowProfileTranslate,
+                                intervalStartCrossing,
+                                currentCrossing,
+                                ((destinationTop + row) << FixedShift) + FixedHalf,
+                                x - intervalStart))
+                        {
+                            continue;
+                        }
+
+                        first = ((intervalStart >> 1) + (x >> 1)) >> FixedShift;
+                        last = first;
+                    }
+
+                    first = Math.Max(first, 0);
+                    last = Math.Min(last, this.width - 1);
+                    if (last < first)
+                    {
+                        continue;
+                    }
+
+                    // Insert pending column results before this row interval. Discard a result
+                    // inside the interval because the row pass already covers that pixel.
+                    while (dropoutStart < dropoutEnd)
+                    {
+                        int dropColumn = columnDropouts[dropoutStart] & 0xFFFF;
+                        if (dropColumn >= first)
+                        {
+                            if (dropColumn <= last)
+                            {
+                                dropoutStart++;
+                                continue;
+                            }
+
+                            break;
+                        }
+
+                        dropoutStart++;
+                        AccumulateRun(scanline, dropColumn, dropColumn, ref runStart, ref runEnd, destinationTop + row, destinationLeft, ref rowHandler);
+                    }
+
+                    AccumulateRun(scanline, first, last, ref runStart, ref runEnd, destinationTop + row, destinationLeft, ref rowHandler);
+                }
+
+                while (dropoutStart < dropoutEnd)
+                {
+                    int dropColumn = columnDropouts[dropoutStart++] & 0xFFFF;
+                    AccumulateRun(scanline, dropColumn, dropColumn, ref runStart, ref runEnd, destinationTop + row, destinationLeft, ref rowHandler);
+                }
+
+                if (runStart >= 0)
+                {
+                    scanline[..(runEnd - runStart)].Fill(1F);
+                    rowHandler.Handle(destinationTop + row, destinationLeft + runStart, scanline[..(runEnd - runStart)]);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Adds one inclusive pixel interval to the row's run, coalescing with the open run or
+        /// flushing it when a gap intervenes.
+        /// </summary>
+        /// <typeparam name="TRowHandler">The struct coverage handler type; constrained to a value type so calls devirtualize.</typeparam>
+        /// <param name="scanline">Reusable scanline scratch buffer used to materialize emitted spans.</param>
+        /// <param name="first">The inclusive first pixel of the interval.</param>
+        /// <param name="last">The inclusive last pixel of the interval.</param>
+        /// <param name="runStart">The open run's inclusive start pixel; negative when no run is open.</param>
+        /// <param name="runEnd">The open run's exclusive end pixel.</param>
+        /// <param name="destinationY">Absolute destination Y for the emitted row.</param>
+        /// <param name="destinationLeft">Absolute destination X corresponding to column zero in this context.</param>
+        /// <param name="rowHandler">Coverage callback invoked for each flushed run.</param>
+        private static void AccumulateRun<TRowHandler>(
+            Span<float> scanline,
+            int first,
+            int last,
+            ref int runStart,
+            ref int runEnd,
+            int destinationY,
+            int destinationLeft,
+            ref TRowHandler rowHandler)
+            where TRowHandler : struct, IRasterizerCoverageRowHandler
+        {
+            if (runStart < 0)
+            {
+                runStart = first;
+                runEnd = last + 1;
+                return;
+            }
+
+            if (first <= runEnd)
+            {
+                runEnd = Math.Max(runEnd, last + 1);
+                return;
+            }
+
+            scanline[..(runEnd - runStart)].Fill(1F);
+            rowHandler.Handle(destinationY, destinationLeft + runStart, scanline[..(runEnd - runStart)]);
+            runStart = first;
+            runEnd = last + 1;
+        }
+
+        /// <summary>
+        /// Finds the first index in a sorted span whose value is not less than the given key.
+        /// </summary>
+        /// <param name="values">The sorted values.</param>
+        /// <param name="key">The search key.</param>
+        /// <returns>The lower bound index.</returns>
+        private static int LowerBound(ReadOnlySpan<int> values, int key)
+        {
+            int lo = 0;
+            int hi = values.Length;
+            while (lo < hi)
+            {
+                int mid = (lo + hi) >> 1;
+                if (values[mid] < key)
+                {
+                    lo = mid + 1;
+                }
+                else
+                {
+                    hi = mid;
+                }
+            }
+
+            return lo;
+        }
+
+        /// <summary>
+        /// Tests whether a centre-free interval ends at a terminating contour tip.
+        /// </summary>
+        /// <remarks>
+        /// A centre-free interval is the closed span between two crossings when that span contains
+        /// no pixel centre. The normal thin-feature rule lights its midpoint pixel. It must not
+        /// extend a contour tip into the next empty pixel. The two boundary profiles identify that
+        /// case because they meet in one contour and both end inside the same pixel gap.
+        /// </remarks>
+        /// <param name="profiles">The geometry-space profile data.</param>
+        /// <param name="xAxis">Whether to read the X-axis profile table.</param>
+        /// <param name="translate">The absolute translation applied to the profile extents.</param>
+        /// <param name="enterCrossing">The packed crossing that opened the interval.</param>
+        /// <param name="exitCrossing">The packed crossing that closed the interval.</param>
+        /// <param name="centre">The scanline's centre coordinate in 24.8 fixed-point.</param>
+        /// <param name="intervalSpan">The interval's length along the scanline in 24.8 fixed-point.</param>
+        /// <returns>
+        /// <see langword="true"/> when the interval must remain unlit because it is a terminating tip.
+        /// </returns>
+        private static bool IsStubInterval(
+            LinearGeometryProfiles profiles,
+            bool xAxis,
+            float translate,
+            long enterCrossing,
+            long exitCrossing,
+            int centre,
+            int intervalSpan)
+        {
+            int a = (int)(enterCrossing & ProfileIdMask);
+            int b = (int)(exitCrossing & ProfileIdMask);
+
+            // The sentinel means that the segment has no usable profile. Without both profiles,
+            // the interval cannot be identified as a terminating tip and must remain visible.
+            if (a == ProfileIdMask || b == ProfileIdMask || profiles.IsEmpty)
+            {
+                return false;
+            }
+
+            if (xAxis)
+            {
+                profiles.GetXProfile(a, out float minAFloat, out float maxAFloat, out int linkA);
+                profiles.GetXProfile(b, out float minBFloat, out float maxBFloat, out int linkB);
+                return IsStubIntervalCore(
+                    minAFloat,
+                    maxAFloat,
+                    linkA,
+                    minBFloat,
+                    maxBFloat,
+                    linkB,
+                    a,
+                    b,
+                    translate,
+                    centre,
+                    intervalSpan);
+            }
+
+            profiles.GetYProfile(a, out float rowMinA, out float rowMaxA, out int rowLinkA);
+            profiles.GetYProfile(b, out float rowMinB, out float rowMaxB, out int rowLinkB);
+            return IsStubIntervalCore(
+                rowMinA,
+                rowMaxA,
+                rowLinkA,
+                rowMinB,
+                rowMaxB,
+                rowLinkB,
+                a,
+                b,
+                translate,
+                centre,
+                intervalSpan);
+        }
+
+        /// <summary>
+        /// Applies the terminating-tip test to two profile records.
+        /// </summary>
+        /// <param name="minAFloat">The first profile's minimum extent.</param>
+        /// <param name="maxAFloat">The first profile's maximum extent.</param>
+        /// <param name="linkA">The first profile's adjacency link.</param>
+        /// <param name="minBFloat">The second profile's minimum extent.</param>
+        /// <param name="maxBFloat">The second profile's maximum extent.</param>
+        /// <param name="linkB">The second profile's adjacency link.</param>
+        /// <param name="a">The first profile identifier.</param>
+        /// <param name="b">The second profile identifier.</param>
+        /// <param name="translate">The absolute translation applied to the profile extents.</param>
+        /// <param name="centre">The scanline's centre coordinate in 24.8 fixed-point.</param>
+        /// <param name="intervalSpan">The interval's length along the scanline in 24.8 fixed-point.</param>
+        /// <returns><see langword="true"/> when the interval must remain unlit.</returns>
+        private static bool IsStubIntervalCore(
+            float minAFloat,
+            float maxAFloat,
+            int linkA,
+            float minBFloat,
+            float maxBFloat,
+            int linkB,
+            int a,
+            int b,
+            float translate,
+            int centre,
+            int intervalSpan)
+        {
+            bool adjacent = (b == a + 1 && (linkB & 1) != 0)
+                || (a == b + 1 && (linkA & 1) != 0)
+                || (linkA >> 1) == b + 1
+                || (linkB >> 1) == a + 1;
+
+            // Only two profiles joined in the same contour can describe one terminating tip.
+            // Separate contours or non-adjacent profiles describe a continuing thin feature.
+            if (!adjacent)
+            {
+                return false;
+            }
+
+            // Profiles are stored in geometry coordinates. Translate only the two records needed
+            // by this rare test. This avoids creating translated profile arrays for every draw.
+            int minA = TranslateProfileExtent(minAFloat, translate);
+            int maxA = TranslateProfileExtent(maxAFloat, translate);
+            int minB = TranslateProfileExtent(minBFloat, translate);
+            int maxB = TranslateProfileExtent(maxBFloat, translate);
+
+            // Both profiles must turn around before the next centre on the same side of this
+            // scanline. That places the interval at the end of the contour feature. A tip still
+            // remains visible when it reaches at least halfway into that pixel and the interval
+            // itself is at least half a pixel long.
+            if (maxA < centre + FixedOne && maxB < centre + FixedOne)
+            {
+                int tip = Math.Max(maxA, maxB);
+                return !((tip & (FixedOne - 1)) >= FixedHalf && intervalSpan >= FixedHalf);
+            }
+
+            if (minA > centre - FixedOne && minB > centre - FixedOne)
+            {
+                int tip = Math.Min(minA, minB);
+                int fraction = tip & (FixedOne - 1);
+                return !(fraction != 0 && fraction <= FixedHalf && intervalSpan >= FixedHalf);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Converts one translated geometry-space profile extent to signed 24.8 fixed-point.
+        /// </summary>
+        /// <param name="extent">The geometry-space extent.</param>
+        /// <param name="translate">The absolute device translation.</param>
+        /// <returns>The translated extent in signed 24.8 fixed-point.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int TranslateProfileExtent(float extent, float translate)
+            => FloatToFixed24Dot8(Math.Clamp(extent + translate, -8388608F, 8388607F));
+
+        /// <summary>
+        /// Records where one segment crosses the vertical centre line of each affected column.
+        /// </summary>
+        /// <param name="x0">The segment's start X in 24.8 fixed-point.</param>
+        /// <param name="y0">The segment's start Y in 24.8 fixed-point.</param>
+        /// <param name="x1">The segment's end X in 24.8 fixed-point.</param>
+        /// <param name="y1">The segment's end Y in 24.8 fixed-point.</param>
+        /// <param name="xProfileId">The segment's x-profile identifier.</param>
+        private void CaptureColumnCrossings(int x0, int y0, int x1, int y1, uint xProfileId)
+        {
+            if (x0 == x1)
+            {
+                return;
+            }
+
+            int direction = x1 > x0 ? 1 : -1;
+            int left = direction > 0 ? x0 : x1;
+            int right = direction > 0 ? x1 : x0;
+
+            int firstColumn = Math.Max(0, left >> FixedShift);
+            int lastColumn = Math.Min(this.width - 1, (right - 1) >> FixedShift);
+
+            for (int column = firstColumn; column <= lastColumn; column++)
+            {
+                int sampleX = (column << FixedShift) + FixedHalf;
+
+                // Use a half-open X range so a shared vertex is owned by one edge only. This is
+                // the transposed form of the row-crossing rule used below.
+                if (sampleX < left || sampleX >= right)
+                {
+                    continue;
+                }
+
+                int count = this.columnCrossingCounts[column];
+                if (count >= ColumnCrossingCapacity)
+                {
+                    continue;
+                }
+
+                if (count == 0 && this.touchedColumnCount < this.touchedColumns.Length)
+                {
+                    this.touchedColumns[this.touchedColumnCount++] = column;
+                }
+
+                int y = y0 + (int)(((long)(y1 - y0) * (sampleX - x0)) / (x1 - x0));
+
+                // Column coordinates are band-local and need at most 13 bits in 24.8 form.
+                // The complete packed crossing therefore fits in one word, unlike row crossings
+                // whose X coordinate spans the full destination width.
+                this.columnCrossings[(column * ColumnCrossingCapacity) + count] = ((uint)y << CrossingShift) | (direction > 0 ? (uint)CrossingDirectionBit : 0U) | xProfileId;
+                this.columnCrossingCounts[column] = count + 1;
+            }
+        }
+
+        /// <summary>
+        /// Finds closed vertical intervals that contain no row centre.
+        /// </summary>
+        /// <param name="dropouts">The destination for packed midpoint pixel coordinates.</param>
+        /// <param name="destinationLeft">Absolute destination X corresponding to column zero, used to compare the column centre with absolute profile ranges.</param>
+        /// <returns>
+        /// The number of midpoint pixels written. Each result is packed as
+        /// <c>(row &lt;&lt; 16) | column</c>.
+        /// </returns>
+        private readonly int CollectColumnDropouts(Span<int> dropouts, int destinationLeft)
+        {
+            int count = 0;
+            for (int i = 0; i < this.touchedColumnCount; i++)
+            {
+                int column = this.touchedColumns[i];
+                int crossingCount = this.columnCrossingCounts[column];
+                if (crossingCount < 2)
+                {
+                    continue;
+                }
+
+                Span<uint> crossings = this.columnCrossings.Slice(column * ColumnCrossingCapacity, crossingCount);
+                crossings.Sort();
+
+                int winding = 0;
+                int intervalStart = 0;
+                long intervalStartCrossing = long.MinValue;
+                for (int c = 0; c < crossingCount; c++)
+                {
+                    long crossing = crossings[c];
+                    int y = (int)(crossing >> CrossingShift);
+                    int previousWinding = winding;
+                    winding = this.intersectionRule == IntersectionRule.NonZero
+                        ? winding + (((crossing & CrossingDirectionBit) != 0) ? 1 : -1)
+                        : winding ^ 1;
+
+                    if (previousWinding == 0 && winding != 0)
+                    {
+                        intervalStart = y;
+                        intervalStartCrossing = crossing;
+                        continue;
+                    }
+
+                    if (previousWinding == 0 || winding != 0)
+                    {
+                        continue;
+                    }
+
+                    if (FloorPixel(y) >= CeilingPixel(intervalStart))
+                    {
+                        // The primary row pass sees this interval and needs no secondary result.
+                        continue;
+                    }
+
+                    if (IsStubInterval(
+                            this.profiles,
+                            xAxis: true,
+                            this.columnProfileTranslate,
+                            intervalStartCrossing,
+                            crossing,
+                            ((destinationLeft + column) << FixedShift) + FixedHalf,
+                            y - intervalStart))
+                    {
+                        // The interval ends at a contour tip and must remain unlit.
+                        continue;
+                    }
+
+                    int row = ((intervalStart >> 1) + (y >> 1)) >> FixedShift;
+                    if (row < 0 || row >= this.height || count == dropouts.Length)
+                    {
+                        continue;
+                    }
+
+                    dropouts[count++] = (row << 16) | column;
+                }
+            }
+
+            return count;
+        }
+
+        /// <summary>
+        /// Converts a row's signed 24.8 start cover to an integer winding count.
+        /// </summary>
+        /// <remarks>
+        /// One complete cover unit represents one crossing to the left of the band. A partial unit
+        /// represents an edge that crosses only part of the row. Rounding to the nearest signed
+        /// unit determines whether that edge has crossed the row centre.
+        /// </remarks>
+        /// <param name="startCover">The row's accumulated carry cover in 24.8 units.</param>
+        /// <returns>The signed crossing count.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int NearestCrossingCount(int startCover)
+            => startCover >= 0
+                ? (startCover + FixedHalf) >> FixedShift
+                : -((-startCover + FixedHalf) >> FixedShift);
+
+        /// <summary>
+        /// Returns the first pixel whose centre is at or after the given 24.8 coordinate.
+        /// </summary>
+        /// <param name="value">The 24.8 fixed-point coordinate.</param>
+        /// <returns>The pixel index.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int CeilingPixel(int value)
+        {
+            int shifted = value - FixedHalf;
+            return shifted >= 0
+                ? (shifted + FixedOne - 1) >> FixedShift
+                : -((-shifted) >> FixedShift);
+        }
+
+        /// <summary>
+        /// Returns the last pixel whose centre is at or before the given 24.8 coordinate.
+        /// </summary>
+        /// <param name="value">The 24.8 fixed-point coordinate.</param>
+        /// <returns>The pixel index.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int FloorPixel(int value)
+        {
+            int shifted = value - FixedHalf;
+            return shifted >= 0
+                ? shifted >> FixedShift
+                : -(((-shifted) + FixedOne - 1) >> FixedShift);
+        }
+
+        /// <summary>
+        /// Records where one segment crosses the horizontal centre line of each affected row.
+        /// </summary>
+        /// <remarks>
+        /// Aliased coverage depends on whether the shape contains the pixel centre. Area coverage
+        /// alone cannot answer this because equal covered areas can lie on opposite sides of the
+        /// centre. The sorted crossings define the exact filled intervals along the centre line.
+        /// </remarks>
+        /// <param name="x0">The segment's start X in 24.8 fixed-point.</param>
+        /// <param name="y0">The segment's start Y in 24.8 fixed-point.</param>
+        /// <param name="x1">The segment's end X in 24.8 fixed-point.</param>
+        /// <param name="y1">The segment's end Y in 24.8 fixed-point.</param>
+        /// <param name="tag">The segment's profile tag: the x-profile identifier in the low sixteen bits and the y-profile identifier in the high sixteen bits.</param>
+        private void CaptureCrossings(int x0, int y0, int x1, int y1, uint tag)
+        {
+            this.CaptureColumnCrossings(x0, y0, x1, y1, tag & ProfileIdMask);
+
+            if (y0 == y1)
+            {
+                return;
+            }
+
+            int direction = y1 > y0 ? 1 : -1;
+            int top = direction > 0 ? y0 : y1;
+            int bottom = direction > 0 ? y1 : y0;
+
+            int firstRow = Math.Max(0, top >> FixedShift);
+            int lastRow = Math.Min(this.height - 1, (bottom - 1) >> FixedShift);
+
+            for (int row = firstRow; row <= lastRow; row++)
+            {
+                int sampleY = (row << FixedShift) + FixedHalf;
+
+                // Use a half-open Y range so two edges meeting at a vertex do not both contribute
+                // that vertex to the winding count.
+                if (sampleY < top || sampleY >= bottom)
+                {
+                    continue;
+                }
+
+                int count = this.crossingCounts[row];
+                int x = x0 + (int)(((long)(x1 - x0) * (sampleY - y0)) / (y1 - y0));
+
+                // Position, direction, and profile pack into one value ordered by position, so a
+                // row sorts with a single primitive sort. The lower bits only break ties between
+                // equal positions, where crossing order cannot change the winding result.
+                this.crossings[(row * this.crossingStride) + count] = ((long)x << CrossingShift) | (direction > 0 ? CrossingDirectionBit : 0L) | (tag >> 16);
+                this.crossingCounts[row] = count + 1;
+                this.MarkRowTouched(row);
+            }
+        }
+
+        /// <summary>
         /// Converts accumulated signed area to normalized coverage under the selected fill rule.
         /// </summary>
         /// <param name="area">
@@ -880,13 +1657,6 @@ internal static partial class DefaultRasterizer
                 }
 
                 coverage = wrapped >= CoverageStepCount ? 1F : wrapped * CoverageScale;
-            }
-
-            if (this.rasterizationMode == RasterizationMode.Aliased)
-            {
-                // Aliased mode quantizes final coverage to hard 0/1 per pixel
-                // using the configurable threshold from GraphicsOptions.AntialiasThreshold.
-                return coverage >= this.antialiasThreshold ? 1F : 0F;
             }
 
             if (this.coverageBoost != 0F)
@@ -1723,8 +2493,21 @@ internal static partial class DefaultRasterizer
         /// <param name="y0">The starting Y coordinate in 24.8 fixed-point band-local space.</param>
         /// <param name="x1">The ending X coordinate in 24.8 fixed-point band-local space.</param>
         /// <param name="y1">The ending Y coordinate in 24.8 fixed-point band-local space.</param>
-        private void RasterizeLine(int x0, int y0, int x1, int y1)
+        /// <param name="tag">The segment's profile tag.</param>
+        private void RasterizeLine(int x0, int y0, int x1, int y1, uint tag)
         {
+            if (this.rasterizationMode == RasterizationMode.Aliased)
+            {
+                this.CaptureCrossings(x0, y0, x1, y1, tag);
+            }
+
+            // Horizontal segments are retained only so the aliased column pass can find features
+            // between row centres. They add no area, and the row walker cannot divide by zero Y.
+            if (y0 == y1)
+            {
+                return;
+            }
+
             if (x0 == x1)
             {
                 // Vertical edges need ownership adjustment to avoid double counting at cell seams.
@@ -1822,6 +2605,8 @@ internal static partial class DefaultRasterizer
         private readonly IMemoryOwner<int> touchedRowsOwner;
         private readonly IMemoryOwner<float> scanlineOwner;
         private IMemoryOwner<float>? strokeBandCoverageOwner;
+        private IMemoryOwner<long>? crossingsOwner;
+        private IMemoryOwner<uint>? aliasedScratchOwner;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WorkerScratch"/> class taking ownership of the supplied buffers.
@@ -1884,6 +2669,88 @@ internal static partial class DefaultRasterizer
             => (this.strokeBandCoverageOwner ??=
                 this.allocator.Allocate<float>(checked(this.width * this.tileCapacity * DirectStrokeVerticalSampleCount)))
                 .Memory.Span;
+
+        /// <summary>
+        /// Gets reusable per-row crossing count scratch, created on first aliased use.
+        /// </summary>
+        public Span<int> CrossingCounts
+            => MemoryMarshal.Cast<uint, int>(this.GetAliasedScratch()[..this.tileCapacity]);
+
+        /// <summary>
+        /// Gets reusable per-column centre line crossing scratch, created on first aliased use.
+        /// </summary>
+        public Span<uint> ColumnCrossings
+            => this.GetAliasedScratch().Slice(this.tileCapacity, checked(this.width * ColumnCrossingCapacity));
+
+        /// <summary>
+        /// Gets reusable per-column crossing count scratch, created on first aliased use.
+        /// </summary>
+        public Span<int> ColumnCrossingCounts
+        {
+            get
+            {
+                int offset = checked(this.tileCapacity + (this.width * ColumnCrossingCapacity));
+                return MemoryMarshal.Cast<uint, int>(this.GetAliasedScratch().Slice(offset, this.width));
+            }
+        }
+
+        /// <summary>
+        /// Gets the reusable touched column index list, created on first aliased use.
+        /// </summary>
+        public Span<int> TouchedColumns
+        {
+            get
+            {
+                int offset = checked(this.tileCapacity + (this.width * (ColumnCrossingCapacity + 1)));
+                return MemoryMarshal.Cast<uint, int>(this.GetAliasedScratch().Slice(offset, this.width));
+            }
+        }
+
+        /// <summary>
+        /// Gets the worker's fixed-size aliased scratch rental, creating it on first use.
+        /// </summary>
+        /// <returns>The packed row-count, column-crossing, column-count, and touched-column storage.</returns>
+        private Span<uint> GetAliasedScratch()
+        {
+            if (this.aliasedScratchOwner is null)
+            {
+                // This allocation belongs to WorkerScratch, not to a geometry. The worker reuses it
+                // for every aliased geometry until the worker is disposed.
+                int columnCrossingLength = checked(this.width * ColumnCrossingCapacity);
+                int length = checked(this.tileCapacity + columnCrossingLength + this.width + this.width);
+                this.aliasedScratchOwner = this.allocator.Allocate<uint>(length);
+
+                // Only counts require an initial zero. Crossing values and touched indices are
+                // overwritten before use, so clearing their much larger slices would be wasted work.
+                Span<uint> scratch = this.aliasedScratchOwner.Memory.Span;
+                scratch[..this.tileCapacity].Clear();
+                scratch.Slice(this.tileCapacity + columnCrossingLength, this.width).Clear();
+            }
+
+            return this.aliasedScratchOwner.Memory.Span;
+        }
+
+        /// <summary>
+        /// Gets the worker's growable row-crossing rental. Each row reserves one slot per retained
+        /// line because one line can cross a row centre no more than once.
+        /// </summary>
+        /// <param name="crossingStride">The required crossing slots for each row.</param>
+        /// <returns>The rented crossing storage.</returns>
+        private Span<long> GetCrossings(int crossingStride)
+        {
+            int requiredLength = checked(this.tileCapacity * crossingStride);
+            if (this.crossingsOwner is null || this.crossingsOwner.Memory.Length < requiredLength)
+            {
+                // Keep the largest rental used by this worker. Later geometries at or below that
+                // complexity reuse it without another allocation.
+                IMemoryOwner<long> replacement = this.allocator.Allocate<long>(requiredLength);
+
+                this.crossingsOwner?.Dispose();
+                this.crossingsOwner = replacement;
+            }
+
+            return this.crossingsOwner.Memory.Span;
+        }
 
         /// <summary>
         /// Returns <see langword="true"/> when this scratch has compatible dimensions and sufficient
@@ -1979,13 +2846,13 @@ internal static partial class DefaultRasterizer
         /// Creates a context view over a compatible prefix of this scratch for the requested geometry width.
         /// </summary>
         /// <param name="intersectionRule">The fill rule used when converting accumulated winding/coverage into final alpha.</param>
-        /// <param name="rasterizationMode">The rasterization mode that controls how antialiasing thresholds are interpreted.</param>
-        /// <param name="antialiasThreshold">The threshold used when antialiasing is conditionally reduced or disabled.</param>
+        /// <param name="rasterizationMode">The rasterization mode that selects continuous or centre-sampled coverage.</param>
+        /// <param name="lineCount">The retained line count, which is the exact maximum crossing count for one row.</param>
         /// <returns>A <see cref="Context"/> backed by this scratch; the caller must not use two contexts over the same scratch concurrently.</returns>
         public Context CreateContext(
             IntersectionRule intersectionRule,
             RasterizationMode rasterizationMode,
-            float antialiasThreshold)
+            int lineCount)
             => new(
                 this.bitVectorsOwner.Memory.Span,
                 this.coverAreaOwner.Memory.Span,
@@ -1995,9 +2862,14 @@ internal static partial class DefaultRasterizer
                 this.rowHasBitsOwner.Memory.Span,
                 this.rowTouchedOwner.Memory.Span,
                 this.touchedRowsOwner.Memory.Span,
+                rasterizationMode == RasterizationMode.Aliased && lineCount > 0 ? this.GetCrossings(lineCount) : default,
+                rasterizationMode == RasterizationMode.Aliased ? this.CrossingCounts : default,
+                rasterizationMode == RasterizationMode.Aliased ? this.ColumnCrossings : default,
+                rasterizationMode == RasterizationMode.Aliased ? this.ColumnCrossingCounts : default,
+                rasterizationMode == RasterizationMode.Aliased ? this.TouchedColumns : default,
+                rasterizationMode == RasterizationMode.Aliased ? lineCount : 0,
                 intersectionRule,
-                rasterizationMode,
-                antialiasThreshold);
+                rasterizationMode);
 
         /// <summary>
         /// Releases worker-local scratch buffers back to the allocator.
@@ -2014,6 +2886,8 @@ internal static partial class DefaultRasterizer
             this.touchedRowsOwner.Dispose();
             this.scanlineOwner.Dispose();
             this.strokeBandCoverageOwner?.Dispose();
+            this.crossingsOwner?.Dispose();
+            this.aliasedScratchOwner?.Dispose();
         }
     }
 }

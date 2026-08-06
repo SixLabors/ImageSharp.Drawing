@@ -35,6 +35,7 @@ internal sealed class PreparedPathClipState : IDisposable
     /// <param name="targetBounds">The absolute command target bounds.</param>
     /// <param name="destinationOffset">The destination offset used to place clip descriptors.</param>
     /// <param name="allocator">The allocator used for retained raster storage.</param>
+    /// <param name="profileStorage">The partition-owned aliased profile arena.</param>
     /// <param name="prepared">The prepared path clip state, or <see langword="null"/> when the clip state has no path clips.</param>
     /// <returns><see langword="true"/> when the command can still draw after preparing clips; otherwise <see langword="false"/>.</returns>
     public static bool TryCreate(
@@ -42,6 +43,7 @@ internal sealed class PreparedPathClipState : IDisposable
         Rectangle targetBounds,
         Point destinationOffset,
         MemoryAllocator allocator,
+        LinearGeometryProfileStorage profileStorage,
         out PreparedPathClipState? prepared)
     {
         prepared = null;
@@ -79,8 +81,7 @@ internal sealed class PreparedPathClipState : IDisposable
                 RasterizerOptions options = new(
                     targetBounds,
                     descriptor.IntersectionRule,
-                    mode,
-                    descriptor.AntialiasThreshold);
+                    mode);
 
                 DefaultRasterizer.RasterizableGeometry? rasterizable = DefaultRasterizer.CreateRasterizableGeometry(
                     geometry,
@@ -88,7 +89,8 @@ internal sealed class PreparedPathClipState : IDisposable
                     destinationOffset.X,
                     destinationOffset.Y,
                     options,
-                    allocator);
+                    allocator,
+                    profileStorage);
 
                 // An empty intersecting path clip makes the whole command empty. An empty
                 // difference clip is a no-op, so it remains represented by a null rasterizable.

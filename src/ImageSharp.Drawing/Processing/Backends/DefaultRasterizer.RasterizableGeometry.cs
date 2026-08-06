@@ -17,6 +17,7 @@ internal static partial class DefaultRasterizer
         private readonly LineArrayX32Y16Block?[]? linesX32;
         private readonly int[] firstBlockLineCounts;
         private readonly IMemoryOwner<int>?[] startCoverTable;
+        private readonly LinearGeometryProfiles profiles;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="RasterizableGeometry"/> class.
@@ -33,6 +34,9 @@ internal static partial class DefaultRasterizer
         /// <param name="linesX32">The retained wide line chains for each local row band.</param>
         /// <param name="firstBlockLineCounts">The valid line count in each front retained block.</param>
         /// <param name="startCoverTable">The retained start-cover table for each local row band.</param>
+        /// <param name="profiles">The geometry-space profile data, or an empty view.</param>
+        /// <param name="profileTranslateX">The absolute X translation applied to profile extents.</param>
+        /// <param name="profileTranslateY">The absolute Y translation applied to profile extents.</param>
         public RasterizableGeometry(
             int firstRowBandIndex,
             int rowBandCount,
@@ -45,8 +49,14 @@ internal static partial class DefaultRasterizer
             LineArrayX16Y16Block?[]? linesX16,
             LineArrayX32Y16Block?[]? linesX32,
             int[] firstBlockLineCounts,
-            IMemoryOwner<int>?[] startCoverTable)
+            IMemoryOwner<int>?[] startCoverTable,
+            LinearGeometryProfiles profiles,
+            float profileTranslateX,
+            float profileTranslateY)
         {
+            this.profiles = profiles;
+            this.ProfileTranslateX = profileTranslateX;
+            this.ProfileTranslateY = profileTranslateY;
             this.FirstRowBandIndex = firstRowBandIndex;
             this.RowBandCount = rowBandCount;
             this.Width = width;
@@ -95,6 +105,21 @@ internal static partial class DefaultRasterizer
         /// Gets a value indicating whether this geometry uses Blaze's narrow X16Y16 line arrays.
         /// </summary>
         public bool IsX16 { get; }
+
+        /// <summary>
+        /// Gets the geometry-space profile data, or an empty view.
+        /// </summary>
+        public LinearGeometryProfiles Profiles => this.profiles;
+
+        /// <summary>
+        /// Gets the absolute X translation applied to profile extents.
+        /// </summary>
+        public float ProfileTranslateX { get; }
+
+        /// <summary>
+        /// Gets the absolute Y translation applied to profile extents.
+        /// </summary>
+        public float ProfileTranslateY { get; }
 
         /// <summary>
         /// Returns <see langword="true"/> when the given local row band has retained coverage payload.

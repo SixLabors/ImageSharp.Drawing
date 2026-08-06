@@ -4,12 +4,12 @@
 // Resets the chunk-local bump allocator counters between chunk dispatches
 // while preserving the full-scene state produced by the shared scheduling
 // stages. The scene is rendered in vertical tile-row chunks; the shared
-// stages (flatten, binning, ...) run once, but the chunk-local stages
+// stages (path_lowering, binning, ...) run once, but the chunk-local stages
 // (path_row_alloc through path_tiling) rerun per chunk and must start
 // from zeroed counters.
 //
 // Inputs/outputs: bump. Retained across chunks: the binning and lines
-// counters plus the STAGE_BINNING and STAGE_FLATTEN failure bits, since
+// counters plus the STAGE_BINNING and STAGE_PATH_LOWERING failure bits, since
 // those belong to the shared stages that are not rerun. Everything else
 // (ptcl, path_rows, tile, seg_counts, segments, blend_spill and the
 // chunk-local failure bits) is cleared.
@@ -25,7 +25,7 @@ var<storage, read_write> bump: BumpAllocators;
 // whole struct so chunk-local counters start at zero.
 @compute @workgroup_size(1)
 fn main() {
-    let retained_failed = atomicLoad(&bump.failed) & (STAGE_BINNING | STAGE_FLATTEN);
+    let retained_failed = atomicLoad(&bump.failed) & (STAGE_BINNING | STAGE_PATH_LOWERING);
     let retained_binning = atomicLoad(&bump.binning);
     let retained_lines = atomicLoad(&bump.lines);
 

@@ -7,7 +7,6 @@ using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
 using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
-using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Text;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
@@ -99,9 +98,11 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
     // for repeated characters.
     //
     // Position is intentionally absent from the key: cached paths are anchored at their exact
-    // outline origin, and each emitted operation carries the pixel-snapped location plus the
+    // outline origin, and each emitted operation carries the integer location plus the
     // fractional remainder (DrawingOperation.SubPixelOffset). The backends apply the remainder
-    // as a residual translation, so one cache entry renders exactly at every position.
+    // as a residual translation. Fonts supplies metric bounds at the same resolved origin used
+    // for outline emission, including format-specific grid placement, so BoundsOffset maps every
+    // cache hit back to the exact position a fresh outline would have produced.
     // The key's size component stays quantized (1/SizeAccuracyMultiple px) because transformed
     // bounds sizes pick up float noise under translation.
 
@@ -492,7 +493,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
         // Otherwise, on a cache miss the built path is anchored at its exact outline origin,
         // stored for future hits, and emitted as fill and/or outline DrawingOperations.
         // On a cache hit the stored path is reused; this instance's own outline origin
-        // (snapped location + fractional remainder) positions it exactly.
+        // positions it exactly.
         if (this.hasLayer)
         {
             // The layer has already been rendered.
@@ -573,13 +574,14 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
         {
             // Cache hit: the base class skipped building the decoded outline, so derive the
             // position estimate from the anchor stored with the cached entry, exactly as the
-            // fast path does. The stored path is anchored at its exact origin, so the snapped
-            // estimate plus its fractional remainder positions it exactly. The entries were
+            // fast path does. The stored path is anchored at its exact origin, so the integer
+            // component plus its fractional remainder positions it exactly. The entries were
             // assigned by the hit in BeginGlyph.
             renderData = this.currentCacheEntries![this.cacheReadIndex++];
             PointF estimatedPathLocation = new(
                 this.currentTransformedBoundsLocation.X + renderData.BoundsOffset.X,
                 this.currentTransformedBoundsLocation.Y + renderData.BoundsOffset.Y);
+
             renderLocation = ClampToPixel(estimatedPathLocation);
             subPixelOffset = (Vector2)(estimatedPathLocation - renderLocation);
 
@@ -640,11 +642,12 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
     {
         // Estimate the outline bounds location using the stored offset between
         // the outline bounds and the font metric bounds from the original glyph.
-        // The cached path is anchored at its exact outline origin, so the snapped
-        // estimate plus its fractional remainder positions it exactly.
+        // The cached path is anchored at its exact outline origin, so the integer
+        // component plus its fractional remainder positions it exactly.
         PointF estimatedPathLocation = new(
             currentBoundsLocation.X + renderData.BoundsOffset.X,
             currentBoundsLocation.Y + renderData.BoundsOffset.Y);
+
         Point renderLocation = ClampToPixel(estimatedPathLocation);
         Vector2 subPixelOffset = (Vector2)(estimatedPathLocation - renderLocation);
 
@@ -707,10 +710,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
     /// current key. Creates the cache list on first insertion for a given key.
     /// </summary>
     /// <param name="renderData">The render data to append to the current key's entry list.</param>
-    private void UpdateCache(GlyphRenderData renderData)
-    {
-        this.glyphCache.GetOrAdd(this.currentCacheKey).Add(renderData);
-    }
+    private void UpdateCache(GlyphRenderData renderData) => this.glyphCache.GetOrAdd(this.currentCacheKey).Add(renderData);
 
     /// <summary>
     /// Truncates a floating-point position to the nearest whole pixel toward negative infinity.
@@ -738,7 +738,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
 
     /// <summary>
     /// Per-layer cached data for a rasterized glyph. Stores the path anchored at its exact
-    /// outline origin; cache hits position it via their own snapped location and fractional
+    /// outline origin; cache hits position it via their own integer location and fractional
     /// remainder, so no per-hit compensation state is required.
     /// </summary>
     internal struct GlyphRenderData

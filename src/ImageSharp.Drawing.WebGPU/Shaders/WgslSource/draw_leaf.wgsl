@@ -9,7 +9,7 @@
 //
 // Inputs: config uniform; scene stream; reduced (per-workgroup DrawMonoid
 // aggregates from draw_reduce); path_bbox (per-path bounds, draw flags,
-// coverage threshold and raster interest from the path bbox stages).
+// coverage data and raster interest from the path bbox stages).
 // Outputs: draw_monoid (exclusive prefix per draw object); info (per-draw
 // brush info words consumed by coarse and fine); clip_inp (ClipInp records
 // consumed by clip_reduce and clip_leaf).
@@ -17,7 +17,7 @@
 // Ported from Vello's draw_leaf.wgsl (linebender/vello,
 // vello_shaders/shader). Local divergences: extra draw tags (recolor,
 // elliptic and path gradients), 9-word transforms carrying a perspective
-// row, coverage-threshold plus raster-interest words appended to
+// row, coverage-data plus raster-interest words appended to
 // visible-fill info entries, and a clip operation (intersection or
 // difference) carried in each ClipInp record.
 
@@ -345,12 +345,12 @@ fn main(
 
             // Visible fills and begin clips carry raster interest in the info stream so coarse can
             // read it without another storage-buffer binding. Bits 6..9 of the tag give the info
-            // word count (matching map_draw_tag); the threshold plus interest block occupies the
+            // word count (matching map_draw_tag); the coverage data plus interest block occupies the
             // final five words of the entry.
             let tag_info_size = (tag_word >> 6u) & 0xfu;
             if tag_info_size >= 5u {
                 let interest_offset = di + tag_info_size - 5u;
-                info[interest_offset] = bitcast<u32>(bbox.coverage_threshold);
+                info[interest_offset] = bitcast<u32>(bbox.coverage_data);
                 info[interest_offset + 1u] = bitcast<u32>(bbox.interest.x);
                 info[interest_offset + 2u] = bitcast<u32>(bbox.interest.y);
                 info[interest_offset + 3u] = bitcast<u32>(bbox.interest.z);

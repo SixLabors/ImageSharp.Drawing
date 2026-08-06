@@ -7,7 +7,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
 /// GPU stage that finishes the pathtag scan, writing an exclusive prefix TagMonoid per 4-byte
-/// tag word for flatten to locate path data in the scene stream. Two generated variants share
+/// tag word for path lowering to locate path data in the scene stream. Two generated variants share
 /// this wrapper: the small variant scans the pathtag-reduce partials directly, while the large
 /// variant reads per-workgroup prefixes precomputed by pathtag-scan1. Wraps
 /// <c>pathtag_scan.wgsl</c>.

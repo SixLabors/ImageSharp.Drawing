@@ -1,14 +1,14 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-// Counts, per tile, how many line segments from the flattened line soup
+// Counts, per tile, how many segments from the final line stream
 // cross it. One thread per line: walks the line's tile boundary crossings,
 // atomically increments the crossed tile's segment count, accumulates
 // top-edge winding deltas into tile backdrops, and emits one SegmentCount
 // record per crossing so path_tiling can later write the clipped segments.
 //
 // Inputs: config uniform, bump (lines counter, seg_counts allocator),
-// lines (LineSoup from flatten), paths (Path records from path_row_alloc),
+// lines (LineSoup from path lowering), paths (Path records from path_row_alloc),
 // rows (PathRow spans finalized by tile_alloc).
 // Outputs: tile (backdrop and segment_count_or_ix, atomically updated),
 // seg_counts (one record per line/tile crossing), bump.seg_counts.
@@ -92,8 +92,8 @@ fn main(
 
     let dx = abs(s1.x - s0.x);
     let dy = s1.y - s0.y;
-    // Zero-length segment, drop it. This could be culled in the flattening
-    // stage, but letting one slip through here would be much worse.
+    // Path lowering rejects zero length before grid snapping. Snapping can still collapse a short
+    // line, so reject it again before the divisions below.
     if dx + dy == 0.0 {
         return;
     }

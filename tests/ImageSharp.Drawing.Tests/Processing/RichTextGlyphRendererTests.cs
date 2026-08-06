@@ -51,6 +51,24 @@ public class RichTextGlyphRendererTests
         Assert.Equal(2, underlinedCount - plainCount);
     }
 
+    [Fact]
+    public void FullHinting_CacheHitMatchesFreshRasterizationAtFractionalOrigin()
+    {
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 24);
+        DrawingTextCache sharedCache = new();
+
+        _ = RenderSingleGlyph(font, new PointF(10.3F, 10.7F), sharedCache);
+        Assert.Equal(1, sharedCache.Count);
+
+        DrawingOperation cached = RenderSingleGlyph(font, new PointF(13.8F, 14.1F), sharedCache);
+        DrawingOperation fresh = RenderSingleGlyph(font, new PointF(13.8F, 14.1F), new DrawingTextCache());
+
+        // Fonts resolves the final hinted origin before BeginGlyph, so the ordinary bounds
+        // offset path must reproduce both components of the fresh operation's device position.
+        Assert.Equal(fresh.RenderLocation, cached.RenderLocation);
+        Assert.Equal(fresh.SubPixelOffset, cached.SubPixelOffset);
+    }
+
     private static int CountOperations(Font font, string text, List<RichTextRun>? runs)
     {
         RichTextOptions options = new(font);
@@ -72,5 +90,28 @@ public class RichTextGlyphRendererTests
 
         // Dispose clears the caller-owned operation list, so count before leaving scope.
         return operations.Count;
+    }
+
+    private static DrawingOperation RenderSingleGlyph(Font font, PointF origin, DrawingTextCache cache)
+    {
+        RichTextOptions options = new(font)
+        {
+            HintingMode = HintingMode.Full,
+            Origin = origin,
+        };
+
+        List<DrawingOperation> operations = [];
+        using RichTextGlyphRenderer renderer = new(
+            new DrawingOptions(),
+            path: null,
+            pen: null,
+            brush: Brushes.Solid(Color.Black),
+            cache,
+            operations);
+
+        TextRenderer.RenderTo(renderer, "H", options);
+
+        // Return the value copy before disposing the renderer, which clears the caller-owned list.
+        return Assert.Single(operations);
     }
 }

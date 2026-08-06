@@ -47,10 +47,9 @@ struct CmdFill {
     size_and_rule: u32, // bit 0 = even-odd, bit 1 = aliased coverage, bits 2.. = segment count
     seg_data: u32, // index of the tile's first Segment in segment storage
     backdrop: i32, // winding number at the tile's left edge
-    // Per-fill coverage parameter, mode-dependent because the two uses are mutually
-    // exclusive: the quantization threshold when the aliased bit in size_and_rule is set,
-    // otherwise the perceptual coverage boost for antialiased text (zero when disabled).
-    coverage_threshold: f32,
+    // Mode-dependent payload. Aliased fills pack the path-tile index and horizontal-neighbor
+    // flags. Antialiased fills store the bit pattern of their coverage boost, or zero.
+    coverage_data: u32,
     interest: vec4<f32>, // pixel rect (x0, y0, x1, y1); coverage outside it is zeroed
 }
 

@@ -90,7 +90,7 @@ public partial class DrawingCanvasTests
 
         DrawingOptions options = new()
         {
-            GraphicsOptions = new GraphicsOptions { Antialias = false, AntialiasThreshold = 0.01F }
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
         };
 
         SolidPen pen = new(new PenOptions(Color.White, penWidth, null)

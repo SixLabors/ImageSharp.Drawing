@@ -17,6 +17,7 @@ internal static partial class DefaultRasterizer
         where TL : class
     {
         private bool hasAnyCoverage;
+        private int segmentOrdinal;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Linearizer{TL}"/> class.
@@ -32,6 +33,10 @@ internal static partial class DefaultRasterizer
         /// <param name="firstBandIndex">The first retained row-band index touched by the geometry.</param>
         /// <param name="rowBandCount">The number of retained row bands owned by the geometry.</param>
         /// <param name="allocator">The allocator used for retained start-cover storage.</param>
+        /// <param name="keepHorizontalLines">
+        /// Whether to retain horizontal edges. They do not change row winding, but the aliased
+        /// column pass needs them to detect horizontal features between two row centres.
+        /// </param>
         protected Linearizer(
             LinearGeometry geometry,
             Matrix4x4 residual,
@@ -43,8 +48,10 @@ internal static partial class DefaultRasterizer
             int height,
             int firstBandIndex,
             int rowBandCount,
-            MemoryAllocator allocator)
+            MemoryAllocator allocator,
+            bool keepHorizontalLines)
         {
+            this.KeepHorizontalLines = keepHorizontalLines;
             this.Geometry = geometry;
             this.Residual = residual;
             this.HasResidual = !residual.IsIdentity;
@@ -63,6 +70,11 @@ internal static partial class DefaultRasterizer
             this.StartCoverTable = new IMemoryOwner<int>?[rowBandCount];
             this.LineArrays = new TL?[rowBandCount];
         }
+
+        /// <summary>
+        /// Gets a value indicating whether horizontal edges are retained for the aliased column pass.
+        /// </summary>
+        protected bool KeepHorizontalLines { get; }
 
         /// <summary>
         /// Gets the source geometry being lowered.
@@ -155,6 +167,38 @@ internal static partial class DefaultRasterizer
         protected ref bool HasAnyCoverage => ref this.hasAnyCoverage;
 
         /// <summary>
+        /// Gets the geometry-space profile data, or an empty view outside aliased rendering.
+        /// </summary>
+        public LinearGeometryProfiles Profiles { get; private set; }
+
+        /// <summary>
+        /// Gets the absolute X translation applied to geometry-space profile extents.
+        /// </summary>
+        public float ProfileTranslateX { get; private set; }
+
+        /// <summary>
+        /// Gets the absolute Y translation applied to geometry-space profile extents.
+        /// </summary>
+        public float ProfileTranslateY { get; private set; }
+
+        /// <summary>
+        /// Prepares the profile tags used by aliased fill line emission.
+        /// </summary>
+        /// <param name="profileStorage">The partition-owned profile arena.</param>
+        protected void PrepareProfiles(LinearGeometryProfileStorage profileStorage)
+        {
+            // Each profile stores a range on one original geometry axis. Translation preserves
+            // that range. Scale, rotation, and shear do not, so those draws use sentinel tags and
+            // skip the terminating-tip test.
+            if (this.KeepHorizontalLines && IsAxisPreservingTranslation(this.Residual))
+            {
+                this.Profiles = profileStorage.GetOrAdd(this.Geometry);
+                this.ProfileTranslateX = this.Residual.Translation.X + this.TranslateX;
+                this.ProfileTranslateY = this.Residual.Translation.Y + this.TranslateY;
+            }
+        }
+
+        /// <summary>
         /// Executes the linearization pass and finalizes the retained row payloads.
         /// </summary>
         /// <returns><see langword="true"/> when any retained coverage was produced; otherwise <see langword="false"/>.</returns>
@@ -215,7 +259,8 @@ internal static partial class DefaultRasterizer
                     FloatToFixed24Dot8((p0.X + this.TranslateX) - this.MinX),
                     FloatToFixed24Dot8((p0.Y + this.TranslateY) - this.MinY),
                     FloatToFixed24Dot8((p1.X + this.TranslateX) - this.MinX),
-                    FloatToFixed24Dot8((p1.Y + this.TranslateY) - this.MinY));
+                    FloatToFixed24Dot8((p1.Y + this.TranslateY) - this.MinY),
+                    this.NextSegmentTag());
             }
         }
 
@@ -242,9 +287,28 @@ internal static partial class DefaultRasterizer
                     (p0.X + this.TranslateX) - this.MinX,
                     (p0.Y + this.TranslateY) - this.MinY,
                     (p1.X + this.TranslateX) - this.MinX,
-                    (p1.Y + this.TranslateY) - this.MinY);
+                    (p1.Y + this.TranslateY) - this.MinY,
+                    this.NextSegmentTag());
             }
         }
+
+        /// <summary>
+        /// Gets the X and Y profile identifiers for the next derived segment.
+        /// </summary>
+        /// <returns>The packed identifiers, or the all-sentinel tag when this draw has no profile data.</returns>
+        private uint NextSegmentTag()
+            => this.Profiles.IsEmpty ? LinearGeometryProfiles.SentinelTag : this.Profiles.GetSegmentTag(this.segmentOrdinal++);
+
+        /// <summary>
+        /// Tests whether device coordinates differ from geometry coordinates only by translation.
+        /// </summary>
+        /// <param name="residual">The residual transform to classify.</param>
+        /// <returns><see langword="true"/> when the residual is a pure translation.</returns>
+        private static bool IsAxisPreservingTranslation(in Matrix4x4 residual)
+            => residual.M11 == 1F && residual.M22 == 1F && residual.M33 == 1F
+            && residual.M12 == 0F && residual.M21 == 0F
+            && residual.M13 == 0F && residual.M31 == 0F
+            && residual.M23 == 0F && residual.M32 == 0F;
 
         /// <summary>
         /// Clips one geometry line against the destination interest and adds the retained result.
@@ -258,11 +322,29 @@ internal static partial class DefaultRasterizer
         /// <param name="y0">The starting Y coordinate in translated float space.</param>
         /// <param name="x1">The ending X coordinate in translated float space.</param>
         /// <param name="y1">The ending Y coordinate in translated float space.</param>
-        protected void AddUncontainedLine(float x0, float y0, float x1, float y1)
+        /// <param name="tag">The segment profile tag, retained with every clipped piece.</param>
+        protected void AddUncontainedLine(float x0, float y0, float x1, float y1, uint tag)
         {
-            // Horizontal segments never change scanline winding.
+            // A horizontal edge does not change winding along a row. Continuous coverage can
+            // discard it. Aliased rendering retains its visible part because the column pass needs
+            // both horizontal boundaries of a feature that lies between two row centres.
             if (y0 == y1)
             {
+                if (this.KeepHorizontalLines && y0 >= 0F && y0 < this.Height)
+                {
+                    float hx0 = Math.Clamp(x0, 0F, this.Width);
+                    float hx1 = Math.Clamp(x1, 0F, this.Width);
+                    if (hx0 != hx1)
+                    {
+                        this.AddContainedLineF24Dot8(
+                            Math.Clamp(FloatToFixed24Dot8(hx0), 0, this.Width * FixedOne),
+                            Math.Clamp(FloatToFixed24Dot8(y0), 0, this.Height * FixedOne),
+                            Math.Clamp(FloatToFixed24Dot8(hx1), 0, this.Width * FixedOne),
+                            Math.Clamp(FloatToFixed24Dot8(y1), 0, this.Height * FixedOne),
+                            tag);
+                    }
+                }
+
                 return;
             }
 
@@ -298,7 +380,7 @@ internal static partial class DefaultRasterizer
                 }
                 else
                 {
-                    this.AddContainedLineF24Dot8(x0c, p0y, x0c, p1y);
+                    this.AddContainedLineF24Dot8(x0c, p0y, x0c, p1y, tag);
                 }
 
                 return;
@@ -359,7 +441,8 @@ internal static partial class DefaultRasterizer
                     Math.Clamp(FloatToFixed24Dot8((float)rx0), 0, this.Width * FixedOne),
                     Math.Clamp(FloatToFixed24Dot8((float)ry0), 0, this.Height * FixedOne),
                     Math.Clamp(FloatToFixed24Dot8((float)rx1), 0, this.Width * FixedOne),
-                    Math.Clamp(FloatToFixed24Dot8((float)ry1), 0, this.Height * FixedOne));
+                    Math.Clamp(FloatToFixed24Dot8((float)ry1), 0, this.Height * FixedOne),
+                    tag);
                 return;
             }
 
@@ -402,7 +485,7 @@ internal static partial class DefaultRasterizer
                     this.hasAnyCoverage = true;
 
                     // The visible portion begins exactly at x == 0 after the left-edge clip.
-                    this.AddContainedLineF24Dot8(0, by, cx, cy);
+                    this.AddContainedLineF24Dot8(0, by, cx, cy, tag);
                 }
                 else
                 {
@@ -410,7 +493,8 @@ internal static partial class DefaultRasterizer
                         Math.Clamp(FloatToFixed24Dot8((float)rx0), 0, this.Width * FixedOne),
                         Math.Clamp(FloatToFixed24Dot8((float)ry0), 0, this.Height * FixedOne),
                         Math.Clamp(FloatToFixed24Dot8((float)bx1), 0, this.Width * FixedOne),
-                        Math.Clamp(FloatToFixed24Dot8((float)by1), 0, this.Height * FixedOne));
+                        Math.Clamp(FloatToFixed24Dot8((float)by1), 0, this.Height * FixedOne),
+                        tag);
                 }
             }
             else
@@ -435,7 +519,7 @@ internal static partial class DefaultRasterizer
 
                     // The right-to-left case mirrors the left-edge handling above: emit the
                     // visible portion first, then retain the winding-only tail as start covers.
-                    this.AddContainedLineF24Dot8(ax, ay, 0, by);
+                    this.AddContainedLineF24Dot8(ax, ay, 0, by, tag);
                     this.UpdateStartCoversClipped(by, c);
                     this.hasAnyCoverage = true;
                 }
@@ -445,7 +529,8 @@ internal static partial class DefaultRasterizer
                         Math.Clamp(FloatToFixed24Dot8((float)bx0), 0, this.Width * FixedOne),
                         Math.Clamp(FloatToFixed24Dot8((float)by0), 0, this.Height * FixedOne),
                         Math.Clamp(FloatToFixed24Dot8((float)rx1), 0, this.Width * FixedOne),
-                        Math.Clamp(FloatToFixed24Dot8((float)ry1), 0, this.Height * FixedOne));
+                        Math.Clamp(FloatToFixed24Dot8((float)ry1), 0, this.Height * FixedOne),
+                        tag);
                 }
             }
         }
@@ -457,11 +542,38 @@ internal static partial class DefaultRasterizer
         /// <param name="y0">The starting Y coordinate.</param>
         /// <param name="x1">The ending X coordinate.</param>
         /// <param name="y1">The ending Y coordinate.</param>
-        protected void AddContainedLineF24Dot8(int x0, int y0, int x1, int y1)
+        /// <param name="tag">The segment profile tag, retained with every band piece.</param>
+        protected void AddContainedLineF24Dot8(int x0, int y0, int x1, int y1, uint tag)
         {
-            // Horizontal segments never change scanline winding.
+            // A retained horizontal edge belongs to the band containing its Y coordinate. At an
+            // exact band boundary it is copied to both adjacent bands. Only the band containing
+            // the matching edge can form a closed column interval; the other band ignores its
+            // unmatched crossing.
             if (y0 == y1)
             {
+                if (!this.KeepHorizontalLines || x0 == x1)
+                {
+                    return;
+                }
+
+                int bandTop = this.BandTopStart * FixedOne;
+                int bandExtent = PreferredRowHeight * FixedOne;
+                int band = (y0 - bandTop) / bandExtent;
+                if ((uint)band < (uint)this.RowBandCount)
+                {
+                    int rowTop = bandTop + (band * bandExtent);
+                    this.AppendLine(band, x0, y0 - rowTop, x1, y1 - rowTop, tag);
+                    this.LineCounts[band]++;
+                    this.hasAnyCoverage = true;
+                }
+
+                if ((y0 - bandTop) % bandExtent == 0 && (uint)(band - 1) < (uint)this.RowBandCount)
+                {
+                    int rowTop = bandTop + ((band - 1) * bandExtent);
+                    this.AppendLine(band - 1, x0, y0 - rowTop, x1, y1 - rowTop, tag);
+                    this.LineCounts[band - 1]++;
+                }
+
                 return;
             }
 
@@ -469,7 +581,7 @@ internal static partial class DefaultRasterizer
             {
                 // Winding direction is carried by the y endpoint order itself, so both the
                 // downward and upward cases hand the endpoints to the band splitter as-is.
-                this.SplitAcrossBands(x0, y0, x0, y1);
+                this.SplitAcrossBands(x0, y0, x0, y1, tag);
                 return;
             }
 
@@ -484,8 +596,8 @@ internal static partial class DefaultRasterizer
                 // shrinks and the recursion overflows the stack (issue #403).
                 int mx = (int)(((long)x0 + x1) >> 1);
                 int my = (int)(((long)y0 + y1) >> 1);
-                this.AddContainedLineF24Dot8(x0, y0, mx, my);
-                this.AddContainedLineF24Dot8(mx, my, x1, y1);
+                this.AddContainedLineF24Dot8(x0, y0, mx, my, tag);
+                this.AddContainedLineF24Dot8(mx, my, x1, y1, tag);
                 return;
             }
 
@@ -516,13 +628,13 @@ internal static partial class DefaultRasterizer
             if (rowIndex0 == rowIndex1)
             {
                 int rowTop = bandTopStart + (rowIndex0 * bandHeight);
-                this.AppendLine(rowIndex0, x0, y0 - rowTop, x1, y1 - rowTop);
+                this.AppendLine(rowIndex0, x0, y0 - rowTop, x1, y1 - rowTop, tag);
                 this.LineCounts[rowIndex0]++;
                 this.hasAnyCoverage = true;
                 return;
             }
 
-            this.SplitAcrossBands(x0, y0, x1, y1);
+            this.SplitAcrossBands(x0, y0, x1, y1, tag);
         }
 
         /// <summary>
@@ -539,7 +651,8 @@ internal static partial class DefaultRasterizer
         /// <param name="y0">The starting Y coordinate relative to the row band.</param>
         /// <param name="x1">The ending X coordinate relative to the row band.</param>
         /// <param name="y1">The ending Y coordinate relative to the row band.</param>
-        protected abstract void AppendLine(int rowIndex, int x0, int y0, int x1, int y1);
+        /// <param name="tag">The segment profile tag.</param>
+        protected abstract void AppendLine(int rowIndex, int x0, int y0, int x1, int y1, uint tag);
 
         /// <summary>
         /// Finalizes the mutable collectors into the retained line-block representation.
@@ -571,7 +684,8 @@ internal static partial class DefaultRasterizer
         /// <param name="y0">The starting Y coordinate.</param>
         /// <param name="x1">The ending X coordinate.</param>
         /// <param name="y1">The ending Y coordinate.</param>
-        private void SplitAcrossBands(int x0, int y0, int x1, int y1)
+        /// <param name="tag">The segment profile tag, retained with every band piece.</param>
+        private void SplitAcrossBands(int x0, int y0, int x1, int y1, uint tag)
         {
             int dy = y1 - y0;
             int dx = x1 - x0;
@@ -594,7 +708,7 @@ internal static partial class DefaultRasterizer
                 int rowTop = bandTopStart + (currentBand * bandHeight);
 
                 // Each retained segment is stored in the local coordinate space of its owning band.
-                this.AppendLine(currentBand, currentX, currentY - rowTop, nextX, bandBoundaryY - rowTop);
+                this.AppendLine(currentBand, currentX, currentY - rowTop, nextX, bandBoundaryY - rowTop, tag);
                 this.LineCounts[currentBand]++;
                 this.hasAnyCoverage = true;
                 currentX = nextX;
@@ -609,7 +723,7 @@ internal static partial class DefaultRasterizer
             }
 
             int finalRowTop = bandTopStart + (endBand * bandHeight);
-            this.AppendLine(endBand, currentX, currentY - finalRowTop, x1, y1 - finalRowTop);
+            this.AppendLine(endBand, currentX, currentY - finalRowTop, x1, y1 - finalRowTop, tag);
             this.LineCounts[endBand]++;
             this.hasAnyCoverage = true;
         }
@@ -787,6 +901,8 @@ internal static partial class DefaultRasterizer
     /// </summary>
     private sealed class LinearizerX32Y16 : Linearizer<LineArrayX32Y16>
     {
+        private readonly LinearGeometryProfileStorage profileStorage;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="LinearizerX32Y16"/> class.
         /// </summary>
@@ -801,6 +917,8 @@ internal static partial class DefaultRasterizer
         /// <param name="firstBandIndex">The first retained row-band index touched by the geometry.</param>
         /// <param name="rowBandCount">The number of retained row bands owned by the geometry.</param>
         /// <param name="allocator">The allocator used for retained start-cover storage.</param>
+        /// <param name="profileStorage">The partition-owned profile arena.</param>
+        /// <param name="keepHorizontalLines">Whether to retain horizontal edges for aliased thin-feature recovery between row centres.</param>
         public LinearizerX32Y16(
             LinearGeometry geometry,
             Matrix4x4 residual,
@@ -812,9 +930,14 @@ internal static partial class DefaultRasterizer
             int height,
             int firstBandIndex,
             int rowBandCount,
-            MemoryAllocator allocator)
-            : base(geometry, residual, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, allocator)
-            => this.FinalLines = new LineArrayX32Y16Block?[rowBandCount];
+            MemoryAllocator allocator,
+            LinearGeometryProfileStorage profileStorage,
+            bool keepHorizontalLines)
+            : base(geometry, residual, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, allocator, keepHorizontalLines)
+        {
+            this.profileStorage = profileStorage;
+            this.FinalLines = new LineArrayX32Y16Block?[rowBandCount];
+        }
 
         /// <summary>
         /// Gets the finalized retained line blocks for each row band.
@@ -822,11 +945,11 @@ internal static partial class DefaultRasterizer
         public LineArrayX32Y16Block?[] FinalLines { get; }
 
         /// <inheritdoc />
-        protected override LineArrayX32Y16 CreateLineArray() => new();
+        protected override LineArrayX32Y16 CreateLineArray() => new(this.KeepHorizontalLines);
 
         /// <inheritdoc />
-        protected override void AppendLine(int rowIndex, int x0, int y0, int x1, int y1)
-            => this.GetOrCreateLineArray(rowIndex).AppendLine(x0, y0, x1, y1);
+        protected override void AppendLine(int rowIndex, int x0, int y0, int x1, int y1, uint tag)
+            => this.GetOrCreateLineArray(rowIndex).AppendLine(x0, y0, x1, y1, tag);
 
         /// <inheritdoc />
         protected override void FinalizeLines()
@@ -846,6 +969,8 @@ internal static partial class DefaultRasterizer
         /// <returns><see langword="true"/> when retained coverage was produced; otherwise <see langword="false"/>.</returns>
         public bool TryProcess(out LinearizedRasterData<LineArrayX32Y16Block> result)
         {
+            this.PrepareProfiles(this.profileStorage);
+
             if (!this.ProcessCore())
             {
                 result = null!;
@@ -857,7 +982,10 @@ internal static partial class DefaultRasterizer
                 new TileBounds(this.MinX, this.FirstBandIndex, this.Width, this.RowBandCount),
                 this.FinalLines,
                 this.FirstBlockLineCounts,
-                this.StartCoverTable);
+                this.StartCoverTable,
+                this.Profiles,
+                this.ProfileTranslateX,
+                this.ProfileTranslateY);
 
             return true;
         }
@@ -868,6 +996,8 @@ internal static partial class DefaultRasterizer
     /// </summary>
     private sealed class LinearizerX16Y16 : Linearizer<LineArrayX16Y16>
     {
+        private readonly LinearGeometryProfileStorage profileStorage;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="LinearizerX16Y16"/> class.
         /// </summary>
@@ -882,6 +1012,8 @@ internal static partial class DefaultRasterizer
         /// <param name="firstBandIndex">The first retained row-band index touched by the geometry.</param>
         /// <param name="rowBandCount">The number of retained row bands owned by the geometry.</param>
         /// <param name="allocator">The allocator used for retained start-cover storage.</param>
+        /// <param name="profileStorage">The partition-owned profile arena.</param>
+        /// <param name="keepHorizontalLines">Whether to retain horizontal edges for aliased thin-feature recovery between row centres.</param>
         public LinearizerX16Y16(
             LinearGeometry geometry,
             Matrix4x4 residual,
@@ -893,9 +1025,14 @@ internal static partial class DefaultRasterizer
             int height,
             int firstBandIndex,
             int rowBandCount,
-            MemoryAllocator allocator)
-            : base(geometry, residual, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, allocator)
-            => this.FinalLines = new LineArrayX16Y16Block?[rowBandCount];
+            MemoryAllocator allocator,
+            LinearGeometryProfileStorage profileStorage,
+            bool keepHorizontalLines)
+            : base(geometry, residual, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, allocator, keepHorizontalLines)
+        {
+            this.profileStorage = profileStorage;
+            this.FinalLines = new LineArrayX16Y16Block?[rowBandCount];
+        }
 
         /// <summary>
         /// Gets the finalized retained line blocks for each row band.
@@ -903,11 +1040,11 @@ internal static partial class DefaultRasterizer
         public LineArrayX16Y16Block?[] FinalLines { get; }
 
         /// <inheritdoc />
-        protected override LineArrayX16Y16 CreateLineArray() => new();
+        protected override LineArrayX16Y16 CreateLineArray() => new(this.KeepHorizontalLines);
 
         /// <inheritdoc />
-        protected override void AppendLine(int rowIndex, int x0, int y0, int x1, int y1)
-            => this.GetOrCreateLineArray(rowIndex).AppendLine(x0, y0, x1, y1);
+        protected override void AppendLine(int rowIndex, int x0, int y0, int x1, int y1, uint tag)
+            => this.GetOrCreateLineArray(rowIndex).AppendLine(x0, y0, x1, y1, tag);
 
         /// <inheritdoc />
         protected override void FinalizeLines()
@@ -927,6 +1064,8 @@ internal static partial class DefaultRasterizer
         /// <returns><see langword="true"/> when retained coverage was produced; otherwise <see langword="false"/>.</returns>
         public bool TryProcess(out LinearizedRasterData<LineArrayX16Y16Block> result)
         {
+            this.PrepareProfiles(this.profileStorage);
+
             if (!this.ProcessCore())
             {
                 result = null!;
@@ -938,7 +1077,10 @@ internal static partial class DefaultRasterizer
                 new TileBounds(this.MinX, this.FirstBandIndex, this.Width, this.RowBandCount),
                 this.FinalLines,
                 this.FirstBlockLineCounts,
-                this.StartCoverTable);
+                this.StartCoverTable,
+                this.Profiles,
+                this.ProfileTranslateX,
+                this.ProfileTranslateY);
 
             return true;
         }

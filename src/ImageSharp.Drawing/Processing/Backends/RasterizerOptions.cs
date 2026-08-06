@@ -30,19 +30,16 @@ public readonly struct RasterizerOptions
     /// <param name="interest">Destination bounds to rasterize into.</param>
     /// <param name="intersectionRule">Polygon intersection rule.</param>
     /// <param name="rasterizationMode">Rasterization coverage mode.</param>
-    /// <param name="antialiasThreshold">Coverage threshold for aliased mode (0 to 1).</param>
     /// <param name="coverageBoost">Perceptual coverage boost for antialiased mode (0 disables).</param>
     public RasterizerOptions(
         Rectangle interest,
         IntersectionRule intersectionRule,
         RasterizationMode rasterizationMode,
-        float antialiasThreshold,
         float coverageBoost = 0F)
     {
         this.Interest = interest;
         this.IntersectionRule = intersectionRule;
         this.RasterizationMode = rasterizationMode;
-        this.AntialiasThreshold = antialiasThreshold;
         this.CoverageBoost = coverageBoost;
     }
 
@@ -62,12 +59,6 @@ public readonly struct RasterizerOptions
     public RasterizationMode RasterizationMode { get; }
 
     /// <summary>
-    /// Gets the coverage threshold used when <see cref="RasterizationMode"/> is <see cref="RasterizationMode.Aliased"/>.
-    /// Pixels whose coverage is greater than or equal to this value are rendered as fully opaque; pixels below it are discarded.
-    /// </summary>
-    public float AntialiasThreshold { get; }
-
-    /// <summary>
     /// Gets the perceptual coverage boost used when <see cref="RasterizationMode"/> is
     /// <see cref="RasterizationMode.Antialiased"/>. Partial coverage values are remapped by
     /// the S-curve <c>a + boost * a * (1 - a) * (2a - 1)</c>, darkening mostly covered pixels
@@ -83,5 +74,5 @@ public readonly struct RasterizerOptions
     /// <param name="interest">The replacement interest rectangle.</param>
     /// <returns>A new <see cref="RasterizerOptions"/> value.</returns>
     public RasterizerOptions WithInterest(Rectangle interest)
-        => new(interest, this.IntersectionRule, this.RasterizationMode, this.AntialiasThreshold, this.CoverageBoost);
+        => new(interest, this.IntersectionRule, this.RasterizationMode, this.CoverageBoost);
 }
