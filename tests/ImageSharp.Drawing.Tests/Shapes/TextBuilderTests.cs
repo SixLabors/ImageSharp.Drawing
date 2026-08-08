@@ -177,20 +177,28 @@ public class TextBuilderTests
     [InlineData(CompositeMode.SrcAtop, PixelAlphaCompositionMode.SrcAtop)]
     [InlineData(CompositeMode.DestAtop, PixelAlphaCompositionMode.DestAtop)]
     [InlineData(CompositeMode.Xor, PixelAlphaCompositionMode.Xor)]
+    [InlineData(CompositeMode.Plus, PixelAlphaCompositionMode.Plus)]
     [InlineData(CompositeMode.Multiply, PixelAlphaCompositionMode.SrcOver)]
     public void TextUtilities_MapsAlphaCompositionModes(CompositeMode compositeMode, PixelAlphaCompositionMode alphaCompositionMode)
         => Assert.Equal(alphaCompositionMode, TextUtilities.MapCompositionMode(compositeMode));
 
     [Theory]
-    [InlineData(CompositeMode.Plus, PixelColorBlendingMode.Add)]
     [InlineData(CompositeMode.Screen, PixelColorBlendingMode.Screen)]
     [InlineData(CompositeMode.Overlay, PixelColorBlendingMode.Overlay)]
     [InlineData(CompositeMode.Darken, PixelColorBlendingMode.Darken)]
     [InlineData(CompositeMode.Lighten, PixelColorBlendingMode.Lighten)]
     [InlineData(CompositeMode.HardLight, PixelColorBlendingMode.HardLight)]
     [InlineData(CompositeMode.Multiply, PixelColorBlendingMode.Multiply)]
+    [InlineData(CompositeMode.ColorDodge, PixelColorBlendingMode.ColorDodge)]
+    [InlineData(CompositeMode.ColorBurn, PixelColorBlendingMode.ColorBurn)]
+    [InlineData(CompositeMode.SoftLight, PixelColorBlendingMode.SoftLight)]
+    [InlineData(CompositeMode.Difference, PixelColorBlendingMode.Difference)]
+    [InlineData(CompositeMode.Exclusion, PixelColorBlendingMode.Exclusion)]
+    [InlineData(CompositeMode.Hue, PixelColorBlendingMode.Hue)]
+    [InlineData(CompositeMode.Saturation, PixelColorBlendingMode.Saturation)]
+    [InlineData(CompositeMode.Color, PixelColorBlendingMode.Color)]
+    [InlineData(CompositeMode.Luminosity, PixelColorBlendingMode.Luminosity)]
     [InlineData(CompositeMode.SrcOver, PixelColorBlendingMode.Normal)]
-    [InlineData(CompositeMode.ColorDodge, PixelColorBlendingMode.Normal)]
     public void TextUtilities_MapsColorBlendingModes(CompositeMode compositeMode, PixelColorBlendingMode colorBlendingMode)
         => Assert.Equal(colorBlendingMode, TextUtilities.MapBlendingMode(compositeMode));
 

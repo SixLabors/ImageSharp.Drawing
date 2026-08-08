@@ -54,7 +54,7 @@ var<storage> info: array<u32>;
 
 // Scratch for clip/blend stack entries deeper than BLEND_STACK_SPLIT.
 @group(0) @binding(4)
-var<storage, read_write> blend_spill: array<vec2<u32>>;
+var<storage, read_write> blend_spill: array<vec4<u32>>;
 
 // Final render target; its declaration and encoding are specialized by the host.
 @group(0) @binding(5)
@@ -248,16 +248,6 @@ fn read_draw_blend_mode(draw_flags: u32) -> u32 {
     return (draw_flags & DRAW_FLAGS_BLEND_MODE_MASK) >> DRAW_FLAGS_BLEND_MODE_SHIFT;
 }
 
-// Extracts the mix (blending) mode from a draw-flags word.
-fn read_draw_mix_mode(draw_flags: u32) -> u32 {
-    return read_draw_blend_mode(draw_flags) >> 8u;
-}
-
-// Extracts the Porter-Duff compose mode from a draw-flags word.
-fn read_draw_compose_mode(draw_flags: u32) -> u32 {
-    return read_draw_blend_mode(draw_flags) & 0xffu;
-}
-
 // Extracts the layer alpha from a draw-flags word, stored as a 16-bit
 // normalized value.
 fn read_draw_blend_alpha(draw_flags: u32) -> f32 {
@@ -265,182 +255,29 @@ fn read_draw_blend_alpha(draw_flags: u32) -> f32 {
     return f32(packed) / 65535.0;
 }
 
-// True when the flags encode plain source-over at full layer alpha, which
-// allows compose_draw to take the fast path.
-fn is_default_draw_blend(draw_flags: u32) -> bool {
-    return read_draw_blend_mode(draw_flags) == ((MIX_NORMAL << 8u) | COMPOSE_SRC_OVER)
-        && (draw_flags & DRAW_FLAGS_BLEND_ALPHA_MASK) == DRAW_FLAGS_BLEND_ALPHA_MASK;
-}
-
-// Recolor's inner blend uses a distance-derived alpha rather than the layer alpha in
-// draw_flags. Keep that distinct from compose_draw so ordinary draws retain their exact path.
+// Recolor's inner blend uses a distance-derived alpha rather than the layer
+// alpha in draw_flags. That alpha plays the same role as the CPU blender's
+// amount operand, so it routes through the shared CPU-ported compositor.
 fn compose_recolor_inner(backdrop: vec4<f32>, source: vec4<f32>, blend_alpha: f32, draw_flags: u32) -> vec4<f32> {
-    let effective_alpha = source.a * blend_alpha;
-
-    if read_draw_blend_mode(draw_flags) == ((MIX_NORMAL << 8u) | COMPOSE_SRC_OVER) {
-        return backdrop * (1.0 - effective_alpha) + (source * blend_alpha);
-    }
-
-    let cb = unpremultiply(backdrop);
-    let cs = unpremultiply(source);
-    let ab = backdrop.a;
-    let as_ = effective_alpha;
-    let mix_mode = read_draw_mix_mode(draw_flags);
-    let compose_mode = read_draw_compose_mode(draw_flags);
-    let shared_alpha = as_ * ab;
-
-    switch compose_mode {
-        case COMPOSE_CLEAR: {
-            return vec4(0.0);
-        }
-        case COMPOSE_COPY: {
-            return vec4(cs * as_, as_);
-        }
-        case COMPOSE_DEST: {
-            return backdrop;
-        }
-        case COMPOSE_SRC_OVER: {
-            let blend = blend_mix(cb, cs, mix_mode);
-            let dst_weight = ab - shared_alpha;
-            let src_weight = as_ - shared_alpha;
-            let alpha = dst_weight + as_;
-            let premul = (cb * dst_weight) + (cs * src_weight) + (blend * shared_alpha);
-            return vec4(premul, alpha);
-        }
-        case COMPOSE_DEST_OVER: {
-            let blend = blend_mix(cs, cb, mix_mode);
-            let dst_weight = as_ - shared_alpha;
-            let src_weight = ab - shared_alpha;
-            let alpha = dst_weight + ab;
-            let premul = (cs * dst_weight) + (cb * src_weight) + (blend * shared_alpha);
-            return vec4(premul, alpha);
-        }
-        case COMPOSE_SRC_IN: {
-            return vec4(cs * shared_alpha, shared_alpha);
-        }
-        case COMPOSE_DEST_IN: {
-            return vec4(cb * shared_alpha, shared_alpha);
-        }
-        case COMPOSE_SRC_OUT: {
-            let alpha = as_ * (1.0 - ab);
-            return vec4(cs * alpha, alpha);
-        }
-        case COMPOSE_DEST_OUT: {
-            let alpha = ab * (1.0 - as_);
-            return vec4(cb * alpha, alpha);
-        }
-        case COMPOSE_SRC_ATOP: {
-            let blend = blend_mix(cb, cs, mix_mode);
-            let dst_weight = ab - shared_alpha;
-            let premul = (cb * dst_weight) + (blend * shared_alpha);
-            return vec4(premul, ab);
-        }
-        case COMPOSE_DEST_ATOP: {
-            let blend = blend_mix(cs, cb, mix_mode);
-            let dst_weight = as_ - shared_alpha;
-            let premul = (cs * dst_weight) + (blend * shared_alpha);
-            return vec4(premul, as_);
-        }
-        case COMPOSE_XOR: {
-            let src_weight = as_ * (1.0 - ab);
-            let dst_weight = ab * (1.0 - as_);
-            return vec4((cs * src_weight) + (cb * dst_weight), src_weight + dst_weight);
-        }
-        default: {
-            return blend_mix_compose(backdrop, source * blend_alpha, read_draw_blend_mode(draw_flags));
-        }
-    }
+    return compose_source(backdrop, source, blend_alpha, read_draw_blend_mode(draw_flags));
 }
 
-// Composites a premultiplied source over a premultiplied backdrop using the
-// mix/compose modes and layer alpha packed in draw_flags. Plain source-over at
-// full alpha takes a fast path. The common Porter-Duff compose operators are
-// expanded inline with the mix result weighted by the shared-alpha region;
-// anything else falls back to blend_mix_compose.
+// Composites an associated source over an associated backdrop using the
+// mix/compose modes and layer alpha packed in draw_flags. The arithmetic is
+// the AssociatedAlphaPorterDuffFunctions port in blend.wgsl, so every draw
+// blends with the same formulas and operand order as the CPU backend.
 fn compose_draw(backdrop: vec4<f32>, source: vec4<f32>, draw_flags: u32) -> vec4<f32> {
-    let effective_alpha = source.a * read_draw_blend_alpha(draw_flags);
-
-    if is_default_draw_blend(draw_flags) {
-        return backdrop * (1.0 - source.a) + source;
-    }
-
-    let cb = unpremultiply(backdrop);
-    let cs = unpremultiply(source);
-    let ab = backdrop.a;
-    let as_ = effective_alpha;
-    let mix_mode = read_draw_mix_mode(draw_flags);
-    let compose_mode = read_draw_compose_mode(draw_flags);
-    let shared_alpha = as_ * ab;
-
-    switch compose_mode {
-        case COMPOSE_CLEAR: {
-            return vec4(0.0);
-        }
-        case COMPOSE_COPY: {
-            return vec4(cs * as_, as_);
-        }
-        case COMPOSE_DEST: {
-            return backdrop;
-        }
-        case COMPOSE_SRC_OVER: {
-            let blend = blend_mix(cb, cs, mix_mode);
-            let dst_weight = ab - shared_alpha;
-            let src_weight = as_ - shared_alpha;
-            let alpha = dst_weight + as_;
-            let premul = (cb * dst_weight) + (cs * src_weight) + (blend * shared_alpha);
-            return vec4(premul, alpha);
-        }
-        case COMPOSE_DEST_OVER: {
-            let blend = blend_mix(cs, cb, mix_mode);
-            let dst_weight = as_ - shared_alpha;
-            let src_weight = ab - shared_alpha;
-            let alpha = dst_weight + ab;
-            let premul = (cs * dst_weight) + (cb * src_weight) + (blend * shared_alpha);
-            return vec4(premul, alpha);
-        }
-        case COMPOSE_SRC_IN: {
-            return vec4(cs * shared_alpha, shared_alpha);
-        }
-        case COMPOSE_DEST_IN: {
-            return vec4(cb * shared_alpha, shared_alpha);
-        }
-        case COMPOSE_SRC_OUT: {
-            let alpha = as_ * (1.0 - ab);
-            return vec4(cs * alpha, alpha);
-        }
-        case COMPOSE_DEST_OUT: {
-            let alpha = ab * (1.0 - as_);
-            return vec4(cb * alpha, alpha);
-        }
-        case COMPOSE_SRC_ATOP: {
-            let blend = blend_mix(cb, cs, mix_mode);
-            let dst_weight = ab - shared_alpha;
-            let premul = (cb * dst_weight) + (blend * shared_alpha);
-            return vec4(premul, ab);
-        }
-        case COMPOSE_DEST_ATOP: {
-            let blend = blend_mix(cs, cb, mix_mode);
-            let dst_weight = as_ - shared_alpha;
-            let premul = (cs * dst_weight) + (blend * shared_alpha);
-            return vec4(premul, as_);
-        }
-        case COMPOSE_XOR: {
-            let src_weight = as_ * (1.0 - ab);
-            let dst_weight = ab * (1.0 - as_);
-            return vec4((cs * src_weight) + (cb * dst_weight), src_weight + dst_weight);
-        }
-        default: {
-            return blend_mix_compose(backdrop, source * read_draw_blend_alpha(draw_flags), read_draw_blend_mode(draw_flags));
-        }
-    }
+    return compose_source(backdrop, source, read_draw_blend_alpha(draw_flags), read_draw_blend_mode(draw_flags));
 }
 
 // Applies compose_draw, then lerps between the backdrop and the composed
 // result by coverage so partial coverage attenuates the whole composite
-// (including destructive compose modes), not just the source alpha.
+// (including destructive compose modes), not just the source alpha. The CPU
+// coverage path (AssociatedAlphaPorterDuffFunctions.BlendWithCoverage) is a
+// fused multiply-add, so fma() is the closest expression of it.
 fn compose_draw_with_coverage(backdrop: vec4<f32>, source: vec4<f32>, coverage: f32, draw_flags: u32) -> vec4<f32> {
     let composed = compose_draw(backdrop, source, draw_flags);
-    return backdrop + ((composed - backdrop) * coverage);
+    return fma(composed - backdrop, vec4(coverage), backdrop);
 }
 
 const PIXEL_FORMAT_RGBA: u32 = 0u;
@@ -1327,7 +1164,7 @@ fn main(
     }
     // Clip saves remain in the fine shader's associated working representation. Two
     // binary16 pairs avoid the severe RGBA8 loss that a nested clip previously introduced.
-    var blend_stack: array<array<vec2<u32>, PIXELS_PER_THREAD>, BLEND_STACK_SPLIT>;
+    var blend_stack: array<array<vec4<u32>, PIXELS_PER_THREAD>, BLEND_STACK_SPLIT>;
     var clip_depth = 0u;
     var area: array<f32, PIXELS_PER_THREAD>;
     var cmd_ix = tile_ix * PTCL_INITIAL_ALLOC;
@@ -1433,7 +1270,7 @@ fn main(
                 let end_clip = read_end_clip(cmd_ix);
                 clip_depth -= 1u;
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                    var bg_rgba: vec2<u32>;
+                    var bg_rgba: vec4<u32>;
                     if clip_depth < BLEND_STACK_SPLIT {
                         bg_rgba = blend_stack[clip_depth][i];
                     } else {
@@ -1478,7 +1315,7 @@ fn main(
                         let composed = bg * luminance;
                         rgba[i] = bg + ((composed - bg) * clip_area);
                     } else {
-                        let composed = blend_mix_compose(bg, fg, clip_blend);
+                        let composed = compose_source(bg, fg, 1.0, clip_blend);
                         rgba[i] = bg + ((composed - bg) * clip_area);
                     }
                 }

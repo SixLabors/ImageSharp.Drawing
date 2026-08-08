@@ -81,9 +81,16 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
     /// <summary>
     /// Reusable sort buffer for <see cref="DrawTextOperations"/>, hosted by the text cache for
-    /// the same reason as <see cref="textOperations"/>.
+    /// the same reason as <see cref="textOperations"/>. Only pass and index pairs are sorted;
+    /// the operations themselves stay in place so the per-draw sort moves eight bytes per
+    /// entry instead of the full operation struct.
     /// </summary>
-    private readonly List<(byte RenderPass, int Sequence, CompositionSceneCommand Command)> textCommandSortBuffer;
+    private readonly List<(byte RenderPass, int Sequence)> textOperationSortBuffer;
+
+    /// <summary>
+    /// Reusable stack pairing the begin and end commands for nested text composite layers.
+    /// </summary>
+    private readonly List<DrawingCanvasLayer> textCompositeLayerStack;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class.
@@ -297,7 +304,8 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         this.batcher = batcher;
         this.textCache = textCache;
         this.textOperations = textCache.OperationScratch;
-        this.textCommandSortBuffer = textCache.CommandSortScratch;
+        this.textOperationSortBuffer = textCache.OperationSortScratch;
+        this.textCompositeLayerStack = textCache.CompositeLayerScratch;
         this.ownsBatcher = ownsBatcher;
         this.ownsTextCache = ownsTextCache;
         this.pendingImageResources = pendingImageResources;
@@ -1660,11 +1668,13 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                         operation.RenderLocation.X - fillOperation.RenderLocation.X,
                         operation.RenderLocation.Y - fillOperation.RenderLocation.Y)
                         + operation.SubPixelOffset - fillOperation.SubPixelOffset;
+
                     fillEntries[fillCount++] = new DrawingTextCache.RunPathCacheEntry(
-                        operation.Path,
+                        operation.Path!,
                         fillRelativeLocation,
                         operation.GlyphKey,
                         operation.HasGlyphKey);
+
                     break;
 
                 case DrawingOperationKind.Draw:
@@ -1684,12 +1694,19 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                         operation.RenderLocation.X - drawOperation.RenderLocation.X,
                         operation.RenderLocation.Y - drawOperation.RenderLocation.Y)
                         + operation.SubPixelOffset - drawOperation.SubPixelOffset;
+
                     drawEntries[drawCount++] = new DrawingTextCache.RunPathCacheEntry(
-                        operation.Path,
+                        operation.Path!,
                         drawRelativeLocation,
                         operation.GlyphKey,
                         operation.HasGlyphKey);
+
                     break;
+
+                default:
+                    // Group control operations cannot be merged into a run path because
+                    // their exact position in the painted-layer stream defines isolation.
+                    return operations;
             }
         }
 
@@ -1787,12 +1804,13 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// <param name="drawingOptions">Drawing options applied to each operation.</param>
     private void DrawTextOperations(List<DrawingOperation> operations, DrawingOptions drawingOptions)
     {
-        // Build composition commands and enforce render-pass ordering while preserving
-        // original emission order inside each pass. This preserves overlapping color-font
-        // layer compositing semantics (for example emoji mouth/teeth layers).
+        // Enforce render-pass ordering while preserving original emission order inside each
+        // pass. This preserves overlapping color-font layer compositing semantics (for
+        // example emoji mouth/teeth layers) and keeps the composite group markers paired
+        // with the fill operations they contain.
         // The cache-owned buffer keeps its capacity across draws; draw calls never overlap on
-        // one canvas, and the batcher retains the commands, not this buffer.
-        List<(byte RenderPass, int Sequence, CompositionSceneCommand Command)> entries = this.textCommandSortBuffer;
+        // one canvas.
+        List<(byte RenderPass, int Sequence)> entries = this.textOperationSortBuffer;
         entries.Clear();
 
         // Queued glyph commands never carry the canvas transform: glyph geometry arrives with
@@ -1805,8 +1823,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         for (int i = 0; i < operations.Count; i++)
         {
-            DrawingOperation operation = operations[i];
-            entries.Add((operation.RenderPass, i, this.CreateTextCompositionCommand(operation, drawingOptions, sharedTextOptions)));
+            entries.Add((operations[i].RenderPass, i));
         }
 
         entries.Sort(static (a, b) =>
@@ -1815,21 +1832,82 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             return cmp != 0 ? cmp : a.Sequence.CompareTo(b.Sequence);
         });
 
+        List<DrawingCanvasLayer> compositeLayers = this.textCompositeLayerStack;
+        compositeLayers.Clear();
+        DrawingCanvasState state = this.ResolveState();
+
         for (int i = 0; i < entries.Count; i++)
         {
-            if (entries[i].Command is PathCompositionSceneCommand pathCommand)
+            DrawingOperation operation = operations[entries[i].Sequence];
+            if (operation.Kind == DrawingOperationKind.BeginGroup)
+            {
+                GraphicsOptions layerOptions = CreateTextGroupOptions(operation, drawingOptions.GraphicsOptions);
+                DrawingCanvasLayer layer = new(layerOptions);
+                Rectangle layerBounds = operation.CompositeBounds;
+                layerBounds.Offset(state.DestinationOffset);
+
+                // Each group is exactly one isolated layer. Its blend modes apply when the
+                // group ends and the layer composites onto the content below it.
+                this.batcher.AddComposition(CompositionCommand.CreateBeginLayer(layerBounds, layer));
+                compositeLayers.Add(layer);
+                continue;
+            }
+
+            if (operation.Kind == DrawingOperationKind.EndGroup)
+            {
+                Rectangle layerBounds = operation.CompositeBounds;
+                layerBounds.Offset(state.DestinationOffset);
+
+                DrawingCanvasLayer layer = compositeLayers[^1];
+                compositeLayers.RemoveAt(compositeLayers.Count - 1);
+                this.batcher.AddComposition(CompositionCommand.CreateEndLayer(layerBounds, layer));
+                continue;
+            }
+
+            CompositionSceneCommand command = this.CreateTextCompositionCommand(
+                operation,
+                drawingOptions,
+                sharedTextOptions,
+                compositeLayers.Count > 0);
+
+            if (command is PathCompositionSceneCommand pathCommand)
             {
                 this.batcher.AddComposition(pathCommand.Command);
             }
             else
             {
-                this.batcher.AddStrokePath(((StrokePathCompositionSceneCommand)entries[i].Command).Command);
+                this.batcher.AddStrokePath(((StrokePathCompositionSceneCommand)command).Command);
             }
         }
 
-        // The buffer outlives the canvas (the text cache hosts it), so release the command
-        // references now rather than rooting the final draw's geometry until the next draw.
+        // The buffers outlive the canvas (the text cache hosts them), so drop the layer
+        // references now rather than rooting the final draw's state until the next draw.
         entries.Clear();
+        compositeLayers.Clear();
+    }
+
+    /// <summary>
+    /// Creates the graphics options used when a text group layer closes.
+    /// </summary>
+    /// <param name="operation">The group begin operation carrying the required modes.</param>
+    /// <param name="drawingOptions">The caller's graphics options.</param>
+    /// <returns>The options owned by the group layer.</returns>
+    private static GraphicsOptions CreateTextGroupOptions(
+        DrawingOperation operation,
+        GraphicsOptions drawingOptions)
+    {
+        GraphicsOptions result = drawingOptions.DeepClone();
+        if (!operation.ApplyDrawingOptions)
+        {
+            // Inner COLR groups compose at full strength with the group's own COLR modes.
+            // Only the outermost group applies caller opacity, preventing it from
+            // multiplying once per nesting level.
+            result.AlphaCompositionMode = operation.PixelAlphaCompositionMode;
+            result.ColorBlendingMode = operation.PixelColorBlendingMode;
+            result.BlendPercentage = 1F;
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -2146,8 +2224,15 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// The identity-transform options shared by every operation of the draw whose graphics
     /// options match the canvas options.
     /// </param>
+    /// <param name="useFullOpacity">
+    /// Whether the operation is internal content of an isolated composite group.
+    /// </param>
     /// <returns>A composition scene command ready for batching.</returns>
-    private CompositionSceneCommand CreateTextCompositionCommand(DrawingOperation operation, DrawingOptions drawingOptions, DrawingOptions sharedTextOptions)
+    private CompositionSceneCommand CreateTextCompositionCommand(
+        DrawingOperation operation,
+        DrawingOptions drawingOptions,
+        DrawingOptions sharedTextOptions,
+        bool useFullOpacity)
     {
         Brush compositeBrush = operation.Kind == DrawingOperationKind.Fill
             ? operation.Brush!
@@ -2157,6 +2242,14 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             drawingOptions.GraphicsOptions.CloneOrReturnForRules(
                 operation.PixelAlphaCompositionMode,
                 operation.PixelColorBlendingMode);
+
+        if (useFullOpacity && graphicsOptions.BlendPercentage != 1F)
+        {
+            // Caller opacity belongs to the outer isolated result. Applying it to group leaves
+            // would multiply the opacity once per paint and change the COLR composition.
+            graphicsOptions = graphicsOptions.DeepClone();
+            graphicsOptions.BlendPercentage = 1F;
+        }
 
         RasterizationMode rasterizationMode = graphicsOptions.Antialias
             ? RasterizationMode.Antialiased
@@ -2180,8 +2273,9 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         Vector2 subPixelOffset = operation.SubPixelOffset;
 
         Pen? pen = operation.Kind == DrawingOperationKind.Draw ? operation.Pen : null;
+        IPath path = operation.Path!;
 
-        RectangleF bounds = operation.Path.Bounds;
+        RectangleF bounds = path.Bounds;
         bounds.Offset(subPixelOffset.X, subPixelOffset.Y);
         if (pen is not null)
         {
@@ -2199,6 +2293,16 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             float inflate = MathF.Max(joinInflate, capInflate);
 
             bounds.Inflate(new SizeF(inflate, inflate));
+        }
+
+        // The font's clip bounds arrive as one canvas-space rectangle per glyph. The
+        // operation's interest is path-local, so shift the clip by the operation's integer
+        // location and narrow the bounds; the rasterizer then crops with no geometry work.
+        if (operation.GlyphClip.HasValue)
+        {
+            RectangleF glyphClip = operation.GlyphClip.Value;
+            glyphClip.Offset(-operation.RenderLocation.X, -operation.RenderLocation.Y);
+            bounds = RectangleF.Intersect(bounds, glyphClip);
         }
 
         Rectangle interest = ToRasterizerInterest(bounds);
@@ -2229,7 +2333,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         {
             return new PathCompositionSceneCommand(
                 CompositionCommand.Create(
-                    operation.Path,
+                    path,
                     compositeBrush,
                     effectiveOptions,
                     in rasterizerOptions,
@@ -2241,7 +2345,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
 
         return new StrokePathCompositionSceneCommand(
             new StrokePathCommand(
-                operation.Path,
+                path,
                 compositeBrush,
                 effectiveOptions,
                 in rasterizerOptions,

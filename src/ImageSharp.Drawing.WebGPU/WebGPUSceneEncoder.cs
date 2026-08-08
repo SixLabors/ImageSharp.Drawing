@@ -1640,6 +1640,8 @@ internal static class WebGPUSceneEncoder
             this.PathGradientData = new OwnedStream<uint>(allocator, plan.PathGradientDataWordCapacity);
             this.Images = [];
             this.Recolors = [];
+            this.SolidColors = [];
+            this.GradientRamps = [];
             this.FillCount = 0;
             this.PathCount = 0;
             this.LineCount = 0;
@@ -1738,6 +1740,16 @@ internal static class WebGPUSceneEncoder
         /// Gets or sets the deferred RecolorBrush payload descriptors specialized for the render target pixel type.
         /// </summary>
         public List<GpuRecolorDescriptor> Recolors;
+
+        /// <summary>
+        /// Gets or sets the deferred solid color descriptors specialized for the render target pixel type.
+        /// </summary>
+        public List<GpuSolidColorDescriptor> SolidColors;
+
+        /// <summary>
+        /// Gets or sets the deferred gradient ramp descriptors specialized for the render target pixel type.
+        /// </summary>
+        public List<GpuGradientRampDescriptor> GradientRamps;
 
         /// <summary>
         /// Gets the number of emitted fill records.
@@ -2645,6 +2657,8 @@ internal static class WebGPUSceneEncoder
                     ref this.PathGradientData,
                     this.Images,
                     this.Recolors,
+                    this.SolidColors,
+                    this.GradientRamps,
                     ref gradientRowCount);
             }
 
@@ -2763,6 +2777,8 @@ internal static class WebGPUSceneEncoder
                 ref this.PathGradientData,
                 this.Images,
                 this.Recolors,
+                this.SolidColors,
+                this.GradientRamps,
                 ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
         }
@@ -2882,6 +2898,8 @@ internal static class WebGPUSceneEncoder
                 ref this.PathGradientData,
                 this.Images,
                 this.Recolors,
+                this.SolidColors,
+                this.GradientRamps,
                 ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
         }
@@ -3003,6 +3021,8 @@ internal static class WebGPUSceneEncoder
                 ref this.PathGradientData,
                 this.Images,
                 this.Recolors,
+                this.SolidColors,
+                this.GradientRamps,
                 ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
         }
@@ -3529,6 +3549,8 @@ internal static class WebGPUSceneEncoder
         /// <param name="pathGradientDataOwner">The detached path-gradient storage, or <see langword="null"/> when no path gradients were emitted.</param>
         /// <param name="images">The deferred image descriptors recorded by the partition.</param>
         /// <param name="recolors">The deferred recolor descriptors recorded by the partition.</param>
+        /// <param name="solidColors">The deferred solid color descriptors recorded by the partition.</param>
+        /// <param name="gradientRamps">The deferred gradient ramp descriptors recorded by the partition.</param>
         /// <param name="fillCount">The number of emitted fill records.</param>
         /// <param name="visibleFillCount">The number of visible fills accepted by staged-scene validation.</param>
         /// <param name="pathCount">The number of emitted paths.</param>
@@ -3559,6 +3581,8 @@ internal static class WebGPUSceneEncoder
             IMemoryOwner<uint>? pathGradientDataOwner,
             List<GpuImageDescriptor> images,
             List<GpuRecolorDescriptor> recolors,
+            List<GpuSolidColorDescriptor> solidColors,
+            List<GpuGradientRampDescriptor> gradientRamps,
             int fillCount,
             int visibleFillCount,
             int pathCount,
@@ -3590,6 +3614,8 @@ internal static class WebGPUSceneEncoder
             this.profileStorage = profileStorage;
             this.Images = images;
             this.Recolors = recolors;
+            this.SolidColors = solidColors;
+            this.GradientRamps = gradientRamps;
             this.FillCount = fillCount;
             this.VisibleFillCount = visibleFillCount;
             this.PathCount = pathCount;
@@ -3671,6 +3697,16 @@ internal static class WebGPUSceneEncoder
         /// Gets the deferred recolor descriptors recorded by this partition.
         /// </summary>
         public List<GpuRecolorDescriptor> Recolors { get; }
+
+        /// <summary>
+        /// Gets the deferred solid color descriptors recorded by this partition.
+        /// </summary>
+        public List<GpuSolidColorDescriptor> SolidColors { get; }
+
+        /// <summary>
+        /// Gets the deferred gradient ramp descriptors recorded by this partition.
+        /// </summary>
+        public List<GpuGradientRampDescriptor> GradientRamps { get; }
 
         /// <summary>
         /// Gets the number of emitted fill records.
@@ -3807,6 +3843,8 @@ internal static class WebGPUSceneEncoder
                 pathGradientDataOwner,
                 encoding.Images,
                 encoding.Recolors,
+                encoding.SolidColors,
+                encoding.GradientRamps,
                 encoding.FillCount,
                 encoding.VisibleFillCount,
                 encoding.PathCount,
@@ -3958,6 +3996,8 @@ internal static class WebGPUSceneEncoder
                     pathGradientDataWordCount,
                     encoding.Images,
                     encoding.Recolors,
+                    encoding.SolidColors,
+                    encoding.GradientRamps,
                     encoding.GradientRowCount,
                     layout,
                     encoding.FillCount,
@@ -4352,6 +4392,8 @@ internal static class WebGPUSceneEncoder
             int pathGradientDataWordCount = 0;
             int imageCount = 0;
             int recolorCount = 0;
+            int solidColorCount = 0;
+            int gradientRampCount = 0;
             int gradientRowCount = 0;
             int fillCount = 0;
             int pathCount = 0;
@@ -4375,6 +4417,8 @@ internal static class WebGPUSceneEncoder
                 pathGradientDataWordCount += partition.PathGradientDataWordCount;
                 imageCount += partition.Images.Count;
                 recolorCount += partition.Recolors.Count;
+                solidColorCount += partition.SolidColors.Count;
+                gradientRampCount += partition.GradientRamps.Count;
                 gradientRowCount += partition.GradientRowCount;
                 fillCount += partition.FillCount;
                 pathCount += partition.PathCount;
@@ -4439,6 +4483,8 @@ internal static class WebGPUSceneEncoder
                 Span<byte> sceneBytes = MemoryMarshal.Cast<uint, byte>(sceneWords);
                 List<GpuImageDescriptor> images = new(imageCount);
                 List<GpuRecolorDescriptor> recolors = new(recolorCount);
+                List<GpuSolidColorDescriptor> solidColors = new(solidColorCount);
+                List<GpuGradientRampDescriptor> gradientRamps = new(gradientRampCount);
                 int pathTagOffset = 0;
                 int pathDataOffset = 0;
                 int drawTagOffset = 0;
@@ -4482,6 +4528,24 @@ internal static class WebGPUSceneEncoder
                             recolor.TargetColor,
                             recolor.Threshold,
                             pathGradientDataOffset + recolor.BrushDataWordOffset));
+                    }
+
+                    for (int solidColorIndex = 0; solidColorIndex < partition.SolidColors.Count; solidColorIndex++)
+                    {
+                        GpuSolidColorDescriptor solidColor = partition.SolidColors[solidColorIndex];
+
+                        solidColors.Add(new GpuSolidColorDescriptor(
+                            solidColor.Color,
+                            drawDataOffset + solidColor.DrawDataWordOffset));
+                    }
+
+                    for (int gradientRampIndex = 0; gradientRampIndex < partition.GradientRamps.Count; gradientRampIndex++)
+                    {
+                        GpuGradientRampDescriptor gradientRamp = partition.GradientRamps[gradientRampIndex];
+
+                        gradientRamps.Add(new GpuGradientRampDescriptor(
+                            gradientRamp.ColorStops,
+                            gradientRowOffset + gradientRamp.RowIndex));
                     }
 
                     drawDataOffset += partition.DrawDataWordCount;
@@ -4531,6 +4595,8 @@ internal static class WebGPUSceneEncoder
                     pathGradientDataWordCount,
                     images,
                     recolors,
+                    solidColors,
+                    gradientRamps,
                     gradientRowCount,
                     layout,
                     fillCount,
@@ -6617,8 +6683,18 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     /// <param name="solidBrush">The solid brush to encode.</param>
     /// <param name="drawData">The draw-data stream.</param>
-    private static void AppendSolidColor(SolidBrush solidBrush, ref OwnedStream<uint> drawData)
-        => AppendColor(solidBrush.Color.ToScaledVector4(PixelAlphaRepresentation.Associated), ref drawData);
+    /// <param name="solidColors">Receives the target-specialized color patch site.</param>
+    private static void AppendSolidColor(
+        SolidBrush solidBrush,
+        ref OwnedStream<uint> drawData,
+        List<GpuSolidColorDescriptor> solidColors)
+    {
+        // The CPU renderer blends a source snapped through TPixel, which is unknown here
+        // because retained scenes bind to any pixel format later. The continuous words keep
+        // the stream layout fixed; the descriptor records where the snapped value is patched.
+        solidColors.Add(new GpuSolidColorDescriptor(solidBrush.Color, drawData.Count));
+        AppendColor(solidBrush.Color.ToScaledVector4(PixelAlphaRepresentation.Associated), ref drawData);
+    }
 
     /// <summary>
     /// Appends the draw-data payload for one encoded draw tag.
@@ -6633,6 +6709,8 @@ internal static class WebGPUSceneEncoder
     /// <param name="pathGradientData">The path-gradient payload stream.</param>
     /// <param name="images">Receives deferred image patch sites.</param>
     /// <param name="recolors">Receives deferred recolor payload patch sites.</param>
+    /// <param name="solidColors">Receives deferred solid color patch sites.</param>
+    /// <param name="gradientRamps">Receives deferred gradient ramp patch sites.</param>
     /// <param name="gradientRowCount">The gradient row counter, advanced when a ramp is emitted.</param>
     private static void AppendDrawData(
         Brush brush,
@@ -6645,6 +6723,8 @@ internal static class WebGPUSceneEncoder
         ref OwnedStream<uint> pathGradientData,
         List<GpuImageDescriptor> images,
         List<GpuRecolorDescriptor> recolors,
+        List<GpuSolidColorDescriptor> solidColors,
+        List<GpuGradientRampDescriptor> gradientRamps,
         ref int gradientRowCount)
     {
         Rectangle localBrushBounds = brush is ImageBrush
@@ -6659,22 +6739,22 @@ internal static class WebGPUSceneEncoder
                 AppendBeginClipData(graphicsOptions, ref drawData);
                 break;
             case GpuSceneDrawTag.FillColor:
-                AppendSolidColor((SolidBrush)brush, ref drawData);
+                AppendSolidColor((SolidBrush)brush, ref drawData, solidColors);
                 break;
             case GpuSceneDrawTag.FillRecolor:
                 AppendRecolorData((RecolorBrush)brush, ref drawData, ref pathGradientData, recolors);
                 break;
             case GpuSceneDrawTag.FillLinGradient:
-                AppendLinearGradientData((LinearGradientBrush)brush, ref drawData, ref gradientPixels, ref gradientRowCount);
+                AppendLinearGradientData((LinearGradientBrush)brush, ref drawData, ref gradientPixels, gradientRamps, ref gradientRowCount);
                 break;
             case GpuSceneDrawTag.FillRadGradient:
-                AppendRadialGradientData((RadialGradientBrush)brush, ref drawData, ref gradientPixels, ref gradientRowCount);
+                AppendRadialGradientData((RadialGradientBrush)brush, ref drawData, ref gradientPixels, gradientRamps, ref gradientRowCount);
                 break;
             case GpuSceneDrawTag.FillEllipticGradient:
-                AppendEllipticGradientData((EllipticGradientBrush)brush, ref drawData, ref gradientPixels, ref gradientRowCount);
+                AppendEllipticGradientData((EllipticGradientBrush)brush, ref drawData, ref gradientPixels, gradientRamps, ref gradientRowCount);
                 break;
             case GpuSceneDrawTag.FillSweepGradient:
-                AppendSweepGradientData((SweepGradientBrush)brush, ref drawData, ref gradientPixels, ref gradientRowCount);
+                AppendSweepGradientData((SweepGradientBrush)brush, ref drawData, ref gradientPixels, gradientRamps, ref gradientRowCount);
                 break;
             case GpuSceneDrawTag.FillPathGradient:
                 AppendPathGradientData((PathGradientBrush)brush, rootTargetBounds, ref drawData, ref pathGradientData);
@@ -6749,6 +6829,15 @@ internal static class WebGPUSceneEncoder
             PixelColorBlendingMode.Lighten => 5U,
             PixelColorBlendingMode.Overlay => 3U,
             PixelColorBlendingMode.HardLight => 8U,
+            PixelColorBlendingMode.ColorDodge => 6U,
+            PixelColorBlendingMode.ColorBurn => 7U,
+            PixelColorBlendingMode.SoftLight => 9U,
+            PixelColorBlendingMode.Difference => 10U,
+            PixelColorBlendingMode.Exclusion => 11U,
+            PixelColorBlendingMode.Hue => 12U,
+            PixelColorBlendingMode.Saturation => 13U,
+            PixelColorBlendingMode.Color => 14U,
+            PixelColorBlendingMode.Luminosity => 15U,
             _ => throw new UnreachableException($"Unsupported color blending mode '{mode}'.")
         };
 
@@ -6773,6 +6862,7 @@ internal static class WebGPUSceneEncoder
             PixelAlphaCompositionMode.DestOut => 8U,
             PixelAlphaCompositionMode.Clear => 0U,
             PixelAlphaCompositionMode.Xor => 11U,
+            PixelAlphaCompositionMode.Plus => 12U,
             _ => throw new UnreachableException($"Unsupported alpha composition mode '{mode}'.")
         };
 
@@ -6843,15 +6933,18 @@ internal static class WebGPUSceneEncoder
     /// <param name="brush">The linear gradient brush.</param>
     /// <param name="drawData">The draw-data stream.</param>
     /// <param name="gradientPixels">The gradient-pixel stream.</param>
+    /// <param name="gradientRamps">Receives the target-specialized ramp patch site.</param>
     /// <param name="gradientRowCount">The gradient row counter, advanced by one.</param>
     private static void AppendLinearGradientData(
         LinearGradientBrush brush,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,
+        List<GpuGradientRampDescriptor> gradientRamps,
         ref int gradientRowCount)
     {
         uint indexMode = ((uint)gradientRowCount << 2) | MapExtendMode(brush.RepetitionMode);
-        AppendGradientRamp(brush.ColorStops, ref gradientPixels);
+        AppendGradientRamp(ref gradientPixels);
+        gradientRamps.Add(new GpuGradientRampDescriptor(brush.ColorStops.ToArray(), gradientRowCount));
         gradientRowCount++;
 
         drawData.Add(indexMode);
@@ -6867,15 +6960,18 @@ internal static class WebGPUSceneEncoder
     /// <param name="brush">The radial gradient brush.</param>
     /// <param name="drawData">The draw-data stream.</param>
     /// <param name="gradientPixels">The gradient-pixel stream.</param>
+    /// <param name="gradientRamps">Receives the target-specialized ramp patch site.</param>
     /// <param name="gradientRowCount">The gradient row counter, advanced by one.</param>
     private static void AppendRadialGradientData(
         RadialGradientBrush brush,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,
+        List<GpuGradientRampDescriptor> gradientRamps,
         ref int gradientRowCount)
     {
         uint indexMode = ((uint)gradientRowCount << 2) | MapExtendMode(brush.RepetitionMode);
-        AppendGradientRamp(brush.ColorStops, ref gradientPixels);
+        AppendGradientRamp(ref gradientPixels);
+        gradientRamps.Add(new GpuGradientRampDescriptor(brush.ColorStops.ToArray(), gradientRowCount));
         gradientRowCount++;
 
         PointF center0;
@@ -6913,15 +7009,18 @@ internal static class WebGPUSceneEncoder
     /// <param name="brush">The elliptic gradient brush.</param>
     /// <param name="drawData">The draw-data stream.</param>
     /// <param name="gradientPixels">The gradient-pixel stream.</param>
+    /// <param name="gradientRamps">Receives the target-specialized ramp patch site.</param>
     /// <param name="gradientRowCount">The gradient row counter, advanced by one.</param>
     private static void AppendEllipticGradientData(
         EllipticGradientBrush brush,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,
+        List<GpuGradientRampDescriptor> gradientRamps,
         ref int gradientRowCount)
     {
         uint indexMode = ((uint)gradientRowCount << 2) | MapExtendMode(brush.RepetitionMode);
-        AppendGradientRamp(brush.ColorStops, ref gradientPixels);
+        AppendGradientRamp(ref gradientPixels);
+        gradientRamps.Add(new GpuGradientRampDescriptor(brush.ColorStops.ToArray(), gradientRowCount));
         gradientRowCount++;
 
         // Brushes reach the encoder after batcher normalization, so gradient payload points are
@@ -6948,15 +7047,18 @@ internal static class WebGPUSceneEncoder
     /// <param name="brush">The sweep gradient brush.</param>
     /// <param name="drawData">The draw-data stream.</param>
     /// <param name="gradientPixels">The gradient-pixel stream.</param>
+    /// <param name="gradientRamps">Receives the target-specialized ramp patch site.</param>
     /// <param name="gradientRowCount">The gradient row counter, advanced by one.</param>
     private static void AppendSweepGradientData(
         SweepGradientBrush brush,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,
+        List<GpuGradientRampDescriptor> gradientRamps,
         ref int gradientRowCount)
     {
         uint indexMode = ((uint)gradientRowCount << 2) | MapExtendMode(brush.RepetitionMode);
-        AppendGradientRamp(brush.ColorStops, ref gradientPixels);
+        AppendGradientRamp(ref gradientPixels);
+        gradientRamps.Add(new GpuGradientRampDescriptor(brush.ColorStops.ToArray(), gradientRowCount));
         gradientRowCount++;
 
         float sweepDegrees = brush.EndAngleDegrees - brush.StartAngleDegrees;
@@ -7044,17 +7146,20 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Appends one packed gradient ramp row sampled across the fixed gradient width.
+    /// Reserves one zeroed gradient ramp row across the fixed gradient width.
     /// </summary>
-    /// <param name="colorStops">The gradient color stops, ordered by ratio.</param>
     /// <param name="gradientPixels">The gradient-pixel stream.</param>
-    private static void AppendGradientRamp(ReadOnlySpan<ColorStop> colorStops, ref OwnedStream<uint> gradientPixels)
+    /// <remarks>
+    /// The texels are written by <see cref="WebGPUEncodedScene.SpecializeBrushColors{TPixel}"/>
+    /// when a flush binds the scene to its pixel format: every ramp sample must snap through
+    /// the target pixel type, so values baked here would be discarded. The row advances zeroed
+    /// to keep the stream layout fixed.
+    /// </remarks>
+    private static void AppendGradientRamp(ref OwnedStream<uint> gradientPixels)
     {
-        for (int x = 0; x < GradientWidth; x++)
-        {
-            float t = x / (float)(GradientWidth - 1);
-            AppendColor(EvaluateGradientColor(colorStops, t), ref gradientPixels);
-        }
+        Span<uint> row = gradientPixels.GetAppendSpan(GradientRowWordCount);
+        row.Clear();
+        gradientPixels.Advance(GradientRowWordCount);
     }
 
     /// <summary>
@@ -7063,7 +7168,7 @@ internal static class WebGPUSceneEncoder
     /// <param name="colorStops">The gradient color stops, ordered by ratio.</param>
     /// <param name="t">The normalized sample position in the range [0, 1].</param>
     /// <returns>The associated floating-point sample.</returns>
-    private static Vector4 EvaluateGradientColor(ReadOnlySpan<ColorStop> colorStops, float t)
+    public static Vector4 EvaluateGradientColor(ReadOnlySpan<ColorStop> colorStops, float t)
     {
         // Walk the stop list once to find the enclosing interval, then interpolate within it.
         ColorStop from = colorStops[0];
@@ -7112,7 +7217,7 @@ internal static class WebGPUSceneEncoder
     /// <param name="y">The high component.</param>
     /// <returns>The packed pair.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint PackHalf2(float x, float y)
+    public static uint PackHalf2(float x, float y)
         => BitConverter.HalfToUInt16Bits((Half)x) | ((uint)BitConverter.HalfToUInt16Bits((Half)y) << 16);
 
     /// <summary>
@@ -7187,6 +7292,8 @@ internal sealed class WebGPUEncodedScene : IDisposable
         0,
         [],
         [],
+        [],
+        [],
         0,
         default,
         0,
@@ -7213,8 +7320,16 @@ internal sealed class WebGPUEncodedScene : IDisposable
     private readonly IMemoryOwner<uint>? pathGradientDataOwner;
     private readonly List<GpuImageDescriptor> images;
     private readonly List<GpuRecolorDescriptor> recolors;
+    private readonly List<GpuSolidColorDescriptor> solidColors;
+    private readonly List<GpuGradientRampDescriptor> gradientRamps;
     private readonly WebGPUSceneOperation[] operations;
     private bool disposed;
+
+    /// <summary>
+    /// The pixel type the solid color words and gradient ramp texels are specialized for, or
+    /// <see langword="null"/> while they hold the encoder's continuous values.
+    /// </summary>
+    private Type? specializedPixelType;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUEncodedScene"/> class.
@@ -7228,6 +7343,8 @@ internal sealed class WebGPUEncodedScene : IDisposable
     /// <param name="pathGradientDataWordCount">The number of path-gradient data words.</param>
     /// <param name="images">The image descriptors referenced by draw data.</param>
     /// <param name="recolors">The recolor descriptors referenced by auxiliary brush data.</param>
+    /// <param name="solidColors">The solid color descriptors referenced by draw data.</param>
+    /// <param name="gradientRamps">The gradient ramp descriptors referenced by the ramp texture rows.</param>
     /// <param name="gradientRowCount">The number of gradient texture rows.</param>
     /// <param name="layout">The packed GPU scene layout.</param>
     /// <param name="fillCount">The number of fill draw records.</param>
@@ -7258,6 +7375,8 @@ internal sealed class WebGPUEncodedScene : IDisposable
         int pathGradientDataWordCount,
         List<GpuImageDescriptor> images,
         List<GpuRecolorDescriptor> recolors,
+        List<GpuSolidColorDescriptor> solidColors,
+        List<GpuGradientRampDescriptor> gradientRamps,
         int gradientRowCount,
         GpuSceneLayout layout,
         int fillCount,
@@ -7287,6 +7406,8 @@ internal sealed class WebGPUEncodedScene : IDisposable
         this.PathGradientDataWordCount = pathGradientDataWordCount;
         this.images = images;
         this.recolors = recolors;
+        this.solidColors = solidColors;
+        this.gradientRamps = gradientRamps;
         this.operations = operations;
         this.SceneWordCount = sceneWordCount;
         this.GradientRowCount = gradientRowCount;
@@ -7441,6 +7562,16 @@ internal sealed class WebGPUEncodedScene : IDisposable
     /// Gets the deferred recolor descriptors that must be specialized for the target pixel type.
     /// </summary>
     public IReadOnlyList<GpuRecolorDescriptor> Recolors => this.recolors;
+
+    /// <summary>
+    /// Gets the deferred solid color descriptors that must be specialized for the target pixel type.
+    /// </summary>
+    public IReadOnlyList<GpuSolidColorDescriptor> SolidColors => this.solidColors;
+
+    /// <summary>
+    /// Gets the deferred gradient ramp descriptors that must be specialized for the target pixel type.
+    /// </summary>
+    public IReadOnlyList<GpuGradientRampDescriptor> GradientRamps => this.gradientRamps;
 
     /// <summary>
     /// Gets the ordered retained operations for a scene containing Apply.
@@ -7645,6 +7776,131 @@ internal sealed class WebGPUEncodedScene : IDisposable
     }
 
     /// <summary>
+    /// Rewrites the retained solid color words and gradient ramp texels with values snapped
+    /// through <typeparamref name="TPixel"/>, so the shader blends the same sources the CPU
+    /// renderer blends.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The pixel type is unknown until a flush binds the scene to a target, so the snap cannot
+    /// happen at encode time. Mutating the retained streams lets the snapped values ride the
+    /// scene upload and the ramp texture write that happen anyway; patching them GPU-side would
+    /// cost one queue call per solid draw per flush. <see cref="SetSceneWord"/> skips identical
+    /// rewrites, so repeated flushes at one pixel type upload nothing new, and a pixel type
+    /// change re-uploads only the words that differ.
+    /// </para>
+    /// <para>
+    /// Precision contract: the wire format is associated binary16, so straight-alpha snapped
+    /// components multiply by alpha and the product rounds. Opaque values are exempt because
+    /// multiplying by one changes nothing and every 8-bit value is exactly representable, so
+    /// they blend bit-identically to the CPU. Translucent values carry the product rounding
+    /// into the blend, and with output rounding stacked on top a rare pixel can land two 8-bit
+    /// steps from the CPU result. Removing that requires straight transport plus an in-shader
+    /// premultiply, which for ramps also changes how the sampler interpolates between texels.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TPixel">The pixel format of the target.</typeparam>
+    public void SpecializeBrushColors<TPixel>()
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (this.specializedPixelType == typeof(TPixel))
+        {
+            return;
+        }
+
+        PixelAlphaRepresentation alphaRepresentation = TPixel.GetPixelTypeInfo().AlphaRepresentation;
+        this.SpecializeSolidColors<TPixel>(alphaRepresentation);
+        this.SpecializeGradientRamps<TPixel>(alphaRepresentation);
+        this.specializedPixelType = typeof(TPixel);
+    }
+
+    /// <summary>
+    /// Rewrites each solid fill's packed draw-data words with the color snapped through
+    /// <typeparamref name="TPixel"/>, mirroring the conversion <c>SolidBrush</c> performs when
+    /// it creates its CPU renderer.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format of the target.</typeparam>
+    /// <param name="alphaRepresentation">The alpha representation of <typeparamref name="TPixel"/>.</param>
+    private void SpecializeSolidColors<TPixel>(PixelAlphaRepresentation alphaRepresentation)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        for (int i = 0; i < this.solidColors.Count; i++)
+        {
+            GpuSolidColorDescriptor descriptor = this.solidColors[i];
+            Vector4 color = descriptor.Color.ToPixel<TPixel>().ToScaledVector4();
+            if (alphaRepresentation != PixelAlphaRepresentation.Associated)
+            {
+                // Associating rounds the product into binary16; see the precision contract on
+                // SpecializeBrushColors.
+                float alpha = color.W;
+                color *= alpha;
+                color.W = alpha;
+            }
+
+            int wordIndex = checked((int)this.Layout.DrawDataBase + descriptor.DrawDataWordOffset);
+            this.SetSceneWord(wordIndex, WebGPUSceneEncoder.PackHalf2(color.X, color.Y));
+            this.SetSceneWord(wordIndex + 1, WebGPUSceneEncoder.PackHalf2(color.Z, color.W));
+        }
+    }
+
+    /// <summary>
+    /// Rewrites each recorded gradient ramp row with texels snapped through
+    /// <typeparamref name="TPixel"/>, mirroring the per-pixel conversion the CPU gradient
+    /// encoders perform before blending.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format of the target.</typeparam>
+    /// <param name="alphaRepresentation">The alpha representation of <typeparamref name="TPixel"/>.</param>
+    private void SpecializeGradientRamps<TPixel>(PixelAlphaRepresentation alphaRepresentation)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (this.gradientPixelsOwner is null)
+        {
+            return;
+        }
+
+        Span<uint> gradientPixels = this.gradientPixelsOwner.Memory.Span;
+        for (int i = 0; i < this.gradientRamps.Count; i++)
+        {
+            GpuGradientRampDescriptor descriptor = this.gradientRamps[i];
+            int rowBase = descriptor.RowIndex * WebGPUSceneEncoder.GradientRowWordCount;
+            for (int x = 0; x < WebGPUSceneEncoder.GradientWidth; x++)
+            {
+                float t = x / (float)(WebGPUSceneEncoder.GradientWidth - 1);
+                Vector4 color = WebGPUSceneEncoder.EvaluateGradientColor(descriptor.ColorStops, t);
+                if (alphaRepresentation == PixelAlphaRepresentation.Associated)
+                {
+                    color = TPixel.FromScaledVector4(color).ToScaledVector4();
+                }
+                else
+                {
+                    // The CPU's straight-alpha encoder undoes the interpolation-time
+                    // premultiplication before converting to TPixel, so the same division
+                    // precedes the snap. Re-associating rounds the product into binary16;
+                    // see the precision contract on SpecializeBrushColors.
+                    float alpha = color.W;
+                    if (alpha > 0)
+                    {
+                        color /= alpha;
+                        color.W = alpha;
+                    }
+                    else
+                    {
+                        color = Vector4.Zero;
+                    }
+
+                    color = TPixel.FromScaledVector4(color).ToScaledVector4();
+                    float snappedAlpha = color.W;
+                    color *= snappedAlpha;
+                    color.W = snappedAlpha;
+                }
+
+                gradientPixels[rowBase + (x * 2)] = WebGPUSceneEncoder.PackHalf2(color.X, color.Y);
+                gradientPixels[rowBase + (x * 2) + 1] = WebGPUSceneEncoder.PackHalf2(color.Z, color.W);
+            }
+        }
+    }
+
+    /// <summary>
     /// Releases the owned scene, gradient, and path-gradient buffers.
     /// </summary>
     public void Dispose()
@@ -7828,6 +8084,61 @@ internal readonly struct GpuRecolorDescriptor
     /// Gets the auxiliary brush-data word offset to patch for the render target.
     /// </summary>
     public int BrushDataWordOffset { get; }
+}
+
+/// <summary>
+/// Describes one solid brush color whose packed draw-data words must be converted for the
+/// render target pixel type.
+/// </summary>
+internal readonly struct GpuSolidColorDescriptor
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GpuSolidColorDescriptor"/> struct.
+    /// </summary>
+    /// <param name="color">The full-precision brush color.</param>
+    /// <param name="drawDataWordOffset">The draw-data word offset of the packed color to patch.</param>
+    public GpuSolidColorDescriptor(Color color, int drawDataWordOffset)
+    {
+        this.Color = color;
+        this.DrawDataWordOffset = drawDataWordOffset;
+    }
+
+    /// <summary>
+    /// Gets the full-precision brush color.
+    /// </summary>
+    public Color Color { get; }
+
+    /// <summary>
+    /// Gets the draw-data word offset of the packed color to patch for the render target.
+    /// </summary>
+    public int DrawDataWordOffset { get; }
+}
+
+/// <summary>
+/// Describes one gradient ramp row whose texels must be converted for the render target pixel type.
+/// </summary>
+internal readonly struct GpuGradientRampDescriptor
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GpuGradientRampDescriptor"/> struct.
+    /// </summary>
+    /// <param name="colorStops">The gradient color stops, ordered by ratio.</param>
+    /// <param name="rowIndex">The ramp texture row the gradient occupies.</param>
+    public GpuGradientRampDescriptor(ColorStop[] colorStops, int rowIndex)
+    {
+        this.ColorStops = colorStops;
+        this.RowIndex = rowIndex;
+    }
+
+    /// <summary>
+    /// Gets the gradient color stops, ordered by ratio.
+    /// </summary>
+    public ColorStop[] ColorStops { get; }
+
+    /// <summary>
+    /// Gets the ramp texture row the gradient occupies.
+    /// </summary>
+    public int RowIndex { get; }
 }
 
 /// <summary>
