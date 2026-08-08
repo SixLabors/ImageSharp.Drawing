@@ -61,7 +61,7 @@ const DRAW_FLAGS_BLEND_ALPHA_MASK = 0x3fffc000u;
 // clip so fine inverts the mask. Declared here because every consumer imports this module.
 const CLIP_DIFFERENCE_MASK_BIT = 0x80000000u;
 // Marks an ISOLATED group (a layer). Isolated groups seed with transparent content and
-// composite back with blend_mix_compose, matching the CPU backend's clean layer targets.
+// composite back with compose_source, matching the CPU backend's clean layer targets.
 // Non-isolated groups (canvas clips) seed with a copy of the current tile content and pop
 // with a coverage lerp, matching the CPU backend's per-draw clip masking so composition
 // modes such as Src behave identically whether or not a tile goes through the clip group.

@@ -147,6 +147,11 @@ internal static unsafe class WebGPUSceneResources
         resources = default;
         int infoWordCount = range?.InfoWordCount ?? scene.InfoWordCount;
 
+        // The retained solid color words and ramp texels specialize to the target pixel type
+        // before any upload below reads them, so the snapped values ride the ordinary scene
+        // upload and ramp texture write with no per-word GPU patching.
+        scene.SpecializeBrushColors<TPixel>();
+
         // Textures are scene-dependent and not pooled.
         if (!TryCreateGradientTexture(flushContext, scene, out WGPUTextureViewImpl* gradientTextureView, out error))
         {

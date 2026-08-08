@@ -160,15 +160,21 @@ internal static class FineAreaComputeShader
         // The CPU RecolorBrush observes a TPixel already written by earlier draws. A staged GPU
         // scene keeps those draws in f32 registers, so Recolor alone must reproduce the target's
         // physical storage conversion before comparing without reducing normal composition precision.
+        // Binary16 quantization must round to nearest even like the CPU renderer's
+        // float-to-half conversion; pack2x16float and the hardware store may truncate
+        // toward zero, so the round trip routes through the explicit RTNE helper.
         string targetFormatRoundTripBody = textureFormat switch
         {
             WGPUTextureFormat.RGBA8Unorm or WGPUTextureFormat.BGRA8Unorm => "return unpack4x8unorm(pack4x8unorm(color));",
             WGPUTextureFormat.RGBA8Snorm => "return unpack4x8snorm(pack4x8snorm(color));",
-            WGPUTextureFormat.RGBA16Float => "return vec4<f32>(unpack2x16float(pack2x16float(color.rg)), unpack2x16float(pack2x16float(color.ba)));"
+            WGPUTextureFormat.RGBA16Float => "return vec4<f32>(quantize_f16_rtne(color.x), quantize_f16_rtne(color.y), quantize_f16_rtne(color.z), quantize_f16_rtne(color.w));"
         };
 
-        // Fine shading uses associated colors internally. Recolor explicitly crosses the target
-        // TPixel storage boundary, including associated-alpha rescaling when stored alpha quantizes.
+        // Fine shading uses associated colors internally. Unassociated targets cross the storage
+        // boundary with Numerics.UnPremultiply's exact semantics: zero alpha preserves RGB, and a
+        // true division (not a reciprocal multiply) rounds identically to the CPU renderer.
+        // Recolor additionally crosses the target TPixel storage boundary, including
+        // associated-alpha rescaling when stored alpha quantizes.
         (string Decode, string Encode, string RecolorNativeToInternal, string RecolorStoreTarget) alphaBodies = alphaRepresentation switch
         {
             PixelAlphaRepresentation.Associated =>
@@ -180,14 +186,40 @@ internal static class FineAreaComputeShader
             PixelAlphaRepresentation.Unassociated =>
                 (
                     "return premul_alpha(decode_numeric(color));",
-                    "let a_inv = select(0.0, 1.0 / color.a, color.a > 0.0);\n    return encode_numeric(vec4<f32>(color.rgb * a_inv, color.a));",
+                    "if color.a == 0.0 {\n        return encode_numeric(color);\n    }\n\n    return encode_numeric(vec4<f32>(color.rgb / color.a, color.a));",
                     "return premul_alpha(color);",
-                    "let a_inv = select(0.0, 1.0 / color.a, color.a > 0.0);\n    let native = vec4<f32>(color.rgb * a_inv, color.a);\n    return decode_numeric(round_trip_target_format(encode_numeric(native)));")
+                    "if color.a == 0.0 {\n        return decode_numeric(round_trip_target_format(encode_numeric(color)));\n    }\n\n    let native = vec4<f32>(color.rgb / color.a, color.a);\n    return decode_numeric(round_trip_target_format(encode_numeric(native)));")
         };
 #pragma warning restore CS8509, CS8524
 
         string targetConversionFunctions =
             $$"""
+            fn quantize_f16_rtne(value: f32) -> f32 {
+                // Binary16 quantization with IEEE round-to-nearest-even. pack2x16float and the
+                // hardware f32-to-f16 store conversion may truncate toward zero, so the two
+                // bracketing half values are recovered by bit stepping (monotonic for one sign)
+                // and the nearest is chosen, ties to the even mantissa, matching the CPU
+                // renderer's float-to-half conversion exactly.
+                let magnitude = abs(value);
+                let packed = pack2x16float(vec2(magnitude, 0.0)) & 0xffffu;
+                let snapped = unpack2x16float(packed).x;
+                if snapped == magnitude {
+                    return select(snapped, -snapped, value < 0.0);
+                }
+
+                let lower_bits = select(packed, packed - 1u, snapped > magnitude);
+                let lower = unpack2x16float(lower_bits).x;
+                let upper = unpack2x16float(lower_bits + 1u).x;
+                let below = magnitude - lower;
+                let above = upper - magnitude;
+                var rounded = lower;
+                if above < below || (above == below && (lower_bits & 1u) == 1u) {
+                    rounded = upper;
+                }
+
+                return select(rounded, -rounded, value < 0.0);
+            }
+
             fn decode_numeric(color: vec4<f32>) -> vec4<f32> {
                 {{numericBodies.Decode}}
             }
@@ -220,16 +252,29 @@ internal static class FineAreaComputeShader
                 return color;
             }
 
-            fn pack_clip_color(color: vec4<f32>) -> vec2<u32> {
-                return vec2<u32>(pack2x16float(color.rg), pack2x16float(color.ba));
+            fn pack_clip_color(color: vec4<f32>) -> vec4<u32> {
+                // The clip stack preserves the backdrop across isolated layer pops, where
+                // per-draw blend modes composite against it. The CPU renderer composes
+                // against the exact target value, so the save must be bit-lossless:
+                // binary16 packing here shifts results near storage rounding boundaries.
+                return bitcast<vec4<u32>>(color);
             }
 
-            fn unpack_clip_color(color: vec2<u32>) -> vec4<f32> {
-                return vec4<f32>(unpack2x16float(color.x), unpack2x16float(color.y));
+            fn unpack_clip_color(color: vec4<u32>) -> vec4<f32> {
+                return bitcast<vec4<f32>>(color);
             }
             """;
 
-        return new ShaderTraits(compositeTraits.OutputFormat, targetConversionFunctions, "textureStore(output, vec2<i32>(coords), encode_target(rgba[i]));");
+        // Every store quantizes in-shader first: hardware store conversions carry slack the
+        // CPU renderer does not (f32-to-f16 may truncate toward zero, float-to-unorm allows
+        // up to 0.6 ULP of error), while the spec-defined pack builtins and the explicit
+        // binary16 helper round exactly like the CPU's pixel packing. Passing an exactly
+        // representable value makes the hardware conversion lossless, so both backends
+        // store identical pixels.
+        return new ShaderTraits(
+            compositeTraits.OutputFormat,
+            targetConversionFunctions,
+            "textureStore(output, vec2<i32>(coords), round_trip_target_format(encode_target(rgba[i])));");
     }
 
     /// <summary>

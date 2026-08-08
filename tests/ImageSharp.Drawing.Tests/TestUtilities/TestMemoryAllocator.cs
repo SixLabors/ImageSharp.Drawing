@@ -12,6 +12,8 @@ internal class TestMemoryAllocator : MemoryAllocator
 {
     private readonly List<AllocationRequest> allocationLog = [];
     private readonly List<ReturnRequest> returnLog = [];
+    private readonly object allocationLogSync = new();
+    private readonly object returnLogSync = new();
 
     public TestMemoryAllocator(byte dirtyValue = 42) => this.DirtyValue = dirtyValue;
 
@@ -22,9 +24,31 @@ internal class TestMemoryAllocator : MemoryAllocator
 
     public int BufferCapacityInBytes { get; set; } = int.MaxValue;
 
-    public IReadOnlyList<AllocationRequest> AllocationLog => this.allocationLog;
+    public IReadOnlyList<AllocationRequest> AllocationLog
+    {
+        get
+        {
+            // Snapshot under the writer lock: parallel workers can still append while a
+            // test enumerates, and List<T> enumeration is not safe against concurrent Add.
+            lock (this.allocationLogSync)
+            {
+                return [.. this.allocationLog];
+            }
+        }
+    }
 
-    public IReadOnlyList<ReturnRequest> ReturnLog => this.returnLog;
+    public IReadOnlyList<ReturnRequest> ReturnLog
+    {
+        get
+        {
+            // Snapshot under the writer lock: the finalizer thread can still append
+            // returns while a test enumerates the log.
+            lock (this.returnLogSync)
+            {
+                return [.. this.returnLog];
+            }
+        }
+    }
 
     protected internal override int GetBufferCapacityInBytes() => this.BufferCapacityInBytes;
 
@@ -38,7 +62,13 @@ internal class TestMemoryAllocator : MemoryAllocator
         where T : struct
     {
         T[] array = new T[length + 42];
-        this.allocationLog.Add(AllocationRequest.Create(options, length, array));
+
+        // Image processors can request buffers from parallel workers. Serialize the test log
+        // mutation so its observed allocation count cannot lose or corrupt concurrent entries.
+        lock (this.allocationLogSync)
+        {
+            this.allocationLog.Add(AllocationRequest.Create(options, length, array));
+        }
 
         if (options == AllocationOptions.None)
         {
@@ -50,7 +80,15 @@ internal class TestMemoryAllocator : MemoryAllocator
     }
 
     private void Return<T>(BasicArrayBuffer<T> buffer)
-        where T : struct => this.returnLog.Add(new ReturnRequest(buffer.Array.GetHashCode()));
+        where T : struct
+    {
+        // Returns can arrive from worker or finalizer threads, so they require the same
+        // serialized logging contract as allocations.
+        lock (this.returnLogSync)
+        {
+            this.returnLog.Add(new ReturnRequest(buffer.Array.GetHashCode()));
+        }
+    }
 
     public struct AllocationRequest
     {

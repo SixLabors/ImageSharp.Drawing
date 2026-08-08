@@ -29,7 +29,7 @@ public class FineAreaComputeShaderTests
         Assert.Contains("fn decode_target(color: vec4<f32>) -> vec4<f32> {\n    return decode_numeric(color);\n}", source);
         Assert.Contains("fn encode_target(color: vec4<f32>) -> vec4<f32> {\n    return encode_numeric(color);\n}", source);
         Assert.Contains("rgba[i] = decode_target(backdrop_raw);", source);
-        Assert.Contains("textureStore(output, vec2<i32>(coords), encode_target(rgba[i]));", source);
+        Assert.Contains("textureStore(output, vec2<i32>(coords), round_trip_target_format(encode_target(rgba[i])));", source);
     }
 
     [Fact]
@@ -38,8 +38,8 @@ public class FineAreaComputeShaderTests
         string source = GetSource(TextureFormat.RGBA8Unorm, PixelAlphaRepresentation.Unassociated, WebGPUTargetNumericEncoding.Unit);
 
         Assert.Contains("return premul_alpha(decode_numeric(color));", source);
-        Assert.Contains("let a_inv = select(0.0, 1.0 / color.a, color.a > 0.0);", source);
-        Assert.Contains("return encode_numeric(vec4<f32>(color.rgb * a_inv, color.a));", source);
+        Assert.Contains("if color.a == 0.0 {\n        return encode_numeric(color);\n    }", source);
+        Assert.Contains("return encode_numeric(vec4<f32>(color.rgb / color.a, color.a));", source);
     }
 
     [Fact]
@@ -58,6 +58,11 @@ public class FineAreaComputeShaderTests
 
         Assert.Contains("fn decode_numeric(color: vec4<f32>) -> vec4<f32> {\n    return color;\n}", source);
         Assert.Contains("fn encode_numeric(color: vec4<f32>) -> vec4<f32> {\n    return color;\n}", source);
+
+        // Binary16 stores quantize in-shader with round-to-nearest-even so the hardware
+        // conversion is lossless and matches the CPU renderer's float-to-half rounding.
+        Assert.Contains("textureStore(output, vec2<i32>(coords), round_trip_target_format(encode_target(rgba[i])));", source);
+        Assert.Contains("return vec4<f32>(quantize_f16_rtne(color.x), quantize_f16_rtne(color.y), quantize_f16_rtne(color.z), quantize_f16_rtne(color.w));", source);
     }
 
     private static string GetSource(
