@@ -1219,6 +1219,14 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
         public Pen? PenReference { get; init; }
 
         /// <summary>
+        /// Gets the color palette selection the glyph's colors were resolved with, or
+        /// <see langword="null"/> when the glyph resolves no palette colors. The selection
+        /// changes the cached layer paints, so palette variants of one glyph must occupy
+        /// separate cache entries.
+        /// </summary>
+        public FontPalette? FontPalette { get; init; }
+
+        /// <summary>
         /// Determines whether two <see cref="CacheKey"/> instances are equal.
         /// </summary>
         /// <param name="left">The first key to compare.</param>
@@ -1269,7 +1277,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
                 TextAttributes = parameters.TextRun.TextAttributes,
                 TextDecorations = parameters.TextRun.TextDecorations,
                 Size = size,
-                PenReference = penReference
+                PenReference = penReference,
+                FontPalette = parameters.FontPalette
             };
 
         /// <inheritdoc/>
@@ -1291,7 +1300,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
             this.TextAttributes == other.TextAttributes &&
             this.TextDecorations == other.TextDecorations &&
             this.Size.Equals(other.Size) &&
-            ReferenceEquals(this.PenReference, other.PenReference);
+            ReferenceEquals(this.PenReference, other.PenReference) &&
+            Equals(this.FontPalette, other.FontPalette);
 
         /// <inheritdoc/>
         public override int GetHashCode()
@@ -1312,6 +1322,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
             hash.Add(this.TextDecorations);
             hash.Add(this.Size);
             hash.Add(this.PenReference is null ? 0 : RuntimeHelpers.GetHashCode(this.PenReference));
+            hash.Add(this.FontPalette);
             return hash.ToHashCode();
         }
     }

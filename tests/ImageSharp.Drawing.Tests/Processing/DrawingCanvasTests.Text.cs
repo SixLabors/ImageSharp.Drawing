@@ -107,6 +107,7 @@ public partial class DrawingCanvasTests
                         TextDecorations.None,
                         LayoutMode.HorizontalTopBottom,
                         ColorFontSupport.None,
+                        null,
                         out FontGlyphMetrics metrics))
                 {
                     continue;
@@ -160,6 +161,7 @@ public partial class DrawingCanvasTests
                         TextDecorations.None,
                         LayoutMode.HorizontalTopBottom,
                         ColorFontSupport.None,
+                        null,
                         out FontGlyphMetrics metrics))
                 {
                     continue;
@@ -306,6 +308,7 @@ public partial class DrawingCanvasTests
                         TextDecorations.None,
                         LayoutMode.HorizontalTopBottom,
                         ColorFontSupport.None,
+                        null,
                         out FontGlyphMetrics metrics))
                 {
                     continue;
@@ -820,6 +823,7 @@ public partial class DrawingCanvasTests
                     TextDecorations.None,
                     LayoutMode.HorizontalTopBottom,
                     ColorFontSupport.None,
+                    null,
                     out FontGlyphMetrics metrics))
             {
                 continue;
