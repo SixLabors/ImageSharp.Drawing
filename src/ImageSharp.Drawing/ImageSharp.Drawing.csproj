@@ -44,9 +44,9 @@
     <InternalsVisibleTo Include="SixLabors.ImageSharp.Drawing.WebGPU" Key="$(SixLaborsPublicKey)" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="SixLabors.Fonts" Version="3.0.1-alpha.0.18" />
+    <PackageReference Include="SixLabors.Fonts" Version="3.0.1-alpha.0.19" />
     <PackageReference Include="SixLabors.ImageSharp" Version="4.0.1-alpha.0.24" />
-    <PackageReference Include="SixLabors.PolygonClipper" Version="1.0.1-alpha.0.6" />
+    <PackageReference Include="SixLabors.PolygonClipper" Version="1.0.1" />
   </ItemGroup>
 
   <!--
