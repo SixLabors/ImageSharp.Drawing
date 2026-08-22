@@ -147,6 +147,11 @@ internal static unsafe class WebGPUSceneResources
         resources = default;
         int infoWordCount = range?.InfoWordCount ?? scene.InfoWordCount;
 
+        // The retained solid color words and ramp texels specialize to the target pixel type
+        // before any upload below reads them, so the snapped values ride the ordinary scene
+        // upload and ramp texture write with no per-word GPU patching.
+        scene.SpecializeBrushColors<TPixel>();
+
         // Textures are scene-dependent and not pooled.
         if (!TryCreateGradientTexture(flushContext, scene, out WGPUTextureViewImpl* gradientTextureView, out error))
         {
@@ -475,7 +480,8 @@ internal static unsafe class WebGPUSceneResources
             config.BumpSizes.Segments,
             config.BumpSizes.BlendSpill,
             config.BumpSizes.Ptcl,
-            scene.FineCoverageThreshold);
+            scene.ProfileSlotsBase,
+            scene.ProfileRecordsBase);
     }
 
     /// <summary>
@@ -528,7 +534,8 @@ internal static unsafe class WebGPUSceneResources
             config.BumpSizes.Segments,
             config.BumpSizes.BlendSpill,
             config.BumpSizes.Ptcl,
-            scene.FineCoverageThreshold);
+            scene.ProfileSlotsBase,
+            scene.ProfileRecordsBase);
     }
 
     /// <summary>
@@ -731,7 +738,6 @@ internal static unsafe class WebGPUSceneResources
         }
 
         const TextureUsage usage = TextureUsage.TextureBinding | TextureUsage.CopyDst;
-        WGPUTextureImpl* texture;
 
         // Prefer a device-pooled texture. Extra rows in a larger entry are never addressed: the
         // fine shader loads gradient texels by exact ramp row index.
@@ -740,7 +746,7 @@ internal static unsafe class WebGPUSceneResources
                 (ulong)usage,
                 512,
                 (uint)scene.GradientRowCount,
-                out texture,
+                out WGPUTextureImpl* texture,
                 out textureView,
                 out uint rentedWidth,
                 out uint rentedHeight))
@@ -1006,12 +1012,10 @@ internal static unsafe class WebGPUSceneResources
             size = totalByteLength
         };
 
-        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
-        {
-            WGPUBufferImpl* buffer = flushContext.Api.DeviceCreateBuffer((WGPUDeviceImpl*)deviceReference.Handle, in descriptor);
-            UploadBrushData<TPixel>(flushContext, buffer, infoWordCount, scene);
-            return buffer;
-        }
+        using WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference();
+        WGPUBufferImpl* buffer = flushContext.Api.DeviceCreateBuffer((WGPUDeviceImpl*)deviceReference.Handle, in descriptor);
+        UploadBrushData<TPixel>(flushContext, buffer, infoWordCount, scene);
+        return buffer;
     }
 
     /// <summary>
@@ -1328,18 +1332,16 @@ internal static unsafe class WebGPUSceneResources
             size = byteLength
         };
 
-        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
-        {
-            WGPUBufferImpl* buffer = flushContext.Api.DeviceCreateBuffer((WGPUDeviceImpl*)deviceReference.Handle, in descriptor);
-            using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
-            flushContext.Api.QueueWriteBuffer(
-                (WGPUQueueImpl*)queueReference.Handle,
-                buffer,
-                0,
-                Unsafe.AsPointer(ref Unsafe.AsRef(in value)),
-                byteLength);
-            return buffer;
-        }
+        using WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference();
+        WGPUBufferImpl* buffer = flushContext.Api.DeviceCreateBuffer((WGPUDeviceImpl*)deviceReference.Handle, in descriptor);
+        using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
+        flushContext.Api.QueueWriteBuffer(
+            (WGPUQueueImpl*)queueReference.Handle,
+            buffer,
+            0,
+            Unsafe.AsPointer(ref Unsafe.AsRef(in value)),
+            byteLength);
+        return buffer;
     }
 
     /// <summary>
@@ -1368,26 +1370,24 @@ internal static unsafe class WebGPUSceneResources
             size = byteLength
         };
 
-        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
+        using WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference();
+        WGPUBufferImpl* buffer = flushContext.Api.DeviceCreateBuffer((WGPUDeviceImpl*)deviceReference.Handle, in descriptor);
+        if (!values.IsEmpty)
         {
-            WGPUBufferImpl* buffer = flushContext.Api.DeviceCreateBuffer((WGPUDeviceImpl*)deviceReference.Handle, in descriptor);
-            if (!values.IsEmpty)
+            nuint uploadByteLength = checked((nuint)values.Length * (nuint)Unsafe.SizeOf<T>());
+            using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
+            fixed (T* dataPtr = values)
             {
-                nuint uploadByteLength = checked((nuint)values.Length * (nuint)Unsafe.SizeOf<T>());
-                using WebGPUHandle.HandleReference queueReference = flushContext.QueueHandle.AcquireReference();
-                fixed (T* dataPtr = values)
-                {
-                    flushContext.Api.QueueWriteBuffer(
-                        (WGPUQueueImpl*)queueReference.Handle,
-                        buffer,
-                        0,
-                        dataPtr,
-                        uploadByteLength);
-                }
+                flushContext.Api.QueueWriteBuffer(
+                    (WGPUQueueImpl*)queueReference.Handle,
+                    buffer,
+                    0,
+                    dataPtr,
+                    uploadByteLength);
             }
-
-            return buffer;
         }
+
+        return buffer;
     }
 
     /// <summary>
@@ -1439,8 +1439,8 @@ internal readonly unsafe struct WebGPUSceneResourceSet
     /// <param name="clipBicBuffer">The clip bic (stack-monoid) reduction buffer.</param>
     /// <param name="clipBboxBuffer">The clip bounding-box buffer.</param>
     /// <param name="drawBboxBuffer">The draw bounding-box buffer.</param>
-    /// <param name="pathBuffer">The flattened path buffer.</param>
-    /// <param name="lineBuffer">The flattened line buffer.</param>
+    /// <param name="pathBuffer">The per-path scheduling buffer.</param>
+    /// <param name="lineBuffer">The final device-space line buffer.</param>
     /// <param name="gradientTextureView">The gradient texture view.</param>
     /// <param name="imageAtlasTextureView">The image atlas texture view.</param>
     public WebGPUSceneResourceSet(
@@ -1566,7 +1566,7 @@ internal readonly unsafe struct WebGPUSceneResourceSet
     public WGPUBufferImpl* PathBuffer { get; }
 
     /// <summary>
-    /// Gets the flattened line buffer.
+    /// Gets the final device-space line buffer.
     /// </summary>
     public WGPUBufferImpl* LineBuffer { get; }
 
@@ -1617,7 +1617,7 @@ internal sealed unsafe class WebGPUSceneResourceArena
     /// <param name="clipBboxBuffer">The clip bounding-box buffer.</param>
     /// <param name="drawBboxBuffer">The draw bounding-box buffer.</param>
     /// <param name="pathBuffer">The per-path scheduling buffer.</param>
-    /// <param name="lineBuffer">The flattened line buffer.</param>
+    /// <param name="lineBuffer">The final device-space line buffer.</param>
     public WebGPUSceneResourceArena(
         WebGPU api,
         WebGPUDeviceHandle device,
@@ -1772,7 +1772,7 @@ internal sealed unsafe class WebGPUSceneResourceArena
     public WGPUBufferImpl* PathBuffer { get; private set; }
 
     /// <summary>
-    /// Gets the flattened line buffer.
+    /// Gets the final device-space line buffer.
     /// </summary>
     public WGPUBufferImpl* LineBuffer { get; private set; }
 
@@ -1935,7 +1935,7 @@ internal struct GpuSceneBumpAllocators
     public uint BlendSpill;
 
     /// <summary>
-    /// The flattened line record allocation head.
+    /// The final line record allocation head.
     /// </summary>
     public uint Lines;
 }
@@ -1987,7 +1987,7 @@ internal readonly struct GpuTagMonoid
 }
 
 /// <summary>
-/// Per-path bounding box and scheduling data written by the flatten pass.
+/// Per-path bounding box and scheduling data written by the path-lowering pass.
 /// </summary>
 /// <remarks>
 /// Mirrors <c>PathBbox</c> in Shared/bbox.wgsl; field order and the 48-byte stride must
@@ -2006,7 +2006,7 @@ internal readonly struct GpuPathBbox
     /// <param name="y1">The bottom edge of the transformed integer path bounds.</param>
     /// <param name="drawFlags">The draw flags associated with the path.</param>
     /// <param name="transIndex">The transform index associated with the path.</param>
-    /// <param name="coverageThreshold">The aliased coverage threshold for the path.</param>
+    /// <param name="coverageData">The antialiased coverage adjustment for the path.</param>
     /// <param name="padding">The reserved layout slot matching <c>PathBbox._padding</c> in <c>bbox.wgsl</c>.</param>
     /// <param name="interest">The root-target-local raster interest rectangle.</param>
     public GpuPathBbox(
@@ -2016,7 +2016,7 @@ internal readonly struct GpuPathBbox
         int y1,
         uint drawFlags,
         uint transIndex,
-        float coverageThreshold,
+        float coverageData,
         uint padding,
         Vector4 interest)
     {
@@ -2026,7 +2026,7 @@ internal readonly struct GpuPathBbox
         this.Y1 = y1;
         this.DrawFlags = drawFlags;
         this.TransIndex = transIndex;
-        this.CoverageThreshold = coverageThreshold;
+        this.CoverageData = coverageData;
         this.Padding = padding;
         this.Interest = interest;
     }
@@ -2062,9 +2062,9 @@ internal readonly struct GpuPathBbox
     public uint TransIndex { get; }
 
     /// <summary>
-    /// Gets the aliased coverage threshold for this path.
+    /// Gets the antialiased coverage adjustment for this path.
     /// </summary>
-    public float CoverageThreshold { get; }
+    public float CoverageData { get; }
 
     /// <summary>
     /// Gets the reserved layout slot matching <c>PathBbox._padding</c> in <c>bbox.wgsl</c>.
@@ -2413,7 +2413,7 @@ internal readonly struct GpuSceneConfig
     /// <param name="chunkTileHeight">The number of real tile rows rendered by this attempt.</param>
     /// <param name="baseColor">The packed RGBA8 base color applied by the fine pass.</param>
     /// <param name="layout">The scene-buffer layout metadata.</param>
-    /// <param name="linesSize">The flattened line buffer capacity in elements.</param>
+    /// <param name="linesSize">The final line buffer capacity in elements.</param>
     /// <param name="binningSize">The bin-data scratch capacity in words.</param>
     /// <param name="pathRowsSize">The sparse path-row buffer capacity in elements.</param>
     /// <param name="tilesSize">The path-tile buffer capacity in elements.</param>
@@ -2421,7 +2421,8 @@ internal readonly struct GpuSceneConfig
     /// <param name="segmentsSize">The segment buffer capacity in elements.</param>
     /// <param name="blendSize">The blend-spill buffer capacity in slots.</param>
     /// <param name="ptclSize">The PTCL buffer capacity in words.</param>
-    /// <param name="fineCoverageThreshold">The scene-wide aliased coverage threshold.</param>
+    /// <param name="profileSlotsBase">The word offset of the segment-to-profile table, or zero when absent.</param>
+    /// <param name="profileRecordsBase">The word offset of the profile range and contour-link table, or zero when absent.</param>
     public GpuSceneConfig(
         uint widthInTiles,
         uint heightInTiles,
@@ -2439,8 +2440,14 @@ internal readonly struct GpuSceneConfig
         uint segmentsSize,
         uint blendSize,
         uint ptclSize,
-        float fineCoverageThreshold)
+        uint profileSlotsBase,
+        uint profileRecordsBase)
     {
+        this.ProfileSlotsBase = profileSlotsBase;
+        this.ProfileRecordsBase = profileRecordsBase;
+        this.profilePad0 = 0;
+        this.profilePad1 = 0;
+        this.profilePad2 = 0;
         this.WidthInTiles = widthInTiles;
         this.HeightInTiles = heightInTiles;
         this.TargetWidth = targetWidth;
@@ -2457,7 +2464,6 @@ internal readonly struct GpuSceneConfig
         this.SegmentsSize = segmentsSize;
         this.BlendSize = blendSize;
         this.PtclSize = ptclSize;
-        this.FineCoverageThreshold = fineCoverageThreshold;
     }
 
     /// <summary>
@@ -2501,7 +2507,7 @@ internal readonly struct GpuSceneConfig
     public GpuSceneLayout Layout { get; }
 
     /// <summary>
-    /// Gets the flattened line buffer capacity in elements.
+    /// Gets the final line buffer capacity in elements.
     /// </summary>
     public uint LinesSize { get; }
 
@@ -2541,9 +2547,20 @@ internal readonly struct GpuSceneConfig
     public uint PtclSize { get; }
 
     /// <summary>
-    /// Gets the scene-wide coverage threshold consumed by the aliased fine pass.
+    /// Gets the word offset of the segment-to-profile table, or zero when absent.
     /// </summary>
-    public float FineCoverageThreshold { get; }
+    public uint ProfileSlotsBase { get; }
+
+    /// <summary>
+    /// Gets the word offset of the profile range and contour-link table, or zero when absent.
+    /// </summary>
+    public uint ProfileRecordsBase { get; }
+
+    // Config in config.wgsl declares three final pad words so its size is a multiple of 16 bytes.
+    // Declare the same words after the auto-properties to preserve the uniform buffer layout.
+    private readonly uint profilePad0;
+    private readonly uint profilePad1;
+    private readonly uint profilePad2;
 }
 
 /// <summary>
@@ -2555,9 +2572,8 @@ internal readonly struct GpuSceneConfig
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuScenePath
 {
-    // Path in tile.wgsl has a vec4<u32> followed by one u32 and therefore a
-    // 32-byte array stride. The padding keeps reusable GPU buffer sizing exact.
-    private readonly uint padding0;
+    // Path in tile.wgsl has a 16-byte-aligned vec4<u32> followed by two u32 values. WGSL rounds
+    // the 24-byte payload up to a 32-byte array stride, so these fields represent the final 8 bytes.
     private readonly uint padding1;
     private readonly uint padding2;
 
@@ -2569,14 +2585,15 @@ internal readonly struct GpuScenePath
     /// <param name="bboxMaxX">The maximum x of the path bounds in tiles.</param>
     /// <param name="bboxMaxY">The maximum y of the path bounds in tiles.</param>
     /// <param name="rowOffset">The first sparse row record owned by the path.</param>
-    public GpuScenePath(uint bboxMinX, uint bboxMinY, uint bboxMaxX, uint bboxMaxY, uint rowOffset)
+    /// <param name="flags">The path flags. Bit zero means that the original path starts left of its clipped drawing bounds.</param>
+    public GpuScenePath(uint bboxMinX, uint bboxMinY, uint bboxMaxX, uint bboxMaxY, uint rowOffset, uint flags)
     {
         this.BboxMinX = bboxMinX;
         this.BboxMinY = bboxMinY;
         this.BboxMaxX = bboxMaxX;
         this.BboxMaxY = bboxMaxY;
         this.RowOffset = rowOffset;
-        this.padding0 = 0;
+        this.Flags = flags;
         this.padding1 = 0;
         this.padding2 = 0;
     }
@@ -2605,6 +2622,11 @@ internal readonly struct GpuScenePath
     /// Gets the first sparse row record owned by this path.
     /// </summary>
     public uint RowOffset { get; }
+
+    /// <summary>
+    /// Gets the path flags. Bit zero means that the original path starts left of its clipped drawing bounds.
+    /// </summary>
+    public uint Flags { get; }
 }
 
 /// <summary>
@@ -2654,7 +2676,7 @@ internal struct GpuPathRow
 }
 
 /// <summary>
-/// Flattened line record emitted from the path stream for segment-counting and tiling.
+/// Final device-space line record emitted from the path stream for segment-counting and tiling.
 /// </summary>
 /// <remarks>
 /// Mirrors <c>LineSoup</c> in Shared/segment.wgsl; field order and the 24-byte stride must match.
@@ -2740,7 +2762,7 @@ internal readonly struct GpuSegmentCount
     /// <summary>
     /// Initializes a new instance of the <see cref="GpuSegmentCount"/> struct.
     /// </summary>
-    /// <param name="lineIndex">The index of the source line in the flattened line buffer.</param>
+    /// <param name="lineIndex">The index of the source line in the final line buffer.</param>
     /// <param name="counts">The packed segment indices; see <see cref="Counts"/>.</param>
     public GpuSegmentCount(uint lineIndex, uint counts)
     {
@@ -2749,7 +2771,7 @@ internal readonly struct GpuSegmentCount
     }
 
     /// <summary>
-    /// Gets the index of the source line in the flattened line buffer.
+    /// Gets the index of the source line in the final line buffer.
     /// </summary>
     public uint LineIndex { get; }
 

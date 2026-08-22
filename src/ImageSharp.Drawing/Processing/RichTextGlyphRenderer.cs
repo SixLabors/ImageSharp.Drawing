@@ -7,10 +7,32 @@ using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
 using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
-using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Text;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
+
+/// <summary>
+/// Identifies which renderer callback a cached glyph entry replays. <see cref="Layer"/> is
+/// zero so pre-existing non-layered and ink-free entries keep their meaning under
+/// <see langword="default"/> initialization.
+/// </summary>
+internal enum GlyphCacheEntryKind : byte
+{
+    /// <summary>
+    /// A color layer, or the single entry of a non-layered glyph.
+    /// </summary>
+    Layer = 0,
+
+    /// <summary>
+    /// A marker opening an isolated group.
+    /// </summary>
+    BeginGroup = 1,
+
+    /// <summary>
+    /// A marker closing the current group.
+    /// </summary>
+    EndGroup = 2
+}
 
 /// <summary>
 /// Allows the rendering of rich text configured via <see cref="RichTextOptions"/>.
@@ -93,15 +115,43 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
     /// </summary>
     private bool hasLayer;
 
+    /// <summary>
+    /// The transformed bounds used for isolated group layers in the current glyph.
+    /// </summary>
+    private Rectangle currentCompositeBounds;
+
+    /// <summary>
+    /// The nesting depth of open COLR groups. Zero identifies the outermost group and
+    /// root-level content, which alone apply the caller's graphics options.
+    /// </summary>
+    private int groupDepth;
+
+    /// <summary>
+    /// The canvas-local rectangle from the font's clip bounds, or <see langword="null"/>
+    /// when the current glyph has none. Stamped on every operation the glyph emits; the
+    /// canvas narrows each operation's rasterizer interest to it.
+    /// </summary>
+    private RectangleF? currentGlyphClip;
+
+    /// <summary>
+    /// The paint of the current color layer when <see cref="BeginLayer"/> converted it to a
+    /// brush, or <see langword="null"/> when the layer falls back to the run brush. Cached
+    /// layered replays store this paint so brush conversion can re-run per draw: paint
+    /// brushes bake device coordinates and cannot be reused across glyph positions.
+    /// </summary>
+    private Paint? currentLayerPaint;
+
     // --- Glyph outline cache ---
     // Glyphs that share the same CacheKey (same glyph id, size, pen reference, etc.) reuse
     // the anchored IPath from the first occurrence. This avoids re-building the full outline
     // for repeated characters.
     //
     // Position is intentionally absent from the key: cached paths are anchored at their exact
-    // outline origin, and each emitted operation carries the pixel-snapped location plus the
+    // outline origin, and each emitted operation carries the integer location plus the
     // fractional remainder (DrawingOperation.SubPixelOffset). The backends apply the remainder
-    // as a residual translation, so one cache entry renders exactly at every position.
+    // as a residual translation. Fonts supplies metric bounds at the same resolved origin used
+    // for outline emission, including format-specific grid placement, so BoundsOffset maps every
+    // cache hit back to the exact position a fresh outline would have produced.
     // The key's size component stays quantized (1/SizeAccuracyMultiple px) because transformed
     // bounds sizes pick up float noise under translation.
 
@@ -246,6 +296,42 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
             this.currentPen = null;
         }
 
+        // Group layer bounds must land where the glyph geometry lands: the builder
+        // transform carries any path-following placement composed onto the drawing
+        // transform, and brushes inside the glyph use that same transform.
+        RectangleF compositeBounds = RectangleF.Transform(
+            new RectangleF(bounds.Location, new SizeF(bounds.Width, bounds.Height)),
+            this.Builder.Transform);
+
+        this.currentCompositeBounds = Rectangle.FromLTRB(
+            (int)MathF.Floor(compositeBounds.Left),
+            (int)MathF.Floor(compositeBounds.Top),
+            (int)MathF.Ceiling(compositeBounds.Right),
+            (int)MathF.Ceiling(compositeBounds.Bottom));
+
+        this.groupDepth = 0;
+
+        // The font's clip bounds map to one device rectangle per glyph. Four corners cover
+        // every transform; under rotation the min-max rectangle is the tilted shape's Bounds,
+        // which keeps slightly too much area, and that area holds no paint. The rectangle is
+        // recomputed per draw because the clip transform carries the glyph's placement.
+        this.currentGlyphClip = null;
+        if (parameters.ClipBounds.HasValue)
+        {
+            ClipBounds clip = parameters.ClipBounds.Value;
+            Matrix4x4 clipTransform = new Matrix4x4(clip.Transform) * this.Builder.Transform;
+            FontRectangle clipRect = clip.Bounds;
+
+            Vector2 p0 = Vector2.Transform(new Vector2(clipRect.Left, clipRect.Top), clipTransform);
+            Vector2 p1 = Vector2.Transform(new Vector2(clipRect.Right, clipRect.Top), clipTransform);
+            Vector2 p2 = Vector2.Transform(new Vector2(clipRect.Right, clipRect.Bottom), clipTransform);
+            Vector2 p3 = Vector2.Transform(new Vector2(clipRect.Left, clipRect.Bottom), clipTransform);
+
+            Vector2 min = Vector2.Min(Vector2.Min(p0, p1), Vector2.Min(p2, p3));
+            Vector2 max = Vector2.Max(Vector2.Max(p0, p1), Vector2.Max(p2, p3));
+            this.currentGlyphClip = RectangleF.FromLTRB(min.X, min.Y, max.X, max.Y);
+        }
+
         if (!this.noCache)
         {
             // Transform the font-metric bounds by the drawing transform so that the size
@@ -253,8 +339,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
             // cached paths are position independent, and quantizing absorbs the float noise
             // that transformed sizes pick up under translation.
             RectangleF currentBounds = RectangleF.Transform(
-                   new RectangleF(bounds.Location, new SizeF(bounds.Width, bounds.Height)),
-                   this.drawingOptions.Transform);
+                new RectangleF(bounds.Location, new SizeF(bounds.Width, bounds.Height)),
+                this.drawingOptions.Transform);
 
             this.currentTransformedBoundsLocation = currentBounds.Location;
 
@@ -271,22 +357,30 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
             {
                 this.currentCacheEntries = cachedEntries;
 
-                if (cachedEntries.Count > 0 && !cachedEntries[0].IsLayered
-                    && this.EnabledDecorations() == TextDecorations.None)
+                if (cachedEntries.Count > 0 && this.EnabledDecorations() == TextDecorations.None)
                 {
-                    // Non-layered cache hit without decorations: emit operations directly
-                    // and tell the font engine to skip the outline entirely
-                    // (no MoveTo/LineTo/SetDecoration/EndGlyph).
-                    this.EmitCachedGlyphOperations(cachedEntries[0], currentBounds.Location);
+                    // Decoration-free cache hit: emit operations directly and tell the font
+                    // engine to skip the glyph entirely (no decode, no MoveTo/LineTo, no
+                    // layer or composite callbacks, no EndGlyph). Layered glyphs replay
+                    // their stored entry sequence; non-layered glyphs replay one entry.
+                    if (cachedEntries[0].IsLayered)
+                    {
+                        this.EmitCachedLayeredGlyphOperations(cachedEntries, currentBounds.Location);
+                    }
+                    else
+                    {
+                        this.EmitCachedGlyphOperations(cachedEntries[0], currentBounds.Location);
+                    }
+
                     return false;
                 }
 
-                // Layered or decorated cache hit: let the normal flow handle
-                // per-layer state and decoration callbacks. For decorated non-layered glyphs the
-                // decoded outline is not needed, because the cached path and its stored anchor
-                // position the glyph; skipping the build avoids a discarded path graph per glyph
-                // per draw. Layered glyphs keep building: each layer's exact built bounds anchor
-                // that layer, and COLR components interleave layers across glyph callbacks.
+                // Decorated cache hit: let the normal flow handle per-layer state and
+                // decoration callbacks, consuming one stored entry per callback. For
+                // decorated non-layered glyphs the decoded outline is not needed, because
+                // the cached path and its stored anchor position the glyph; skipping the
+                // build avoids a discarded path graph per glyph per draw. Decorated layered
+                // glyphs keep building: each layer's exact built bounds anchor that layer.
                 this.rasterizationRequired = false;
                 this.OutlineBuildRequired = cachedEntries[0].IsLayered;
                 return true;
@@ -298,17 +392,28 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
     }
 
     /// <inheritdoc/>
-    protected override void BeginLayer(Paint? paint, FillRule fillRule, ClipQuad? clipBounds)
+    protected override void BeginLayer(Paint? paint, FillRule fillRule)
     {
         // Capture the color-layer paint, fill rule, and composite mode.
         // Setting hasLayer tells EndGlyph to skip its default single-layer path emission.
         this.hasLayer = true;
         this.currentFillRule = fillRule;
+        this.currentLayerPaint = null;
         if (TryCreateBrush(paint, this.Builder.Transform, out Brush? brush))
         {
             this.currentBrush = brush;
+            this.currentLayerPaint = paint;
             this.currentCompositionMode = TextUtilities.MapCompositionMode(paint.CompositeMode);
             this.currentBlendingMode = TextUtilities.MapBlendingMode(paint.CompositeMode);
+        }
+        else if (this.groupDepth > 0)
+        {
+            // A layer inside an isolated group must never composite with the caller's
+            // modes: a destructive mode such as Src erases the group's accumulated
+            // backdrop. When the paint has no brush conversion the modes stay at their
+            // reset values, so pin plain source-over here.
+            this.currentCompositionMode = PixelAlphaCompositionMode.SrcOver;
+            this.currentBlendingMode = PixelColorBlendingMode.Normal;
         }
     }
 
@@ -333,16 +438,26 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
         // Any drawing of outlines is ignored as that doesn't really make sense.
         bool renderFill = this.currentBrush != null;
 
-        // Path has already been added to the collection via the base class. Layered glyphs
-        // always build their decoded outline, on hits too: each layer is anchored by its own
-        // exact built bounds, and COLR components interleave layers across glyph callbacks.
+        // Path has already been added to the collection via the base class, with any COLR
+        // clip box already intersected in, so the anchor below always describes the visible
+        // geometry and cached replays inherit the clip for free. Layered glyphs always build
+        // their decoded outline, on hits too: each layer is anchored by its own exact built
+        // bounds, and COLR components interleave layers across glyph callbacks.
         IPath path = this.CurrentPaths[^1];
+
         PointF boundsLocation = path.Bounds.Location;
         Point renderLocation = ClampToPixel(boundsLocation);
         Vector2 subPixelOffset = (Vector2)(boundsLocation - renderLocation);
         if (this.noCache || this.rasterizationRequired)
         {
+            // Capture everything a callback-free replay needs: the fill rule and paint are
+            // font data and bake safely; run-brush layers leave Paint null so the replay
+            // resolves the caller-dependent brush and modes live.
             renderData.IsLayered = true;
+            renderData.LayerFillRule = this.currentFillRule;
+            renderData.Paint = this.currentLayerPaint;
+            renderData.CompositionMode = this.currentCompositionMode;
+            renderData.BlendingMode = this.currentBlendingMode;
 
             if (path.Bounds.Equals(RectangleF.Empty))
             {
@@ -361,6 +476,10 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
                 renderData.FillPath = path.Translate(-boundsLocation.X, -boundsLocation.Y);
                 fillPath = renderData.FillPath;
             }
+
+            // The anchor offset lets replays estimate this layer's position from the fresh
+            // font-metric bounds alone, exactly like the non-layered replay.
+            renderData.BoundsOffset = (Vector2)(boundsLocation - this.currentTransformedBoundsLocation);
 
             if (!this.noCache)
             {
@@ -396,13 +515,57 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
                 Brush = this.currentBrush,
                 RenderPass = RenderOrderFill,
                 PixelAlphaCompositionMode = this.currentCompositionMode,
-                PixelColorBlendingMode = this.currentBlendingMode
+                PixelColorBlendingMode = this.currentBlendingMode,
+                GlyphClip = this.currentGlyphClip
             });
         }
 
         this.currentFillRule = FillRule.NonZero;
         this.currentCompositionMode = this.drawingOptions.GraphicsOptions.AlphaCompositionMode;
         this.currentBlendingMode = this.drawingOptions.GraphicsOptions.ColorBlendingMode;
+        this.currentLayerPaint = null;
+    }
+
+    /// <inheritdoc/>
+    protected override void BeginGroup(CompositeMode mode)
+    {
+        this.DrawingOperations.Add(new DrawingOperation
+        {
+            Kind = DrawingOperationKind.BeginGroup,
+            CompositeBounds = this.currentCompositeBounds,
+            RenderPass = RenderOrderFill,
+            ApplyDrawingOptions = this.groupDepth == 0,
+            PixelAlphaCompositionMode = TextUtilities.MapCompositionMode(mode),
+            PixelColorBlendingMode = TextUtilities.MapBlendingMode(mode)
+        });
+
+        this.RecordMarker(new GlyphRenderData
+        {
+            IsLayered = true,
+            EntryKind = GlyphCacheEntryKind.BeginGroup,
+            CompositionMode = TextUtilities.MapCompositionMode(mode),
+            BlendingMode = TextUtilities.MapBlendingMode(mode)
+        });
+
+        this.groupDepth++;
+    }
+
+    /// <inheritdoc/>
+    protected override void EndGroup()
+    {
+        this.groupDepth--;
+        this.DrawingOperations.Add(new DrawingOperation
+        {
+            Kind = DrawingOperationKind.EndGroup,
+            CompositeBounds = this.currentCompositeBounds,
+            RenderPass = RenderOrderFill
+        });
+
+        this.RecordMarker(new GlyphRenderData
+        {
+            IsLayered = true,
+            EntryKind = GlyphCacheEntryKind.EndGroup
+        });
     }
 
     /// <inheritdoc/>
@@ -492,7 +655,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
         // Otherwise, on a cache miss the built path is anchored at its exact outline origin,
         // stored for future hits, and emitted as fill and/or outline DrawingOperations.
         // On a cache hit the stored path is reused; this instance's own outline origin
-        // (snapped location + fractional remainder) positions it exactly.
+        // positions it exactly.
         if (this.hasLayer)
         {
             // The layer has already been rendered.
@@ -573,13 +736,14 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
         {
             // Cache hit: the base class skipped building the decoded outline, so derive the
             // position estimate from the anchor stored with the cached entry, exactly as the
-            // fast path does. The stored path is anchored at its exact origin, so the snapped
-            // estimate plus its fractional remainder positions it exactly. The entries were
+            // fast path does. The stored path is anchored at its exact origin, so the integer
+            // component plus its fractional remainder positions it exactly. The entries were
             // assigned by the hit in BeginGlyph.
             renderData = this.currentCacheEntries![this.cacheReadIndex++];
             PointF estimatedPathLocation = new(
                 this.currentTransformedBoundsLocation.X + renderData.BoundsOffset.X,
                 this.currentTransformedBoundsLocation.Y + renderData.BoundsOffset.Y);
+
             renderLocation = ClampToPixel(estimatedPathLocation);
             subPixelOffset = (Vector2)(estimatedPathLocation - renderLocation);
 
@@ -604,7 +768,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
                 Brush = this.currentBrush,
                 RenderPass = RenderOrderFill,
                 PixelAlphaCompositionMode = this.currentCompositionMode,
-                PixelColorBlendingMode = this.currentBlendingMode
+                PixelColorBlendingMode = this.currentBlendingMode,
+                GlyphClip = this.currentGlyphClip
             });
         }
 
@@ -623,7 +788,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
                 Pen = this.currentPen,
                 RenderPass = RenderOrderOutline,
                 PixelAlphaCompositionMode = this.currentCompositionMode,
-                PixelColorBlendingMode = this.currentBlendingMode
+                PixelColorBlendingMode = this.currentBlendingMode,
+                GlyphClip = this.currentGlyphClip
             });
         }
     }
@@ -640,11 +806,12 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
     {
         // Estimate the outline bounds location using the stored offset between
         // the outline bounds and the font metric bounds from the original glyph.
-        // The cached path is anchored at its exact outline origin, so the snapped
-        // estimate plus its fractional remainder positions it exactly.
+        // The cached path is anchored at its exact outline origin, so the integer
+        // component plus its fractional remainder positions it exactly.
         PointF estimatedPathLocation = new(
             currentBoundsLocation.X + renderData.BoundsOffset.X,
             currentBoundsLocation.Y + renderData.BoundsOffset.Y);
+
         Point renderLocation = ClampToPixel(estimatedPathLocation);
         Vector2 subPixelOffset = (Vector2)(estimatedPathLocation - renderLocation);
 
@@ -678,7 +845,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
                 Brush = brush,
                 RenderPass = RenderOrderFill,
                 PixelAlphaCompositionMode = this.currentCompositionMode,
-                PixelColorBlendingMode = this.currentBlendingMode
+                PixelColorBlendingMode = this.currentBlendingMode,
+                GlyphClip = this.currentGlyphClip
             });
         }
 
@@ -697,18 +865,179 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
                 Pen = pen,
                 RenderPass = RenderOrderOutline,
                 PixelAlphaCompositionMode = this.currentCompositionMode,
-                PixelColorBlendingMode = this.currentBlendingMode
+                PixelColorBlendingMode = this.currentBlendingMode,
+                GlyphClip = this.currentGlyphClip
             });
         }
     }
 
     /// <summary>
+    /// Emits the complete <see cref="DrawingOperation"/> sequence for a layered (COLR) glyph
+    /// from its cached entry stream. Called from <see cref="BeginGlyph"/> on a
+    /// decoration-free cache hit when the font engine is told to skip the glyph entirely,
+    /// so no outline is decoded and no path graph is built. Geometry replays from the
+    /// anchored per-layer paths, group bounds and the glyph clip are recomputed per draw,
+    /// and paint brushes re-convert with the glyph's positional delta appended to the
+    /// drawing transform, because converted brushes bake device coordinates.
+    /// </summary>
+    /// <param name="entries">The cached entry stream recorded by the build draw.</param>
+    /// <param name="currentBoundsLocation">The transformed bounding-box origin for the current glyph instance.</param>
+    private void EmitCachedLayeredGlyphOperations(List<GlyphRenderData> entries, PointF currentBoundsLocation)
+    {
+        Vector2 currentOrigin = currentBoundsLocation;
+        Vector2 delta = currentOrigin - entries[0].SourceOrigin;
+        Matrix4x4 paintTransform = this.drawingOptions.Transform * Matrix4x4.CreateTranslation(delta.X, delta.Y, 0F);
+        int replayDepth = 0;
+
+        for (int i = 0; i < entries.Count; i++)
+        {
+            GlyphRenderData entry = entries[i];
+            switch (entry.EntryKind)
+            {
+                case GlyphCacheEntryKind.BeginGroup:
+                    this.DrawingOperations.Add(new DrawingOperation
+                    {
+                        Kind = DrawingOperationKind.BeginGroup,
+                        CompositeBounds = this.currentCompositeBounds,
+                        RenderPass = RenderOrderFill,
+                        ApplyDrawingOptions = replayDepth == 0,
+                        PixelAlphaCompositionMode = entry.CompositionMode,
+                        PixelColorBlendingMode = entry.BlendingMode
+                    });
+
+                    replayDepth++;
+                    break;
+
+                case GlyphCacheEntryKind.EndGroup:
+                    this.DrawingOperations.Add(new DrawingOperation
+                    {
+                        Kind = DrawingOperationKind.EndGroup,
+                        CompositeBounds = this.currentCompositeBounds,
+                        RenderPass = RenderOrderFill
+                    });
+
+                    replayDepth--;
+                    break;
+
+                default:
+                    this.EmitCachedLayerFill(entry, currentBoundsLocation, paintTransform, replayDepth);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Emits one cached color layer at the current glyph position. Brush and mode
+    /// resolution mirrors <see cref="BeginLayer"/> and <see cref="EndLayer"/>: paint layers
+    /// re-convert their paint and use its baked modes, and run-brush layers resolve the
+    /// caller's brush and modes live, with group content pinned to plain source-over.
+    /// </summary>
+    /// <param name="entry">The cached layer entry.</param>
+    /// <param name="currentBoundsLocation">The transformed bounding-box origin for the current glyph instance.</param>
+    /// <param name="paintTransform">The drawing transform with the glyph's positional delta appended.</param>
+    /// <param name="replayDepth">The current group nesting depth.</param>
+    private void EmitCachedLayerFill(GlyphRenderData entry, PointF currentBoundsLocation, Matrix4x4 paintTransform, int replayDepth)
+    {
+        if (entry.FillPath is null)
+        {
+            // Ink-free layer marker: the build emitted nothing for it either.
+            return;
+        }
+
+        PointF estimatedPathLocation = new(
+            currentBoundsLocation.X + entry.BoundsOffset.X,
+            currentBoundsLocation.Y + entry.BoundsOffset.Y);
+
+        Point renderLocation = ClampToPixel(estimatedPathLocation);
+        Vector2 subPixelOffset = (Vector2)(estimatedPathLocation - renderLocation);
+
+        Brush? brush;
+        PixelAlphaCompositionMode compositionMode;
+        PixelColorBlendingMode blendingMode;
+        if (entry.Paint is not null && TryCreateBrush(entry.Paint, paintTransform, out Brush? paintBrush))
+        {
+            brush = paintBrush;
+            compositionMode = entry.CompositionMode;
+            blendingMode = entry.BlendingMode;
+        }
+        else
+        {
+            // Same fallback ladder as EndLayer: the run brush, then the draw default when no
+            // pen claims the glyph, with group content pinned to plain source-over so
+            // destructive caller modes cannot erase the isolated backdrop.
+            brush = this.currentBrush;
+            if (brush is null && this.currentPen is null)
+            {
+                brush = this.defaultBrush;
+            }
+
+            if (replayDepth > 0)
+            {
+                compositionMode = PixelAlphaCompositionMode.SrcOver;
+                blendingMode = PixelColorBlendingMode.Normal;
+            }
+            else
+            {
+                compositionMode = this.drawingOptions.GraphicsOptions.AlphaCompositionMode;
+                blendingMode = this.drawingOptions.GraphicsOptions.ColorBlendingMode;
+            }
+        }
+
+        if (brush is null)
+        {
+            return;
+        }
+
+        this.DrawingOperations.Add(new DrawingOperation
+        {
+            Kind = DrawingOperationKind.Fill,
+            Path = entry.FillPath,
+            RenderLocation = renderLocation,
+            SubPixelOffset = subPixelOffset,
+            GlyphKey = this.currentCacheKey,
+            HasGlyphKey = true,
+            IntersectionRule = TextUtilities.MapFillRule(entry.LayerFillRule),
+            Brush = brush,
+            RenderPass = RenderOrderFill,
+            PixelAlphaCompositionMode = compositionMode,
+            PixelColorBlendingMode = blendingMode,
+            GlyphClip = this.currentGlyphClip
+        });
+    }
+
+    /// <summary>
+    /// Records one non-layer callback in the glyph cache stream. On a build this appends
+    /// the marker entry; on a decorated cache hit it consumes the matching stored entry so
+    /// the per-callback read index stays aligned with the font engine's sequence.
+    /// </summary>
+    /// <param name="entry">The marker entry to append on a build.</param>
+    private void RecordMarker(GlyphRenderData entry)
+    {
+        if (this.noCache)
+        {
+            return;
+        }
+
+        if (this.rasterizationRequired)
+        {
+            this.UpdateCache(entry);
+        }
+        else if (this.currentCacheEntries is not null)
+        {
+            this.cacheReadIndex++;
+        }
+    }
+
+    /// <summary>
     /// Stores a <see cref="GlyphRenderData"/> entry in the glyph cache under the
-    /// current key. Creates the cache list on first insertion for a given key.
+    /// current key. Creates the cache list on first insertion for a given key. Every entry
+    /// is stamped with the glyph's build-time transformed metric origin so layered replays
+    /// can derive the positional delta for paint brushes.
     /// </summary>
     /// <param name="renderData">The render data to append to the current key's entry list.</param>
     private void UpdateCache(GlyphRenderData renderData)
     {
+        renderData.SourceOrigin = this.currentTransformedBoundsLocation;
         this.glyphCache.GetOrAdd(this.currentCacheKey).Add(renderData);
     }
 
@@ -738,7 +1067,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
 
     /// <summary>
     /// Per-layer cached data for a rasterized glyph. Stores the path anchored at its exact
-    /// outline origin; cache hits position it via their own snapped location and fractional
+    /// outline origin; cache hits position it via their own integer location and fractional
     /// remainder, so no per-hit compensation state is required.
     /// </summary>
     internal struct GlyphRenderData
@@ -762,9 +1091,46 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
         /// <see langword="true"/> if this entry belongs to a multi-layer (COLR) glyph.
         /// Non-layered cache hits with no decorations can skip the outline entirely
         /// (return <see langword="false"/> from <see cref="BeginGlyph"/>); layered hits
-        /// still need the per-layer <c>BeginLayer</c>/<c>EndLayer</c> callbacks.
+        /// replay the stored entry sequence, and decorated hits still walk the callbacks
+        /// consuming one entry per callback.
         /// </summary>
         public bool IsLayered;
+
+        /// <summary>
+        /// Identifies which callback this entry replays. Layer entries carry geometry;
+        /// marker entries reproduce the composite group structure.
+        /// </summary>
+        public GlyphCacheEntryKind EntryKind;
+
+        /// <summary>
+        /// The fill rule captured for a layer entry.
+        /// </summary>
+        public FillRule LayerFillRule;
+
+        /// <summary>
+        /// The COLR paint for a layer entry, or <see langword="null"/> when the layer uses
+        /// the run brush. Paints are re-converted to brushes on every replay because
+        /// converted brushes bake device coordinates for the build position.
+        /// </summary>
+        public Paint? Paint;
+
+        /// <summary>
+        /// The alpha composition mode baked from font data. Valid for layer entries whose
+        /// <see cref="Paint"/> is set and for <see cref="GlyphCacheEntryKind.BeginGroup"/>
+        /// markers; all other entries resolve caller-dependent modes live at replay.
+        /// </summary>
+        public PixelAlphaCompositionMode CompositionMode;
+
+        /// <summary>
+        /// The color blending mode baked from font data, paired with <see cref="CompositionMode"/>.
+        /// </summary>
+        public PixelColorBlendingMode BlendingMode;
+
+        /// <summary>
+        /// The glyph's transformed metric-bounds origin at build time. Replays subtract this
+        /// from the current origin to translate paint brushes to the new position.
+        /// </summary>
+        public Vector2 SourceOrigin;
     }
 
     /// <summary>
@@ -853,6 +1219,14 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
         public Pen? PenReference { get; init; }
 
         /// <summary>
+        /// Gets the color palette selection the glyph's colors were resolved with, or
+        /// <see langword="null"/> when the glyph resolves no palette colors. The selection
+        /// changes the cached layer paints, so palette variants of one glyph must occupy
+        /// separate cache entries.
+        /// </summary>
+        public FontPalette? FontPalette { get; init; }
+
+        /// <summary>
         /// Determines whether two <see cref="CacheKey"/> instances are equal.
         /// </summary>
         /// <param name="left">The first key to compare.</param>
@@ -903,7 +1277,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
                 TextAttributes = parameters.TextRun.TextAttributes,
                 TextDecorations = parameters.TextRun.TextDecorations,
                 Size = size,
-                PenReference = penReference
+                PenReference = penReference,
+                FontPalette = parameters.FontPalette
             };
 
         /// <inheritdoc/>
@@ -925,7 +1300,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
             this.TextAttributes == other.TextAttributes &&
             this.TextDecorations == other.TextDecorations &&
             this.Size.Equals(other.Size) &&
-            ReferenceEquals(this.PenReference, other.PenReference);
+            ReferenceEquals(this.PenReference, other.PenReference) &&
+            Equals(this.FontPalette, other.FontPalette);
 
         /// <inheritdoc/>
         public override int GetHashCode()
@@ -946,6 +1322,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
             hash.Add(this.TextDecorations);
             hash.Add(this.Size);
             hash.Add(this.PenReference is null ? 0 : RuntimeHelpers.GetHashCode(this.PenReference));
+            hash.Add(this.FontPalette);
             return hash.ToHashCode();
         }
     }

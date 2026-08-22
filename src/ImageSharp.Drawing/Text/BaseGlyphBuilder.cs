@@ -121,11 +121,6 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
     private FillRule currentLayerFillRule;
 
     /// <summary>
-    /// Clip quad supplied by <c>BeginLayer</c> (COLR v1); applied in <c>EndLayer</c>.
-    /// </summary>
-    private ClipQuad? currentClipBounds;
-
-    /// <summary>
     /// Dedicated builder for carved decoration segments. The sliding window emits a glyph's
     /// segments after the next glyph has already retargeted <see cref="Builder"/> (path text
     /// sets a per-glyph transform), so decoration geometry is built here under the transform
@@ -314,7 +309,6 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
         this.layerStartIndex = this.graphemePathCount;
         this.currentLayerPaint = null;
         this.currentLayerFillRule = FillRule.NonZero;
-        this.currentClipBounds = null;
         return this.BeginGlyph(in bounds, in parameters);
     }
 
@@ -326,7 +320,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
         // renderer, so dropping the geometry here loses nothing.
         if (this.OutlineBuildRequired)
         {
-            this.Builder.StartFigure();
+            _ = this.Builder.StartFigure();
         }
     }
 
@@ -335,7 +329,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
     {
         if (this.OutlineBuildRequired)
         {
-            this.Builder.AddCubicBezier(this.currentPoint, secondControlPoint, thirdControlPoint, point);
+            _ = this.Builder.AddCubicBezier(this.currentPoint, secondControlPoint, thirdControlPoint, point);
         }
 
         this.currentPoint = point;
@@ -385,7 +379,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
     {
         if (this.OutlineBuildRequired)
         {
-            this.Builder.CloseFigure();
+            _ = this.Builder.CloseFigure();
         }
     }
 
@@ -394,7 +388,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
     {
         if (this.OutlineBuildRequired)
         {
-            this.Builder.AddLine(this.currentPoint, point);
+            _ = this.Builder.AddLine(this.currentPoint, point);
         }
 
         this.currentPoint = point;
@@ -405,7 +399,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
     {
         if (this.OutlineBuildRequired)
         {
-            this.Builder.StartFigure();
+            _ = this.Builder.StartFigure();
         }
 
         this.currentPoint = point;
@@ -416,7 +410,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
     {
         if (this.OutlineBuildRequired)
         {
-            this.Builder.AddArc(this.currentPoint, radiusX, radiusY, rotation, largeArc, sweep, point);
+            _ = this.Builder.AddArc(this.currentPoint, radiusX, radiusY, rotation, largeArc, sweep, point);
         }
 
         this.currentPoint = point;
@@ -427,7 +421,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
     {
         if (this.OutlineBuildRequired)
         {
-            this.Builder.AddQuadraticBezier(this.currentPoint, secondControlPoint, point);
+            _ = this.Builder.AddQuadraticBezier(this.currentPoint, secondControlPoint, point);
         }
 
         this.currentPoint = point;
@@ -439,24 +433,22 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
     /// </summary>
     /// <param name="paint">The paint for this color layer, or <see langword="null"/> for the default foreground.</param>
     /// <param name="fillRule">The fill rule to use when rasterizing this layer.</param>
-    /// <param name="clipBounds">Optional clip quad constraining the layer region.</param>
-    void IGlyphRenderer.BeginLayer(Paint? paint, FillRule fillRule, ClipQuad? clipBounds)
+    void IGlyphRenderer.BeginLayer(Paint? paint, FillRule fillRule)
     {
         this.usedLayers = true;
         this.inLayer = true;
         this.layerStartIndex = this.graphemePathCount;
         this.currentLayerPaint = paint;
         this.currentLayerFillRule = fillRule;
-        this.currentClipBounds = clipBounds;
 
         this.Builder.Clear();
-        this.BeginLayer(paint, fillRule, clipBounds);
+        this.BeginLayer(paint, fillRule);
     }
 
     /// <summary>
     /// Called by the font engine to close a color layer opened by <c>BeginLayer</c>.
-    /// Builds the layer path, applies any clip quad, and registers the result
-    /// as a painted layer in the current grapheme aggregate.
+    /// Builds the layer path and registers the result as a painted layer in the current
+    /// grapheme aggregate.
     /// </summary>
     void IGlyphRenderer.EndLayer()
     {
@@ -470,18 +462,6 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
         if (this.OutlineBuildRequired)
         {
             IPath path = this.Builder.Build();
-
-            // If the layer defines a clip quad (e.g. from COLR v1), intersect the
-            // built path with the quad polygon to constrain rendering.
-            if (this.currentClipBounds is not null)
-            {
-                ClipQuad clip = this.currentClipBounds.Value;
-                PointF[] points = [clip.TopLeft, clip.TopRight, clip.BottomRight, clip.BottomLeft];
-                LinearLineSegment segment = new(points);
-                Polygon polygon = new(segment);
-
-                path = path.Clip(BooleanOperation.Intersection, TextUtilities.MapFillRule(this.currentLayerFillRule), polygon);
-            }
 
             this.CurrentPaths.Add(path);
 
@@ -504,9 +484,14 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
         this.inLayer = false;
         this.currentLayerPaint = null;
         this.currentLayerFillRule = FillRule.NonZero;
-        this.currentClipBounds = null;
         this.EndLayer();
     }
+
+    /// <inheritdoc/>
+    void IGlyphRenderer.BeginGroup(CompositeMode mode) => this.BeginGroup(mode);
+
+    /// <inheritdoc/>
+    void IGlyphRenderer.EndGroup() => this.EndGroup();
 
     /// <summary>
     /// Called by the font engine to report a text decoration (underline, strikeout, or overline)
@@ -868,10 +853,10 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
         // The sampled frames replace the per-glyph placement transforms, but the builder's
         // default transform still applies on top, exactly as it does for glyph geometry.
         this.decorationBuilder.Clear();
-        this.decorationBuilder.SetTransform(this.baseTransform);
-        this.decorationBuilder.StartFigure();
-        this.decorationBuilder.AddLines(outline);
-        this.decorationBuilder.CloseFigure();
+        _ = this.decorationBuilder.SetTransform(this.baseTransform);
+        _ = this.decorationBuilder.StartFigure();
+        _ = this.decorationBuilder.AddLines(outline);
+        _ = this.decorationBuilder.CloseFigure();
 
         IPath path = this.decorationBuilder.Build();
         this.decorationBuilder.Clear();
@@ -922,12 +907,12 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
         // Snap the corners to whole pixels on the cross axis only, keeping the stroke's edges crisp;
         // the along-line coordinates stay exact so skip-ink gap boundaries land symmetrically.
         this.decorationBuilder.Clear();
-        this.decorationBuilder.SetTransform(transform);
-        this.decorationBuilder.StartFigure();
-        this.decorationBuilder.AddLine(SnapCross(a + offset, rotated), SnapCross(b + offset, rotated));
-        this.decorationBuilder.AddLine(SnapCross(b + offset, rotated), SnapCross(c + offset, rotated));
-        this.decorationBuilder.AddLine(SnapCross(c + offset, rotated), SnapCross(d + offset, rotated));
-        this.decorationBuilder.CloseFigure();
+        _ = this.decorationBuilder.SetTransform(transform);
+        _ = this.decorationBuilder.StartFigure();
+        _ = this.decorationBuilder.AddLine(SnapCross(a + offset, rotated), SnapCross(b + offset, rotated));
+        _ = this.decorationBuilder.AddLine(SnapCross(b + offset, rotated), SnapCross(c + offset, rotated));
+        _ = this.decorationBuilder.AddLine(SnapCross(c + offset, rotated), SnapCross(d + offset, rotated));
+        _ = this.decorationBuilder.CloseFigure();
 
         IPath path = this.decorationBuilder.Build();
 
@@ -1017,7 +1002,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
         // Translate so the glyph's top-left aligns with the path point,
         // then rotate around the path point to follow the tangent.
         Vector2 translation = (Vector2)pathPoint.Point - bounds.Location - half + new Vector2(0, bounds.Top);
-        this.Builder.SetTransform(
+        _ = this.Builder.SetTransform(
             Matrix4x4.CreateTranslation(translation.X, translation.Y, 0)
             * new Matrix4x4(Matrix3x2.CreateRotation(angle, (Vector2)pathPoint.Point)));
     }
@@ -1063,8 +1048,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
     /// </summary>
     /// <param name="paint">The paint for this color layer, or <see langword="null"/> for the default foreground.</param>
     /// <param name="fillRule">The fill rule to use when rasterizing this layer.</param>
-    /// <param name="clipBounds">Optional clip quad constraining the layer region.</param>
-    protected virtual void BeginLayer(Paint? paint, FillRule fillRule, ClipQuad? clipBounds)
+    protected virtual void BeginLayer(Paint? paint, FillRule fillRule)
     {
     }
 
@@ -1073,6 +1057,22 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
     /// emit the layer as a drawing operation.
     /// </summary>
     protected virtual void EndLayer()
+    {
+    }
+
+    /// <summary>
+    /// Called when an isolated COLR group begins. Layers and nested groups painted before the
+    /// matching <see cref="EndGroup"/> compose as one unit.
+    /// </summary>
+    /// <param name="mode">The mode used to blend the finished group onto the content below it within its parent.</param>
+    protected virtual void BeginGroup(CompositeMode mode)
+    {
+    }
+
+    /// <summary>
+    /// Called when the current isolated COLR group ends.
+    /// </summary>
+    protected virtual void EndGroup()
     {
     }
 

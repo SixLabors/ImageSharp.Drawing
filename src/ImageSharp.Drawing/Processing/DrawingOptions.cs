@@ -49,8 +49,8 @@ public class DrawingOptions
     }
 
     /// <summary>
-    /// Gets or sets the graphics rendering options that control antialiasing, blending, alpha composition,
-    /// and coverage thresholding for the drawing operation.
+    /// Gets or sets the graphics rendering options that control antialiasing, blending, and alpha composition
+    /// for the drawing operation.
     /// </summary>
     public GraphicsOptions GraphicsOptions
     {

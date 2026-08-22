@@ -15,7 +15,7 @@ internal static partial class DefaultRasterizer
     /// </summary>
     /// <remarks>
     /// The stroke expansion below is a port of AGG's <c>PolygonStroker</c> and is the reference
-    /// implementation for the GPU stroker: <c>flatten.wgsl</c>'s <c>stroke_side_join</c>,
+    /// implementation for the GPU stroker: <c>path_lowering.wgsl</c>'s <c>stroke_side_join</c>,
     /// <c>stroke_calc_miter</c>, <c>stroke_calc_arc</c>, and <c>stroke_chain_point</c> are direct
     /// ports of the corresponding members here, and <c>WebGPUSceneEncoder.EncodeStrokePath</c>
     /// ports the contour preprocessing. Any behavioral change here must be mirrored there.
@@ -47,6 +47,7 @@ internal static partial class DefaultRasterizer
         /// <param name="height">The visible destination height in pixels.</param>
         /// <param name="firstBandIndex">The first retained row-band index.</param>
         /// <param name="rowBandCount">The retained row-band count.</param>
+        /// <param name="keepHorizontalLines">Whether to retain horizontal outline edges for aliased thin-feature recovery between row centres.</param>
         /// <param name="allocator">The allocator used for retained start-cover storage.</param>
         protected StrokeLinearizer(
             LinearGeometry geometry,
@@ -60,8 +61,9 @@ internal static partial class DefaultRasterizer
             int height,
             int firstBandIndex,
             int rowBandCount,
+            bool keepHorizontalLines,
             MemoryAllocator allocator)
-            : base(geometry, residual, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, allocator)
+            : base(geometry, residual, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, allocator, keepHorizontalLines)
             => this.stroke = stroke;
 
         /// <summary>
@@ -614,7 +616,7 @@ internal static partial class DefaultRasterizer
 
         /// <summary>
         /// Appends a contour arc directly to the active stroke contour. Ported to the GPU as
-        /// <c>stroke_chain_arc</c> in <c>flatten.wgsl</c>; changes here must be mirrored there.
+        /// <c>stroke_chain_arc</c> in <c>path_lowering.wgsl</c>; changes here must be mirrored there.
         /// </summary>
         /// <param name="contour">The active contour state.</param>
         /// <param name="center">The arc center.</param>
@@ -667,7 +669,7 @@ internal static partial class DefaultRasterizer
         /// join geometry as the reference CPU stroker. Each side of the outline calls this
         /// once per source vertex; the reverse side reverses the vertex order exactly
         /// like PolygonStroker's Outline2 state. Ported to the GPU as <c>stroke_side_join</c>
-        /// in <c>flatten.wgsl</c>; changes here must be mirrored there.
+        /// in <c>path_lowering.wgsl</c>; changes here must be mirrored there.
         /// </remarks>
         /// <param name="contour">The active contour state.</param>
         /// <param name="v0">Previous source vertex in the emission's traversal order.</param>
@@ -785,7 +787,7 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Direct port of <c>PolygonStroker.CalcMiter</c>. Emits the miter apex (or the
         /// configured overflow fallback) at the join vertex. Ported to the GPU as
-        /// <c>stroke_calc_miter</c> in <c>flatten.wgsl</c>; changes here must be mirrored there.
+        /// <c>stroke_calc_miter</c> in <c>path_lowering.wgsl</c>; changes here must be mirrored there.
         /// </summary>
         /// <param name="contour">The active contour state.</param>
         /// <param name="v0">Previous source vertex in the emission's traversal order.</param>
@@ -897,7 +899,7 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Direct port of <c>PolygonStroker.CalcArc</c>. Emits intermediate arc vertices
         /// around a join center between two offset vectors. Ported to the GPU as
-        /// <c>stroke_calc_arc</c> in <c>flatten.wgsl</c>; changes here must be mirrored there.
+        /// <c>stroke_calc_arc</c> in <c>path_lowering.wgsl</c>; changes here must be mirrored there.
         /// </summary>
         /// <param name="contour">The active contour state.</param>
         /// <param name="x">The join center X coordinate.</param>
@@ -954,7 +956,7 @@ internal static partial class DefaultRasterizer
         /// Signed area of triangle (a, b, point), matching <c>PolygonStroker.CrossProduct</c>;
         /// used as a side-of-line test for <paramref name="point"/> against the line through
         /// <paramref name="a"/> and <paramref name="b"/>. Ported to the GPU as
-        /// <c>stroke_cross_product</c> in <c>flatten.wgsl</c>.
+        /// <c>stroke_cross_product</c> in <c>path_lowering.wgsl</c>.
         /// </summary>
         /// <param name="a">The first line point.</param>
         /// <param name="b">The second line point.</param>
@@ -967,7 +969,7 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Intersects two infinite lines defined by point pairs (a, b) and (c, d),
         /// matching <c>PolygonStroker.TryCalcIntersection</c>. Ported to the GPU as
-        /// <c>stroke_try_intersect</c> in <c>flatten.wgsl</c>.
+        /// <c>stroke_try_intersect</c> in <c>path_lowering.wgsl</c>.
         /// </summary>
         /// <param name="a">The first point on the first line.</param>
         /// <param name="b">The second point on the first line.</param>
@@ -994,7 +996,7 @@ internal static partial class DefaultRasterizer
 
         /// <summary>
         /// Appends one point to the active contour, emitting a line from the previously appended
-        /// point. Ported to the GPU as <c>stroke_chain_point</c> in <c>flatten.wgsl</c>; changes
+        /// point. Ported to the GPU as <c>stroke_chain_point</c> in <c>path_lowering.wgsl</c>; changes
         /// here must be mirrored there.
         /// </summary>
         /// <param name="state">The active contour state.</param>
@@ -1044,13 +1046,16 @@ internal static partial class DefaultRasterizer
         /// <param name="contained">Indicates whether the edge is fully contained within the interest.</param>
         private void EmitLine(PointF start, PointF end, bool contained)
         {
+            // The stroker creates new outline edges, so they have no profiles from the source
+            // geometry. Sentinel tags keep centre-free stroke intervals visible.
             if (contained)
             {
                 this.AddContainedLineF24Dot8(
                     FloatToFixed24Dot8((start.X + this.TranslateX) - this.MinX),
                     FloatToFixed24Dot8((start.Y + this.TranslateY) - this.MinY),
                     FloatToFixed24Dot8((end.X + this.TranslateX) - this.MinX),
-                    FloatToFixed24Dot8((end.Y + this.TranslateY) - this.MinY));
+                    FloatToFixed24Dot8((end.Y + this.TranslateY) - this.MinY),
+                    LinearGeometryProfiles.SentinelTag);
                 return;
             }
 
@@ -1058,7 +1063,8 @@ internal static partial class DefaultRasterizer
                 (start.X + this.TranslateX) - this.MinX,
                 (start.Y + this.TranslateY) - this.MinY,
                 (end.X + this.TranslateX) - this.MinX,
-                (end.Y + this.TranslateY) - this.MinY);
+                (end.Y + this.TranslateY) - this.MinY,
+                LinearGeometryProfiles.SentinelTag);
         }
 
         /// <summary>
@@ -1156,6 +1162,7 @@ internal static partial class DefaultRasterizer
         /// <param name="height">The visible destination height in pixels.</param>
         /// <param name="firstBandIndex">The first retained row-band index.</param>
         /// <param name="rowBandCount">The retained row-band count.</param>
+        /// <param name="keepHorizontalLines">Whether to retain horizontal outline edges for aliased thin-feature recovery between row centres.</param>
         /// <param name="allocator">The allocator used for retained start-cover storage.</param>
         public StrokeLinearizerX32Y16(
             LinearGeometry geometry,
@@ -1169,8 +1176,9 @@ internal static partial class DefaultRasterizer
             int height,
             int firstBandIndex,
             int rowBandCount,
+            bool keepHorizontalLines,
             MemoryAllocator allocator)
-            : base(geometry, residual, stroke, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, allocator)
+            : base(geometry, residual, stroke, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, keepHorizontalLines, allocator)
             => this.FinalLines = new LineArrayX32Y16Block?[rowBandCount];
 
         /// <summary>
@@ -1179,11 +1187,11 @@ internal static partial class DefaultRasterizer
         public LineArrayX32Y16Block?[] FinalLines { get; }
 
         /// <inheritdoc />
-        protected override LineArrayX32Y16 CreateLineArray() => new();
+        protected override LineArrayX32Y16 CreateLineArray() => new(false);
 
         /// <inheritdoc />
-        protected override void AppendLine(int rowIndex, int x0, int y0, int x1, int y1)
-            => this.GetOrCreateLineArray(rowIndex).AppendLine(x0, y0, x1, y1);
+        protected override void AppendLine(int rowIndex, int x0, int y0, int x1, int y1, uint tag)
+            => this.GetOrCreateLineArray(rowIndex).AppendLine(x0, y0, x1, y1, tag);
 
         /// <inheritdoc />
         protected override void FinalizeLines()
@@ -1214,7 +1222,10 @@ internal static partial class DefaultRasterizer
                 new TileBounds(this.MinX, this.FirstBandIndex, this.Width, this.RowBandCount),
                 this.FinalLines,
                 this.FirstBlockLineCounts,
-                this.StartCoverTable);
+                this.StartCoverTable,
+                this.Profiles,
+                this.ProfileTranslateX,
+                this.ProfileTranslateY);
 
             return true;
         }
@@ -1239,6 +1250,7 @@ internal static partial class DefaultRasterizer
         /// <param name="height">The visible destination height in pixels.</param>
         /// <param name="firstBandIndex">The first retained row-band index.</param>
         /// <param name="rowBandCount">The retained row-band count.</param>
+        /// <param name="keepHorizontalLines">Whether to retain horizontal outline edges for aliased thin-feature recovery between row centres.</param>
         /// <param name="allocator">The allocator used for retained start-cover storage.</param>
         public StrokeLinearizerX16Y16(
             LinearGeometry geometry,
@@ -1252,8 +1264,9 @@ internal static partial class DefaultRasterizer
             int height,
             int firstBandIndex,
             int rowBandCount,
+            bool keepHorizontalLines,
             MemoryAllocator allocator)
-            : base(geometry, residual, stroke, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, allocator)
+            : base(geometry, residual, stroke, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, keepHorizontalLines, allocator)
             => this.FinalLines = new LineArrayX16Y16Block?[rowBandCount];
 
         /// <summary>
@@ -1262,11 +1275,11 @@ internal static partial class DefaultRasterizer
         public LineArrayX16Y16Block?[] FinalLines { get; }
 
         /// <inheritdoc />
-        protected override LineArrayX16Y16 CreateLineArray() => new();
+        protected override LineArrayX16Y16 CreateLineArray() => new(false);
 
         /// <inheritdoc />
-        protected override void AppendLine(int rowIndex, int x0, int y0, int x1, int y1)
-            => this.GetOrCreateLineArray(rowIndex).AppendLine(x0, y0, x1, y1);
+        protected override void AppendLine(int rowIndex, int x0, int y0, int x1, int y1, uint tag)
+            => this.GetOrCreateLineArray(rowIndex).AppendLine(x0, y0, x1, y1, tag);
 
         /// <inheritdoc />
         protected override void FinalizeLines()
@@ -1297,7 +1310,10 @@ internal static partial class DefaultRasterizer
                 new TileBounds(this.MinX, this.FirstBandIndex, this.Width, this.RowBandCount),
                 this.FinalLines,
                 this.FirstBlockLineCounts,
-                this.StartCoverTable);
+                this.StartCoverTable,
+                this.Profiles,
+                this.ProfileTranslateX,
+                this.ProfileTranslateY);
 
             return true;
         }

@@ -7,7 +7,7 @@
 // compare the result against the capacity in Config; on overflow they set
 // their STAGE_* bit in `failed` and the C# side reads the block back, grows
 // the buffers, and retries the render. Imported by most compute stages
-// (binning, flatten, tile/row allocation, counting, coarse, chunk_reset,
+// (binning, path lowering, tile/row allocation, counting, coarse, chunk_reset,
 // prepare, and the indirect-dispatch setup shaders).
 //
 // Ported from Vello's shader/shared/bump.wgsl (linebender/vello), where the
@@ -16,7 +16,7 @@
 // Bitflags for each stage that can fail allocation.
 const STAGE_BINNING: u32 = 0x1u;
 const STAGE_TILE_ALLOC: u32 = 0x2u;
-const STAGE_FLATTEN: u32 = 0x4u;
+const STAGE_PATH_LOWERING: u32 = 0x4u;
 const STAGE_PATH_COUNT: u32 = 0x8u;
 const STAGE_COARSE: u32 = 0x10u;
 
@@ -33,7 +33,7 @@ struct BumpAllocators {
     seg_counts: atomic<u32>, // SegmentCount records
     segments: atomic<u32>, // Segment records
     blend_spill: atomic<u32>, // blend stack slots spilled past BLEND_STACK_SPLIT
-    lines: atomic<u32>, // LineSoup records from flattening
+    lines: atomic<u32>, // final LineSoup records from path lowering
 }
 
 // Workgroup counts for dispatchWorkgroupsIndirect, written by the setup

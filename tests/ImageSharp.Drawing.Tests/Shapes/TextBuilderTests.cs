@@ -32,12 +32,16 @@ public class TextBuilderTests
 
         Assert.Equal(measuredBounds.X, builderBounds.X);
         Assert.Equal(measuredBounds.Y, builderBounds.Y);
-        Assert.Equal(measuredBounds.Width, builderBounds.Width);
+
+        // Outline geometry is quantized to the 26.6 fixed-point grid while the measurer works in
+        // unquantized metrics, so the widths agree only to within one grid step of 1/64 pixel.
+        Assert.True(MathF.Abs(measuredBounds.Width - builderBounds.Width) <= 1F / 64F);
 
         // TextMeasurer will measure the full lineheight of the string.
         // TextBuilder does not include line gaps following the descender since there
-        // is no path to include.
-        Assert.True(measuredBounds.Height >= builderBounds.Height);
+        // is no path to include; quantized outline geometry can still poke one 26.6
+        // grid step past the unquantized measurement.
+        Assert.True(measuredBounds.Height >= builderBounds.Height - (1F / 64F));
     }
 
     [Fact]
@@ -62,12 +66,16 @@ public class TextBuilderTests
 
         Assert.Equal(measuredBounds.X, builderBounds.X);
         Assert.Equal(measuredBounds.Y, builderBounds.Y);
-        Assert.Equal(measuredBounds.Width, builderBounds.Width);
+
+        // Outline geometry is quantized to the 26.6 fixed-point grid while the measurer works in
+        // unquantized metrics, so the widths agree only to within one grid step of 1/64 pixel.
+        Assert.True(MathF.Abs(measuredBounds.Width - builderBounds.Width) <= 1F / 64F);
 
         // TextMeasurer will measure the full lineheight of the string.
         // TextBuilder does not include line gaps following the descender since there
-        // is no path to include.
-        Assert.True(measuredBounds.Height >= builderBounds.Height);
+        // is no path to include; quantized outline geometry can still poke one 26.6
+        // grid step past the unquantized measurement.
+        Assert.True(measuredBounds.Height >= builderBounds.Height - (1F / 64F));
     }
 
     [Fact]
@@ -169,20 +177,28 @@ public class TextBuilderTests
     [InlineData(CompositeMode.SrcAtop, PixelAlphaCompositionMode.SrcAtop)]
     [InlineData(CompositeMode.DestAtop, PixelAlphaCompositionMode.DestAtop)]
     [InlineData(CompositeMode.Xor, PixelAlphaCompositionMode.Xor)]
+    [InlineData(CompositeMode.Plus, PixelAlphaCompositionMode.Plus)]
     [InlineData(CompositeMode.Multiply, PixelAlphaCompositionMode.SrcOver)]
     public void TextUtilities_MapsAlphaCompositionModes(CompositeMode compositeMode, PixelAlphaCompositionMode alphaCompositionMode)
         => Assert.Equal(alphaCompositionMode, TextUtilities.MapCompositionMode(compositeMode));
 
     [Theory]
-    [InlineData(CompositeMode.Plus, PixelColorBlendingMode.Add)]
     [InlineData(CompositeMode.Screen, PixelColorBlendingMode.Screen)]
     [InlineData(CompositeMode.Overlay, PixelColorBlendingMode.Overlay)]
     [InlineData(CompositeMode.Darken, PixelColorBlendingMode.Darken)]
     [InlineData(CompositeMode.Lighten, PixelColorBlendingMode.Lighten)]
     [InlineData(CompositeMode.HardLight, PixelColorBlendingMode.HardLight)]
     [InlineData(CompositeMode.Multiply, PixelColorBlendingMode.Multiply)]
+    [InlineData(CompositeMode.ColorDodge, PixelColorBlendingMode.ColorDodge)]
+    [InlineData(CompositeMode.ColorBurn, PixelColorBlendingMode.ColorBurn)]
+    [InlineData(CompositeMode.SoftLight, PixelColorBlendingMode.SoftLight)]
+    [InlineData(CompositeMode.Difference, PixelColorBlendingMode.Difference)]
+    [InlineData(CompositeMode.Exclusion, PixelColorBlendingMode.Exclusion)]
+    [InlineData(CompositeMode.Hue, PixelColorBlendingMode.Hue)]
+    [InlineData(CompositeMode.Saturation, PixelColorBlendingMode.Saturation)]
+    [InlineData(CompositeMode.Color, PixelColorBlendingMode.Color)]
+    [InlineData(CompositeMode.Luminosity, PixelColorBlendingMode.Luminosity)]
     [InlineData(CompositeMode.SrcOver, PixelColorBlendingMode.Normal)]
-    [InlineData(CompositeMode.ColorDodge, PixelColorBlendingMode.Normal)]
     public void TextUtilities_MapsColorBlendingModes(CompositeMode compositeMode, PixelColorBlendingMode colorBlendingMode)
         => Assert.Equal(colorBlendingMode, TextUtilities.MapBlendingMode(compositeMode));
 

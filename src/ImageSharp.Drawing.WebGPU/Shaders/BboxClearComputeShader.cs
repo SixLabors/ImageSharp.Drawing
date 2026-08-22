@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
 /// GPU stage that initializes every per-path bounding box to an empty (inverted) box so
-/// that flatten can accumulate extents with atomic min/max. Wraps <c>bbox_clear.wgsl</c>.
+/// that path lowering can accumulate extents with atomic min/max. Wraps <c>bbox_clear.wgsl</c>.
 /// </summary>
 internal static unsafe class BboxClearComputeShader
 {

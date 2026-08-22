@@ -149,7 +149,7 @@ The encoder first builds several logical streams such as:
 
 Those streams are then packed into the final scene word buffer plus separate gradient and image payloads.
 
-The draw-tag words and draw-info flag bits are defined by `GpuSceneDrawTag` and must match `Shaders/WgslSource/Shared/drawtag.wgsl`. The encoder chooses which tag or flag to write; the format type owns the numeric shader contract. The clip mask bits (`CLIP_DIFFERENCE_MASK_BIT`, `CLIP_HARD_MASK_BIT`) are declared once in `drawtag.wgsl` and set by the encoder in the high bits of the clip blend word.
+The draw-tag words and draw-info flag bits are defined by `GpuSceneDrawTag` and must match `Shaders/WgslSource/Shared/drawtag.wgsl`. The encoder chooses which tag or flag to write; the format type owns the numeric shader contract. The local clip bits (`CLIP_DIFFERENCE_MASK_BIT`, `CLIP_ISOLATED_MASK_BIT`) are declared once in `drawtag.wgsl` and set by the encoder in the high bits of the clip blend word.
 
 Explicit layers are part of this encoding step too. `BeginLayer` and `EndLayer` stay in the prepared command stream until `WebGPUSceneEncoder` lowers them into `BeginClip` and `EndClip` draw records inside the encoded scene.
 
@@ -157,11 +157,11 @@ The stream split matters because the shaders consume offsets into one shared pac
 
 Three geometry rules the encoder applies matter downstream:
 
-- fill geometry is pre-flattened on the CPU, so only line segments reach the flatten stage for fills; curve handling on the GPU exists but is not exercised by fills in practice
-- stroke geometry is not expanded on the CPU. The encoder emits the stroke's segment list after collapsing micro-segments shorter than 1/64 px (mirroring the CPU stroker's preprocessing), and reuses quad-to path tags as stroke tangent markers rather than curves; the GPU stroker in `flatten.wgsl` does the expansion
-- clip paths carry a full-target raster interest rectangle; a clipped interest would make binning intersect the clip coverage away
+- the CPU pre-flattens fill geometry. The path-lowering stage transforms and emits only final fill lines. It does not subdivide fill curves
+- the CPU does not expand stroke geometry. The encoder collapses micro-segments shorter than 1/64 px, matching the CPU stroker. Quad-to path tags carry stroke tangents, not curves. The GPU stroker in `path_lowering.wgsl` expands the stroke geometry
+- clip paths carry a full-target raster interest rectangle. A clipped interest rectangle makes binning remove the clip coverage
 
-Per-draw rasterization state is also encoded here: each visible fill carries its own coverage threshold and raster interest rectangle, and an aliased fill sets `DRAW_INFO_FLAGS_ALIASED_BIT` in its draw flags. Antialiased and aliased fills therefore coexist in one scene.
+Per-draw rasterization state is also encoded here: each visible fill carries its raster interest rectangle, and an aliased fill sets `DRAW_INFO_FLAGS_ALIASED_BIT` in its draw flags. Antialiased coverage data contains only the optional text coverage boost. Antialiased and aliased fills therefore coexist in one scene.
 
 ### Parallel Encoding
 
@@ -236,7 +236,7 @@ Their purpose is structural. They:
 
 - reset the GPU bump allocators (prepare)
 - scan the packed path and draw streams
-- flatten path segments into a device-space line soup, expanding strokes on the GPU
+- lower path segments into a device-space line soup, expanding strokes on the GPU
 - build path and clip metadata
 - bin work into tiles
 - allocate sparse per-path row metadata from clipped draw bounds
@@ -254,7 +254,7 @@ flowchart TD
     B --> C[PathtagScan1 if needed]
     C --> D[PathtagScan]
     D --> E[BboxClear]
-    E --> F[Flatten]
+    E --> F[Path Lowering]
     F --> G[DrawReduce]
     G --> H[DrawLeaf]
     H --> I[ClipReduce if needed]
@@ -274,15 +274,15 @@ flowchart TD
 A few stage details worth knowing:
 
 - `prepare.wgsl` binds only the bump buffer. It zeroes every bump-allocator counter and the failure mask on the GPU, and the pipeline never cancels mid-flush: all stages run so the counters report the true demand for every scratch buffer in a single pass
-- the pathtag scan computes a prefix sum of a four-word `TagMonoid` (`trans_ix`, `pathseg_offset`, `style_ix`, `path_ix`) so flatten can locate each segment's points, transform, and style in O(1)
-- `bbox_clear` is dispatched over the scene's path count and resets each atomic path bbox to an inverted empty state before flatten accumulates into it
+- the pathtag scan computes a prefix sum of a four-word `TagMonoid` (`trans_ix`, `pathseg_offset`, `style_ix`, `path_ix`) so path lowering can locate each segment's points, transform, and style in O(1)
+- `bbox_clear` is dispatched over the scene's path count and resets each atomic path bbox to an inverted empty state before path lowering expands it
 - `clip_reduce`/`clip_leaf` are skipped entirely when the scene has no clip records, and `clip_reduce` is skipped when the clip stream fits one 256-element partition
 
-### Flatten: Fills And GPU Stroking
+### Path Lowering: Fill Lines And GPU Stroking
 
-`flatten.wgsl` converts encoded path segments into the device-space line soup consumed by the later stages, and it is where strokes become geometry.
+`path_lowering.wgsl` converts encoded path segments into the device-space line soup consumed by the later stages, and it is where strokes become geometry.
 
-For fills, every segment type routes through `flatten_euler` exactly as in upstream Vello: `read_path_segment` lowers lines to degenerate cubics and the Euler-spiral math resolves them through its low-curvature path. Because the C# encoder pre-flattens fill curves on the CPU, only line segments arrive for fills in practice.
+For fills, the C# encoder supplies only final line segments. The shader reads each endpoint pair, applies the device transform, rejects zero-length results, and writes the line directly. This stage contains no curve subdivision or degree raising.
 
 Stroke expansion diverges from upstream Vello. It is a direct port of the CPU `PolygonStroker`: `stroke_chain_point` walks the offset chain, `stroke_side_join` dispatches per-join handling, and `stroke_calc_miter` and `stroke_calc_arc` produce miters and round joins/caps. Caps, joins, and arcs are all generated on the GPU. The encoder supports this with two conventions: micro-segments shorter than 1/64 px are collapsed CPU-side before encoding (matching the CPU stroker's preprocessing), and quad-to path tags in a stroke are tangent markers for the stroker, not curve segments. Stroking never falls back to the CPU.
 
@@ -291,17 +291,16 @@ Stroke expansion diverges from upstream Vello. It is a direct port of the CPU `P
 The fine pass is where the scheduled scene becomes final pixel writes.
 
 A single fine shader (`FineAreaComputeShader`) handles every flush; its pipeline is cached per
-output texture format. It computes analytic area coverage and, per fill, quantizes that
-coverage against the fill's own threshold when the fill carries the aliased bit in
-`CmdFill.size_and_rule`. The per-fill threshold travels in the `CmdFill` command itself and
-overrides the scene-wide `config.fine_coverage_threshold` fallback. Antialiased and aliased
-fills therefore coexist within one flush, matching the CPU rasterizer's per-fill
-`RasterizationMode`. Each fill also carries a raster interest rectangle; coverage outside it
-is zeroed.
+output texture format. Antialiased fills use analytic area coverage. Aliased fills walk sorted
+crossings at pixel row and column centres. If a closed interval contains no centre, they light its
+midpoint pixel unless the two boundary profiles show that the interval ends at a contour tip. A
+second, vertical walk finds horizontal features between row centres. The aliased bit in
+`CmdFill.size_and_rule` selects the coverage path. Each fill also carries a raster interest
+rectangle; coverage outside it is zeroed.
 
-For antialiased fills the `CmdFill.coverage_threshold` word is reused to carry the perceptual
-coverage boost for text (the two uses are mutually exclusive, so no extra command word is
-needed). When non-zero, fine remaps partial coverage with the S-curve
+For antialiased fills the `CmdFill.coverage_data` word carries the perceptual coverage boost
+for text. Aliased fills leave that style value at zero because their command word is used for
+tile-neighbour data. When non-zero, fine remaps partial coverage with the S-curve
 `f(a) = a + boost * a * (1 - a) * (2a - 1)`, equivalently a blend
 `(1 - boost) * a + boost * smoothstep(a)`: coverage above one half darkens and coverage below
 it lightens, so stems solidify while counters stay bright. The remap is monotone and range
@@ -330,7 +329,7 @@ gradient extend behavior; the recolor threshold is pre-transformed by the encode
 (`Threshold * 4`) into the shader's squared-color-distance domain so the shader compares
 distances directly.
 
-That is also where explicit layers are composited. The fine shader handles `BeginClip` and `EndClip` records inline by saving the current tile color, rendering the isolated layer contents, and then blending that isolated result back into the saved backdrop with the layer's stored blend mode and alpha. The clip blend word's high bits select clip variants: `CLIP_DIFFERENCE_MASK_BIT` inverts the mask coverage for Difference clips and `CLIP_HARD_MASK_BIT` marks a hard-edge (aliased) clip mask.
+That is also where explicit layers are composited. The fine shader handles `BeginClip` and `EndClip` records inline by saving the current tile color, rendering the isolated layer contents, and then blending that isolated result back into the saved backdrop with the layer's stored blend mode and alpha. `CLIP_DIFFERENCE_MASK_BIT` inverts the clip coverage. Hard clips use the same aliased centre-sampling path as other aliased fills, so the clip pop consumes their binary mask directly.
 
 ## Stage 7: Readback, Copy, And Submit
 
@@ -362,7 +361,7 @@ The important design point is that chunking does not re-clip or re-encode the sc
 The dispatch layer executes the staged pipeline in chunk-local tile-row windows so each chunk stays within device limits while still using the same encoded scene. The mechanics are:
 
 - the output texture is seeded with the current target contents first, so pixels no chunk writes keep their original values when the full rectangle is copied back
-- the chunk-invariant stages (prepare through binning) run exactly once per flush; each chunk then replays only the chunk-local stages, with `chunk_reset` clearing the chunk-local bump counters while preserving the shared flatten/binning state
+- the chunk-invariant stages (prepare through binning) run exactly once per flush; each chunk then replays only the chunk-local stages, with `chunk_reset` clearing the chunk-local bump counters while preserving the shared path-lowering/binning state
 - each chunk window is validated against the binding limits before dispatch; if a chunk's buffers still exceed the limit the window shrinks and validation repeats
 - a chunk attempt that fails after passing binding validation fails the flush, because shrinking cannot cure it and retrying would re-record the identical chunk forever
 - every chunk copies its bump-allocator status into a distinct offset of one readback buffer; all chunks are checked in a single batch readback at the end, and any overflow feeds the same grow-and-retry loop as the monolithic path

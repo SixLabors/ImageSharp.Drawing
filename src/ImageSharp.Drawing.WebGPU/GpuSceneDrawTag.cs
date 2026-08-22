@@ -12,7 +12,7 @@ internal static class GpuSceneDrawTag
 {
     // These values are not a plain enum because each word also encodes the path-count, clip-count,
     // scene-word-count, and info-word-count increments consumed by the scan/reduction stages.
-    // Visible-fill tags carry five extra info words: coverage threshold plus raster interest. Must match drawtag.wgsl.
+    // Visible-fill tags carry five extra info words: coverage data plus raster interest. Must match drawtag.wgsl.
     public const uint Nop = 0U;
     public const uint FillColor = 0x188U;
     public const uint FillRecolor = 0x184U;

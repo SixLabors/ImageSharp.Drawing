@@ -30,6 +30,13 @@ internal static partial class DefaultRasterizer
         /// <param name="count">The number of leading lines to rasterize from this block.</param>
         /// <param name="context">The mutable scan-conversion context to write into.</param>
         public void Rasterize(int count, ref Context context);
+
+        /// <summary>
+        /// Rasterizes the leading <paramref name="count"/> lines and supplies each line's profile tag.
+        /// </summary>
+        /// <param name="count">The number of leading lines to rasterize from this block.</param>
+        /// <param name="context">The mutable scan-conversion context to write into.</param>
+        public void RasterizeTagged(int count, ref Context context);
     }
 
     /// <summary>
@@ -88,18 +95,27 @@ internal static partial class DefaultRasterizer
         /// <param name="lines">The retained line-block chain for each row band.</param>
         /// <param name="firstBlockLineCounts">The valid line count in each row's front block.</param>
         /// <param name="startCoverTable">The retained start-cover seeds for each row band.</param>
+        /// <param name="profiles">The geometry-space profile data, or an empty view outside aliased rendering.</param>
+        /// <param name="profileTranslateX">The absolute X translation applied to profile extents.</param>
+        /// <param name="profileTranslateY">The absolute Y translation applied to profile extents.</param>
         public LinearizedRasterData(
             LinearGeometry geometry,
             TileBounds bounds,
             TLineBlock?[] lines,
             int[] firstBlockLineCounts,
-            IMemoryOwner<int>?[] startCoverTable)
+            IMemoryOwner<int>?[] startCoverTable,
+            LinearGeometryProfiles profiles,
+            float profileTranslateX,
+            float profileTranslateY)
         {
             this.Geometry = geometry;
             this.Bounds = bounds;
             this.Lines = lines;
             this.FirstBlockLineCounts = firstBlockLineCounts;
             this.StartCoverTable = startCoverTable;
+            this.Profiles = profiles;
+            this.ProfileTranslateX = profileTranslateX;
+            this.ProfileTranslateY = profileTranslateY;
         }
 
         /// <summary>
@@ -126,6 +142,21 @@ internal static partial class DefaultRasterizer
         /// Gets the retained start-cover seeds for each row band.
         /// </summary>
         public IMemoryOwner<int>?[] StartCoverTable { get; }
+
+        /// <summary>
+        /// Gets the geometry-space profile data, or an empty view outside aliased rendering.
+        /// </summary>
+        public LinearGeometryProfiles Profiles { get; }
+
+        /// <summary>
+        /// Gets the absolute X translation applied to profile extents.
+        /// </summary>
+        public float ProfileTranslateX { get; }
+
+        /// <summary>
+        /// Gets the absolute Y translation applied to profile extents.
+        /// </summary>
+        public float ProfileTranslateY { get; }
 
         /// <summary>
         /// Iterates the retained line blocks for one row band.

@@ -31,7 +31,8 @@ internal sealed partial class FlushScene : IDisposable
         controlItems: [],
         hasApply: false,
         rows: [],
-        segments: []);
+        segments: [],
+        profileStorages: []);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FlushScene"/> class.
@@ -51,6 +52,7 @@ internal sealed partial class FlushScene : IDisposable
     /// <param name="hasApply">Whether the scene contains apply barriers.</param>
     /// <param name="rows">The retained row lists.</param>
     /// <param name="segments">The retained target-wide execution segments for scenes containing apply barriers.</param>
+    /// <param name="profileStorages">The partition-owned aliased profile arenas.</param>
     private FlushScene(
         int fillItemCount,
         int strokeItemCount,
@@ -66,7 +68,8 @@ internal sealed partial class FlushScene : IDisposable
         SceneControlItem?[] controlItems,
         bool hasApply,
         SceneRow[] rows,
-        SceneSegment[] segments)
+        SceneSegment[] segments,
+        LinearGeometryProfileStorage[] profileStorages)
     {
         this.FillItemCount = fillItemCount;
         this.StrokeItemCount = strokeItemCount;
@@ -83,6 +86,7 @@ internal sealed partial class FlushScene : IDisposable
         this.HasApply = hasApply;
         this.Rows = rows;
         this.Segments = segments;
+        this.ProfileStorages = profileStorages;
     }
 
     /// <summary>
@@ -139,6 +143,11 @@ internal sealed partial class FlushScene : IDisposable
     /// Gets retained target-wide execution segments for scenes containing apply barriers.
     /// </summary>
     public SceneSegment[] Segments { get; }
+
+    /// <summary>
+    /// Gets the partition-owned profile arenas retained for the scene lifetime.
+    /// </summary>
+    private LinearGeometryProfileStorage[] ProfileStorages { get; }
 
     /// <summary>
     /// Gets the total number of row items retained by the scene.
@@ -204,6 +213,7 @@ internal sealed partial class FlushScene : IDisposable
         SceneControlItem?[] controlItems = scene.HasApply ? new SceneControlItem?[commandCount] : [];
         int partitionCount = ParallelExecutionHelper.GetPartitionCount(maxDegreeOfParallelism, commandCount, targetRowCount);
         PartitionState[] partitions = new PartitionState[partitionCount];
+        LinearGeometryProfileStorage[] profileStorages = new LinearGeometryProfileStorage[partitionCount];
 
         // The ordered begin/end-clip command stream is the single source of truth for clipping.
         // A single sequential prescan resolves the clip scopes open at each partition boundary so
@@ -230,7 +240,7 @@ internal sealed partial class FlushScene : IDisposable
                     int partitionCommandStart = (partitionIndex * commandCount) / partitionCount;
                     int partitionCommandEnd = ((partitionIndex + 1) * commandCount) / partitionCount;
 
-                    partitions[partitionIndex] = ProcessPartition(
+                    PartitionState partition = ProcessPartition(
                         scene.Commands,
                         partitionCommandStart,
                         partitionCommandEnd,
@@ -243,6 +253,9 @@ internal sealed partial class FlushScene : IDisposable
                         strokeItems,
                         layers,
                         controlItems);
+
+                    partitions[partitionIndex] = partition;
+                    profileStorages[partitionIndex] = partition.ProfileStorage;
                 });
 
             int fillItemCount = 0;
@@ -296,6 +309,7 @@ internal sealed partial class FlushScene : IDisposable
                 // geometry and clip state; the empty singleton carries nothing, so release them here.
                 DisposeRetainedItems(fillItems, strokeItems, controlItems);
                 DisposeRows(rowBuilders);
+                DisposeProfileStorages(profileStorages);
                 return Empty();
             }
 
@@ -343,7 +357,8 @@ internal sealed partial class FlushScene : IDisposable
                 controlItems,
                 scene.HasApply,
                 sceneRows,
-                segments);
+                segments,
+                profileStorages);
         }
         catch
         {
@@ -375,6 +390,7 @@ internal sealed partial class FlushScene : IDisposable
             }
 
             DisposeRetainedItems(fillItems, strokeItems, segments.Length == 0 ? controlItems : []);
+            DisposeProfileStorages(profileStorages);
             throw;
         }
     }
@@ -402,6 +418,19 @@ internal sealed partial class FlushScene : IDisposable
         }
 
         DisposeRetainedItems(this.FillItems, this.StrokeItems, this.ControlItems);
+        DisposeProfileStorages(this.ProfileStorages);
+    }
+
+    /// <summary>
+    /// Releases all initialized partition profile arenas.
+    /// </summary>
+    /// <param name="profileStorages">The profile arenas to release.</param>
+    private static void DisposeProfileStorages(LinearGeometryProfileStorage[] profileStorages)
+    {
+        for (int i = 0; i < profileStorages.Length; i++)
+        {
+            profileStorages[i]?.Dispose();
+        }
     }
 
     /// <summary>
@@ -904,112 +933,126 @@ internal sealed partial class FlushScene : IDisposable
         int currentLayerDepth = 0;
         int maxLayerDepth = 0;
         ClipStreamTracker clipTracker = ClipStreamTracker.CreateFromSeed(clipSeed);
+        LinearGeometryProfileStorage profileStorage = new(allocator);
 
-        for (int commandIndex = commandStart; commandIndex < commandEnd; commandIndex++)
+        try
         {
-            CompositionSceneCommand command = commands[commandIndex];
-            if (command is PathCompositionSceneCommand pathCommand)
+            for (int commandIndex = commandStart; commandIndex < commandEnd; commandIndex++)
             {
-                CompositionCommand composition = pathCommand.Command;
-
-                // Clip commands only mutate the tracker; they retain no scene items. Every draw
-                // command that follows captures the composed clip state and anchor from the tracker,
-                // keeping the ordered clip stream the single source of truth for clipping.
-                if (composition.Kind == CompositionCommandKind.BeginClip)
+                CompositionSceneCommand command = commands[commandIndex];
+                if (command is PathCompositionSceneCommand pathCommand)
                 {
-                    clipTracker.Push(composition.ClipDescriptor, composition.DestinationOffset);
-                    continue;
-                }
+                    CompositionCommand composition = pathCommand.Command;
 
-                if (composition.Kind == CompositionCommandKind.EndClip)
+                    // Clip commands only mutate the tracker; they retain no scene items. Every draw
+                    // command that follows captures the composed clip state and anchor from the tracker,
+                    // keeping the ordered clip stream the single source of truth for clipping.
+                    if (composition.Kind == CompositionCommandKind.BeginClip)
+                    {
+                        clipTracker.Push(composition.ClipDescriptor, composition.DestinationOffset);
+                        continue;
+                    }
+
+                    if (composition.Kind == CompositionCommandKind.EndClip)
+                    {
+                        clipTracker.Pop();
+                        continue;
+                    }
+
+                    ProcessPathCommand(
+                        composition,
+                        commandIndex,
+                        clipTracker.Current,
+                        clipTracker.Anchor,
+                        targetBounds,
+                        firstTargetRowBandIndex,
+                        rowBuilders,
+                        allocator,
+                        profileStorage,
+                        fillItems,
+                        strokeItems,
+                        layers,
+                        controlItems,
+                        ref fillItemCount,
+                        ref strokeItemCount,
+                        ref totalEdgeCount,
+                        ref singleBandItemCount,
+                        ref smallEdgeItemCount,
+                        ref currentLayerDepth,
+                        ref maxLayerDepth);
+                }
+                else if (command is StrokePathCompositionSceneCommand strokePathCommand)
                 {
-                    clipTracker.Pop();
-                    continue;
+                    ProcessStrokePathCommand(
+                        strokePathCommand.Command,
+                        commandIndex,
+                        clipTracker.Current,
+                        clipTracker.Anchor,
+                        targetRowCount,
+                        firstTargetRowBandIndex,
+                        rowBuilders,
+                        allocator,
+                        profileStorage,
+                        strokeItems,
+                        ref strokeItemCount,
+                        ref totalEdgeCount,
+                        ref singleBandItemCount,
+                        ref smallEdgeItemCount);
                 }
+                else if (command is LineSegmentCompositionSceneCommand lineSegmentCommand)
+                {
+                    ProcessLineSegmentCommand(
+                        lineSegmentCommand.Command,
+                        commandIndex,
+                        clipTracker.Current,
+                        clipTracker.Anchor,
+                        targetRowCount,
+                        firstTargetRowBandIndex,
+                        rowBuilders,
+                        allocator,
+                        profileStorage,
+                        strokeItems,
+                        ref strokeItemCount,
+                        ref totalEdgeCount,
+                        ref singleBandItemCount,
+                        ref smallEdgeItemCount);
+                }
+                else if (command is PolylineCompositionSceneCommand polylineCommand)
+                {
+                    ProcessPolylineCommand(
+                        polylineCommand.Command,
+                        commandIndex,
+                        clipTracker.Current,
+                        clipTracker.Anchor,
+                        targetRowCount,
+                        firstTargetRowBandIndex,
+                        rowBuilders,
+                        allocator,
+                        profileStorage,
+                        strokeItems,
+                        ref strokeItemCount,
+                        ref totalEdgeCount,
+                        ref singleBandItemCount,
+                        ref smallEdgeItemCount);
+                }
+            }
 
-                ProcessPathCommand(
-                    composition,
-                    commandIndex,
-                    clipTracker.Current,
-                    clipTracker.Anchor,
-                    targetBounds,
-                    firstTargetRowBandIndex,
-                    rowBuilders,
-                    allocator,
-                    fillItems,
-                    strokeItems,
-                    layers,
-                    controlItems,
-                    ref fillItemCount,
-                    ref strokeItemCount,
-                    ref totalEdgeCount,
-                    ref singleBandItemCount,
-                    ref smallEdgeItemCount,
-                    ref currentLayerDepth,
-                    ref maxLayerDepth);
-            }
-            else if (command is StrokePathCompositionSceneCommand strokePathCommand)
-            {
-                ProcessStrokePathCommand(
-                    strokePathCommand.Command,
-                    commandIndex,
-                    clipTracker.Current,
-                    clipTracker.Anchor,
-                    targetRowCount,
-                    firstTargetRowBandIndex,
-                    rowBuilders,
-                    allocator,
-                    strokeItems,
-                    ref strokeItemCount,
-                    ref totalEdgeCount,
-                    ref singleBandItemCount,
-                    ref smallEdgeItemCount);
-            }
-            else if (command is LineSegmentCompositionSceneCommand lineSegmentCommand)
-            {
-                ProcessLineSegmentCommand(
-                    lineSegmentCommand.Command,
-                    commandIndex,
-                    clipTracker.Current,
-                    clipTracker.Anchor,
-                    targetRowCount,
-                    firstTargetRowBandIndex,
-                    rowBuilders,
-                    allocator,
-                    strokeItems,
-                    ref strokeItemCount,
-                    ref totalEdgeCount,
-                    ref singleBandItemCount,
-                    ref smallEdgeItemCount);
-            }
-            else if (command is PolylineCompositionSceneCommand polylineCommand)
-            {
-                ProcessPolylineCommand(
-                    polylineCommand.Command,
-                    commandIndex,
-                    clipTracker.Current,
-                    clipTracker.Anchor,
-                    targetRowCount,
-                    firstTargetRowBandIndex,
-                    rowBuilders,
-                    allocator,
-                    strokeItems,
-                    ref strokeItemCount,
-                    ref totalEdgeCount,
-                    ref singleBandItemCount,
-                    ref smallEdgeItemCount);
-            }
+            return new PartitionState(
+                fillItemCount,
+                strokeItemCount,
+                totalEdgeCount,
+                singleBandItemCount,
+                smallEdgeItemCount,
+                currentLayerDepth,
+                maxLayerDepth,
+                rowBuilders,
+                profileStorage);
         }
-
-        return new PartitionState(
-            fillItemCount,
-            strokeItemCount,
-            totalEdgeCount,
-            singleBandItemCount,
-            smallEdgeItemCount,
-            currentLayerDepth,
-            maxLayerDepth,
-            rowBuilders);
+        catch
+        {
+            profileStorage.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
@@ -1024,6 +1067,7 @@ internal sealed partial class FlushScene : IDisposable
     /// <param name="firstTargetRowBandIndex">The first row-band index covered by the target.</param>
     /// <param name="rowBuilders">The partition-owned row builders, one slot per target row band.</param>
     /// <param name="allocator">The allocator used for retained row storage.</param>
+    /// <param name="profileStorage">The partition-owned aliased profile arena.</param>
     /// <param name="fillItems">The shared retained fill items indexed by original command index.</param>
     /// <param name="strokeItems">The shared retained stroke items indexed by original command index.</param>
     /// <param name="layers">The shared retained layer state indexed by begin-layer command index.</param>
@@ -1044,6 +1088,7 @@ internal sealed partial class FlushScene : IDisposable
         int firstTargetRowBandIndex,
         RowBuilder[] rowBuilders,
         MemoryAllocator allocator,
+        LinearGeometryProfileStorage profileStorage,
         FillSceneItem?[] fillItems,
         StrokeSceneItem?[] strokeItems,
         DrawingCanvasLayer?[] layers,
@@ -1074,6 +1119,7 @@ internal sealed partial class FlushScene : IDisposable
                     command.DestinationOffset,
                     command.SubPixelOffset,
                     allocator,
+                    profileStorage,
                     out PreparedFillItem preparedApply))
             {
                 return;
@@ -1084,6 +1130,7 @@ internal sealed partial class FlushScene : IDisposable
                     command.TargetBounds,
                     clipAnchor,
                     allocator,
+                    profileStorage,
                     out PreparedPathClipState? preparedApplyPathClips))
             {
                 preparedApply.Rasterizable.Dispose();
@@ -1152,7 +1199,7 @@ internal sealed partial class FlushScene : IDisposable
             return;
         }
 
-        if (!TryPrepareFillPath(command, allocator, out PreparedFillItem preparedFill) ||
+        if (!TryPrepareFillPath(command, allocator, profileStorage, out PreparedFillItem preparedFill) ||
             preparedFill.Rasterizable.RowBandCount == 0)
         {
             return;
@@ -1163,6 +1210,7 @@ internal sealed partial class FlushScene : IDisposable
                 command.TargetBounds,
                 clipAnchor,
                 allocator,
+                profileStorage,
                 out PreparedPathClipState? preparedPathClips))
         {
             preparedFill.Rasterizable.Dispose();
@@ -1196,6 +1244,7 @@ internal sealed partial class FlushScene : IDisposable
     /// <param name="firstTargetRowBandIndex">The first row-band index covered by the target.</param>
     /// <param name="rowBuilders">The partition-owned row builders, one slot per target row band.</param>
     /// <param name="allocator">The allocator used for retained row storage.</param>
+    /// <param name="profileStorage">The partition-owned aliased profile arena.</param>
     /// <param name="strokeItems">The shared retained stroke items indexed by original command index.</param>
     /// <param name="strokeItemCount">The running partition stroke item count.</param>
     /// <param name="totalEdgeCount">The running total of encoded raster edges.</param>
@@ -1210,6 +1259,7 @@ internal sealed partial class FlushScene : IDisposable
         int firstTargetRowBandIndex,
         RowBuilder[] rowBuilders,
         MemoryAllocator allocator,
+        LinearGeometryProfileStorage profileStorage,
         StrokeSceneItem?[] strokeItems,
         ref int strokeItemCount,
         ref long totalEdgeCount,
@@ -1227,6 +1277,7 @@ internal sealed partial class FlushScene : IDisposable
                 command.TargetBounds,
                 clipAnchor,
                 allocator,
+                profileStorage,
                 out PreparedPathClipState? preparedPathClips))
         {
             preparedStroke.Rasterizable.Dispose();
@@ -1260,6 +1311,7 @@ internal sealed partial class FlushScene : IDisposable
     /// <param name="firstTargetRowBandIndex">The first row-band index covered by the target.</param>
     /// <param name="rowBuilders">The partition-owned row builders, one slot per target row band.</param>
     /// <param name="allocator">The allocator used for retained row storage.</param>
+    /// <param name="profileStorage">The partition-owned aliased profile arena.</param>
     /// <param name="strokeItems">The shared retained stroke items indexed by original command index.</param>
     /// <param name="strokeItemCount">The running partition stroke item count.</param>
     /// <param name="totalEdgeCount">The running total of encoded raster edges.</param>
@@ -1274,6 +1326,7 @@ internal sealed partial class FlushScene : IDisposable
         int firstTargetRowBandIndex,
         RowBuilder[] rowBuilders,
         MemoryAllocator allocator,
+        LinearGeometryProfileStorage profileStorage,
         StrokeSceneItem?[] strokeItems,
         ref int strokeItemCount,
         ref long totalEdgeCount,
@@ -1291,6 +1344,7 @@ internal sealed partial class FlushScene : IDisposable
                 command.TargetBounds,
                 clipAnchor,
                 allocator,
+                profileStorage,
                 out PreparedPathClipState? preparedPathClips))
         {
             preparedStroke.Rasterizable.Dispose();
@@ -1324,6 +1378,7 @@ internal sealed partial class FlushScene : IDisposable
     /// <param name="firstTargetRowBandIndex">The first row-band index covered by the target.</param>
     /// <param name="rowBuilders">The partition-owned row builders, one slot per target row band.</param>
     /// <param name="allocator">The allocator used for retained row storage.</param>
+    /// <param name="profileStorage">The partition-owned aliased profile arena.</param>
     /// <param name="strokeItems">The shared retained stroke items indexed by original command index.</param>
     /// <param name="strokeItemCount">The running partition stroke item count.</param>
     /// <param name="totalEdgeCount">The running total of encoded raster edges.</param>
@@ -1338,6 +1393,7 @@ internal sealed partial class FlushScene : IDisposable
         int firstTargetRowBandIndex,
         RowBuilder[] rowBuilders,
         MemoryAllocator allocator,
+        LinearGeometryProfileStorage profileStorage,
         StrokeSceneItem?[] strokeItems,
         ref int strokeItemCount,
         ref long totalEdgeCount,
@@ -1355,6 +1411,7 @@ internal sealed partial class FlushScene : IDisposable
                 command.TargetBounds,
                 clipAnchor,
                 allocator,
+                profileStorage,
                 out PreparedPathClipState? preparedPathClips))
         {
             preparedStroke.Rasterizable.Dispose();
@@ -1418,11 +1475,13 @@ internal sealed partial class FlushScene : IDisposable
     /// </summary>
     /// <param name="command">The command supplying the path, brush, and options.</param>
     /// <param name="allocator">The allocator used for retained raster storage.</param>
+    /// <param name="profileStorage">The partition-owned aliased profile arena.</param>
     /// <param name="prepared">The prepared fill payload when successful.</param>
     /// <returns><see langword="true"/> when the fill intersects the target and rasterizable geometry was created; otherwise <see langword="false"/>.</returns>
     private static bool TryPrepareFillPath(
         in CompositionCommand command,
         MemoryAllocator allocator,
+        LinearGeometryProfileStorage profileStorage,
         out PreparedFillItem prepared)
         => TryPrepareFillPath(
             command.SourcePath,
@@ -1433,6 +1492,7 @@ internal sealed partial class FlushScene : IDisposable
             command.DestinationOffset,
             command.SubPixelOffset,
             allocator,
+            profileStorage,
             out prepared);
 
     /// <summary>
@@ -1448,6 +1508,7 @@ internal sealed partial class FlushScene : IDisposable
     /// <param name="destinationOffset">The offset from path-local to destination coordinates.</param>
     /// <param name="subPixelOffset">The fractional translation applied after the drawing options transform.</param>
     /// <param name="allocator">The allocator used for retained raster storage.</param>
+    /// <param name="profileStorage">The partition-owned aliased profile arena.</param>
     /// <param name="prepared">The prepared fill payload when successful.</param>
     /// <returns><see langword="true"/> when the fill intersects the target and rasterizable geometry was created; otherwise <see langword="false"/>.</returns>
     internal static bool TryPrepareFillPath(
@@ -1459,6 +1520,7 @@ internal sealed partial class FlushScene : IDisposable
         Point destinationOffset,
         Vector2 subPixelOffset,
         MemoryAllocator allocator,
+        LinearGeometryProfileStorage profileStorage,
         out PreparedFillItem prepared)
     {
         Matrix4x4 transform = drawingOptions.Transform;
@@ -1497,7 +1559,8 @@ internal sealed partial class FlushScene : IDisposable
             destinationOffset.X,
             destinationOffset.Y,
             rasterizerOptions,
-            allocator);
+            allocator,
+            profileStorage);
 
         if (rasterizable is null)
         {
@@ -1732,7 +1795,6 @@ internal sealed partial class FlushScene : IDisposable
             clippedDestination,
             options.IntersectionRule,
             options.RasterizationMode,
-            options.AntialiasThreshold,
             options.CoverageBoost);
 
         brushBounds = absoluteInterest;
@@ -1905,6 +1967,7 @@ internal sealed partial class FlushScene : IDisposable
         /// <param name="layerDepthDelta">The net begin minus end layer count across the partition.</param>
         /// <param name="maxLayerDepth">The maximum layer depth reached, relative to the partition start.</param>
         /// <param name="rowBuilders">The partition-owned row builders, one slot per target row band.</param>
+        /// <param name="profileStorage">The partition-owned aliased profile arena.</param>
         public PartitionState(
             int fillItemCount,
             int strokeItemCount,
@@ -1913,7 +1976,8 @@ internal sealed partial class FlushScene : IDisposable
             int smallEdgeItemCount,
             int layerDepthDelta,
             int maxLayerDepth,
-            RowBuilder[] rowBuilders)
+            RowBuilder[] rowBuilders,
+            LinearGeometryProfileStorage profileStorage)
         {
             this.FillItemCount = fillItemCount;
             this.StrokeItemCount = strokeItemCount;
@@ -1923,6 +1987,7 @@ internal sealed partial class FlushScene : IDisposable
             this.LayerDepthDelta = layerDepthDelta;
             this.MaxLayerDepth = maxLayerDepth;
             this.RowBuilders = rowBuilders;
+            this.ProfileStorage = profileStorage;
         }
 
         /// <summary>
@@ -1964,6 +2029,11 @@ internal sealed partial class FlushScene : IDisposable
         /// Gets the partition-owned row builders, one slot per target row band.
         /// </summary>
         public RowBuilder[] RowBuilders { get; }
+
+        /// <summary>
+        /// Gets the aliased profile arena built by this partition.
+        /// </summary>
+        public LinearGeometryProfileStorage ProfileStorage { get; }
     }
 
     /// <summary>

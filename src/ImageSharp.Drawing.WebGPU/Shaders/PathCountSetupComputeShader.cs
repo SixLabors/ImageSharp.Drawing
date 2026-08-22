@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
 /// GPU stage that computes the indirect dispatch size for the per-line stages
-/// (path-row-span and path-count) by dividing the flattened line count by the workgroup
+/// (path-row-span and path-count) by dividing the final line count by the workgroup
 /// size, or zero workgroups after an upstream allocation failure. Wraps
 /// <c>path_count_setup.wgsl</c>.
 /// </summary>

@@ -401,12 +401,12 @@ The fill rule is therefore an emission-time decision, not a geometry-preprocessi
 
 ## Antialiased And Aliased Modes
 
-The rasterizer can emit either continuous or thresholded coverage.
+The rasterizer has separate coverage paths for the two modes.
 
-- `Antialiased` mode keeps the continuous coverage produced by the area-and-cover math
-- `Aliased` mode thresholds that continuous coverage using `AntialiasThreshold`
+- `Antialiased` mode keeps the continuous coverage produced by the area-and-cover math.
+- `Aliased` mode walks sorted crossings at pixel row and column centres. A pixel is covered when the shape contains its centre. If a closed interval contains no centre, the rasterizer lights its midpoint pixel unless the two boundary profiles show that the interval ends at a contour tip. A second, vertical walk finds horizontal features between row centres.
 
-The scan-conversion core stays the same in both modes. Only the final conversion from area to emitted coverage changes.
+Aliased coverage is therefore determined directly from geometry. It is not produced by thresholding antialiased area coverage.
 
 ## Why Self-Intersections Work
 

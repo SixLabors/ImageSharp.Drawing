@@ -170,7 +170,7 @@ internal readonly struct WebGPUSceneBumpSizes
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUSceneBumpSizes"/> struct.
     /// </summary>
-    /// <param name="lines">The flattened line buffer capacity.</param>
+    /// <param name="lines">The final line buffer capacity.</param>
     /// <param name="binning">The bin-data scratch capacity.</param>
     /// <param name="pathRows">The sparse path-row buffer capacity.</param>
     /// <param name="pathTiles">The path-tile buffer capacity.</param>
@@ -199,7 +199,7 @@ internal readonly struct WebGPUSceneBumpSizes
     }
 
     /// <summary>
-    /// Gets the flattened line buffer capacity.
+    /// Gets the final line buffer capacity.
     /// </summary>
     public uint Lines { get; }
 
@@ -275,7 +275,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
     /// <param name="pathScan1X">The workgroup count for the large pathtag scan setup pass.</param>
     /// <param name="pathScanX">The workgroup count for the final pathtag scan pass.</param>
     /// <param name="bboxClearX">The workgroup count for the bbox clear pass.</param>
-    /// <param name="flattenX">The workgroup count for the flatten pass.</param>
+    /// <param name="pathLoweringX">The workgroup count for the path-lowering pass.</param>
     /// <param name="drawReduceX">The workgroup count for the draw reduction pass.</param>
     /// <param name="drawLeafX">The workgroup count for the draw leaf pass.</param>
     /// <param name="clipReduceX">The workgroup count for the clip reduction pass.</param>
@@ -300,7 +300,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
         uint pathScan1X,
         uint pathScanX,
         uint bboxClearX,
-        uint flattenX,
+        uint pathLoweringX,
         uint drawReduceX,
         uint drawLeafX,
         uint clipReduceX,
@@ -325,7 +325,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
         this.PathScan1X = pathScan1X;
         this.PathScanX = pathScanX;
         this.BboxClearX = bboxClearX;
-        this.FlattenX = flattenX;
+        this.PathLoweringX = pathLoweringX;
         this.DrawReduceX = drawReduceX;
         this.DrawLeafX = drawLeafX;
         this.ClipReduceX = clipReduceX;
@@ -376,9 +376,9 @@ internal readonly struct WebGPUSceneWorkgroupCounts
     public uint BboxClearX { get; }
 
     /// <summary>
-    /// Gets the workgroup count for the flatten pass.
+    /// Gets the workgroup count for the path-lowering pass.
     /// </summary>
-    public uint FlattenX { get; }
+    public uint PathLoweringX { get; }
 
     /// <summary>
     /// Gets the workgroup count for the draw reduction pass.
@@ -493,7 +493,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
         // draw_leaf.wgsl distributes all draw blocks over at most 256 workgroups
         // (each loops over its share of blocks), so reduce/leaf dispatches cap at 256.
         uint drawMonoidWgs = Math.Min(drawObjectWgs, 256U);
-        uint flattenWgs = DivideRoundUp(pathTagCount, 256U);
+        uint pathLoweringWgs = DivideRoundUp(pathTagCount, 256U);
 
         // Vello's sizing: clip_leaf processes the final (possibly partial) partition
         // itself, so clip_reduce only covers the full partitions preceding it.
@@ -518,7 +518,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
             reducedSize / 256U,
             pathTagWgs,
             pathWgs,
-            flattenWgs,
+            pathLoweringWgs,
             drawMonoidWgs,
             drawMonoidWgs,
             clipReduceWgs,
@@ -560,7 +560,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
         uint reducedSize = useLargePathScan ? AlignUp(pathTagWgs, 256U) : pathTagWgs;
         uint drawObjectWgs = DivideRoundUp(drawObjectCount, 256U);
         uint drawMonoidWgs = Math.Min(drawObjectWgs, 256U);
-        uint flattenWgs = DivideRoundUp(pathTagCount, 256U);
+        uint pathLoweringWgs = DivideRoundUp(pathTagCount, 256U);
         uint clipReduceWgs = clipCount == 0U ? 0U : (clipCount - 1U) / 256U;
         uint clipWgs = DivideRoundUp(clipCount, 256U);
         uint pathWgs = DivideRoundUp(pathCount, 256U);
@@ -579,7 +579,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
             reducedSize / 256U,
             pathTagWgs,
             pathWgs,
-            flattenWgs,
+            pathLoweringWgs,
             drawMonoidWgs,
             drawMonoidWgs,
             clipReduceWgs,
@@ -643,7 +643,7 @@ internal readonly struct WebGPUSceneBufferSizes
     /// <param name="drawBboxes">The draw bounding-box buffer size.</param>
     /// <param name="bumpAlloc">The bump allocator block size.</param>
     /// <param name="paths">The per-path scheduling buffer size.</param>
-    /// <param name="lines">The flattened line buffer size.</param>
+    /// <param name="lines">The final line buffer size.</param>
     /// <param name="binHeaders">The bin-header buffer size.</param>
     /// <param name="binData">The bin-data scratch buffer size.</param>
     /// <param name="indirectCount">The indirect dispatch-count buffer size.</param>
@@ -677,7 +677,7 @@ internal readonly struct WebGPUSceneBufferSizes
         WebGPUSceneBufferSize<GpuPathTile> pathTiles,
         WebGPUSceneBufferSize<GpuSegmentCount> segCounts,
         WebGPUSceneBufferSize<GpuPathSegment> segments,
-        WebGPUSceneBufferSize<ulong> blendSpill,
+        WebGPUSceneBufferSize<Vector4> blendSpill,
         WebGPUSceneBufferSize<uint> ptcl)
     {
         this.PathReduced = pathReduced;
@@ -783,7 +783,7 @@ internal readonly struct WebGPUSceneBufferSizes
     public WebGPUSceneBufferSize<GpuScenePath> Paths { get; }
 
     /// <summary>
-    /// Gets the size of the flattened line buffer.
+    /// Gets the size of the final line buffer.
     /// </summary>
     public WebGPUSceneBufferSize<GpuSceneLine> Lines { get; }
 
@@ -825,7 +825,7 @@ internal readonly struct WebGPUSceneBufferSizes
     /// <summary>
     /// Gets the size of the blend-spill buffer.
     /// </summary>
-    public WebGPUSceneBufferSize<ulong> BlendSpill { get; }
+    public WebGPUSceneBufferSize<Vector4> BlendSpill { get; }
 
     /// <summary>
     /// Gets the size of the PTCL buffer.
@@ -901,7 +901,7 @@ internal readonly struct WebGPUSceneBufferSizes
             WebGPUSceneBufferSize<GpuPathTile>.Create(bumpSizes.PathTiles),
             WebGPUSceneBufferSize<GpuSegmentCount>.Create(bumpSizes.SegCounts),
             WebGPUSceneBufferSize<GpuPathSegment>.Create(bumpSizes.Segments),
-            WebGPUSceneBufferSize<ulong>.Create(bumpSizes.BlendSpill),
+            WebGPUSceneBufferSize<Vector4>.Create(bumpSizes.BlendSpill),
             WebGPUSceneBufferSize<uint>.Create(ptclCount));
     }
 
@@ -953,7 +953,7 @@ internal readonly struct WebGPUSceneBufferSizes
             WebGPUSceneBufferSize<GpuPathTile>.Create(bumpSizes.PathTiles),
             WebGPUSceneBufferSize<GpuSegmentCount>.Create(bumpSizes.SegCounts),
             WebGPUSceneBufferSize<GpuPathSegment>.Create(bumpSizes.Segments),
-            WebGPUSceneBufferSize<ulong>.Create(bumpSizes.BlendSpill),
+            WebGPUSceneBufferSize<Vector4>.Create(bumpSizes.BlendSpill),
             WebGPUSceneBufferSize<uint>.Create(ptclCount));
     }
 

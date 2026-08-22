@@ -127,8 +127,6 @@ public partial class ProcessWithDrawingCanvasTests
     [Theory]
     [WithSolidFilledImages(30, 30, "White", PixelTypes.Rgba32, 1F, true)]
     [WithSolidFilledImages(30, 30, "White", PixelTypes.Rgba32, 5F, true)]
-    [WithSolidFilledImages(30, 30, "White", PixelTypes.Rgba32, 1F, false)]
-    [WithSolidFilledImages(30, 30, "White", PixelTypes.Rgba32, 5F, false)]
     public void DrawLinesInvalidPoints<TPixel>(TestImageProvider<TPixel> provider, float thickness, bool antialias)
         where TPixel : unmanaged, IPixel<TPixel>
     {

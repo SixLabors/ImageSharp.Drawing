@@ -18,7 +18,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <remarks>
 /// <para>
 /// The stage order is fixed by data dependencies: prepare (bump reset), pathtag reduce/scan,
-/// bbox_clear, flatten, draw reduce/leaf, clip reduce/leaf, binning, then the tile stages
+/// bbox_clear, path lowering, draw reduce/leaf, clip reduce/leaf, binning, then the tile stages
 /// (path_row_alloc, path_row_span, tile_alloc, path_count, backdrop, coarse, path_tiling) and
 /// finally the fine shading pass. Scratch buffers use GPU bump allocators sized from cached
 /// estimates; after each attempt the allocator counters are read back and, on overflow, the caller
@@ -45,7 +45,7 @@ internal static class WebGPUSceneDispatch
     private const string PathtagScanPipelineKey = "scene/pathtag-scan";
     private const string PathtagScanSmallPipelineKey = "scene/pathtag-scan-small";
     private const string BboxClearPipelineKey = "scene/bbox-clear";
-    private const string FlattenPipelineKey = "scene/flatten";
+    private const string PathLoweringPipelineKey = "scene/path-lowering";
     private const string DrawReducePipelineKey = "scene/draw-reduce";
     private const string DrawLeafPipelineKey = "scene/draw-leaf";
     private const string ClipReducePipelineKey = "scene/clip-reduce";
@@ -648,7 +648,6 @@ internal static class WebGPUSceneDispatch
         nuint clipBboxBufferSize = bufferSizes.ClipBboxes.ByteLength;
         nuint drawBboxBufferSize = bufferSizes.DrawBboxes.ByteLength;
         nuint lineBufferSize = bufferSizes.Lines.ByteLength;
-        nuint binHeaderBufferSize = bufferSizes.BinHeaders.ByteLength;
         if (GetRenderableDrawCount(stagedScene) == 0)
         {
             error = null;
@@ -661,12 +660,10 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        WGPUBufferImpl* binHeaderBuffer = arena.BinHeaderBuffer;
         WGPUBufferImpl* bumpBuffer = arena.BumpBuffer;
 
         WebGPUSceneResourceRegistry resourceRegistry = WebGPUSceneResourceRegistry.Create(stagedScene.Resources);
         resourceRegistry.RegisterSchedulingBuffers(
-            binHeaderBuffer,
             arena.IndirectCountBuffer,
             arena.PathRowBuffer,
             arena.PathTileBuffer,
@@ -758,7 +755,7 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        // Flatten accumulates path bboxes with atomic min/max, so every box must be reset to an
+        // Path lowering accumulates path bboxes with atomic min/max, so every box must be reset to an
         // inverted empty state first.
         if (!TryDispatchBboxClear(
                 recording,
@@ -771,7 +768,7 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        if (!TryDispatchFlatten(
+        if (!TryDispatchPathLowering(
                 recording,
                 flushContext,
                 stagedScene.Resources,
@@ -780,7 +777,7 @@ internal static class WebGPUSceneDispatch
                 pathBboxBufferSize,
                 bumpBuffer,
                 lineBufferSize,
-                workgroupCounts.FlattenX,
+                workgroupCounts.PathLoweringX,
                 out error))
         {
             return false;
@@ -904,7 +901,6 @@ internal static class WebGPUSceneDispatch
         nuint drawBboxBufferSize = bufferSizes.DrawBboxes.ByteLength;
         nuint pathBufferSize = bufferSizes.Paths.ByteLength;
         nuint lineBufferSize = bufferSizes.Lines.ByteLength;
-        nuint binHeaderBufferSize = bufferSizes.BinHeaders.ByteLength;
         nuint pathRowBufferSize = bufferSizes.PathRows.ByteLength;
         nuint pathTileBufferSize = bufferSizes.PathTiles.ByteLength;
         nuint segCountBufferSize = bufferSizes.SegCounts.ByteLength;
@@ -922,7 +918,6 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        WGPUBufferImpl* binHeaderBuffer = arena.BinHeaderBuffer;
         WGPUBufferImpl* indirectCountBuffer = arena.IndirectCountBuffer;
         WGPUBufferImpl* pathRowBuffer = arena.PathRowBuffer;
         WGPUBufferImpl* pathTileBuffer = arena.PathTileBuffer;
@@ -934,7 +929,6 @@ internal static class WebGPUSceneDispatch
 
         WebGPUSceneResourceRegistry resourceRegistry = WebGPUSceneResourceRegistry.Create(stagedScene.Resources);
         resourceRegistry.RegisterSchedulingBuffers(
-            binHeaderBuffer,
             indirectCountBuffer,
             pathRowBuffer,
             pathTileBuffer,
@@ -946,7 +940,7 @@ internal static class WebGPUSceneDispatch
 
         WebGPUSceneComputeRecording recording = new(resourceRegistry);
 
-        // chunk_reset clears only the chunk-local bump counters; the shared flatten/binning
+        // chunk_reset clears only the chunk-local bump counters; the shared path-lowering/binning
         // counters and failure bits must survive because those stages are not rerun per window.
         if (resetChunkLocalBumpAllocators &&
             !TryDispatchChunkReset(recording, bumpBuffer, ChunkResetComputeShader.GetDispatchX(), out error))
@@ -960,6 +954,7 @@ internal static class WebGPUSceneDispatch
                 stagedScene.Resources,
                 sceneBufferSize,
                 drawBboxBufferSize,
+                pathBboxBufferSize,
                 pathBufferSize,
                 pathRowBuffer,
                 pathRowBufferSize,
@@ -970,7 +965,7 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        // path_count_setup reads only bump.lines, which the shared flatten pass has already
+        // path_count_setup reads only bump.lines, which the shared path-lowering pass has already
         // produced, so it can run here even though path_count itself comes later. The same
         // indirect argument buffer drives both per-line dispatches (path_row_span and path_count)
         // because they use the same workgroup size.
@@ -1120,7 +1115,6 @@ internal static class WebGPUSceneDispatch
         }
 
         scheduling = new WebGPUSceneSchedulingResources(
-            binHeaderBuffer,
             indirectCountBuffer,
             pathRowBuffer,
             pathTileBuffer,
@@ -1241,6 +1235,7 @@ internal static class WebGPUSceneDispatch
                 flushContext,
                 stagedScene.Resources,
                 stagedScene.Config.BufferSizes,
+                GetBindingByteLength<uint>(stagedScene.EncodedScene.SceneWordCount),
                 scheduling,
                 outputTextureView,
                 backdropTarget.TextureView,
@@ -1439,7 +1434,6 @@ internal static class WebGPUSceneDispatch
         WebGPUSceneBufferSizes bufferSizes,
         nuint readbackByteLength)
     {
-        WGPUBufferImpl* binHeaderBuffer = null;
         WGPUBufferImpl* indirectCountBuffer = null;
         WGPUBufferImpl* pathRowBuffer = null;
         WGPUBufferImpl* pathTileBuffer = null;
@@ -1451,7 +1445,6 @@ internal static class WebGPUSceneDispatch
 
         try
         {
-            binHeaderBuffer = CreateArenaStorageBuffer(flushContext, bufferSizes.BinHeaders.ByteLength);
             indirectCountBuffer = CreateArenaIndirectStorageBuffer(flushContext, bufferSizes.IndirectCount.ByteLength);
             pathRowBuffer = CreateArenaStorageBuffer(flushContext, bufferSizes.PathRows.ByteLength);
             pathTileBuffer = CreateArenaStorageBuffer(flushContext, bufferSizes.PathTiles.ByteLength);
@@ -1481,7 +1474,6 @@ internal static class WebGPUSceneDispatch
                 flushContext.DeviceHandle,
                 bufferSizes,
                 readbackByteLength,
-                binHeaderBuffer,
                 indirectCountBuffer,
                 pathRowBuffer,
                 pathTileBuffer,
@@ -1497,7 +1489,6 @@ internal static class WebGPUSceneDispatch
             // Nothing owns these buffers until the arena is constructed; a throw mid-sequence
             // (a closed device handle, checked-size overflow) must release the ones created.
             WebGPU api = flushContext.Api;
-            WebGPUSceneSchedulingArena.ReleaseArenaBuffer(api, binHeaderBuffer);
             WebGPUSceneSchedulingArena.ReleaseArenaBuffer(api, indirectCountBuffer);
             WebGPUSceneSchedulingArena.ReleaseArenaBuffer(api, pathRowBuffer);
             WebGPUSceneSchedulingArena.ReleaseArenaBuffer(api, pathTileBuffer);
@@ -1611,7 +1602,6 @@ internal static class WebGPUSceneDispatch
         pendingStatus = null;
         error = null;
 
-        WebGPUEncodedScene encodedScene = stagedScene.EncodedScene;
         if (GetRenderableDrawCount(stagedScene) == 0)
         {
             return true;
@@ -1665,6 +1655,7 @@ internal static class WebGPUSceneDispatch
                 flushContext,
                 stagedScene.Resources,
                 stagedScene.Config.BufferSizes,
+                GetBindingByteLength<uint>(stagedScene.EncodedScene.SceneWordCount),
                 scheduling,
                 outputTextureView,
                 backdropTarget.TextureView,
@@ -2134,6 +2125,7 @@ internal static class WebGPUSceneDispatch
                 stagedScene.FlushContext,
                 stagedScene.Resources,
                 stagedScene.Config.BufferSizes,
+                GetBindingByteLength<uint>(stagedScene.EncodedScene.SceneWordCount),
                 scheduling,
                 outputTextureView,
                 backdropTarget.TextureView,
@@ -2196,6 +2188,7 @@ internal static class WebGPUSceneDispatch
                 stagedScene.FlushContext,
                 stagedScene.Resources,
                 stagedScene.Config.BufferSizes,
+                GetBindingByteLength<uint>(stagedScene.EncodedScene.SceneWordCount),
                 scheduling,
                 outputTextureView,
                 backdropTarget.TextureView,
@@ -2832,7 +2825,7 @@ internal static class WebGPUSceneDispatch
     }
 
     /// <summary>
-    /// Records the pass that resets every per-path bbox to an inverted empty box so flatten can
+    /// Records the pass that resets every per-path bbox to an inverted empty box so path lowering can
     /// accumulate extents with atomic min/max.
     /// </summary>
     /// <param name="recording">The compute recording that receives the staged dispatch.</param>
@@ -2858,7 +2851,7 @@ internal static class WebGPUSceneDispatch
     }
 
     /// <summary>
-    /// Records the flatten stage that converts encoded path segments into the device-space line
+    /// Records the path-lowering stage that converts encoded path segments into the device-space line
     /// soup and accumulates per-path bboxes, bump-allocating lines from the shared counters.
     /// </summary>
     /// <param name="recording">The compute recording that receives the staged dispatch.</param>
@@ -2868,11 +2861,11 @@ internal static class WebGPUSceneDispatch
     /// <param name="pathMonoidBufferSize">The byte length of the pathtag monoid buffer binding.</param>
     /// <param name="pathBboxBufferSize">The byte length of the per-path bbox buffer binding.</param>
     /// <param name="bumpBuffer">The scheduling bump-allocator buffer that tracks line usage.</param>
-    /// <param name="lineBufferSize">The byte length of the flattened line buffer binding.</param>
+    /// <param name="lineBufferSize">The byte length of the final line buffer binding.</param>
     /// <param name="dispatchX">The X workgroup count for the stage.</param>
     /// <param name="error">Receives the recording failure reason when the dispatch cannot be staged.</param>
     /// <returns><see langword="true"/> when the dispatch was recorded successfully; otherwise, <see langword="false"/>.</returns>
-    private static unsafe bool TryDispatchFlatten(
+    private static unsafe bool TryDispatchPathLowering(
         WebGPUSceneComputeRecording recording,
         WebGPUFlushContext flushContext,
         WebGPUSceneResourceSet resources,
@@ -2892,7 +2885,7 @@ internal static class WebGPUSceneDispatch
         entries[4] = CreateBufferBinding(4, bumpBuffer, (nuint)sizeof(GpuSceneBumpAllocators));
         entries[5] = CreateBufferBinding(5, resources.LineBuffer, lineBufferSize);
 
-        return recording.TryRecord(WebGPUSceneShaderId.Flatten, entries, 6, dispatchX, 1, 1, out error);
+        return recording.TryRecord(WebGPUSceneShaderId.PathLowering, entries, 6, dispatchX, 1, 1, out error);
     }
 
     /// <summary>
@@ -3530,6 +3523,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="resources">The staged-scene resource set that provides the scene, draw-bbox, and path buffers.</param>
     /// <param name="sceneBufferSize">The byte length of the packed scene buffer binding.</param>
     /// <param name="drawBboxBufferSize">The byte length of the draw-bbox buffer binding.</param>
+    /// <param name="pathBboxBufferSize">The byte length of the original path-bbox buffer binding.</param>
     /// <param name="pathBufferSize">The byte length of the per-path buffer binding.</param>
     /// <param name="pathRowBuffer">The sparse path-row buffer to populate.</param>
     /// <param name="pathRowBufferSize">The byte length of the sparse path-row buffer binding.</param>
@@ -3543,6 +3537,7 @@ internal static class WebGPUSceneDispatch
         WebGPUSceneResourceSet resources,
         nuint sceneBufferSize,
         nuint drawBboxBufferSize,
+        nuint pathBboxBufferSize,
         nuint pathBufferSize,
         WGPUBufferImpl* pathRowBuffer,
         nuint pathRowBufferSize,
@@ -3550,15 +3545,16 @@ internal static class WebGPUSceneDispatch
         uint dispatchX,
         out string? error)
     {
-        WGPUBindGroupEntry* entries = stackalloc WGPUBindGroupEntry[6];
+        WGPUBindGroupEntry* entries = stackalloc WGPUBindGroupEntry[7];
         entries[0] = CreateBufferBinding(0, resources.HeaderBuffer, (nuint)sizeof(GpuSceneConfig));
         entries[1] = CreateBufferBinding(1, resources.SceneBuffer, sceneBufferSize);
         entries[2] = CreateBufferBinding(2, resources.DrawBboxBuffer, drawBboxBufferSize);
         entries[3] = CreateBufferBinding(3, bumpBuffer, (nuint)sizeof(GpuSceneBumpAllocators));
         entries[4] = CreateBufferBinding(4, resources.PathBuffer, pathBufferSize);
         entries[5] = CreateBufferBinding(5, pathRowBuffer, pathRowBufferSize);
+        entries[6] = CreateBufferBinding(6, resources.PathBboxBuffer, pathBboxBufferSize);
 
-        if (!recording.TryRecord(WebGPUSceneShaderId.PathRowAlloc, entries, 6, dispatchX, 1, 1, out error))
+        if (!recording.TryRecord(WebGPUSceneShaderId.PathRowAlloc, entries, 7, dispatchX, 1, 1, out error))
         {
             return false;
         }
@@ -3577,7 +3573,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="pathBufferSize">The byte length of the per-path buffer binding.</param>
     /// <param name="pathRowBuffer">The sparse path-row buffer to update.</param>
     /// <param name="pathRowBufferSize">The byte length of the sparse path-row buffer binding.</param>
-    /// <param name="lineBufferSize">The byte length of the flattened line buffer binding.</param>
+    /// <param name="lineBufferSize">The byte length of the final line buffer binding.</param>
     /// <param name="indirectCountBuffer">The indirect-dispatch argument buffer seeded from the line count.</param>
     /// <param name="error">Receives the recording failure reason when the dispatch cannot be staged.</param>
     /// <returns><see langword="true"/> when the dispatch was recorded successfully; otherwise, <see langword="false"/>.</returns>
@@ -3700,7 +3696,7 @@ internal static class WebGPUSceneDispatch
     }
 
     /// <summary>
-    /// Records the one-workgroup pass that converts the flattened line count into indirect
+    /// Records the one-workgroup pass that converts the final line count into indirect
     /// dispatch arguments for the per-line stages, or zeroes the dispatch after an upstream failure.
     /// </summary>
     /// <param name="recording">The compute recording that receives the staged dispatch.</param>
@@ -3804,7 +3800,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="pathTileBufferSize">The byte length of the tile buffer binding.</param>
     /// <param name="segCountBuffer">The segment-count buffer receiving one record per crossing.</param>
     /// <param name="segCountBufferSize">The byte length of the segment-count buffer binding.</param>
-    /// <param name="lineBufferSize">The byte length of the flattened line buffer binding.</param>
+    /// <param name="lineBufferSize">The byte length of the final line buffer binding.</param>
     /// <param name="indirectCountBuffer">The indirect-dispatch argument buffer seeded by path_count_setup.</param>
     /// <param name="error">Receives the recording failure reason when the dispatch cannot be staged.</param>
     /// <returns><see langword="true"/> when the dispatch was recorded successfully; otherwise, <see langword="false"/>.</returns>
@@ -3945,7 +3941,7 @@ internal static class WebGPUSceneDispatch
     }
 
     /// <summary>
-    /// Records the per-crossing stage that clips each flattened line to its tile and writes the
+    /// Records the per-crossing stage that clips each final line to its tile and writes the
     /// final tile-relative segments consumed by the fine pass.
     /// </summary>
     /// <param name="recording">The compute recording that receives the staged dispatch.</param>
@@ -3954,7 +3950,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="bumpBuffer">The scheduling bump-allocator buffer providing the segment-count total.</param>
     /// <param name="segCountBuffer">The segment-count records emitted by path_count.</param>
     /// <param name="segCountBufferSize">The byte length of the segment-count buffer binding.</param>
-    /// <param name="lineBufferSize">The byte length of the flattened line buffer binding.</param>
+    /// <param name="lineBufferSize">The byte length of the final line buffer binding.</param>
     /// <param name="pathBufferSize">The byte length of the per-path buffer binding.</param>
     /// <param name="pathRowBuffer">The sparse path-row buffer used to resolve tile indices.</param>
     /// <param name="pathRowBufferSize">The byte length of the sparse path-row buffer binding.</param>
@@ -4012,6 +4008,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="flushContext">The flush context that owns the device, encoder, and texture format.</param>
     /// <param name="resources">The staged-scene resource set that provides the header, info, and texture bindings.</param>
     /// <param name="bufferSizes">The buffer plan providing the byte length of each scheduling binding.</param>
+    /// <param name="sceneBufferSize">The byte length of the packed scene buffer binding backing the profile records.</param>
     /// <param name="scheduling">The transient scheduling buffers produced by the earlier stages.</param>
     /// <param name="outputTextureView">The storage texture view receiving the shaded output.</param>
     /// <param name="backdropTextureView">The texture view holding the existing target contents sampled as the backdrop.</param>
@@ -4023,6 +4020,7 @@ internal static class WebGPUSceneDispatch
         WebGPUFlushContext flushContext,
         WebGPUSceneResourceSet resources,
         WebGPUSceneBufferSizes bufferSizes,
+        nuint sceneBufferSize,
         WebGPUSceneSchedulingResources scheduling,
         WGPUTextureViewImpl* outputTextureView,
         WGPUTextureViewImpl* backdropTextureView,
@@ -4056,7 +4054,7 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        WGPUBindGroupEntry* entries = stackalloc WGPUBindGroupEntry[9];
+        WGPUBindGroupEntry* entries = stackalloc WGPUBindGroupEntry[11];
         entries[0] = CreateBufferBinding(0, resources.HeaderBuffer, (nuint)sizeof(GpuSceneConfig));
         entries[1] = CreateBufferBinding(1, scheduling.SegmentBuffer, bufferSizes.Segments.ByteLength);
         entries[2] = CreateBufferBinding(2, scheduling.PtclBuffer, bufferSizes.Ptcl.ByteLength);
@@ -4067,8 +4065,10 @@ internal static class WebGPUSceneDispatch
         entries[7] = new WGPUBindGroupEntry { binding = 7, textureView = resources.ImageAtlasTextureView };
 
         entries[8] = new WGPUBindGroupEntry { binding = 8, textureView = backdropTextureView };
+        entries[9] = CreateBufferBinding(9, resources.SceneBuffer, sceneBufferSize);
+        entries[10] = CreateBufferBinding(10, scheduling.PathTileBuffer, bufferSizes.PathTiles.ByteLength);
 
-        if (!TryDispatchComputePass(flushContext, bindGroupLayout, pipeline, entries, 9, groupCountX, groupCountY, 1, out error))
+        if (!TryDispatchComputePass(flushContext, bindGroupLayout, pipeline, entries, 11, groupCountX, groupCountY, 1, out error))
         {
             return false;
         }
@@ -4265,7 +4265,7 @@ internal static class WebGPUSceneDispatch
             WebGPUSceneShaderId.PathtagScan => "pathtag_scan",
             WebGPUSceneShaderId.PathtagScanSmall => "pathtag_scan_small",
             WebGPUSceneShaderId.BboxClear => "bbox_clear",
-            WebGPUSceneShaderId.Flatten => "flatten",
+            WebGPUSceneShaderId.PathLowering => "path_lowering",
             WebGPUSceneShaderId.DrawReduce => "draw_reduce",
             WebGPUSceneShaderId.DrawLeaf => "draw_leaf",
             WebGPUSceneShaderId.ClipReduce => "clip_reduce",
@@ -4312,7 +4312,7 @@ internal static class WebGPUSceneDispatch
                 WebGPUSceneShaderId.PathtagScan1 => PathtagScan1ComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 WebGPUSceneShaderId.PathtagScan or WebGPUSceneShaderId.PathtagScanSmall => PathtagScanComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 WebGPUSceneShaderId.BboxClear => BboxClearComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
-                WebGPUSceneShaderId.Flatten => FlattenComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
+                WebGPUSceneShaderId.PathLowering => PathLoweringComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 WebGPUSceneShaderId.DrawReduce => DrawReduceComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 WebGPUSceneShaderId.DrawLeaf => DrawLeafComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
                 WebGPUSceneShaderId.ClipReduce => ClipReduceComputeShader.TryCreateBindGroupLayout(api, device, out layout, out layoutError),
@@ -4340,7 +4340,7 @@ internal static class WebGPUSceneDispatch
             WebGPUSceneShaderId.PathtagScan => PathtagScanComputeShader.ShaderCode,
             WebGPUSceneShaderId.PathtagScanSmall => PathtagScanComputeShader.SmallShaderCode,
             WebGPUSceneShaderId.BboxClear => BboxClearComputeShader.ShaderCode,
-            WebGPUSceneShaderId.Flatten => FlattenComputeShader.ShaderCode,
+            WebGPUSceneShaderId.PathLowering => PathLoweringComputeShader.ShaderCode,
             WebGPUSceneShaderId.DrawReduce => DrawReduceComputeShader.ShaderCode,
             WebGPUSceneShaderId.DrawLeaf => DrawLeafComputeShader.ShaderCode,
             WebGPUSceneShaderId.ClipReduce => ClipReduceComputeShader.ShaderCode,
@@ -4367,7 +4367,7 @@ internal static class WebGPUSceneDispatch
             WebGPUSceneShaderId.PathtagScan1 => PathtagScan1ComputeShader.EntryPoint,
             WebGPUSceneShaderId.PathtagScan or WebGPUSceneShaderId.PathtagScanSmall => PathtagScanComputeShader.EntryPoint,
             WebGPUSceneShaderId.BboxClear => BboxClearComputeShader.EntryPoint,
-            WebGPUSceneShaderId.Flatten => FlattenComputeShader.EntryPoint,
+            WebGPUSceneShaderId.PathLowering => PathLoweringComputeShader.EntryPoint,
             WebGPUSceneShaderId.DrawReduce => DrawReduceComputeShader.EntryPoint,
             WebGPUSceneShaderId.DrawLeaf => DrawLeafComputeShader.EntryPoint,
             WebGPUSceneShaderId.ClipReduce => ClipReduceComputeShader.EntryPoint,
@@ -4395,7 +4395,7 @@ internal static class WebGPUSceneDispatch
             WebGPUSceneShaderId.PathtagScan => PathtagScanPipelineKey,
             WebGPUSceneShaderId.PathtagScanSmall => PathtagScanSmallPipelineKey,
             WebGPUSceneShaderId.BboxClear => BboxClearPipelineKey,
-            WebGPUSceneShaderId.Flatten => FlattenPipelineKey,
+            WebGPUSceneShaderId.PathLowering => PathLoweringPipelineKey,
             WebGPUSceneShaderId.DrawReduce => DrawReducePipelineKey,
             WebGPUSceneShaderId.DrawLeaf => DrawLeafPipelineKey,
             WebGPUSceneShaderId.ClipReduce => ClipReducePipelineKey,
@@ -4471,7 +4471,7 @@ internal static class WebGPUSceneDispatch
             // Most expensive shaders first so their driver compilation starts as early as possible.
             ReadOnlySpan<WebGPUSceneShaderId> order =
             [
-                WebGPUSceneShaderId.Flatten,
+                WebGPUSceneShaderId.PathLowering,
                 WebGPUSceneShaderId.Coarse,
                 WebGPUSceneShaderId.DrawLeaf,
                 WebGPUSceneShaderId.PathCount,
@@ -4602,12 +4602,10 @@ internal static class WebGPUSceneDispatch
             size = size
         };
 
-        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
-        {
-            WGPUBufferImpl* buffer = flushContext.Api.DeviceCreateBuffer((WGPUDeviceImpl*)deviceReference.Handle, in descriptor);
-            flushContext.TrackBuffer(buffer);
-            return buffer;
-        }
+        using WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference();
+        WGPUBufferImpl* buffer = flushContext.Api.DeviceCreateBuffer((WGPUDeviceImpl*)deviceReference.Handle, in descriptor);
+        flushContext.TrackBuffer(buffer);
+        return buffer;
     }
 
     /// <summary>
@@ -4633,10 +4631,8 @@ internal static class WebGPUSceneDispatch
             size = size
         };
 
-        using (WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference())
-        {
-            return flushContext.Api.DeviceCreateBuffer((WGPUDeviceImpl*)deviceReference.Handle, in descriptor);
-        }
+        using WebGPUHandle.HandleReference deviceReference = flushContext.DeviceHandle.AcquireReference();
+        return flushContext.Api.DeviceCreateBuffer((WGPUDeviceImpl*)deviceReference.Handle, in descriptor);
     }
 
     /// <summary>
@@ -4756,7 +4752,7 @@ internal static class WebGPUSceneDispatch
 
             if (!signal.IsSet)
             {
-                Thread.Yield();
+                _ = Thread.Yield();
             }
         }
 
@@ -5007,9 +5003,9 @@ internal enum WebGPUSceneShaderId
     BboxClear = 6,
 
     /// <summary>
-    /// flatten.wgsl: lowers encoded path segments into the device-space line soup.
+    /// path_lowering.wgsl: lowers encoded path segments into the device-space line soup.
     /// </summary>
-    Flatten = 7,
+    PathLowering = 7,
 
     /// <summary>
     /// draw_reduce.wgsl: first pass of the draw-tag prefix sum.
@@ -5224,7 +5220,6 @@ internal sealed unsafe class WebGPUSceneResourceRegistry
     /// <summary>
     /// Registers the transient buffers produced by the scheduling passes.
     /// </summary>
-    /// <param name="binHeaderBuffer">The bin-header buffer.</param>
     /// <param name="indirectCountBuffer">The indirect dispatch-count buffer.</param>
     /// <param name="pathRowBuffer">The sparse path-row buffer.</param>
     /// <param name="pathTileBuffer">The path-tile buffer.</param>
@@ -5234,7 +5229,6 @@ internal sealed unsafe class WebGPUSceneResourceRegistry
     /// <param name="ptclBuffer">The PTCL buffer.</param>
     /// <param name="bumpBuffer">The bump-allocator buffer.</param>
     public void RegisterSchedulingBuffers(
-        WGPUBufferImpl* binHeaderBuffer,
         WGPUBufferImpl* indirectCountBuffer,
         WGPUBufferImpl* pathRowBuffer,
         WGPUBufferImpl* pathTileBuffer,
@@ -5244,7 +5238,6 @@ internal sealed unsafe class WebGPUSceneResourceRegistry
         WGPUBufferImpl* ptclBuffer,
         WGPUBufferImpl* bumpBuffer)
     {
-        this.RegisterBuffer(binHeaderBuffer);
         this.RegisterBuffer(indirectCountBuffer);
         this.RegisterBuffer(pathRowBuffer);
         this.RegisterBuffer(pathTileBuffer);
@@ -5460,7 +5453,6 @@ internal readonly unsafe struct WebGPUSceneSchedulingResources
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUSceneSchedulingResources"/> struct.
     /// </summary>
-    /// <param name="binHeaderBuffer">The bin-header buffer produced by the scheduling passes.</param>
     /// <param name="indirectCountBuffer">The indirect dispatch-count buffer.</param>
     /// <param name="pathRowBuffer">The sparse path-row buffer.</param>
     /// <param name="pathTileBuffer">The path-tile buffer.</param>
@@ -5470,7 +5462,6 @@ internal readonly unsafe struct WebGPUSceneSchedulingResources
     /// <param name="ptclBuffer">The PTCL buffer.</param>
     /// <param name="bumpBuffer">The bump-allocator buffer.</param>
     public WebGPUSceneSchedulingResources(
-        WGPUBufferImpl* binHeaderBuffer,
         WGPUBufferImpl* indirectCountBuffer,
         WGPUBufferImpl* pathRowBuffer,
         WGPUBufferImpl* pathTileBuffer,
@@ -5480,7 +5471,6 @@ internal readonly unsafe struct WebGPUSceneSchedulingResources
         WGPUBufferImpl* ptclBuffer,
         WGPUBufferImpl* bumpBuffer)
     {
-        this.BinHeaderBuffer = binHeaderBuffer;
         this.IndirectCountBuffer = indirectCountBuffer;
         this.PathRowBuffer = pathRowBuffer;
         this.PathTileBuffer = pathTileBuffer;
@@ -5490,11 +5480,6 @@ internal readonly unsafe struct WebGPUSceneSchedulingResources
         this.PtclBuffer = ptclBuffer;
         this.BumpBuffer = bumpBuffer;
     }
-
-    /// <summary>
-    /// Gets the bin-header buffer produced by the scheduling passes.
-    /// </summary>
-    public WGPUBufferImpl* BinHeaderBuffer { get; }
 
     /// <summary>
     /// Gets the indirect dispatch-count buffer produced by the scheduling passes.
@@ -5555,7 +5540,6 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
     /// <param name="device">The device that created the arena buffers.</param>
     /// <param name="capacitySizes">The buffer plan the arena buffers were sized from.</param>
     /// <param name="readbackByteLength">The size of the map-readable status buffer in bytes.</param>
-    /// <param name="binHeaderBuffer">The bin-header scratch buffer.</param>
     /// <param name="indirectCountBuffer">The indirect dispatch-count buffer.</param>
     /// <param name="pathRowBuffer">The sparse path-row scratch buffer.</param>
     /// <param name="pathTileBuffer">The path-tile scratch buffer.</param>
@@ -5570,7 +5554,6 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
         WebGPUDeviceHandle device,
         WebGPUSceneBufferSizes capacitySizes,
         nuint readbackByteLength,
-        WGPUBufferImpl* binHeaderBuffer,
         WGPUBufferImpl* indirectCountBuffer,
         WGPUBufferImpl* pathRowBuffer,
         WGPUBufferImpl* pathTileBuffer,
@@ -5585,7 +5568,6 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
         this.Device = device;
         this.CapacitySizes = capacitySizes;
         this.ReadbackByteLength = readbackByteLength;
-        this.BinHeaderBuffer = binHeaderBuffer;
         this.IndirectCountBuffer = indirectCountBuffer;
         this.PathRowBuffer = pathRowBuffer;
         this.PathTileBuffer = pathTileBuffer;
@@ -5617,11 +5599,6 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
     /// Gets the size of the map-readable status buffer in bytes.
     /// </summary>
     public nuint ReadbackByteLength { get; }
-
-    /// <summary>
-    /// Gets the bin-header scratch buffer.
-    /// </summary>
-    public WGPUBufferImpl* BinHeaderBuffer { get; private set; }
 
     /// <summary>
     /// Gets the indirect dispatch-count buffer.
@@ -5677,7 +5654,6 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
     /// <returns><see langword="true"/> when the arena can be reused as-is; otherwise, <see langword="false"/>.</returns>
     public bool CanReuse(WebGPUFlushContext flushContext, WebGPUSceneBufferSizes bufferSizes, nuint readbackByteLength)
         => ReferenceEquals(this.Device, flushContext.DeviceHandle) &&
-           this.BinHeaderBuffer is not null &&
            this.IndirectCountBuffer is not null &&
            this.PathRowBuffer is not null &&
            this.PathTileBuffer is not null &&
@@ -5687,7 +5663,6 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
            this.PtclBuffer is not null &&
            this.BumpBuffer is not null &&
            this.ReadbackBuffer is not null &&
-           bufferSizes.BinHeaders.ByteLength <= this.CapacitySizes.BinHeaders.ByteLength &&
            bufferSizes.IndirectCount.ByteLength <= this.CapacitySizes.IndirectCount.ByteLength &&
            bufferSizes.PathRows.ByteLength <= this.CapacitySizes.PathRows.ByteLength &&
            bufferSizes.PathTiles.ByteLength <= this.CapacitySizes.PathTiles.ByteLength &&
@@ -5730,8 +5705,6 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
         arena.PathTileBuffer = null;
         ReleaseArenaBuffer(api, arena.IndirectCountBuffer);
         arena.IndirectCountBuffer = null;
-        ReleaseArenaBuffer(api, arena.BinHeaderBuffer);
-        arena.BinHeaderBuffer = null;
     }
 
     /// <summary>

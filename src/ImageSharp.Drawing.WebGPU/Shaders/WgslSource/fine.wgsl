@@ -3,10 +3,10 @@
 
 // Fine rasterizer: the final stage of the pipeline. Each workgroup shades one
 // 16x16 tile by interpreting the tile's command list (PTCL) written by
-// coarse.wgsl. Coverage is computed analytically from the tile's line segments
-// plus backdrop winding, then brushes (solid color, recolor, linear/radial/
-// elliptic/sweep/path gradients, images) are evaluated and composited,
-// including clip mask begin/end handling.
+// coarse.wgsl. Antialiased fills use analytic area coverage. Aliased fills use
+// exact row-centre and column-centre crossings. Brushes (solid color, recolor,
+// linear/radial/elliptic/sweep/path gradients, images) are then evaluated and
+// composited, including clip mask begin/end handling.
 //
 // Inputs: config uniform, segment buffer, ptcl and info streams, gradient ramp
 // texture, image atlas, and a backdrop texture holding the existing target
@@ -15,15 +15,16 @@
 // stacks deeper than BLEND_STACK_SPLIT.
 //
 // Ported from Vello's fine.wgsl (vello_shaders/shader/fine.wgsl). Local
-// divergences from upstream: per-fill aliased coverage thresholds, extra PTCL
-// commands (CMD_RECOLOR, CMD_ELLIPTIC_GRAD, CMD_PATH_GRAD), clip difference and
-// hard mask bits, per-command raster interest rectangles, backdrop texture
+// divergences from upstream: centre-sampled aliased fills, extra PTCL commands
+// (CMD_RECOLOR, CMD_ELLIPTIC_GRAD, CMD_PATH_GRAD), clip difference and isolation
+// bits, per-command raster interest rectangles, backdrop texture
 // seeding, tile-row chunking via config.chunk_tile_y_start, and gradient extend
 // behavior deliberately matched to the CPU brushes.
 
 #import segment
 #import config
 #import drawtag
+#import tile
 
 // Scene configuration: target dimensions, tile counts, and the chunk window.
 @group(0) @binding(0)
@@ -53,7 +54,7 @@ var<storage> info: array<u32>;
 
 // Scratch for clip/blend stack entries deeper than BLEND_STACK_SPLIT.
 @group(0) @binding(4)
-var<storage, read_write> blend_spill: array<vec2<u32>>;
+var<storage, read_write> blend_spill: array<vec4<u32>>;
 
 // Final render target; its declaration and encoding are specialized by the host.
 @group(0) @binding(5)
@@ -71,21 +72,35 @@ var image_atlas: texture_2d<f32>;
 @group(0) @binding(8)
 var backdrop_texture: texture_2d<f32>;
 
+// The packed scene stream is bound here so aliased fills can read profile records. The table at
+// profile_records_base starts with the X and Y record counts. X records follow, then Y records.
+// Each record contains a minimum coordinate, a maximum coordinate, and a contour link.
+@group(0) @binding(9)
+var<storage> scene_data: array<u32>;
+
+// Coarse rewrites each non-empty path tile's segment field to an inverted slice index and then
+// preserves its original segment count in backdrop. Aliased row walks use adjacent slices for
+// the exact half-pixel crossing halo.
+@group(0) @binding(10)
+var<storage> path_tiles: array<Tile>;
+
 // Decodes a CMD_FILL payload: packed segment-count/fill-rule word, segment
-// base index, backdrop winding, per-fill aliased coverage threshold, and the
-// raster interest rectangle. As for all read_* decoders, cmd_ix addresses the
+// base index, backdrop winding, coverage data, and the raster interest
+// rectangle. Antialiased text may use the coverage word for a perceptual boost;
+// coarse repacks aliased fills with the path-tile index and neighbor flags used
+// by the exact crossing halo. As for all read_* decoders, cmd_ix addresses the
 // command tag and the payload words follow it.
 fn read_fill(cmd_ix: u32) -> CmdFill {
     let size_and_rule = ptcl[cmd_ix + 1u];
     let seg_data = ptcl[cmd_ix + 2u];
     let backdrop = i32(ptcl[cmd_ix + 3u]);
-    let coverage_threshold = bitcast<f32>(ptcl[cmd_ix + 4u]);
+    let coverage_data = ptcl[cmd_ix + 4u];
     let interest = vec4<f32>(
         bitcast<f32>(ptcl[cmd_ix + 5u]),
         bitcast<f32>(ptcl[cmd_ix + 6u]),
         bitcast<f32>(ptcl[cmd_ix + 7u]),
         bitcast<f32>(ptcl[cmd_ix + 8u]));
-    return CmdFill(size_and_rule, seg_data, backdrop, coverage_threshold, interest);
+    return CmdFill(size_and_rule, seg_data, backdrop, coverage_data, interest);
 }
 
 // Expands one RGBA color stored as two binary16 pairs. Brush payloads use
@@ -220,9 +235,8 @@ fn read_image(cmd_ix: u32) -> CmdImage {
     return CmdImage(matrx, xlat, vec2(x, y), vec2(width, height), format, x_extend, y_extend, alpha, alpha_type, signed_unit);
 }
 
-// Decodes a CMD_END_CLIP payload: the packed blend mode (which may carry the
-// clip difference/hard mask bits) and the layer alpha, which doubles as the
-// coverage threshold for hard mask clips.
+// Decodes a CMD_END_CLIP payload: the packed blend mode, including the local
+// difference and isolation bits, and the layer alpha.
 fn read_end_clip(cmd_ix: u32) -> CmdEndClip {
     let blend = ptcl[cmd_ix + 1u];
     let alpha = bitcast<f32>(ptcl[cmd_ix + 2u]);
@@ -234,16 +248,6 @@ fn read_draw_blend_mode(draw_flags: u32) -> u32 {
     return (draw_flags & DRAW_FLAGS_BLEND_MODE_MASK) >> DRAW_FLAGS_BLEND_MODE_SHIFT;
 }
 
-// Extracts the mix (blending) mode from a draw-flags word.
-fn read_draw_mix_mode(draw_flags: u32) -> u32 {
-    return read_draw_blend_mode(draw_flags) >> 8u;
-}
-
-// Extracts the Porter-Duff compose mode from a draw-flags word.
-fn read_draw_compose_mode(draw_flags: u32) -> u32 {
-    return read_draw_blend_mode(draw_flags) & 0xffu;
-}
-
 // Extracts the layer alpha from a draw-flags word, stored as a 16-bit
 // normalized value.
 fn read_draw_blend_alpha(draw_flags: u32) -> f32 {
@@ -251,182 +255,29 @@ fn read_draw_blend_alpha(draw_flags: u32) -> f32 {
     return f32(packed) / 65535.0;
 }
 
-// True when the flags encode plain source-over at full layer alpha, which
-// allows compose_draw to take the fast path.
-fn is_default_draw_blend(draw_flags: u32) -> bool {
-    return read_draw_blend_mode(draw_flags) == ((MIX_NORMAL << 8u) | COMPOSE_SRC_OVER)
-        && (draw_flags & DRAW_FLAGS_BLEND_ALPHA_MASK) == DRAW_FLAGS_BLEND_ALPHA_MASK;
-}
-
-// Recolor's inner blend uses a distance-derived alpha rather than the layer alpha in
-// draw_flags. Keep that distinct from compose_draw so ordinary draws retain their exact path.
+// Recolor's inner blend uses a distance-derived alpha rather than the layer
+// alpha in draw_flags. That alpha plays the same role as the CPU blender's
+// amount operand, so it routes through the shared CPU-ported compositor.
 fn compose_recolor_inner(backdrop: vec4<f32>, source: vec4<f32>, blend_alpha: f32, draw_flags: u32) -> vec4<f32> {
-    let effective_alpha = source.a * blend_alpha;
-
-    if read_draw_blend_mode(draw_flags) == ((MIX_NORMAL << 8u) | COMPOSE_SRC_OVER) {
-        return backdrop * (1.0 - effective_alpha) + (source * blend_alpha);
-    }
-
-    let cb = unpremultiply(backdrop);
-    let cs = unpremultiply(source);
-    let ab = backdrop.a;
-    let as_ = effective_alpha;
-    let mix_mode = read_draw_mix_mode(draw_flags);
-    let compose_mode = read_draw_compose_mode(draw_flags);
-    let shared_alpha = as_ * ab;
-
-    switch compose_mode {
-        case COMPOSE_CLEAR: {
-            return vec4(0.0);
-        }
-        case COMPOSE_COPY: {
-            return vec4(cs * as_, as_);
-        }
-        case COMPOSE_DEST: {
-            return backdrop;
-        }
-        case COMPOSE_SRC_OVER: {
-            let blend = blend_mix(cb, cs, mix_mode);
-            let dst_weight = ab - shared_alpha;
-            let src_weight = as_ - shared_alpha;
-            let alpha = dst_weight + as_;
-            let premul = (cb * dst_weight) + (cs * src_weight) + (blend * shared_alpha);
-            return vec4(premul, alpha);
-        }
-        case COMPOSE_DEST_OVER: {
-            let blend = blend_mix(cs, cb, mix_mode);
-            let dst_weight = as_ - shared_alpha;
-            let src_weight = ab - shared_alpha;
-            let alpha = dst_weight + ab;
-            let premul = (cs * dst_weight) + (cb * src_weight) + (blend * shared_alpha);
-            return vec4(premul, alpha);
-        }
-        case COMPOSE_SRC_IN: {
-            return vec4(cs * shared_alpha, shared_alpha);
-        }
-        case COMPOSE_DEST_IN: {
-            return vec4(cb * shared_alpha, shared_alpha);
-        }
-        case COMPOSE_SRC_OUT: {
-            let alpha = as_ * (1.0 - ab);
-            return vec4(cs * alpha, alpha);
-        }
-        case COMPOSE_DEST_OUT: {
-            let alpha = ab * (1.0 - as_);
-            return vec4(cb * alpha, alpha);
-        }
-        case COMPOSE_SRC_ATOP: {
-            let blend = blend_mix(cb, cs, mix_mode);
-            let dst_weight = ab - shared_alpha;
-            let premul = (cb * dst_weight) + (blend * shared_alpha);
-            return vec4(premul, ab);
-        }
-        case COMPOSE_DEST_ATOP: {
-            let blend = blend_mix(cs, cb, mix_mode);
-            let dst_weight = as_ - shared_alpha;
-            let premul = (cs * dst_weight) + (blend * shared_alpha);
-            return vec4(premul, as_);
-        }
-        case COMPOSE_XOR: {
-            let src_weight = as_ * (1.0 - ab);
-            let dst_weight = ab * (1.0 - as_);
-            return vec4((cs * src_weight) + (cb * dst_weight), src_weight + dst_weight);
-        }
-        default: {
-            return blend_mix_compose(backdrop, source * blend_alpha, read_draw_blend_mode(draw_flags));
-        }
-    }
+    return compose_source(backdrop, source, blend_alpha, read_draw_blend_mode(draw_flags));
 }
 
-// Composites a premultiplied source over a premultiplied backdrop using the
-// mix/compose modes and layer alpha packed in draw_flags. Plain source-over at
-// full alpha takes a fast path. The common Porter-Duff compose operators are
-// expanded inline with the mix result weighted by the shared-alpha region;
-// anything else falls back to blend_mix_compose.
+// Composites an associated source over an associated backdrop using the
+// mix/compose modes and layer alpha packed in draw_flags. The arithmetic is
+// the AssociatedAlphaPorterDuffFunctions port in blend.wgsl, so every draw
+// blends with the same formulas and operand order as the CPU backend.
 fn compose_draw(backdrop: vec4<f32>, source: vec4<f32>, draw_flags: u32) -> vec4<f32> {
-    let effective_alpha = source.a * read_draw_blend_alpha(draw_flags);
-
-    if is_default_draw_blend(draw_flags) {
-        return backdrop * (1.0 - source.a) + source;
-    }
-
-    let cb = unpremultiply(backdrop);
-    let cs = unpremultiply(source);
-    let ab = backdrop.a;
-    let as_ = effective_alpha;
-    let mix_mode = read_draw_mix_mode(draw_flags);
-    let compose_mode = read_draw_compose_mode(draw_flags);
-    let shared_alpha = as_ * ab;
-
-    switch compose_mode {
-        case COMPOSE_CLEAR: {
-            return vec4(0.0);
-        }
-        case COMPOSE_COPY: {
-            return vec4(cs * as_, as_);
-        }
-        case COMPOSE_DEST: {
-            return backdrop;
-        }
-        case COMPOSE_SRC_OVER: {
-            let blend = blend_mix(cb, cs, mix_mode);
-            let dst_weight = ab - shared_alpha;
-            let src_weight = as_ - shared_alpha;
-            let alpha = dst_weight + as_;
-            let premul = (cb * dst_weight) + (cs * src_weight) + (blend * shared_alpha);
-            return vec4(premul, alpha);
-        }
-        case COMPOSE_DEST_OVER: {
-            let blend = blend_mix(cs, cb, mix_mode);
-            let dst_weight = as_ - shared_alpha;
-            let src_weight = ab - shared_alpha;
-            let alpha = dst_weight + ab;
-            let premul = (cs * dst_weight) + (cb * src_weight) + (blend * shared_alpha);
-            return vec4(premul, alpha);
-        }
-        case COMPOSE_SRC_IN: {
-            return vec4(cs * shared_alpha, shared_alpha);
-        }
-        case COMPOSE_DEST_IN: {
-            return vec4(cb * shared_alpha, shared_alpha);
-        }
-        case COMPOSE_SRC_OUT: {
-            let alpha = as_ * (1.0 - ab);
-            return vec4(cs * alpha, alpha);
-        }
-        case COMPOSE_DEST_OUT: {
-            let alpha = ab * (1.0 - as_);
-            return vec4(cb * alpha, alpha);
-        }
-        case COMPOSE_SRC_ATOP: {
-            let blend = blend_mix(cb, cs, mix_mode);
-            let dst_weight = ab - shared_alpha;
-            let premul = (cb * dst_weight) + (blend * shared_alpha);
-            return vec4(premul, ab);
-        }
-        case COMPOSE_DEST_ATOP: {
-            let blend = blend_mix(cs, cb, mix_mode);
-            let dst_weight = as_ - shared_alpha;
-            let premul = (cs * dst_weight) + (blend * shared_alpha);
-            return vec4(premul, as_);
-        }
-        case COMPOSE_XOR: {
-            let src_weight = as_ * (1.0 - ab);
-            let dst_weight = ab * (1.0 - as_);
-            return vec4((cs * src_weight) + (cb * dst_weight), src_weight + dst_weight);
-        }
-        default: {
-            return blend_mix_compose(backdrop, source * read_draw_blend_alpha(draw_flags), read_draw_blend_mode(draw_flags));
-        }
-    }
+    return compose_source(backdrop, source, read_draw_blend_alpha(draw_flags), read_draw_blend_mode(draw_flags));
 }
 
 // Applies compose_draw, then lerps between the backdrop and the composed
 // result by coverage so partial coverage attenuates the whole composite
-// (including destructive compose modes), not just the source alpha.
+// (including destructive compose modes), not just the source alpha. The CPU
+// coverage path (AssociatedAlphaPorterDuffFunctions.BlendWithCoverage) is a
+// fused multiply-add, so fma() is the closest expression of it.
 fn compose_draw_with_coverage(backdrop: vec4<f32>, source: vec4<f32>, coverage: f32, draw_flags: u32) -> vec4<f32> {
     let composed = compose_draw(backdrop, source, draw_flags);
-    return backdrop + ((composed - backdrop) * coverage);
+    return fma(composed - backdrop, vec4(coverage), backdrop);
 }
 
 const PIXEL_FORMAT_RGBA: u32 = 0u;
@@ -713,14 +564,480 @@ fn evaluate_path_gradient(path_grad: CmdPathGrad, point: vec2<f32>) -> vec4<f32>
 // Number of horizontally adjacent pixels shaded by each thread.
 const PIXELS_PER_THREAD = 4u;
 
+// Tests whether a centre-free interval ends at a contour tip and must remain unlit.
+//
+// A centre-free interval is the closed span between two crossings when that span contains no pixel
+// centre. It normally lights the pixel containing its midpoint. Do not light that pixel when the
+// two boundary profiles meet in the contour and both end in the same gap between centre lines.
+// That shape is a terminating tip, not a continuing thin feature. Keep the tip when it reaches at
+// least halfway into the pixel and the interval is also at least half a pixel long.
+//
+// `x_axis` selects X profiles for a vertical interval and Y profiles for a horizontal interval.
+// `a` and `b` identify the profiles on the two edges that bound the interval.
+fn profile_is_stub(x_axis: bool, a: u32, b: u32, centre_px: f32, span_px: f32) -> bool {
+    // A sentinel identifier or an absent record table means the interval cannot be classified as
+    // a terminating tip. Keep its midpoint pixel.
+    if a == PROFILE_ID_SENTINEL || b == PROFILE_ID_SENTINEL || config.profile_records_base == 0u {
+        return false;
+    }
+
+    // The record region starts with the X and Y counts. Each following record has three words:
+    // minimum, maximum, and adjacency link.
+    let records = config.profile_records_base;
+    let x_count = scene_data[records];
+    let y_count = scene_data[records + 1u];
+    var base = records + 2u;
+    var count = x_count;
+    if !x_axis {
+        base = records + 2u + x_count * 3u;
+        count = y_count;
+    }
+    if a >= count || b >= count {
+        return false;
+    }
+
+    let link_a = bitcast<i32>(scene_data[base + a * 3u + 2u]);
+    let link_b = bitcast<i32>(scene_data[base + b * 3u + 2u]);
+
+    // Bit 0 records a connection to the previous identifier. Bits 1..31 contain the one-based
+    // identifier joined across a closed contour's final point.
+    let adjacent = (b == a + 1u && (link_b & 1) != 0)
+        || (a == b + 1u && (link_a & 1) != 0)
+        || (link_a >> 1u) == i32(b + 1u)
+        || (link_b >> 1u) == i32(a + 1u);
+    if !adjacent {
+        return false;
+    }
+
+    let min_a = bitcast<i32>(scene_data[base + a * 3u]);
+    let max_a = bitcast<i32>(scene_data[base + a * 3u + 1u]);
+    let min_b = bitcast<i32>(scene_data[base + b * 3u]);
+    let max_b = bitcast<i32>(scene_data[base + b * 3u + 1u]);
+    let centre = i32(round(centre_px * 256.0));
+    let span = i32(round(span_px * 256.0));
+
+    // A tip on the positive side has both profile ends before the next centre. A tip on the
+    // negative side has both profile starts after the previous centre. Keep either tip when it
+    // reaches halfway across its pixel and the interval is at least half a pixel wide.
+    if max_a < centre + 256 && max_b < centre + 256 {
+        let tip = max(max_a, max_b);
+        return !((tip & 255) >= 128 && span >= 128);
+    }
+    if min_a > centre - 256 && min_b > centre - 256 {
+        let tip = min(min_a, min_b);
+        let fraction = tip & 255;
+        return !(fraction != 0 && fraction <= 128 && span >= 128);
+    }
+    return false;
+}
+
+// Fixed shared-memory capacities for one row or column crossing list. On overflow, the exact
+// centre-winding result remains valid. Only midpoint recovery for a centre-free interval is skipped.
+const ROW_CROSSING_CAPACITY = 16u;
+const COLUMN_CROSSING_CAPACITY = 8u;
+
+// Four invocations shade each row, but all four need the same crossing list. The invocation whose
+// first pixel has X = 0 scans the geometry once and calculates winding for all sixteen row centres.
+// This replaces four identical segment scans, four halo scans, and four sorts per row.
+var<workgroup> aliased_row_crossings: array<array<u32, ROW_CROSSING_CAPACITY>, TILE_HEIGHT>;
+var<workgroup> aliased_row_counts: array<u32, TILE_HEIGHT>;
+var<workgroup> aliased_row_overflow: array<u32, TILE_HEIGHT>;
+var<workgroup> aliased_row_seed: array<i32, TILE_HEIGHT>;
+var<workgroup> aliased_row_winding: array<array<i32, TILE_WIDTH>, TILE_HEIGHT>;
+
+// The four invocations in row zero own four columns each. They build all sixteen column lists once.
+var<workgroup> aliased_column_crossings: array<array<u32, COLUMN_CROSSING_CAPACITY>, TILE_WIDTH>;
+var<workgroup> aliased_column_counts: array<u32, TILE_WIDTH>;
+var<workgroup> aliased_column_overflow: array<u32, TILE_WIDTH>;
+
+// Packs one crossing into a sortable word:
+// bits  0..15: profile identifier
+// bit      16: positive winding direction
+// bits 17..31: tile-relative position, biased by 16 pixels, with 9 fractional bits
+//
+// The full 15-bit position field is required for the right halo, which extends to X = 16.5.
+fn pack_crossing(position: f32, direction_positive: bool, profile_id: u32) -> u32 {
+    let fixed = min(u32(max(position + 16.0, 0.0) * 512.0), 0x7fffu);
+    return (fixed << 17u) | (u32(direction_positive) << 16u) | profile_id;
+}
+
+// Recovers the position a crossing was packed with.
+fn unpack_crossing_position(packed: u32) -> f32 {
+    return (f32(packed >> 17u) / 512.0) - 16.0;
+}
+
+// Inserts one crossing into its row's shared sorted list. One invocation owns each row, so the
+// insertion needs no atomics. Keeping the list sorted here also removes four per-thread sorts.
+fn insert_aliased_row_crossing(row: u32, packed: u32) {
+    let count = aliased_row_counts[row];
+    if count < ROW_CROSSING_CAPACITY {
+        var insert = count;
+        while insert > 0u && aliased_row_crossings[row][insert - 1u] > packed {
+            aliased_row_crossings[row][insert] = aliased_row_crossings[row][insert - 1u];
+            insert -= 1u;
+        }
+
+        aliased_row_crossings[row][insert] = packed;
+        aliased_row_counts[row] = count + 1u;
+    } else {
+        aliased_row_overflow[row] = 1u;
+    }
+}
+
+// Computes binary coverage for one 16x16 tile.
+//
+// The workgroup has 64 invocations. Each invocation returns four adjacent pixels in one row.
+// Processing has four phases:
+// 1. Sixteen row owners and four column owners clear their shared lists.
+// 2. Row owners scan current and neighboring tile segments. Column owners scan current segments.
+// 3. A barrier publishes the sorted crossings and exact centre windings.
+// 4. Every invocation consumes its row list and four column lists.
+//
+// Exact winding decides normal centre coverage. A closed interval that contains no centre lights
+// its midpoint pixel unless its profiles identify a terminating tip. The column walk applies the
+// same rule vertically to recover horizontal features that lie between two row centres.
+fn fill_path_aliased(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result: ptr<function, array<f32, PIXELS_PER_THREAD>>) {
+    let n_segs = fill.size_and_rule >> 2u;
+    let even_odd = (fill.size_and_rule & 1u) != 0u;
+    let sample_y = xy.y + 0.5;
+    let row = u32(xy.y);
+    let owns_row = xy.x == 0.0;
+    let owns_columns = xy.y == 0.0;
+
+    // A tile can contain consecutive aliased fill commands. All invocations must finish reading
+    // the previous command's shared row and column state before its owners clear it.
+    workgroupBarrier();
+
+    if owns_row {
+        aliased_row_counts[row] = 0u;
+        aliased_row_overflow[row] = 0u;
+        aliased_row_seed[row] = fill.backdrop;
+        for (var i = 0u; i < TILE_WIDTH; i += 1u) {
+            aliased_row_winding[row][i] = fill.backdrop;
+        }
+    }
+
+    if owns_columns {
+        for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+            let column = u32(xy.x) + i;
+            aliased_column_counts[column] = 0u;
+            aliased_column_overflow[column] = 0u;
+        }
+    }
+
+    // The sixteen row owners and four column owners are the only invocations that need segment
+    // data. The remaining 45 invocations wait at the collection barrier and then consume their
+    // row and columns. Row zero, X zero owns both one row and four columns.
+    if owns_row || owns_columns {
+        for (var s = 0u; s < n_segs; s++) {
+            let segment = segments[fill.seg_data + s];
+            if segment.y_edge == HALO_ONLY_Y_EDGE {
+                continue;
+            }
+
+            let delta = segment.point1 - segment.point0;
+
+            // The CPU captures crossings after rounding endpoints to 24.8. Use the same integer
+            // interpolation so hinted edges and exact half-pixel positions select the same pixels.
+            let p0_fixed = vec2<i32>(round(segment.point0 * 256.0));
+            let p1_fixed = vec2<i32>(round(segment.point1 * 256.0));
+
+            if owns_row {
+                let sample_y_fixed = i32(sample_y * 256.0);
+
+                // Half-open span ownership counts a vertex on the centre line on exactly one edge.
+                let crosses_row = (p0_fixed.y <= sample_y_fixed) != (p1_fixed.y <= sample_y_fixed);
+                if crosses_row {
+                    let x_cross_fixed = p0_fixed.x
+                        + (((p1_fixed.x - p0_fixed.x) * (sample_y_fixed - p0_fixed.y)) / (p1_fixed.y - p0_fixed.y));
+
+                    // Increasing local X walks from the tile's left edge. Match the sign used by
+                    // the backdrop and y_edge values so all three contributions form one winding.
+                    let direction = -i32(sign(delta.y));
+                    for (var k = 0u; k < TILE_WIDTH; k += 1u) {
+                        if x_cross_fixed <= (i32(k) << 8) + 128 {
+                            aliased_row_winding[row][k] += direction;
+                        }
+                    }
+
+                    // A horizontal interval uses the Y profiles of its two boundary edges. Their
+                    // identifiers occupy bits 16..31 of the segment tag.
+                    insert_aliased_row_crossing(
+                        row,
+                        pack_crossing(f32(x_cross_fixed) / 256.0, direction > 0, segment.tag >> 16u));
+                }
+
+                // y_edge represents the part of this segment clipped to the left of the tile. Add
+                // its winding step to every centre below that crossing. It is not a column event;
+                // the corresponding geometry lies outside this tile.
+                if segment.y_edge < 1.0e9 {
+                    // NearestCrossingCount rounds an exact half-row carry away from zero, so a
+                    // left-edge crossing on the row centre is included.
+                    let step = select(0, i32(sign(delta.x)), sample_y >= segment.y_edge);
+                    for (var k = 0u; k < TILE_WIDTH; k += 1u) {
+                        aliased_row_winding[row][k] += step;
+                    }
+
+                    aliased_row_seed[row] += step;
+                }
+            }
+
+            if owns_columns {
+                for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+                    let column = u32(xy.x) + i;
+                    let sample_x_fixed = (i32(column) << 8) + 128;
+                    if (p0_fixed.x <= sample_x_fixed) != (p1_fixed.x <= sample_x_fixed) {
+                        let column_count = aliased_column_counts[column];
+                        if column_count < COLUMN_CROSSING_CAPACITY {
+                            let y_cross_fixed = p0_fixed.y
+                                + (((p1_fixed.y - p0_fixed.y) * (sample_x_fixed - p0_fixed.x)) / (p1_fixed.x - p0_fixed.x));
+
+                            // A vertical interval uses the X profiles of its two boundary edges.
+                            // Their identifiers occupy bits 0..15 of the segment tag.
+                            let packed = pack_crossing(
+                                f32(y_cross_fixed) / 256.0,
+                                segment.point1.x > segment.point0.x,
+                                segment.tag & PROFILE_ID_MASK);
+
+                            // Keep the shared list sorted as it is built. Sorting once here avoids
+                            // copying and sorting the same column again in every row.
+                            var insert = column_count;
+                            while insert > 0u && aliased_column_crossings[column][insert - 1u] > packed {
+                                aliased_column_crossings[column][insert] = aliased_column_crossings[column][insert - 1u];
+                                insert -= 1u;
+                            }
+
+                            aliased_column_crossings[column][insert] = packed;
+                            aliased_column_counts[column] = column_count + 1u;
+                        } else {
+                            aliased_column_overflow[column] = 1u;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // A CPU row list is not split at tile boundaries. A crossing no more than half a pixel outside
+    // this tile can pair with a local crossing to form a centre-free interval whose midpoint belongs
+    // to this tile. Read that narrow halo from the two real neighboring tile slices. Do not add halo
+    // crossings to centre winding; backdrop and y_edge already include their winding effect.
+    let tile_and_neighbors = fill.coverage_data;
+    let current_tile = tile_and_neighbors & ALIASED_TILE_INDEX_MASK;
+    let halo_tiles = array<u32, 2>(
+        select(INVALID_TILE_INDEX, current_tile - 1u, (tile_and_neighbors & ALIASED_LEFT_NEIGHBOR_BIT) != 0u),
+        select(INVALID_TILE_INDEX, current_tile + 1u, (tile_and_neighbors & ALIASED_RIGHT_NEIGHBOR_BIT) != 0u));
+    if owns_row {
+        for (var h = 0u; h < 2u; h += 1u) {
+            let halo_tile_ix = halo_tiles[h];
+            if halo_tile_ix == INVALID_TILE_INDEX {
+                continue;
+            }
+
+            let halo_data = ~path_tiles[halo_tile_ix].segment_count_or_ix;
+            let halo_count = u32(path_tiles[halo_tile_ix].backdrop);
+            let fixed_offset = select(-4096, 4096, h != 0u);
+            for (var s = 0u; s < halo_count; s += 1u) {
+                let segment = segments[halo_data + s];
+                let p0_fixed = vec2<i32>(round(segment.point0 * 256.0));
+                let p1_fixed = vec2<i32>(round(segment.point1 * 256.0));
+                let sample_y_fixed = i32(sample_y * 256.0);
+                if (p0_fixed.y <= sample_y_fixed) == (p1_fixed.y <= sample_y_fixed) {
+                    continue;
+                }
+
+                let local_x_fixed = p0_fixed.x
+                    + (((p1_fixed.x - p0_fixed.x) * (sample_y_fixed - p0_fixed.y)) / (p1_fixed.y - p0_fixed.y))
+                    + fixed_offset;
+                let in_halo = select(
+                    local_x_fixed >= -128 && local_x_fixed <= 0,
+                    local_x_fixed >= 4096 && local_x_fixed <= 4224,
+                    h != 0u);
+                if !in_halo {
+                    continue;
+                }
+
+                let direction = -i32(sign(segment.point1.y - segment.point0.y));
+                insert_aliased_row_crossing(
+                    row,
+                    pack_crossing(f32(local_x_fixed) / 256.0, direction > 0, segment.tag >> 16u));
+
+                if h == 0u {
+                    // row_seed is the winding at X = 0. The sorted list begins in the left halo, so
+                    // remove each halo crossing to obtain the winding immediately before that list.
+                    aliased_row_seed[row] -= direction;
+                }
+            }
+        }
+    }
+
+    // Publish the row and column collections before any invocation reads its four-pixel slice.
+    workgroupBarrier();
+
+    let row_count = aliased_row_counts[row];
+    let row_overflow = aliased_row_overflow[row] != 0u;
+    let row_seed = aliased_row_seed[row];
+
+    var lit: array<bool, PIXELS_PER_THREAD>;
+    for (var k = 0u; k < PIXELS_PER_THREAD; k += 1u) {
+        let centre_winding = aliased_row_winding[row][u32(xy.x) + k];
+        if even_odd {
+            lit[k] = (centre_winding & 1) != 0;
+        } else {
+            lit[k] = centre_winding != 0;
+        }
+    }
+
+    // Walk the sorted row crossings from left to right. row_seed is the winding immediately before
+    // the first local or halo crossing.
+    if !row_overflow && row_count > 0u {
+        var w = row_seed;
+        if even_odd {
+            w &= 1;
+        }
+
+        var interval_start = 0.0;
+        var enter_id = PROFILE_ID_SENTINEL;
+        var has_local_start = false;
+        for (var c = 0u; c < row_count; c += 1u) {
+            let packed = aliased_row_crossings[row][c];
+            let position = unpack_crossing_position(packed) - xy.x;
+            let previous = w;
+            if even_odd {
+                w ^= 1;
+            } else {
+                w += select(-1, 1, ((packed >> 16u) & 1u) != 0u);
+            }
+
+            // Interval coverage is closed at both ends. The direct winding comparison already
+            // includes an opening edge on a centre, but it excludes a closing edge on a centre.
+            // Restore that closing endpoint explicitly.
+            let centre_index = i32(floor(position));
+            if centre_index >= 0 && centre_index < i32(PIXELS_PER_THREAD)
+                && position == f32(centre_index) + 0.5 && (previous != 0 || w != 0) {
+                lit[u32(centre_index)] = true;
+            }
+
+            if previous == 0 && w != 0 {
+                interval_start = position;
+                enter_id = packed & PROFILE_ID_MASK;
+                has_local_start = true;
+                continue;
+            }
+            if previous == 0 || w != 0 {
+                continue;
+            }
+
+            // An interval already open before the halo is not a local centre-free interval; it may
+            // have covered centres farther left. The clipped-left case is different: the CPU keeps
+            // the closing edge's one-pixel extension, so its first destination pixel remains covered.
+            if !has_local_start {
+                let clipped_left = (tile_and_neighbors & ALIASED_CLIPPED_LEFT_BIT) != 0u;
+                if clipped_left && position == 0.0 && global_xy.x + 1.0 == fill.interest.z {
+                    lit[0] = true;
+                }
+
+                continue;
+            }
+            has_local_start = false;
+
+            // For closed endpoint coverage, the first contained centre is ceil(start - 0.5) and
+            // the last is floor(end - 0.5). last < first means the interval contains no centre.
+            let first = i32(ceil(interval_start - 0.5));
+            let last = i32(floor(position - 0.5));
+            if last >= first {
+                continue;
+            }
+
+            let interval_start_fixed = i32(round((interval_start + xy.x) * 256.0));
+            let position_fixed = i32(round((position + xy.x) * 256.0));
+            let midpoint_pixel = ((interval_start_fixed >> 1) + (position_fixed >> 1)) >> 8;
+            let local = midpoint_pixel - i32(xy.x);
+            if local >= 0 && local < i32(PIXELS_PER_THREAD) && !lit[u32(local)]
+                && !profile_is_stub(false, enter_id, packed & PROFILE_ID_MASK, global_xy.y + 0.5, position - interval_start) {
+                lit[u32(local)] = true;
+            }
+        }
+    }
+
+    // The CPU column pass starts each 16-row band at zero and accepts only intervals with both
+    // crossings inside that band. Do not derive a top-edge winding seed: that would turn geometry
+    // clipped above the band into a new open interval and could add a pixel absent from the CPU.
+    for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+        let column = u32(xy.x) + i;
+        let column_count = aliased_column_counts[column];
+
+        // Match the CPU's merge order. It consults column results only when this row has at least
+        // one horizontal-centre crossing. Overflow disables only this secondary recovery.
+        if lit[i] || row_overflow || row_count == 0u || aliased_column_overflow[column] != 0u || column_count < 2u {
+            continue;
+        }
+
+        var w = 0;
+
+        var interval_start = 0.0;
+        var enter_id = PROFILE_ID_SENTINEL;
+        for (var c = 0u; c < column_count; c += 1u) {
+            let packed = aliased_column_crossings[column][c];
+            let position = unpack_crossing_position(packed);
+            let previous = w;
+            if even_odd {
+                w ^= 1;
+            } else {
+                w += select(-1, 1, ((packed >> 16u) & 1u) != 0u);
+            }
+
+            if previous == 0 && w != 0 {
+                interval_start = position;
+                enter_id = packed & PROFILE_ID_MASK;
+                continue;
+            }
+            if previous == 0 || w != 0 {
+                continue;
+            }
+
+            // Closed at both ends, as in the row walk: an interval reaching a row centre
+            // exactly is owned by that row's walk and is not a collapsed interval.
+            if i32(floor(position - 0.5)) >= i32(ceil(interval_start - 0.5)) {
+                continue;
+            }
+
+            // Match the CPU's overflow-safe fixed-point midpoint exactly: it
+            // halves each endpoint before adding, so two odd coordinates land
+            // one 24.8 unit below their mathematical average.
+            let interval_start_fixed = i32(round(interval_start * 256.0));
+            let position_fixed = i32(round(position * 256.0));
+            let midpoint_row = ((interval_start_fixed >> 1) + (position_fixed >> 1)) >> 8;
+            if midpoint_row == i32(xy.y)
+                && !profile_is_stub(true, enter_id, packed & PROFILE_ID_MASK, global_xy.x + f32(i) + 0.5, position - interval_start) {
+                lit[i] = true;
+            }
+        }
+    }
+
+    var area: array<f32, PIXELS_PER_THREAD>;
+    for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+        area[i] = select(0.0, 1.0, lit[i]);
+    }
+
+    // Discard coverage outside the fill's raster interest rectangle.
+    for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+        let pixel = global_xy + vec2<f32>(f32(i), 0.0);
+        if pixel.x < fill.interest.x || pixel.y < fill.interest.y || pixel.x >= fill.interest.z || pixel.y >= fill.interest.w {
+            area[i] = 0.0;
+        }
+    }
+
+    *result = area;
+}
+
 // Computes per-pixel coverage for a CMD_FILL using analytic area
 // anti-aliasing. Signed winding is accumulated from the backdrop and every
-// segment in the tile, the fill rule is applied, aliased fills are quantized
-// against their per-fill threshold, and coverage outside the fill's raster
-// interest rectangle is zeroed. xy is the thread's first pixel in tile-local
-// space (segments are tile-relative); global_xy is the same pixel in
-// full-target space. result receives coverage for PIXELS_PER_THREAD adjacent
-// pixels.
+// segment in the tile, the fill rule is applied, and coverage outside the
+// fill's raster interest rectangle is zeroed. xy is the thread's first pixel
+// in tile-local space (segments are tile-relative); global_xy is the same
+// pixel in full-target space. result receives coverage for PIXELS_PER_THREAD
+// adjacent pixels.
 //
 // FIXME: This should return an array when https://github.com/gfx-rs/naga/issues/1930 is fixed.
 fn fill_path(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result: ptr<function, array<f32, PIXELS_PER_THREAD>>) {
@@ -728,6 +1045,11 @@ fn fill_path(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result: ptr<fun
     let n_segs = fill.size_and_rule >> 2u;
     let even_odd = (fill.size_and_rule & 1u) != 0u;
     let aliased = (fill.size_and_rule & 2u) != 0u;
+    if aliased {
+        fill_path_aliased(fill, xy, global_xy, result);
+        return;
+    }
+
     var area: array<f32, PIXELS_PER_THREAD>;
     let backdrop_f = f32(fill.backdrop);
     for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
@@ -736,6 +1058,10 @@ fn fill_path(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result: ptr<fun
     for (var i = 0u; i < n_segs; i++) {
         let seg_off = fill.seg_data + i;
         let segment = segments[seg_off];
+        if segment.y_edge == HALO_ONLY_Y_EDGE {
+            continue;
+        }
+
         let y = segment.point0.y - xy.y;
         let delta = segment.point1 - segment.point0;
         let y0 = clamp(y, 0.0, 1.0);
@@ -781,23 +1107,13 @@ fn fill_path(fill: CmdFill, xy: vec2<f32>, global_xy: vec2<f32>, result: ptr<fun
             area[i] = min(abs(area[i]), 1.0);
         }
     }
-    if aliased {
-        // Aliased fills quantize analytic coverage against this fill's own coverage threshold,
-        // matching the CPU rasterizer's per-fill RasterizationMode.Aliased + AntialiasThreshold.
-        // The comparison is biased by more than the area formula's xmin epsilon so coverage that
-        // is analytically equal to the threshold (a half-covered pixel against the default 0.5)
-        // quantizes inclusively, as the CPU rasterizer's exact arithmetic does.
-        let threshold = fill.coverage_threshold - 1e-5;
-        for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-            area[i] = select(0.0, 1.0, area[i] >= threshold);
-        }
-    } else if fill.coverage_threshold > 0.0 {
-        // For antialiased fills the coverage_threshold word carries the perceptual coverage
-        // boost instead (the two uses are mutually exclusive). An S-curve darkens coverage
+    if bitcast<f32>(fill.coverage_data) > 0.0 {
+        // For antialiased fills the coverage_data word carries the perceptual coverage boost.
+        // An S-curve darkens coverage
         // above one half and lightens it below, so text stems solidify while nearly-open
         // counters stay bright; at full strength the remap is exactly smoothstep. Matches
         // the CPU rasterizer's AreaToCoverage boost.
-        let boost = fill.coverage_threshold;
+        let boost = bitcast<f32>(fill.coverage_data);
         for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
             let a = area[i];
             area[i] = a + boost * a * (1.0 - a) * (2.0 * a - 1.0);
@@ -848,7 +1164,7 @@ fn main(
     }
     // Clip saves remain in the fine shader's associated working representation. Two
     // binary16 pairs avoid the severe RGBA8 loss that a nested clip previously introduced.
-    var blend_stack: array<array<vec2<u32>, PIXELS_PER_THREAD>, BLEND_STACK_SPLIT>;
+    var blend_stack: array<array<vec4<u32>, PIXELS_PER_THREAD>, BLEND_STACK_SPLIT>;
     var clip_depth = 0u;
     var area: array<f32, PIXELS_PER_THREAD>;
     var cmd_ix = tile_ix * PTCL_INITIAL_ALLOC;
@@ -954,7 +1270,7 @@ fn main(
                 let end_clip = read_end_clip(cmd_ix);
                 clip_depth -= 1u;
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                    var bg_rgba: vec2<u32>;
+                    var bg_rgba: vec4<u32>;
                     if clip_depth < BLEND_STACK_SPLIT {
                         bg_rgba = blend_stack[clip_depth][i];
                     } else {
@@ -966,21 +1282,10 @@ fn main(
                     // Difference clips reuse the same clip path but invert the mask at the
                     // point where the saved backdrop is restored. This keeps clip operation
                     // semantics in the clip stack instead of fabricating inverse path geometry.
-                    // Hard mask clips binarize coverage against the stored alpha
-                    // threshold instead of scaling the layer by it.
-                    let is_hard_clip = (end_clip.blend & CLIP_HARD_MASK_BIT) != 0u;
-                    var source_clip_area = area[i];
-                    if is_hard_clip {
-                        source_clip_area = select(0.0, 1.0, source_clip_area > end_clip.alpha);
-                    }
-
                     // Strip the local mask bits so only the packed blend mode remains.
-                    let clip_area = select(source_clip_area, 1.0 - source_clip_area, (end_clip.blend & CLIP_DIFFERENCE_MASK_BIT) != 0u);
+                    let clip_area = select(area[i], 1.0 - area[i], (end_clip.blend & CLIP_DIFFERENCE_MASK_BIT) != 0u);
                     let isolated = (end_clip.blend & CLIP_ISOLATED_MASK_BIT) != 0u;
-                    var clip_blend = end_clip.blend & ~(CLIP_DIFFERENCE_MASK_BIT | CLIP_ISOLATED_MASK_BIT);
-                    if is_hard_clip {
-                        clip_blend &= ~CLIP_HARD_MASK_BIT;
-                    }
+                    let clip_blend = end_clip.blend & ~(CLIP_DIFFERENCE_MASK_BIT | CLIP_ISOLATED_MASK_BIT);
 
                     let bg = unpack_clip_color(bg_rgba);
 
@@ -994,8 +1299,7 @@ fn main(
                         continue;
                     }
 
-                    let clip_alpha = select(end_clip.alpha, 1.0, is_hard_clip);
-                    let fg = rgba[i] * clip_alpha;
+                    let fg = rgba[i] * end_clip.alpha;
 
                     if clip_blend == LUMINANCE_MASK_LAYER {
                         // TODO: Does this case apply more generally?
@@ -1011,7 +1315,7 @@ fn main(
                         let composed = bg * luminance;
                         rgba[i] = bg + ((composed - bg) * clip_area);
                     } else {
-                        let composed = blend_mix_compose(bg, fg, clip_blend);
+                        let composed = compose_source(bg, fg, 1.0, clip_blend);
                         rgba[i] = bg + ((composed - bg) * clip_area);
                     }
                 }

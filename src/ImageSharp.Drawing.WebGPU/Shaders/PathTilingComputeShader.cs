@@ -40,7 +40,7 @@ internal static unsafe class PathTilingComputeShader
         // Bindings match path_tiling.wgsl:
         //   0 bump allocators (read-write because the buffer is atomic; this stage only reads the seg_counts total)
         //   1 seg_counts (read-only SegmentCount records from path_count)
-        //   2 lines (read-only LineSoup from flatten)
+        //   2 lines (read-only LineSoup from path lowering)
         //   3 paths (read-only Path records)
         //   4 rows (read-only sparse PathRow records)
         //   5 tiles (read-only; segment_count_or_ix holds the inverted segment base index from coarse)

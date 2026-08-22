@@ -55,6 +55,7 @@ internal static class TextUtilities
             CompositeMode.SrcAtop => PixelAlphaCompositionMode.SrcAtop,
             CompositeMode.DestAtop => PixelAlphaCompositionMode.DestAtop,
             CompositeMode.Xor => PixelAlphaCompositionMode.Xor,
+            CompositeMode.Plus => PixelAlphaCompositionMode.Plus,
             _ => PixelAlphaCompositionMode.SrcOver,
         };
 
@@ -69,18 +70,21 @@ internal static class TextUtilities
     public static PixelColorBlendingMode MapBlendingMode(CompositeMode mode)
         => mode switch
         {
-            CompositeMode.Plus => PixelColorBlendingMode.Add,
             CompositeMode.Screen => PixelColorBlendingMode.Screen,
             CompositeMode.Overlay => PixelColorBlendingMode.Overlay,
             CompositeMode.Darken => PixelColorBlendingMode.Darken,
             CompositeMode.Lighten => PixelColorBlendingMode.Lighten,
             CompositeMode.HardLight => PixelColorBlendingMode.HardLight,
             CompositeMode.Multiply => PixelColorBlendingMode.Multiply,
-
-            // TODO: We do not support the following separate alpha blending modes:
-            // - ColorDodge, ColorBurn, SoftLight, Difference, Exclusion
-            // TODO: We do not support the non-alpha blending modes.
-            // - Hue, Saturation, Color, Luminosity
+            CompositeMode.ColorDodge => PixelColorBlendingMode.ColorDodge,
+            CompositeMode.ColorBurn => PixelColorBlendingMode.ColorBurn,
+            CompositeMode.SoftLight => PixelColorBlendingMode.SoftLight,
+            CompositeMode.Difference => PixelColorBlendingMode.Difference,
+            CompositeMode.Exclusion => PixelColorBlendingMode.Exclusion,
+            CompositeMode.Hue => PixelColorBlendingMode.Hue,
+            CompositeMode.Saturation => PixelColorBlendingMode.Saturation,
+            CompositeMode.Color => PixelColorBlendingMode.Color,
+            CompositeMode.Luminosity => PixelColorBlendingMode.Luminosity,
             _ => PixelColorBlendingMode.Normal
         };
 

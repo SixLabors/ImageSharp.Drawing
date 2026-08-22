@@ -537,7 +537,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         DefaultRasterizer.Context context = scratch.CreateContext(
             bandInfo.IntersectionRule,
             bandInfo.RasterizationMode,
-            bandInfo.AntialiasThreshold);
+            bandInfo.LineCount);
 
         FillCoverageRowHandler<TPixel> rowHandler = new(
             renderer,
@@ -583,7 +583,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         DefaultRasterizer.Context context = scratch.CreateContext(
             bandInfo.IntersectionRule,
             bandInfo.RasterizationMode,
-            bandInfo.AntialiasThreshold);
+            bandInfo.LineCount);
 
         FillCoverageRowHandler<TPixel> rowHandler = new(
             renderer,

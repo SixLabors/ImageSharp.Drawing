@@ -7,7 +7,7 @@ using SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Identifies how a text drawing operation paints its path.
+/// Identifies how a text drawing operation paints its path, or which group boundary it marks.
 /// </summary>
 internal enum DrawingOperationKind : byte
 {
@@ -19,25 +19,59 @@ internal enum DrawingOperationKind : byte
     /// <summary>
     /// The path is stroked using <see cref="DrawingOperation.Pen"/>.
     /// </summary>
-    Draw = 1
+    Draw = 1,
+
+    /// <summary>
+    /// Begins an isolated group.
+    /// </summary>
+    BeginGroup = 2,
+
+    /// <summary>
+    /// Ends the current group, blending it onto the content below it within its parent using
+    /// the modes captured by the matching <see cref="BeginGroup"/> operation.
+    /// </summary>
+    EndGroup = 3
 }
 
 /// <summary>
-/// Represents one paint operation emitted by <see cref="RichTextGlyphRenderer"/> during text
-/// rendering and later converted to composition commands by
-/// <see cref="DrawingCanvas{TPixel}"/>.
+/// Represents one paint or group-control operation emitted by
+/// <see cref="RichTextGlyphRenderer"/> during text rendering and later converted to
+/// composition commands by <see cref="DrawingCanvas{TPixel}"/>.
 /// </summary>
 internal struct DrawingOperation
 {
     /// <summary>
-    /// Gets or sets a value identifying whether the operation fills or strokes <see cref="Path"/>.
+    /// Gets or sets a value identifying whether the operation fills or strokes
+    /// <see cref="Path"/>, or which group boundary it marks.
     /// </summary>
     public DrawingOperationKind Kind { get; set; }
 
     /// <summary>
-    /// Gets or sets the glyph or decoration path in local coordinates relative to <see cref="RenderLocation"/>.
+    /// Gets or sets the glyph or decoration path in local coordinates relative to
+    /// <see cref="RenderLocation"/>. Group markers carry no geometry and leave
+    /// this <see langword="null"/>.
     /// </summary>
-    public IPath Path { get; set; }
+    public IPath? Path { get; set; }
+
+    /// <summary>
+    /// Gets or sets the canvas-local bounds of a group; the canvas offsets them
+    /// by its destination offset when the group is lowered to layer commands.
+    /// </summary>
+    public Rectangle CompositeBounds { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether a group result uses the caller's graphics options
+    /// when it is added to the canvas. Only the outermost group of a glyph does, so caller
+    /// opacity applies once to the finished composition.
+    /// </summary>
+    public bool ApplyDrawingOptions { get; set; }
+
+    /// <summary>
+    /// Gets or sets the canvas-local rectangle from the font's clip bounds, or
+    /// <see langword="null"/> when the glyph has none. The canvas narrows the operation's
+    /// rasterizer interest to it, so the clip costs one rectangle intersect.
+    /// </summary>
+    public RectangleF? GlyphClip { get; set; }
 
     /// <summary>
     /// Gets or sets the pixel-clamped target location at which <see cref="Path"/> is rendered.

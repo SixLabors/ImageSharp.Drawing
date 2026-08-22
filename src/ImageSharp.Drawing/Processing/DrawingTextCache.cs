@@ -108,12 +108,17 @@ public sealed class DrawingTextCache
     internal List<DrawingOperation> OperationScratch { get; } = [];
 
     /// <summary>
-    /// Gets the reusable render-pass sort buffer used when text operations are lowered to
+    /// Gets the reusable render-pass sort buffer used before text operations are lowered to
     /// composition commands, hosted here for the same lifetime reason as
-    /// <see cref="OperationScratch"/>. The consuming batcher retains the commands, never this
-    /// buffer.
+    /// <see cref="OperationScratch"/>. Entries index into the operation list so the sort
+    /// moves pass and index pairs rather than whole operation structs.
     /// </summary>
-    internal List<(byte RenderPass, int Sequence, Backends.CompositionSceneCommand Command)> CommandSortScratch { get; } = [];
+    internal List<(byte RenderPass, int Sequence)> OperationSortScratch { get; } = [];
+
+    /// <summary>
+    /// Gets the reusable stack used to pair nested text composite layer commands.
+    /// </summary>
+    internal List<DrawingCanvasLayer> CompositeLayerScratch { get; } = [];
 
     /// <summary>
     /// Removes all cached text drawing data.
@@ -125,7 +130,8 @@ public sealed class DrawingTextCache
         this.runPathEntries.Clear();
         this.runPathUsage.Clear();
         this.OperationScratch.Clear();
-        this.CommandSortScratch.Clear();
+        this.OperationSortScratch.Clear();
+        this.CompositeLayerScratch.Clear();
     }
 
     /// <summary>

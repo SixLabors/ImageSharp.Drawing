@@ -12,8 +12,7 @@ public class DrawingClipStateTests
         => DrawingClipDescriptor.CreateRectangle(
             new RectangleF(x, y, width, height),
             ClipOperation.Intersection,
-            DrawingClipEdgeMode.Hard,
-            0.5F);
+            DrawingClipEdgeMode.Hard);
 
     [Fact]
     public void Empty_HasNoClips()
@@ -29,7 +28,7 @@ public class DrawingClipStateTests
     [Fact]
     public void FromPaths_EmptyList_ReturnsEmpty()
     {
-        DrawingClipState state = DrawingClipState.FromPaths([], ClipOperation.Intersection, DrawingClipEdgeMode.Hard, 0.5F);
+        DrawingClipState state = DrawingClipState.FromPaths([], ClipOperation.Intersection, DrawingClipEdgeMode.Hard);
 
         Assert.False(state.HasClips);
     }
@@ -43,7 +42,7 @@ public class DrawingClipStateTests
             new RectanglePolygon(20, 0, 10, 10),
         ];
 
-        DrawingClipState state = DrawingClipState.FromPaths(paths, ClipOperation.Intersection, DrawingClipEdgeMode.Antialiased, 0.5F);
+        DrawingClipState state = DrawingClipState.FromPaths(paths, ClipOperation.Intersection, DrawingClipEdgeMode.Antialiased);
 
         Assert.Equal(1, state.Count);
         Assert.Equal(2, state.GetDescriptor(0).Paths.Count);
@@ -183,8 +182,7 @@ public class DrawingClipStateTests
         DrawingClipDescriptor difference = DrawingClipDescriptor.CreateRectangle(
             new RectangleF(0, 0, 10, 10),
             ClipOperation.Difference,
-            DrawingClipEdgeMode.Hard,
-            0.5F);
+            DrawingClipEdgeMode.Hard);
         DrawingClipState state = DrawingClipState.Empty.Append(difference);
 
         Assert.False(state.TryGetConservativeBounds(Point.Empty, out _));
@@ -223,8 +221,7 @@ public class DrawingClipStateTests
         DrawingClipDescriptor difference = DrawingClipDescriptor.CreateRectangle(
             new RectangleF(0, 0, 10, 10),
             ClipOperation.Difference,
-            DrawingClipEdgeMode.Hard,
-            0.5F);
+            DrawingClipEdgeMode.Hard);
         DrawingClipState state = DrawingClipState.Empty.Append(difference);
 
         Assert.False(state.TryGetTargetBoundsClip(Point.Empty, out _));
@@ -235,8 +232,7 @@ public class DrawingClipStateTests
     {
         DrawingClipDescriptor region = DrawingClipDescriptor.CreateIntegerRegion(
             [new Rectangle(10, 20, 30, 40)],
-            ClipOperation.Intersection,
-            0.5F);
+            ClipOperation.Intersection);
         DrawingClipState state = DrawingClipState.Empty.Append(region);
 
         Assert.True(state.TryGetTargetBoundsClip(new Point(1, 2), out Rectangle bounds));
@@ -248,8 +244,7 @@ public class DrawingClipStateTests
     {
         DrawingClipDescriptor region = DrawingClipDescriptor.CreateIntegerRegion(
             [new Rectangle(0, 0, 10, 10), new Rectangle(20, 0, 10, 10)],
-            ClipOperation.Intersection,
-            0.5F);
+            ClipOperation.Intersection);
         DrawingClipState state = DrawingClipState.Empty.Append(region);
 
         Assert.False(state.TryGetTargetBoundsClip(Point.Empty, out _));

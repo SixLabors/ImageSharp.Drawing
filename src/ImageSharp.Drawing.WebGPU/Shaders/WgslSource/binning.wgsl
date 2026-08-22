@@ -101,7 +101,7 @@ fn main(
     let failed = workgroupUniformLoad(&sh_previous_failed);
     if failed != 0u {
         if global_id.x == 0u {
-            atomicOr(&bump.failed, STAGE_FLATTEN);
+            atomicOr(&bump.failed, STAGE_PATH_LOWERING);
         }
         return;
     }
@@ -139,7 +139,12 @@ fn main(
         // TODO check this is true
 
         let path_bbox = path_bbox_buf[draw_monoid.path_ix];
-        let pb = vec4<f32>(vec4(path_bbox.x0, path_bbox.y0, path_bbox.x1, path_bbox.y1));
+        // The CPU retained rasterizer extends a fill's maximum X bound by one pixel because
+        // its clipper otherwise discards a closing vertical edge on that boundary. Aliased
+        // fine needs the same edge in the next tile to complete its full scanline walk; keep
+        // antialiased bin coverage unchanged.
+        let aliased_right_pad = select(0.0, 1.0, (path_bbox.draw_flags & DRAW_INFO_FLAGS_ALIASED_BIT) != 0u);
+        let pb = vec4<f32>(f32(path_bbox.x0), f32(path_bbox.y0), f32(path_bbox.x1) + aliased_right_pad, f32(path_bbox.y1));
         let bbox = bbox_intersect(clip_bbox, bbox_intersect(pb, path_bbox.interest));
 
         // Only the first bin-chunk workgroup writes the intersected bbox, since

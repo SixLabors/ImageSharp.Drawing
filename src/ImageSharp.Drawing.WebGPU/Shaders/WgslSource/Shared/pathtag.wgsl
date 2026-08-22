@@ -5,9 +5,9 @@
 //
 // The scene encodes each path as a byte stream of tags (one per segment,
 // plus transform/style/path markers). The pathtag_reduce/scan stages compute
-// a prefix sum of TagMonoid over that stream so flatten.wgsl can locate each
+// a prefix sum of TagMonoid over that stream so path_lowering.wgsl can locate each
 // segment's point data, transform, and style in O(1). Imported by
-// flatten.wgsl, pathtag_reduce.wgsl, pathtag_reduce2.wgsl, pathtag_scan.wgsl,
+// path_lowering.wgsl, pathtag_reduce.wgsl, pathtag_reduce2.wgsl, pathtag_scan.wgsl,
 // and pathtag_scan1.wgsl.
 //
 // Ported from Vello's shader/shared/pathtag.wgsl (linebender/vello). Tag
@@ -43,7 +43,7 @@ const STYLE_SIZE_IN_WORDS: u32 = 10u;
 // Flag bits of the first word of a Style record, packed by the C# encoder.
 // STYLE marks a stroke (vs fill) and FILL marks the even-odd fill rule
 // (clear = non-zero); the cap and join fields drive the GPU stroker in
-// flatten.wgsl.
+// path_lowering.wgsl.
 const STYLE_FLAGS_STYLE: u32 = 0x80000000u;
 const STYLE_FLAGS_FILL: u32 = 0x40000000u;
 

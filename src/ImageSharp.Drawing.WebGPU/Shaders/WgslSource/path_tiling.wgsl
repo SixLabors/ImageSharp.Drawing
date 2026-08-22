@@ -117,7 +117,6 @@ fn main(
 
     let tile_xy = vec2(f32(x) * f32(TILE_WIDTH), f32(y) * f32(TILE_HEIGHT));
     let tile_xy1 = tile_xy + vec2(f32(TILE_WIDTH), f32(TILE_HEIGHT));
-
     // Clip the segment's start to the tile edge it entered through, unless
     // this is the line's first crossing (the true endpoint is inside).
     if seg_within_line > 0u {
@@ -169,9 +168,12 @@ fn main(
                 p1.x = EPSILON;
                 p1.y = f32(TILE_HEIGHT);
             } else {
-                // Make the segment disappear (zero vertical extent).
-                p1.x = 2.0 * EPSILON;
-                p1.y = p0.y;
+                // The owning tile must ignore this boundary edge, but the aliased row walk in
+                // the tile on the left still needs its exact crossing to match the CPU's single
+                // crossing list for the full row. Preserve the vertical extent under an explicit
+                // halo-only marker; ordinary fine integration continues to treat it as absent.
+                p1.x = EPSILON;
+                y_edge = HALO_ONLY_Y_EDGE;
             }
         } else if p0.y == 0.0 {
             p0.x = EPSILON;
@@ -201,6 +203,6 @@ fn main(
         p0 = p1;
         p1 = tmp;
     }
-    let segment = Segment(p0, p1, y_edge);
+    let segment = Segment(p0, p1, y_edge, line.tag);
     segments[seg_start + seg_within_slice] = segment;
 }
