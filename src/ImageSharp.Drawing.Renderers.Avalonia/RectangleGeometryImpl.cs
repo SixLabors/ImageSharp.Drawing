@@ -4,7 +4,7 @@
 using Avalonia;
 using SixLabors.ImageSharp.Drawing;
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
 /// Avalonia rectangle geometry implementation backed by an ImageSharp rectangle path.

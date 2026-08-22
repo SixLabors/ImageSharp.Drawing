@@ -22,7 +22,7 @@ using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
 using AvaloniaGlyphRun = Avalonia.Media.GlyphRun;
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
 /// Avalonia rendering platform implementation backed by ImageSharp.Drawing.
@@ -93,7 +93,7 @@ internal sealed class PlatformRenderInterface : IPlatformRenderInterface
     public AlphaFormat DefaultAlphaFormat => AlphaFormat.Premul;
 
     /// <inheritdoc />
-    public PixelFormat DefaultPixelFormat => PixelFormat.Bgra8888;
+    public PixelFormat DefaultPixelFormat => AvaloniaPixelFormats.Bgra8888;
 
     /// <inheritdoc />
     public bool SupportsRegions => true;
@@ -222,9 +222,9 @@ internal sealed class PlatformRenderInterface : IPlatformRenderInterface
 
     /// <inheritdoc />
     public bool IsSupportedBitmapPixelFormat(PixelFormat format)
-        => format == PixelFormats.Rgb565
-        || format == PixelFormats.Bgra8888
-        || format == PixelFormats.Rgba8888;
+        => format == AvaloniaPixelFormats.Rgb565
+        || format == AvaloniaPixelFormats.Bgra8888
+        || format == AvaloniaPixelFormats.Rgba8888;
 
     /// <inheritdoc />
     public IPlatformRenderInterfaceRegion CreateRegion() => new RegionImpl();

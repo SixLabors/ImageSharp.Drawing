@@ -3,6 +3,7 @@
 
 using System.Collections.ObjectModel;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing;
@@ -17,8 +18,8 @@ namespace SixLabors.ImageSharp.Drawing;
 /// </remarks>
 public sealed class Region
 {
-    // The canonical model is the same shape used by SkRegion: a sorted set of horizontal
-    // Y bands, where each band owns sorted, non-overlapping X intervals. This preserves
+    // The canonical model is a sorted set of horizontal Y bands, where each band owns
+    // sorted, non-overlapping X intervals. This preserves
     // disjoint islands, L shapes, holes, and stair-step edges without collapsing anything
     // to the bounding rectangle.
     private readonly List<RegionBand> bands = [];
@@ -44,6 +45,331 @@ public sealed class Region
     /// <param name="rectangle">The rectangle to add to the region.</param>
     public Region(Rectangle rectangle)
         : this() => this.Add(rectangle);
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Region"/> class containing the integer coverage of the specified path.
+    /// </summary>
+    /// <param name="path">The path whose filled area is added to the region.</param>
+    /// <param name="intersectionRule">The rule used to determine the filled area of the path.</param>
+    /// <remarks>The resulting region contains non-antialiased integer coverage.</remarks>
+    public Region(IPath path, IntersectionRule intersectionRule)
+        : this()
+    {
+        RectangleF pathBounds = path.Bounds;
+
+        // The finite integer clip ceilings each edge independently to match the path-region
+        // conversion contract; deriving right and bottom from rounded sizes can widen the clip.
+        int clipLeft = (int)MathF.Ceiling(pathBounds.Left);
+        int clipTop = (int)MathF.Ceiling(pathBounds.Top);
+        int clipRight = (int)MathF.Ceiling(pathBounds.Right);
+        int clipBottom = (int)MathF.Ceiling(pathBounds.Bottom);
+
+        if (clipLeft >= clipRight || clipTop >= clipBottom)
+        {
+            return;
+        }
+
+        LinearGeometry geometry = path.ToLinearGeometry(Vector2.One);
+        ReadOnlySpan<LinearContour> contours = geometry.GetContours();
+        int maximumEdgeCount = geometry.Info.PointCount;
+
+        if (maximumEdgeCount == 0)
+        {
+            return;
+        }
+
+        const int stackEdgeBufferSizeInBytes = 512;
+        int stackEdgeCapacity = stackEdgeBufferSizeInBytes / Unsafe.SizeOf<RegionEdge>();
+
+        // Each stored point can contribute at most one edge after the contour is implicitly closed.
+        // The fixed byte budget bounds per-call stack use while keeping small paths allocation-free;
+        // larger paths receive one exact, constructor-local array that dies with the conversion.
+        Span<RegionEdge> edges = maximumEdgeCount <= stackEdgeCapacity
+            ? stackalloc RegionEdge[maximumEdgeCount]
+            : new RegionEdge[maximumEdgeCount];
+
+        int edgeCount = 0;
+
+        for (int i = 0; i < contours.Length; i++)
+        {
+            LinearContour contour = contours[i];
+
+            if (contour.PointCount < 2)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<PointF> points = geometry.GetContourPoints(contour);
+
+            // Filled contours are implicitly closed. Starting with the final point emits the
+            // closing edge without copying the contour or appending a duplicate endpoint.
+            PointF previous = points[^1];
+
+            for (int p = 0; p < points.Length; p++)
+            {
+                PointF current = points[p];
+
+                // Edge endpoints use signed 26.6 coordinates. The current X crossing and its
+                // per-row delta use signed 16.16 coordinates so every scanline advances by one add.
+                long x0 = (long)(previous.X * 64F);
+                long y0 = (long)(previous.Y * 64F);
+                long x1 = (long)(current.X * 64F);
+                long y1 = (long)(current.Y * 64F);
+                previous = current;
+
+                int winding = 1;
+
+                if (y0 > y1)
+                {
+                    long temporary = x0;
+                    x0 = x1;
+                    x1 = temporary;
+
+                    temporary = y0;
+                    y0 = y1;
+                    y1 = temporary;
+                    winding = -1;
+                }
+
+                // Adding one half selects rows by their pixel centres. The bottom row is
+                // exclusive so adjoining edges contribute their shared vertex exactly once.
+                int top = (int)((y0 + 32) >> 6);
+                int bottom = (int)((y1 + 32) >> 6);
+
+                if (top == bottom || top >= clipBottom || bottom <= clipTop)
+                {
+                    continue;
+                }
+
+                long slope = ((x1 - x0) << 16) / (y1 - y0);
+                long distanceToFirstCentre = ((long)top << 6) + 32 - y0;
+                long x = (x0 + ((slope * distanceToFirstCentre) >> 16)) << 10;
+                int firstY = Math.Max(top, clipTop);
+                int lastY = Math.Min(bottom - 1, clipBottom - 1);
+
+                // Advance from the edge's natural first row to the clipped first row in 16.16
+                // units. Converting before subtraction prevents the row distance from wrapping.
+                x += slope * ((long)firstY - top);
+
+                edges[edgeCount++] = new RegionEdge
+                {
+                    FirstY = firstY,
+                    LastY = lastY,
+                    X = x,
+                    DxDy = slope,
+                    Winding = winding,
+                    Previous = -1,
+                    Next = -1
+                };
+            }
+        }
+
+        if (edgeCount == 0)
+        {
+            return;
+        }
+
+        edges[..edgeCount].Sort();
+
+        // The sorted list contains active edges followed by edges for future rows. Relinking
+        // crossings in place avoids a second edge-sized order buffer.
+        for (int i = 0; i < edgeCount; i++)
+        {
+            edges[i].Previous = i - 1;
+            edges[i].Next = i + 1 < edgeCount ? i + 1 : -1;
+        }
+
+        int activeHead = 0;
+        int firstFutureEdge = 0;
+        int y = edges[0].FirstY;
+        int windingMask = intersectionRule == IntersectionRule.EvenOdd ? 1 : -1;
+        bool hasBounds = false;
+        int regionLeft = 0;
+        int regionTop = 0;
+        int regionRight = 0;
+        int regionBottom = 0;
+
+        while (activeHead >= 0 && y < clipBottom)
+        {
+            // When no edge spans the vertical gap, skip directly to the next populated row.
+            if (activeHead == firstFutureEdge && y < edges[firstFutureEdge].FirstY)
+            {
+                y = edges[firstFutureEdge].FirstY;
+            }
+
+            // Future edges are ordered by their first row and initial X. Move only the edges
+            // beginning on this row into active X order; existing active edges were restored
+            // to that order while walking the preceding row.
+            int newEdge = firstFutureEdge;
+
+            while (newEdge >= 0 && edges[newEdge].FirstY <= y)
+            {
+                int nextNewEdge = edges[newEdge].Next;
+                MoveEdgeBackward(edges, newEdge, ref activeHead);
+                newEdge = nextNewEdge;
+            }
+
+            RegionBand? previousBand = this.bands.Count > 0 && this.bands[^1].Bottom == y
+                ? this.bands[^1]
+                : null;
+
+            RegionBand? rowBand = null;
+            int matchedIntervalCount = 0;
+            int winding = 0;
+            long intervalLeft = 0;
+            int activeEdge = activeHead;
+
+            while (activeEdge >= 0 && edges[activeEdge].FirstY <= y)
+            {
+                // All crossings that round to one integer boundary are one transition. Grouping
+                // them makes equal-X edge order irrelevant and removes zero-width intermediate spans.
+                long crossingX = (edges[activeEdge].X + 32768) >> 16;
+                int windingDelta = 0;
+
+                do
+                {
+                    int currentEdge = activeEdge;
+                    int nextActiveEdge = edges[currentEdge].Next;
+                    windingDelta += edges[currentEdge].Winding;
+
+                    if (edges[currentEdge].LastY == y)
+                    {
+                        int previousActiveEdge = edges[currentEdge].Previous;
+
+                        if (previousActiveEdge >= 0)
+                        {
+                            edges[previousActiveEdge].Next = nextActiveEdge;
+                        }
+                        else
+                        {
+                            activeHead = nextActiveEdge;
+                        }
+
+                        if (nextActiveEdge >= 0)
+                        {
+                            edges[nextActiveEdge].Previous = previousActiveEdge;
+                        }
+                    }
+                    else
+                    {
+                        edges[currentEdge].X += edges[currentEdge].DxDy;
+                        MoveEdgeBackward(edges, currentEdge, ref activeHead);
+                    }
+
+                    activeEdge = nextActiveEdge;
+                }
+                while (activeEdge >= 0 &&
+                       edges[activeEdge].FirstY <= y &&
+                       ((edges[activeEdge].X + 32768) >> 16) == crossingX);
+
+                bool wasInside = (winding & windingMask) != 0;
+                winding += windingDelta;
+                bool isInside = (winding & windingMask) != 0;
+
+                if (!wasInside && isInside)
+                {
+                    intervalLeft = crossingX;
+                    continue;
+                }
+
+                if (!wasInside || isInside)
+                {
+                    continue;
+                }
+
+                // Clamp in the wide type and reject a wholly clipped span before narrowing.
+                // A surviving endpoint is therefore guaranteed to fit the integer clip.
+                long clippedLeft = Math.Max(intervalLeft, clipLeft);
+                long clippedRight = Math.Min(crossingX, clipRight);
+
+                if (clippedLeft >= clippedRight)
+                {
+                    continue;
+                }
+
+                int left = (int)clippedLeft;
+                int right = (int)clippedRight;
+
+                if (!hasBounds)
+                {
+                    regionLeft = left;
+                    regionTop = y;
+                    regionRight = right;
+                    hasBounds = true;
+                }
+                else
+                {
+                    regionLeft = Math.Min(regionLeft, left);
+                    regionRight = Math.Max(regionRight, right);
+                }
+
+                regionBottom = y + 1;
+
+                // Delay allocating a row band while its intervals still match the preceding
+                // band. On the first difference, copy only the already-matched prefix that
+                // must become part of the new canonical band.
+                if (rowBand is null &&
+                    previousBand is not null &&
+                    matchedIntervalCount < previousBand.Intervals.Count &&
+                    previousBand.Intervals[matchedIntervalCount].Left == left &&
+                    previousBand.Intervals[matchedIntervalCount].Right == right)
+                {
+                    matchedIntervalCount++;
+                    continue;
+                }
+
+                if (rowBand is null)
+                {
+                    rowBand = new RegionBand(y, y + 1);
+
+                    if (previousBand is not null && matchedIntervalCount > 0)
+                    {
+                        rowBand.Intervals.EnsureCapacity(previousBand.Intervals.Count);
+
+                        for (int i = 0; i < matchedIntervalCount; i++)
+                        {
+                            rowBand.Intervals.Add(previousBand.Intervals[i]);
+                        }
+                    }
+                }
+
+                rowBand.Intervals.Add(new Interval(left, right));
+            }
+
+            firstFutureEdge = activeEdge;
+
+            if (rowBand is not null)
+            {
+                this.bands.Add(rowBand);
+            }
+            else if (previousBand is not null && matchedIntervalCount == previousBand.Intervals.Count)
+            {
+                // Identical consecutive rows share the existing interval storage.
+                previousBand.Bottom = y + 1;
+            }
+            else if (previousBand is not null && matchedIntervalCount > 0)
+            {
+                // A shorter row can differ only after its matching prefix has ended.
+                RegionBand shorterBand = new(y, y + 1);
+                shorterBand.Intervals.EnsureCapacity(matchedIntervalCount);
+
+                for (int i = 0; i < matchedIntervalCount; i++)
+                {
+                    shorterBand.Intervals.Add(previousBand.Intervals[i]);
+                }
+
+                this.bands.Add(shorterBand);
+            }
+
+            y++;
+        }
+
+        if (hasBounds)
+        {
+            this.bounds = Rectangle.FromLTRB(regionLeft, regionTop, regionRight, regionBottom);
+            this.rectanglesValid = false;
+        }
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Region"/> class containing the same area as the specified region.
@@ -229,6 +555,80 @@ public sealed class Region
     }
 
     /// <summary>
+    /// Returns a value indicating whether this region contains the specified region.
+    /// </summary>
+    /// <param name="region">The region to test.</param>
+    /// <returns><see langword="true"/> if this region contains all of <paramref name="region"/>; otherwise, <see langword="false"/>.</returns>
+    public bool Contains(Region region)
+    {
+        // Empty regions contain no area, while the bounds test rejects containment before scanning the canonical bands.
+        if (this.IsEmpty || region.IsEmpty || !this.bounds.Contains(region.bounds))
+        {
+            return false;
+        }
+
+        // Bands are ordered and non-overlapping, so the candidate containing band never needs to move backwards.
+        int firstContainingBandIndex = 0;
+        for (int i = 0; i < region.bands.Count; i++)
+        {
+            RegionBand requiredBand = region.bands[i];
+            while (firstContainingBandIndex < this.bands.Count && this.bands[firstContainingBandIndex].Bottom <= requiredBand.Top)
+            {
+                firstContainingBandIndex++;
+            }
+
+            int containingBandIndex = firstContainingBandIndex;
+            int coveredTop = requiredBand.Top;
+
+            // Every vertical portion of the required band must be covered without a gap.
+            while (coveredTop < requiredBand.Bottom)
+            {
+                if (containingBandIndex >= this.bands.Count)
+                {
+                    return false;
+                }
+
+                RegionBand containingBand = this.bands[containingBandIndex];
+                if (containingBand.Top > coveredTop)
+                {
+                    return false;
+                }
+
+                // Intervals are also ordered and non-overlapping, allowing a monotonic scan within the overlapping bands.
+                int containingIntervalIndex = 0;
+                for (int j = 0; j < requiredBand.Intervals.Count; j++)
+                {
+                    Interval required = requiredBand.Intervals[j];
+                    while (containingIntervalIndex < containingBand.Intervals.Count
+                        && containingBand.Intervals[containingIntervalIndex].Right <= required.Left)
+                    {
+                        containingIntervalIndex++;
+                    }
+
+                    if (containingIntervalIndex >= containingBand.Intervals.Count)
+                    {
+                        return false;
+                    }
+
+                    Interval containing = containingBand.Intervals[containingIntervalIndex];
+
+                    // A required interval is contained only when one interval covers its complete horizontal extent.
+                    if (containing.Left > required.Left || containing.Right < required.Right)
+                    {
+                        return false;
+                    }
+                }
+
+                // Continue at the first uncovered scanline when the required band spans multiple containing bands.
+                coveredTop = Math.Min(containingBand.Bottom, requiredBand.Bottom);
+                containingBandIndex++;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Returns a value indicating whether the region intersects the specified rectangle.
     /// </summary>
     /// <param name="rectangle">The rectangle to test.</param>
@@ -273,6 +673,80 @@ public sealed class Region
                 }
 
                 return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Returns a value indicating whether this region intersects the specified region.
+    /// </summary>
+    /// <param name="region">The region to test.</param>
+    /// <returns><see langword="true"/> if the regions have area in common; otherwise, <see langword="false"/>.</returns>
+    public bool Intersects(Region region)
+    {
+        // Touching bounds have no shared area, so they can be rejected before scanning the canonical bands.
+        if (this.IsEmpty || region.IsEmpty
+            || this.bounds.Right <= region.bounds.Left
+            || region.bounds.Right <= this.bounds.Left
+            || this.bounds.Bottom <= region.bounds.Top
+            || region.bounds.Bottom <= this.bounds.Top)
+        {
+            return false;
+        }
+
+        // Both band lists are ordered and non-overlapping, enabling a linear two-pointer vertical sweep.
+        int firstBandIndex = 0;
+        int secondBandIndex = 0;
+        while (firstBandIndex < this.bands.Count && secondBandIndex < region.bands.Count)
+        {
+            RegionBand firstBand = this.bands[firstBandIndex];
+            RegionBand secondBand = region.bands[secondBandIndex];
+            if (firstBand.Bottom <= secondBand.Top)
+            {
+                firstBandIndex++;
+                continue;
+            }
+
+            if (secondBand.Bottom <= firstBand.Top)
+            {
+                secondBandIndex++;
+                continue;
+            }
+
+            // The bands overlap vertically, so scan their ordered intervals for a horizontal overlap.
+            int firstIntervalIndex = 0;
+            int secondIntervalIndex = 0;
+            while (firstIntervalIndex < firstBand.Intervals.Count && secondIntervalIndex < secondBand.Intervals.Count)
+            {
+                Interval first = firstBand.Intervals[firstIntervalIndex];
+                Interval second = secondBand.Intervals[secondIntervalIndex];
+                if (first.Right <= second.Left)
+                {
+                    firstIntervalIndex++;
+                    continue;
+                }
+
+                if (second.Right <= first.Left)
+                {
+                    secondIntervalIndex++;
+                    continue;
+                }
+
+                return true;
+            }
+
+            // Advance every band ending at this boundary so the sweep continues beyond the tested vertical overlap.
+            int overlappingBottom = Math.Min(firstBand.Bottom, secondBand.Bottom);
+            if (firstBand.Bottom == overlappingBottom)
+            {
+                firstBandIndex++;
+            }
+
+            if (secondBand.Bottom == overlappingBottom)
+            {
+                secondBandIndex++;
             }
         }
 
@@ -437,8 +911,8 @@ public sealed class Region
     /// <returns>The path describing the region boundary.</returns>
     private IPath BuildBoundaryPath()
     {
-        // Match SkRegion's boundary export shape: rectangles are first represented as
-        // opposing vertical edges, then linked into closed contours around the region
+        // Rectangles are first represented as opposing vertical edges, then linked into
+        // closed contours around the region
         // boundary. Shared internal edges cancel because the rectangle list is already
         // normalized into non-overlapping bands/intervals.
         List<BoundaryEdge> edges = new(this.rectangles.Count * 2);
@@ -814,6 +1288,57 @@ public sealed class Region
     }
 
     /// <summary>
+    /// Moves an edge backwards through the linked crossing order when its X position precedes its current predecessor.
+    /// </summary>
+    /// <param name="edges">The edge storage containing the linked order.</param>
+    /// <param name="edgeIndex">The edge whose X position may have moved backwards.</param>
+    /// <param name="head">The first edge in crossing order.</param>
+    private static void MoveEdgeBackward(Span<RegionEdge> edges, int edgeIndex, ref int head)
+    {
+        int previousIndex = edges[edgeIndex].Previous;
+
+        if (previousIndex < 0 || edges[previousIndex].X <= edges[edgeIndex].X)
+        {
+            return;
+        }
+
+        // Unlink the edge before searching backwards through the already-sorted prefix.
+        int nextIndex = edges[edgeIndex].Next;
+        edges[previousIndex].Next = nextIndex;
+
+        if (nextIndex >= 0)
+        {
+            edges[nextIndex].Previous = previousIndex;
+        }
+
+        int insertionPredecessor = previousIndex;
+
+        while (insertionPredecessor >= 0 && edges[insertionPredecessor].X > edges[edgeIndex].X)
+        {
+            insertionPredecessor = edges[insertionPredecessor].Previous;
+        }
+
+        if (insertionPredecessor < 0)
+        {
+            edges[edgeIndex].Previous = -1;
+            edges[edgeIndex].Next = head;
+            edges[head].Previous = edgeIndex;
+            head = edgeIndex;
+            return;
+        }
+
+        int insertionSuccessor = edges[insertionPredecessor].Next;
+        edges[edgeIndex].Previous = insertionPredecessor;
+        edges[edgeIndex].Next = insertionSuccessor;
+        edges[insertionPredecessor].Next = edgeIndex;
+
+        if (insertionSuccessor >= 0)
+        {
+            edges[insertionSuccessor].Previous = edgeIndex;
+        }
+    }
+
+    /// <summary>
     /// Converts one rectangle to its boundary path.
     /// </summary>
     /// <param name="rectangle">The rectangle to convert.</param>
@@ -846,6 +1371,58 @@ public sealed class Region
         /// Gets the exclusive right edge.
         /// </summary>
         public int Right { get; }
+    }
+
+    /// <summary>
+    /// Represents one non-horizontal path edge during integer scan conversion.
+    /// </summary>
+    private struct RegionEdge : IComparable<RegionEdge>
+    {
+        /// <summary>
+        /// Gets or sets the first scanline crossed by the edge.
+        /// </summary>
+        public int FirstY { get; set; }
+
+        /// <summary>
+        /// Gets or sets the last scanline crossed by the edge.
+        /// </summary>
+        public int LastY { get; set; }
+
+        /// <summary>
+        /// Gets or sets the current crossing position in signed 16.16 fixed-point units.
+        /// </summary>
+        public long X { get; set; }
+
+        /// <summary>
+        /// Gets or sets the signed 16.16 X advance for one scanline.
+        /// </summary>
+        public long DxDy { get; set; }
+
+        /// <summary>
+        /// Gets or sets the winding contribution made when the edge is crossed.
+        /// </summary>
+        public int Winding { get; set; }
+
+        /// <summary>
+        /// Gets or sets the preceding edge index in active crossing order.
+        /// </summary>
+        public int Previous { get; set; }
+
+        /// <summary>
+        /// Gets or sets the following edge index in active crossing order.
+        /// </summary>
+        public int Next { get; set; }
+
+        /// <summary>
+        /// Compares edges by their first scanline and initial crossing position.
+        /// </summary>
+        /// <param name="other">The edge to compare with this edge.</param>
+        /// <returns>A value indicating the relative scan order of the edges.</returns>
+        public readonly int CompareTo(RegionEdge other)
+        {
+            int y = this.FirstY.CompareTo(other.FirstY);
+            return y != 0 ? y : this.X.CompareTo(other.X);
+        }
     }
 
     /// <summary>

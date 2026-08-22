@@ -16,7 +16,7 @@ using SixLaborsFontMetrics = SixLabors.Fonts.FontMetrics;
 using SixLaborsFontStyle = SixLabors.Fonts.FontStyle;
 using SixLaborsSystemFonts = SixLabors.Fonts.SystemFonts;
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
 /// Avalonia font manager implementation backed by SixLabors.Fonts.

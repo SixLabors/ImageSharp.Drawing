@@ -4,7 +4,7 @@
 using Avalonia.Platform;
 using Avalonia.Platform.Surfaces;
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
 /// Framebuffer render target for the ImageSharp.Drawing sample renderer.

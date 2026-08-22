@@ -5,6 +5,8 @@
     <AssemblyTitle>SixLabors.ImageSharp.Drawing.WebGPU</AssemblyTitle>
     <RootNamespace>SixLabors.ImageSharp.Drawing.Processing.Backends</RootNamespace>
     <PackageId>SixLabors.ImageSharp.Drawing.WebGPU</PackageId>
+    <!-- Sets this package's independent major version while MinVer supplies the remaining version components. -->
+    <IndependentPackageVersionMajor>1</IndependentPackageVersionMajor>
     <PackageIcon>sixlabors.imagesharp.drawing.128.png</PackageIcon>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <RepositoryUrl Condition="'$(RepositoryUrl)' == ''">https://github.com/SixLabors/ImageSharp.Drawing/</RepositoryUrl>

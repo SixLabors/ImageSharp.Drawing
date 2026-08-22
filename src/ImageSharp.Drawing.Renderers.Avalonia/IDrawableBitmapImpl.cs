@@ -6,7 +6,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
 /// Bitmap implementation that can draw itself into an ImageSharp-backed drawing context.

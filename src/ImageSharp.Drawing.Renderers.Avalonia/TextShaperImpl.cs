@@ -15,7 +15,7 @@ using SixLaborsTextDirection = SixLabors.Fonts.TextDirection;
 using SixLaborsTextShaper = SixLabors.Fonts.TextShaper;
 using SixLaborsTextShapingBuffer = SixLabors.Fonts.TextShapingBuffer;
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
 /// Avalonia text shaper implementation backed by SixLabors.Fonts.
@@ -96,7 +96,7 @@ internal sealed class TextShaperImpl : ITextShaperImpl
                 glyphOffset = default;
             }
 
-            shapedBuffer[i] = new Avalonia.Media.TextFormatting.GlyphInfo(glyphIndex, glyphCluster, glyphAdvance, glyphOffset);
+            shapedBuffer[i] = new global::Avalonia.Media.TextFormatting.GlyphInfo(glyphIndex, glyphCluster, glyphAdvance, glyphOffset);
         }
 
         return shapedBuffer;

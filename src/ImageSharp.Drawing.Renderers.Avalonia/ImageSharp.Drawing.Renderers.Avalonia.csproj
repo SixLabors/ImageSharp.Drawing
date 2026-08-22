@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>SixLabors.ImageSharp.Drawing.Renderers.Avalonia</AssemblyName>
+    <AssemblyTitle>SixLabors.ImageSharp.Drawing.Renderers.Avalonia</AssemblyTitle>
+    <RootNamespace>SixLabors.ImageSharp.Drawing.Renderers.Avalonia</RootNamespace>
+    <PackageId>SixLabors.ImageSharp.Drawing.Renderers.Avalonia</PackageId>
+    <!-- Sets this package's independent major version while MinVer supplies the remaining version components. -->
+    <IndependentPackageVersionMajor>1</IndependentPackageVersionMajor>
+    <PackageIcon>sixlabors.imagesharp.drawing.128.png</PackageIcon>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <RepositoryUrl Condition="'$(RepositoryUrl)' == ''">https://github.com/SixLabors/ImageSharp.Drawing/</RepositoryUrl>
+    <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
+    <PackageTags>ImageSharp Drawing Avalonia Graphics Renderer Shapes Paths Text</PackageTags>
+    <Description>An ImageSharp.Drawing renderer for Avalonia applications.</Description>
+    <Configurations>Debug;Release</Configurations>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <WarningsAsErrors>Nullable</WarningsAsErrors>
+    <RunAnalyzers>false</RunAnalyzers>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AvaloniaAccessUnstablePrivateApis>true</AvaloniaAccessUnstablePrivateApis>
+    <NoWarn>$(NoWarn);AVA3001</NoWarn>
+    <AvaloniaVersion>12.2.999-cibuild0068621-alpha</AvaloniaVersion>
+    <RestoreAdditionalProjectSources>https://nuget-feed-all.avaloniaui.net/v3/index.json;$(RestoreAdditionalProjectSources)</RestoreAdditionalProjectSources>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
+    <None Include="..\..\shared-infrastructure\branding\icons\imagesharp.drawing\sixlabors.imagesharp.drawing.128.png" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
+    <!-- WebGPU's Silk.NET dependency loads DependencyModel 9.0.9, so net8 consumers need the matching JSON runtime assembly. -->
+    <PackageReference Include="System.Text.Json" Version="9.0.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ImageSharp.Drawing.WebGPU\ImageSharp.Drawing.WebGPU.csproj" />
+  </ItemGroup>
+</Project>

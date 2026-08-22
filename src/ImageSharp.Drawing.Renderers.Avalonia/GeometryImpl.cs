@@ -10,7 +10,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
 /// Base Avalonia geometry implementation backed by ImageSharp paths.
@@ -114,6 +114,37 @@ internal abstract class GeometryImpl : IGeometryImpl
     /// <inheritdoc />
     public bool FillContains(AvaloniaPoint point)
         => this.fillGeometry is not null && this.fillGeometry.Contains(point.ToPointF(), this.FillRule);
+
+    /// <inheritdoc />
+    public IntersectionResult GetFillIntersectionResult(IGeometryImpl geometry)
+    {
+        if (geometry is not GeometryImpl other || this.FillPath is null || other.FillPath is null)
+        {
+            return IntersectionResult.Empty;
+        }
+
+        Region region = new(this.FillPath, this.FillRule);
+        Region otherRegion = new(other.FillPath, other.FillRule);
+
+        // Containment is tested before intersection so equal regions produce FullyInside
+        // rather than FullyContains.
+        if (region.Contains(otherRegion))
+        {
+            return IntersectionResult.FullyInside;
+        }
+
+        if (otherRegion.Contains(region))
+        {
+            return IntersectionResult.FullyContains;
+        }
+
+        if (region.Intersects(otherRegion))
+        {
+            return IntersectionResult.Intersects;
+        }
+
+        return IntersectionResult.Empty;
+    }
 
     /// <inheritdoc />
     public IGeometryImpl? Intersect(IGeometryImpl geometry)

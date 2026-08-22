@@ -9,7 +9,7 @@ using Avalonia.Rendering.Composition;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using ImageSharpSize = SixLabors.ImageSharp.Size;
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
 /// WebGPU render target bound directly to an Avalonia native window surface.

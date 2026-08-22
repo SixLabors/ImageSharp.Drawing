@@ -10,7 +10,7 @@ using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
 /// WebGPU-backed Avalonia drawing layer for the ImageSharp.Drawing sample renderer.
@@ -62,10 +62,10 @@ internal sealed class WebGPULayerImpl : IDrawingContextLayerWithRenderContextAff
     public bool IsCorrupted => false;
 
     /// <inheritdoc />
-    public PixelFormat? Format => PixelFormat.Bgra8888;
+    public PixelFormat? Format => AvaloniaPixelFormats.Bgra8888;
 
     /// <inheritdoc />
-    public AlphaFormat? AlphaFormat => Avalonia.Platform.AlphaFormat.Premul;
+    public AlphaFormat? AlphaFormat => global::Avalonia.Platform.AlphaFormat.Premul;
 
     /// <inheritdoc />
     public bool HasRenderContextAffinity => true;

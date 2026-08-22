@@ -4,7 +4,7 @@
 using Avalonia;
 using SixLabors.ImageSharp.Drawing;
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
 /// Avalonia line geometry implementation backed by an ImageSharp open path.
@@ -16,7 +16,7 @@ internal sealed class LineGeometryImpl : GeometryImpl
     /// </summary>
     /// <param name="p1">The line start point.</param>
     /// <param name="p2">The line end point.</param>
-    public LineGeometryImpl(Point p1, Point p2)
+    public LineGeometryImpl(AvaloniaPoint p1, AvaloniaPoint p2)
         : base(new PathBuilder().AddLine(p1.ToPointF(), p2.ToPointF()).Build(), null, IntersectionRule.EvenOdd)
     {
     }

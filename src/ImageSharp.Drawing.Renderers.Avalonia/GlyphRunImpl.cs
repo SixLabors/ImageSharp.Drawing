@@ -11,7 +11,7 @@ using SixLabors.ImageSharp.Drawing.Processing;
 using AvaloniaTextHintingMode = Avalonia.Media.TextHintingMode;
 using AvaloniaTextOptions = Avalonia.Media.TextOptions;
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
 /// Avalonia glyph run implementation backed by SixLabors.Fonts glyph ids and positions.
@@ -45,7 +45,7 @@ internal sealed class GlyphRunImpl : IGlyphRunImpl
     /// <param name="glyphInfos">The positioned glyph information from Avalonia shaping.</param>
     /// <param name="baselineOrigin">The glyph-run baseline origin.</param>
     /// <param name="font">The SixLabors font face used to render the run.</param>
-    public GlyphRunImpl(GlyphTypeface glyphTypeface, double fontRenderingEmSize, IReadOnlyList<GlyphInfo> glyphInfos, Point baselineOrigin, Font font)
+    public GlyphRunImpl(GlyphTypeface glyphTypeface, double fontRenderingEmSize, IReadOnlyList<GlyphInfo> glyphInfos, AvaloniaPoint baselineOrigin, Font font)
     {
         this.GlyphTypeface = glyphTypeface;
         this.FontRenderingEmSize = fontRenderingEmSize;
@@ -59,7 +59,7 @@ internal sealed class GlyphRunImpl : IGlyphRunImpl
         for (int i = 0; i < glyphInfos.Count; i++)
         {
             GlyphInfo glyph = glyphInfos[i];
-            Avalonia.Vector offset = glyph.GlyphOffset;
+            AvaloniaVector offset = glyph.GlyphOffset;
 
             glyphIds[i] = glyph.GlyphIndex;
             origins[i] = new Vector2((float)(baselineOrigin.X + penX + offset.X), (float)(baselineOrigin.Y + offset.Y));
@@ -112,7 +112,7 @@ internal sealed class GlyphRunImpl : IGlyphRunImpl
     public double FontRenderingEmSize { get; }
 
     /// <inheritdoc />
-    public Point BaselineOrigin { get; }
+    public AvaloniaPoint BaselineOrigin { get; }
 
     /// <inheritdoc />
     public Rect Bounds { get; }

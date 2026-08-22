@@ -40,7 +40,6 @@
     </StackPanel>
     <Expander Header="FilePicker API">
       <StackPanel Spacing="4">
-        <CheckBox Name="ForceManaged">Force managed dialog</CheckBox>
         <CheckBox Name="OpenMultiple">Open multiple</CheckBox>
         <Button Name="OpenFolderPicker">Select Fo_lder</Button>
         <Button Name="OpenFilePicker">_Open File</Button>

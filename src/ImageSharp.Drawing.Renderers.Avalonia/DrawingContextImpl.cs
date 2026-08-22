@@ -19,7 +19,7 @@ using AvaloniaTextOptions = Avalonia.Media.TextOptions;
 using AvaloniaTextRenderingMode = Avalonia.Media.TextRenderingMode;
 using BoxShadow = Avalonia.Media.BoxShadow;
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
 /// Avalonia drawing context implementation backed by an ImageSharp.Drawing canvas.
@@ -181,7 +181,7 @@ internal sealed class DrawingContextImpl : IDrawingContextImpl, IDrawingContextI
     internal DrawingCanvas Canvas => this.canvas;
 
     /// <inheritdoc />
-    public void Clear(Avalonia.Media.Color color)
+    public void Clear(global::Avalonia.Media.Color color)
     {
         this.Trace(() => $"Clear color={Describe(color)}");
         this.canvas.Clear(Brushes.Solid(color.ToColor()));
@@ -261,7 +261,7 @@ internal sealed class DrawingContextImpl : IDrawingContextImpl, IDrawingContextI
     }
 
     /// <inheritdoc />
-    public void DrawLine(IPen? pen, Avalonia.Point p1, Avalonia.Point p2)
+    public void DrawLine(IPen? pen, AvaloniaPoint p1, AvaloniaPoint p2)
     {
         Rect targetRect = new Rect(p1, p2).Normalize();
         Pen? strokePen = this.CreatePen(pen, targetRect);
@@ -328,7 +328,7 @@ internal sealed class DrawingContextImpl : IDrawingContextImpl, IDrawingContextI
     }
 
     /// <inheritdoc />
-    public void DrawRectangle(Avalonia.Media.IExperimentalAcrylicMaterial material, RoundedRect rect)
+    public void DrawRectangle(global::Avalonia.Media.IExperimentalAcrylicMaterial material, RoundedRect rect)
     {
         if (rect.Rect.Height <= 0 || rect.Rect.Width <= 0)
         {
@@ -919,16 +919,16 @@ internal sealed class DrawingContextImpl : IDrawingContextImpl, IDrawingContextI
             return this.CreateImageBrush(imageBrush, targetRect);
         }
 
-        if (brush is Avalonia.Media.ISceneBrush sceneBrush)
+        if (brush is global::Avalonia.Media.ISceneBrush sceneBrush)
         {
-            using Avalonia.Media.ISceneBrushContent? content = sceneBrush.CreateContent();
+            using global::Avalonia.Media.ISceneBrushContent? content = sceneBrush.CreateContent();
 
             return content is null
                 ? null
                 : this.CreateSceneBrushContent(content, targetRect);
         }
 
-        if (brush is Avalonia.Media.ISceneBrushContent sceneBrushContent)
+        if (brush is global::Avalonia.Media.ISceneBrushContent sceneBrushContent)
         {
             return this.CreateSceneBrushContent(sceneBrushContent, targetRect);
         }
@@ -1355,14 +1355,14 @@ internal sealed class DrawingContextImpl : IDrawingContextImpl, IDrawingContextI
         // Skia feeds TileBrushCalculator the bitmap size in the current drawing DPI, then draws
         // from source pixels into that logical size. Keep the same split here: layout in Avalonia
         // DIPs, source sampling through the bitmap implementation.
-        Avalonia.Size sourceSize = bitmap.PixelSize.ToSizeWithDpi(this.dpi);
+        AvaloniaSize sourceSize = bitmap.PixelSize.ToSizeWithDpi(this.dpi);
         return this.CreateTileBrush(bitmap, sourceSize, brush, targetRect);
     }
 
     /// <summary>
     /// Converts an Avalonia scene brush into an ImageSharp tiled image brush.
     /// </summary>
-    private ImageBrush<Bgra32P>? CreateSceneBrushContent(Avalonia.Media.ISceneBrushContent content, Rect targetRect)
+    private ImageBrush<Bgra32P>? CreateSceneBrushContent(global::Avalonia.Media.ISceneBrushContent content, Rect targetRect)
     {
         Rect contentRect = content.Rect;
         int width = (int)Math.Ceiling(contentRect.Width);
@@ -1396,7 +1396,7 @@ internal sealed class DrawingContextImpl : IDrawingContextImpl, IDrawingContextI
                 : Matrix.CreateTranslation(-contentRect.X, -contentRect.Y);
 
             context.PushRenderOptions(this.currentRenderOptions);
-            context.Clear(Avalonia.Media.Colors.Transparent);
+            context.Clear(global::Avalonia.Media.Colors.Transparent);
             content.Render(context, transform);
             context.PopRenderOptions();
         }
@@ -1411,7 +1411,7 @@ internal sealed class DrawingContextImpl : IDrawingContextImpl, IDrawingContextI
     /// </summary>
     private ImageBrush<Bgra32P>? CreateTileBrush(
         IDrawableBitmapImpl sourceBitmap,
-        Avalonia.Size sourceSize,
+        AvaloniaSize sourceSize,
         ITileBrush brush,
         Rect targetRect)
     {
@@ -1426,7 +1426,7 @@ internal sealed class DrawingContextImpl : IDrawingContextImpl, IDrawingContextI
 
         using (DrawingContextImpl context = new(tileImage, this.dpi))
         {
-            context.Clear(Avalonia.Media.Colors.Transparent);
+            context.Clear(global::Avalonia.Media.Colors.Transparent);
             context.PushClip(layout.IntermediateClip);
             context.PushRenderOptions(this.currentRenderOptions);
             context.Transform = layout.IntermediateTransform;
@@ -1473,10 +1473,10 @@ internal sealed class DrawingContextImpl : IDrawingContextImpl, IDrawingContextI
     /// <summary>
     /// Calculates the ImageSharp tile image that represents Avalonia's tile brush viewbox/viewport rules.
     /// </summary>
-    private static TileBrushLayout CalculateTileBrushLayout(ITileBrush brush, Avalonia.Size sourceSize, Rect targetRect)
+    private static TileBrushLayout CalculateTileBrushLayout(ITileBrush brush, AvaloniaSize sourceSize, Rect targetRect)
     {
         Rect sourceRect = brush.SourceRect.ToPixels(sourceSize);
-        Avalonia.Size targetSize = targetRect.Size;
+        AvaloniaSize targetSize = targetRect.Size;
         Rect destinationRect = brush.DestinationRect.ToPixels(targetSize);
 
         if (sourceRect.Width <= 0 || sourceRect.Height <= 0 || destinationRect.Width <= 0 || destinationRect.Height <= 0)
@@ -1484,12 +1484,12 @@ internal sealed class DrawingContextImpl : IDrawingContextImpl, IDrawingContextI
             return default;
         }
 
-        AvaloniaVector scale = Avalonia.Media.MediaExtensions.CalculateScaling(
+        AvaloniaVector scale = global::Avalonia.Media.MediaExtensions.CalculateScaling(
             brush.Stretch,
             destinationRect.Size,
             sourceRect.Size);
 
-        Avalonia.Size scaledSize = new(sourceRect.Width * scale.X, sourceRect.Height * scale.Y);
+        AvaloniaSize scaledSize = new(sourceRect.Width * scale.X, sourceRect.Height * scale.Y);
         AvaloniaVector translate = CalculateTileTranslate(
             brush.AlignmentX,
             brush.AlignmentY,
@@ -1497,7 +1497,7 @@ internal sealed class DrawingContextImpl : IDrawingContextImpl, IDrawingContextI
             destinationRect.Size);
 
         bool isTiled = brush.TileMode != TileMode.None;
-        Avalonia.Size intermediateSize = isTiled ? destinationRect.Size : targetSize;
+        AvaloniaSize intermediateSize = isTiled ? destinationRect.Size : targetSize;
         Matrix intermediateTransform =
             Matrix.CreateTranslation(-sourceRect.Position) *
             Matrix.CreateScale(scale) *
@@ -1537,7 +1537,7 @@ internal sealed class DrawingContextImpl : IDrawingContextImpl, IDrawingContextI
     /// <summary>
     /// Calculates Avalonia tile alignment translation for the scaled source size.
     /// </summary>
-    private static AvaloniaVector CalculateTileTranslate(AlignmentX alignmentX, AlignmentY alignmentY, Avalonia.Size sourceSize, Avalonia.Size destinationSize)
+    private static AvaloniaVector CalculateTileTranslate(AlignmentX alignmentX, AlignmentY alignmentY, AvaloniaSize sourceSize, AvaloniaSize destinationSize)
     {
         double x = alignmentX switch
         {
@@ -1723,7 +1723,7 @@ internal sealed class DrawingContextImpl : IDrawingContextImpl, IDrawingContextI
     /// <summary>
     /// Formats an Avalonia color for diagnostic traces.
     /// </summary>
-    private static string Describe(Avalonia.Media.Color color)
+    private static string Describe(global::Avalonia.Media.Color color)
         => $"#{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}";
 
     /// <summary>

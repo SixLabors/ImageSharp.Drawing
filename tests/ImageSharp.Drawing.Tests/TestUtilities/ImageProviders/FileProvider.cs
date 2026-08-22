@@ -6,9 +6,8 @@ using System.Reflection;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
-using IOPath = System.IO.Path;
-
 using Xunit.Abstractions;
+using IOPath = System.IO.Path;
 
 namespace SixLabors.ImageSharp.Drawing.Tests;
 

@@ -11,7 +11,7 @@ using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
 /// ImageSharp-backed immutable bitmap implementation for the sample Avalonia renderer.
@@ -43,8 +43,8 @@ internal sealed unsafe class ImmutableBitmapImpl : IDrawableBitmapImpl, IReadabl
         this.Image = image;
         this.Dpi = source.Dpi;
         this.PixelSize = destinationSize;
-        this.format = PixelFormat.Bgra8888;
-        this.alphaFormat = Avalonia.Platform.AlphaFormat.Premul;
+        this.format = AvaloniaPixelFormats.Bgra8888;
+        this.alphaFormat = global::Avalonia.Platform.AlphaFormat.Premul;
 
         bool isUpscaling = destinationSize.Width > source.PixelSize.Width || destinationSize.Height > source.PixelSize.Height;
         IResampler sampler = interpolationMode.ToResampler(isUpscaling);
@@ -106,7 +106,7 @@ internal sealed unsafe class ImmutableBitmapImpl : IDrawableBitmapImpl, IReadabl
     /// <param name="image">The ImageSharp image backing the bitmap.</param>
     /// <param name="dpi">The bitmap DPI.</param>
     public ImmutableBitmapImpl(Image<Bgra32P> image, Vector dpi)
-        : this(image, dpi, PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul)
+        : this(image, dpi, AvaloniaPixelFormats.Bgra8888, global::Avalonia.Platform.AlphaFormat.Premul)
     {
     }
 
@@ -170,16 +170,16 @@ internal sealed unsafe class ImmutableBitmapImpl : IDrawableBitmapImpl, IReadabl
     /// </summary>
     private static Image CloneExternalPixels(PixelSize size, int stride, PixelFormat format, AlphaFormat alphaFormat, IntPtr data)
     {
-        if (format == PixelFormats.Bgra8888)
+        if (format == AvaloniaPixelFormats.Bgra8888)
         {
-            return alphaFormat == Avalonia.Platform.AlphaFormat.Premul
+            return alphaFormat == global::Avalonia.Platform.AlphaFormat.Premul
                 ? CopyExternalPixels<Bgra32P>(size, stride, data)
                 : CopyExternalPixels<Bgra32>(size, stride, data);
         }
 
-        if (format == PixelFormats.Rgba8888)
+        if (format == AvaloniaPixelFormats.Rgba8888)
         {
-            return alphaFormat == Avalonia.Platform.AlphaFormat.Premul
+            return alphaFormat == global::Avalonia.Platform.AlphaFormat.Premul
                 ? CopyExternalPixels<Rgba32P>(size, stride, data)
                 : CopyExternalPixels<Rgba32>(size, stride, data);
         }

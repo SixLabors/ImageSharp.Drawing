@@ -12,19 +12,15 @@
     <AvaloniaAccessUnstablePrivateApis>true</AvaloniaAccessUnstablePrivateApis>
     <RunAnalyzers>false</RunAnalyzers>
     <NoWarn>$(NoWarn);AVA3001</NoWarn>
-    <LocalAvaloniaRoot>..\..\..\..\JimBobSquarePants\Avalonia</LocalAvaloniaRoot>
-    <AssemblyOriginatorKeyFile>$(MSBuildProjectDirectory)\$(LocalAvaloniaRoot)\build\avalonia.snk</AssemblyOriginatorKeyFile>
     <RestoreConfigFile>$(MSBuildProjectDirectory)\NuGet.Config</RestoreConfigFile>
-    <AvaloniaBuildTasksLocation>$(MSBuildProjectDirectory)\$(LocalAvaloniaRoot)\src\Avalonia.Build.Tasks\bin\Release\netstandard2.0\Avalonia.Build.Tasks.dll</AvaloniaBuildTasksLocation>
+    <AvaloniaVersion>12.2.999-cibuild0068621-alpha</AvaloniaVersion>
+    <RestoreAdditionalProjectSources>https://nuget-feed-all.avaloniaui.net/v3/index.json;$(RestoreAdditionalProjectSources)</RestoreAdditionalProjectSources>
     <EnableAvaloniaXamlCompilation Condition="'$(EnableAvaloniaXamlCompilation)'==''">true</EnableAvaloniaXamlCompilation>
     <AvaloniaXamlIlVerifyIl Condition="'$(AvaloniaXamlIlVerifyIl)'==''">false</AvaloniaXamlIlVerifyIl>
     <AvaloniaUseCompiledBindingsByDefault Condition="'$(AvaloniaUseCompiledBindingsByDefault)'==''">true</AvaloniaUseCompiledBindingsByDefault>
     <AvaloniaNameGeneratorAttachDevTools Condition="'$(AvaloniaNameGeneratorAttachDevTools)' == ''">true</AvaloniaNameGeneratorAttachDevTools>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
-
-  <Import Project="$(LocalAvaloniaRoot)\packages\Avalonia\AvaloniaBuildTasks.props" />
-  <Import Project="$(LocalAvaloniaRoot)\src\tools\Avalonia.Generators\Avalonia.Generators.props" />
 
   <ItemGroup>
     <!-- Upstream builds without SDK implicit usings; this alias preserves its shape references without changing copied pages. -->
@@ -58,32 +54,22 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\ImageSharp.Drawing.Renderers.Avalonia\ImageSharp.Drawing.Renderers.Avalonia.csproj" />
     <ProjectReference Include="..\..\src\ImageSharp.Drawing.WebGPU\ImageSharp.Drawing.WebGPU.csproj" />
     <ProjectReference Include="..\..\src\ImageSharp.Drawing\ImageSharp.Drawing.csproj" />
-    <ProjectReference Include="..\..\..\..\JimBobSquarePants\Avalonia\src\Avalonia.Controls.ColorPicker\Avalonia.Controls.ColorPicker.csproj" />
-    <ProjectReference Include="..\..\..\..\JimBobSquarePants\Avalonia\src\Avalonia.Desktop\Avalonia.Desktop.csproj" />
-    <ProjectReference Include="..\..\..\..\JimBobSquarePants\Avalonia\src\Avalonia.Fonts.Inter\Avalonia.Fonts.Inter.csproj" />
-    <ProjectReference Include="..\..\..\..\JimBobSquarePants\Avalonia\src\tools\Avalonia.Generators\Avalonia.Generators.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" OutputItemType="Analyzer" />
-    <ProjectReference Include="..\..\..\..\JimBobSquarePants\Avalonia\src\HarfBuzz\Avalonia.HarfBuzz\Avalonia.HarfBuzz.csproj" />
-    <ProjectReference Include="..\..\..\..\JimBobSquarePants\Avalonia\src\Skia\Avalonia.Skia\Avalonia.Skia.csproj" />
-    <ProjectReference Include="..\..\..\..\JimBobSquarePants\Avalonia\src\Avalonia.Themes.Fluent\Avalonia.Themes.Fluent.csproj" />
-    <ProjectReference Include="..\..\..\..\JimBobSquarePants\Avalonia\src\Avalonia.Themes.Simple\Avalonia.Themes.Simple.csproj" />
-    <ProjectReference Include="..\..\..\..\JimBobSquarePants\Avalonia\src\Windows\Avalonia.Win32\Avalonia.Win32.csproj" />
   </ItemGroup>
 
-  <!--
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.0.3" />
-    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.0.3" />
-    <PackageReference Include="Avalonia.Desktop" Version="12.0.3" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.3" />
-    <PackageReference Include="Avalonia.HarfBuzz" Version="12.0.3" />
-    <PackageReference Include="Avalonia.Skia" Version="12.0.3" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.3" />
-    <PackageReference Include="Avalonia.Themes.Simple" Version="12.0.3" />
-    <PackageReference Include="Avalonia.Win32" Version="12.0.3" />
+    <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.HarfBuzz" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Skia" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Themes.Simple" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Win32" Version="$(AvaloniaVersion)" />
   </ItemGroup>
-  -->
 
   <ItemGroup>
     <AvaloniaXaml Update="NavHeaderItem.xaml">
@@ -91,9 +77,4 @@
     </AvaloniaXaml>
   </ItemGroup>
 
-  <!-- Load local Avalonia build tasks out-of-process so they do not lock the source-built task assembly. -->
-  <UsingTask TaskName="GenerateAvaloniaResourcesTask" AssemblyFile="$(AvaloniaBuildTasksLocation)" TaskFactory="TaskHostFactory" />
-  <UsingTask TaskName="CompileAvaloniaXamlTask" AssemblyFile="$(AvaloniaBuildTasksLocation)" TaskFactory="TaskHostFactory" />
-
-  <Import Project="$(LocalAvaloniaRoot)\packages\Avalonia\AvaloniaBuildTasks.targets" />
 </Project>

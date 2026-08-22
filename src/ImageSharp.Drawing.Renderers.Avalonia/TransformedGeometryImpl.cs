@@ -7,7 +7,7 @@ using Avalonia.Media;
 using Avalonia.Platform;
 using SixLabors.ImageSharp.Drawing;
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
 /// Geometry wrapper that preserves the original source geometry and applied transform.

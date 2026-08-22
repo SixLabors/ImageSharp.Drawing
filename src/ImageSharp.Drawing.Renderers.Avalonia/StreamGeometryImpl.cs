@@ -7,7 +7,7 @@ using Avalonia.Platform;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing;
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
 /// Mutable stream geometry implementation backed by ImageSharp path builders.

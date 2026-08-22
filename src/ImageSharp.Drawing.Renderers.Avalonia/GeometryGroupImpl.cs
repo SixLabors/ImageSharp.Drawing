@@ -5,7 +5,7 @@ using Avalonia.Media;
 using Avalonia.Platform;
 using SixLabors.ImageSharp.Drawing;
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
 /// Avalonia geometry group implementation backed by combined ImageSharp paths.

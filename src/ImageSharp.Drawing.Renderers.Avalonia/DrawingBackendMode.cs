@@ -1,12 +1,12 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
-/// Selects the rendering backend used by the ImageSharp.Drawing Avalonia sample.
+/// Selects the rendering backend used by the ImageSharp.Drawing Avalonia renderer.
 /// </summary>
-internal enum DrawingBackendMode
+public enum DrawingBackendMode
 {
     /// <summary>
     /// Uses WebGPU when Avalonia exposes a compatible native surface; otherwise uses the CPU framebuffer.

@@ -5,6 +5,7 @@ using System;
 using Avalonia;
 using ControlCatalog;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 namespace AvaloniaControlCatalog;
 
@@ -16,14 +17,12 @@ internal static class Program
 
     private static AppBuilder BuildAvaloniaApp()
     {
-        DrawingContextImpl.BackendMode = Environment.GetEnvironmentVariable("IMAGESHARP_DRAWING_BACKEND")?.ToLowerInvariant() switch
+        DrawingBackendMode backendMode = Environment.GetEnvironmentVariable("IMAGESHARP_DRAWING_BACKEND")?.ToLowerInvariant() switch
         {
             "cpu" => DrawingBackendMode.Cpu,
             "webgpu" => DrawingBackendMode.WebGpu,
             _ => DrawingBackendMode.Auto
         };
-
-        // DrawingContextImpl.BackendMode = DrawingBackendMode.Cpu;
 
         if (int.TryParse(Environment.GetEnvironmentVariable("IMAGESHARP_DRAWING_MAX_PARALLELISM"), out int maxParallelism))
         {
@@ -34,7 +33,7 @@ internal static class Program
             .UsePlatformDetect()
             .WithInterFont();
 
-        if (DrawingContextImpl.BackendMode == DrawingBackendMode.Cpu)
+        if (backendMode == DrawingBackendMode.Cpu)
         {
             // This sample-only override must run before Avalonia creates the backend context;
             // otherwise Win32 creates a platform graphics context and the top-level surfaces
@@ -48,7 +47,7 @@ internal static class Program
         // Temporary backend switch for visual comparison: ISD_BACKEND=skia uses Avalonia's default (Skia).
         if (!string.Equals(Environment.GetEnvironmentVariable("ISD_BACKEND"), "skia", StringComparison.OrdinalIgnoreCase))
         {
-            builder = builder.UseImageSharpDrawing();
+            builder = builder.UseImageSharpDrawing(backendMode);
         }
 
         return builder;

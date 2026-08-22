@@ -6,7 +6,6 @@ using System.Security;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Dialogs;
 using Avalonia.Layout;
 using Avalonia.Platform.Storage;
 
@@ -498,13 +497,7 @@ CanPickFolder: {storageProvider.CanPickFolder}";
             return window;
         }
 
-        private IStorageProvider GetStorageProvider()
-        {
-            var forceManaged = ForceManaged.IsChecked ?? false;
-            return forceManaged 
-                ? new ManagedStorageProvider(GetWindow()) // NOTE: In your production App use 'AppBuilder.UseManagedSystemDialogs()'
-                : GetTopLevel().StorageProvider;
-        }
+        private IStorageProvider GetStorageProvider() => GetTopLevel().StorageProvider;
 
         private static string FullPathOrName(IStorageItem? item)
         {

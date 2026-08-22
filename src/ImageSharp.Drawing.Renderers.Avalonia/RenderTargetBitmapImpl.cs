@@ -9,7 +9,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
 
-namespace AvaloniaControlCatalog;
+namespace SixLabors.ImageSharp.Drawing.Renderers.Avalonia;
 
 /// <summary>
 /// ImageSharp-backed render-target bitmap implementation for offscreen layers and render-target bitmaps.
@@ -76,7 +76,7 @@ internal sealed class RenderTargetBitmapImpl : IRenderTargetBitmapImpl, IDrawing
     /// <inheritdoc />
     public IDrawingContextImpl CreateDrawingContext()
         => this.renderTarget.CreateDrawingContext(
-            new IRenderTarget.RenderTargetSceneInfo(this.PixelSize, this.Dpi.X / 96D, Avalonia.Rendering.Composition.CompositionTransparencyLevel.None),
+            new IRenderTarget.RenderTargetSceneInfo(this.PixelSize, this.Dpi.X / 96D, global::Avalonia.Rendering.Composition.CompositionTransparencyLevel.None),
             out _);
 
     /// <inheritdoc />
