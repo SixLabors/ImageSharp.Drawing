@@ -35,7 +35,7 @@ internal sealed class GlyphRunImpl : IGlyphRunImpl
     /// The hinting mode the run was most recently drawn with; intersections are computed from
     /// the same hinted geometry so decoration gaps align with the rendered outlines.
     /// </summary>
-    private HintingMode hintingMode = HintingMode.Standard;
+    private HintingMode hintingMode = HintingMode.Full;
 
     /// <summary>
     /// Initializes a new glyph run wrapper.
@@ -78,6 +78,7 @@ internal sealed class GlyphRunImpl : IGlyphRunImpl
             new GlyphOptions
             {
                 Font = font,
+                HintingMode = HintingMode.Full,
                 TextBaseline = TextBaseline.Alphabetic,
                 ColorFontSupport = ColorFontSupport.ColrV0 | ColorFontSupport.ColrV1 | ColorFontSupport.Svg
             });
@@ -140,8 +141,8 @@ internal sealed class GlyphRunImpl : IGlyphRunImpl
         {
             AvaloniaTextHintingMode.None => HintingMode.None,
             AvaloniaTextHintingMode.Light => HintingMode.Standard,
-            AvaloniaTextHintingMode.Strong => HintingMode.Standard,
-            _ => HintingMode.Standard
+            AvaloniaTextHintingMode.Strong => HintingMode.Full,
+            _ => HintingMode.Full
         };
 
         return new RichGlyphOptions
