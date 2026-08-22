@@ -43,17 +43,6 @@ namespace ControlCatalog
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktopLifetime)
             {
                 desktopLifetime.MainWindow = new MainWindow { DataContext = new MainWindowViewModel() };
-
-                if (int.TryParse(Environment.GetEnvironmentVariable("IMAGESHARP_CONTROL_CATALOG_EXIT_AFTER_MS"), out int exitDelay) && exitDelay > 0)
-                {
-                    // Test-only hook: let the real desktop lifetime render normally, then shut it down
-                    // without a human closing the window.
-                    desktopLifetime.MainWindow.Opened += async (_, _) =>
-                    {
-                        await Task.Delay(exitDelay);
-                        desktopLifetime.Shutdown();
-                    };
-                }
             }
             else if (ApplicationLifetime is IActivityApplicationLifetime singleViewFactoryApplicationLifetime)
             {
