@@ -333,10 +333,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DrawShapesWithImageSharp", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AvaloniaControlCatalog", "samples\AvaloniaControlCatalog\AvaloniaControlCatalog.csproj", "{333F3D4F-D251-5601-4851-307FF0F13D23}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SixLabors.Fonts", "..\Fonts\src\SixLabors.Fonts\SixLabors.Fonts.csproj", "{4A922B77-34EC-EA6A-8E96-8353C8FA0640}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PolygonClipper", "..\PolygonClipper\src\PolygonClipper\PolygonClipper.csproj", "{5EC089DC-69F7-643B-93BB-293D199F5F74}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DrawingBackendBenchmark", "samples\DrawingBackendBenchmark\DrawingBackendBenchmark.csproj", "{B5CF5531-624F-9F49-46BD-937FF4062F54}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebGPUExternalSurfaceDemo", "samples\WebGPUExternalSurfaceDemo\WebGPUExternalSurfaceDemo.csproj", "{97619DEB-226C-EB67-140D-0C7E67B2F7D0}"
@@ -411,30 +407,6 @@ Global
 		{333F3D4F-D251-5601-4851-307FF0F13D23}.Release|x64.Build.0 = Release|Any CPU
 		{333F3D4F-D251-5601-4851-307FF0F13D23}.Release|x86.ActiveCfg = Release|Any CPU
 		{333F3D4F-D251-5601-4851-307FF0F13D23}.Release|x86.Build.0 = Release|Any CPU
-		{4A922B77-34EC-EA6A-8E96-8353C8FA0640}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{4A922B77-34EC-EA6A-8E96-8353C8FA0640}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{4A922B77-34EC-EA6A-8E96-8353C8FA0640}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{4A922B77-34EC-EA6A-8E96-8353C8FA0640}.Debug|x64.Build.0 = Debug|Any CPU
-		{4A922B77-34EC-EA6A-8E96-8353C8FA0640}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{4A922B77-34EC-EA6A-8E96-8353C8FA0640}.Debug|x86.Build.0 = Debug|Any CPU
-		{4A922B77-34EC-EA6A-8E96-8353C8FA0640}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{4A922B77-34EC-EA6A-8E96-8353C8FA0640}.Release|Any CPU.Build.0 = Release|Any CPU
-		{4A922B77-34EC-EA6A-8E96-8353C8FA0640}.Release|x64.ActiveCfg = Release|Any CPU
-		{4A922B77-34EC-EA6A-8E96-8353C8FA0640}.Release|x64.Build.0 = Release|Any CPU
-		{4A922B77-34EC-EA6A-8E96-8353C8FA0640}.Release|x86.ActiveCfg = Release|Any CPU
-		{4A922B77-34EC-EA6A-8E96-8353C8FA0640}.Release|x86.Build.0 = Release|Any CPU
-		{5EC089DC-69F7-643B-93BB-293D199F5F74}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{5EC089DC-69F7-643B-93BB-293D199F5F74}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{5EC089DC-69F7-643B-93BB-293D199F5F74}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{5EC089DC-69F7-643B-93BB-293D199F5F74}.Debug|x64.Build.0 = Debug|Any CPU
-		{5EC089DC-69F7-643B-93BB-293D199F5F74}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{5EC089DC-69F7-643B-93BB-293D199F5F74}.Debug|x86.Build.0 = Debug|Any CPU
-		{5EC089DC-69F7-643B-93BB-293D199F5F74}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{5EC089DC-69F7-643B-93BB-293D199F5F74}.Release|Any CPU.Build.0 = Release|Any CPU
-		{5EC089DC-69F7-643B-93BB-293D199F5F74}.Release|x64.ActiveCfg = Release|Any CPU
-		{5EC089DC-69F7-643B-93BB-293D199F5F74}.Release|x64.Build.0 = Release|Any CPU
-		{5EC089DC-69F7-643B-93BB-293D199F5F74}.Release|x86.ActiveCfg = Release|Any CPU
-		{5EC089DC-69F7-643B-93BB-293D199F5F74}.Release|x86.Build.0 = Release|Any CPU
 		{B5CF5531-624F-9F49-46BD-937FF4062F54}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{B5CF5531-624F-9F49-46BD-937FF4062F54}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B5CF5531-624F-9F49-46BD-937FF4062F54}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -558,8 +530,6 @@ Global
 		{C7606104-5D58-4670-912C-3F336606B02D} = {815C0625-CD3D-440F-9F80-2D83856AB7AE}
 		{43A3CA46-2675-4AD4-88FC-DDC2E657F0B7} = {CC2DDE4D-58D9-4333-BBEE-B4F36E0A4070}
 		{333F3D4F-D251-5601-4851-307FF0F13D23} = {CC2DDE4D-58D9-4333-BBEE-B4F36E0A4070}
-		{4A922B77-34EC-EA6A-8E96-8353C8FA0640} = {815C0625-CD3D-440F-9F80-2D83856AB7AE}
-		{5EC089DC-69F7-643B-93BB-293D199F5F74} = {815C0625-CD3D-440F-9F80-2D83856AB7AE}
 		{B5CF5531-624F-9F49-46BD-937FF4062F54} = {CC2DDE4D-58D9-4333-BBEE-B4F36E0A4070}
 		{97619DEB-226C-EB67-140D-0C7E67B2F7D0} = {CC2DDE4D-58D9-4333-BBEE-B4F36E0A4070}
 		{4570F31D-D00F-6A80-DB7C-74826CBD15AE} = {CC2DDE4D-58D9-4333-BBEE-B4F36E0A4070}
@@ -574,8 +544,6 @@ Global
 	EndGlobalSection
 	GlobalSection(SharedMSBuildProjectFiles) = preSolution
 		shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{2e33181e-6e28-4662-a801-e2e7dc206029}*SharedItemsImports = 5
-		..\Fonts\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{4a922b77-34ec-ea6a-8e96-8353c8fa0640}*SharedItemsImports = 5
-		..\PolygonClipper\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{5ec089dc-69f7-643b-93bb-293d199f5f74}*SharedItemsImports = 5
 		shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{638fc2ae-7fc1-6527-e051-c6b34803f08d}*SharedItemsImports = 5
 		shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{68a8cc40-6aed-4e96-b524-31b1158fdeea}*SharedItemsImports = 13
 	EndGlobalSection
