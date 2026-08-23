@@ -18,6 +18,7 @@ internal sealed class WebGPURenderTargetImpl : IRenderTarget
 {
     private readonly WebGPUSurfaceHost host;
     private readonly WebGPUSurfaceSession session;
+    private readonly nint x11Display;
     private WebGPUExternalSurface? surface;
     private WebGPUCompositeAlphaMode alphaMode;
     private bool isDisposed;
@@ -31,9 +32,9 @@ internal sealed class WebGPURenderTargetImpl : IRenderTarget
     /// <returns><see langword="true"/> when the native surface can be used by WebGPU.</returns>
     public static bool TryCreate(WebGPUSurfaceSession session, INativePlatformHandleSurface nativeSurface, [NotNullWhen(true)] out WebGPURenderTargetImpl? renderTarget)
     {
-        if (TryCreateSurfaceHost(nativeSurface, out WebGPUSurfaceHost host))
+        if (TryCreateSurfaceHost(nativeSurface, out WebGPUSurfaceHost host, out nint x11Display))
         {
-            renderTarget = new WebGPURenderTargetImpl(session, host);
+            renderTarget = new WebGPURenderTargetImpl(session, host, x11Display);
             return true;
         }
 
@@ -41,19 +42,35 @@ internal sealed class WebGPURenderTargetImpl : IRenderTarget
         return false;
     }
 
-    private WebGPURenderTargetImpl(WebGPUSurfaceSession session, WebGPUSurfaceHost host)
+    private WebGPURenderTargetImpl(WebGPUSurfaceSession session, WebGPUSurfaceHost host, nint x11Display)
     {
         this.session = session;
         this.host = host;
+        this.x11Display = x11Display;
     }
 
-    private static bool TryCreateSurfaceHost(INativePlatformHandleSurface nativeSurface, out WebGPUSurfaceHost host)
+    private static bool TryCreateSurfaceHost(INativePlatformHandleSurface nativeSurface, out WebGPUSurfaceHost host, out nint x11Display)
     {
+        x11Display = 0;
         switch (nativeSurface.HandleDescriptor)
         {
             case "HWND":
                 nint hinstance = Marshal.GetHINSTANCE(typeof(WebGPURenderTargetImpl).Module);
                 host = WebGPUSurfaceHost.Win32(nativeSurface.Handle, hinstance);
+                return true;
+
+            case "XID":
+                // Avalonia exposes the window id but keeps its Display* internal. Window ids are valid
+                // on any connection to the same server, so open our own connection and keep it open for
+                // the lifetime of the render target; the WebGPU surface is created against it.
+                x11Display = Xlib.XOpenDisplay(null);
+                if (x11Display == 0)
+                {
+                    host = default;
+                    return false;
+                }
+
+                host = WebGPUSurfaceHost.X11(x11Display, (nuint)nativeSurface.Handle);
                 return true;
 
             case "SurfaceView":
@@ -66,7 +83,7 @@ internal sealed class WebGPURenderTargetImpl : IRenderTarget
 
             default:
                 // Avalonia currently exposes several GPU-capable platform surfaces through GL/Metal/D3D
-                // abstractions rather than full native window descriptors. X11, Wayland, and NSView require
+                // abstractions rather than full native window descriptors. Wayland and NSView require
                 // additional upstream handle metadata before they can be mapped to Silk.NET WebGPU hosts here.
                 host = default;
                 return false;
@@ -137,6 +154,13 @@ internal sealed class WebGPURenderTargetImpl : IRenderTarget
         }
 
         this.surface?.Dispose();
+
+        // The surface is gone, so the X connection it was created on can close.
+        if (this.x11Display != 0)
+        {
+            Xlib.XCloseDisplay(this.x11Display);
+        }
+
         this.isDisposed = true;
     }
 }
