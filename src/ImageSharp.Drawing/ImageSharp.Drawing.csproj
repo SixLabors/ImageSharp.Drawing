@@ -45,7 +45,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="SixLabors.Fonts" Version="3.1.0" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="4.1.0" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="4.1.1" />
     <PackageReference Include="SixLabors.PolygonClipper" Version="1.0.1" />
   </ItemGroup>
 
@@ -53,11 +53,11 @@
   Enable when referencing the local imagesharp source
   to prevent missing global usings for the ImageSharp namespaces.
   -->
-  <ItemGroup>
+  <!--<ItemGroup>
     <Using Include="SixLabors.ImageSharp" />
     <Using Include="SixLabors.ImageSharp.PixelFormats" />
     <Using Include="SixLabors.ImageSharp.Processing" />
-  </ItemGroup>
+  </ItemGroup>-->
   
   <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
 
