@@ -62,11 +62,62 @@ internal sealed class PlatformRenderInterface : IPlatformRenderInterface
             AppendWebGpuLog($"failed to wire wgpu log callback: {ex.Message}");
         }
 
+        if (OperatingSystem.IsWindows())
+        {
+            EnsureWin32SoftwareRenderingForFramebuffer();
+        }
+
         PlatformRenderInterface platform = new();
 
         AvaloniaLocator.CurrentMutable
             .Bind<IPlatformRenderInterface>().ToConstant(platform)
             .Bind<IFontManagerImpl>().ToConstant(new FontManagerImpl());
+    }
+
+    /// <summary>
+    /// Keeps CPU rendering visible on Windows. Win32 creates GPU-composited windows whenever a GPU
+    /// platform is available, and pixels drawn by the CPU into those windows are never shown. When
+    /// this renderer will draw with the CPU and the application did not configure
+    /// <see cref="Win32PlatformOptions"/> itself, select software rendering so the windows keep a
+    /// redirection surface. Avalonia runs this initializer after the application's options and before
+    /// the windowing subsystem, which is the only point where both facts are known.
+    /// </summary>
+    private static void EnsureWin32SoftwareRenderingForFramebuffer()
+    {
+        if (AvaloniaLocator.Current.GetService<Win32PlatformOptions>() is not null)
+        {
+            return;
+        }
+
+        bool usesFramebuffer;
+        switch (DrawingContextImpl.BackendMode)
+        {
+            case DrawingBackendMode.Cpu:
+                usesFramebuffer = true;
+                break;
+
+            case DrawingBackendMode.Auto:
+                WebGPUEnvironmentError probe = WebGPUEnvironment.ProbeAvailability();
+                usesFramebuffer = probe != WebGPUEnvironmentError.Success;
+                if (usesFramebuffer)
+                {
+                    AppendWebGpuLog($"WebGPU unavailable ({probe}); using the CPU framebuffer with Win32 software rendering.");
+                }
+
+                break;
+
+            default:
+                usesFramebuffer = false;
+                break;
+        }
+
+        if (usesFramebuffer)
+        {
+            AvaloniaLocator.CurrentMutable.Bind<Win32PlatformOptions>().ToConstant(new Win32PlatformOptions
+            {
+                RenderingMode = [Win32RenderingMode.Software]
+            });
+        }
     }
 
     private static void AppendWebGpuLog(string message)

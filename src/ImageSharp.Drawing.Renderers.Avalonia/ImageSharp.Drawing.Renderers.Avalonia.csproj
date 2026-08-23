@@ -32,6 +32,7 @@
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Win32" Version="$(AvaloniaVersion)" />
     <!-- WebGPU's Silk.NET dependency loads DependencyModel 9.0.9, so net8 consumers need the matching JSON runtime assembly. -->
     <PackageReference Include="System.Text.Json" Version="9.0.9" />
   </ItemGroup>

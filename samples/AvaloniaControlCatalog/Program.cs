@@ -33,17 +33,6 @@ internal static class Program
             .UsePlatformDetect()
             .WithInterFont();
 
-        if (backendMode == DrawingBackendMode.Cpu)
-        {
-            // This sample-only override must run before Avalonia creates the backend context;
-            // otherwise Win32 creates a platform graphics context and the top-level surfaces
-            // represent the GPU/composited path instead of the framebuffer path we need to test.
-            builder = builder.With(new Win32PlatformOptions
-            {
-                RenderingMode = [Win32RenderingMode.Software]
-            });
-        }
-
         // Temporary backend switch for visual comparison: ISD_BACKEND=skia uses Avalonia's default (Skia).
         if (!string.Equals(Environment.GetEnvironmentVariable("ISD_BACKEND"), "skia", StringComparison.OrdinalIgnoreCase))
         {

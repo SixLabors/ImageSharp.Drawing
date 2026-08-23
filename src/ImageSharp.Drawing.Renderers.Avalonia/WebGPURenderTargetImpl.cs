@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Platform;
 using Avalonia.Rendering.Composition;
@@ -55,8 +54,9 @@ internal sealed class WebGPURenderTargetImpl : IRenderTarget
         switch (nativeSurface.HandleDescriptor)
         {
             case "HWND":
-                nint hinstance = Marshal.GetHINSTANCE(typeof(WebGPURenderTargetImpl).Module);
-                host = WebGPUSurfaceHost.Win32(nativeSurface.Handle, hinstance);
+                // Avalonia registers its window classes against the process executable, so that is
+                // the module that owns this window. The managed assembly's module would be the wrong one.
+                host = WebGPUSurfaceHost.Win32(nativeSurface.Handle, Kernel32.GetModuleHandle(null));
                 return true;
 
             case "XID":
