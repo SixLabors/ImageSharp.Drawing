@@ -24,7 +24,7 @@
 
  * When first cloning the repo, make sure to run `git submodule update --init --recursive` otherwise the submodules (e.g. `shared-infrastructure`) will be missing.
 
- * Run `dotnet build` in the root of the repo, or open the ImageSharp.Drawing.sln file in Visual Studio and build from there.
+ * Run `dotnet build` in the root of the repo, or open the ImageSharp.Drawing.slnx file in Visual Studio and build from there.
 
 #### **Running tests and Debugging**
 

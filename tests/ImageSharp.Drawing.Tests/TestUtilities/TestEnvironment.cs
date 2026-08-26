@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests;
 
 public static partial class TestEnvironment
 {
-    private const string ImageSharpSolutionFileName = "ImageSharp.Drawing.sln";
+    private const string ImageSharpSolutionFileName = "ImageSharp.Drawing.slnx";
 
     private const string InputImagesRelativePath = @"tests\Images\Input";
 

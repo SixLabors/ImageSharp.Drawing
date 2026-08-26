@@ -1,7 +1,7 @@
 $env:CI = "true"
 $env:SIXLABORS_TESTING = "True"
 
-$solution = Join-Path $PSScriptRoot "ImageSharp.Drawing.sln"
+$solution = Join-Path $PSScriptRoot "ImageSharp.Drawing.slnx"
 
 # Build (ci-build.ps1 net10.0)
 dotnet clean $solution -c Release

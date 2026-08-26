@@ -16,7 +16,7 @@ SixLabors.ImageSharp.Drawing
 
 **ImageSharp.Drawing** is a cross-platform 2D drawing library built on top of [ImageSharp](https://github.com/SixLabors/ImageSharp). It adds a rich vector drawing model for composing raster images, rendering text, shaping paths, masking image-processing operations, and targeting CPU or WebGPU-backed drawing surfaces from the same `DrawingCanvas` API.
 
-The core package targets .NET 8 and provides the default CPU backend. The optional `SixLabors.ImageSharp.Drawing.WebGPU` package adds GPU-backed rendering for native windows, external surfaces, and offscreen render targets.
+The core package targets .NET 10 and provides the default CPU backend. The optional `SixLabors.ImageSharp.Drawing.WebGPU` package adds GPU-backed rendering for native windows, external surfaces, and offscreen render targets.
 
 ## Capabilities
 
@@ -115,12 +115,12 @@ If you prefer, you can compile ImageSharp.Drawing yourself (please do and help!)
 
 - Using [Visual Studio 2022](https://visualstudio.microsoft.com/vs/)
   - Make sure you have the latest version installed
-  - Make sure you have [the .NET 8 SDK](https://www.microsoft.com/net/core#windows) installed
+  - Make sure you have [the .NET 10 SDK](https://www.microsoft.com/net/core#windows) installed
 
 Alternatively, you can work from command line and/or with a lightweight editor on **both Linux/Unix and Windows**:
 
 - [Visual Studio Code](https://code.visualstudio.com/) with [C# Extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode.csharp)
-- [the .NET 8 SDK](https://www.microsoft.com/net/core#linuxubuntu)
+- [the .NET 10 SDK](https://www.microsoft.com/net/core#linuxubuntu)
 
 To clone ImageSharp.Drawing locally, click the "Clone in [YOUR_OS]" button above or run the following git commands:
 
