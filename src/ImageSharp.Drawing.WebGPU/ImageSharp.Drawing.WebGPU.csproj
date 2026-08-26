@@ -5,6 +5,8 @@
     <AssemblyTitle>SixLabors.ImageSharp.Drawing.WebGPU</AssemblyTitle>
     <RootNamespace>SixLabors.ImageSharp.Drawing.Processing.Backends</RootNamespace>
     <PackageId>SixLabors.ImageSharp.Drawing.WebGPU</PackageId>
+    <!-- Sets this package's independent major version while MinVer supplies the remaining version components. -->
+    <IndependentPackageVersionMajor>2</IndependentPackageVersionMajor>
     <PackageIcon>sixlabors.imagesharp.drawing.128.png</PackageIcon>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <RepositoryUrl Condition="'$(RepositoryUrl)' == ''">https://github.com/SixLabors/ImageSharp.Drawing/</RepositoryUrl>
@@ -38,12 +40,12 @@
   <Choose>
     <When Condition="$(SIXLABORS_TESTING_PREVIEW) == true">
       <PropertyGroup>
-        <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+        <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
       </PropertyGroup>
     </When>
     <Otherwise>
       <PropertyGroup>
-        <TargetFrameworks>net8.0</TargetFrameworks>
+        <TargetFrameworks>net10.0</TargetFrameworks>
       </PropertyGroup>
     </Otherwise>
   </Choose>

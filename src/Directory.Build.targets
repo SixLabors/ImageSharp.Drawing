@@ -17,30 +17,29 @@
   <Import Project="$(MSBuildThisFileDirectory)..\Directory.Build.targets" />
 
   <!--
-    Override the WebGPU package version so it tracks the main ImageSharp.Drawing
-    version but uses a different major number (defined by WebGpuVersionMajor).
-    For example, if MinVer calculates 3.0.0-alpha.0.201 for the main project,
-    the WebGPU package becomes 1.0.0-alpha.0.201.
+    Allow independently versioned packages to track the main ImageSharp.Drawing
+    version while using a project-defined major number. For example, if MinVer
+    calculates 3.0.0-alpha.0.201 and IndependentPackageVersionMajor is 1, the
+    package version becomes 1.0.0-alpha.0.201.
     See: https://github.com/adamralph/minver#can-i-use-the-version-calculated-by-minver-for-other-purposes
   -->
   <PropertyGroup>
-    <MinVerMinimumMajorMinor>3.0</MinVerMinimumMajorMinor>
-    <WebGpuVersionMajor>1</WebGpuVersionMajor>
+    <MinVerMinimumMajorMinor>4.0</MinVerMinimumMajorMinor>
   </PropertyGroup>
 
-  <Target Name="SetWebGpuVersionNumber" AfterTargets="MinVer" Condition="'$(MSBuildProjectName)' == 'ImageSharp.Drawing.WebGPU' and '$(IsContinuousIntegration)' == 'true'">
+  <Target Name="SetIndependentPackageVersionNumber" AfterTargets="MinVer" Condition="'$(IndependentPackageVersionMajor)' != '' and '$(IsContinuousIntegration)' == 'true'">
     <PropertyGroup>
-      <_WebGpuVersionPrefix>$(WebGpuVersionMajor).$(MinVerMinor).$(MinVerPatch)</_WebGpuVersionPrefix>
-      <_WebGpuPreReleaseSuffix></_WebGpuPreReleaseSuffix>
-      <_WebGpuPreReleaseSuffix Condition="'$(MinVerPreRelease)' != ''">-$(MinVerPreRelease)</_WebGpuPreReleaseSuffix>
-      <_WebGpuBuildMetadataSuffix></_WebGpuBuildMetadataSuffix>
-      <_WebGpuBuildMetadataSuffix Condition="'$(MinVerBuildMetadata)' != ''">+$(MinVerBuildMetadata)</_WebGpuBuildMetadataSuffix>
+      <_IndependentPackageVersionPrefix>$(IndependentPackageVersionMajor).$(MinVerMinor).$(MinVerPatch)</_IndependentPackageVersionPrefix>
+      <_IndependentPackagePreReleaseSuffix></_IndependentPackagePreReleaseSuffix>
+      <_IndependentPackagePreReleaseSuffix Condition="'$(MinVerPreRelease)' != ''">-$(MinVerPreRelease)</_IndependentPackagePreReleaseSuffix>
+      <_IndependentPackageBuildMetadataSuffix></_IndependentPackageBuildMetadataSuffix>
+      <_IndependentPackageBuildMetadataSuffix Condition="'$(MinVerBuildMetadata)' != ''">+$(MinVerBuildMetadata)</_IndependentPackageBuildMetadataSuffix>
 
-      <AssemblyVersion>$(WebGpuVersionMajor).0.0.0</AssemblyVersion>
-      <FileVersion>$(WebGpuVersionMajor).$(MinVerMinor).$(MinVerPatch).0</FileVersion>
-      <Version>$(_WebGpuVersionPrefix)$(_WebGpuPreReleaseSuffix)</Version>
+      <AssemblyVersion>$(IndependentPackageVersionMajor).0.0.0</AssemblyVersion>
+      <FileVersion>$(IndependentPackageVersionMajor).$(MinVerMinor).$(MinVerPatch).0</FileVersion>
+      <Version>$(_IndependentPackageVersionPrefix)$(_IndependentPackagePreReleaseSuffix)</Version>
       <PackageVersion>$(Version)</PackageVersion>
-      <InformationalVersion>$(Version)$(_WebGpuBuildMetadataSuffix)</InformationalVersion>
+      <InformationalVersion>$(Version)$(_IndependentPackageBuildMetadataSuffix)</InformationalVersion>
     </PropertyGroup>
   </Target>
 

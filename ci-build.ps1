@@ -3,7 +3,7 @@ param(
   [string]$targetFramework
 )
 
-$solution = Join-Path $PSScriptRoot "ImageSharp.Drawing.sln"
+$solution = Join-Path $PSScriptRoot "ImageSharp.Drawing.slnx"
 
 dotnet clean $solution -c Release
 

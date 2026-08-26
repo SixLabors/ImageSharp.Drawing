@@ -1,0 +1,16 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/samples/">
+    <Project Path="samples/DrawingBackendBenchmark/DrawingBackendBenchmark.csproj" />
+    <Project Path="samples/WebGPUExternalSurfaceDemo/WebGPUExternalSurfaceDemo.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/ImageSharp.Drawing.WebGPU.ShaderGen/ImageSharp.Drawing.WebGPU.ShaderGen.csproj" />
+    <Project Path="src/ImageSharp.Drawing.WebGPU/ImageSharp.Drawing.WebGPU.csproj" />
+    <Project Path="src/ImageSharp.Drawing/ImageSharp.Drawing.csproj" />
+  </Folder>
+</Solution>
