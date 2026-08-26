@@ -26,6 +26,7 @@
     <PackageReference Update="GeoJSON.Net" Version="1.4.1" />
     <PackageReference Update="SkiaSharp" Version="2.88.9" />
     <PackageReference Update="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="2.88.9" Condition="'$(IsLinux)'=='true'"/>
+    <PackageReference Update="ZXing.Net" Version="0.16.11" />
   </ItemGroup>
 
 </Project>

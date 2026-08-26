@@ -1,0 +1,120 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+namespace SixLabors.ImageSharp.Drawing.Barcodes;
+
+/// <summary>
+/// The UPC-E symbology specified in ISO/IEC 15420. UPC-E is the zero suppression form of UPC-A: a UPC-A number
+/// whose manufacturer and product codes match one of four zero patterns compresses to six digits. The symbol is
+/// 51 modules wide: a normal guard pattern, six symbol characters from number sets A and B, and a special right
+/// guard pattern. The number system digit (0 or 1) and the check digit of the expanded UPC-A number are conveyed
+/// only through the number set parity of the six characters.
+/// </summary>
+public sealed class UpcESymbology : BarcodeSymbology
+{
+    private const int Width = 51;
+    private const int BarCount = 17;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="UpcESymbology"/> class.
+    /// </summary>
+    public UpcESymbology()
+    {
+    }
+
+    /// <summary>
+    /// Gets the indexes of the extended bars: the two bars of the left guard pattern and the three bars of
+    /// the special right guard pattern.
+    /// </summary>
+    private static ReadOnlySpan<int> GuardBars => new[] { 0, 1, 14, 15, 16 };
+
+    /// <inheritdoc/>
+    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    {
+        Guard.NotNull(text, nameof(text));
+
+        if (text.Length != 7 && text.Length != 8)
+        {
+            throw new ArgumentException(
+                $"UPC-E requires a number system digit and 6 data digits with an optional check digit; got {text.Length} characters.",
+                nameof(text));
+        }
+
+        EanUpcEncoder.ValidateDigits(text, "UPC-E");
+
+        int numberSystem = text[0] - '0';
+        if (numberSystem is not 0 and not 1)
+        {
+            throw new ArgumentException("UPC-E supports only the number systems 0 and 1.", nameof(text));
+        }
+
+        // The check digit is computed over the expanded UPC-A number, not the compressed digits, per the
+        // zero suppression rules of ISO/IEC 15420.
+        int check = EanUpcEncoder.ComputeCheckDigit(Expand(text));
+        if (text.Length == 8 && text[7] - '0' != check)
+        {
+            throw new ArgumentException($"UPC-E check digit mismatch: expected {check}, got {text[7]}.", nameof(text));
+        }
+
+        int parity = EanUpcEncoder.UpcEParity[check];
+        if (numberSystem == 1)
+        {
+            parity = ~parity & 0b111111;
+        }
+
+        Span<byte> modules = stackalloc byte[Width];
+        int position = 0;
+        EanUpcEncoder.AppendPattern(modules, ref position, 0b101, 3);
+        for (int i = 1; i <= 6; i++)
+        {
+            ReadOnlySpan<byte> numberSet = ((parity >> (6 - i)) & 1) == 0 ? EanUpcEncoder.NumberSetA : EanUpcEncoder.NumberSetB;
+            EanUpcEncoder.AppendPattern(modules, ref position, numberSet[text[i] - '0'], 7);
+        }
+
+        EanUpcEncoder.AppendPattern(modules, ref position, 0b010101, 6);
+
+        float barHeight = EanUpcEncoder.ResolveBarHeight(options, EanUpcEncoder.NominalBarHeight);
+        EanUpcEncoder.BuildGuardedHeights(BarCount, barHeight, GuardBars, options, out float[] heights, out float[] tops);
+
+        // ISO/IEC 15420 prints the number system digit in the leading quiet zone, the check digit in the
+        // trailing quiet zone and every other digit below its own symbol character. Digits hang one module below the
+        // digit bars and flow past the extended guard bars, as in the nominal symbol drawing.
+        BarcodeTextPlacement[] placements = Array.Empty<BarcodeTextPlacement>();
+        if (options.Font is not null)
+        {
+            float textLine = barHeight + 1;
+            placements = new BarcodeTextPlacement[8];
+            placements[0] = new BarcodeTextPlacement(EanUpcEncoder.DigitString(text[0]), -9F, -2F, textLine, EanUpcEncoder.QuietZoneDigitScale);
+            EanUpcEncoder.FillDigitPlacements(placements, 1, text, 1, 6, 3F, 7F, textLine);
+            placements[7] = new BarcodeTextPlacement(EanUpcEncoder.DigitString((char)('0' + check)), 52F, 59F, textLine, EanUpcEncoder.QuietZoneDigitScale);
+        }
+
+        return new LinearBarcodeSymbol(EanUpcEncoder.ToRuns(modules), heights, tops, placements, 9, 7);
+    }
+
+    /// <summary>
+    /// Expands the compressed digits to the eleven data digits of the equivalent UPC-A number using the
+    /// zero suppression rules of ISO/IEC 15420. The last compressed digit selects the pattern.
+    /// </summary>
+    /// <param name="text">The number system digit followed by the six compressed digits.</param>
+    /// <returns>The eleven UPC-A data digits.</returns>
+    private static string Expand(string text)
+    {
+        char d1 = text[1];
+        char d2 = text[2];
+        char d3 = text[3];
+        char d4 = text[4];
+        char d5 = text[5];
+        char d6 = text[6];
+
+        string body = d6 switch
+        {
+            '0' or '1' or '2' => $"{d1}{d2}{d6}0000{d3}{d4}{d5}",
+            '3' => $"{d1}{d2}{d3}00000{d4}{d5}",
+            '4' => $"{d1}{d2}{d3}{d4}00000{d5}",
+            _ => $"{d1}{d2}{d3}{d4}{d5}0000{d6}",
+        };
+
+        return text[0] + body;
+    }
+}

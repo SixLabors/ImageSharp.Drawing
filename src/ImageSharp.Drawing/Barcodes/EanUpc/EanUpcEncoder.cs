@@ -1,0 +1,321 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+namespace SixLabors.ImageSharp.Drawing.Barcodes;
+
+/// <summary>
+/// Shared encodation for the EAN/UPC symbology family as specified in ISO/IEC 15420 and the GS1 General
+/// Specifications. Symbol characters are seven modules wide and encode one digit through number set A, B or C;
+/// the number set choice carries the implied extra digit of EAN-13 and the check digit of UPC-E.
+/// </summary>
+internal static class EanUpcEncoder
+{
+    /// <summary>
+    /// The number of modules a guard pattern extends below the digit bars when the human readable
+    /// interpretation is printed. ISO/IEC 15420 extends the guard bars five modules into the text area at
+    /// nominal size; the extension flanks the text row, so a symbol without text has uniform bars, matching
+    /// the reference implementation BWIPP.
+    /// </summary>
+    public const float GuardExtension = 5F;
+
+    /// <summary>
+    /// The nominal EAN-13, UPC-A and UPC-E bar height in modules: 22.85mm bars at the nominal 0.33mm
+    /// X-dimension of ISO/IEC 15420.
+    /// </summary>
+    public const float NominalBarHeight = 69.24F;
+
+    /// <summary>
+    /// The nominal EAN-8 bar height in modules: 18.23mm bars at the nominal 0.33mm X-dimension of ISO/IEC 15420.
+    /// </summary>
+    public const float NominalEan8BarHeight = 55.24F;
+
+    /// <summary>
+    /// The nominal add-on bar height in modules: 21.90mm bars at the nominal 0.33mm X-dimension per the
+    /// GS1 General Specifications.
+    /// </summary>
+    public const float NominalAddOnBarHeight = 66.36F;
+
+    /// <summary>
+    /// The height in modules of the band above an add-on symbol that holds its human readable interpretation.
+    /// The GS1 General Specifications print the add-on interpretation above the bars.
+    /// </summary>
+    public const float AddOnTextBand = 12F;
+
+    /// <summary>
+    /// The font scale for the UPC number system and check digits, which print in smaller type in the quiet
+    /// zones. The reference implementation BWIPP prints them at 10/12 of the digit size.
+    /// </summary>
+    public const float QuietZoneDigitScale = 10F / 12F;
+
+    private static readonly string[] DigitStrings = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+
+    /// <summary>
+    /// Gets the number set A symbol characters indexed by digit, seven modules per character with the most significant
+    /// bit first and 1 meaning a dark module. ISO/IEC 15420 defines number set A with odd parity; every
+    /// character starts with a space module and ends with a bar module.
+    /// </summary>
+    public static ReadOnlySpan<byte> NumberSetA => new byte[]
+    {
+        0b0001101, 0b0011001, 0b0010011, 0b0111101, 0b0100011,
+        0b0110001, 0b0101111, 0b0111011, 0b0110111, 0b0001011,
+    };
+
+    /// <summary>
+    /// Gets the number set B symbol characters indexed by digit. ISO/IEC 15420 defines number set B with even parity;
+    /// each character is number set C for the same digit read in reverse module order.
+    /// </summary>
+    public static ReadOnlySpan<byte> NumberSetB => new byte[]
+    {
+        0b0100111, 0b0110011, 0b0011011, 0b0100001, 0b0011101,
+        0b0111001, 0b0000101, 0b0010001, 0b0001001, 0b0010111,
+    };
+
+    /// <summary>
+    /// Gets the number set C symbol characters indexed by digit. ISO/IEC 15420 defines number set C as the module-wise
+    /// inverse of number set A; every character starts with a bar module and ends with a space module.
+    /// </summary>
+    public static ReadOnlySpan<byte> NumberSetC => new byte[]
+    {
+        0b1110010, 0b1100110, 0b1101100, 0b1000010, 0b1011100,
+        0b1001110, 0b1010000, 0b1000100, 0b1001000, 0b1110100,
+    };
+
+    /// <summary>
+    /// Gets the number set sequence for the six left-half characters of an EAN-13 symbol, indexed by the leading
+    /// digit. A set bit selects number set B, a clear bit number set A, most significant bit first.
+    /// ISO/IEC 15420 encodes the thirteenth digit through this variable parity; the leading digit has no
+    /// symbol character of its own.
+    /// </summary>
+    public static ReadOnlySpan<byte> Ean13LeftParity => new byte[]
+    {
+        0b000000, 0b001011, 0b001101, 0b001110, 0b010011,
+        0b011001, 0b011100, 0b010101, 0b010110, 0b011010,
+    };
+
+    /// <summary>
+    /// Gets the number set sequence for the six characters of a UPC-E symbol with number system 0, indexed by the
+    /// check digit. A set bit selects number set B, most significant bit first. Number system 1 uses the
+    /// bitwise complement. ISO/IEC 15420 encodes both the number system and the check digit of UPC-E through
+    /// this parity because neither has a symbol character of its own.
+    /// </summary>
+    public static ReadOnlySpan<byte> UpcEParity => new byte[]
+    {
+        0b111000, 0b110100, 0b110010, 0b110001, 0b101100,
+        0b100110, 0b100011, 0b101010, 0b101001, 0b100101,
+    };
+
+    /// <summary>
+    /// Gets the number set sequence for a five-digit add-on, indexed by the add-on checksum. A set bit selects
+    /// number set B, most significant bit first. The GS1 General Specifications derive the checksum from the
+    /// add-on digits and convey it only through this parity.
+    /// </summary>
+    public static ReadOnlySpan<byte> AddOnFiveParity => new byte[]
+    {
+        0b11000, 0b10100, 0b10010, 0b10001, 0b01100,
+        0b00110, 0b00011, 0b01010, 0b01001, 0b00101,
+    };
+
+    /// <summary>
+    /// Computes the GS1 check digit for the given data digits using the standard check digit calculation of
+    /// the GS1 General Specifications: digits are weighted 3 and 1 alternately starting with 3 at the rightmost
+    /// data digit, and the check digit lifts the sum to the next multiple of ten.
+    /// </summary>
+    /// <param name="digits">The data digits, excluding the check digit.</param>
+    /// <returns>The check digit value.</returns>
+    public static int ComputeCheckDigit(ReadOnlySpan<char> digits)
+    {
+        int sum = 0;
+        int weight = 3;
+        for (int i = digits.Length - 1; i >= 0; i--)
+        {
+            sum += (digits[i] - '0') * weight;
+            weight = 4 - weight;
+        }
+
+        return (10 - (sum % 10)) % 10;
+    }
+
+    /// <summary>
+    /// Validates that the text consists solely of the decimal digits 0-9 and has one of the two permitted
+    /// lengths: the data length, or the data length plus a check digit. When the check digit is present it is
+    /// verified; when absent it is computed. The returned string always carries the check digit.
+    /// </summary>
+    /// <param name="text">The input text.</param>
+    /// <param name="dataLength">The number of data digits, excluding the check digit.</param>
+    /// <param name="symbologyName">The symbology name used in error messages.</param>
+    /// <returns>The digits with the check digit appended or verified.</returns>
+    /// <exception cref="ArgumentException">The text is null, has a wrong length, contains a non-digit, or carries a wrong check digit.</exception>
+    public static string ValidateAndApplyCheckDigit(string text, int dataLength, string symbologyName)
+    {
+        Guard.NotNull(text, nameof(text));
+
+        if (text.Length != dataLength && text.Length != dataLength + 1)
+        {
+            throw new ArgumentException(
+                $"{symbologyName} requires {dataLength} data digits with an optional check digit; got {text.Length} characters.",
+                nameof(text));
+        }
+
+        ValidateDigits(text, symbologyName);
+
+        int check = ComputeCheckDigit(text.AsSpan(0, dataLength));
+        if (text.Length == dataLength)
+        {
+            return text + (char)('0' + check);
+        }
+
+        if (text[dataLength] - '0' != check)
+        {
+            throw new ArgumentException($"{symbologyName} check digit mismatch: expected {check}, got {text[dataLength]}.", nameof(text));
+        }
+
+        return text;
+    }
+
+    /// <summary>
+    /// Validates that every character of the text is a decimal digit 0-9.
+    /// </summary>
+    /// <param name="text">The input text.</param>
+    /// <param name="symbologyName">The symbology name used in error messages.</param>
+    /// <exception cref="ArgumentException">The text contains a non-digit character.</exception>
+    public static void ValidateDigits(string text, string symbologyName)
+    {
+        foreach (char c in text)
+        {
+            if (c is < '0' or > '9')
+            {
+                throw new ArgumentException($"{symbologyName} accepts only the digits 0-9; got '{c}'.", nameof(text));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Appends a pattern to the module stream, most significant bit first.
+    /// </summary>
+    /// <param name="modules">The module stream; 1 is a dark module.</param>
+    /// <param name="position">The write position, advanced by <paramref name="bitCount"/>.</param>
+    /// <param name="pattern">The pattern bits.</param>
+    /// <param name="bitCount">The number of pattern bits.</param>
+    public static void AppendPattern(Span<byte> modules, ref int position, int pattern, int bitCount)
+    {
+        for (int bit = bitCount - 1; bit >= 0; bit--)
+        {
+            modules[position++] = (byte)((pattern >> bit) & 1);
+        }
+    }
+
+    /// <summary>
+    /// Converts a module stream into alternating bar and space run widths. The stream must start and end with
+    /// a dark module so that even run indexes are bars.
+    /// </summary>
+    /// <param name="modules">The module stream; 1 is a dark module.</param>
+    /// <returns>The run widths in modules.</returns>
+    public static int[] ToRuns(ReadOnlySpan<byte> modules)
+    {
+        int count = 1;
+        for (int i = 1; i < modules.Length; i++)
+        {
+            if (modules[i] != modules[i - 1])
+            {
+                count++;
+            }
+        }
+
+        int[] runs = new int[count];
+        int run = 0;
+        int width = 1;
+        for (int i = 1; i < modules.Length; i++)
+        {
+            if (modules[i] != modules[i - 1])
+            {
+                runs[run++] = width;
+                width = 1;
+            }
+            else
+            {
+                width++;
+            }
+        }
+
+        runs[run] = width;
+        return runs;
+    }
+
+    /// <summary>
+    /// Builds the bar height and top offset arrays for a symbol whose bars are top aligned. When the options
+    /// carry a font the listed guard bars extend downwards by <see cref="GuardExtension"/> to flank the text
+    /// row; without text all bars are uniform.
+    /// </summary>
+    /// <param name="barCount">The number of bars in the symbol.</param>
+    /// <param name="barHeight">The digit bar height in modules.</param>
+    /// <param name="guardBars">The indexes of the extended bars.</param>
+    /// <param name="options">The options; the font decides whether the guards extend.</param>
+    /// <param name="heights">The resulting per-bar heights in modules.</param>
+    /// <param name="tops">The resulting per-bar top offsets in modules.</param>
+    public static void BuildGuardedHeights(int barCount, float barHeight, ReadOnlySpan<int> guardBars, BarcodeOptions options, out float[] heights, out float[] tops)
+    {
+        heights = new float[barCount];
+        tops = new float[barCount];
+        Array.Fill(heights, barHeight);
+        if (options.Font is null)
+        {
+            return;
+        }
+
+        foreach (int guard in guardBars)
+        {
+            heights[guard] = barHeight + GuardExtension;
+        }
+    }
+
+    /// <summary>
+    /// Resolves the digit bar height in modules from the options.
+    /// </summary>
+    /// <param name="options">The barcode options.</param>
+    /// <param name="nominalHeight">The nominal height for the symbology, in modules.</param>
+    /// <returns>The bar height in modules.</returns>
+    public static float ResolveBarHeight(BarcodeOptions options, float nominalHeight)
+        => options.BarHeight.HasValue ? options.BarHeight.Value / options.ModuleWidth : nominalHeight;
+
+    /// <summary>
+    /// Fills one text placement per digit, each centered in its own character cell. ISO/IEC 15420 prints
+    /// every digit of the interpretation below (or above, for add-ons) its own symbol character rather than
+    /// centering digit groups, so placement is per digit.
+    /// </summary>
+    /// <param name="placements">The placement array to fill.</param>
+    /// <param name="placementIndex">The first index to fill in <paramref name="placements"/>.</param>
+    /// <param name="digits">The digit characters.</param>
+    /// <param name="digitIndex">The first digit to place.</param>
+    /// <param name="digitCount">The number of digits to place.</param>
+    /// <param name="firstCellLeft">The left edge of the first character cell, in modules.</param>
+    /// <param name="cellAdvance">The distance between successive cell left edges, in modules.</param>
+    /// <param name="y">The top line of the text, in modules from the symbol top.</param>
+    public static void FillDigitPlacements(
+        BarcodeTextPlacement[] placements,
+        int placementIndex,
+        string digits,
+        int digitIndex,
+        int digitCount,
+        float firstCellLeft,
+        float cellAdvance,
+        float y)
+    {
+        for (int i = 0; i < digitCount; i++)
+        {
+            float left = firstCellLeft + (i * cellAdvance);
+            placements[placementIndex + i] = new BarcodeTextPlacement(
+                DigitString(digits[digitIndex + i]),
+                left,
+                left + 7,
+                y);
+        }
+    }
+
+    /// <summary>
+    /// Returns the cached single character string for a digit, avoiding a string allocation per placement.
+    /// </summary>
+    /// <param name="digit">The digit character, 0-9.</param>
+    /// <returns>The single character string.</returns>
+    public static string DigitString(char digit)
+        => DigitStrings[digit - '0'];
+}

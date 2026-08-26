@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Barcodes;
+
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <content>
@@ -223,5 +225,31 @@ public abstract partial class DrawingCanvas
         Guard.NotNull(pathBuilder, nameof(pathBuilder));
 
         this.Draw(pen, pathBuilder.Build());
+    }
+
+    /// <summary>
+    /// Draws a barcode. The symbology validates and encodes the text, then the symbol renders through the
+    /// regular fill and text commands of this canvas.
+    /// </summary>
+    /// <param name="symbology">The barcode symbology to encode with.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="options">The sizing and painting options.</param>
+    /// <param name="origin">The top left corner of the drawn area, in pixels.</param>
+    /// <exception cref="ArgumentException">The text is not valid for the symbology.</exception>
+    public void DrawBarcode(BarcodeSymbology symbology, string text, BarcodeOptions options, PointF origin)
+    {
+        Guard.NotNull(symbology, nameof(symbology));
+        Guard.NotNull(options, nameof(options));
+
+        BarcodeSymbol symbol = symbology.Encode(text, options);
+        switch (symbol)
+        {
+            case LinearBarcodeSymbol linear:
+                LinearBarcodeEmitter.Emit(this, linear, options, origin);
+                break;
+
+            default:
+                throw new InvalidOperationException($"Unsupported barcode symbol type: {symbol.GetType()}.");
+        }
     }
 }
