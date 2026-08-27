@@ -47,7 +47,7 @@ internal static class AddOnLayout
 
         // Each digit prints above its own symbol character; the character cells start after the guard
         // pattern and advance by the seven character modules plus the two delineator modules.
-        BarcodeTextPlacement[] placements = Array.Empty<BarcodeTextPlacement>();
+        BarcodeTextPlacement[] placements = [];
         if (options.Font is not null)
         {
             placements = new BarcodeTextPlacement[text.Length];

@@ -39,6 +39,22 @@ public class BarcodeDecodeTests
     public void UpcE_RoundTrips(string text)
         => AssertDecodes(new UpcESymbology(), text, BarcodeFormat.UPC_E, text);
 
+    [Fact]
+    public void Isbn_RoundTrips()
+        => AssertDecodes(new IsbnSymbology(), "978-0-306-40615-7", BarcodeFormat.EAN_13, "9780306406157");
+
+    [Fact]
+    public void Ismn_RoundTrips()
+        => AssertDecodes(new IsmnSymbology(), "979-0-2600-0043-8", BarcodeFormat.EAN_13, "9790260000438");
+
+    [Fact]
+    public void Issn_RoundTrips()
+        => AssertDecodes(new IssnSymbology(), "0317-8471", BarcodeFormat.EAN_13, "9770317847001");
+
+    [Fact]
+    public void Mands_RoundTrips()
+        => AssertDecodes(new MandsSymbology(), "0642118", BarcodeFormat.EAN_8, "00642118");
+
     /// <summary>
     /// The decoder must also read the symbol with the human readable interpretation present, proving the
     /// text does not intrude into the bars or quiet zones.
@@ -47,7 +63,7 @@ public class BarcodeDecodeTests
     public void Ean13_RoundTrips_WithText()
     {
         BarcodeOptions options = CreateOptions();
-        options.Font = TestFontUtilities.GetFont("OCRB7.ttf", 20);
+        options.Font = BarcodeFonts.OcrA.CreateFont(23.15F);
         AssertDecodes(new Ean13Symbology(), "5901234123457", BarcodeFormat.EAN_13, "5901234123457", options);
     }
 
@@ -63,7 +79,7 @@ public class BarcodeDecodeTests
         image.CopyPixelDataTo(pixels);
 
         BarcodeReaderGeneric reader = new();
-        reader.Options.PossibleFormats = new[] { format };
+        reader.Options.PossibleFormats = [format];
         reader.Options.TryHarder = true;
 
         Result result = reader.Decode(new RGBLuminanceSource(pixels, image.Width, image.Height, RGBLuminanceSource.BitmapFormat.RGBA32));

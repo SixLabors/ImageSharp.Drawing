@@ -57,6 +57,30 @@ public class DrawBarcodeTests
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new Ean2Symbology(), "05", CreateOptions());
 
+    [Theory]
+    [WithBlankImage(280, 180, PixelTypes.Rgba32)]
+    public void Isbn_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new IsbnSymbology(), "978-0-306-40615-7", CreateTextOptions());
+
+    [Theory]
+    [WithBlankImage(280, 180, PixelTypes.Rgba32)]
+    public void Ismn_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new IsmnSymbology(), "M-2306-7118", CreateTextOptions());
+
+    [Theory]
+    [WithBlankImage(280, 180, PixelTypes.Rgba32)]
+    public void Issn_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new IssnSymbology(), "0317-8471", CreateTextOptions());
+
+    [Theory]
+    [WithBlankImage(210, 160, PixelTypes.Rgba32)]
+    public void Mands_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new MandsSymbology(), "0642118", CreateTextOptions());
+
     /// <summary>
     /// Disabling the quiet zones must shift the first bar to the draw origin, and a non-solid brush must
     /// flow through to the bar fill unchanged.
@@ -96,7 +120,9 @@ public class DrawBarcodeTests
     private static BarcodeOptions CreateTextOptions()
     {
         BarcodeOptions options = CreateOptions();
-        options.Font = TestFontUtilities.GetFont("OCRB7.ttf", 20);
+        // GS1 prints the interpretation 2.75mm high at the 0.33mm X-dimension; at ModuleWidth 2 that is
+        // 16.7px of ink, and the font's ink spans 0.72 em.
+        options.Font = BarcodeFonts.OcrA.CreateFont(23.15F);
         return options;
     }
 }

@@ -23,6 +23,9 @@
     <Project Path="tests/ImageSharp.Drawing.ManualBenchmarks/ImageSharp.Drawing.ManualBenchmarks.csproj" />
     <Project Path="tests/ImageSharp.Drawing.Tests/ImageSharp.Drawing.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/ImageSharp.Drawing.FontGenerator/ImageSharp.Drawing.FontGenerator.csproj" />
+  </Folder>
   <Folder Name="/tests/Images/" />
   <Folder Name="/tests/Images/Input/" />
   <Folder Name="/tests/Images/Input/Bmp/">

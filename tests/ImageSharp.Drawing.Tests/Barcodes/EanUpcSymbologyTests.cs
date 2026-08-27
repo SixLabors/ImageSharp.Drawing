@@ -262,7 +262,7 @@ public class EanUpcSymbologyTests
     private static BarcodeOptions CreateTextOptions()
         => new()
         {
-            Font = TestFontUtilities.GetFont("OCRB7.ttf", 20),
+            Font = BarcodeFonts.OcrA.CreateFont(23.15F),
         };
 
     private static string RunsToString(LinearBarcodeSymbol symbol)

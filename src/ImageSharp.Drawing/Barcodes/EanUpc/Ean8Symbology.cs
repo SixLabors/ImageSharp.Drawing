@@ -23,13 +23,20 @@ public sealed class Ean8Symbology : BarcodeSymbology
     /// <summary>
     /// Gets the indexes of the extended bars: the two bars of each of the left, centre and right guard patterns.
     /// </summary>
-    private static ReadOnlySpan<int> GuardBars => new[] { 0, 1, 10, 11, 20, 21 };
+    private static ReadOnlySpan<int> GuardBars => [0, 1, 10, 11, 20, 21];
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
-    {
-        string digits = EanUpcEncoder.ValidateAndApplyCheckDigit(text, 7, "EAN-8");
+        => EncodeDigits(EanUpcEncoder.ValidateAndApplyCheckDigit(text, 7, "EAN-8"), options);
 
+    /// <summary>
+    /// Encodes eight verified digits into an EAN-8 symbol.
+    /// </summary>
+    /// <param name="digits">The eight digits including a verified check digit.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <returns>The encoded symbol.</returns>
+    internal static LinearBarcodeSymbol EncodeDigits(string digits, BarcodeOptions options)
+    {
         Span<byte> modules = stackalloc byte[Width];
         int position = 0;
         EanUpcEncoder.AppendPattern(modules, ref position, 0b101, 3);
@@ -51,7 +58,7 @@ public sealed class Ean8Symbology : BarcodeSymbology
 
         // ISO/IEC 15420 prints every digit below its own symbol character. Digits hang one module below the digit
         // bars and flow past the extended guard bars, as in the nominal symbol drawing.
-        BarcodeTextPlacement[] placements = Array.Empty<BarcodeTextPlacement>();
+        BarcodeTextPlacement[] placements = [];
         if (options.Font is not null)
         {
             float textLine = barHeight + 1;
