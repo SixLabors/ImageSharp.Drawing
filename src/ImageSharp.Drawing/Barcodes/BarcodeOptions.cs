@@ -14,6 +14,8 @@ public sealed class BarcodeOptions
     /// <summary>
     /// Gets or sets the width of one module in pixels. The module is the narrowest nominal element of a
     /// symbology, called the X-dimension in ISO/IEC 15420. All symbol dimensions scale from this value.
+    /// A whole number gives every module the same pixel width; a fractional value renders crisp bars whose
+    /// widths vary by one pixel, because bar edges snap to the pixel grid.
     /// </summary>
     public float ModuleWidth { get; set; } = 2F;
 
@@ -42,6 +44,15 @@ public sealed class BarcodeOptions
     /// the caller selects the font and size.
     /// </summary>
     public Font? Font { get; set; }
+
+    /// <summary>
+    /// Gets or sets the font for the caption a data layer symbology prints above its symbol, such as the
+    /// ISBN line, or <see langword="null"/> to derive it from <see cref="Font"/> sized so the caption
+    /// extends the full width of the main body of the symbol, the size the book industry barcoding
+    /// guidelines specify for the ISBN line. Those guidelines typeset the caption in a sans serif face
+    /// such as OCR-B.
+    /// </summary>
+    public Font? CaptionFont { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether the mandatory quiet zones are reserved inside the drawn area.

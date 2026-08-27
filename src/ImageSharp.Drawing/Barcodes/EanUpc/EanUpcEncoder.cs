@@ -13,8 +13,7 @@ internal static class EanUpcEncoder
     /// <summary>
     /// The number of modules a guard pattern extends below the digit bars when the human readable
     /// interpretation is printed. ISO/IEC 15420 extends the guard bars five modules into the text area at
-    /// nominal size; the extension flanks the text row, so a symbol without text has uniform bars, matching
-    /// the reference implementation BWIPP.
+    /// nominal size; the extension exists to flank the text row, so a symbol without text has uniform bars.
     /// </summary>
     public const float GuardExtension = 5F;
 
@@ -43,9 +42,14 @@ internal static class EanUpcEncoder
 
     /// <summary>
     /// The font scale for the UPC number system and check digits, which print in smaller type in the quiet
-    /// zones. The reference implementation BWIPP prints them at 10/12 of the digit size.
+    /// zones at 10/12 of the digit size.
     /// </summary>
     public const float QuietZoneDigitScale = 10F / 12F;
+
+    /// <summary>
+    /// The height in modules of the band above an EAN-13 symbol that holds an ISBN, ISMN or ISSN caption.
+    /// </summary>
+    public const float CaptionBand = 12F;
 
     private static readonly string[] DigitStrings = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
@@ -54,31 +58,31 @@ internal static class EanUpcEncoder
     /// bit first and 1 meaning a dark module. ISO/IEC 15420 defines number set A with odd parity; every
     /// character starts with a space module and ends with a bar module.
     /// </summary>
-    public static ReadOnlySpan<byte> NumberSetA => new byte[]
-    {
+    public static ReadOnlySpan<byte> NumberSetA =>
+    [
         0b0001101, 0b0011001, 0b0010011, 0b0111101, 0b0100011,
         0b0110001, 0b0101111, 0b0111011, 0b0110111, 0b0001011,
-    };
+    ];
 
     /// <summary>
     /// Gets the number set B symbol characters indexed by digit. ISO/IEC 15420 defines number set B with even parity;
     /// each character is number set C for the same digit read in reverse module order.
     /// </summary>
-    public static ReadOnlySpan<byte> NumberSetB => new byte[]
-    {
+    public static ReadOnlySpan<byte> NumberSetB =>
+    [
         0b0100111, 0b0110011, 0b0011011, 0b0100001, 0b0011101,
         0b0111001, 0b0000101, 0b0010001, 0b0001001, 0b0010111,
-    };
+    ];
 
     /// <summary>
     /// Gets the number set C symbol characters indexed by digit. ISO/IEC 15420 defines number set C as the module-wise
     /// inverse of number set A; every character starts with a bar module and ends with a space module.
     /// </summary>
-    public static ReadOnlySpan<byte> NumberSetC => new byte[]
-    {
+    public static ReadOnlySpan<byte> NumberSetC =>
+    [
         0b1110010, 0b1100110, 0b1101100, 0b1000010, 0b1011100,
         0b1001110, 0b1010000, 0b1000100, 0b1001000, 0b1110100,
-    };
+    ];
 
     /// <summary>
     /// Gets the number set sequence for the six left-half characters of an EAN-13 symbol, indexed by the leading
@@ -86,11 +90,11 @@ internal static class EanUpcEncoder
     /// ISO/IEC 15420 encodes the thirteenth digit through this variable parity; the leading digit has no
     /// symbol character of its own.
     /// </summary>
-    public static ReadOnlySpan<byte> Ean13LeftParity => new byte[]
-    {
+    public static ReadOnlySpan<byte> Ean13LeftParity =>
+    [
         0b000000, 0b001011, 0b001101, 0b001110, 0b010011,
         0b011001, 0b011100, 0b010101, 0b010110, 0b011010,
-    };
+    ];
 
     /// <summary>
     /// Gets the number set sequence for the six characters of a UPC-E symbol with number system 0, indexed by the
@@ -98,22 +102,22 @@ internal static class EanUpcEncoder
     /// bitwise complement. ISO/IEC 15420 encodes both the number system and the check digit of UPC-E through
     /// this parity because neither has a symbol character of its own.
     /// </summary>
-    public static ReadOnlySpan<byte> UpcEParity => new byte[]
-    {
+    public static ReadOnlySpan<byte> UpcEParity =>
+    [
         0b111000, 0b110100, 0b110010, 0b110001, 0b101100,
         0b100110, 0b100011, 0b101010, 0b101001, 0b100101,
-    };
+    ];
 
     /// <summary>
     /// Gets the number set sequence for a five-digit add-on, indexed by the add-on checksum. A set bit selects
     /// number set B, most significant bit first. The GS1 General Specifications derive the checksum from the
     /// add-on digits and convey it only through this parity.
     /// </summary>
-    public static ReadOnlySpan<byte> AddOnFiveParity => new byte[]
-    {
+    public static ReadOnlySpan<byte> AddOnFiveParity =>
+    [
         0b11000, 0b10100, 0b10010, 0b10001, 0b01100,
         0b00110, 0b00011, 0b01010, 0b01001, 0b00101,
-    };
+    ];
 
     /// <summary>
     /// Computes the GS1 check digit for the given data digits using the standard check digit calculation of
@@ -318,4 +322,29 @@ internal static class EanUpcEncoder
     /// <returns>The single character string.</returns>
     public static string DigitString(char digit)
         => DigitStrings[digit - '0'];
+
+    /// <summary>
+    /// Returns the prefix of a hyphenated number that contains the given count of digits, preserving the
+    /// caller's hyphenation and trimming a trailing hyphen. The ISBN, ISMN and ISSN captions reproduce the
+    /// number as the caller wrote it, without its check character.
+    /// </summary>
+    /// <param name="text">The hyphenated input.</param>
+    /// <param name="digitCount">The number of digits the prefix must contain.</param>
+    /// <returns>The hyphenated prefix.</returns>
+    public static string TakeHyphenatedPrefix(string text, int digitCount)
+    {
+        int digits = 0;
+        int end = 0;
+        while (digits < digitCount)
+        {
+            if (text[end] != '-')
+            {
+                digits++;
+            }
+
+            end++;
+        }
+
+        return text.Substring(0, end);
+    }
 }

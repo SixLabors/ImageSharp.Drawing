@@ -33,12 +33,27 @@ internal readonly struct BarcodeTextPlacement
     /// <param name="y">The top line of the text, in modules from the symbol top.</param>
     /// <param name="fontScale">The factor applied to the caller's font size for this placement.</param>
     public BarcodeTextPlacement(string text, float left, float right, float y, float fontScale)
+        : this(text, left, right, y, fontScale, false)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BarcodeTextPlacement"/> struct.
+    /// </summary>
+    /// <param name="text">The characters to render.</param>
+    /// <param name="left">The left edge of the horizontal span, in modules.</param>
+    /// <param name="right">The right edge of the horizontal span, in modules.</param>
+    /// <param name="y">The top line of the text, in modules from the symbol top.</param>
+    /// <param name="fontScale">The factor applied to the caller's font size for this placement.</param>
+    /// <param name="isCaption">Whether this placement is a data layer caption rendered with the caption font.</param>
+    public BarcodeTextPlacement(string text, float left, float right, float y, float fontScale, bool isCaption)
     {
         this.Text = text;
         this.Left = left;
         this.Right = right;
         this.Y = y;
         this.FontScale = fontScale;
+        this.IsCaption = isCaption;
     }
 
     /// <summary>
@@ -69,4 +84,11 @@ internal readonly struct BarcodeTextPlacement
     /// check digits print in smaller type in the quiet zones than the digits below the symbol.
     /// </summary>
     public float FontScale { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this placement is a data layer caption, such as the ISBN line above
+    /// its symbol. Captions render with the caption font when one is set, and they anchor to their own top
+    /// line rather than the shared digit baseline.
+    /// </summary>
+    public bool IsCaption { get; }
 }

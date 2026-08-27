@@ -25,7 +25,7 @@ public sealed class UpcASymbology : BarcodeSymbology
     /// Gets the indexes of the extended bars: the guard pattern bars plus the bars of the first and last
     /// symbol characters, whose digits print in the quiet zones.
     /// </summary>
-    private static ReadOnlySpan<int> GuardBars => new[] { 0, 1, 2, 3, 14, 15, 26, 27, 28, 29 };
+    private static ReadOnlySpan<int> GuardBars => [0, 1, 2, 3, 14, 15, 26, 27, 28, 29];
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
@@ -55,7 +55,7 @@ public sealed class UpcASymbology : BarcodeSymbology
         // trailing quiet zone, and every other digit below its own symbol character beside the extended
         // character bars. Digits hang one module below the digit bars and flow past the extended bars,
         // as in the nominal symbol drawing.
-        BarcodeTextPlacement[] placements = Array.Empty<BarcodeTextPlacement>();
+        BarcodeTextPlacement[] placements = [];
         if (options.Font is not null)
         {
             float textLine = barHeight + 1;

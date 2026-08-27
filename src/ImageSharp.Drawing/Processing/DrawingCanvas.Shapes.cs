@@ -234,7 +234,7 @@ public abstract partial class DrawingCanvas
     /// <param name="symbology">The barcode symbology to encode with.</param>
     /// <param name="text">The text to encode.</param>
     /// <param name="options">The sizing and painting options.</param>
-    /// <param name="origin">The top left corner of the drawn area, in pixels.</param>
+    /// <param name="origin">The top left corner of everything the call draws, including any text that overhangs the symbol, in pixels.</param>
     /// <exception cref="ArgumentException">The text is not valid for the symbology.</exception>
     public void DrawBarcode(BarcodeSymbology symbology, string text, BarcodeOptions options, PointF origin)
     {
