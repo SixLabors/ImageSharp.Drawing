@@ -14,10 +14,18 @@ public static class BarcodeFonts
 {
     private static readonly Lazy<FontFamily> OcrAFamily = new(() => Load(OcrAFontData.Bytes));
 
+    private static readonly Lazy<FontFamily> OcrBFamily = new(() => Load(OcrBFontData.Bytes));
+
     /// <summary>
     /// Gets the SixLabors OCR-A font family, built from the character drawings of FIPS PUB 32 (1974).
     /// </summary>
     public static FontFamily OcrA => OcrAFamily.Value;
+
+    /// <summary>
+    /// Gets the SixLabors OCR-B font family, the barcode repertoire of the constant-strokewidth OCR-B
+    /// design: digits, capitals, the Code 39 symbols and the EAN quiet zone indicators.
+    /// </summary>
+    public static FontFamily OcrB => OcrBFamily.Value;
 
     private static FontFamily Load(ReadOnlySpan<byte> data)
     {

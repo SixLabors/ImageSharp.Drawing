@@ -63,7 +63,7 @@ public class BarcodeDecodeTests
     public void Ean13_RoundTrips_WithText()
     {
         BarcodeOptions options = CreateOptions();
-        options.Font = BarcodeFonts.OcrA.CreateFont(23.15F);
+        options.Font = BarcodeFonts.OcrB.CreateFont(21.5F);
         AssertDecodes(new Ean13Symbology(), "5901234123457", BarcodeFormat.EAN_13, "5901234123457", options);
     }
 

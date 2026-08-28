@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.Fonts;
+
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -47,9 +49,19 @@ internal static class EanUpcEncoder
     public const float QuietZoneDigitScale = 10F / 12F;
 
     /// <summary>
-    /// The height in modules of the band above an EAN-13 symbol that holds an ISBN, ISMN or ISSN caption.
+    /// The clear space in modules between the ink of a text line and the bars. Section 5.2.5 of the GS1
+    /// General Specifications sets the minimum at 0.5X and then states: "Normally the minimum is one
+    /// module, which is close enough to keep the human readable interpretation associated with the
+    /// symbol." The same space applies above a caption, where no document gives a figure.
     /// </summary>
-    public const float CaptionBand = 12F;
+    public const float TextGap = 1F;
+
+    /// <summary>
+    /// The smallest size in points that any text prints at. Section 8.1 of the ISBN Users' Manual: "The
+    /// ISBN should always be printed in type large enough to be easily legible (i.e., 9-point or
+    /// larger)." Section 7 of the ISMN Users' Manual gives the same floor.
+    /// </summary>
+    public const float MinimumTextPoints = 9F;
 
     private static readonly string[] DigitStrings = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
@@ -280,6 +292,45 @@ internal static class EanUpcEncoder
     /// <returns>The bar height in modules.</returns>
     public static float ResolveBarHeight(BarcodeOptions options, float nominalHeight)
         => options.BarHeight.HasValue ? options.BarHeight.Value / options.ModuleWidth : nominalHeight;
+
+    /// <summary>
+    /// Measures the strip an ISBN, ISMN or ISSN caption needs above the bars, in modules. The strip is
+    /// measured from the caption that prints in it, so the strip always holds it.
+    /// </summary>
+    /// <param name="caption">The caption text.</param>
+    /// <param name="spanModules">The width the caption prints across, in modules.</param>
+    /// <param name="options">The options that carry the fonts and the module width.</param>
+    /// <returns>The strip height in modules, including the clear space above the bars.</returns>
+    public static float MeasureCaptionStrip(string caption, float spanModules, BarcodeOptions options)
+    {
+        Font font = ResolveCaptionFont(caption, spanModules, options);
+        float height = TextMeasurer.MeasureRenderableBounds(caption, new TextOptions(font)).Height;
+        return (height / options.ModuleWidth) + TextGap;
+    }
+
+    /// <summary>
+    /// Resolves the font an ISBN, ISMN or ISSN caption prints in. Under
+    /// <see cref="BarcodeOptions.FitCaptionToSymbolWidth"/> the size is the one that spans the bars.
+    /// Otherwise the font keeps its own size. The 9 point floor wins over both, because it is the one
+    /// size rule the standards state, and a caption that cannot fit at 9 point widens the drawing.
+    /// </summary>
+    /// <param name="caption">The caption text.</param>
+    /// <param name="spanModules">The width the caption prints across, in modules.</param>
+    /// <param name="options">The options that carry the fonts and the module width.</param>
+    /// <returns>The font to print the caption with.</returns>
+    public static Font ResolveCaptionFont(string caption, float spanModules, BarcodeOptions options)
+    {
+        Font font = options.CaptionFont ?? options.Font!;
+        float size = font.Size;
+        if (options.FitCaptionToSymbolWidth)
+        {
+            float width = TextMeasurer.MeasureRenderableBounds(caption, new TextOptions(font)).Width;
+            size = font.Size * spanModules * options.ModuleWidth / width;
+        }
+
+        size = MathF.Max(size, MinimumTextPoints);
+        return size == font.Size ? font : new Font(font, size);
+    }
 
     /// <summary>
     /// Fills one text placement per digit, each centered in its own character cell. ISO/IEC 15420 prints

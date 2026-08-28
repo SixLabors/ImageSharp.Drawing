@@ -33,8 +33,8 @@ public class DataLayerSymbologyTests
         LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new IsbnSymbology().Encode("978-0-306-40615", options);
 
         // The caption prints the hyphenated ISBN with the EAN-13 check digit above the bars, spanning the
-        // main body of the symbol per the BISG guidelines, and the bars shift down to leave the caption
-        // band. The emitter derives the caption size from the span, so the placement scale is neutral.
+        // main body of the symbol, and the bars shift down to clear it. The emitter derives the caption
+        // size from that span, so the placement scale is neutral.
         BarcodeTextPlacement caption = symbol.Text[symbol.Text.Length - 1];
         Assert.Equal("ISBN 978-0-306-40615-7", caption.Text);
         Assert.Equal(0, caption.Y);
@@ -43,13 +43,18 @@ public class DataLayerSymbologyTests
         Assert.Equal(1F, caption.FontScale);
         Assert.True(caption.IsCaption);
         Assert.Equal(14, symbol.Text.Length);
-        Assert.All(symbol.BarTops, top => Assert.Equal(12, top));
+
+        // The strip above the bars is measured from the caption, so every bar starts at the same line
+        // and that line clears the caption ink by the gap the specification sets.
+        float strip = EanUpcEncoder.MeasureCaptionStrip(caption.Text, 95F, options);
+        Assert.All(symbol.BarTops, top => Assert.Equal(strip, top, 3));
+        Assert.True(strip > EanUpcEncoder.TextGap);
 
         // An ISBN-10 input captions its converted 978 form.
         symbol = (LinearBarcodeSymbol)new IsbnSymbology().Encode("0-306-40615-2", options);
         Assert.Equal("ISBN 978-0-306-40615-7", symbol.Text[symbol.Text.Length - 1].Text);
 
-        // Without a font there is no caption and no band.
+        // Without a font there is no caption and no strip.
         symbol = Encode(new IsbnSymbology(), "978-0-306-40615-7");
         Assert.Empty(symbol.Text);
         Assert.All(symbol.BarTops, top => Assert.Equal(0, top));
@@ -175,7 +180,7 @@ public class DataLayerSymbologyTests
         {
             ModuleWidth = 2F,
             BarHeight = 100F,
-            Font = BarcodeFonts.OcrA.CreateFont(23.15F),
+            Font = BarcodeFonts.OcrB.CreateFont(21.5F),
         };
 
     private static string RunsToString(LinearBarcodeSymbol symbol)

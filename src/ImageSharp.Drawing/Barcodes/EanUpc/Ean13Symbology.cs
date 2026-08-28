@@ -75,7 +75,7 @@ public sealed class Ean13Symbology : BarcodeSymbology
         float band = 0;
         if (caption is not null && options.Font is not null)
         {
-            band = EanUpcEncoder.CaptionBand;
+            band = EanUpcEncoder.MeasureCaptionStrip(caption, Width, options);
             for (int i = 0; i < tops.Length; i++)
             {
                 tops[i] += band;

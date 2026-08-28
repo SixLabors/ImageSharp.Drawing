@@ -120,9 +120,10 @@ public class DrawBarcodeTests
     private static BarcodeOptions CreateTextOptions()
     {
         BarcodeOptions options = CreateOptions();
-        // GS1 prints the interpretation 2.75mm high at the 0.33mm X-dimension; at ModuleWidth 2 that is
-        // 16.7px of ink, and the font's ink spans 0.72 em.
-        options.Font = BarcodeFonts.OcrA.CreateFont(23.15F);
+
+        // GS1 prints the interpretation 2.75mm high at the 0.33mm X-dimension, so at ModuleWidth 2 it
+        // is 16.7px of ink. The cap ink of this font stands 0.778 em, giving 21.5 points.
+        options.Font = BarcodeFonts.OcrB.CreateFont(21.5F);
         return options;
     }
 }

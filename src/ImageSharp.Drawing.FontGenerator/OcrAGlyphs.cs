@@ -1153,6 +1153,30 @@ internal static class OcrAGlyphs
         };
 
     /// <summary>
+    /// Gets the design definition the generator consumes.
+    /// </summary>
+    public static FontDesign Design { get; } = new()
+    {
+        Name = "OcrA",
+        FamilyName = "SixLabors OCRA",
+        DataSummary = "Built clean-room from the dimensioned character drawings of FIPS PUB 32 (1974).",
+        UnitsPerEm = UnitsPerEm,
+        H = H,
+        W = W,
+        Descender = D,
+        DefaultStrokeWidth = T,
+        CutTerminals = false,
+        Skeletons = Skeletons,
+        SquareStrokes = SquareStrokes,
+        ButtStrokes = ButtStrokes,
+        MiterStrokes = MiterStrokes,
+        MiterRoundStrokes = MiterRoundStrokes,
+        StrokeWidths = new Dictionary<char, float>(),
+        StrokeWidthOverrides = StrokeWidthOverrides,
+        Expectations = SpecChecks.OcrA,
+    };
+
+    /// <summary>
     /// Builds the six strokes of a rounded square mark of full stroke ink: two butt-cut bars crossing to
     /// form the body and four round dots supplying the corner radii. Loop-free so the outline union never
     /// sees a degenerate inner offset.

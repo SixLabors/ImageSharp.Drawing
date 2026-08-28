@@ -46,13 +46,20 @@ public sealed class BarcodeOptions
     public Font? Font { get; set; }
 
     /// <summary>
-    /// Gets or sets the font for the caption a data layer symbology prints above its symbol, such as the
-    /// ISBN line, or <see langword="null"/> to derive it from <see cref="Font"/> sized so the caption
-    /// extends the full width of the main body of the symbol, the size the book industry barcoding
-    /// guidelines specify for the ISBN line. Those guidelines typeset the caption in a sans serif face
-    /// such as OCR-B.
+    /// Gets or sets the font used for the caption that a data layer symbology prints above its symbol,
+    /// such as the ISBN line, or <see langword="null"/> to use <see cref="Font"/>. Its size is the
+    /// starting point for the caption, which <see cref="FitCaptionToSymbolWidth"/> then resolves. No
+    /// caption prints below 9 point: the ISBN and ISMN manuals both require type of 9 point or larger.
     /// </summary>
     public Font? CaptionFont { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the caption is sized to span the bars of its symbol.
+    /// When <see langword="true"/>, the default, the caption is scaled so its ends meet the ends of the
+    /// bars. When <see langword="false"/> the caption prints at the size of its own font, and the drawn
+    /// area widens when the caption is wider than the bars.
+    /// </summary>
+    public bool FitCaptionToSymbolWidth { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether the mandatory quiet zones are reserved inside the drawn area.
