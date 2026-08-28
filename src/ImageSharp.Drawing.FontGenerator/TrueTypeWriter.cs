@@ -22,13 +22,15 @@ internal sealed class TrueTypeWriter
     /// <param name="unitsPerEm">The design units per em.</param>
     /// <param name="ascender">The typographic ascender in design units.</param>
     /// <param name="descender">The typographic descender in design units, negative below the baseline.</param>
+    /// <param name="capHeight">The ink height of a flat topped capital in design units.</param>
     /// <param name="familyName">The font family name.</param>
     /// <param name="copyright">The copyright notice written to name ID 0.</param>
-    public TrueTypeWriter(ushort unitsPerEm, short ascender, short descender, string familyName, string copyright)
+    public TrueTypeWriter(ushort unitsPerEm, short ascender, short descender, short capHeight, string familyName, string copyright)
     {
         this.UnitsPerEm = unitsPerEm;
         this.Ascender = ascender;
         this.Descender = descender;
+        this.CapHeight = capHeight;
         this.FamilyName = familyName;
         this.Copyright = copyright;
         this.glyphs.Add(new GlyphRecord([], unitsPerEm));
@@ -48,6 +50,12 @@ internal sealed class TrueTypeWriter
     /// Gets the typographic descender in design units.
     /// </summary>
     public short Descender { get; }
+
+    /// <summary>
+    /// Gets the ink height of a flat topped capital in design units. Text layout uses this value to
+    /// place a line of capitals or digits against a reference line.
+    /// </summary>
+    public short CapHeight { get; }
 
     /// <summary>
     /// Gets the font family name.
@@ -495,7 +503,7 @@ internal sealed class TrueTypeWriter
         BinaryPrimitives.WriteInt16BigEndian(os2.AsSpan(72), 0);
         BinaryPrimitives.WriteUInt16BigEndian(os2.AsSpan(74), (ushort)yMax);
         BinaryPrimitives.WriteUInt16BigEndian(os2.AsSpan(76), (ushort)Math.Max(0, -yMin));
-        BinaryPrimitives.WriteInt16BigEndian(os2.AsSpan(88), yMax);
+        BinaryPrimitives.WriteInt16BigEndian(os2.AsSpan(88), this.CapHeight);
         BinaryPrimitives.WriteUInt16BigEndian(os2.AsSpan(92), ' ');
         return os2;
     }

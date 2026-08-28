@@ -19,7 +19,7 @@
     <Project Path="src/ImageSharp.Drawing/ImageSharp.Drawing.csproj" />
   </Folder>
   <Folder Name="/tools/">
-    <Project Path="tools/ImageSharp.Drawing.FontGenerator/ImageSharp.Drawing.FontGenerator.csproj" />
+    <Project Path="src/ImageSharp.Drawing.FontGenerator/ImageSharp.Drawing.FontGenerator.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <File Path="tests/Directory.Build.props" />
