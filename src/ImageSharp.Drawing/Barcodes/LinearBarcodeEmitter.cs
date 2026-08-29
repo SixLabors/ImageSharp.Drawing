@@ -225,6 +225,11 @@ internal static class LinearBarcodeEmitter
             return bounds;
         }
 
+        // Each of the three fonts a symbol can resolve keeps its own draw options, which carry the same
+        // settings for every line and differ only in the origin, so a line sets that and draws.
+        RichTextOptions digitDrawOptions = CreateDrawOptions(digitFont);
+        RichTextOptions? scaledDrawOptions = null;
+        RichTextOptions? captionDrawOptions = null;
         for (int i = 0; i < symbol.Text.Length; i++)
         {
             BarcodeTextPlacement placement = symbol.Text[i];
@@ -243,19 +248,40 @@ internal static class LinearBarcodeEmitter
             // lets the text and the bars disagree by up to half a module.
             float textX = (MathF.Round(symbolLeft + (placement.Left * moduleWidth)) + MathF.Round(symbolLeft + (placement.Right * moduleWidth))) * 0.5F;
 
-            RichTextOptions textOptions = new(font)
+            RichTextOptions textOptions;
+            if (placement.IsCaption)
             {
-                Origin = new PointF(textX, textY),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                TextBaseline = TextBaseline.Alphabetic,
-                HintingMode = HintingMode.Standard
-            };
+                textOptions = captionDrawOptions ??= CreateDrawOptions(font);
+            }
+            else if (ReferenceEquals(font, digitFont))
+            {
+                textOptions = digitDrawOptions;
+            }
+            else
+            {
+                textOptions = scaledDrawOptions ??= CreateDrawOptions(font);
+            }
 
+            textOptions.Origin = new PointF(textX, textY);
             canvas.DrawText(textOptions, placement.Text, options.BarBrush, null);
         }
 
         return bounds;
     }
+
+    /// <summary>
+    /// Returns the options every line of the human readable interpretation draws with. A line anchors on
+    /// its alphabetic baseline and centers on its span, so only the origin changes from line to line.
+    /// </summary>
+    /// <param name="font">The font the line renders in.</param>
+    /// <returns>The draw options.</returns>
+    private static RichTextOptions CreateDrawOptions(Font font)
+        => new(font)
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextBaseline = TextBaseline.Alphabetic,
+            HintingMode = HintingMode.Standard
+        };
 
     /// <summary>
     /// Returns the font a placement renders in. A caption renders in the caption font, resolved once for

@@ -25,13 +25,13 @@ public sealed class IssnSymbology : BarcodeSymbology
     {
         Guard.NotNull(text, nameof(text));
 
-        string issn = text;
-        string variant = "00";
+        ReadOnlySpan<char> issn = text;
+        ReadOnlySpan<char> variant = "00";
         int space = text.IndexOf(' ');
         if (space >= 0)
         {
-            issn = text.Substring(0, space);
-            variant = text.Substring(space + 1);
+            issn = text.AsSpan(0, space);
+            variant = text.AsSpan(space + 1);
         }
 
         if (variant.Length != 2 || variant[0] is < '0' or > '9' || variant[1] is < '0' or > '9')
@@ -55,7 +55,14 @@ public sealed class IssnSymbology : BarcodeSymbology
         }
 
         // ISO 3297 check: weights 8 down to 2 over the seven data digits, modulus 11, X representing ten.
-        string digits7 = string.Concat(issn.AsSpan(0, 4), issn.AsSpan(5, 3));
+        // The encoded form is thirteen digits: the 977 prefix, the seven data digits, the sequence
+        // variant and the EAN-13 check digit.
+        Span<char> digits = stackalloc char[13];
+        "977".CopyTo(digits);
+        issn[..4].CopyTo(digits[3..]);
+        issn.Slice(5, 3).CopyTo(digits[7..]);
+        variant.CopyTo(digits[10..]);
+        ReadOnlySpan<char> digits7 = digits.Slice(3, 7);
         int sum = 0;
         for (int i = 0; i < 7; i++)
         {
@@ -72,10 +79,9 @@ public sealed class IssnSymbology : BarcodeSymbology
             }
         }
 
-        string ean12 = "977" + digits7 + variant;
-        string digits = ean12 + (char)('0' + EanUpcEncoder.ComputeCheckDigit(ean12));
+        digits[12] = (char)('0' + EanUpcEncoder.ComputeCheckDigit(digits[..12]));
         char checkChar = check == 10 ? 'X' : (char)('0' + check);
-        string? caption = options.Font is null ? null : $"ISSN {issn.Substring(0, 8)}{checkChar}";
+        string? caption = options.Font is null ? null : $"ISSN {issn[..8]}{checkChar}";
         return EanUpcEncoder.BuildEan13(digits, options, caption);
     }
 }
