@@ -55,6 +55,23 @@ public class BarcodeDecodeTests
     public void Mands_RoundTrips()
         => AssertDecodes(new MandsSymbology(), "0642118", BarcodeFormat.EAN_8, "00642118");
 
+    [Theory]
+    [InlineData("CODE128")]
+    [InlineData("ABC-123")]
+    public void Code128_RoundTrips(string text)
+        => AssertDecodes(new Code128Symbology(), text, BarcodeFormat.CODE_128, text);
+
+    /// <summary>
+    /// A GS1-128 symbol decodes to its element strings without the parentheses, which section 4.14
+    /// rule 2c keeps to the human readable interpretation, and without the Function 1 characters, which
+    /// are symbol overhead rather than data.
+    /// </summary>
+    [Theory]
+    [InlineData("(01)09521234543213", "0109521234543213")]
+    [InlineData("(10)ABC123", "10ABC123")]
+    public void Gs1_128_RoundTrips(string text, string expected)
+        => AssertDecodes(new Gs1128Symbology(), text, BarcodeFormat.CODE_128, expected);
+
     /// <summary>
     /// The decoder must also read the symbol with the human readable interpretation present, proving the
     /// text does not intrude into the bars or quiet zones.
@@ -72,8 +89,23 @@ public class BarcodeDecodeTests
 
     private static void AssertDecodes(BarcodeSymbology symbology, string text, BarcodeFormat format, string expected, BarcodeOptions options)
     {
-        using Image<Rgba32> image = new(400, 220, Color.White.ToPixel<Rgba32>());
-        image.Mutate(x => x.Paint(canvas => canvas.DrawBarcode(symbology, text, options, new PointF(20, 20))));
+        // The image holds the symbol and a margin on every side, measured rather than assumed, so a
+        // symbology whose symbol is wider than the next is not silently clipped.
+        PointF origin = new(20, 20);
+        RectangleF bounds;
+        using (Image<Rgba32> probe = new(1, 1))
+        {
+            RectangleF measured = default;
+            probe.Mutate(x => x.Paint(canvas => measured = canvas.MeasureBarcode(symbology, text, options, origin)));
+            bounds = measured;
+        }
+
+        using Image<Rgba32> image = new(
+            (int)MathF.Ceiling(bounds.Right) + 20,
+            (int)MathF.Ceiling(bounds.Bottom) + 20,
+            Color.White.ToPixel<Rgba32>());
+
+        image.Mutate(x => x.Paint(canvas => canvas.DrawBarcode(symbology, text, options, origin)));
 
         byte[] pixels = new byte[image.Width * image.Height * 4];
         image.CopyPixelDataTo(pixels);

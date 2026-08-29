@@ -600,9 +600,9 @@ internal static class OcrBGlyphs
         ['D'] =
         [
             [
-                -68.6f, 0, 51.8f, 0, float.NaN, float.NaN, float.NaN, float.NaN, 361.3f, 0,
+                -60f, 0, 51.8f, 0, float.NaN, float.NaN, float.NaN, float.NaN, 361.3f, 0,
                 586.4f, 186.4f, 586.4f, 509, float.NaN, float.NaN, float.NaN, float.NaN, 586.4f, 830.1f,
-                347.2f, 1061.9f, 31.4f, 1061.9f, -68.6f, 1061.9f, -68.6f, 0,
+                347.2f, 1061.9f, 31.4f, 1061.9f, -60f, 1061.9f, -60f, 0,
             ],
             [
                 103.6f, 914.6f, float.NaN, float.NaN, float.NaN, float.NaN, 300.9f, 905.3f, 426.9f, 703.2f,
