@@ -121,18 +121,28 @@ internal static class LinearBarcodeEmitter
         float bottomInModules = symbol.HeightInModules;
         if (digitFont is not null)
         {
-            // A symbol resolves to at most three fonts, and its placements arrive grouped by font, so one
-            // set of measuring options serves a whole run of them.
-            Font? measuredFont = null;
-            TextOptions measureOptions = new(digitFont);
+            // A symbol resolves to at most three fonts: the digits, the scaled quiet zone digits and the
+            // caption. Each keeps its own measuring options, so a symbol that alternates between them,
+            // as UPC-A does, still builds one set per font.
+            TextOptions digitOptions = new(digitFont);
+            TextOptions? scaledOptions = null;
+            TextOptions? captionOptions = null;
             for (int i = 0; i < symbol.Text.Length; i++)
             {
                 BarcodeTextPlacement placement = symbol.Text[i];
                 Font font = ResolveFont(placement, digitFont, ref captionFont, ref scaledFont, options);
-                if (!ReferenceEquals(font, measuredFont))
+                TextOptions measureOptions;
+                if (placement.IsCaption)
                 {
-                    measuredFont = font;
-                    measureOptions = new TextOptions(font);
+                    measureOptions = captionOptions ??= new TextOptions(font);
+                }
+                else if (ReferenceEquals(font, digitFont))
+                {
+                    measureOptions = digitOptions;
+                }
+                else
+                {
+                    measureOptions = scaledOptions ??= new TextOptions(font);
                 }
 
                 float inkInModules = InkRise(font) / moduleWidth;
