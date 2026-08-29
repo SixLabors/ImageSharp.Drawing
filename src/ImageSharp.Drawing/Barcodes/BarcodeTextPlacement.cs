@@ -4,10 +4,9 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// A single piece of the human readable interpretation of a barcode, positioned in module space.
-/// The renderer centers the text horizontally within the span and flows it downward from the top line.
-/// The symbol height grows at render time to hold the text, the way the nominal ISO/IEC 15420 symbol is
-/// sized so its text region extends below the guard bars.
+/// A single piece of the human readable interpretation of a barcode, positioned in module space. The
+/// placement names the bar edge the line faces and the side it prints on; the clear space between the
+/// two, and the room the line needs, belong to the renderer, which is what knows the font.
 /// </summary>
 internal readonly struct BarcodeTextPlacement
 {
@@ -18,9 +17,10 @@ internal readonly struct BarcodeTextPlacement
     /// <param name="text">The characters to render.</param>
     /// <param name="left">The left edge of the horizontal span, in modules.</param>
     /// <param name="right">The right edge of the horizontal span, in modules.</param>
-    /// <param name="y">The top line of the text, in modules from the symbol top.</param>
-    public BarcodeTextPlacement(string text, float left, float right, float y)
-        : this(text, left, right, y, 1F)
+    /// <param name="side">The side of the bars the line prints on.</param>
+    /// <param name="barEdge">The bar edge the line faces, in modules from the symbol top.</param>
+    public BarcodeTextPlacement(string text, float left, float right, BarcodeTextSide side, float barEdge)
+        : this(text, left, right, side, barEdge, 1F)
     {
     }
 
@@ -30,10 +30,11 @@ internal readonly struct BarcodeTextPlacement
     /// <param name="text">The characters to render.</param>
     /// <param name="left">The left edge of the horizontal span, in modules.</param>
     /// <param name="right">The right edge of the horizontal span, in modules.</param>
-    /// <param name="y">The top line of the text, in modules from the symbol top.</param>
+    /// <param name="side">The side of the bars the line prints on.</param>
+    /// <param name="barEdge">The bar edge the line faces, in modules from the symbol top.</param>
     /// <param name="fontScale">The factor applied to the caller's font size for this placement.</param>
-    public BarcodeTextPlacement(string text, float left, float right, float y, float fontScale)
-        : this(text, left, right, y, fontScale, false)
+    public BarcodeTextPlacement(string text, float left, float right, BarcodeTextSide side, float barEdge, float fontScale)
+        : this(text, left, right, side, barEdge, fontScale, false)
     {
     }
 
@@ -43,15 +44,17 @@ internal readonly struct BarcodeTextPlacement
     /// <param name="text">The characters to render.</param>
     /// <param name="left">The left edge of the horizontal span, in modules.</param>
     /// <param name="right">The right edge of the horizontal span, in modules.</param>
-    /// <param name="y">The top line of the text, in modules from the symbol top.</param>
+    /// <param name="side">The side of the bars the line prints on.</param>
+    /// <param name="barEdge">The bar edge the line faces, in modules from the symbol top.</param>
     /// <param name="fontScale">The factor applied to the caller's font size for this placement.</param>
     /// <param name="isCaption">Whether this placement is a data layer caption rendered with the caption font.</param>
-    public BarcodeTextPlacement(string text, float left, float right, float y, float fontScale, bool isCaption)
+    public BarcodeTextPlacement(string text, float left, float right, BarcodeTextSide side, float barEdge, float fontScale, bool isCaption)
     {
         this.Text = text;
         this.Left = left;
         this.Right = right;
-        this.Y = y;
+        this.Side = side;
+        this.BarEdge = barEdge;
         this.FontScale = fontScale;
         this.IsCaption = isCaption;
     }
@@ -73,11 +76,17 @@ internal readonly struct BarcodeTextPlacement
     public float Right { get; }
 
     /// <summary>
-    /// Gets the top line of the text, in modules from the symbol top. The digits of an EAN-13 symbol hang
-    /// just below the digit bars, flowing past the extended guard bars; add-on digits hang from the symbol
-    /// top inside their text band.
+    /// Gets the side of the bars the line prints on.
     /// </summary>
-    public float Y { get; }
+    public BarcodeTextSide Side { get; }
+
+    /// <summary>
+    /// Gets the bar edge the line faces, in modules from the symbol top, before any room is made for text
+    /// above the bars. A line below the bars faces a bar bottom, and the EAN-13 digits face the bottom of
+    /// the digit bars rather than the extended guard bars, which they flow past. A line above the bars
+    /// faces a bar top.
+    /// </summary>
+    public float BarEdge { get; }
 
     /// <summary>
     /// Gets the factor applied to the caller's font size for this placement. The UPC number system and
@@ -87,8 +96,7 @@ internal readonly struct BarcodeTextPlacement
 
     /// <summary>
     /// Gets a value indicating whether this placement is a data layer caption, such as the ISBN line above
-    /// its symbol. Captions render with the caption font when one is set, and they anchor to their own top
-    /// line rather than the shared digit baseline.
+    /// its symbol. Captions render with the caption font when one is set.
     /// </summary>
     public bool IsCaption { get; }
 }

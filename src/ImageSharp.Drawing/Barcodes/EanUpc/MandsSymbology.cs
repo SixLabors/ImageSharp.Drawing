@@ -37,7 +37,7 @@ public sealed class MandsSymbology : BarcodeSymbology
         bool padded = text.Length == 7;
         string digits = EanUpcEncoder.ValidateAndApplyCheckDigit(padded ? "0" + text : text, 7, "M&S");
 
-        LinearBarcodeSymbol ean8 = Ean8Symbology.EncodeDigits(digits, options);
+        LinearBarcodeSymbol ean8 = EanUpcEncoder.BuildEan8(digits, options);
 
         // The centre guard bars stay at digit bar height; only the outer guards extend beside the text.
         float digitHeight = ean8.BarHeights[2];
@@ -49,17 +49,17 @@ public sealed class MandsSymbology : BarcodeSymbology
         {
             // A padded number hides its leading zero and its check digit: seven digits spread over the first
             // seven character cells with the eighth cell left empty. The full eight digit form prints as-is.
-            float textLine = digitHeight + 1;
+            float textLine = digitHeight;
             int shown = padded ? 7 : 8;
             placements = new BarcodeTextPlacement[shown + 2];
             for (int i = 0; i < shown; i++)
             {
                 float left = i < 4 ? 3F + (i * 7F) : 36F + ((i - 4) * 7F);
-                placements[i] = new BarcodeTextPlacement(EanUpcEncoder.DigitString(digits[padded ? i + 1 : i]), left, left + 7F, textLine);
+                placements[i] = new BarcodeTextPlacement(EanUpcEncoder.DigitString(digits[padded ? i + 1 : i]), left, left + 7F, BarcodeTextSide.BelowBars, textLine);
             }
 
-            placements[shown] = new BarcodeTextPlacement("M", -12F, -5F, textLine);
-            placements[shown + 1] = new BarcodeTextPlacement("S", 69F, 76F, textLine);
+            placements[shown] = new BarcodeTextPlacement("M", -12F, -5F, BarcodeTextSide.BelowBars, textLine);
+            placements[shown + 1] = new BarcodeTextPlacement("S", 69F, 76F, BarcodeTextSide.BelowBars, textLine);
         }
 
         return new LinearBarcodeSymbol(ean8.RunWidths, ean8.BarHeights, ean8.BarTops, placements, QuietZone, QuietZone);

@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.Fonts.Unicode;
+
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -27,11 +29,13 @@ public sealed class IsmnSymbology : BarcodeSymbology
         string compact = text.Replace("-", string.Empty);
         bool mForm = compact.Length > 0 && compact[0] == 'M';
         string body = mForm ? compact.Substring(1) : compact;
-        foreach (char c in body)
+        SpanCodePointEnumerator codePoints = body.AsSpan().EnumerateCodePoints();
+        while (codePoints.MoveNext())
         {
-            if (c is < '0' or > '9')
+            CodePoint current = codePoints.Current;
+            if (current.Value is < '0' or > '9')
             {
-                throw new ArgumentException($"ISMN accepts only digits, hyphens and a leading M; got '{c}'.", nameof(text));
+                throw new ArgumentException($"ISMN accepts only digits, hyphens and a leading M; got U+{current.Value:X4}.", nameof(text));
             }
         }
 
@@ -64,6 +68,6 @@ public sealed class IsmnSymbology : BarcodeSymbology
 
         string digits = ean12 + (char)('0' + check);
         string? caption = options.Font is null ? null : $"ISMN {captionBody}-{(char)('0' + check)}";
-        return Ean13Symbology.EncodeDigits(digits, options, caption);
+        return EanUpcEncoder.BuildEan13(digits, options, caption);
     }
 }

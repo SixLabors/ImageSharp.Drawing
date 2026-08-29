@@ -53,7 +53,8 @@ public class EanUpcSymbologyTests
         Assert.Equal(13, symbol.Text.Length);
         Assert.Equal("5901234123457", string.Concat(symbol.Text.Select(placement => placement.Text)));
         Assert.True(symbol.Text[0].Left < 0);
-        Assert.All(symbol.Text, placement => Assert.Equal(symbol.BarHeights.Min() + 1, placement.Y));
+        Assert.All(symbol.Text, placement => Assert.Equal(BarcodeTextSide.BelowBars, placement.Side));
+        Assert.All(symbol.Text, placement => Assert.Equal(symbol.BarHeights.Min(), placement.BarEdge));
 
         Assert.Empty(Encode(new Ean13Symbology(), "5901234123457").Text);
     }
@@ -201,11 +202,13 @@ public class EanUpcSymbologyTests
         LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Ean5Symbology().Encode("90200", options);
 
         // GS1 General Specifications: the add-on interpretation prints above the bars, one digit above its
-        // own symbol character, so the bars shift down to leave a text band at the symbol top.
+        // own symbol character. The room it needs belongs to the renderer, which is what knows the font,
+        // so the symbol itself leaves every bar top aligned.
         Assert.Equal(5, symbol.Text.Length);
         Assert.Equal("90200", string.Concat(symbol.Text.Select(placement => placement.Text)));
-        Assert.All(symbol.Text, placement => Assert.Equal(0, placement.Y));
-        Assert.All(symbol.BarTops, top => Assert.True(top > 0));
+        Assert.All(symbol.Text, placement => Assert.Equal(BarcodeTextSide.AboveBars, placement.Side));
+        Assert.All(symbol.Text, placement => Assert.Equal(0, placement.BarEdge));
+        Assert.All(symbol.BarTops, top => Assert.Equal(0, top));
     }
 
     [Theory]

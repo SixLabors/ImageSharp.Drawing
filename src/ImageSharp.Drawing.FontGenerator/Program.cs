@@ -49,13 +49,6 @@ for (int argIndex = 1; argIndex < args.Length; argIndex++)
 
 Directory.CreateDirectory(outputDirectory);
 
-// The design grid maps the 0.1 inch character pitch to one em, which makes the cap ink 1.08 em: far
-// larger than any font convention, so the same point size renders far larger glyphs. This scale maps
-// the design onto the em to match the sizing of the established OCR digitizations: the free OCR
-// chain renders OCR-A caps at 780 and OCR-B caps at 723 per em, and this scale lands ours at 778 and
-// 719. The exact 0.1 inch pitch then prints at 10 points.
-const float EmScale = 0.72F;
-
 StrokeOptions roundStroke = new()
 {
     LineJoin = LineJoin.Round,
@@ -105,69 +98,61 @@ foreach (FontDesign design in designs)
         continue;
     }
 
-    ushort advanceWidth = (ushort)MathF.Round(design.UnitsPerEm * EmScale);
+    float emScale = design.EmScale;
+    ushort advanceWidth = (ushort)MathF.Round(design.UnitsPerEm * emScale);
+
+    // The sheet the skeletons are traced from fixes shape but not size, so every glyph is normalized
+    // onto the height the standard gives its class. The scale is the glyph's own drawn bounds against
+    // the bounds the standard calls for, and it applies to both axes, so the glyph lands on the line
+    // and keeps every ratio it was drawn with. Each glyph carries its own scale, so a line of capitals,
+    // digits and full height marks is one height throughout.
+    float NormalizedScale(char character, float top, float bottom)
+    {
+        if (design.NormalizationExceptions.Contains(character, StringComparison.Ordinal))
+        {
+            return 1F;
+        }
+
+        // A letter carries its category's scale, so a letter that reaches past its line, an accented one
+        // for example, keeps the mark in proportion with the body. A digit and a mark carry their own,
+        // so a line of digits and full height marks is one height throughout. A mark that never reaches
+        // the capital line, a hyphen or a comma, is not a full height glyph: normalizing it onto that
+        // line would enlarge it out of all proportion, so it carries the scale of the capitals.
+        switch (Classify(character))
+        {
+            case GlyphClass.Absolute:
+                return 1F;
+            case GlyphClass.Digit:
+                return design.CapitalHeight / top;
+            case GlyphClass.Ascender:
+                return design.AscenderHeight / design.DrawnAscenderHeight;
+            case GlyphClass.SmallLetter:
+                return design.SmallLetterHeight / design.DrawnSmallLetterHeight;
+            case GlyphClass.Descender:
+                return design.DescenderDepth / design.DrawnDescenderDepth;
+            default:
+                float capitalScale = design.CapitalHeight / design.DrawnCapitalHeight;
+                return char.IsLetter(character) || top < design.DrawnCapitalHeight
+                    ? capitalScale
+                    : design.CapitalHeight / top;
+        }
+    }
 
     // Ink projects a half stroke beyond the centerline box at every terminal, dots rise above it and
     // descenders drop below it, so the vertical metrics cover those extremes. Text layout grows the
     // line box for any glyph whose ink passes the ascender, which shifts that glyph off the shared
     // baseline, so the metrics are measured from the geometry rather than assumed from the box.
-    float inkTop = design.H + (design.DefaultStrokeWidth / 2);
-    float inkBottom = design.Descender - (design.DefaultStrokeWidth / 2);
+    float inkTop = 0;
+    float inkBottom = 0;
 
-    // The cap height is the ink height of a flat topped capital, which text layout uses to set a line
-    // of capitals or digits against a reference line. The font-wide ink maximum is not that value: the
-    // tallest ink in these designs belongs to marks that stand well above the capitals.
-    float capHeight = 0;
-    foreach ((char inkCharacter, float[][] inkStrokes) in design.Skeletons)
-    {
-        float inkCharacterWidth = design.StrokeWidths.TryGetValue(inkCharacter, out float inkPerCharacter)
-            ? inkPerCharacter
-            : design.DefaultStrokeWidth;
+    // The cap height is the ink height of a capital, which text layout uses to set a line of capitals
+    // or digits against a reference line.
+    float capHeight = design.CapitalHeight;
 
-        for (int inkIndex = 0; inkIndex < inkStrokes.Length; inkIndex++)
-        {
-            float inkWidth = design.StrokeWidthOverrides.TryGetValue((inkCharacter, inkIndex), out float inkOverride)
-                ? inkOverride
-                : inkCharacterWidth;
-
-            float inkHalf = inkWidth / 2;
-            float[] inkStroke = inkStrokes[inkIndex];
-            for (int inkValue = 1; inkValue < inkStroke.Length; inkValue += 2)
-            {
-                if (float.IsNaN(inkStroke[inkValue]))
-                {
-                    continue;
-                }
-
-                inkTop = MathF.Max(inkTop, inkStroke[inkValue] + inkHalf);
-                inkBottom = MathF.Min(inkBottom, inkStroke[inkValue] - inkHalf);
-                if (inkCharacter == 'H')
-                {
-                    capHeight = MathF.Max(capHeight, inkStroke[inkValue] + inkHalf);
-                }
-            }
-        }
-    }
-
-    // Text layout centers the em box inside the declared line height, so a glyph cell reaches
-    // ascender - (lineHeight - unitsPerEm) / 2 above the baseline. Ink above that line makes the
-    // layout lower that one glyph to keep it inside the cell, which breaks the shared baseline.
-    // Solving for a zero shift with a zero line gap gives the ascender below. This design needs it
-    // because the em carries the 0.1 inch pitch while the ink stands taller than the pitch.
-    float inkTopUnits = inkTop * EmScale;
-    short descender = (short)MathF.Round(inkBottom * EmScale);
-    short ascender = (short)MathF.Round(MathF.Max(inkTopUnits, (2 * inkTopUnits) - descender - design.UnitsPerEm));
     float sideBearing = (design.UnitsPerEm - design.W) / 2;
-    TrueTypeWriter writer = new(
-        design.UnitsPerEm,
-        ascender,
-        descender,
-        (short)MathF.Round(capHeight * EmScale),
-        design.FamilyName,
-        "Copyright (c) Six Labors. Licensed under the Six Labors Split License.");
-
-    writer.AddGlyph(' ', [], advanceWidth);
     Dictionary<char, List<IReadOnlyList<Vector2>>> auditOutlines = [];
+    Dictionary<char, List<IReadOnlyList<(short X, short Y)>>> quantizedGlyphs = [];
+    Dictionary<char, float> glyphScales = [];
     List<string> specFailures = [];
     foreach ((char character, float[][] strokes) in design.Skeletons.OrderBy(entry => entry.Key))
     {
@@ -346,12 +331,39 @@ foreach (FontDesign design in designs)
 
             // The stroker flattens curves densely; most of those points are collinear within a
             // fraction of a design unit and would bloat the font. 0.6 units is 1.5 microns of print.
-            Vector2[] designPoints = SimplifyContour(dense, 0.6f);
-            designContours.Add(designPoints);
+            designContours.Add(SimplifyContour(dense, 0.6f));
+        }
+
+        // Both axes take one scale, about the baseline and the centre of the character cell, so the
+        // glyph lands on the height its category stands at and keeps the shape it was drawn with.
+        float drawnTop = 0;
+        float drawnBottom = 0;
+        foreach (IReadOnlyList<Vector2> drawnContour in designContours)
+        {
+            foreach (Vector2 point in drawnContour)
+            {
+                drawnTop = MathF.Max(drawnTop, point.Y);
+                drawnBottom = MathF.Min(drawnBottom, point.Y);
+            }
+        }
+
+        float glyphScale = NormalizedScale(character, drawnTop, drawnBottom);
+        glyphScales[character] = glyphScale;
+        float cellCentre = design.W / 2;
+        foreach (Vector2[] designPoints in designContours.Cast<Vector2[]>())
+        {
+            for (int i = 0; i < designPoints.Length; i++)
+            {
+                Vector2 point = designPoints[i];
+                designPoints[i] = new Vector2(cellCentre + ((point.X - cellCentre) * glyphScale), point.Y * glyphScale);
+                inkTop = MathF.Max(inkTop, designPoints[i].Y);
+                inkBottom = MathF.Min(inkBottom, designPoints[i].Y);
+            }
+
             List<(short X, short Y)> contour = new(designPoints.Length);
             foreach (Vector2 point in designPoints)
             {
-                (short X, short Y) quantized = ((short)MathF.Round((point.X + sideBearing) * EmScale), (short)MathF.Round(point.Y * EmScale));
+                (short X, short Y) quantized = ((short)MathF.Round((point.X + sideBearing) * emScale), (short)MathF.Round(point.Y * emScale));
                 if (contour.Count == 0 || contour[^1] != quantized)
                 {
                     contour.Add(quantized);
@@ -369,9 +381,31 @@ foreach (FontDesign design in designs)
             }
         }
 
-        writer.AddGlyph(character, contours, advanceWidth);
+        quantizedGlyphs[character] = contours;
         auditOutlines[character] = designContours;
         SpecChecks.Verify(character, designContours, design.Expectations, specFailures);
+    }
+
+    // Text layout centers the em box inside the declared line height, so a glyph cell reaches
+    // ascender - (lineHeight - unitsPerEm) / 2 above the baseline. Ink above that line makes the
+    // layout lower that one glyph to keep it inside the cell, which breaks the shared baseline.
+    // Solving for a zero shift with a zero line gap gives the ascender below. This design needs it
+    // because the em carries the 0.1 inch pitch while the ink stands taller than the pitch.
+    float inkTopUnits = inkTop * emScale;
+    short descender = (short)MathF.Round(inkBottom * emScale);
+    short ascender = (short)MathF.Round(MathF.Max(inkTopUnits, (2 * inkTopUnits) - descender - design.UnitsPerEm));
+    TrueTypeWriter writer = new(
+        design.UnitsPerEm,
+        ascender,
+        descender,
+        (short)MathF.Round(capHeight * emScale),
+        design.FamilyName,
+        "Copyright (c) Six Labors. Licensed under the Six Labors Split License.");
+
+    writer.AddGlyph(' ', [], advanceWidth);
+    foreach ((char glyphCharacter, List<IReadOnlyList<(short X, short Y)>> glyphContours) in quantizedGlyphs.OrderBy(entry => entry.Key))
+    {
+        writer.AddGlyph(glyphCharacter, glyphContours, advanceWidth);
     }
 
     if (specFailures.Count > 0)
@@ -386,6 +420,68 @@ foreach (FontDesign design in designs)
     {
         Console.WriteLine($"{design.Name} SPEC CHECK PASSED");
     }
+
+    // Normalizing the glyphs moves every extreme, so the expectations that record accepted ink are
+    // rewritten from the normalized outlines. The probe points are not rewritten: each was chosen by
+    // eye to sit inside or outside a particular sweep, so it takes the same scale as the outline it
+    // probes and keeps testing the same feature.
+    StringBuilder expectationRows = new();
+    foreach (char expectedCharacter in auditOutlines.Keys.OrderBy(character => character))
+    {
+        float expectedMinX = float.MaxValue;
+        float expectedMaxX = float.MinValue;
+        float expectedMinY = float.MaxValue;
+        float expectedMaxY = float.MinValue;
+        foreach (IReadOnlyList<Vector2> contour in auditOutlines[expectedCharacter])
+        {
+            foreach (Vector2 point in contour)
+            {
+                expectedMinX = MathF.Min(expectedMinX, point.X);
+                expectedMaxX = MathF.Max(expectedMaxX, point.X);
+                expectedMinY = MathF.Min(expectedMinY, point.Y);
+                expectedMaxY = MathF.Max(expectedMaxY, point.Y);
+            }
+        }
+
+        float expectedScale = glyphScales[expectedCharacter];
+        float expectedCentre = design.W / 2;
+        (float[] Bounds, float[][] Inked, float[][] Blank) old = design.Expectations[expectedCharacter];
+        string Probes(float[][] points) => $"[{string.Join(", ", points.Select(point => $"[{Number(expectedCentre + ((point[0] - expectedCentre) * expectedScale))}, {Number(point[1] * expectedScale)}]"))}]";
+        expectationRows.AppendLine(
+            CultureInfo.InvariantCulture,
+            $"            [{Literal(expectedCharacter)}] = ([{Number(expectedMinX)}, {Number(expectedMaxX)}, {Number(expectedMinY)}, {Number(expectedMaxY)}], {Probes(old.Inked)}, {Probes(old.Blank)}),");
+    }
+
+    string expectationPath = System.IO.Path.Combine(outputDirectory, $"{design.Name}-expectations.txt");
+    File.WriteAllText(expectationPath, expectationRows.ToString());
+    Console.WriteLine(expectationPath);
+
+    static string Number(float value)
+    {
+        float rounded = MathF.Round(value, 1);
+        return rounded == MathF.Round(rounded)
+            ? ((int)rounded).ToString(CultureInfo.InvariantCulture)
+            : rounded.ToString("0.0#", CultureInfo.InvariantCulture) + "f";
+    }
+
+    static string Literal(char value) => value switch
+    {
+        '\'' => @"'\''",
+        '\\' => @"'\\'",
+        _ => $"'{value}'",
+    };
+
+    static GlyphClass Classify(char value) => value switch
+    {
+        // ECMA-11 section 10 and FIPS PUB 32 section 2.6 dimension these in millimetres rather than
+        // drawing them, so they carry their own absolute size.
+        '―' or '∣' or '█' or '|' => GlyphClass.Absolute,
+        >= '0' and <= '9' => GlyphClass.Digit,
+        'b' or 'd' or 'f' or 'h' or 'i' or 'k' or 'l' or 't' => GlyphClass.Ascender,
+        'g' or 'j' or 'p' or 'q' or 'y' => GlyphClass.Descender,
+        _ when char.IsLower(value) => GlyphClass.SmallLetter,
+        _ => GlyphClass.Capital,
+    };
 
     byte[] font = writer.Write();
     string fontPath = System.IO.Path.Combine(outputDirectory, $"{design.Name}.ttf");
