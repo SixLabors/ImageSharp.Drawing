@@ -34,8 +34,22 @@ public sealed class MandsSymbology : BarcodeSymbology
             throw new ArgumentException($"An M&S barcode must be 7 or 8 characters; got {text.Length}.", nameof(text));
         }
 
+        // An M&S number is seven or eight characters, and a seven character one carries an implied
+        // leading zero, so the padded form and its check digit are both built on the stack.
         bool padded = text.Length == 7;
-        string digits = EanUpcEncoder.ValidateAndApplyCheckDigit(padded ? "0" + text : text, 7, "M&S");
+        Span<char> paddedBuffer = stackalloc char[8];
+        if (padded)
+        {
+            paddedBuffer[0] = '0';
+            text.CopyTo(paddedBuffer[1..]);
+        }
+        else
+        {
+            text.CopyTo(paddedBuffer);
+        }
+
+        Span<char> digitBuffer = stackalloc char[8];
+        ReadOnlySpan<char> digits = EanUpcEncoder.ValidateAndApplyCheckDigit(paddedBuffer[..(padded ? 8 : text.Length)], 7, "M&S", digitBuffer);
 
         LinearBarcodeSymbol ean8 = EanUpcEncoder.BuildEan8(digits, options);
 

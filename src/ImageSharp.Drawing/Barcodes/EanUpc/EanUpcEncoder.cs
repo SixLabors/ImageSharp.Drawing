@@ -166,17 +166,16 @@ internal static class EanUpcEncoder
     /// <summary>
     /// Validates that the text consists solely of the decimal digits 0-9 and has one of the two permitted
     /// lengths: the data length, or the data length plus a check digit. When the check digit is present it is
-    /// verified; when absent it is computed. The returned string always carries the check digit.
+    /// verified; when absent it is computed. The digits written always carry the check digit.
     /// </summary>
     /// <param name="text">The input text.</param>
     /// <param name="dataLength">The number of data digits, excluding the check digit.</param>
     /// <param name="symbologyName">The symbology name used in error messages.</param>
-    /// <returns>The digits with the check digit appended or verified.</returns>
-    /// <exception cref="ArgumentException">The text is null, has a wrong length, contains a non-digit, or carries a wrong check digit.</exception>
-    public static string ValidateAndApplyCheckDigit(string text, int dataLength, string symbologyName)
+    /// <param name="destination">The buffer the digits are written into, of at least the data length plus one.</param>
+    /// <returns>The written digits, which are the data digits with the check digit appended.</returns>
+    /// <exception cref="ArgumentException">The text has a wrong length, contains a non-digit, or carries a wrong check digit.</exception>
+    public static ReadOnlySpan<char> ValidateAndApplyCheckDigit(ReadOnlySpan<char> text, int dataLength, string symbologyName, Span<char> destination)
     {
-        Guard.NotNull(text, nameof(text));
-
         if (text.Length != dataLength && text.Length != dataLength + 1)
         {
             throw new ArgumentException(
@@ -186,18 +185,15 @@ internal static class EanUpcEncoder
 
         ValidateDigits(text, symbologyName);
 
-        int check = ComputeCheckDigit(text.AsSpan(0, dataLength));
-        if (text.Length == dataLength)
-        {
-            return text + (char)('0' + check);
-        }
-
-        if (text[dataLength] - '0' != check)
+        int check = ComputeCheckDigit(text[..dataLength]);
+        if (text.Length > dataLength && text[dataLength] - '0' != check)
         {
             throw new ArgumentException($"{symbologyName} check digit mismatch: expected {check}, got {text[dataLength]}.", nameof(text));
         }
 
-        return text;
+        text[..dataLength].CopyTo(destination);
+        destination[dataLength] = (char)('0' + check);
+        return destination[..(dataLength + 1)];
     }
 
     /// <summary>
@@ -206,11 +202,11 @@ internal static class EanUpcEncoder
     /// <param name="text">The input text.</param>
     /// <param name="symbologyName">The symbology name used in error messages.</param>
     /// <exception cref="ArgumentException">The text contains a non-digit character.</exception>
-    public static void ValidateDigits(string text, string symbologyName)
+    public static void ValidateDigits(ReadOnlySpan<char> text, string symbologyName)
     {
         // Walking code points rather than UTF-16 units reports a surrogate pair as the one character it
         // is, instead of showing half of it back to the caller.
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
+        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
         while (codePoints.MoveNext())
         {
             CodePoint current = codePoints.Current;
@@ -352,7 +348,7 @@ internal static class EanUpcEncoder
     public static void FillDigitPlacements(
         BarcodeTextPlacement[] placements,
         int placementIndex,
-        string digits,
+        ReadOnlySpan<char> digits,
         int digitIndex,
         int digitCount,
         float firstCellLeft,
@@ -388,7 +384,7 @@ internal static class EanUpcEncoder
     /// <param name="text">The hyphenated input.</param>
     /// <param name="digitCount">The number of digits the prefix must contain.</param>
     /// <returns>The hyphenated prefix.</returns>
-    public static string TakeHyphenatedPrefix(string text, int digitCount)
+    public static string TakeHyphenatedPrefix(ReadOnlySpan<char> text, int digitCount)
     {
         int digits = 0;
         int end = 0;
@@ -402,7 +398,7 @@ internal static class EanUpcEncoder
             end++;
         }
 
-        return text.Substring(0, end);
+        return new string(text[..end]);
     }
 
     /// <summary>
@@ -414,7 +410,7 @@ internal static class EanUpcEncoder
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="caption">The text above the bars, or <see langword="null"/> for none.</param>
     /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildEan13(string digits, BarcodeOptions options, string? caption)
+    public static LinearBarcodeSymbol BuildEan13(ReadOnlySpan<char> digits, BarcodeOptions options, string? caption)
     {
         Span<byte> modules = stackalloc byte[Ean13Width];
         int position = 0;
@@ -464,7 +460,7 @@ internal static class EanUpcEncoder
     /// <param name="digits">The eight digits including a verified check digit.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildEan8(string digits, BarcodeOptions options)
+    public static LinearBarcodeSymbol BuildEan8(ReadOnlySpan<char> digits, BarcodeOptions options)
     {
         Span<byte> modules = stackalloc byte[Ean8Width];
         int position = 0;

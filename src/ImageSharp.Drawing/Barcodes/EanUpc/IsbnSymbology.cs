@@ -24,7 +24,18 @@ public sealed class IsbnSymbology : BarcodeSymbology
     {
         Guard.NotNull(text, nameof(text));
 
-        string compact = text.Replace("-", string.Empty);
+        // An ISBN is at most seventeen characters, so the hyphenless form is built on the stack.
+        Span<char> compactBuffer = stackalloc char[text.Length];
+        int compactLength = 0;
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] != '-')
+            {
+                compactBuffer[compactLength++] = text[i];
+            }
+        }
+
+        ReadOnlySpan<char> compact = compactBuffer[..compactLength];
         for (int i = 0; i < compact.Length; i++)
         {
             char c = compact[i];
@@ -35,7 +46,8 @@ public sealed class IsbnSymbology : BarcodeSymbology
             }
         }
 
-        string ean12;
+        // The encoded form is thirteen digits: twelve data digits and the check digit the caption repeats.
+        Span<char> digits = stackalloc char[13];
         string captionBody;
         if (compact.Length is 12 or 13)
         {
@@ -44,12 +56,12 @@ public sealed class IsbnSymbology : BarcodeSymbology
                 throw new ArgumentException("An ISBN-13 must start with the 978 or 979 prefix.", nameof(text));
             }
 
-            if (compact.Length == 13 && compact[12] - '0' != EanUpcEncoder.ComputeCheckDigit(compact.AsSpan(0, 12)))
+            if (compact.Length == 13 && compact[12] - '0' != EanUpcEncoder.ComputeCheckDigit(compact[..12]))
             {
                 throw new ArgumentException("Incorrect ISBN-13 check digit.", nameof(text));
             }
 
-            ean12 = compact.Substring(0, 12);
+            compact[..12].CopyTo(digits);
             captionBody = EanUpcEncoder.TakeHyphenatedPrefix(text, 12);
         }
         else if (compact.Length is 9 or 10)
@@ -72,7 +84,8 @@ public sealed class IsbnSymbology : BarcodeSymbology
                 }
             }
 
-            ean12 = string.Concat("978", compact.AsSpan(0, 9));
+            "978".CopyTo(digits);
+            compact[..9].CopyTo(digits[3..]);
             captionBody = "978-" + EanUpcEncoder.TakeHyphenatedPrefix(text, 9);
         }
         else
@@ -82,8 +95,8 @@ public sealed class IsbnSymbology : BarcodeSymbology
 
         // The caption always carries the EAN-13 check digit of the encoded form, so the printed number and
         // the symbol agree even when an ISBN-10 was supplied.
-        int eanCheck = EanUpcEncoder.ComputeCheckDigit(ean12);
-        string digits = ean12 + (char)('0' + eanCheck);
+        int eanCheck = EanUpcEncoder.ComputeCheckDigit(digits[..12]);
+        digits[12] = (char)('0' + eanCheck);
         string? caption = options.Font is null ? null : $"ISBN {captionBody}-{(char)('0' + eanCheck)}";
         return EanUpcEncoder.BuildEan13(digits, options, caption);
     }

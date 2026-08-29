@@ -30,7 +30,8 @@ public sealed class UpcASymbology : BarcodeSymbology
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
     {
-        string digits = EanUpcEncoder.ValidateAndApplyCheckDigit(text, 11, "UPC-A");
+        Span<char> digitBuffer = stackalloc char[12];
+        ReadOnlySpan<char> digits = EanUpcEncoder.ValidateAndApplyCheckDigit(text, 11, "UPC-A", digitBuffer);
 
         Span<byte> modules = stackalloc byte[Width];
         int position = 0;

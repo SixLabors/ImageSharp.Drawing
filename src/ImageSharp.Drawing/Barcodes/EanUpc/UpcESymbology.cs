@@ -50,7 +50,8 @@ public sealed class UpcESymbology : BarcodeSymbology
 
         // The check digit is computed over the expanded UPC-A number, not the compressed digits, per the
         // zero suppression rules of ISO/IEC 15420.
-        int check = EanUpcEncoder.ComputeCheckDigit(Expand(text));
+        Span<char> expanded = stackalloc char[11];
+        int check = EanUpcEncoder.ComputeCheckDigit(Expand(text, expanded));
         if (text.Length == 8 && text[7] - '0' != check)
         {
             throw new ArgumentException($"UPC-E check digit mismatch: expected {check}, got {text[7]}.", nameof(text));
@@ -97,8 +98,9 @@ public sealed class UpcESymbology : BarcodeSymbology
     /// zero suppression rules of ISO/IEC 15420. The last compressed digit selects the pattern.
     /// </summary>
     /// <param name="text">The number system digit followed by the six compressed digits.</param>
+    /// <param name="destination">The buffer the eleven data digits are written into.</param>
     /// <returns>The eleven UPC-A data digits.</returns>
-    private static string Expand(string text)
+    private static ReadOnlySpan<char> Expand(ReadOnlySpan<char> text, Span<char> destination)
     {
         char d1 = text[1];
         char d2 = text[2];
@@ -107,14 +109,38 @@ public sealed class UpcESymbology : BarcodeSymbology
         char d5 = text[5];
         char d6 = text[6];
 
-        string body = d6 switch
+        destination[0] = text[0];
+        destination[1] = d1;
+        destination[2] = d2;
+        destination[3..11].Fill('0');
+        switch (d6)
         {
-            '0' or '1' or '2' => $"{d1}{d2}{d6}0000{d3}{d4}{d5}",
-            '3' => $"{d1}{d2}{d3}00000{d4}{d5}",
-            '4' => $"{d1}{d2}{d3}{d4}00000{d5}",
-            _ => $"{d1}{d2}{d3}{d4}{d5}0000{d6}",
-        };
+            case '0':
+            case '1':
+            case '2':
+                destination[3] = d6;
+                destination[8] = d3;
+                destination[9] = d4;
+                destination[10] = d5;
+                break;
+            case '3':
+                destination[3] = d3;
+                destination[9] = d4;
+                destination[10] = d5;
+                break;
+            case '4':
+                destination[3] = d3;
+                destination[4] = d4;
+                destination[10] = d5;
+                break;
+            default:
+                destination[3] = d3;
+                destination[4] = d4;
+                destination[5] = d5;
+                destination[10] = d6;
+                break;
+        }
 
-        return text[0] + body;
+        return destination[..11];
     }
 }
