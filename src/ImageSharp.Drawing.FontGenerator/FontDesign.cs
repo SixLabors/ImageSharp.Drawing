@@ -52,6 +52,67 @@ internal sealed class FontDesign
     public required float DefaultStrokeWidth { get; init; }
 
     /// <summary>
+    /// Gets the ink height of a small letter above the baseline, in design units, as the standard
+    /// dimensions the nominal printed image.
+    /// </summary>
+    public required float SmallLetterHeight { get; init; }
+
+    /// <summary>
+    /// Gets the ink height of a capital letter and of a digit above the baseline, in design units.
+    /// </summary>
+    public required float CapitalHeight { get; init; }
+
+    /// <summary>
+    /// Gets the ink height of an ascender above the baseline, in design units.
+    /// </summary>
+    public required float AscenderHeight { get; init; }
+
+    /// <summary>
+    /// Gets the ink depth of a descender below the baseline, in design units, as a positive distance.
+    /// </summary>
+    public required float DescenderDepth { get; init; }
+
+    /// <summary>
+    /// Gets the characters the standard dimensions on their own rather than on a nominal line. Those
+    /// keep the size they are drawn at, because normalizing them onto a line they were never meant to
+    /// touch would change a shape the standard states.
+    /// </summary>
+    public required string NormalizationExceptions { get; init; }
+
+    /// <summary>
+    /// Gets the factor that maps the design grid onto the em. The grid carries the 0.1 inch character
+    /// pitch, which makes the ink far taller per em than any font convention, so the same point size
+    /// would render far larger glyphs than an established digitization of the same standard. The factor
+    /// lands the capital ink at the height those digitizations use, so a point size means the same
+    /// thing across them.
+    /// </summary>
+    public required float EmScale { get; init; }
+
+    /// <summary>
+    /// Gets the ink height a small letter is drawn at, in design units, before normalization.
+    /// </summary>
+    public required float DrawnSmallLetterHeight { get; init; }
+
+    /// <summary>
+    /// Gets the ink height an ascender is drawn at, in design units, before normalization.
+    /// </summary>
+    public required float DrawnAscenderHeight { get; init; }
+
+    /// <summary>
+    /// Gets the ink depth a descender is drawn at, in design units, as a positive distance, before
+    /// normalization.
+    /// </summary>
+    public required float DrawnDescenderDepth { get; init; }
+
+    /// <summary>
+    /// Gets the ink height a capital is drawn at, in design units, before normalization. A glyph whose
+    /// drawn ink reaches this line is a full height glyph and is normalized onto
+    /// <see cref="CapitalHeight"/>. One that does not reach it, such as a hyphen or a comma, keeps its
+    /// place against the capitals instead.
+    /// </summary>
+    public required float DrawnCapitalHeight { get; init; }
+
+    /// <summary>
     /// Gets a value indicating whether open stroke ends project half a stroke width along their
     /// tangent and cut flat, as the printed OCR-B terminals do, instead of ending in the round pen
     /// sweep.

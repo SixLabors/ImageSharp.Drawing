@@ -85,6 +85,6 @@ public sealed class IsbnSymbology : BarcodeSymbology
         int eanCheck = EanUpcEncoder.ComputeCheckDigit(ean12);
         string digits = ean12 + (char)('0' + eanCheck);
         string? caption = options.Font is null ? null : $"ISBN {captionBody}-{(char)('0' + eanCheck)}";
-        return Ean13Symbology.EncodeDigits(digits, options, caption);
+        return EanUpcEncoder.BuildEan13(digits, options, caption);
     }
 }

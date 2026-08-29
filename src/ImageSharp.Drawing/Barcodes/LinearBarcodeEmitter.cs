@@ -13,6 +13,15 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class LinearBarcodeEmitter
 {
     /// <summary>
+    /// The clear space in modules between the ink of a line of the human readable interpretation and the
+    /// bar edge that line faces. Section 5.2.5 of the GS1 General Specifications sets the minimum at 0.5X
+    /// both below the main symbol and above an add-on symbol, and states: "Normally the minimum is one
+    /// module, which is close enough to keep the human readable interpretation associated with the
+    /// symbol." The same space applies above a caption, where no document gives a figure.
+    /// </summary>
+    private const float TextGap = 1F;
+
+    /// <summary>
     /// Renders the symbol onto the canvas.
     /// </summary>
     /// <param name="canvas">The canvas to render onto.</param>
@@ -59,13 +68,9 @@ internal static class LinearBarcodeEmitter
 
         // The drawn area grows to hold the human readable interpretation in both axes: text hangs below the
         // bars the way the nominal ISO/IEC 15420 symbol reserves its text region, and a caption wider than
-        // the symbol (an ISBN line, for example) widens the background. The ascender of the full size font
-        // also fixes the shared baseline: scaled placements shift down by their ascent difference so every
-        // digit sits on one line, the way the specifications print the smaller UPC quiet zone digits.
+        // the symbol, an ISBN line for example, widens the background.
         float backgroundLeft = origin.X;
         float backgroundRight = origin.X + (widthInModules * moduleWidth);
-        float heightInPixels = symbol.HeightInModules * moduleWidth;
-        float digitCapHeight = 0;
         Font? captionFont = null;
 
         // Every text line prints at 9 point or larger, the one size floor the standards state.
@@ -86,8 +91,16 @@ internal static class LinearBarcodeEmitter
                     continue;
                 }
 
+                // What runs into a neighbour is the glyph bounds, so the cap measures those. The
+                // renderable bounds are their union with the advance, and the advance is space the glyph
+                // reserves rather than covers, so capping on it shrinks the text for no gain.
+                float cellText = TextMeasurer.MeasureBounds(capPlacement.Text, new TextOptions(digitFont)).Width;
+                if (cellText <= 0)
+                {
+                    continue;
+                }
+
                 float cell = (capPlacement.Right - capPlacement.Left) * moduleWidth;
-                float cellText = canvas.MeasureText(new RichTextOptions(digitFont), capPlacement.Text).LineMetrics[0].Extent.X;
                 cap = MathF.Min(cap, digitFont.Size * cell / (cellText * capPlacement.FontScale));
             }
 
@@ -98,51 +111,42 @@ internal static class LinearBarcodeEmitter
             }
         }
 
-        // A caption prints in the strip the symbology clears above the bars, which reaches from the top
-        // of the drawing down to the highest bar.
-        float captionStrip = 0;
-        for (int i = 0; i < symbol.BarTops.Length; i++)
+        // One rule places every line: the ink edge facing the bars sits TextGap modules from the bar edge
+        // the line names, and the room a line needs is its own ink plus that gap. A line above the bars
+        // therefore pushes the whole bar block down by the room it needs, which is why the band is
+        // measured here, where the fonts are known, rather than guessed at as a constant by each encoder.
+        float topBand = 0;
+        float bottomInModules = symbol.HeightInModules;
+        if (digitFont is not null)
         {
-            captionStrip = i == 0 ? symbol.BarTops[i] : MathF.Min(captionStrip, symbol.BarTops[i]);
-        }
-
-        if (digitFont is not null && symbol.Text.Length > 0)
-        {
-            LineMetrics lineMetrics = canvas.MeasureText(new RichTextOptions(digitFont), "0").LineMetrics[0];
-
-            // Section 5.2.5 of the GS1 General Specifications measures the clear space to the top of the
-            // digits, which is their ink. A digit stands one cap height above its baseline, so anchoring
-            // on the baseline and adding the cap height puts the ink exactly on the placement line. The
-            // scale factor carries the 72 of the default resolution, which the size cancels.
-            digitCapHeight = digitFont.FontMetrics.CapHeight * digitFont.Size / digitFont.FontMetrics.UnitsPerEm;
             for (int i = 0; i < symbol.Text.Length; i++)
             {
                 BarcodeTextPlacement placement = symbol.Text[i];
-                Font font;
-                if (placement.IsCaption)
+                Font font = ResolveFont(placement, digitFont, ref captionFont, options);
+                float inkInModules = InkRise(font) / moduleWidth;
+
+                if (placement.Side == BarcodeTextSide.AboveBars)
                 {
-                    // The symbology clears a strip of exactly this caption's height above the bars, so
-                    // both sides resolve the caption font by the same rule.
-                    captionFont ??= EanUpcEncoder.ResolveCaptionFont(placement.Text, placement.Right - placement.Left, options);
-                    font = captionFont;
+                    topBand = MathF.Max(topBand, inkInModules + TextGap - placement.BarEdge);
                 }
                 else
                 {
-                    font = placement.FontScale == 1F ? digitFont : new Font(digitFont, digitFont.Size * placement.FontScale);
+                    bottomInModules = MathF.Max(bottomInModules, placement.BarEdge + TextGap + inkInModules);
                 }
 
-                float textWidth = canvas.MeasureText(new RichTextOptions(font), placement.Text).LineMetrics[0].Extent.X;
-                float center = symbolLeft + ((placement.Left + placement.Right) * 0.5F * moduleWidth);
+                float textWidth = TextMeasurer.MeasureRenderableBounds(placement.Text, new TextOptions(font)).Width;
+                float center = (MathF.Round(symbolLeft + (placement.Left * moduleWidth)) + MathF.Round(symbolLeft + (placement.Right * moduleWidth))) * 0.5F;
                 backgroundLeft = MathF.Min(backgroundLeft, center - (textWidth * 0.5F));
                 backgroundRight = MathF.Max(backgroundRight, center + (textWidth * 0.5F));
-                heightInPixels = MathF.Max(heightInPixels, (placement.Y * moduleWidth) + lineMetrics.LineHeight);
             }
         }
+
+        float heightInPixels = (topBand + bottomInModules) * moduleWidth;
 
         // The origin is the top left corner of everything this call draws. When text overhangs the symbol on
         // the left (an ISBN caption wider than the bars), the whole rendering shifts right by a whole number
         // of pixels so the leftmost element starts at the origin without moving the bars off the pixel grid.
-        // Nothing renders above the origin because every text line sits at or below the symbol top.
+        // Nothing renders above the origin because the band already holds every line above the bars.
         float shift = MathF.Ceiling(origin.X - backgroundLeft);
         if (shift > 0)
         {
@@ -184,8 +188,8 @@ internal static class LinearBarcodeEmitter
                 int bar = i >> 1;
                 float barLeft = MathF.Round(x);
                 float barRight = MathF.Round(x + runWidth);
-                float barTop = MathF.Round(origin.Y + (symbol.BarTops[bar] * moduleWidth));
-                float barBottom = MathF.Round(origin.Y + (symbol.BarTops[bar] * moduleWidth) + (symbol.BarHeights[bar] * moduleWidth));
+                float barTop = MathF.Round(origin.Y + ((topBand + symbol.BarTops[bar]) * moduleWidth));
+                float barBottom = MathF.Round(origin.Y + ((topBand + symbol.BarTops[bar] + symbol.BarHeights[bar]) * moduleWidth));
                 bars[bar] = new RectanglePolygon(barLeft, barTop, barRight - barLeft, barBottom - barTop);
             }
 
@@ -202,25 +206,24 @@ internal static class LinearBarcodeEmitter
         for (int i = 0; i < symbol.Text.Length; i++)
         {
             BarcodeTextPlacement placement = symbol.Text[i];
-            Font font = placement.IsCaption
-                ? captionFont ?? digitFont
-                : placement.FontScale == 1F ? digitFont : new Font(digitFont, digitFont.Size * placement.FontScale);
+            Font font = ResolveFont(placement, digitFont, ref captionFont, options);
 
-            // Every line anchors on its alphabetic baseline, so the origin places that baseline and no
-            // line box arithmetic is involved. Capitals and digits rest their ink on the baseline, which
-            // makes a caption's baseline its clear space above the bars. The digits below the bars hang
-            // from their ink top, one cap height over the baseline, and a scaled placement shares that
-            // baseline with the rest without any further correction.
-            // Every baseline rounds onto the device pixel grid, as the bar edges do, so the text stays
-            // crisp at any module width and a measured strip or cap height cannot land a row on a half
-            // pixel.
-            float textY = placement.IsCaption
-                ? MathF.Round(origin.Y + ((captionStrip - EanUpcEncoder.TextGap) * moduleWidth))
-                : MathF.Round(origin.Y + (placement.Y * moduleWidth) + digitCapHeight);
+            // The edge the reader sees is what rounds onto the device pixel grid, as the bar edges do. For
+            // a line below the bars that edge is the top of its ink, so the placement line rounds and the
+            // ink rise is added after; for a line above the bars the ink bottom is the baseline itself.
+            float barEdge = origin.Y + ((topBand + placement.BarEdge) * moduleWidth);
+            float textY = placement.Side == BarcodeTextSide.AboveBars
+                ? MathF.Round(barEdge - (TextGap * moduleWidth))
+                : MathF.Round(barEdge + (TextGap * moduleWidth)) + InkRise(font);
+
+            // The text centres on the cell edges the bars actually drew on, not on the exact fractional
+            // position, so a digit stays over its own symbol character. Centring on the unrounded edges
+            // lets the text and the bars disagree by up to half a module.
+            float textX = (MathF.Round(symbolLeft + (placement.Left * moduleWidth)) + MathF.Round(symbolLeft + (placement.Right * moduleWidth))) * 0.5F;
 
             RichTextOptions textOptions = new(font)
             {
-                Origin = new PointF(symbolLeft + ((placement.Left + placement.Right) * 0.5F * moduleWidth), textY),
+                Origin = new PointF(textX, textY),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 TextBaseline = TextBaseline.Alphabetic,
                 HintingMode = HintingMode.Standard
@@ -231,4 +234,34 @@ internal static class LinearBarcodeEmitter
 
         return bounds;
     }
+
+    /// <summary>
+    /// Returns the font a placement renders in. A caption renders in the caption font, resolved once for
+    /// the symbol so that both the band and the drawing use one size.
+    /// </summary>
+    /// <param name="placement">The placement to resolve for.</param>
+    /// <param name="digitFont">The font the digit lines render in.</param>
+    /// <param name="captionFont">The resolved caption font, filled in on first use.</param>
+    /// <param name="options">The sizing and painting options.</param>
+    /// <returns>The font for the placement.</returns>
+    private static Font ResolveFont(BarcodeTextPlacement placement, Font digitFont, ref Font? captionFont, BarcodeOptions options)
+    {
+        if (placement.IsCaption)
+        {
+            captionFont ??= EanUpcEncoder.ResolveCaptionFont(placement.Text, placement.Right - placement.Left, options);
+            return captionFont;
+        }
+
+        return placement.FontScale == 1F ? digitFont : new Font(digitFont, digitFont.Size * placement.FontScale);
+    }
+
+    /// <summary>
+    /// Returns how far the ink of a line of digits or capitals stands above its baseline, in pixels.
+    /// Section 5.2.5 of the GS1 General Specifications measures the clear space to that ink, and the
+    /// characters of the human readable interpretation all rest their ink on the baseline.
+    /// </summary>
+    /// <param name="font">The font the line renders in.</param>
+    /// <returns>The rise in pixels.</returns>
+    private static float InkRise(Font font)
+        => font.FontMetrics.CapHeight * font.Size / font.FontMetrics.UnitsPerEm;
 }

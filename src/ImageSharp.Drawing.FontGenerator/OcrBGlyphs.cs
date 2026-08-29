@@ -51,6 +51,32 @@ internal static class OcrBGlyphs
     public const float Square = 7.874f;
 
     /// <summary>
+    /// Design units per millimetre. The design grid is the 0,0001 inch grid.
+    /// </summary>
+    public const float PerMillimetre = 10000F / 25.4F;
+
+    /// <summary>
+    /// Dimension C of ECMA-11 section 4.1: a small letter stands 1,83 mm above the baseline.
+    /// </summary>
+    public const float SmallLetterHeight = 1.83F * PerMillimetre;
+
+    /// <summary>
+    /// Dimension B of ECMA-11 section 4.1: a capital letter and a digit both stand 2,46 mm above the
+    /// baseline. The standard gives the two one dimension.
+    /// </summary>
+    public const float CapitalHeight = 2.46F * PerMillimetre;
+
+    /// <summary>
+    /// Dimension A of ECMA-11 section 4.1: an ascender stands 2,60 mm above the baseline.
+    /// </summary>
+    public const float AscenderHeight = 2.60F * PerMillimetre;
+
+    /// <summary>
+    /// Dimension D of ECMA-11 section 4.1: a descender hangs 0,60 mm below the baseline.
+    /// </summary>
+    public const float DescenderDepth = 0.60F * PerMillimetre;
+
+    /// <summary>
     /// Gets the glyph outlines and the dimensional primitives keyed by character, in the
     /// stroke token format that <c>BuildStroke</c> in Program.cs documents.
     /// </summary>
@@ -1890,6 +1916,19 @@ internal static class OcrBGlyphs
         W = W,
         Descender = D,
         DefaultStrokeWidth = T,
+        SmallLetterHeight = SmallLetterHeight,
+        CapitalHeight = CapitalHeight,
+        AscenderHeight = AscenderHeight,
+        DescenderDepth = DescenderDepth,
+        NormalizationExceptions = string.Empty,
+        DrawnCapitalHeight = 1050,
+
+        // The reference OCR-B digitization prints its capital ink 678 units above the baseline per em, so
+        // the scale lands ours there and a point size means the same glyph size in both.
+        EmScale = 678F / CapitalHeight,
+        DrawnSmallLetterHeight = 780.6F,
+        DrawnAscenderHeight = 1154.2F,
+        DrawnDescenderDepth = 266.7F,
         CutTerminals = false,
         Skeletons = Skeletons,
         SquareStrokes = SquareStrokes,

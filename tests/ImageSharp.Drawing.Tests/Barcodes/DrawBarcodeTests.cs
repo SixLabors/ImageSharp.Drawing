@@ -4,6 +4,7 @@
 using SixLabors.ImageSharp.Drawing.Barcodes;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
@@ -16,77 +17,89 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 public class DrawBarcodeTests
 {
     [Theory]
-    [WithBlankImage(260, 140, PixelTypes.Rgba32)]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Ean13<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new Ean13Symbology(), "5901234123457", CreateOptions());
 
     [Theory]
-    [WithBlankImage(260, 160, PixelTypes.Rgba32)]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Ean13_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new Ean13Symbology(), "5901234123457", CreateTextOptions());
 
     [Theory]
-    [WithBlankImage(200, 140, PixelTypes.Rgba32)]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Ean8<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new Ean8Symbology(), "96385074", CreateOptions());
 
     [Theory]
-    [WithBlankImage(260, 160, PixelTypes.Rgba32)]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void UpcA_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new UpcASymbology(), "036000291452", CreateTextOptions());
 
     [Theory]
-    [WithBlankImage(180, 160, PixelTypes.Rgba32)]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void UpcE_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new UpcESymbology(), "01234565", CreateTextOptions());
 
     [Theory]
-    [WithBlankImage(160, 160, PixelTypes.Rgba32)]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Ean5_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new Ean5Symbology(), "52495", CreateTextOptions());
 
     [Theory]
-    [WithBlankImage(110, 140, PixelTypes.Rgba32)]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Ean2<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new Ean2Symbology(), "05", CreateOptions());
 
     [Theory]
-    [WithBlankImage(280, 180, PixelTypes.Rgba32)]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Isbn_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new IsbnSymbology(), "978-0-306-40615-7", CreateTextOptions());
 
     [Theory]
-    [WithBlankImage(280, 180, PixelTypes.Rgba32)]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Ismn_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new IsmnSymbology(), "M-2306-7118", CreateTextOptions());
 
     [Theory]
-    [WithBlankImage(280, 180, PixelTypes.Rgba32)]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Issn_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new IssnSymbology(), "0317-8471", CreateTextOptions());
 
     [Theory]
-    [WithBlankImage(210, 160, PixelTypes.Rgba32)]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Mands_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new MandsSymbology(), "0642118", CreateTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Code128<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Code128Symbology(), "CODE128", CreateOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Code128_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Code128Symbology(), "CODE128", CreateTextOptions());
 
     /// <summary>
     /// Disabling the quiet zones must shift the first bar to the draw origin, and a non-solid brush must
     /// flow through to the bar fill unchanged.
     /// </summary>
     [Theory]
-    [WithBlankImage(220, 140, PixelTypes.Rgba32)]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Ean13_NoQuietZones_GradientBars<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -105,7 +118,16 @@ public class DrawBarcodeTests
     private static void RunTest<TPixel>(TestImageProvider<TPixel> provider, BarcodeSymbology symbology, string text, BarcodeOptions options)
         where TPixel : unmanaged, IPixel<TPixel>
         => provider.RunValidatingProcessorTest(
-            x => x.Paint(canvas => canvas.DrawBarcode(symbology, text, options, new PointF(10, 10))),
+            x =>
+            {
+                // The image is the symbol, with no slack around it. The provider hands over a one pixel
+                // canvas, MeasureBarcode reports the area the symbol needs, and the canvas grows to it.
+                // Slack would hide a symbol that grew, and a shortfall would clip one.
+                RectangleF bounds = default;
+                x.Paint(canvas => bounds = canvas.MeasureBarcode(symbology, text, options, PointF.Empty));
+                x.Resize(new Size((int)MathF.Ceiling(bounds.Width), (int)MathF.Ceiling(bounds.Height)));
+                x.Paint(canvas => canvas.DrawBarcode(symbology, text, options, PointF.Empty));
+            },
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
 
@@ -122,7 +144,8 @@ public class DrawBarcodeTests
         BarcodeOptions options = CreateOptions();
 
         // GS1 prints the interpretation 2.75mm high at the 0.33mm X-dimension, so at ModuleWidth 2 it
-        // is 16.7px of ink. The cap ink of this font stands 0.778 em, giving 21.5 points.
+        // is 16.7px of ink. The cap ink of this font stands 0.678 em, giving 24.6 points, but the digit cell
+        // cap holds it to what fits a 7 module cell.
         options.Font = BarcodeFonts.OcrB.CreateFont(21.5F);
         return options;
     }

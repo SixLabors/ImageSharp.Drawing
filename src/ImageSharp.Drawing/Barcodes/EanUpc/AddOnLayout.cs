@@ -6,7 +6,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <summary>
 /// Shared layout for the two and five digit EAN/UPC add-on symbols. Add-on bars are uniform in height and,
 /// unlike the main symbols, the GS1 General Specifications print the human readable interpretation above the
-/// bars, so a text band is carved from the top of the symbol when text is enabled.
+/// bars, so the digits face the bar tops. The room they need belongs to the renderer, which is what knows
+/// the font.
 /// </summary>
 internal static class AddOnLayout
 {
@@ -35,23 +36,19 @@ internal static class AddOnLayout
         int barCount = (runs.Length + 1) / 2;
 
         float barHeight = EanUpcEncoder.ResolveBarHeight(options, EanUpcEncoder.NominalAddOnBarHeight);
-        float band = options.Font is null ? 0 : MathF.Min(EanUpcEncoder.AddOnTextBand, barHeight - 1);
 
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];
-        Array.Fill(heights, barHeight - band);
-        if (band > 0)
-        {
-            Array.Fill(tops, band);
-        }
+        Array.Fill(heights, barHeight);
 
+        // Section 5.2.5 of the GS1 General Specifications prints the add-on interpretation above the bars.
         // Each digit prints above its own symbol character; the character cells start after the guard
         // pattern and advance by the seven character modules plus the two delineator modules.
         BarcodeTextPlacement[] placements = [];
         if (options.Font is not null)
         {
             placements = new BarcodeTextPlacement[text.Length];
-            EanUpcEncoder.FillDigitPlacements(placements, 0, text, 0, text.Length, 4F, 9F, 0F);
+            EanUpcEncoder.FillDigitPlacements(placements, 0, text, 0, text.Length, 4F, 9F, BarcodeTextSide.AboveBars, 0F);
         }
 
         return new LinearBarcodeSymbol(runs, heights, tops, placements, LeadingQuietZone, TrailingQuietZone);

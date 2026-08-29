@@ -82,6 +82,31 @@ internal static class OcrAGlyphs
     public const float D = -224;
 
     /// <summary>
+    /// The ink height of a capital and of a digit above the baseline. Section 2.7 of FIPS PUB 32 gives
+    /// upper case dimensions in terms of W and H, so both reach the nominal centerline height of
+    /// Table II-1 plus half a stroke.
+    /// </summary>
+    public const float CapitalHeight = H + (T / 2);
+
+    /// <summary>
+    /// The ink height of a small letter above the baseline, from the lower case drawings of Figures
+    /// II-68 through II-93.
+    /// </summary>
+    public const float SmallLetterHeight = X + (T / 2);
+
+    /// <summary>
+    /// The ink height of an ascender above the baseline. The lower case drawings carry the ascenders to
+    /// the same line as the capitals.
+    /// </summary>
+    public const float AscenderHeight = CapitalHeight;
+
+    /// <summary>
+    /// The ink depth of a descender below the baseline, as a positive distance. The descending letters
+    /// carry their tail centerline to 294 below the baseline.
+    /// </summary>
+    public const float DescenderDepth = 294 + (T / 2);
+
+    /// <summary>
     /// The centerline radius of the 13.8 corner arcs of the lower case drawings, measured on the outer
     /// ink.
     /// </summary>
@@ -1165,6 +1190,22 @@ internal static class OcrAGlyphs
         W = W,
         Descender = D,
         DefaultStrokeWidth = T,
+        SmallLetterHeight = SmallLetterHeight,
+        CapitalHeight = CapitalHeight,
+        AscenderHeight = AscenderHeight,
+        DescenderDepth = DescenderDepth,
+
+        // Section 2.1 of FIPS PUB 32 states that i, j, m, p and w were designed to exceed the nominal
+        // values of Table II-1, and Figure II-88 dimensions t at its own height rather than on a line.
+        NormalizationExceptions = "ijmpwt",
+        DrawnCapitalHeight = CapitalHeight,
+
+        // The reference OCR-A digitization prints its capital ink 780 units above the baseline per em, so
+        // the scale lands ours there and a point size means the same glyph size in both.
+        EmScale = 780F / CapitalHeight,
+        DrawnSmallLetterHeight = SmallLetterHeight,
+        DrawnAscenderHeight = AscenderHeight,
+        DrawnDescenderDepth = DescenderDepth,
         CutTerminals = false,
         Skeletons = Skeletons,
         SquareStrokes = SquareStrokes,

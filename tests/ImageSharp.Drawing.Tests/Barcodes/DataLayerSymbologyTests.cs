@@ -37,18 +37,17 @@ public class DataLayerSymbologyTests
         // size from that span, so the placement scale is neutral.
         BarcodeTextPlacement caption = symbol.Text[symbol.Text.Length - 1];
         Assert.Equal("ISBN 978-0-306-40615-7", caption.Text);
-        Assert.Equal(0, caption.Y);
+        Assert.Equal(BarcodeTextSide.AboveBars, caption.Side);
+        Assert.Equal(0, caption.BarEdge);
         Assert.Equal(0, caption.Left);
         Assert.Equal(95, caption.Right);
         Assert.Equal(1F, caption.FontScale);
         Assert.True(caption.IsCaption);
         Assert.Equal(14, symbol.Text.Length);
 
-        // The strip above the bars is measured from the caption, so every bar starts at the same line
-        // and that line clears the caption ink by the gap the specification sets.
-        float strip = EanUpcEncoder.MeasureCaptionStrip(caption.Text, 95F, options);
-        Assert.All(symbol.BarTops, top => Assert.Equal(strip, top, 3));
-        Assert.True(strip > EanUpcEncoder.TextGap);
+        // The room a caption needs above the bars belongs to the renderer, which is what knows the font,
+        // so the symbol itself leaves every bar top aligned whether or not it carries a caption.
+        Assert.All(symbol.BarTops, top => Assert.Equal(0, top));
 
         // An ISBN-10 input captions its converted 978 form.
         symbol = (LinearBarcodeSymbol)new IsbnSymbology().Encode("0-306-40615-2", options);
