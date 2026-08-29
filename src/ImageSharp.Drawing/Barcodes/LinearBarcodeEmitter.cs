@@ -72,6 +72,7 @@ internal static class LinearBarcodeEmitter
         float backgroundLeft = origin.X;
         float backgroundRight = origin.X + (widthInModules * moduleWidth);
         Font? captionFont = null;
+        Font? scaledFont = null;
 
         // Every text line prints at 9 point or larger, the one size floor the standards state.
         Font? digitFont = options.Font is null || options.Font.Size >= EanUpcEncoder.MinimumTextPoints
@@ -83,6 +84,7 @@ internal static class LinearBarcodeEmitter
         if (digitFont is not null)
         {
             float cap = float.MaxValue;
+            TextOptions capOptions = new(digitFont);
             for (int i = 0; i < symbol.Text.Length; i++)
             {
                 BarcodeTextPlacement capPlacement = symbol.Text[i];
@@ -94,7 +96,7 @@ internal static class LinearBarcodeEmitter
                 // What runs into a neighbour is the glyph bounds, so the cap measures those. The
                 // renderable bounds are their union with the advance, and the advance is space the glyph
                 // reserves rather than covers, so capping on it shrinks the text for no gain.
-                float cellText = TextMeasurer.MeasureBounds(capPlacement.Text, new TextOptions(digitFont)).Width;
+                float cellText = TextMeasurer.MeasureBounds(capPlacement.Text, capOptions).Width;
                 if (cellText <= 0)
                 {
                     continue;
@@ -119,10 +121,20 @@ internal static class LinearBarcodeEmitter
         float bottomInModules = symbol.HeightInModules;
         if (digitFont is not null)
         {
+            // A symbol resolves to at most three fonts, and its placements arrive grouped by font, so one
+            // set of measuring options serves a whole run of them.
+            Font? measuredFont = null;
+            TextOptions measureOptions = new(digitFont);
             for (int i = 0; i < symbol.Text.Length; i++)
             {
                 BarcodeTextPlacement placement = symbol.Text[i];
-                Font font = ResolveFont(placement, digitFont, ref captionFont, options);
+                Font font = ResolveFont(placement, digitFont, ref captionFont, ref scaledFont, options);
+                if (!ReferenceEquals(font, measuredFont))
+                {
+                    measuredFont = font;
+                    measureOptions = new TextOptions(font);
+                }
+
                 float inkInModules = InkRise(font) / moduleWidth;
 
                 if (placement.Side == BarcodeTextSide.AboveBars)
@@ -134,7 +146,7 @@ internal static class LinearBarcodeEmitter
                     bottomInModules = MathF.Max(bottomInModules, placement.BarEdge + TextGap + inkInModules);
                 }
 
-                float textWidth = TextMeasurer.MeasureRenderableBounds(placement.Text, new TextOptions(font)).Width;
+                float textWidth = TextMeasurer.MeasureRenderableBounds(placement.Text, measureOptions).Width;
                 float center = (MathF.Round(symbolLeft + (placement.Left * moduleWidth)) + MathF.Round(symbolLeft + (placement.Right * moduleWidth))) * 0.5F;
                 backgroundLeft = MathF.Min(backgroundLeft, center - (textWidth * 0.5F));
                 backgroundRight = MathF.Max(backgroundRight, center + (textWidth * 0.5F));
@@ -206,7 +218,7 @@ internal static class LinearBarcodeEmitter
         for (int i = 0; i < symbol.Text.Length; i++)
         {
             BarcodeTextPlacement placement = symbol.Text[i];
-            Font font = ResolveFont(placement, digitFont, ref captionFont, options);
+            Font font = ResolveFont(placement, digitFont, ref captionFont, ref scaledFont, options);
 
             // The edge the reader sees is what rounds onto the device pixel grid, as the bar edges do. For
             // a line below the bars that edge is the top of its ink, so the placement line rounds and the
@@ -242,9 +254,10 @@ internal static class LinearBarcodeEmitter
     /// <param name="placement">The placement to resolve for.</param>
     /// <param name="digitFont">The font the digit lines render in.</param>
     /// <param name="captionFont">The resolved caption font, filled in on first use.</param>
+    /// <param name="scaledFont">The scaled digit font, filled in on first use and reused while the scale holds.</param>
     /// <param name="options">The sizing and painting options.</param>
     /// <returns>The font for the placement.</returns>
-    private static Font ResolveFont(BarcodeTextPlacement placement, Font digitFont, ref Font? captionFont, BarcodeOptions options)
+    private static Font ResolveFont(BarcodeTextPlacement placement, Font digitFont, ref Font? captionFont, ref Font? scaledFont, BarcodeOptions options)
     {
         if (placement.IsCaption)
         {
@@ -252,7 +265,20 @@ internal static class LinearBarcodeEmitter
             return captionFont;
         }
 
-        return placement.FontScale == 1F ? digitFont : new Font(digitFont, digitFont.Size * placement.FontScale);
+        if (placement.FontScale == 1F)
+        {
+            return digitFont;
+        }
+
+        // A symbol scales at most a handful of placements, and the UPC quiet zone digits all scale by the
+        // same factor, so the scaled font is built once and reused while that factor holds.
+        float scaledSize = digitFont.Size * placement.FontScale;
+        if (scaledFont is null || scaledFont.Size != scaledSize)
+        {
+            scaledFont = new Font(digitFont, scaledSize);
+        }
+
+        return scaledFont;
     }
 
     /// <summary>
