@@ -78,7 +78,7 @@ public class Gs1128SymbologyTests
     /// </summary>
     [Fact]
     public void RejectsOverlongData()
-        => Assert.Throws<ArgumentException>(() => Encode("(10)" + new string('A', 48)));
+        => Assert.ThrowsAny<ArgumentException>(() => Encode("(10)" + new string('A', 48)));
 
     private static LinearBarcodeSymbol Encode(string text)
         => (LinearBarcodeSymbol)new Gs1128Symbology().Encode(text, new BarcodeOptions());

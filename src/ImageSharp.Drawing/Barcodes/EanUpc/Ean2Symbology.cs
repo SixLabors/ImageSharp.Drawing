@@ -31,7 +31,7 @@ public sealed class Ean2Symbology : BarcodeSymbology
             throw new ArgumentException($"EAN-2 requires exactly 2 digits; got {text.Length} characters.", nameof(text));
         }
 
-        EanUpcEncoder.ValidateDigits(text, "EAN-2");
+        EanUpcEncoder.ValidateDigits(text);
 
         // GS1 General Specifications: the two-digit value modulo four selects the parity pattern, where
         // 0 = AA, 1 = AB, 2 = BA and 3 = BB. The remainder bits map to the number sets directly: a set bit is B.

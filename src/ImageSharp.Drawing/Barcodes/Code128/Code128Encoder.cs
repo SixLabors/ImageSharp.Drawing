@@ -38,6 +38,11 @@ internal static class Code128Encoder
     /// </summary>
     public const char Separator = (char)29;
 
+    /// <summary>
+    /// The largest number of characters a Code 128 symbol carries.
+    /// </summary>
+    public const int MaximumLength = 500;
+
     private const int StartA = 103;
     private const int StartB = 104;
     private const int StartC = 105;
@@ -91,22 +96,23 @@ internal static class Code128Encoder
     /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
     /// <param name="gs1">Whether this is a GS1 symbol. Such a symbol carries a Function 1 character after
     /// its start character, and encodes every <see cref="Separator"/> in the text as another one.</param>
-    /// <param name="symbologyName">The symbology name used in error messages.</param>
     /// <returns>The run widths in modules.</returns>
     /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode.</exception>
-    public static int[] Encode(string text, bool gs1, string symbologyName)
+    public static int[] Encode(ReadOnlySpan<char> text, bool gs1)
     {
+        Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
+
         // Section 5.4.3.3 gives the three code sets ASCII 0 to 127 between them, so anything above that is
         // rejected. Walking code points rather than UTF-16 units reports a surrogate pair as the one
         // character it is.
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
+        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
         while (codePoints.MoveNext())
         {
             CodePoint current = codePoints.Current;
-            if (current.Value > 127)
+            if (!current.IsAscii)
             {
                 throw new ArgumentException(
-                    $"{symbologyName} encodes ASCII 0 to 127; U+{current.Value:X4} is outside that range.",
+                    $"Code 128 encodes ASCII 0 to 127; U+{current.Value:X4} is outside that range.",
                     nameof(text));
             }
         }
@@ -186,7 +192,7 @@ internal static class Code128Encoder
     /// <param name="digitsFromOdd">Scratch for the same count one character out of step.</param>
     /// <returns>The number of symbol character values written.</returns>
     private static int Encode(
-        string text,
+        ReadOnlySpan<char> text,
         bool gs1,
         Span<int> values,
         Span<byte> nextOnlyInA,
@@ -218,7 +224,7 @@ internal static class Code128Encoder
                 digitsFromEven[i] = SaturatingAdd(digitsFromEven[i + 1], 2);
                 digitsFromOdd[i] = 0;
             }
-            else if (text[i] is >= '0' and <= '9')
+            else if (char.IsAsciiDigit(text[i]))
             {
                 digitsFromEven[i] = SaturatingAdd(digitsFromOdd[i + 1], 1);
                 digitsFromOdd[i] = SaturatingAdd(digitsFromEven[i + 1], 1);
@@ -377,7 +383,7 @@ internal static class Code128Encoder
     /// <param name="written">The write position, advanced by one.</param>
     /// <returns>The code set the symbol starts in.</returns>
     private static Code128CodeSet ChooseStartSet(
-        string text,
+        ReadOnlySpan<char> text,
         bool gs1,
         ReadOnlySpan<byte> nextOnlyInA,
         ReadOnlySpan<byte> nextOnlyInB,

@@ -20,8 +20,10 @@ public sealed class Ean13Symbology : BarcodeSymbology
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
-        {
+    {
+        Guard.NotNull(text, nameof(text));
+
         Span<char> digits = stackalloc char[13];
-        return EanUpcEncoder.BuildEan13(EanUpcEncoder.ValidateAndApplyCheckDigit(text, 12, "EAN-13", digits), options, null);
+        return EanUpcEncoder.BuildEan13(EanUpcEncoder.ValidateAndApplyCheckDigit(text, 12, digits), options, null);
     }
 }

@@ -49,7 +49,7 @@ public sealed class MandsSymbology : BarcodeSymbology
         }
 
         Span<char> digitBuffer = stackalloc char[8];
-        ReadOnlySpan<char> digits = EanUpcEncoder.ValidateAndApplyCheckDigit(paddedBuffer[..(padded ? 8 : text.Length)], 7, "M&S", digitBuffer);
+        ReadOnlySpan<char> digits = EanUpcEncoder.ValidateAndApplyCheckDigit(paddedBuffer[..(padded ? 8 : text.Length)], 7, digitBuffer);
 
         LinearBarcodeSymbol ean8 = EanUpcEncoder.BuildEan8(digits, options);
 

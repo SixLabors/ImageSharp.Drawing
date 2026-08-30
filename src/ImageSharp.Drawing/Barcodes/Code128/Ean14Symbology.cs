@@ -62,7 +62,7 @@ public sealed class Ean14Symbology : BarcodeSymbology
         ReadOnlySpan<char> supplied = compact[4..length];
         for (int i = 0; i < supplied.Length; i++)
         {
-            if (supplied[i] is < '0' or > '9')
+            if (!char.IsAsciiDigit(supplied[i]))
             {
                 throw new ArgumentException($"EAN-14 carries only digits after its application identifier; got '{supplied[i]}'.", nameof(text));
             }
@@ -86,7 +86,7 @@ public sealed class Ean14Symbology : BarcodeSymbology
             : supplied.Length == 14 ? text : $"{text} {(char)('0' + check)}";
 
         return Code128Encoder.BuildSymbol(
-            Code128Encoder.Encode(new string(encoded), true, "EAN-14"),
+            Code128Encoder.Encode(encoded, true),
             caption,
             options);
     }

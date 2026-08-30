@@ -40,7 +40,7 @@ public sealed class UpcESymbology : BarcodeSymbology
                 nameof(text));
         }
 
-        EanUpcEncoder.ValidateDigits(text, "UPC-E");
+        EanUpcEncoder.ValidateDigits(text);
 
         int numberSystem = text[0] - '0';
         if (numberSystem is not 0 and not 1)

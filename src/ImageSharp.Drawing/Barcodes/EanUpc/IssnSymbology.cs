@@ -34,7 +34,7 @@ public sealed class IssnSymbology : BarcodeSymbology
             variant = text.AsSpan(space + 1);
         }
 
-        if (variant.Length != 2 || variant[0] is < '0' or > '9' || variant[1] is < '0' or > '9')
+        if (variant.Length != 2 || !char.IsAsciiDigit(variant[0]) || !char.IsAsciiDigit(variant[1]))
         {
             throw new ArgumentException("The ISSN sequence variant must be exactly two digits.", nameof(text));
         }

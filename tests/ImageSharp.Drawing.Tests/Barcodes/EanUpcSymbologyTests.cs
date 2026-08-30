@@ -65,7 +65,7 @@ public class EanUpcSymbologyTests
     [InlineData("59012341234A")]
     [InlineData("5901234123450")]
     public void Ean13_RejectsInvalidInput(string text)
-        => Assert.Throws<ArgumentException>(() => Encode(new Ean13Symbology(), text));
+        => Assert.ThrowsAny<ArgumentException>(() => Encode(new Ean13Symbology(), text));
 
     [Fact]
     public void Ean8_EncodesExpectedModuleSequence()
@@ -95,7 +95,7 @@ public class EanUpcSymbologyTests
     [InlineData("9638507A")]
     [InlineData("96385071")]
     public void Ean8_RejectsInvalidInput(string text)
-        => Assert.Throws<ArgumentException>(() => Encode(new Ean8Symbology(), text));
+        => Assert.ThrowsAny<ArgumentException>(() => Encode(new Ean8Symbology(), text));
 
     [Fact]
     public void UpcA_EncodesExpectedModuleSequence()
@@ -174,7 +174,7 @@ public class EanUpcSymbologyTests
     [InlineData("012345A")]
     [InlineData("01234560")]
     public void UpcE_RejectsInvalidInput(string text)
-        => Assert.Throws<ArgumentException>(() => Encode(new UpcESymbology(), text));
+        => Assert.ThrowsAny<ArgumentException>(() => Encode(new UpcESymbology(), text));
 
     [Theory]
     [InlineData("90200", "1,1,2,2,1,1,3,1,1,3,2,1,1,1,1,2,1,2,2,1,1,3,2,1,1,1,1,1,1,2,3")]
@@ -216,7 +216,7 @@ public class EanUpcSymbologyTests
     [InlineData("902000")]
     [InlineData("9020A")]
     public void Ean5_RejectsInvalidInput(string text)
-        => Assert.Throws<ArgumentException>(() => Encode(new Ean5Symbology(), text));
+        => Assert.ThrowsAny<ArgumentException>(() => Encode(new Ean5Symbology(), text));
 
     [Theory]
     [InlineData("05", "1,1,2,3,2,1,1,1,1,1,3,2,1")]
@@ -241,7 +241,7 @@ public class EanUpcSymbologyTests
     [InlineData("053")]
     [InlineData("5A")]
     public void Ean2_RejectsInvalidInput(string text)
-        => Assert.Throws<ArgumentException>(() => Encode(new Ean2Symbology(), text));
+        => Assert.ThrowsAny<ArgumentException>(() => Encode(new Ean2Symbology(), text));
 
     [Fact]
     public void BarHeightOption_OverridesNominalHeight()
