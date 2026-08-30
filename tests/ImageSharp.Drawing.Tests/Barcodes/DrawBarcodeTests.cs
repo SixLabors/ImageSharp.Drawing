@@ -106,6 +106,18 @@ public class DrawBarcodeTests
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new Gs1128Symbology(), "(01)09521234543213(3103)000123", CreateTextOptions());
 
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Ean14<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Ean14Symbology(), "(01)09521234543213", CreateOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Ean14_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Ean14Symbology(), "(01)09521234543213", CreateTextOptions());
+
     /// <summary>
     /// Disabling the quiet zones must shift the first bar to the draw origin, and a non-solid brush must
     /// flow through to the bar fill unchanged.
