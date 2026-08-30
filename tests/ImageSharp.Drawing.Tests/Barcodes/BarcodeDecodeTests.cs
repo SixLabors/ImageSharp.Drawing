@@ -73,6 +73,13 @@ public class BarcodeDecodeTests
         => AssertDecodes(new Gs1128Symbology(), text, BarcodeFormat.CODE_128, expected);
 
     /// <summary>
+    /// An EAN-14 decodes to its Application Identifier and the fourteen digit Global Trade Item Number.
+    /// </summary>
+    [Fact]
+    public void Ean14_RoundTrips()
+        => AssertDecodes(new Ean14Symbology(), "(01)09521234543213", BarcodeFormat.CODE_128, "0109521234543213");
+
+    /// <summary>
     /// The decoder must also read the symbol with the human readable interpretation present, proving the
     /// text does not intrude into the bars or quiet zones.
     /// </summary>

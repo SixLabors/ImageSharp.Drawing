@@ -1,0 +1,93 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+namespace SixLabors.ImageSharp.Drawing.Barcodes;
+
+/// <summary>
+/// EAN-14, a GS1-128 symbol carrying one element string: the Global Trade Item Number of GS1
+/// Application Identifier (01). Section 3.3.2 of the GS1 General Specifications gives that identifier a
+/// 14 digit GTIN, Table 7-6 gives the element string a total length of 16, and section 7.9 defines the
+/// check digit.
+/// <para>
+/// Input is the element string syntax, <c>(01)</c> followed by the GTIN, with spaces ignored. The check
+/// digit is optional: 13 digits have it computed, 14 have it verified. The human readable interpretation
+/// separates a computed check digit with a space, as the printed number is grouped.
+/// </para>
+/// </summary>
+public sealed class Ean14Symbology : BarcodeSymbology
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Ean14Symbology"/> class.
+    /// </summary>
+    public Ean14Symbology()
+    {
+    }
+
+    /// <inheritdoc/>
+    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    {
+        Guard.NotNull(text, nameof(text));
+
+        // The element string is "(01)" and 14 digits, so the longest input is 18 characters once the
+        // spaces the caller may group the number with are dropped.
+        Span<char> compact = stackalloc char[18];
+        int length = 0;
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] == ' ')
+            {
+                continue;
+            }
+
+            if (length == compact.Length)
+            {
+                throw new ArgumentException("EAN-14 takes the (01) application identifier and 13 or 14 digits.", nameof(text));
+            }
+
+            compact[length++] = text[i];
+        }
+
+        if (length is not (17 or 18))
+        {
+            throw new ArgumentException(
+                $"EAN-14 takes the (01) application identifier and 13 or 14 digits; got {length} characters.",
+                nameof(text));
+        }
+
+        if (!compact[..4].SequenceEqual("(01)"))
+        {
+            throw new ArgumentException("EAN-14 begins with the (01) application identifier.", nameof(text));
+        }
+
+        ReadOnlySpan<char> supplied = compact[4..length];
+        for (int i = 0; i < supplied.Length; i++)
+        {
+            if (supplied[i] is < '0' or > '9')
+            {
+                throw new ArgumentException($"EAN-14 carries only digits after its application identifier; got '{supplied[i]}'.", nameof(text));
+            }
+        }
+
+        int check = EanUpcEncoder.ComputeCheckDigit(supplied[..13]);
+        if (supplied.Length == 14 && supplied[13] - '0' != check)
+        {
+            throw new ArgumentException($"Incorrect EAN-14 check digit: expected {check}, got {supplied[13]}.", nameof(text));
+        }
+
+        // The symbol carries the identifier and the fourteen digits with no separator, because Table 7-6
+        // gives this element string a predefined length.
+        Span<char> encoded = stackalloc char[16];
+        "01".CopyTo(encoded);
+        supplied[..13].CopyTo(encoded[2..]);
+        encoded[15] = (char)('0' + check);
+
+        string caption = options.Font is null
+            ? string.Empty
+            : supplied.Length == 14 ? text : $"{text} {(char)('0' + check)}";
+
+        return Code128Encoder.BuildSymbol(
+            Code128Encoder.Encode(new string(encoded), true, "EAN-14"),
+            caption,
+            options);
+    }
+}
