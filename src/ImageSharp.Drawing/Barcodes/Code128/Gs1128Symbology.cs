@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Text;
-
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -56,8 +54,11 @@ public sealed class Gs1128Symbology : BarcodeSymbology
     {
         Guard.NotNull(text, nameof(text));
 
-        StringBuilder encoded = new(text.Length);
-        StringBuilder readable = new(text.Length);
+        // Section 5.4.1 caps the data at 48 characters, so the encoded data never outgrows one buffer. The
+        // human readable interpretation is the input itself: every character this loop consumes is a
+        // parenthesis it drops, an Application Identifier or data, and it re-emits all three in order.
+        Span<char> encoded = stackalloc char[MaximumDataCharacters];
+        int written = 0;
         int position = 0;
         while (position < text.Length)
         {
@@ -84,7 +85,7 @@ public sealed class Gs1128Symbology : BarcodeSymbology
 
             for (int i = 0; i < identifier.Length; i++)
             {
-                if (identifier[i] is < '0' or > '9')
+                if (!char.IsAsciiDigit(identifier[i]))
                 {
                     throw new ArgumentException(
                         $"A GS1 Application Identifier is all digits; got '{identifier}'.",
@@ -105,8 +106,6 @@ public sealed class Gs1128Symbology : BarcodeSymbology
                 throw new ArgumentException($"The GS1 Application Identifier ({identifier}) carries no data.", nameof(text));
             }
 
-            // Section 7.8.6.2: an element string whose first two digits are outside Table 7-6 is
-            // terminated by a separator, unless it is the last one in the symbol.
             int predefined = PredefinedLength(identifier[0], identifier[1]);
             if (predefined > 0 && identifier.Length + data.Length != predefined)
             {
@@ -115,31 +114,33 @@ public sealed class Gs1128Symbology : BarcodeSymbology
                     nameof(text));
             }
 
-            encoded.Append(identifier).Append(data);
-            readable.Append('(').Append(identifier).Append(')').Append(data);
-
             position = dataEnd;
-            if (predefined == 0 && position < text.Length)
+            int separator = predefined == 0 && position < text.Length ? 1 : 0;
+
+            // Section 5.4.1 allows 48 data characters in a GS1-128 symbol.
+            Guard.MustBeLessThanOrEqualTo(written + identifier.Length + data.Length + separator, MaximumDataCharacters, nameof(text));
+
+            identifier.CopyTo(encoded[written..]);
+            written += identifier.Length;
+            data.CopyTo(encoded[written..]);
+            written += data.Length;
+
+            // Section 7.8.6.2: an element string whose first two digits are outside Table 7-6 is
+            // terminated by a separator, unless it is the last one in the symbol.
+            if (separator == 1)
             {
-                encoded.Append(Code128Encoder.Separator);
+                encoded[written++] = Code128Encoder.Separator;
             }
         }
 
-        if (encoded.Length == 0)
+        if (written == 0)
         {
             throw new ArgumentException("GS1-128 requires at least one element string.", nameof(text));
         }
 
-        if (encoded.Length > MaximumDataCharacters)
-        {
-            throw new ArgumentException(
-                $"Section 5.4.1 allows {MaximumDataCharacters} data characters in a GS1-128 symbol; got {encoded.Length}.",
-                nameof(text));
-        }
-
         return Code128Encoder.BuildSymbol(
-            Code128Encoder.Encode(encoded.ToString(), true, "GS1-128"),
-            readable.ToString(),
+            Code128Encoder.Encode(encoded[..written], true),
+            text,
             options);
     }
 }

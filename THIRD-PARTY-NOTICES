@@ -38,3 +38,17 @@ MIT License. The full license texts are available in the Vello repository
 LICENSE-APACHE and LICENSE-MIT files.
 
 ================================================================================
+
+.NET Runtime (https://github.com/dotnet/runtime)
+License: MIT
+
+Portions of this software were developed with reference to the .NET runtime
+project, including the pooled string building buffer.
+See also: src/ImageSharp.Drawing/Helpers/ValueStringBuilder.cs
+
+Copyright (c) .NET Foundation and Contributors
+
+The .NET runtime project is distributed under the MIT License. The full license
+text is available in the .NET runtime repository LICENSE.TXT file.
+
+================================================================================

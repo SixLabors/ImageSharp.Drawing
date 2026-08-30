@@ -88,6 +88,14 @@ public class BarcodeDecodeTests
         => AssertDecodes(new Sscc18Symbology(), "(00)106141411234567897", BarcodeFormat.CODE_128, "00106141411234567897");
 
     /// <summary>
+    /// A HIBC Code 128 decodes to the flag character, the data and the check character, which is what the
+    /// symbol carries; the delimiters belong to the human readable interpretation alone.
+    /// </summary>
+    [Fact]
+    public void HibcCode128_RoundTrips()
+        => AssertDecodes(new HibcCode128Symbology(), "A123BJC5D6E71", BarcodeFormat.CODE_128, "+A123BJC5D6E71G");
+
+    /// <summary>
     /// The decoder must also read the symbol with the human readable interpretation present, proving the
     /// text does not intrude into the bars or quiet zones.
     /// </summary>

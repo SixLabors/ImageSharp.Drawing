@@ -40,7 +40,7 @@ public sealed class IsbnSymbology : BarcodeSymbology
         {
             char c = compact[i];
             bool checkX = c == 'X' && compact.Length == 10 && i == 9;
-            if ((c is < '0' or > '9') && !checkX)
+            if (!char.IsAsciiDigit(c) && !checkX)
             {
                 throw new ArgumentException($"ISBN accepts only digits, hyphens and a trailing X check character; got '{c}'.", nameof(text));
             }

@@ -170,25 +170,18 @@ internal static class EanUpcEncoder
     /// </summary>
     /// <param name="text">The input text.</param>
     /// <param name="dataLength">The number of data digits, excluding the check digit.</param>
-    /// <param name="symbologyName">The symbology name used in error messages.</param>
     /// <param name="destination">The buffer the digits are written into, of at least the data length plus one.</param>
     /// <returns>The written digits, which are the data digits with the check digit appended.</returns>
     /// <exception cref="ArgumentException">The text has a wrong length, contains a non-digit, or carries a wrong check digit.</exception>
-    public static ReadOnlySpan<char> ValidateAndApplyCheckDigit(ReadOnlySpan<char> text, int dataLength, string symbologyName, Span<char> destination)
+    public static ReadOnlySpan<char> ValidateAndApplyCheckDigit(ReadOnlySpan<char> text, int dataLength, Span<char> destination)
     {
-        if (text.Length != dataLength && text.Length != dataLength + 1)
-        {
-            throw new ArgumentException(
-                $"{symbologyName} requires {dataLength} data digits with an optional check digit; got {text.Length} characters.",
-                nameof(text));
-        }
-
-        ValidateDigits(text, symbologyName);
+        Guard.MustBeBetweenOrEqualTo(text.Length, dataLength, dataLength + 1, nameof(text));
+        ValidateDigits(text);
 
         int check = ComputeCheckDigit(text[..dataLength]);
         if (text.Length > dataLength && text[dataLength] - '0' != check)
         {
-            throw new ArgumentException($"{symbologyName} check digit mismatch: expected {check}, got {text[dataLength]}.", nameof(text));
+            throw new ArgumentException($"Check digit mismatch: expected {check}, got {text[dataLength]}.", nameof(text));
         }
 
         text[..dataLength].CopyTo(destination);
@@ -200,9 +193,8 @@ internal static class EanUpcEncoder
     /// Validates that every character of the text is a decimal digit 0-9.
     /// </summary>
     /// <param name="text">The input text.</param>
-    /// <param name="symbologyName">The symbology name used in error messages.</param>
     /// <exception cref="ArgumentException">The text contains a non-digit character.</exception>
-    public static void ValidateDigits(ReadOnlySpan<char> text, string symbologyName)
+    public static void ValidateDigits(ReadOnlySpan<char> text)
     {
         // Walking code points rather than UTF-16 units reports a surrogate pair as the one character it
         // is, instead of showing half of it back to the caller.
@@ -213,7 +205,7 @@ internal static class EanUpcEncoder
             if (current.Value is < '0' or > '9')
             {
                 throw new ArgumentException(
-                    $"{symbologyName} accepts only the digits 0-9; got U+{current.Value:X4}.",
+                    $"Only the digits 0-9 are accepted; got U+{current.Value:X4}.",
                     nameof(text));
             }
         }
