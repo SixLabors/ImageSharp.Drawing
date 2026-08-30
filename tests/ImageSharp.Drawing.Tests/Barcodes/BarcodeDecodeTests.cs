@@ -80,6 +80,14 @@ public class BarcodeDecodeTests
         => AssertDecodes(new Ean14Symbology(), "(01)09521234543213", BarcodeFormat.CODE_128, "0109521234543213");
 
     /// <summary>
+    /// An SSCC-18 decodes to its Application Identifier and the eighteen digit Serial Shipping Container
+    /// Code.
+    /// </summary>
+    [Fact]
+    public void Sscc18_RoundTrips()
+        => AssertDecodes(new Sscc18Symbology(), "(00)106141411234567897", BarcodeFormat.CODE_128, "00106141411234567897");
+
+    /// <summary>
     /// The decoder must also read the symbol with the human readable interpretation present, proving the
     /// text does not intrude into the bars or quiet zones.
     /// </summary>
