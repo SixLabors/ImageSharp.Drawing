@@ -96,6 +96,16 @@ public class BarcodeDecodeTests
         => AssertDecodes(new HibcCode128Symbology(), "A123BJC5D6E71", BarcodeFormat.CODE_128, "+A123BJC5D6E71G");
 
     /// <summary>
+    /// A Code 39 symbol decodes to its data. The start and stop character are symbol overhead, and the
+    /// asterisks that stand for them belong to the human readable interpretation alone.
+    /// </summary>
+    [Theory]
+    [InlineData("CODE39")]
+    [InlineData("ABC-123")]
+    public void Code39_RoundTrips(string text)
+        => AssertDecodes(new Code39Symbology(), text, BarcodeFormat.CODE_39, text);
+
+    /// <summary>
     /// The decoder must also read the symbol with the human readable interpretation present, proving the
     /// text does not intrude into the bars or quiet zones.
     /// </summary>
