@@ -4,15 +4,16 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// A barcode symbology: one machine readable encoding scheme, such as EAN-13 or Code 128. A symbology validates
-/// input, applies the check character rules of its specification and encodes the input into a symbol that the
-/// canvas renders via <see cref="Processing.DrawingCanvas.DrawBarcode(BarcodeSymbology, string, BarcodeOptions, PointF)"/>.
+/// A barcode symbology: one machine readable encoding scheme, such as EAN-13 or Code 128. A symbology
+/// validates the input and applies the check character rules of its specification. It then encodes the
+/// input into a symbol. The canvas draws that symbol through
+/// <see cref="Processing.DrawingCanvas.DrawBarcode(BarcodeSymbology, string, BarcodeOptions, PointF)"/>.
 /// </summary>
 public abstract class BarcodeSymbology
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="BarcodeSymbology"/> class. The constructor is internal
-    /// because the encoded symbol types are internal; the set of symbologies is defined by this library.
+    /// because the encoded symbol types are internal. This library defines the set of symbologies.
     /// </summary>
     private protected BarcodeSymbology()
     {

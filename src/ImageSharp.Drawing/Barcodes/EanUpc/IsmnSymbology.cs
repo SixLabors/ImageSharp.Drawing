@@ -7,11 +7,14 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The ISMN data layer over EAN-13. An International Standard Music Number (ISO 10957) renders as an EAN-13
-/// symbol in the GS1 979-0 range, with the ISMN itself printed above the bars. Input is a hyphenated or
-/// plain thirteen digit ISMN starting 9790, or the older ten character form starting with M, which converts
-/// by replacing M with 9790. ISO 10957:2009 defines the check digit of both forms as the EAN-13 check digit
-/// of the thirteen digit number; the check digit is optional and is computed when absent.
+/// The ISMN data layer over EAN-13. An International Standard Music Number (ISO 10957) draws as an EAN-13
+/// symbol in the GS1 979-0 range. The ISMN itself prints above the bars.
+/// <para>
+/// The input is a thirteen digit ISMN that starts 9790, with or without hyphens. The older ten character
+/// form that starts with M is also accepted, and 9790 replaces that M. ISO 10957:2009 makes the check digit
+/// of both forms the EAN-13 check digit of the thirteen digit number. The check digit is optional, and this
+/// class calculates it when the input carries none.
+/// </para>
 /// </summary>
 public sealed class IsmnSymbology : BarcodeSymbology
 {

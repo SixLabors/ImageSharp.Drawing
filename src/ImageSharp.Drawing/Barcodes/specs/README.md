@@ -15,9 +15,18 @@ tree so a rule can be checked against its source rather than against memory.
 | Document | What it settles | Where it was read |
 | -------- | --------------- | ----------------- |
 | ISO/IEC 16388:2007, Code 39 bar code symbology specification | The Code 39 character assignments of Table 1, the nine element character structure of section 4.1 c), the 10 X quiet zone of section 4.4 d), the wide to narrow ratio range of section 4.4 b), the inter-character gap of section 4.4 c), the bar height recommendation of section 4.4 e), the symbol width formula of the note to section 4.4, and the modulo 43 check character of Annex A.1.1 with the character values of Table A.1. | Clauses 1 to 4.5 from the iTeh standard preview at <https://cdn.standards.iteh.ai/samples/43897/358ed85e97e14c3e81d30f621f57ec34/ISO-IEC-16388-2007.pdf>. Annex A.1 and Table A.1 from a copy of BS ISO/IEC 16388:2007 the maintainer holds. Annex A.2, the full ASCII encodation for Code 39 Extended, has not been read from the standard. |
+| IFA, `Technical Information regarding PZN Coding - PZN in Code 39`, V 2.3, 01.04.2025 | The PZN data structure: the minus sign identifier of ISO/IEC 15418, the `*` delimiters which plain text does not show, the printed line `PZN - 12345678` whose term and spaces are not encoded, the nominal module width of 0.25 mm, the nominal 1:2.5 ratio permitting 1:2 to 1:3, the 10 X quiet zone, and the nominal code height of 10 mm. | <https://www.ifaffm.de/mandanten/1/documents/04_ifa_coding_system/IFA_Info_Code_39_EN.pdf>, published free of charge by IFA GmbH |
+| IFA, `Technical Information regarding PZN Coding - Check Digit Calculations of PZN, PPN and Basic UDI-DI`, 26 January 2024 | The PZN check digit: modulo 11 over the digits weighted one upward, the remainder as the check digit, and that a remainder of 10 is not issued. Carries the worked example 2758089 summing to 174 and checking as 9. | <https://www.ifaffm.de/mandanten/1/documents/04_ifa_coding_system/IFA-Info_Check_Digit_Calculations_PZN_PPN_UDI_EN.pdf>, published free of charge by IFA GmbH |
+| Gazzetta Ufficiale della Repubblica Italiana, Serie generale n. 165, 18 July 2014, Allegato A, `Caratteristiche tecniche del bollino farmaceutico` | The Italian pharmaceutical code: the nine digit AIC code whose first digit is zero and last a check digit, the check digit rule of section 3, the base 32 alphabet of Table 1, and the Code 39 representation between asterisks with a 0.250 mm narrow module. | <https://www.medicoeleggi.com/archivio/406145-a1.pdf>, published in the official gazette of the Italian Republic |
 
-ISO sells its standards and they are not redistributable, so the file is not held here. The preview
-is free to read at the address above.
+ISO sells its standards and they are not redistributable, so ISO/IEC 16388 is not held here. The
+preview is free to read at the address above. The IFA and Gazzetta Ufficiale documents are free to
+download at the addresses above.
+
+Code 93 and Code 93 Extended have no free specification. ANSI/AIM BC5-1995, also published as
+AIM ITS 93i, is sold rather than published, and no clause of it has been read. Their numbers will
+have to come from implementations that agree with each other, and the code and the commit will say
+so rather than cite a document.
 
 The ISSN Manual is not held here: the ISSN International Centre publishes it, but no stable direct
 download was reachable at the time of writing. ISO 2108 (ISBN), ISO 3297 (ISSN) and ISO 10957 (ISMN)

@@ -4,11 +4,14 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The two-digit EAN/UPC add-on symbology specified in the GS1 General Specifications, used for issue numbers
-/// on ISSN periodical barcodes. The symbol starts with the add-on guard pattern 01011 and encodes each digit as
-/// a seven module character from number set A or B, with a 01 delineator between them. The number set parity
-/// conveys the two-digit value modulo four. The human readable interpretation prints above the bars. The leading
-/// space module of the guard pattern is folded into the leading quiet zone.
+/// The two digit EAN/UPC add-on symbology, which the GS1 General Specifications specify. It carries the
+/// issue number on an ISSN periodical barcode. The symbol starts with the add-on guard pattern 01011. Each
+/// digit takes a seven module character from number set A or B, with a 01 delineator between them. The
+/// number set parity carries the two digit value modulo four.
+/// <para>
+/// The human readable interpretation prints above the bars. The leading quiet zone absorbs the leading
+/// space module of the guard pattern.
+/// </para>
 /// </summary>
 public sealed class Ean2Symbology : BarcodeSymbology
 {

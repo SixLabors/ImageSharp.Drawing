@@ -26,7 +26,7 @@ internal static class AddOnLayout
     /// <summary>
     /// Builds the symbol for an encoded add-on module stream.
     /// </summary>
-    /// <param name="modules">The module stream; 1 is a dark module.</param>
+    /// <param name="modules">The module stream, where 1 is a dark module.</param>
     /// <param name="text">The digits of the human readable interpretation.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <returns>The add-on symbol.</returns>

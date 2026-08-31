@@ -7,14 +7,15 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// EAN-14, a GS1-128 symbol carrying one element string: the Global Trade Item Number of GS1
+/// EAN-14, a GS1-128 symbol that carries one element string: the Global Trade Item Number of GS1
 /// Application Identifier (01). Section 3.3.2 of the GS1 General Specifications gives that identifier a
-/// 14 digit GTIN, Table 7-6 gives the element string a total length of 16, and section 7.9 defines the
+/// 14 digit GTIN. Table 7-6 gives the element string a total length of 16, and section 7.9 defines the
 /// check digit.
 /// <para>
-/// Input is the element string syntax, <c>(01)</c> followed by the GTIN, with spaces ignored. The check
-/// digit is optional: 13 digits have it computed, 14 have it verified. The human readable interpretation
-/// separates a computed check digit with a space, as the printed number is grouped.
+/// The input is the element string syntax, <c>(01)</c> and then the GTIN. Spaces are ignored. Give 13
+/// digits, and this class calculates the check digit. Give 14 digits, and this class compares the last
+/// digit with the calculated one. A space divides a calculated check digit from the printed number,
+/// because the caller groups that number.
 /// </para>
 /// </summary>
 public sealed class Ean14Symbology : BarcodeSymbology

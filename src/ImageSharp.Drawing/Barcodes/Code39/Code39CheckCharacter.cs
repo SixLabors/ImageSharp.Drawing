@@ -14,12 +14,12 @@ public enum Code39CheckCharacter
     None,
 
     /// <summary>
-    /// The check character is worked out over the input and carried behind it.
+    /// The check character is calculated over the input and carried behind it.
     /// </summary>
     Compute,
 
     /// <summary>
-    /// The last character of the input is a check character the caller has already worked out. It is
+    /// The last character of the input is a check character the caller has already calculated. It is
     /// validated against the data and carried once.
     /// </summary>
     Validate,

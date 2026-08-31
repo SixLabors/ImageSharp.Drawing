@@ -7,11 +7,14 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The ISBN data layer over EAN-13. An International Standard Book Number (ISO 2108) renders as an EAN-13
-/// symbol in the GS1 978 or 979 prefix range, with the ISBN itself printed above the bars. Input is a
-/// hyphenated or plain ISBN-13, or an ISBN-10 whose modulus 11 check digit (X representing ten) is verified
-/// before the number converts to its 978 prefixed EAN-13 form. The check digit in either form is optional
-/// and is computed when absent.
+/// The ISBN data layer over EAN-13. An International Standard Book Number (ISO 2108) draws as an EAN-13
+/// symbol in the GS1 978 or 979 prefix range. The ISBN itself prints above the bars.
+/// <para>
+/// The input is an ISBN-13, with or without hyphens, or an ISBN-10. This class compares the modulus 11
+/// check digit of an ISBN-10, where X stands for ten, and then converts the number to its 978 prefixed
+/// EAN-13 form. The check digit is optional in either form, and this class calculates it when the input
+/// carries none.
+/// </para>
 /// </summary>
 public sealed class IsbnSymbology : BarcodeSymbology
 {

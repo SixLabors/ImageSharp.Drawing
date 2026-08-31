@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// Converts a <see cref="LinearBarcodeSymbol"/> into canvas commands. All bars render through a single fill of
-/// one path collection; each text placement renders through one text command.
+/// one path collection. Each text placement draws through one text command.
 /// </summary>
 internal static class LinearBarcodeEmitter
 {

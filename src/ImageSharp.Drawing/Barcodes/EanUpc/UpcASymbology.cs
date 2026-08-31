@@ -4,10 +4,12 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The UPC-A symbology specified in ISO/IEC 15420. A UPC-A symbol has the same 95 module structure as an
-/// EAN-13 symbol whose leading digit is zero: all six left-half characters use number set A. UPC-A differs
-/// only in its human readable layout, where the number system and check digits print in the quiet zones and
-/// the bars of their symbol characters are extended.
+/// The UPC-A symbology, which ISO/IEC 15420 specifies. A UPC-A symbol has the same 95 module structure as
+/// an EAN-13 symbol with a leading zero, and all six left half characters use number set A.
+/// <para>
+/// Only the human readable layout differs. The number system digit and the check digit print in the quiet
+/// zones, and the bars of their symbol characters extend below the others.
+/// </para>
 /// </summary>
 public sealed class UpcASymbology : BarcodeSymbology
 {

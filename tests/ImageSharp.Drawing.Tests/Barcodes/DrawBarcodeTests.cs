@@ -178,6 +178,30 @@ public class DrawBarcodeTests
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new HibcCode39Symbology(), "A123BJC5D6E71", CreateTextOptions());
 
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Pzn8<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Pzn8Symbology(), "03752864", CreateOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Pzn8_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Pzn8Symbology(), "03752864", CreateTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Pzn7<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Pzn7Symbology(), "1234562", CreateOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Pzn7_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Pzn7Symbology(), "1234562", CreateTextOptions());
+
     /// <summary>
     /// Disabling the quiet zones must shift the first bar to the draw origin, and a non-solid brush must
     /// flow through to the bar fill unchanged.

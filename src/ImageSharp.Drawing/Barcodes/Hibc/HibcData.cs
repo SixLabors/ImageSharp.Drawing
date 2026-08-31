@@ -50,7 +50,7 @@ internal static class HibcData
     private const char PrintedSpace = '_';
 
     /// <summary>
-    /// Validates the given text against the HIBC character set, works out the check character over the
+    /// Validates the given text against the HIBC character set, calculates the check character over the
     /// data and writes the encoded data from both.
     /// </summary>
     /// <param name="text">

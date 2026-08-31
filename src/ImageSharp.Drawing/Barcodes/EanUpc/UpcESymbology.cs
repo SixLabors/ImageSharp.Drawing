@@ -4,11 +4,13 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The UPC-E symbology specified in ISO/IEC 15420. UPC-E is the zero suppression form of UPC-A: a UPC-A number
-/// whose manufacturer and product codes match one of four zero patterns compresses to six digits. The symbol is
-/// 51 modules wide: a normal guard pattern, six symbol characters from number sets A and B, and a special right
-/// guard pattern. The number system digit (0 or 1) and the check digit of the expanded UPC-A number are conveyed
-/// only through the number set parity of the six characters.
+/// The UPC-E symbology, which ISO/IEC 15420 specifies. UPC-E is the zero suppression form of UPC-A. A UPC-A
+/// number compresses to six digits when its manufacturer and product codes match one of four zero patterns.
+/// <para>
+/// The symbol is 51 modules wide: a normal guard pattern, six symbol characters from number sets A and B,
+/// and a special right guard pattern. The number set parity of the six characters carries the number system
+/// digit (0 or 1) and the check digit of the expanded UPC-A number.
+/// </para>
 /// </summary>
 public sealed class UpcESymbology : BarcodeSymbology
 {

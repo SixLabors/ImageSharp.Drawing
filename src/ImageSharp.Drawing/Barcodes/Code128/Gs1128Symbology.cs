@@ -7,13 +7,13 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// The GS1-128 symbology of section 5.4 of the GS1 General Specifications. A GS1-128 symbol is a Code 128
-/// symbol whose start character is followed by a Function 1 character, carrying one or more element
-/// strings: a GS1 Application Identifier and the data that belongs to it.
+/// symbol with a Function 1 character behind its start character. It carries one or more element strings.
+/// Each element string is a GS1 Application Identifier and the data that belongs to it.
 /// <para>
-/// Input is the element string syntax the standard prints, an Application Identifier in parentheses
-/// followed by its data, repeated: <c>(01)09521234543213(3103)000123</c>. Parentheses are not encoded;
-/// section 4.14 rule 2c requires them in the human readable interpretation and rule 2b keeps the
-/// separators out of it.
+/// The input is the element string syntax the standard prints: an Application Identifier in parentheses,
+/// then its data, repeated. For example, <c>(01)09521234543213(3103)000123</c>. The symbol does not carry
+/// the parentheses. Section 4.14 rule 2c requires them in the human readable interpretation, and rule 2b
+/// keeps the separators out of it.
 /// </para>
 /// </summary>
 public sealed class Gs1128Symbology : BarcodeSymbology

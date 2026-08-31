@@ -6,14 +6,14 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The Code 39 symbology, defined by ISO/IEC 16388. Section 4.1 a) gives it the digits, the capital
-/// letters and the special characters <c>space $ % + - . /</c>, and section 4.2 brackets the data with a
-/// start and stop character that share one pattern.
+/// The Code 39 symbology, which ISO/IEC 16388 defines. Section 4.1 a) gives it the digits, the capital
+/// letters and the special characters <c>space $ % + - . /</c>. Section 4.2 puts a start and a stop
+/// character around the data, and both share one pattern.
 /// <para>
 /// Annex A.2 prints the human readable interpretation "of the data characters (and data and symbol check
-/// character(s), if used)", and says the start and stop characters "may be printed". Section 4.3.3 depicts
-/// that character as an asterisk, so a symbol prints its data between asterisks with the check character
-/// behind the data when it carries one.
+/// character(s), if used)". It also says the start and stop characters "may be printed". Section 4.3.3
+/// shows that character as an asterisk. A symbol therefore prints its data between asterisks, with the
+/// check character behind the data when it carries one.
 /// </para>
 /// </summary>
 public sealed class Code39Symbology : BarcodeSymbology
