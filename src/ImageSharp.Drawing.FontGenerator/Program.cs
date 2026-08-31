@@ -4,9 +4,9 @@
 // Generates the SixLabors OCR fonts from the OCR standards themselves: OCR-A from the dimensioned
 // character drawings of FIPS PUB 32, OCR-B from the character sheet and dimension tables of ECMA-11.
 // Each design's glyph skeletons are stroked with the library's own path stroker, the outlines are
-// verified against the independently transcribed SpecChecks expectations, and <Name>.ttf,
-// <Name>FontData.cs plus proof, grid and comparison sheets are written into the output directory.
-// See specs/README.md for the source documents.
+// verified against the independently transcribed SpecChecks expectations, and <Name>FontData.cs is
+// written straight into the library. The .ttf and the proof, grid and comparison sheets are written
+// into artifacts/fonts. See specs/README.md for the source documents.
 using System.Globalization;
 using System.Numerics;
 using System.Text;
@@ -18,20 +18,10 @@ using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
-if (args.Length == 0)
-{
-    Console.WriteLine("Usage: ImageSharp.Drawing.FontGenerator <output-directory> [--ref <font-path>] [--refb <font-path>] [<characters>...]");
-    Console.WriteLine("  --ref   renders a side-by-side comparison sheet of the OCR-A design against the given font");
-    Console.WriteLine("  --refb  renders the same sheet for the OCR-B design");
-    Console.WriteLine("  Remaining arguments render full-size single glyph inspection images per design.");
-    return 1;
-}
-
-string outputDirectory = args[0];
 string? referencePath = null;
 string? referenceBPath = null;
 List<string> inspectTexts = [];
-for (int argIndex = 1; argIndex < args.Length; argIndex++)
+for (int argIndex = 0; argIndex < args.Length; argIndex++)
 {
     if (args[argIndex] == "--ref" && argIndex + 1 < args.Length)
     {
@@ -41,12 +31,22 @@ for (int argIndex = 1; argIndex < args.Length; argIndex++)
     {
         referenceBPath = args[++argIndex];
     }
+    else if (args[argIndex] is "-h" or "--help")
+    {
+        Console.WriteLine("Usage: ImageSharp.Drawing.FontGenerator [--ref <font-path>] [--refb <font-path>] [<characters>...]");
+        Console.WriteLine("  --ref   renders a side-by-side comparison sheet of the OCR-A design against the given font");
+        Console.WriteLine("  --refb  renders the same sheet for the OCR-B design");
+        Console.WriteLine("  Remaining arguments render full-size single glyph inspection images per design.");
+        return 0;
+    }
     else
     {
         inspectTexts.Add(args[argIndex]);
     }
 }
 
+string libraryFontDirectory = RepositoryPaths.LibraryFonts;
+string outputDirectory = RepositoryPaths.Artifacts;
 Directory.CreateDirectory(outputDirectory);
 
 StrokeOptions roundStroke = new()
@@ -488,8 +488,7 @@ foreach (FontDesign design in designs)
     File.WriteAllBytes(fontPath, font);
     Console.WriteLine($"{fontPath}: {font.Length} bytes");
 
-    // Emit the font bytes as C# data for embedding in the library: the emitted file replaces
-    // src/ImageSharp.Drawing/Barcodes/Fonts/<Name>FontData.cs whenever the design changes.
+    // Emit the font bytes as C# data for embedding in the library.
     StringBuilder data = new();
     data.AppendLine("// Copyright (c) Six Labors.");
     data.AppendLine("// Licensed under the Six Labors Split License.");
@@ -531,7 +530,7 @@ foreach (FontDesign design in designs)
 
     data.AppendLine("    ];");
     data.AppendLine("}");
-    string dataPath = System.IO.Path.Combine(outputDirectory, $"{design.Name}FontData.cs");
+    string dataPath = System.IO.Path.Combine(libraryFontDirectory, $"{design.Name}FontData.cs");
     File.WriteAllText(dataPath, data.ToString());
     Console.WriteLine(dataPath);
 
