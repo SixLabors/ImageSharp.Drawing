@@ -51,7 +51,7 @@ public class Gs1128SymbologyTests
 
         BarcodeTextPlacement placement = Assert.Single(symbol.Text);
         Assert.Equal("(10)ABC123(01)09521234543213", placement.Text);
-        Assert.DoesNotContain(Code128Encoder.Separator.ToString(), placement.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain(Gs1Data.Separator.ToString(), placement.Text, StringComparison.Ordinal);
     }
 
     /// <summary>

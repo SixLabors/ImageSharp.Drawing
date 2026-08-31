@@ -10,7 +10,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// character set, the same flag character in front of the data and the same modulo 43 check character
 /// behind it, whatever symbology draws it.
 /// </summary>
-internal static class HibcEncoder
+internal static class HibcData
 {
     /// <summary>
     /// The character set, in check character value order, so the value of a character is its index.
