@@ -32,6 +32,7 @@ public class BarcodeInputValidationTests
     [InlineData(typeof(Ean14Symbology))]
     [InlineData(typeof(Sscc18Symbology))]
     [InlineData(typeof(HibcCode128Symbology))]
+    [InlineData(typeof(Code39Symbology))]
     public void RejectsNullText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;
@@ -58,6 +59,7 @@ public class BarcodeInputValidationTests
     [InlineData(typeof(Ean14Symbology))]
     [InlineData(typeof(Sscc18Symbology))]
     [InlineData(typeof(HibcCode128Symbology))]
+    [InlineData(typeof(Code39Symbology))]
     public void RejectsEmptyText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;

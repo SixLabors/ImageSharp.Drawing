@@ -6,17 +6,12 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The data layer the Health Industry Bar Code symbologies share. Every HIBC symbol carries the same
+/// The data layer the Health Industry Bar Code symbologies share. Every HIBC symbol carries the Code 39
 /// character set, the same flag character in front of the data and the same modulo 43 check character
 /// behind it, whatever symbology draws it.
 /// </summary>
 internal static class HibcData
 {
-    /// <summary>
-    /// The character set, in check character value order, so the value of a character is its index.
-    /// </summary>
-    public const string Characters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
-
     /// <summary>
     /// The largest number of characters a HIBC symbol carries.
     /// </summary>
@@ -34,7 +29,7 @@ internal static class HibcData
     private const char FlagCharacter = '+';
 
     /// <summary>
-    /// The value the flag character holds in <see cref="Characters"/>.
+    /// The value the flag character holds in the Code 39 character set.
     /// </summary>
     private const int FlagCharacterValue = 41;
 
@@ -79,7 +74,7 @@ internal static class HibcData
         int dataLength = validateCheckCharacter ? text.Length - 1 : text.Length;
         for (int i = 0; i < text.Length; i++)
         {
-            int value = Value(text[i]);
+            int value = Code39Encoder.Value(text[i]);
             if (value < 0)
             {
                 throw new ArgumentException(
@@ -93,7 +88,7 @@ internal static class HibcData
             }
         }
 
-        char check = Characters[sum % Characters.Length];
+        char check = Code39Encoder.Characters[sum % Code39Encoder.Characters.Length];
         if (validateCheckCharacter && text[dataLength] != check)
         {
             throw new ArgumentException(
@@ -118,24 +113,4 @@ internal static class HibcData
         Span<char> tail = stackalloc char[2] { check == ' ' ? PrintedSpace : check, ReadableClosing };
         return string.Concat(ReadableOpening, encoded[1..^1], tail);
     }
-
-    /// <summary>
-    /// Gets the check character value of the given character, or a negative number when the character is
-    /// outside the HIBC character set.
-    /// </summary>
-    /// <param name="character">The character to value.</param>
-    /// <returns>The value, or a negative number.</returns>
-    private static int Value(char character) => character switch
-    {
-        >= '0' and <= '9' => character - '0',
-        >= 'A' and <= 'Z' => character - 'A' + 10,
-        '-' => 36,
-        '.' => 37,
-        ' ' => 38,
-        '$' => 39,
-        '/' => 40,
-        '+' => 41,
-        '%' => 42,
-        _ => -1,
-    };
 }
