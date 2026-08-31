@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Helpers;
+
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -28,119 +30,28 @@ public sealed class Gs1128Symbology : BarcodeSymbology
     {
     }
 
-    /// <summary>
-    /// Gets the total length of an element string whose Application Identifier starts with the given two
-    /// digits, or zero when the length is not predefined. Table 7-6 of the GS1 General Specifications
-    /// lists these and states that it "is limited to the listed numbers and will remain unchanged", so an
-    /// Application Identifier outside the list carries a variable length field.
-    /// </summary>
-    /// <param name="first">The first digit of the Application Identifier.</param>
-    /// <param name="second">The second digit of the Application Identifier.</param>
-    /// <returns>The total length in characters, including the Application Identifier, or zero.</returns>
-    private static int PredefinedLength(char first, char second) => (first, second) switch
-    {
-        ('0', '0') => 20,
-        ('0', '1') or ('0', '2') or ('0', '3') => 16,
-        ('0', '4') => 18,
-        ('1', >= '1' and <= '9') => 8,
-        ('2', '0') => 4,
-        ('3', >= '1' and <= '6') => 10,
-        ('4', '1') => 16,
-        _ => 0,
-    };
-
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
     {
         Guard.NotNull(text, nameof(text));
 
-        // Section 5.4.1 caps the data at 48 characters, so the encoded data never outgrows one buffer. The
-        // human readable interpretation is the input itself: every character this loop consumes is a
-        // parenthesis it drops, an Application Identifier or data, and it re-emits all three in order.
-        Span<char> encoded = stackalloc char[MaximumDataCharacters];
-        int written = 0;
-        int position = 0;
-        while (position < text.Length)
+        Span<char> buffer = stackalloc char[Gs1Data.StackBufferLength];
+        ValueStringBuilder encoded = new(buffer);
+        try
         {
-            if (text[position] != '(')
-            {
-                throw new ArgumentException(
-                    $"GS1-128 expects an Application Identifier in parentheses at position {position}.",
-                    nameof(text));
-            }
+            Gs1Data.Prepare(text, ref encoded);
+            Guard.MustBeLessThanOrEqualTo(encoded.Length, MaximumDataCharacters, nameof(text));
 
-            int close = text.IndexOf(')', position);
-            if (close < 0)
-            {
-                throw new ArgumentException("A GS1-128 Application Identifier is missing its closing parenthesis.", nameof(text));
-            }
-
-            ReadOnlySpan<char> identifier = text.AsSpan(position + 1, close - position - 1);
-            if (identifier.Length is < 2 or > 4)
-            {
-                throw new ArgumentException(
-                    $"A GS1 Application Identifier is two to four digits; got '{identifier}'.",
-                    nameof(text));
-            }
-
-            for (int i = 0; i < identifier.Length; i++)
-            {
-                if (!char.IsAsciiDigit(identifier[i]))
-                {
-                    throw new ArgumentException(
-                        $"A GS1 Application Identifier is all digits; got '{identifier}'.",
-                        nameof(text));
-                }
-            }
-
-            int dataStart = close + 1;
-            int dataEnd = text.IndexOf('(', dataStart);
-            if (dataEnd < 0)
-            {
-                dataEnd = text.Length;
-            }
-
-            ReadOnlySpan<char> data = text.AsSpan(dataStart, dataEnd - dataStart);
-            if (data.Length == 0)
-            {
-                throw new ArgumentException($"The GS1 Application Identifier ({identifier}) carries no data.", nameof(text));
-            }
-
-            int predefined = PredefinedLength(identifier[0], identifier[1]);
-            if (predefined > 0 && identifier.Length + data.Length != predefined)
-            {
-                throw new ArgumentException(
-                    $"Table 7-6 gives the element string ({identifier}) a total length of {predefined}; got {identifier.Length + data.Length}.",
-                    nameof(text));
-            }
-
-            position = dataEnd;
-            int separator = predefined == 0 && position < text.Length ? 1 : 0;
-
-            // Section 5.4.1 allows 48 data characters in a GS1-128 symbol.
-            Guard.MustBeLessThanOrEqualTo(written + identifier.Length + data.Length + separator, MaximumDataCharacters, nameof(text));
-
-            identifier.CopyTo(encoded[written..]);
-            written += identifier.Length;
-            data.CopyTo(encoded[written..]);
-            written += data.Length;
-
-            // Section 7.8.6.2: an element string whose first two digits are outside Table 7-6 is
-            // terminated by a separator, unless it is the last one in the symbol.
-            if (separator == 1)
-            {
-                encoded[written++] = Code128Encoder.Separator;
-            }
+            // The human readable interpretation is the input itself: the parse consumes a parenthesis, an
+            // Application Identifier or data, and nothing else, so re-emitting them in order rebuilds it.
+            return Code128Encoder.BuildSymbol(
+                Code128Encoder.Encode(encoded.AsSpan(), true),
+                text,
+                options);
         }
-
-        if (written == 0)
+        finally
         {
-            throw new ArgumentException("GS1-128 requires at least one element string.", nameof(text));
+            encoded.Dispose();
         }
-
-        return Code128Encoder.BuildSymbol(
-            Code128Encoder.Encode(encoded[..written], true),
-            text,
-            options);
     }
 }

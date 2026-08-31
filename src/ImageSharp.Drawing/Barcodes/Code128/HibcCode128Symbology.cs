@@ -41,15 +41,15 @@ public sealed class HibcCode128Symbology : BarcodeSymbology
     {
         Guard.NotNull(text, nameof(text));
 
-        Span<char> buffer = stackalloc char[HibcEncoder.StackBufferLength];
+        Span<char> buffer = stackalloc char[HibcData.StackBufferLength];
         ValueStringBuilder encoded = new(buffer);
         try
         {
-            HibcEncoder.Prepare(text, this.ValidateCheckCharacter, ref encoded);
+            HibcData.Prepare(text, this.ValidateCheckCharacter, ref encoded);
 
             return Code128Encoder.BuildSymbol(
                 Code128Encoder.Encode(encoded.AsSpan(), false),
-                options.Font is null ? string.Empty : HibcEncoder.BuildReadable(encoded.AsSpan()),
+                options.Font is null ? string.Empty : HibcData.BuildReadable(encoded.AsSpan()),
                 options);
         }
         finally

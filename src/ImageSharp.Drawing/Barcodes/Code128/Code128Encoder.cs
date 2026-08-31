@@ -31,14 +31,6 @@ internal static class Code128Encoder
     public const int FunctionOne = 102;
 
     /// <summary>
-    /// The character a GS1 symbol carries where a separator belongs. Section 7.8.6.2 of the GS1 General
-    /// Specifications: the separator "is always represented in the transmitted message by the control
-    /// character &lt;GS&gt; (ASCII value 29 (decimal), 1D (hexadecimal))", and the symbol encodes it as a
-    /// Function 1 character.
-    /// </summary>
-    public const char Separator = (char)29;
-
-    /// <summary>
     /// The largest number of characters a Code 128 symbol carries.
     /// </summary>
     public const int MaximumLength = 500;
@@ -95,7 +87,7 @@ internal static class Code128Encoder
     /// </summary>
     /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
     /// <param name="gs1">Whether this is a GS1 symbol. Such a symbol carries a Function 1 character after
-    /// its start character, and encodes every <see cref="Separator"/> in the text as another one.</param>
+    /// its start character, and encodes every <see cref="Gs1Data.Separator"/> in the text as another one.</param>
     /// <returns>The run widths in modules.</returns>
     /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode.</exception>
     public static int[] Encode(ReadOnlySpan<char> text, bool gs1)
@@ -212,7 +204,7 @@ internal static class Code128Encoder
         {
             // A separator encodes as a Function 1 character, which every code set carries, so it never
             // forces a set of its own.
-            bool separator = gs1 && text[i] == Separator;
+            bool separator = gs1 && text[i] == Gs1Data.Separator;
             nextOnlyInA[i] = !separator && OnlyInSetA(text[i]) ? (byte)0 : SaturatingIncrement(nextOnlyInA[i + 1]);
             nextOnlyInB[i] = !separator && OnlyInSetB(text[i]) ? (byte)0 : SaturatingIncrement(nextOnlyInB[i + 1]);
 
@@ -246,7 +238,7 @@ internal static class Code128Encoder
         int position = 0;
         while (position < text.Length)
         {
-            if (gs1 && text[position] == Separator)
+            if (gs1 && text[position] == Gs1Data.Separator)
             {
                 values[written++] = FunctionOne;
                 position++;
@@ -254,7 +246,7 @@ internal static class Code128Encoder
             }
 
             int digits = digitsFromEven[position];
-            if (set != Code128CodeSet.C && digits >= 4 && !(gs1 && text[position] == Separator))
+            if (set != Code128CodeSet.C && digits >= 4 && !(gs1 && text[position] == Gs1Data.Separator))
             {
                 if ((digits & 1) == 0)
                 {
