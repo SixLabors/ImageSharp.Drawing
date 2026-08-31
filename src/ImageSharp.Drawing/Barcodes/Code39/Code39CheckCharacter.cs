@@ -14,7 +14,7 @@ public enum Code39CheckCharacter
     None,
 
     /// <summary>
-    /// The check character is calculated over the input and carried behind it.
+    /// The check character is calculated over the input and carried after it.
     /// </summary>
     Compute,
 

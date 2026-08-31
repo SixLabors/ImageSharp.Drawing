@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// <summary>
 /// Encoder tests for <see cref="Pzn8Symbology"/> and <see cref="Pzn7Symbology"/>. Each expected run string
 /// is the alternating bar and space module widths, starting with a bar, taken from an independent reference
-/// implementation through its raw encoding API, less the gap it emits behind the stop character. The check
+/// implementation through its raw encoding API, less the gap it emits after the stop character. The check
 /// digit and the printed line come from the IFA technical information documents on PZN coding.
 /// </summary>
 public class PznSymbologyTests

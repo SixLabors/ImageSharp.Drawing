@@ -34,7 +34,7 @@ internal static class Gs1Data
     /// <param name="text">The element strings to parse.</param>
     /// <param name="encoded">
     /// The builder the encoded data is written to: each Application Identifier and its data in turn, with
-    /// a <see cref="Separator"/> behind every variable length element string but the last.
+    /// a <see cref="Separator"/> after every variable length element string but the last.
     /// </param>
     /// <exception cref="ArgumentException">The text is not valid element string syntax.</exception>
     public static void Prepare(ReadOnlySpan<char> text, ref ValueStringBuilder encoded)

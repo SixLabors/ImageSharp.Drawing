@@ -254,25 +254,16 @@ public abstract partial class DrawingCanvas
     }
 
     /// <summary>
-    /// Measures the area a barcode covers, without drawing it. The area includes any text that overhangs
-    /// the bars, so an image sized to this rectangle holds every bar and every glyph.
+    /// Measures the full renderable bounds of a barcode in pixel units.
     /// </summary>
     /// <param name="symbology">The barcode symbology to encode with.</param>
     /// <param name="text">The text to encode.</param>
     /// <param name="options">The sizing and painting options.</param>
     /// <param name="origin">The top left corner the barcode would draw from, in pixels.</param>
-    /// <returns>The area the barcode covers, in pixels.</returns>
+    /// <returns>
+    /// The union of the symbol, including any quiet zones, and the human readable interpretation if the
+    /// barcode was to be rendered.
+    /// </returns>
     /// <exception cref="ArgumentException">The text is not valid for the symbology.</exception>
-    public RectangleF MeasureBarcode(BarcodeSymbology symbology, string text, BarcodeOptions options, PointF origin)
-    {
-        Guard.NotNull(symbology, nameof(symbology));
-        Guard.NotNull(options, nameof(options));
-
-        BarcodeSymbol symbol = symbology.Encode(text, options);
-        return symbol switch
-        {
-            LinearBarcodeSymbol linear => LinearBarcodeEmitter.Measure(this, linear, options, origin),
-            _ => throw new InvalidOperationException($"Unsupported barcode symbol type: {symbol.GetType()}."),
-        };
-    }
+    public abstract RectangleF MeasureBarcode(BarcodeSymbology symbology, string text, BarcodeOptions options, PointF origin);
 }

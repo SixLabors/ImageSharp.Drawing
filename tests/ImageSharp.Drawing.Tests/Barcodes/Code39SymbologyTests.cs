@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// <summary>
 /// Encoder tests for <see cref="Code39Symbology"/>. Each expected run string is the alternating bar and
 /// space module widths, starting with a bar, taken from an independent reference implementation through
-/// its raw encoding API, less the gap the reference emits behind the stop character. Section 4.2 of
+/// its raw encoding API, less the gap the reference emits after the stop character. Section 4.2 of
 /// ISO/IEC 16388 separates the characters "within the symbol" with that gap, and section 4.3.3 puts the
 /// stop character at the right end, so the runs end on a bar.
 /// </summary>

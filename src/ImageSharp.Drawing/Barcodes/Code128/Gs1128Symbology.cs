@@ -7,7 +7,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// The GS1-128 symbology of section 5.4 of the GS1 General Specifications. A GS1-128 symbol is a Code 128
-/// symbol with a Function 1 character behind its start character. It carries one or more element strings.
+/// symbol with a Function 1 character after its start character. It carries one or more element strings.
 /// Each element string is a GS1 Application Identifier and the data that belongs to it.
 /// <para>
 /// The input is the element string syntax the standard prints: an Application Identifier in parentheses,

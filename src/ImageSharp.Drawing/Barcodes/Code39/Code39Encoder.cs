@@ -154,7 +154,7 @@ internal static class Code39Encoder
     /// data character and before the stop character".
     /// </summary>
     /// <param name="text">The text to encode, already validated against the character set.</param>
-    /// <param name="check">The check character to carry behind the data, or <see langword="null"/>.</param>
+    /// <param name="check">The check character to carry after the data, or <see langword="null"/>.</param>
     /// <returns>The run widths in modules.</returns>
     public static int[] Encode(ReadOnlySpan<char> text, char? check)
     {
