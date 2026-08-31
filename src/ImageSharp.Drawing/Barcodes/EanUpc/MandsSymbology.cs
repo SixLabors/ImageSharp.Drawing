@@ -4,10 +4,12 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The Marks &amp; Spencer in-house symbology: an EAN-8 symbol with the centre guard bars kept at digit bar
-/// height and the letters M and S printed in the quiet zones. There is no public specification. A seven
-/// character number is zero padded to eight, and its
-/// leading zero is hidden from the printed interpretation along with the check digit.
+/// The Marks &amp; Spencer in-house symbology. It is an EAN-8 symbol that holds the centre guard bars at
+/// digit bar height and prints the letters M and S in the quiet zones. It has no public specification.
+/// <para>
+/// A zero pads a seven character number to eight. The printed interpretation shows neither that leading
+/// zero nor the check digit.
+/// </para>
 /// </summary>
 public sealed class MandsSymbology : BarcodeSymbology
 {

@@ -28,7 +28,7 @@ internal static class Gs1Data
 
     /// <summary>
     /// Parses the element string syntax the standard prints, an Application Identifier in parentheses
-    /// followed by its data, repeated, and writes the data a symbol carries. Parentheses are not encoded;
+    /// followed by its data, repeated, and writes the data a symbol carries. The symbol does not carry the parentheses.
     /// section 4.14 rule 2c requires them in the human readable interpretation alone.
     /// </summary>
     /// <param name="text">The element strings to parse.</param>

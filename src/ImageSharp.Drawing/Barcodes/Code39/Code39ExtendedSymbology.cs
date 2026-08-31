@@ -12,11 +12,11 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// of one of the four characters ($ + % /) followed by one of the 26 alphabetic characters", and Table A.2
 /// gives the combinations.
 /// <para>
-/// A.3 warns that the mode needs a decoder programmed for it, so the symbol is an ordinary Code 39 symbol
-/// and only a decoder in full ASCII mode reads back what was encoded. Annex A.2 prints an interpretation
-/// "of the data characters", which here are the ASCII characters the caller gave, not the symbol
-/// characters they were substituted into, so the interpretation shows the text as given with a space
-/// where a character has no printed form.
+/// A.3 warns that the mode needs a decoder that is programmed for it. The symbol itself is an ordinary
+/// Code 39 symbol, so only a decoder in full ASCII mode reads back what went in. Annex A.2 prints an
+/// interpretation "of the data characters". Here those are the ASCII characters the caller gave, not the
+/// symbol characters that stand for them. The interpretation therefore shows the text as given, and
+/// prints a space where a character has no printed form.
 /// </para>
 /// </summary>
 public sealed class Code39ExtendedSymbology : BarcodeSymbology
@@ -84,7 +84,7 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
         Guard.IsFalse(
             checkCharacter == Code39CheckCharacter.Validate,
             nameof(checkCharacter),
-            "Code 39 Extended works out the check character over the substituted symbol characters, so a supplied one cannot be validated against the input.");
+            "Code 39 Extended calculates the check character over the substituted symbol characters, so a supplied one cannot be validated against the input.");
 
         this.CheckCharacter = checkCharacter;
         this.PrintCheckCharacter = printCheckCharacter;

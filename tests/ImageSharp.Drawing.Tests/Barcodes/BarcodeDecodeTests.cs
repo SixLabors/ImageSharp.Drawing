@@ -114,6 +114,33 @@ public class BarcodeDecodeTests
             reader => reader.Options.UseCode39ExtendedMode = false);
 
     /// <summary>
+    /// A PZN decodes to the identifier ISO/IEC 15418 gives it, the digits and the check digit, which is
+    /// what the symbol carries; the term PZN and the spaces around the identifier are printed only.
+    /// </summary>
+    [Fact]
+    public void Pzn8_RoundTrips()
+        => AssertDecodes(
+            new Pzn8Symbology(),
+            "03752864",
+            BarcodeFormat.CODE_39,
+            "-03752864",
+            CreateOptions(),
+            reader => reader.Options.UseCode39ExtendedMode = false);
+
+    /// <summary>
+    /// A PZN7 carries one digit fewer than a PZN8, and the same identifier in front of it.
+    /// </summary>
+    [Fact]
+    public void Pzn7_RoundTrips()
+        => AssertDecodes(
+            new Pzn7Symbology(),
+            "1234562",
+            BarcodeFormat.CODE_39,
+            "-1234562",
+            CreateOptions(),
+            reader => reader.Options.UseCode39ExtendedMode = false);
+
+    /// <summary>
     /// A HIBC Code 39 decodes to the flag character, the data and the check character, which is what the
     /// symbol carries; the delimiters belong to the human readable interpretation alone.
     /// </summary>

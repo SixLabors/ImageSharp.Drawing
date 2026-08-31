@@ -7,14 +7,15 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// SSCC-18, a GS1-128 symbol carrying one element string: the Serial Shipping Container Code of GS1
+/// SSCC-18, a GS1-128 symbol that carries one element string: the Serial Shipping Container Code of GS1
 /// Application Identifier (00). Section 3.3.1 of the GS1 General Specifications gives that identifier an
-/// 18 digit SSCC, Table 7-6 gives the element string a total length of 20, and section 7.9 defines the
+/// 18 digit SSCC. Table 7-6 gives the element string a total length of 20, and section 7.9 defines the
 /// check digit.
 /// <para>
-/// Input is the element string syntax, <c>(00)</c> followed by the SSCC, with spaces ignored. The check
-/// digit is optional: 17 digits have it computed, 18 have it verified. The human readable interpretation
-/// separates a computed check digit with a space, as the printed number is grouped.
+/// The input is the element string syntax, <c>(00)</c> and then the SSCC. Spaces are ignored. Give 17
+/// digits, and this class calculates the check digit. Give 18 digits, and this class compares the last
+/// digit with the calculated one. A space divides a calculated check digit from the printed number,
+/// because the caller groups that number.
 /// </para>
 /// </summary>
 public sealed class Sscc18Symbology : BarcodeSymbology

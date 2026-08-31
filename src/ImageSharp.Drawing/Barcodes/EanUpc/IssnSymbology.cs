@@ -7,12 +7,17 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The ISSN data layer over EAN-13. An International Standard Serial Number (ISO 3297) renders as an EAN-13
-/// symbol in the GS1 977 prefix range, with the ISSN itself printed above the bars. Input is the standard
-/// NNNN-NNNC form where the check character C is optional and X represents ten, optionally followed by a
-/// space and a two digit sequence variant that distinguishes issue level variations; the variant defaults
-/// to 00. The EAN-13 form is 977, the seven ISSN data digits, the sequence variant and the EAN check digit;
-/// the ISSN check character itself is not encoded in the bars.
+/// The ISSN data layer over EAN-13. An International Standard Serial Number (ISO 3297) draws as an EAN-13
+/// symbol in the GS1 977 prefix range. The ISSN itself prints above the bars.
+/// <para>
+/// The input is the standard NNNN-NNNC form, where the check character C is optional and X stands for ten.
+/// A space and a two digit sequence variant can follow it, which separates issue level variations. That
+/// variant is 00 when the input carries none.
+/// </para>
+/// <para>
+/// The EAN-13 form is 977, the seven ISSN data digits, the sequence variant and the EAN check digit. The
+/// bars do not carry the ISSN check character itself.
+/// </para>
 /// </summary>
 public sealed class IssnSymbology : BarcodeSymbology
 {

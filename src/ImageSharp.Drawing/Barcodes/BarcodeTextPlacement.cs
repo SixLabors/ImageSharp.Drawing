@@ -4,9 +4,9 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// A single piece of the human readable interpretation of a barcode, positioned in module space. The
-/// placement names the bar edge the line faces and the side it prints on; the clear space between the
-/// two, and the room the line needs, belong to the renderer, which is what knows the font.
+/// One piece of the human readable interpretation of a barcode, positioned in module space. The placement
+/// names the bar edge that the line faces and the side that it prints on. The renderer owns the clear
+/// space between the two and the room that the line needs, because only the renderer knows the font.
 /// </summary>
 internal readonly struct BarcodeTextPlacement
 {

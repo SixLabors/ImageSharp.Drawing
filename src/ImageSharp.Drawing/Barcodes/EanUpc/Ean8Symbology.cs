@@ -4,9 +4,10 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The EAN-8 symbology specified in ISO/IEC 15420. An EAN-8 symbol is 67 modules wide: a normal guard pattern,
-/// four symbol characters from number set A, a centre guard pattern, four symbol characters from number set C
-/// and a closing normal guard pattern. All eight digits have symbol characters; there is no parity-encoded digit.
+/// The EAN-8 symbology, which ISO/IEC 15420 specifies. An EAN-8 symbol is 67 modules wide: a normal guard
+/// pattern, four symbol characters from number set A, a centre guard pattern, four symbol characters from
+/// number set C and a closing normal guard pattern. All eight digits have symbol characters, so no digit
+/// depends on parity.
 /// </summary>
 public sealed class Ean8Symbology : BarcodeSymbology
 {

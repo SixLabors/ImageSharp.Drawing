@@ -4,11 +4,14 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The five-digit EAN/UPC add-on symbology specified in the GS1 General Specifications, used for prices on
-/// ISBN book barcodes. The symbol starts with the add-on guard pattern 01011 and encodes each digit as a seven
-/// module character from number set A or B, with a 01 delineator between characters. The add-on checksum has no
-/// character of its own; it is conveyed through the number set parity. The human readable interpretation prints
-/// above the bars. The leading space module of the guard pattern is folded into the leading quiet zone.
+/// The five digit EAN/UPC add-on symbology, which the GS1 General Specifications specify. It carries the
+/// price on an ISBN book barcode. The symbol starts with the add-on guard pattern 01011. Each digit takes a
+/// seven module character from number set A or B, with a 01 delineator between characters. The add-on
+/// checksum has no character of its own. The number set parity carries it.
+/// <para>
+/// The human readable interpretation prints above the bars. The leading quiet zone absorbs the leading
+/// space module of the guard pattern.
+/// </para>
 /// </summary>
 public sealed class Ean5Symbology : BarcodeSymbology
 {

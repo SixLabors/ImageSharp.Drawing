@@ -51,7 +51,9 @@ internal static class Code39Encoder
     /// <summary>
     /// The width of a wide element in modules. Section 4.4 b) allows a wide to narrow ratio of "2,0 : 1
     /// to 3,0 : 1", and this is the widest of that range, so a symbol character and its gap take the
-    /// sixteen modules at the top of the range section 4.1 h) gives.
+    /// sixteen modules at the top of the range section 4.1 h) gives. An application standard may name a
+    /// nominal ratio inside that range which is not a whole number, as IFA does for the PZN at 1:2.5, and
+    /// a run width is a whole number of modules, so this library draws the permitted 3.
     /// </summary>
     private const int WideElement = 3;
 
@@ -101,7 +103,7 @@ internal static class Code39Encoder
     };
 
     /// <summary>
-    /// Works out the check character over the given data. Annex A.1.1 assigns each data character the
+    /// Calculates the check character over the given data. Annex A.1.1 assigns each data character the
     /// value Table A.1 gives it, sums those values, divides the sum by 43, and takes "the character whose
     /// value (from Table A.1) is the remainder from the division" as the check character.
     /// </summary>
@@ -184,14 +186,21 @@ internal static class Code39Encoder
     /// <param name="options">The options that control layout choices.</param>
     /// <returns>The encoded symbol.</returns>
     public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
-    {
-        int widthInModules = 0;
-        for (int i = 0; i < runs.Length; i++)
-        {
-            widthInModules += runs[i];
-        }
+        => BuildSymbol(runs, text, options, WidthInModules(runs) * NominalBarHeightFraction);
 
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, widthInModules * NominalBarHeightFraction);
+    /// <summary>
+    /// Builds the symbol from encoded run widths, at a bar height an application standard fixes rather
+    /// than the proportional recommendation of section 4.4 e).
+    /// </summary>
+    /// <param name="runs">The alternating bar and space run widths in modules.</param>
+    /// <param name="text">The human readable interpretation.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="nominalBarHeight">The bar height in modules a symbol takes when the caller sets none.</param>
+    /// <returns>The encoded symbol.</returns>
+    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options, float nominalBarHeight)
+    {
+        int widthInModules = WidthInModules(runs);
+        float barHeight = EanUpcEncoder.ResolveBarHeight(options, nominalBarHeight);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];
@@ -207,6 +216,22 @@ internal static class Code39Encoder
         }
 
         return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone);
+    }
+
+    /// <summary>
+    /// Adds up the run widths to give the width of the symbol, its quiet zones excluded.
+    /// </summary>
+    /// <param name="runs">The alternating bar and space run widths in modules.</param>
+    /// <returns>The width in modules.</returns>
+    private static int WidthInModules(ReadOnlySpan<int> runs)
+    {
+        int width = 0;
+        for (int i = 0; i < runs.Length; i++)
+        {
+            width += runs[i];
+        }
+
+        return width;
     }
 
     /// <summary>

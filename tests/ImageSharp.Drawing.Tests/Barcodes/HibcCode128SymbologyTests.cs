@@ -26,7 +26,7 @@ public class HibcCode128SymbologyTests
     }
 
     /// <summary>
-    /// A caller who has already worked out the check character supplies it, and the symbol carries it
+    /// A caller who has already calculated the check character supplies it, and the symbol carries it
     /// once, so the runs match those of the same data with the check character left off.
     /// </summary>
     [Fact]

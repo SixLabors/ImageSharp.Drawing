@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The encoded form of a bar-based symbology. The symbol is a strictly alternating sequence of bars and spaces;
+/// The encoded form of a bar-based symbology. The symbol is a strictly alternating sequence of bars and spaces.
 /// each bar additionally carries a height and a top offset so that symbologies with bars at different vertical
 /// positions (the guard bars of ISO/IEC 15420 symbols, four-state postal bars) share one model.
 /// </summary>

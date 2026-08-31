@@ -9,15 +9,16 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// Shared encodation for the EAN/UPC symbology family as specified in ISO/IEC 15420 and the GS1 General
-/// Specifications. Symbol characters are seven modules wide and encode one digit through number set A, B or C;
-/// the number set choice carries the implied extra digit of EAN-13 and the check digit of UPC-E.
+/// Specifications. Symbol characters are seven modules wide, and each carries one digit through number
+/// set A, B or C. The choice of number set carries the implied extra digit of EAN-13 and the check digit
+/// of UPC-E.
 /// </summary>
 internal static class EanUpcEncoder
 {
     /// <summary>
     /// The number of modules a guard pattern extends below the digit bars when the human readable
     /// interpretation is printed. ISO/IEC 15420 extends the guard bars five modules into the text area at
-    /// nominal size; the extension exists to flank the text row, so a symbol without text has uniform bars.
+    /// nominal size. The extension flanks the text row, so a symbol without text has uniform bars.
     /// </summary>
     public const float GuardExtension = 5F;
 
@@ -80,7 +81,7 @@ internal static class EanUpcEncoder
 
     /// <summary>
     /// Gets the number set A symbol characters indexed by digit, seven modules per character with the most significant
-    /// bit first and 1 meaning a dark module. ISO/IEC 15420 defines number set A with odd parity; every
+    /// bit first and 1 meaning a dark module. ISO/IEC 15420 gives number set A odd parity. Every
     /// character starts with a space module and ends with a bar module.
     /// </summary>
     public static ReadOnlySpan<byte> NumberSetA =>
@@ -90,8 +91,8 @@ internal static class EanUpcEncoder
     ];
 
     /// <summary>
-    /// Gets the number set B symbol characters indexed by digit. ISO/IEC 15420 defines number set B with even parity;
-    /// each character is number set C for the same digit read in reverse module order.
+    /// Gets the number set B symbol characters indexed by digit. ISO/IEC 15420 gives number set B even
+    /// parity. Each character is number set C for the same digit, read in reverse module order.
     /// </summary>
     public static ReadOnlySpan<byte> NumberSetB =>
     [
@@ -101,7 +102,7 @@ internal static class EanUpcEncoder
 
     /// <summary>
     /// Gets the number set C symbol characters indexed by digit. ISO/IEC 15420 defines number set C as the module-wise
-    /// inverse of number set A; every character starts with a bar module and ends with a space module.
+    /// inverse of number set A. Every character starts with a bar module and ends with a space module.
     /// </summary>
     public static ReadOnlySpan<byte> NumberSetC =>
     [
@@ -112,7 +113,7 @@ internal static class EanUpcEncoder
     /// <summary>
     /// Gets the number set sequence for the six left-half characters of an EAN-13 symbol, indexed by the leading
     /// digit. A set bit selects number set B, a clear bit number set A, most significant bit first.
-    /// ISO/IEC 15420 encodes the thirteenth digit through this variable parity; the leading digit has no
+    /// ISO/IEC 15420 carries the thirteenth digit through this variable parity. The leading digit has no
     /// symbol character of its own.
     /// </summary>
     public static ReadOnlySpan<byte> Ean13LeftParity =>
@@ -165,9 +166,10 @@ internal static class EanUpcEncoder
     }
 
     /// <summary>
-    /// Validates that the text consists solely of the decimal digits 0-9 and has one of the two permitted
-    /// lengths: the data length, or the data length plus a check digit. When the check digit is present it is
-    /// verified; when absent it is computed. The digits written always carry the check digit.
+    /// Validates that the text holds only the decimal digits 0 to 9, and that its length is the data
+    /// length or the data length plus a check digit. When the check digit is present, this method compares
+    /// it with the calculated one. When it is absent, this method calculates it. The digits written always
+    /// carry the check digit.
     /// </summary>
     /// <param name="text">The input text.</param>
     /// <param name="dataLength">The number of data digits, excluding the check digit.</param>
@@ -215,7 +217,7 @@ internal static class EanUpcEncoder
     /// <summary>
     /// Appends a pattern to the module stream, most significant bit first.
     /// </summary>
-    /// <param name="modules">The module stream; 1 is a dark module.</param>
+    /// <param name="modules">The module stream, where 1 is a dark module.</param>
     /// <param name="position">The write position, advanced by <paramref name="bitCount"/>.</param>
     /// <param name="pattern">The pattern bits.</param>
     /// <param name="bitCount">The number of pattern bits.</param>
@@ -231,7 +233,7 @@ internal static class EanUpcEncoder
     /// Converts a module stream into alternating bar and space run widths. The stream must start and end with
     /// a dark module so that even run indexes are bars.
     /// </summary>
-    /// <param name="modules">The module stream; 1 is a dark module.</param>
+    /// <param name="modules">The module stream, where 1 is a dark module.</param>
     /// <returns>The run widths in modules.</returns>
     public static int[] ToRuns(ReadOnlySpan<byte> modules)
     {
@@ -267,12 +269,12 @@ internal static class EanUpcEncoder
     /// <summary>
     /// Builds the bar height and top offset arrays for a symbol whose bars are top aligned. When the options
     /// carry a font the listed guard bars extend downwards by <see cref="GuardExtension"/> to flank the text
-    /// row; without text all bars are uniform.
+    /// row. Without text, all bars are uniform.
     /// </summary>
     /// <param name="barCount">The number of bars in the symbol.</param>
     /// <param name="barHeight">The digit bar height in modules.</param>
     /// <param name="guardBars">The indexes of the extended bars.</param>
-    /// <param name="options">The options; the font decides whether the guards extend.</param>
+    /// <param name="options">The options, whose font decides whether the guards extend.</param>
     /// <param name="heights">The resulting per-bar heights in modules.</param>
     /// <param name="tops">The resulting per-bar top offsets in modules.</param>
     public static void BuildGuardedHeights(int barCount, float barHeight, ReadOnlySpan<int> guardBars, BarcodeOptions options, out float[] heights, out float[] tops)
@@ -395,11 +397,11 @@ internal static class EanUpcEncoder
     }
 
     /// <summary>
-    /// Encodes thirteen verified digits into an EAN-13 symbol, optionally with a caption above the bars.
-    /// The ISBN, ISMN and ISSN symbologies print their own number above their EAN-13 symbol; the caption
+    /// Encodes thirteen validated digits into an EAN-13 symbol, optionally with a caption above the bars.
+    /// The ISBN, ISMN and ISSN symbologies print their own number above their EAN-13 symbol. The caption
     /// faces the bar tops, and the room it needs belongs to the renderer, which is what knows the font.
     /// </summary>
-    /// <param name="digits">The thirteen digits including a verified check digit.</param>
+    /// <param name="digits">The thirteen digits, with the check digit already validated.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="caption">The text above the bars, or <see langword="null"/> for none.</param>
     /// <returns>The encoded symbol.</returns>
@@ -448,9 +450,9 @@ internal static class EanUpcEncoder
     }
 
     /// <summary>
-    /// Encodes eight verified digits into an EAN-8 symbol.
+    /// Encodes eight validated digits into an EAN-8 symbol.
     /// </summary>
-    /// <param name="digits">The eight digits including a verified check digit.</param>
+    /// <param name="digits">The eight digits, with the check digit already validated.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <returns>The encoded symbol.</returns>
     public static LinearBarcodeSymbol BuildEan8(ReadOnlySpan<char> digits, BarcodeOptions options)
