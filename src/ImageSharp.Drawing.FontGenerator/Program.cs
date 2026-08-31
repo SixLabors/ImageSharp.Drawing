@@ -489,7 +489,7 @@ foreach (FontDesign design in designs)
     Console.WriteLine($"{fontPath}: {font.Length} bytes");
 
     // Emit the font bytes as C# data for embedding in the library: the emitted file replaces
-    // src/ImageSharp.Drawing/Barcodes/<Name>FontData.cs whenever the design changes.
+    // src/ImageSharp.Drawing/Barcodes/Fonts/<Name>FontData.cs whenever the design changes.
     StringBuilder data = new();
     data.AppendLine("// Copyright (c) Six Labors.");
     data.AppendLine("// Licensed under the Six Labors Split License.");
