@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
@@ -72,20 +73,25 @@ internal static class HibcData
         // sum starts at the value that character holds in the set.
         int sum = FlagCharacterValue;
         int dataLength = validateCheckCharacter ? text.Length - 1 : text.Length;
-        for (int i = 0; i < text.Length; i++)
+        int index = 0;
+        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
+        while (codePoints.MoveNext())
         {
-            int value = Code39Encoder.Value(text[i]);
+            CodePoint current = codePoints.Current;
+            int value = current.IsAscii ? Code39Encoder.Value((char)current.Value) : -1;
             if (value < 0)
             {
                 throw new ArgumentException(
-                    $"HIBC carries only digits, capital letters, spaces and the symbols -.$/+%; got '{text[i]}'.",
+                    $"HIBC carries only digits, capital letters, spaces and the symbols -.$/+%; got {current.ToDisplayString()}.",
                     nameof(text));
             }
 
-            if (i < dataLength)
+            if (index < dataLength)
             {
                 sum += value;
             }
+
+            index++;
         }
 
         char check = Code39Encoder.Characters[sum % Code39Encoder.Characters.Length];

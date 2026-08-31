@@ -1,6 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.Fonts.Unicode;
+using SixLabors.ImageSharp.Drawing.Helpers;
+
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -13,8 +16,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class Code39Encoder
 {
     /// <summary>
-    /// The character set, in check character value order, so the value of a character is its index. This
-    /// is the order Table 1 of ISO/IEC 16388 lists the assignments in.
+    /// The character set, in the value order Table A.1 of ISO/IEC 16388 assigns for the modulo 43 check,
+    /// so the value of a character is its index.
     /// </summary>
     public const string Characters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
 
@@ -28,6 +31,12 @@ internal static class Code39Encoder
     /// The quiet zone in modules on each side. Section 4.4 d): "Minimum width of quiet zone: 10 X".
     /// </summary>
     public const int QuietZone = 10;
+
+    /// <summary>
+    /// The number of characters a caller stack allocates to build symbol data in. Data this long covers
+    /// the labels the symbology is used for, and anything longer grows into a pooled array.
+    /// </summary>
+    public const int StackBufferLength = 64;
 
     /// <summary>
     /// The element count of a symbol character and the gap that follows it.
@@ -72,8 +81,8 @@ internal static class Code39Encoder
     ];
 
     /// <summary>
-    /// Gets the check character value of the given character, or a negative number when the character is
-    /// outside the Code 39 character set.
+    /// Gets the value Table A.1 of ISO/IEC 16388 assigns the given character, or a negative number when
+    /// the character is outside the Code 39 character set.
     /// </summary>
     /// <param name="character">The character to value.</param>
     /// <returns>The value, or a negative number.</returns>
@@ -92,10 +101,9 @@ internal static class Code39Encoder
     };
 
     /// <summary>
-    /// Works out the check character over the given data, the sum of the character values modulo the size
-    /// of the character set. Section 4.1 g) makes the check character optional and leaves its calculation
-    /// to Annex A, which is not in the copy of the standard this was written against, so the calculation
-    /// follows the BWIPP reference implementation.
+    /// Works out the check character over the given data. Annex A.1.1 assigns each data character the
+    /// value Table A.1 gives it, sums those values, divides the sum by 43, and takes "the character whose
+    /// value (from Table A.1) is the remainder from the division" as the check character.
     /// </summary>
     /// <param name="data">The data the check character covers.</param>
     /// <returns>The check character.</returns>
@@ -111,7 +119,9 @@ internal static class Code39Encoder
     }
 
     /// <summary>
-    /// Validates the given text against the Code 39 character set.
+    /// Validates the given text against the Code 39 character set. Walking code points rather than UTF-16
+    /// units reports a surrogate pair as the one character it is, instead of showing half of it back to
+    /// the caller.
     /// </summary>
     /// <param name="text">The text to validate.</param>
     /// <exception cref="ArgumentException">The text carries a character outside the set.</exception>
@@ -120,12 +130,14 @@ internal static class Code39Encoder
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
 
-        for (int i = 0; i < text.Length; i++)
+        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
+        while (codePoints.MoveNext())
         {
-            if (Value(text[i]) < 0)
+            CodePoint current = codePoints.Current;
+            if (!current.IsAscii || Value((char)current.Value) < 0)
             {
                 throw new ArgumentException(
-                    $"Code 39 carries only digits, capital letters, spaces and the symbols -.$/+%; got '{text[i]}'.",
+                    $"Code 39 carries only digits, capital letters, spaces and the symbols -.$/+%; {current.ToDisplayString()} is outside that set.",
                     nameof(text));
             }
         }
@@ -136,7 +148,8 @@ internal static class Code39Encoder
     /// The runs carry the start character, the data, an optional check character and the stop character,
     /// each followed by its inter-character gap. Section 4.2 separates the characters "within the symbol"
     /// with that gap, and section 4.3.3 puts the stop character at the right end, so no gap follows it
-    /// and the runs end on a bar.
+    /// and the runs end on a bar. Annex A.1.1 places the check character "immediately following the final
+    /// data character and before the stop character".
     /// </summary>
     /// <param name="text">The text to encode, already validated against the character set.</param>
     /// <param name="check">The check character to carry behind the data, or <see langword="null"/>.</param>

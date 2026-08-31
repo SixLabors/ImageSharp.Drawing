@@ -7,8 +7,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
 /// Encoder tests for <see cref="Code128Symbology"/>. Each expected run string is the alternating bar and
-/// space module widths, starting with a bar, taken from the BWIPP reference implementation at
-/// <c>D:\GitHub\metafloor\bwip-js</c> through its raw encoding API. The runs carry the start character,
+/// space module widths, starting with a bar, taken from an independent reference implementation through
+/// its raw encoding API. The runs carry the start character,
 /// the code set switches the encoder chose, the check character and the stop character, so a difference in
 /// any of those shows up here.
 /// </summary>

@@ -7,8 +7,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
 /// Encoder tests for <see cref="HibcCode128Symbology"/>. Each expected run string is the alternating bar
-/// and space module widths, starting with a bar, taken from the BWIPP reference implementation through its
-/// raw encoding API. A HIBC Code 128 is a Code 128 symbol carrying the HIBC flag character, the data and
+/// and space module widths, starting with a bar, taken from an independent reference implementation
+/// through its raw encoding API. A HIBC Code 128 is a Code 128 symbol carrying the HIBC flag character, the data and
 /// the modulo 43 check character.
 /// </summary>
 public class HibcCode128SymbologyTests

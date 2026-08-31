@@ -154,6 +154,18 @@ public class DrawBarcodeTests
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new Code39Symbology(), "CODE39", CreateTextOptions());
 
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Code39Extended<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Code39ExtendedSymbology(), "Code39", CreateOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Code39Extended_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Code39ExtendedSymbology(), "Code39", CreateTextOptions());
+
     /// <summary>
     /// Disabling the quiet zones must shift the first bar to the draw origin, and a non-solid brush must
     /// flow through to the bar fill unchanged.

@@ -8,8 +8,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// <summary>
 /// Encoder tests for the data layers over EAN-13 and EAN-8: ISBN (ISO 2108), ISMN (ISO 10957),
 /// ISSN (ISO 3297) and the Marks &amp; Spencer in-house symbology. Module sequences are asserted against
-/// reference vectors generated with BWIPP via bwip-js <c>raw()</c>; caption and layout assertions follow the
-/// standards and, for M&amp;S which has no public specification, BWIPP itself.
+/// reference vectors generated with an independent reference implementation; caption and layout assertions
+/// follow the standards and, for M&amp;S which has no public specification, that implementation itself.
 /// </summary>
 public class DataLayerSymbologyTests
 {
@@ -147,7 +147,7 @@ public class DataLayerSymbologyTests
         BarcodeOptions options = CreateTextOptions();
         LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new MandsSymbology().Encode("0642118", options);
 
-        // Per BWIPP: the centre guard bars stay at digit height while the outer guards extend, the padded
+        // Per the reference implementation: the centre guard bars stay at digit height while the outer guards extend, the padded
         // leading zero and the final cell are hidden, and M and S print in the quiet zones.
         float digitHeight = symbol.BarHeights.Min();
         Assert.Equal(digitHeight, symbol.BarHeights[10]);

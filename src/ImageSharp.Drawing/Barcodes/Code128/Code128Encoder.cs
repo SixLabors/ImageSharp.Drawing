@@ -3,6 +3,7 @@
 
 using System.Buffers;
 using SixLabors.Fonts.Unicode;
+using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
@@ -104,7 +105,7 @@ internal static class Code128Encoder
             if (!current.IsAscii)
             {
                 throw new ArgumentException(
-                    $"Code 128 encodes ASCII 0 to 127; U+{current.Value:X4} is outside that range.",
+                    $"Code 128 encodes ASCII 0 to 127; {current.ToDisplayString()} is outside that range.",
                     nameof(text));
             }
         }
