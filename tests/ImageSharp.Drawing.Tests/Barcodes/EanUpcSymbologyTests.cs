@@ -7,8 +7,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
 /// Encoder tests for the EAN/UPC symbology family. Module sequences are asserted against reference vectors
-/// generated with an independent reference implementation, so an error in our encodation tables cannot
-/// hide behind a matching error in the expected values. Structural assertions (symbol width, bar counts,
+/// generated with an independent reference implementation, so a matching error in the expected values
+/// cannot conceal an error in our encodation tables. Structural assertions (symbol width, bar counts,
 /// guard bar extension, quiet zones, text layout) follow ISO/IEC 15420 directly.
 /// </summary>
 public class EanUpcSymbologyTests

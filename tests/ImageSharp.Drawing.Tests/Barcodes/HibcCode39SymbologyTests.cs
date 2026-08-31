@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// <summary>
 /// Encoder tests for <see cref="HibcCode39Symbology"/>. Each expected run string is the alternating bar and
 /// space module widths, starting with a bar, taken from an independent reference implementation through
-/// its raw encoding API, less the gap it emits behind the stop character. A HIBC Code 39 carries the same
+/// its raw encoding API, less the gap it emits after the stop character. A HIBC Code 39 carries the same
 /// data a HIBC Code 128 does, drawn by Code 39, so these also prove the shared data layer.
 /// </summary>
 public class HibcCode39SymbologyTests

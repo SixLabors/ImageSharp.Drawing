@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// Annex A.2 prints the human readable interpretation "of the data characters (and data and symbol check
 /// character(s), if used)". It also says the start and stop characters "may be printed". Section 4.3.3
 /// shows that character as an asterisk. A symbol therefore prints its data between asterisks, with the
-/// check character behind the data when it carries one.
+/// check character after the data when it carries one.
 /// </para>
 /// </summary>
 public sealed class Code39Symbology : BarcodeSymbology

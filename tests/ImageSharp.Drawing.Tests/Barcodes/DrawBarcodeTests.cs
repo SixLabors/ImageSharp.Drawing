@@ -64,6 +64,23 @@ public class DrawBarcodeTests
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new IsbnSymbology(), "978-0-306-40615-7", CreateTextOptions());
 
+    /// <summary>
+    /// The caption prints at the size the caller gave it, rather than being scaled to the symbol width, so
+    /// it overhangs the bars and sets the width of the drawn area itself.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="provider">The image provider.</param>
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Isbn_WithText_UnscaledCaption<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        BarcodeOptions options = CreateTextOptions();
+        options.FitCaptionToSymbolWidth = false;
+
+        RunTest(provider, new IsbnSymbology(), "978-0-306-40615-7", options);
+    }
+
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Ismn_WithText<TPixel>(TestImageProvider<TPixel> provider)
@@ -202,6 +219,18 @@ public class DrawBarcodeTests
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new Pzn7Symbology(), "1234562", CreateTextOptions());
 
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Code32<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Code32Symbology(), "012345676", CreateOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Code32_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Code32Symbology(), "012345676", CreateTextOptions());
+
     /// <summary>
     /// Disabling the quiet zones must shift the first bar to the draw origin, and a non-solid brush must
     /// flow through to the bar fill unchanged.
@@ -229,10 +258,9 @@ public class DrawBarcodeTests
             x =>
             {
                 // The image is the symbol, with no slack around it. The provider hands over a one pixel
-                // canvas, MeasureBarcode reports the area the symbol needs, and the canvas grows to it.
+                // canvas, the measurer reports the area the symbol needs, and the canvas grows to it.
                 // Slack would hide a symbol that grew, and a shortfall would clip one.
-                RectangleF bounds = default;
-                x.Paint(canvas => bounds = canvas.MeasureBarcode(symbology, text, options, PointF.Empty));
+                RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, text, options, PointF.Empty);
                 x.Resize(new Size((int)MathF.Ceiling(bounds.Width), (int)MathF.Ceiling(bounds.Height)));
                 x.Paint(canvas => canvas.DrawBarcode(symbology, text, options, PointF.Empty));
             },

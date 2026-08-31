@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <summary>
 /// The data layer the Health Industry Bar Code symbologies share. Every HIBC symbol carries the Code 39
 /// character set, the same flag character in front of the data and the same modulo 43 check character
-/// behind it, whatever symbology draws it.
+/// after it, whatever symbology draws it.
 /// </summary>
 internal static class HibcData
 {
@@ -35,7 +35,7 @@ internal static class HibcData
     private const int FlagCharacterValue = 41;
 
     /// <summary>
-    /// The delimiter that opens the human readable interpretation, with the flag character behind it.
+    /// The delimiter that opens the human readable interpretation, with the flag character after it.
     /// </summary>
     private const string ReadableOpening = "*+";
 

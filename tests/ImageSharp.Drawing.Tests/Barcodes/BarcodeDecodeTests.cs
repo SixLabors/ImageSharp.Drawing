@@ -128,6 +128,20 @@ public class BarcodeDecodeTests
             reader => reader.Options.UseCode39ExtendedMode = false);
 
     /// <summary>
+    /// A Code 32 symbol decodes to the six base 32 characters that carry the nine digit AIC code. The
+    /// letter A and the digits themselves belong to the printed line alone.
+    /// </summary>
+    [Fact]
+    public void Code32_RoundTrips()
+        => AssertDecodes(
+            new Code32Symbology(),
+            "012345676",
+            BarcodeFormat.CODE_39,
+            "0CSSBD",
+            CreateOptions(),
+            reader => reader.Options.UseCode39ExtendedMode = false);
+
+    /// <summary>
     /// A PZN7 carries one digit fewer than a PZN8, and the same identifier in front of it.
     /// </summary>
     [Fact]
@@ -204,13 +218,7 @@ public class BarcodeDecodeTests
         // The image holds the symbol and a margin on every side, measured rather than assumed, so a
         // symbology whose symbol is wider than the next is not silently clipped.
         PointF origin = new(20, 20);
-        RectangleF bounds;
-        using (Image<Rgba32> probe = new(1, 1))
-        {
-            RectangleF measured = default;
-            probe.Mutate(x => x.Paint(canvas => measured = canvas.MeasureBarcode(symbology, text, options, origin)));
-            bounds = measured;
-        }
+        RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, text, options, origin);
 
         using Image<Rgba32> image = new(
             (int)MathF.Ceiling(bounds.Right) + 20,

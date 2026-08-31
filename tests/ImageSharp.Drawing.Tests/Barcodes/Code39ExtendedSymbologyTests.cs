@@ -7,7 +7,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
 /// Encoder tests for <see cref="Code39ExtendedSymbology"/>. The expected run strings come from an independent
-/// reference implementation through its raw encoding API, less the gap the reference emits behind the stop
+/// reference implementation through its raw encoding API, less the gap the reference emits after the stop
 /// character. The substitution itself is Table A.2 of ISO/IEC 16388.
 /// </summary>
 public class Code39ExtendedSymbologyTests

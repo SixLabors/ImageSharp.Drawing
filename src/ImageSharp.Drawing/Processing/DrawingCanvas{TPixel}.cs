@@ -4,6 +4,7 @@
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
+using SixLabors.ImageSharp.Drawing.Barcodes;
 using SixLabors.ImageSharp.Drawing.Helpers;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
@@ -1122,6 +1123,13 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     {
         this.EnsureNotDisposed();
         return TextMeasurer.Measure(text, textOptions);
+    }
+
+    /// <inheritdoc />
+    public override RectangleF MeasureBarcode(BarcodeSymbology symbology, string text, BarcodeOptions options, PointF origin)
+    {
+        this.EnsureNotDisposed();
+        return BarcodeMeasurer.MeasureRenderableBounds(symbology, text, options, origin);
     }
 
     /// <inheritdoc />

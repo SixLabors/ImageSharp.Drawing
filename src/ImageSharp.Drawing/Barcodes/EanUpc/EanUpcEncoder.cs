@@ -318,7 +318,7 @@ internal static class EanUpcEncoder
         float size = font.Size;
         if (options.FitCaptionToSymbolWidth)
         {
-            float width = TextMeasurer.MeasureRenderableBounds(caption, new TextOptions(font)).Width;
+            float width = TextMeasurer.Measure(caption, BarcodeTextOptionsFactory.Create(font)).RenderableBounds.Width;
             size = font.Size * spanModules * options.ModuleWidth / width;
         }
 
