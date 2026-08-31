@@ -97,13 +97,35 @@ public class BarcodeDecodeTests
 
     /// <summary>
     /// A Code 39 symbol decodes to its data. The start and stop character are symbol overhead, and the
-    /// asterisks that stand for them belong to the human readable interpretation alone.
+    /// asterisks that stand for them belong to the human readable interpretation alone. The decoder is
+    /// taken out of full ASCII mode, which A.3 calls a non-standard transmission mode, so a pair such as
+    /// <c>+A</c> reads back as the two characters the symbol carries rather than as one lowercase letter.
     /// </summary>
     [Theory]
     [InlineData("CODE39")]
     [InlineData("ABC-123")]
     public void Code39_RoundTrips(string text)
-        => AssertDecodes(new Code39Symbology(), text, BarcodeFormat.CODE_39, text);
+        => AssertDecodes(
+            new Code39Symbology(),
+            text,
+            BarcodeFormat.CODE_39,
+            text,
+            CreateOptions(),
+            reader => reader.Options.UseCode39ExtendedMode = false);
+
+    /// <summary>
+    /// A HIBC Code 39 decodes to the flag character, the data and the check character, which is what the
+    /// symbol carries; the delimiters belong to the human readable interpretation alone.
+    /// </summary>
+    [Fact]
+    public void HibcCode39_RoundTrips()
+        => AssertDecodes(
+            new HibcCode39Symbology(),
+            "A123BJC5D6E71",
+            BarcodeFormat.CODE_39,
+            "+A123BJC5D6E71G",
+            CreateOptions(),
+            reader => reader.Options.UseCode39ExtendedMode = false);
 
     /// <summary>
     /// A Code 39 Extended symbol is an ordinary Code 39 symbol, so A.3.1 needs the decoder put into full
