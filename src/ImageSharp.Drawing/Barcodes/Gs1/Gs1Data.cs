@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
@@ -43,8 +44,10 @@ internal static class Gs1Data
         {
             if (text[position] != '(')
             {
+                SpanCodePointEnumerator opening = text[position..].EnumerateCodePoints();
+                opening.MoveNext();
                 throw new ArgumentException(
-                    $"An element string opens with an Application Identifier in parentheses; got '{text[position]}' at position {position}.",
+                    $"An element string opens with an Application Identifier in parentheses; got {opening.Current.ToDisplayString()} at position {position}.",
                     nameof(text));
             }
 

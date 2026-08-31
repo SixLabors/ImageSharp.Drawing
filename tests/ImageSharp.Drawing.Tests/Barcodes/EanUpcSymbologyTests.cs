@@ -7,10 +7,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
 /// Encoder tests for the EAN/UPC symbology family. Module sequences are asserted against reference vectors
-/// generated with BWIPP (via bwip-js <c>raw()</c>, BWIPP being the de facto reference implementation of
-/// ISO/IEC 15420), so an error in our encodation tables cannot hide behind a matching error in the expected
-/// values. Structural assertions (symbol width, bar counts, guard bar extension, quiet zones, text layout)
-/// follow ISO/IEC 15420 directly.
+/// generated with an independent reference implementation, so an error in our encodation tables cannot
+/// hide behind a matching error in the expected values. Structural assertions (symbol width, bar counts,
+/// guard bar extension, quiet zones, text layout) follow ISO/IEC 15420 directly.
 /// </summary>
 public class EanUpcSymbologyTests
 {
@@ -127,7 +126,7 @@ public class EanUpcSymbologyTests
 
         // ISO/IEC 15420: the number system digit prints in the leading quiet zone, the check digit in the
         // trailing quiet zone, and every other digit below its own symbol character. The quiet zone digits
-        // print in smaller type: 10/12 of the digit size, matching BWIPP.
+        // print in smaller type: 10/12 of the digit size, matching the reference implementation.
         Assert.Equal(12, symbol.Text.Length);
         Assert.Equal("036000291452", string.Concat(symbol.Text.Select(placement => placement.Text)));
         Assert.True(symbol.Text[0].Left < 0);
@@ -274,7 +273,7 @@ public class EanUpcSymbologyTests
     private static void AssertGuardExtension(BarcodeSymbology symbology, string text, ReadOnlySpan<int> guardBars)
     {
         // The guard extension flanks the text row, so it applies only when text is enabled: without a font
-        // every bar is uniform (matching BWIPP); with a font the listed bars descend exactly 5 modules below
+        // every bar is uniform (matching the reference implementation); with a font the listed bars descend exactly 5 modules below
         // the digit bars. Every bar is top aligned in both modes.
         LinearBarcodeSymbol plain = Encode(symbology, text);
         Assert.All(plain.BarHeights, height => Assert.Equal(plain.BarHeights[0], height));

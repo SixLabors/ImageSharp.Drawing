@@ -7,8 +7,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
 /// Encoder tests for <see cref="Sscc18Symbology"/>. Each expected run string is the alternating bar and
-/// space module widths, starting with a bar, taken from the BWIPP reference implementation through its raw
-/// encoding API. An SSCC-18 is a GS1-128 symbol carrying the Serial Shipping Container Code of GS1
+/// space module widths, starting with a bar, taken from an independent reference implementation through
+/// its raw encoding API. An SSCC-18 is a GS1-128 symbol carrying the Serial Shipping Container Code of GS1
 /// Application Identifier (00), so the runs carry the double character start pattern, the identifier, the
 /// eighteen digits, the check character and the stop character.
 /// </summary>

@@ -7,9 +7,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
 /// Encoder tests for <see cref="Ean14Symbology"/>. Each expected run string is the alternating bar and
-/// space module widths, starting with a bar, taken from the BWIPP reference implementation through its raw
-/// encoding API. An EAN-14 is a GS1-128 symbol carrying the Global Trade Item Number of GS1 Application
-/// Identifier (01), so the runs carry the double character start pattern, the identifier, the fourteen
+/// space module widths, starting with a bar, taken from an independent reference implementation through
+/// its raw encoding API. An EAN-14 is a GS1-128 symbol carrying the Global Trade Item Number of GS1
+/// Application Identifier (01), so the runs carry the double character start pattern, the identifier, the fourteen
 /// digits, the check character and the stop character.
 /// </summary>
 public class Ean14SymbologyTests

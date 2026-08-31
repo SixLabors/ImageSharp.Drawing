@@ -1,6 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.Fonts.Unicode;
+using SixLabors.ImageSharp.Drawing.Helpers;
+
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -36,14 +39,20 @@ public sealed class IsbnSymbology : BarcodeSymbology
         }
 
         ReadOnlySpan<char> compact = compactBuffer[..compactLength];
-        for (int i = 0; i < compact.Length; i++)
+        int index = 0;
+        SpanCodePointEnumerator compactPoints = compact.EnumerateCodePoints();
+        while (compactPoints.MoveNext())
         {
-            char c = compact[i];
-            bool checkX = c == 'X' && compact.Length == 10 && i == 9;
-            if (!char.IsAsciiDigit(c) && !checkX)
+            CodePoint current = compactPoints.Current;
+            bool checkX = current.Value == 'X' && compact.Length == 10 && index == 9;
+            if (!current.IsAsciiDigit() && !checkX)
             {
-                throw new ArgumentException($"ISBN accepts only digits, hyphens and a trailing X check character; got '{c}'.", nameof(text));
+                throw new ArgumentException(
+                    $"ISBN accepts only digits, hyphens and a trailing X check character; got {current.ToDisplayString()}.",
+                    nameof(text));
             }
+
+            index++;
         }
 
         // The encoded form is thirteen digits: twelve data digits and the check digit the caption repeats.

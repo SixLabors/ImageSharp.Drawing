@@ -106,6 +106,27 @@ public class BarcodeDecodeTests
         => AssertDecodes(new Code39Symbology(), text, BarcodeFormat.CODE_39, text);
 
     /// <summary>
+    /// A Code 39 Extended symbol is an ordinary Code 39 symbol, so A.3.1 needs the decoder put into full
+    /// ASCII mode before the substituted pairs read back as the characters they stand for.
+    /// </summary>
+    [Theory]
+    [InlineData("Code39")]
+    [InlineData("abc")]
+    [InlineData("a@b")]
+    [InlineData("Hello, World!")]
+    public void Code39Extended_RoundTrips(string text)
+    {
+        BarcodeOptions options = CreateOptions();
+        AssertDecodes(
+            new Code39ExtendedSymbology(),
+            text,
+            BarcodeFormat.CODE_39,
+            text,
+            options,
+            reader => reader.Options.UseCode39ExtendedMode = true);
+    }
+
+    /// <summary>
     /// The decoder must also read the symbol with the human readable interpretation present, proving the
     /// text does not intrude into the bars or quiet zones.
     /// </summary>
@@ -118,9 +139,18 @@ public class BarcodeDecodeTests
     }
 
     private static void AssertDecodes(BarcodeSymbology symbology, string text, BarcodeFormat format, string expected)
-        => AssertDecodes(symbology, text, format, expected, CreateOptions());
+        => AssertDecodes(symbology, text, format, expected, CreateOptions(), null);
 
     private static void AssertDecodes(BarcodeSymbology symbology, string text, BarcodeFormat format, string expected, BarcodeOptions options)
+        => AssertDecodes(symbology, text, format, expected, options, null);
+
+    private static void AssertDecodes(
+        BarcodeSymbology symbology,
+        string text,
+        BarcodeFormat format,
+        string expected,
+        BarcodeOptions options,
+        Action<BarcodeReaderGeneric>? configureReader)
     {
         // The image holds the symbol and a margin on every side, measured rather than assumed, so a
         // symbology whose symbol is wider than the next is not silently clipped.
@@ -146,6 +176,7 @@ public class BarcodeDecodeTests
         BarcodeReaderGeneric reader = new();
         reader.Options.PossibleFormats = [format];
         reader.Options.TryHarder = true;
+        configureReader?.Invoke(reader);
 
         Result result = reader.Decode(new RGBLuminanceSource(pixels, image.Width, image.Height, RGBLuminanceSource.BitmapFormat.RGBA32));
 

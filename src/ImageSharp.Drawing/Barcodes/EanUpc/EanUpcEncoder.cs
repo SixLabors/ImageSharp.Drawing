@@ -3,6 +3,7 @@
 
 using SixLabors.Fonts;
 using SixLabors.Fonts.Unicode;
+using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
@@ -202,10 +203,10 @@ internal static class EanUpcEncoder
         while (codePoints.MoveNext())
         {
             CodePoint current = codePoints.Current;
-            if (current.Value is < '0' or > '9')
+            if (!current.IsAsciiDigit())
             {
                 throw new ArgumentException(
-                    $"Only the digits 0-9 are accepted; got U+{current.Value:X4}.",
+                    $"Only the digits 0-9 are accepted; got {current.ToDisplayString()}.",
                     nameof(text));
             }
         }

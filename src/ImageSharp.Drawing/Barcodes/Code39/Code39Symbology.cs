@@ -10,9 +10,10 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// letters and the special characters <c>space $ % + - . /</c>, and section 4.2 brackets the data with a
 /// start and stop character that share one pattern.
 /// <para>
-/// Section 4.3.3 says that character "is usually depicted in human-readable form by a * (asterisk)", so
-/// the human readable interpretation shows one on each side of the data. Section 4.1 g) makes the check
-/// character optional, and it is not part of the printed interpretation.
+/// Annex A.2 prints the human readable interpretation "of the data characters (and data and symbol check
+/// character(s), if used)", and says the start and stop characters "may be printed". Section 4.3.3 depicts
+/// that character as an asterisk, so a symbol prints its data between asterisks with the check character
+/// behind the data when it carries one.
 /// </para>
 /// </summary>
 public sealed class Code39Symbology : BarcodeSymbology
@@ -23,7 +24,7 @@ public sealed class Code39Symbology : BarcodeSymbology
     /// Initializes a new instance of the <see cref="Code39Symbology"/> class.
     /// </summary>
     public Code39Symbology()
-        : this(Code39CheckCharacter.None)
+        : this(Code39CheckCharacter.None, true)
     {
     }
 
@@ -32,12 +33,33 @@ public sealed class Code39Symbology : BarcodeSymbology
     /// </summary>
     /// <param name="checkCharacter">How the symbol treats the modulo 43 check character.</param>
     public Code39Symbology(Code39CheckCharacter checkCharacter)
-        => this.CheckCharacter = checkCharacter;
+        : this(checkCharacter, true)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Code39Symbology"/> class.
+    /// </summary>
+    /// <param name="checkCharacter">How the symbol treats the modulo 43 check character.</param>
+    /// <param name="printCheckCharacter">
+    /// Whether a check character the symbol carries is part of the human readable interpretation.
+    /// </param>
+    public Code39Symbology(Code39CheckCharacter checkCharacter, bool printCheckCharacter)
+    {
+        this.CheckCharacter = checkCharacter;
+        this.PrintCheckCharacter = printCheckCharacter;
+    }
 
     /// <summary>
     /// Gets a value indicating how the symbol treats the modulo 43 check character.
     /// </summary>
     public Code39CheckCharacter CheckCharacter { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether a check character the symbol carries is part of the human readable
+    /// interpretation. A symbol that carries none prints none either way.
+    /// </summary>
+    public bool PrintCheckCharacter { get; }
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
@@ -56,20 +78,26 @@ public sealed class Code39Symbology : BarcodeSymbology
 
         return Code39Encoder.BuildSymbol(
             Code39Encoder.Encode(data, check),
-            options.Font is null ? string.Empty : BuildReadable(data),
+            options.Font is null ? string.Empty : this.BuildReadable(data, check),
             options);
     }
 
     /// <summary>
-    /// Builds the human readable interpretation: the data between the delimiters that stand for the start
-    /// and stop character.
+    /// Builds the human readable interpretation: the data, then the check character the symbol carries,
+    /// between the delimiters that stand for the start and stop character.
     /// </summary>
     /// <param name="data">The data the symbol carries, without the check character.</param>
+    /// <param name="check">The check character the symbol carries, or <see langword="null"/>.</param>
     /// <returns>The human readable interpretation.</returns>
-    private static string BuildReadable(ReadOnlySpan<char> data)
+    private string BuildReadable(ReadOnlySpan<char> data, char? check)
     {
         Span<char> opening = stackalloc char[1] { ReadableDelimiter };
-        Span<char> closing = stackalloc char[1] { ReadableDelimiter };
+        if (check is null || !this.PrintCheckCharacter)
+        {
+            return string.Concat(opening, data, opening);
+        }
+
+        Span<char> closing = stackalloc char[2] { check.Value, ReadableDelimiter };
         return string.Concat(opening, data, closing);
     }
 }

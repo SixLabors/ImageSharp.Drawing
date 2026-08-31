@@ -1,6 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.Fonts.Unicode;
+using SixLabors.ImageSharp.Drawing.Helpers;
+
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -44,14 +47,20 @@ public sealed class IssnSymbology : BarcodeSymbology
             throw new ArgumentException("ISSN requires the form NNNN-NNN with an optional check character.", nameof(text));
         }
 
-        for (int i = 0; i < issn.Length; i++)
+        int index = 0;
+        SpanCodePointEnumerator issnPoints = issn.EnumerateCodePoints();
+        while (issnPoints.MoveNext())
         {
-            char c = issn[i];
-            bool checkX = c == 'X' && i == 8;
-            if (c is (< '0' or > '9') && i != 4 && !checkX)
+            CodePoint current = issnPoints.Current;
+            bool checkX = current.Value == 'X' && index == 8;
+            if (!current.IsAsciiDigit() && index != 4 && !checkX)
             {
-                throw new ArgumentException($"ISSN accepts only digits, one hyphen and a trailing X check character; got '{c}'.", nameof(text));
+                throw new ArgumentException(
+                    $"ISSN accepts only digits, one hyphen and a trailing X check character; got {current.ToDisplayString()}.",
+                    nameof(text));
             }
+
+            index++;
         }
 
         // ISO 3297 check: weights 8 down to 2 over the seven data digits, modulus 11, X representing ten.

@@ -7,9 +7,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
 /// Encoder tests for <see cref="Gs1128Symbology"/>. Each expected run string is the alternating bar and
-/// space module widths, starting with a bar, taken from the BWIPP reference implementation through its raw
-/// encoding API. The runs carry the double character start pattern of section 5.4.2, the code set switches
-/// the encoder chose, any separator, the check character and the stop character.
+/// space module widths, starting with a bar, taken from an independent reference implementation through
+/// its raw encoding API. The runs carry the double character start pattern of section 5.4.2, the code set
+/// switches the encoder chose, any separator, the check character and the stop character.
 /// </summary>
 public class Gs1128SymbologyTests
 {
