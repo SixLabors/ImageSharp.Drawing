@@ -16,12 +16,6 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class Code39Encoder
 {
     /// <summary>
-    /// The character set, in the value order Table A.1 of ISO/IEC 16388 assigns for the modulo 43 check,
-    /// so the value of a character is its index.
-    /// </summary>
-    public const string Characters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
-
-    /// <summary>
     /// The largest number of characters this library encodes in one symbol. Section 4.1 e) makes the
     /// data string length variable, so the symbology sets no maximum of its own.
     /// </summary>
@@ -83,29 +77,10 @@ internal static class Code39Encoder
     ];
 
     /// <summary>
-    /// Gets the value Table A.1 of ISO/IEC 16388 assigns the given character, or a negative number when
-    /// the character is outside the Code 39 character set.
-    /// </summary>
-    /// <param name="character">The character to value.</param>
-    /// <returns>The value, or a negative number.</returns>
-    public static int Value(char character) => character switch
-    {
-        >= '0' and <= '9' => character - '0',
-        >= 'A' and <= 'Z' => character - 'A' + 10,
-        '-' => 36,
-        '.' => 37,
-        ' ' => 38,
-        '$' => 39,
-        '/' => 40,
-        '+' => 41,
-        '%' => 42,
-        _ => -1,
-    };
-
-    /// <summary>
     /// Calculates the check character over the given data. Annex A.1.1 assigns each data character the
     /// value Table A.1 gives it, sums those values, divides the sum by 43, and takes "the character whose
-    /// value (from Table A.1) is the remainder from the division" as the check character.
+    /// value (from Table A.1) is the remainder from the division" as the check character. Table A.1 is the
+    /// 43 characters of <see cref="AlphanumericCharacterSet"/>.
     /// </summary>
     /// <param name="data">The data the check character covers.</param>
     /// <returns>The check character.</returns>
@@ -114,10 +89,10 @@ internal static class Code39Encoder
         int sum = 0;
         for (int i = 0; i < data.Length; i++)
         {
-            sum += Value(data[i]);
+            sum += AlphanumericCharacterSet.Value(data[i]);
         }
 
-        return Characters[sum % Characters.Length];
+        return AlphanumericCharacterSet.Characters[sum % AlphanumericCharacterSet.Characters.Length];
     }
 
     /// <summary>
@@ -136,7 +111,7 @@ internal static class Code39Encoder
         while (codePoints.MoveNext())
         {
             CodePoint current = codePoints.Current;
-            if (!current.IsAscii || Value((char)current.Value) < 0)
+            if (AlphanumericCharacterSet.Value(current.Value) < 0)
             {
                 throw new ArgumentException(
                     $"Code 39 carries only digits, capital letters, spaces and the symbols -.$/+%; {current.ToDisplayString()} is outside that set.",
@@ -165,12 +140,12 @@ internal static class Code39Encoder
         AppendPattern(runs, ref written, StartStop);
         for (int i = 0; i < text.Length; i++)
         {
-            AppendPattern(runs, ref written, Value(text[i]));
+            AppendPattern(runs, ref written, AlphanumericCharacterSet.Value(text[i]));
         }
 
         if (check is not null)
         {
-            AppendPattern(runs, ref written, Value(check.Value));
+            AppendPattern(runs, ref written, AlphanumericCharacterSet.Value(check.Value));
         }
 
         AppendElements(runs, ref written, StartStop, ElementsPerCharacter - 1);

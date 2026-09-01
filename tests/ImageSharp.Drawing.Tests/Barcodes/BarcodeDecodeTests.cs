@@ -114,6 +114,17 @@ public class BarcodeDecodeTests
             reader => reader.Options.UseCode39ExtendedMode = false);
 
     /// <summary>
+    /// A Code 93 symbol decodes to its data. The two check characters are symbol overhead, so the
+    /// decoder validates them and removes them from the result.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    [Theory]
+    [InlineData("CODE93")]
+    [InlineData("ABC-123")]
+    public void Code93_RoundTrips(string text)
+        => AssertDecodes(new Code93Symbology(), text, BarcodeFormat.CODE_93, text);
+
+    /// <summary>
     /// A PZN decodes to the identifier ISO/IEC 15418 gives it, the digits and the check digit, which is
     /// what the symbol carries; the term PZN and the spaces around the identifier are printed only.
     /// </summary>

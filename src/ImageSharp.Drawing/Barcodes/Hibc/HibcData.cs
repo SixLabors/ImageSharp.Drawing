@@ -30,7 +30,7 @@ internal static class HibcData
     private const char FlagCharacter = '+';
 
     /// <summary>
-    /// The value the flag character holds in the Code 39 character set.
+    /// The value the flag character holds in the HIBC character set.
     /// </summary>
     private const int FlagCharacterValue = 41;
 
@@ -78,7 +78,7 @@ internal static class HibcData
         while (codePoints.MoveNext())
         {
             CodePoint current = codePoints.Current;
-            int value = current.IsAscii ? Code39Encoder.Value((char)current.Value) : -1;
+            int value = AlphanumericCharacterSet.Value(current.Value);
             if (value < 0)
             {
                 throw new ArgumentException(
@@ -94,7 +94,7 @@ internal static class HibcData
             index++;
         }
 
-        char check = Code39Encoder.Characters[sum % Code39Encoder.Characters.Length];
+        char check = AlphanumericCharacterSet.Characters[sum % AlphanumericCharacterSet.Characters.Length];
         if (validateCheckCharacter && text[dataLength] != check)
         {
             throw new ArgumentException(

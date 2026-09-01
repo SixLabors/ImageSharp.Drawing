@@ -221,6 +221,18 @@ public class DrawBarcodeTests
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Code93<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Code93Symbology(), "CODE93", CreateOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Code93_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Code93Symbology(), "CODE93", CreateTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Code32<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new Code32Symbology(), "012345676", CreateOptions());

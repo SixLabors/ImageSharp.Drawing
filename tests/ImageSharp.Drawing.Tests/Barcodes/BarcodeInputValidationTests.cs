@@ -38,6 +38,7 @@ public class BarcodeInputValidationTests
     [InlineData(typeof(Pzn8Symbology))]
     [InlineData(typeof(Pzn7Symbology))]
     [InlineData(typeof(Code32Symbology))]
+    [InlineData(typeof(Code93Symbology))]
     public void RejectsNullText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;
@@ -70,6 +71,7 @@ public class BarcodeInputValidationTests
     [InlineData(typeof(Pzn8Symbology))]
     [InlineData(typeof(Pzn7Symbology))]
     [InlineData(typeof(Code32Symbology))]
+    [InlineData(typeof(Code93Symbology))]
     public void RejectsEmptyText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;
