@@ -128,12 +128,11 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
                         nameof(text));
                 }
 
-                char character = (char)current.Value;
-                ReadOnlySpan<char> pair = Substitutions.AsSpan(character * 2, 2);
+                ReadOnlySpan<char> pair = Substitutions.AsSpan((int)current.Value * 2, 2);
                 encoded.Append(Prefixes.Contains(pair[0], StringComparison.Ordinal) ? pair : pair[1..]);
 
                 // A control character has no printed form, so the interpretation shows a space instead.
-                readable.Append(char.IsControl(character) ? ' ' : character);
+                readable.Append(CodePoint.IsControl(current) ? ' ' : (char)current.Value);
             }
 
             Code39Encoder.Validate(encoded.AsSpan());
