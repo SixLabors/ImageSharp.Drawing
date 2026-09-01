@@ -34,6 +34,12 @@ internal static class Code93Encoder
     public const int QuietZone = 10;
 
     /// <summary>
+    /// The number of characters a caller stack allocates to build symbol data in. Data this long covers
+    /// the labels the symbology is used for, and anything longer grows into a pooled array.
+    /// </summary>
+    public const int StackBufferLength = 64;
+
+    /// <summary>
     /// The element count of a symbol character. ANSI/AIM BC5-1995 gives every character three bars and
     /// three spaces.
     /// </summary>
