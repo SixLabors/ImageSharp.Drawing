@@ -125,6 +125,19 @@ public class BarcodeDecodeTests
         => AssertDecodes(new Code93Symbology(), text, BarcodeFormat.CODE_93, text);
 
     /// <summary>
+    /// A Code 93 Extended symbol is an ordinary Code 93 symbol, and the decoder reverses the Table 3
+    /// substitution on its own, so the ASCII characters come back as they went in.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    [Theory]
+    [InlineData("Code93")]
+    [InlineData("abc")]
+    [InlineData("a@b")]
+    [InlineData("Hello, World!")]
+    public void Code93Extended_RoundTrips(string text)
+        => AssertDecodes(new Code93ExtendedSymbology(), text, BarcodeFormat.CODE_93, text);
+
+    /// <summary>
     /// A PZN decodes to the identifier ISO/IEC 15418 gives it, the digits and the check digit, which is
     /// what the symbol carries; the term PZN and the spaces around the identifier are printed only.
     /// </summary>
