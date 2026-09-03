@@ -74,7 +74,7 @@ public class Code39ExtendedSymbologyTests
     /// </summary>
     [Fact]
     public void RejectsCheckCharacterValidation()
-        => Assert.Throws<ArgumentException>(() => new Code39ExtendedSymbology(Code39CheckCharacter.Validate));
+        => Assert.Throws<ArgumentException>(() => new Code39ExtendedSymbology(CheckCharacterMode.Validate));
 
     private static LinearBarcodeSymbol Encode(Code39ExtendedSymbology symbology, string text)
         => (LinearBarcodeSymbol)symbology.Encode(text, new BarcodeOptions());

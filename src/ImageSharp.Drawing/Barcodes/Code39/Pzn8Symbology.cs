@@ -7,9 +7,12 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// PZN8, the eight digit Pharmazentralnummer. A Code 39 symbol carries it. The symbol contains the minus
 /// sign identifier of ISO/IEC 15418, seven data digits and the check digit.
 /// <para>
-/// Give seven digits, and this class calculates the check digit. Give eight digits, and this class
-/// compares the last digit with the calculated one. The printed line shows the term PZN, the identifier
-/// and the digits. The symbol does not contain the term or the spaces around the identifier.
+/// The input is the seven data digits, or those digits and the check digit. This class always
+/// calculates the check digit. When the input carries one, this class compares the two.
+/// </para>
+/// <para>
+/// The printed line shows the term PZN, the identifier and the digits. The symbol does not contain the
+/// term or the spaces around the identifier.
 /// </para>
 /// </summary>
 public sealed class Pzn8Symbology : BarcodeSymbology

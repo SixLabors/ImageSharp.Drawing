@@ -40,6 +40,15 @@ public class BarcodeInputValidationTests
     [InlineData(typeof(Code32Symbology))]
     [InlineData(typeof(Code93Symbology))]
     [InlineData(typeof(Code93ExtendedSymbology))]
+    [InlineData(typeof(Interleaved2Of5Symbology))]
+    [InlineData(typeof(LeitcodeSymbology))]
+    [InlineData(typeof(IdentcodeSymbology))]
+    [InlineData(typeof(Industrial2Of5Symbology))]
+    [InlineData(typeof(Iata2Of5Symbology))]
+    [InlineData(typeof(Matrix2Of5Symbology))]
+    [InlineData(typeof(Coop2Of5Symbology))]
+    [InlineData(typeof(Datalogic2Of5Symbology))]
+    [InlineData(typeof(Itf14Symbology))]
     public void RejectsNullText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;
@@ -74,6 +83,15 @@ public class BarcodeInputValidationTests
     [InlineData(typeof(Code32Symbology))]
     [InlineData(typeof(Code93Symbology))]
     [InlineData(typeof(Code93ExtendedSymbology))]
+    [InlineData(typeof(Interleaved2Of5Symbology))]
+    [InlineData(typeof(LeitcodeSymbology))]
+    [InlineData(typeof(IdentcodeSymbology))]
+    [InlineData(typeof(Industrial2Of5Symbology))]
+    [InlineData(typeof(Iata2Of5Symbology))]
+    [InlineData(typeof(Matrix2Of5Symbology))]
+    [InlineData(typeof(Coop2Of5Symbology))]
+    [InlineData(typeof(Datalogic2Of5Symbology))]
+    [InlineData(typeof(Itf14Symbology))]
     public void RejectsEmptyText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;

@@ -138,6 +138,55 @@ public class BarcodeDecodeTests
         => AssertDecodes(new Code93ExtendedSymbology(), text, BarcodeFormat.CODE_93, text);
 
     /// <summary>
+    /// An Interleaved 2 of 5 symbol decodes to the digits it carries: the leading zero that makes an odd
+    /// count a pair, the data and the check digit when the symbol carries one. The decoder does not
+    /// validate a check digit, because the symbology does not require one. It does apply a length list,
+    /// which defaults to 6, 8, 10, 12 and 14 digits, so the four digit symbols name their length.
+    /// </summary>
+    /// <param name="checkDigit">
+    /// Whether the symbol carries the check digit, and whether the encoder calculates it or validates it.
+    /// </param>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The digits the symbol carries.</param>
+    [Theory]
+    [InlineData(CheckCharacterMode.None, "1234", "1234")]
+    [InlineData(CheckCharacterMode.None, "123", "0123")]
+    [InlineData(CheckCharacterMode.Compute, "12345", "123457")]
+    [InlineData(CheckCharacterMode.Compute, "1234", "012348")]
+    public void Interleaved2Of5_RoundTrips(CheckCharacterMode checkDigit, string text, string expected)
+        => AssertDecodes(
+            new Interleaved2Of5Symbology(checkDigit),
+            text,
+            BarcodeFormat.ITF,
+            expected,
+            CreateOptions(),
+            reader => reader.Options.AllowedLengths = [4, 6]);
+
+    /// <summary>
+    /// A Leitcode decodes to the fourteen digits the symbol carries, which is the data and the check
+    /// digit. The full stops and the space belong to the printed line alone.
+    /// </summary>
+    [Fact]
+    public void Leitcode_RoundTrips()
+        => AssertDecodes(new LeitcodeSymbology(), "2134807501640", BarcodeFormat.ITF, "21348075016401");
+
+    /// <summary>
+    /// An ITF-14 symbol decodes to the fourteen digits it carries. The bearer bar lies outside the quiet
+    /// zones, so the decoder finds the clear space it needs on both sides of the bars.
+    /// </summary>
+    [Fact]
+    public void Itf14_RoundTrips()
+        => AssertDecodes(new Itf14Symbology(), "1540014128876", BarcodeFormat.ITF, "15400141288763");
+
+    /// <summary>
+    /// An Identcode decodes to the twelve digits the symbol carries, which is the data and the check
+    /// digit. The full stops and the spaces belong to the printed line alone.
+    /// </summary>
+    [Fact]
+    public void Identcode_RoundTrips()
+        => AssertDecodes(new IdentcodeSymbology(), "56310243031", BarcodeFormat.ITF, "563102430313");
+
+    /// <summary>
     /// A PZN decodes to the identifier ISO/IEC 15418 gives it, the digits and the check digit, which is
     /// what the symbol carries; the term PZN and the spaces around the identifier are printed only.
     /// </summary>

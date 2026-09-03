@@ -24,15 +24,18 @@ public sealed class Code39Symbology : BarcodeSymbology
     /// Initializes a new instance of the <see cref="Code39Symbology"/> class.
     /// </summary>
     public Code39Symbology()
-        : this(Code39CheckCharacter.None, true)
+        : this(CheckCharacterMode.None, true)
     {
     }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Code39Symbology"/> class.
     /// </summary>
-    /// <param name="checkCharacter">How the symbol treats the modulo 43 check character.</param>
-    public Code39Symbology(Code39CheckCharacter checkCharacter)
+    /// <param name="checkCharacter">
+    /// Whether the symbol carries the modulo 43 check character, and whether the encoder calculates it
+    /// or validates it.
+    /// </param>
+    public Code39Symbology(CheckCharacterMode checkCharacter)
         : this(checkCharacter, true)
     {
     }
@@ -40,20 +43,24 @@ public sealed class Code39Symbology : BarcodeSymbology
     /// <summary>
     /// Initializes a new instance of the <see cref="Code39Symbology"/> class.
     /// </summary>
-    /// <param name="checkCharacter">How the symbol treats the modulo 43 check character.</param>
+    /// <param name="checkCharacter">
+    /// Whether the symbol carries the modulo 43 check character, and whether the encoder calculates it
+    /// or validates it.
+    /// </param>
     /// <param name="printCheckCharacter">
     /// Whether a check character the symbol carries is part of the human readable interpretation.
     /// </param>
-    public Code39Symbology(Code39CheckCharacter checkCharacter, bool printCheckCharacter)
+    public Code39Symbology(CheckCharacterMode checkCharacter, bool printCheckCharacter)
     {
         this.CheckCharacter = checkCharacter;
         this.PrintCheckCharacter = printCheckCharacter;
     }
 
     /// <summary>
-    /// Gets a value indicating how the symbol treats the modulo 43 check character.
+    /// Gets a value that specifies whether the symbol carries the modulo 43 check character, and whether
+    /// the encoder calculates it or validates it.
     /// </summary>
-    public Code39CheckCharacter CheckCharacter { get; }
+    public CheckCharacterMode CheckCharacter { get; }
 
     /// <summary>
     /// Gets a value indicating whether a check character the symbol carries is part of the human readable
@@ -67,9 +74,9 @@ public sealed class Code39Symbology : BarcodeSymbology
         Guard.NotNull(text, nameof(text));
         Code39Encoder.Validate(text);
 
-        ReadOnlySpan<char> data = this.CheckCharacter == Code39CheckCharacter.Validate ? text.AsSpan(0, text.Length - 1) : text;
-        char? check = this.CheckCharacter == Code39CheckCharacter.None ? null : Code39Encoder.CheckCharacter(data);
-        if (this.CheckCharacter == Code39CheckCharacter.Validate && text[^1] != check)
+        ReadOnlySpan<char> data = this.CheckCharacter == CheckCharacterMode.Validate ? text.AsSpan(0, text.Length - 1) : text;
+        char? check = this.CheckCharacter == CheckCharacterMode.None ? null : Code39Encoder.CheckCharacter(data);
+        if (this.CheckCharacter == CheckCharacterMode.Validate && text[^1] != check)
         {
             throw new ArgumentException(
                 $"Incorrect check character: expected '{check}', got '{text[^1]}'.",

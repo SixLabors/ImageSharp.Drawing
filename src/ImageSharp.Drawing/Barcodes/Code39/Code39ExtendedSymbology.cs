@@ -55,15 +55,17 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
     /// Initializes a new instance of the <see cref="Code39ExtendedSymbology"/> class.
     /// </summary>
     public Code39ExtendedSymbology()
-        : this(Code39CheckCharacter.None, true)
+        : this(CheckCharacterMode.None, true)
     {
     }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Code39ExtendedSymbology"/> class.
     /// </summary>
-    /// <param name="checkCharacter">How the symbol treats the modulo 43 check character.</param>
-    public Code39ExtendedSymbology(Code39CheckCharacter checkCharacter)
+    /// <param name="checkCharacter">
+    /// Whether the symbol carries the modulo 43 check character, and whether the encoder calculates it.
+    /// </param>
+    public Code39ExtendedSymbology(CheckCharacterMode checkCharacter)
         : this(checkCharacter, true)
     {
     }
@@ -72,17 +74,17 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
     /// Initializes a new instance of the <see cref="Code39ExtendedSymbology"/> class.
     /// </summary>
     /// <param name="checkCharacter">
-    /// How the symbol treats the modulo 43 check character. <see cref="Code39CheckCharacter.Validate"/>
-    /// is rejected: the check character covers the substituted symbol characters, which a caller working
-    /// in ASCII does not have.
+    /// Whether the symbol carries the modulo 43 check character, and whether the encoder calculates it.
+    /// <see cref="CheckCharacterMode.Validate"/> is rejected: the check character covers the substituted
+    /// symbol characters, which a caller working in ASCII does not have.
     /// </param>
     /// <param name="printCheckCharacter">
     /// Whether a check character the symbol carries is part of the human readable interpretation.
     /// </param>
-    public Code39ExtendedSymbology(Code39CheckCharacter checkCharacter, bool printCheckCharacter)
+    public Code39ExtendedSymbology(CheckCharacterMode checkCharacter, bool printCheckCharacter)
     {
         Guard.IsFalse(
-            checkCharacter == Code39CheckCharacter.Validate,
+            checkCharacter == CheckCharacterMode.Validate,
             nameof(checkCharacter),
             "Code 39 Extended calculates the check character over the substituted symbol characters, so a supplied one cannot be validated against the input.");
 
@@ -91,9 +93,10 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
     }
 
     /// <summary>
-    /// Gets a value indicating how the symbol treats the modulo 43 check character.
+    /// Gets a value that specifies whether the symbol carries the modulo 43 check character, and whether
+    /// the encoder calculates it.
     /// </summary>
-    public Code39CheckCharacter CheckCharacter { get; }
+    public CheckCharacterMode CheckCharacter { get; }
 
     /// <summary>
     /// Gets a value indicating whether a check character the symbol carries is part of the human readable
@@ -136,7 +139,7 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
             }
 
             Code39Encoder.Validate(encoded.AsSpan());
-            char? check = this.CheckCharacter == Code39CheckCharacter.None ? null : Code39Encoder.CheckCharacter(encoded.AsSpan());
+            char? check = this.CheckCharacter == CheckCharacterMode.None ? null : Code39Encoder.CheckCharacter(encoded.AsSpan());
 
             return Code39Encoder.BuildSymbol(
                 Code39Encoder.Encode(encoded.AsSpan(), check),

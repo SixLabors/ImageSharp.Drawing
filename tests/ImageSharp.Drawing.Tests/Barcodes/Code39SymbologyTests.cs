@@ -35,7 +35,7 @@ public class Code39SymbologyTests
     [InlineData("1234567890", "131131311131131111311133111131313311111111133111313113311111113331111111131131313113113111113311311111133131111133111131131131311")]
     public void MatchesReferenceRunsWithCheckCharacter(string text, string expected)
     {
-        LinearBarcodeSymbol symbol = Encode(new Code39Symbology(Code39CheckCharacter.Compute), text);
+        LinearBarcodeSymbol symbol = Encode(new Code39Symbology(CheckCharacterMode.Compute), text);
         Assert.Equal(expected, string.Concat(symbol.RunWidths));
     }
 
@@ -48,7 +48,7 @@ public class Code39SymbologyTests
     public void MatchesTheWorkedCheckCharacterExample()
         => Assert.Equal(
             string.Concat(Encode(new Code39Symbology(), "CODE 39R").RunWidths),
-            string.Concat(Encode(new Code39Symbology(Code39CheckCharacter.Compute), "CODE 39").RunWidths));
+            string.Concat(Encode(new Code39Symbology(CheckCharacterMode.Compute), "CODE 39").RunWidths));
 
     /// <summary>
     /// A caller who has already calculated the check character supplies it, and the symbol carries it
@@ -57,13 +57,13 @@ public class Code39SymbologyTests
     [Fact]
     public void ValidatesASuppliedCheckCharacter()
         => Assert.Equal(
-            string.Concat(Encode(new Code39Symbology(Code39CheckCharacter.Compute), "CODE39").RunWidths),
-            string.Concat(Encode(new Code39Symbology(Code39CheckCharacter.Validate), "CODE39W").RunWidths));
+            string.Concat(Encode(new Code39Symbology(CheckCharacterMode.Compute), "CODE39").RunWidths),
+            string.Concat(Encode(new Code39Symbology(CheckCharacterMode.Validate), "CODE39W").RunWidths));
 
     [Fact]
     public void RejectsWrongCheckCharacter()
         => Assert.Throws<ArgumentException>(
-            () => Encode(new Code39Symbology(Code39CheckCharacter.Validate), "CODE39X"));
+            () => Encode(new Code39Symbology(CheckCharacterMode.Validate), "CODE39X"));
 
     /// <summary>
     /// The symbology carries digits, capital letters, spaces and the symbols -.$/+% and nothing else.
@@ -100,11 +100,11 @@ public class Code39SymbologyTests
     /// caller who does not want the check character read back turns it off.
     /// </summary>
     [Theory]
-    [InlineData(Code39CheckCharacter.None, true, "*CODE39*")]
-    [InlineData(Code39CheckCharacter.None, false, "*CODE39*")]
-    [InlineData(Code39CheckCharacter.Compute, true, "*CODE39W*")]
-    [InlineData(Code39CheckCharacter.Compute, false, "*CODE39*")]
-    public void PrintsTheDataBetweenAsterisks(Code39CheckCharacter checkCharacter, bool printCheckCharacter, string expected)
+    [InlineData(CheckCharacterMode.None, true, "*CODE39*")]
+    [InlineData(CheckCharacterMode.None, false, "*CODE39*")]
+    [InlineData(CheckCharacterMode.Compute, true, "*CODE39W*")]
+    [InlineData(CheckCharacterMode.Compute, false, "*CODE39*")]
+    public void PrintsTheDataBetweenAsterisks(CheckCharacterMode checkCharacter, bool printCheckCharacter, string expected)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
         Code39Symbology symbology = new(checkCharacter, printCheckCharacter);
@@ -170,11 +170,11 @@ public class Code39SymbologyTests
     /// width has to come to the same number.
     /// </summary>
     [Theory]
-    [InlineData("CODE39", Code39CheckCharacter.None, 6)]
-    [InlineData("CODE39", Code39CheckCharacter.Compute, 7)]
-    [InlineData("A", Code39CheckCharacter.None, 1)]
-    [InlineData("TEST$/+% .", Code39CheckCharacter.None, 10)]
-    public void MatchesTheSymbolWidthFormula(string text, Code39CheckCharacter checkCharacter, int characters)
+    [InlineData("CODE39", CheckCharacterMode.None, 6)]
+    [InlineData("CODE39", CheckCharacterMode.Compute, 7)]
+    [InlineData("A", CheckCharacterMode.None, 1)]
+    [InlineData("TEST$/+% .", CheckCharacterMode.None, 10)]
+    public void MatchesTheSymbolWidthFormula(string text, CheckCharacterMode checkCharacter, int characters)
     {
         LinearBarcodeSymbol symbol = Encode(new Code39Symbology(checkCharacter), text);
         int drawn = symbol.LeadingQuietZone + symbol.TrailingQuietZone;
