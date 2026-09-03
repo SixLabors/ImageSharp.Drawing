@@ -4,20 +4,31 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// A barcode symbology: one machine readable encoding scheme, such as EAN-13 or Code 128. A symbology
-/// validates the input and applies the check character rules of its specification. It then encodes the
-/// input into a symbol. The canvas draws that symbol through
+/// A barcode symbology: one machine readable encoding scheme. A symbology validates the input and applies
+/// the check character rules of its specification. It then encodes the input into a symbol. The canvas
+/// draws that symbol through
 /// <see cref="Processing.DrawingCanvas.DrawBarcode(BarcodeSymbology, string, BarcodeOptions, PointF)"/>.
 /// </summary>
 public abstract class BarcodeSymbology
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="BarcodeSymbology"/> class. The constructor is internal
-    /// because the encoded symbol types are internal. This library defines the set of symbologies.
+    /// The X dimension in millimetres of a symbology whose specification gives none: one point, 25.4 / 72.
+    /// </summary>
+    public const float PointXDimension = 25.4F / 72F;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BarcodeSymbology"/> class.
     /// </summary>
     private protected BarcodeSymbology()
     {
     }
+
+    /// <summary>
+    /// Gets the nominal X dimension in millimetres, the width of one module. A symbology whose
+    /// specification gives an X dimension returns it, and every other symbology returns
+    /// <see cref="PointXDimension"/>. <see cref="BarcodeOptions.XDimension"/> overrides it.
+    /// </summary>
+    public virtual float NominalXDimension => PointXDimension;
 
     /// <summary>
     /// Encodes the given text into a device-independent symbol measured in modules.

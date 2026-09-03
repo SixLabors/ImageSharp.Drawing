@@ -54,10 +54,14 @@ internal static class Code39Encoder
     /// <summary>
     /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no
     /// height. Section 4.4 e) recommends a minimum of "5,0 mm or 15 % of symbol width excluding quiet
-    /// zones, whichever is greater". The millimetre floor needs a print resolution the encoder does not
-    /// have, so only the proportional rule applies here.
+    /// zones, whichever is greater".
     /// </summary>
     private const float NominalBarHeightFraction = 0.15F;
+
+    /// <summary>
+    /// The smallest bar height in millimetres when the caller sets none, section 4.4 e).
+    /// </summary>
+    private const float MinimumBarHeightMillimetres = 5F;
 
     /// <summary>
     /// Gets the element widths of every symbol character, one bit per element, most significant element
@@ -161,7 +165,10 @@ internal static class Code39Encoder
     /// <param name="options">The options that control layout choices.</param>
     /// <returns>The encoded symbol.</returns>
     public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
-        => BuildSymbol(runs, text, options, WidthInModules(runs) * NominalBarHeightFraction);
+    {
+        float xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        return BuildSymbol(runs, text, options, MathF.Max(WidthInModules(runs) * NominalBarHeightFraction, MinimumBarHeightMillimetres / xDimension));
+    }
 
     /// <summary>
     /// Builds the symbol from encoded run widths, at a bar height an application standard fixes rather
@@ -175,7 +182,7 @@ internal static class Code39Encoder
     public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options, float nominalBarHeight)
     {
         int widthInModules = WidthInModules(runs);
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, nominalBarHeight);
+        float barHeight = EanUpcEncoder.ResolveBarHeight(options, BarcodeSymbology.PointXDimension, nominalBarHeight);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];
@@ -187,7 +194,7 @@ internal static class Code39Encoder
         BarcodeTextPlacement[] placements = [];
         if (options.Font is not null && text.Length > 0)
         {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight)];
+            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
         }
 
         return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone);

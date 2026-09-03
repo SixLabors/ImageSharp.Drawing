@@ -53,7 +53,7 @@ public class EanUpcSymbologyTests
         Assert.Equal("5901234123457", string.Concat(symbol.Text.Select(placement => placement.Text)));
         Assert.True(symbol.Text[0].Left < 0);
         Assert.All(symbol.Text, placement => Assert.Equal(BarcodeTextSide.BelowBars, placement.Side));
-        Assert.All(symbol.Text, placement => Assert.Equal(symbol.BarHeights.Min(), placement.BarEdge));
+        Assert.All(symbol.Text, placement => Assert.Equal(symbol.BarHeights.Min() + BarcodeTextPlacement.Clearance, placement.TextEdge));
 
         Assert.Empty(Encode(new Ean13Symbology(), "5901234123457").Text);
     }
@@ -206,7 +206,7 @@ public class EanUpcSymbologyTests
         Assert.Equal(5, symbol.Text.Length);
         Assert.Equal("90200", string.Concat(symbol.Text.Select(placement => placement.Text)));
         Assert.All(symbol.Text, placement => Assert.Equal(BarcodeTextSide.AboveBars, placement.Side));
-        Assert.All(symbol.Text, placement => Assert.Equal(0, placement.BarEdge));
+        Assert.All(symbol.Text, placement => Assert.Equal(-BarcodeTextPlacement.Clearance, placement.TextEdge));
         Assert.All(symbol.BarTops, top => Assert.Equal(0, top));
     }
 
@@ -246,16 +246,15 @@ public class EanUpcSymbologyTests
     public void BarHeightOption_OverridesNominalHeight()
     {
         BarcodeOptions options = CreateTextOptions();
-        options.ModuleWidth = 2F;
-        options.BarHeight = 100F;
+        options.BarHeight = 50F * EanUpcEncoder.NominalXDimension;
 
         LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Ean13Symbology().Encode("5901234123457", options);
 
-        // 100 pixels at 2 pixels per module is 50 modules for the digit bars; with text enabled the guard
+        // 16.5 mm at the 0.33 mm X dimension is 50 modules for the digit bars; with text enabled the guard
         // bars gain the 5 module extension of ISO/IEC 15420 on top of that.
-        Assert.Equal(50, symbol.BarHeights[2]);
-        Assert.Equal(55, symbol.BarHeights[0]);
-        Assert.Equal(55, symbol.HeightInModules);
+        Assert.Equal(50F, symbol.BarHeights[2], 3);
+        Assert.Equal(55F, symbol.BarHeights[0], 3);
+        Assert.Equal(55F, symbol.HeightInModules, 3);
     }
 
     private static LinearBarcodeSymbol Encode(BarcodeSymbology symbology, string text)

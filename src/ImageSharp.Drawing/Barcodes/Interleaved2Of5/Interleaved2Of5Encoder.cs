@@ -60,10 +60,14 @@ internal static class Interleaved2Of5Encoder
     /// <summary>
     /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no
     /// height. Section 3.2 of AIM USS-I 2/5: "the minimum bar height should be 0.25 inches (6.35 mm) or
-    /// 15 percent of the bar code symbol length, whichever is greater." The inch floor needs a print
-    /// resolution the encoder does not have, so only the proportional rule applies here.
+    /// 15 percent of the bar code symbol length, whichever is greater."
     /// </summary>
     private const float NominalBarHeightFraction = 0.15F;
+
+    /// <summary>
+    /// The smallest bar height in millimetres when the caller sets none, section 3.2 of AIM USS-I 2/5.
+    /// </summary>
+    private const float MinimumBarHeightMillimetres = 6.35F;
 
     /// <summary>
     /// Gets the element widths of every digit, one bit per element, most significant element first: a
@@ -124,7 +128,10 @@ internal static class Interleaved2Of5Encoder
     /// <param name="options">The options that control layout choices.</param>
     /// <returns>The encoded symbol.</returns>
     public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
-        => BuildSymbol(runs, text, options, WidthInModules(runs) * NominalBarHeightFraction);
+    {
+        float xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        return BuildSymbol(runs, text, options, MathF.Max(WidthInModules(runs) * NominalBarHeightFraction, MinimumBarHeightMillimetres / xDimension));
+    }
 
     /// <summary>
     /// Builds the symbol from encoded run widths, at a bar height an application standard fixes rather
@@ -136,7 +143,7 @@ internal static class Interleaved2Of5Encoder
     /// <param name="nominalBarHeight">The bar height in modules a symbol takes when the caller sets none.</param>
     /// <returns>The encoded symbol.</returns>
     public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options, float nominalBarHeight)
-        => BuildSymbol(runs, text, options, nominalBarHeight, 0F);
+        => BuildSymbol(runs, text, options, BarcodeSymbology.PointXDimension, nominalBarHeight, 0F);
 
     /// <summary>
     /// Builds the symbol from encoded run widths, at a bar height an application standard fixes and inside
@@ -147,13 +154,14 @@ internal static class Interleaved2Of5Encoder
     /// <param name="runs">The alternating bar and space run widths in modules.</param>
     /// <param name="text">The human readable interpretation.</param>
     /// <param name="options">The options that control layout choices.</param>
+    /// <param name="nominalXDimension">The nominal X dimension of the application standard in millimetres.</param>
     /// <param name="nominalBarHeight">The bar height in modules a symbol takes when the caller sets none.</param>
     /// <param name="bearerBarThickness">The thickness of the bearer bar in modules, or zero for none.</param>
     /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options, float nominalBarHeight, float bearerBarThickness)
+    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options, float nominalXDimension, float nominalBarHeight, float bearerBarThickness)
     {
         int widthInModules = WidthInModules(runs);
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, nominalBarHeight);
+        float barHeight = EanUpcEncoder.ResolveBarHeight(options, nominalXDimension, nominalBarHeight);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];
@@ -166,7 +174,7 @@ internal static class Interleaved2Of5Encoder
         BarcodeTextPlacement[] placements = [];
         if (options.Font is not null && text.Length > 0)
         {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, bearerBarThickness + barHeight + bearerBarThickness)];
+            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, bearerBarThickness + barHeight + bearerBarThickness + BarcodeTextPlacement.Clearance)];
         }
 
         return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone, bearerBarThickness);

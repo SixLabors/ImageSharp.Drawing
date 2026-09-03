@@ -35,7 +35,7 @@ internal static class AddOnLayout
         int[] runs = EanUpcEncoder.ToRuns(modules);
         int barCount = (runs.Length + 1) / 2;
 
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, EanUpcEncoder.NominalAddOnBarHeight);
+        float barHeight = EanUpcEncoder.ResolveBarHeight(options, EanUpcEncoder.NominalXDimension, EanUpcEncoder.NominalAddOnBarHeight);
 
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];
@@ -48,7 +48,7 @@ internal static class AddOnLayout
         if (options.Font is not null)
         {
             placements = new BarcodeTextPlacement[text.Length];
-            EanUpcEncoder.FillDigitPlacements(placements, 0, text, 0, text.Length, 4F, 9F, BarcodeTextSide.AboveBars, 0F);
+            EanUpcEncoder.FillDigitPlacements(placements, 0, text, 0, text.Length, 4F, 9F, BarcodeTextSide.AboveBars, -BarcodeTextPlacement.Clearance);
         }
 
         return new LinearBarcodeSymbol(runs, heights, tops, placements, LeadingQuietZone, TrailingQuietZone);

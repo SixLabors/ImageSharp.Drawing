@@ -179,6 +179,47 @@ public class BarcodeDecodeTests
         => AssertDecodes(new Itf14Symbology(), "1540014128876", BarcodeFormat.ITF, "15400141288763");
 
     /// <summary>
+    /// A Codabar symbol decodes to its start character, its data, the check character when the symbol
+    /// carries one, and its stop character. The decoder strips the start and stop characters unless it
+    /// is asked to return them, and it does not validate a check character, because the symbology does
+    /// not define one.
+    /// </summary>
+    /// <param name="checkCharacter">Whether the symbol carries the check character, and whether the encoder calculates it or validates it.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="expected">The characters the symbol carries.</param>
+    [Theory]
+    [InlineData(CheckCharacterMode.None, "A40156B", "A40156B")]
+    [InlineData(CheckCharacterMode.Compute, "A40156B", "A40156+B")]
+    public void Codabar_RoundTrips(CheckCharacterMode checkCharacter, string text, string expected)
+        => AssertDecodes(
+            new CodabarSymbology(checkCharacter),
+            text,
+            BarcodeFormat.CODABAR,
+            expected,
+            CreateOptions(),
+            reader => reader.Options.ReturnCodabarStartEnd = true);
+
+    /// <summary>
+    /// An MSI symbol decodes to the digits it carries, the check digits included. The decoder validates
+    /// a modulo 10 check digit only when it is asked to assume one, so it returns every digit here.
+    /// </summary>
+    /// <param name="checkDigit">The check digits the symbol carries.</param>
+    /// <param name="expected">The digits the symbol carries.</param>
+    [Theory]
+    [InlineData(MsiCheckDigit.None, "1234567")]
+    [InlineData(MsiCheckDigit.Modulo10, "12345674")]
+    [InlineData(MsiCheckDigit.NcrModulo1110, "123456790")]
+    public void Msi_RoundTrips(MsiCheckDigit checkDigit, string expected)
+        => AssertDecodes(new MsiSymbology(checkDigit), "1234567", BarcodeFormat.MSI, expected);
+
+    /// <summary>
+    /// A one-track Pharmacode symbol decodes to the number it carries.
+    /// </summary>
+    [Fact]
+    public void Pharmacode_RoundTrips()
+        => AssertDecodes(new PharmacodeSymbology(), "117480", BarcodeFormat.PHARMA_CODE, "117480");
+
+    /// <summary>
     /// An Identcode decodes to the twelve digits the symbol carries, which is the data and the check
     /// digit. The full stops and the spaces belong to the printed line alone.
     /// </summary>
@@ -315,10 +356,16 @@ public class BarcodeDecodeTests
         Assert.Equal(expected, result.Text);
     }
 
+    /// <summary>
+    /// Draws at a one point X dimension and 216 dots per inch, 3 px per module, with a 40 point bar
+    /// height, 120 px.
+    /// </summary>
+    /// <returns>The options.</returns>
     private static BarcodeOptions CreateOptions()
         => new()
         {
-            ModuleWidth = 3F,
-            BarHeight = 120F,
+            Dpi = 216F,
+            XDimension = BarcodeSymbology.PointXDimension,
+            BarHeight = 40F * BarcodeSymbology.PointXDimension,
         };
 }

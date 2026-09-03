@@ -49,6 +49,29 @@ public class BarcodeInputValidationTests
     [InlineData(typeof(Coop2Of5Symbology))]
     [InlineData(typeof(Datalogic2Of5Symbology))]
     [InlineData(typeof(Itf14Symbology))]
+    [InlineData(typeof(CodabarSymbology))]
+    [InlineData(typeof(Code11Symbology))]
+    [InlineData(typeof(MsiSymbology))]
+    [InlineData(typeof(PlesseySymbology))]
+    [InlineData(typeof(TelepenSymbology))]
+    [InlineData(typeof(TelepenNumericSymbology))]
+    [InlineData(typeof(PosiCodeSymbology))]
+    [InlineData(typeof(Bc412Symbology))]
+    [InlineData(typeof(ChannelCodeSymbology))]
+    [InlineData(typeof(PharmacodeSymbology))]
+    [InlineData(typeof(TwoTrackPharmacodeSymbology))]
+    [InlineData(typeof(FlattermarkenSymbology))]
+    [InlineData(typeof(RawLinearSymbology))]
+    [InlineData(typeof(FacingIdentificationMarkSymbology))]
+    [InlineData(typeof(PostnetSymbology))]
+    [InlineData(typeof(PlanetSymbology))]
+    [InlineData(typeof(RoyalMailSymbology))]
+    [InlineData(typeof(KixSymbology))]
+    [InlineData(typeof(DaftSymbology))]
+    [InlineData(typeof(IntelligentMailSymbology))]
+    [InlineData(typeof(AustraliaPostSymbology))]
+    [InlineData(typeof(JapanPostSymbology))]
+    [InlineData(typeof(FourStateMailmarkSymbology))]
     public void RejectsNullText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;
@@ -57,8 +80,8 @@ public class BarcodeInputValidationTests
 
     /// <summary>
     /// Empty text carries no data, and every symbology whose standard fixes a length or requires data
-    /// rejects it. Code 128 is left out: its standard sets no minimum, and the reference implementation
-    /// encodes an empty symbol as a start character, a check character and a stop character.
+    /// rejects it. Code 128 is left out: its standard sets no minimum, and an empty symbol is a start
+    /// character, a check character and a stop character.
     /// </summary>
     [Theory]
     [InlineData(typeof(Ean13Symbology))]
@@ -92,6 +115,29 @@ public class BarcodeInputValidationTests
     [InlineData(typeof(Coop2Of5Symbology))]
     [InlineData(typeof(Datalogic2Of5Symbology))]
     [InlineData(typeof(Itf14Symbology))]
+    [InlineData(typeof(CodabarSymbology))]
+    [InlineData(typeof(Code11Symbology))]
+    [InlineData(typeof(MsiSymbology))]
+    [InlineData(typeof(PlesseySymbology))]
+    [InlineData(typeof(TelepenSymbology))]
+    [InlineData(typeof(TelepenNumericSymbology))]
+    [InlineData(typeof(PosiCodeSymbology))]
+    [InlineData(typeof(Bc412Symbology))]
+    [InlineData(typeof(ChannelCodeSymbology))]
+    [InlineData(typeof(PharmacodeSymbology))]
+    [InlineData(typeof(TwoTrackPharmacodeSymbology))]
+    [InlineData(typeof(FlattermarkenSymbology))]
+    [InlineData(typeof(RawLinearSymbology))]
+    [InlineData(typeof(FacingIdentificationMarkSymbology))]
+    [InlineData(typeof(PostnetSymbology))]
+    [InlineData(typeof(PlanetSymbology))]
+    [InlineData(typeof(RoyalMailSymbology))]
+    [InlineData(typeof(KixSymbology))]
+    [InlineData(typeof(DaftSymbology))]
+    [InlineData(typeof(IntelligentMailSymbology))]
+    [InlineData(typeof(AustraliaPostSymbology))]
+    [InlineData(typeof(JapanPostSymbology))]
+    [InlineData(typeof(FourStateMailmarkSymbology))]
     public void RejectsEmptyText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;

@@ -9,14 +9,12 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal enum BarcodeTextSide
 {
     /// <summary>
-    /// The line prints below the bars, growing downward from the bar bottom it faces. The digits of an
-    /// EAN-13 symbol print this way.
+    /// The line prints below the bars and grows downward from its text edge.
     /// </summary>
     BelowBars,
 
     /// <summary>
-    /// The line prints above the bars, growing upward from the bar top it faces. The add-on digits and
-    /// the data layer captions print this way.
+    /// The line prints above the bars and grows upward from its text edge.
     /// </summary>
     AboveBars,
 }

@@ -38,7 +38,7 @@ public class DataLayerSymbologyTests
         BarcodeTextPlacement caption = symbol.Text[symbol.Text.Length - 1];
         Assert.Equal("ISBN 978-0-306-40615-7", caption.Text);
         Assert.Equal(BarcodeTextSide.AboveBars, caption.Side);
-        Assert.Equal(0, caption.BarEdge);
+        Assert.Equal(-BarcodeTextPlacement.Clearance, caption.TextEdge);
         Assert.Equal(0, caption.Left);
         Assert.Equal(95, caption.Right);
         Assert.Equal(1F, caption.FontScale);
@@ -177,9 +177,10 @@ public class DataLayerSymbologyTests
     private static BarcodeOptions CreateTextOptions()
         => new()
         {
-            ModuleWidth = 2F,
-            BarHeight = 100F,
-            Font = BarcodeFonts.OcrB.CreateFont(21.5F),
+            Dpi = 144F,
+            XDimension = BarcodeSymbology.PointXDimension,
+            BarHeight = 50F * BarcodeSymbology.PointXDimension,
+            Font = BarcodeFonts.OcrB.CreateFont(10.75F),
         };
 
     private static string RunsToString(LinearBarcodeSymbol symbol)

@@ -48,9 +48,59 @@ internal sealed class LinearBarcodeSymbol : BarcodeSymbol
         float[] barHeights,
         float[] barTops,
         BarcodeTextPlacement[] text,
-        int leadingQuietZone,
-        int trailingQuietZone,
+        float leadingQuietZone,
+        float trailingQuietZone,
         float bearerBarThickness)
+        : this(runWidths, barHeights, barTops, text, leadingQuietZone, trailingQuietZone, bearerBarThickness, 1F)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LinearBarcodeSymbol"/> class.
+    /// </summary>
+    /// <param name="runWidths">The alternating bar and space widths, in run units.</param>
+    /// <param name="barHeights">The height of each bar, in modules.</param>
+    /// <param name="barTops">The top offset of each bar, in modules.</param>
+    /// <param name="text">The human readable interpretation, empty when text is disabled.</param>
+    /// <param name="leadingQuietZone">The quiet zone before the symbol, in modules.</param>
+    /// <param name="trailingQuietZone">The quiet zone after the symbol, in modules.</param>
+    /// <param name="bearerBarThickness">The thickness of the bearer bar that frames the symbol, in modules, or zero when there is none.</param>
+    /// <param name="runUnit">The width of one run unit in modules.</param>
+    public LinearBarcodeSymbol(
+        int[] runWidths,
+        float[] barHeights,
+        float[] barTops,
+        BarcodeTextPlacement[] text,
+        float leadingQuietZone,
+        float trailingQuietZone,
+        float bearerBarThickness,
+        float runUnit)
+        : this(runWidths, barHeights, barTops, text, leadingQuietZone, trailingQuietZone, bearerBarThickness, runUnit, false)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LinearBarcodeSymbol"/> class.
+    /// </summary>
+    /// <param name="runWidths">The alternating bar and space widths, in run units.</param>
+    /// <param name="barHeights">The height of each bar, in modules.</param>
+    /// <param name="barTops">The top offset of each bar, in modules.</param>
+    /// <param name="text">The human readable interpretation, empty when text is disabled.</param>
+    /// <param name="leadingQuietZone">The quiet zone before the symbol, in modules.</param>
+    /// <param name="trailingQuietZone">The quiet zone after the symbol, in modules.</param>
+    /// <param name="bearerBarThickness">The thickness of the bearer bar that frames the symbol, in modules, or zero when there is none.</param>
+    /// <param name="runUnit">The width of one run unit in modules.</param>
+    /// <param name="uniformBars">Whether every bar is one width at one pitch.</param>
+    public LinearBarcodeSymbol(
+        int[] runWidths,
+        float[] barHeights,
+        float[] barTops,
+        BarcodeTextPlacement[] text,
+        float leadingQuietZone,
+        float trailingQuietZone,
+        float bearerBarThickness,
+        float runUnit,
+        bool uniformBars)
     {
         this.RunWidths = runWidths;
         this.BarHeights = barHeights;
@@ -59,11 +109,13 @@ internal sealed class LinearBarcodeSymbol : BarcodeSymbol
         this.LeadingQuietZone = leadingQuietZone;
         this.TrailingQuietZone = trailingQuietZone;
         this.BearerBarThickness = bearerBarThickness;
+        this.RunUnit = runUnit;
+        this.UniformBars = uniformBars;
 
-        int width = 0;
+        float width = 0;
         for (int i = 0; i < runWidths.Length; i++)
         {
-            width += runWidths[i];
+            width += runWidths[i] * runUnit;
         }
 
         float height = 0;
@@ -88,10 +140,26 @@ internal sealed class LinearBarcodeSymbol : BarcodeSymbol
     public float BearerBarThickness { get; }
 
     /// <summary>
-    /// Gets the alternating bar and space widths in modules. The sequence starts and ends with a bar, so even
-    /// indexes are bars and odd indexes are spaces. Quiet zones are not part of the sequence.
+    /// Gets the alternating bar and space widths in run units, which are modules unless
+    /// <see cref="RunUnit"/> says otherwise. The sequence starts and ends with a bar, so even indexes are
+    /// bars and odd indexes are spaces. The first or the last bar can have zero width, which lets a symbol
+    /// whose layout starts or ends blank keep its width. Quiet zones are not part of the sequence.
     /// </summary>
     public int[] RunWidths { get; }
+
+    /// <summary>
+    /// Gets the width of one unit of <see cref="RunWidths"/> in modules. It is 1 for a symbology whose
+    /// elements are whole modules, and a fraction for a symbology whose bar pitch is not a whole number of
+    /// bar widths, such as the postal symbologies at 22 bars per inch with bars of 0.020 inch.
+    /// </summary>
+    public float RunUnit { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether every bar is one width at one pitch, as in the postal symbologies.
+    /// The renderer then draws every run at a whole number of pixels of its own, so the bars keep one
+    /// width and one pitch on the pixel grid.
+    /// </summary>
+    public bool UniformBars { get; }
 
     /// <summary>
     /// Gets the height of each bar in modules. The array holds one entry per bar, that is one entry per
@@ -117,8 +185,8 @@ internal sealed class LinearBarcodeSymbol : BarcodeSymbol
     public override float HeightInModules => this.heightInModules;
 
     /// <inheritdoc/>
-    public override int LeadingQuietZone { get; }
+    public override float LeadingQuietZone { get; }
 
     /// <inheritdoc/>
-    public override int TrailingQuietZone { get; }
+    public override float TrailingQuietZone { get; }
 }
