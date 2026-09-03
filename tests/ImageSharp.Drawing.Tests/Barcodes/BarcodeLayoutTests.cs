@@ -128,6 +128,36 @@ public class BarcodeLayoutTests
     }
 
     /// <summary>
+    /// A symbol inside a bearer bar. The frame widens the measured area by its thickness on both sides
+    /// of the quiet zones and grows it above the bars and below them, and the printed line hangs from the
+    /// lower bearer bar. The frame is the outermost ink on the left, the right and the top, so it fills the
+    /// measured area to those edges and leaves no background showing past it.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="provider">The image provider.</param>
+    /// <param name="fraction">The fractional part of the draw origin.</param>
+    /// <param name="moduleWidth">The width of one module, in pixels.</param>
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32, 0F, 2F)]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32, 0.3F, 2F)]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32, 0.5F, 2F)]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32, 0.7F, 2F)]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32, 0.3F, 2.3F)]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32, 0.7F, 2.3F)]
+    public void ABearerBarStaysInsideTheMeasuredBounds<TPixel>(TestImageProvider<TPixel> provider, float fraction, float moduleWidth)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        BarcodeOptions options = CreateTextOptions(moduleWidth);
+        PointF origin = new(Margin + fraction, Margin + fraction);
+        RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(new Itf14Symbology(), "15400141288763", options, origin);
+        Rectangle drawn = AssertEverythingDrawnStaysInsideBounds(provider, new Itf14Symbology(), "15400141288763", options, fraction, moduleWidth);
+
+        Assert.Equal((int)bounds.Left, drawn.Left);
+        Assert.Equal((int)bounds.Right, drawn.Right);
+        Assert.Equal((int)bounds.Top, drawn.Top);
+    }
+
+    /// <summary>
     /// Measures the symbol, draws it at that same origin onto a larger image, and asserts that every
     /// pixel the draw call touched lies inside the measured rectangle.
     /// </summary>
@@ -138,7 +168,8 @@ public class BarcodeLayoutTests
     /// <param name="options">The sizing and painting options.</param>
     /// <param name="fraction">The fractional part of the draw origin.</param>
     /// <param name="moduleWidth">The width of one module, in pixels.</param>
-    private static void AssertEverythingDrawnStaysInsideBounds<TPixel>(
+    /// <returns>The pixels the draw call touched, with exclusive right and bottom edges.</returns>
+    private static Rectangle AssertEverythingDrawnStaysInsideBounds<TPixel>(
         TestImageProvider<TPixel> provider,
         BarcodeSymbology symbology,
         string text,
@@ -202,6 +233,8 @@ public class BarcodeLayoutTests
         Assert.InRange(drawnRight, left, right);
         Assert.InRange(drawnTop, top, bottom);
         Assert.InRange(drawnBottom, top, bottom);
+
+        return Rectangle.FromLTRB(drawnLeft, drawnTop, drawnRight + 1, drawnBottom + 1);
     }
 
     private static BarcodeOptions CreateOptions(float moduleWidth)

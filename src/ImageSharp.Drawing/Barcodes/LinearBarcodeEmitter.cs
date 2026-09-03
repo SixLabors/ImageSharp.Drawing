@@ -58,10 +58,23 @@ internal static class LinearBarcodeEmitter
 
         float widthInModules = symbol.WidthInModules;
         float symbolLeft = origin.X;
+        float frameLeft = origin.X;
+        float bearer = symbol.BearerBarThickness;
+        bool bearerSides = false;
         if (options.IncludeQuietZones)
         {
             widthInModules += symbol.LeadingQuietZone + symbol.TrailingQuietZone;
             symbolLeft += symbol.LeadingQuietZone * moduleWidth;
+
+            // Section 5.3.2.4 of the GS1 General Specifications runs the bearer bar around the quiet zones,
+            // so its vertical sections need the quiet zones on the page. Without them the same clause
+            // permits the horizontal sections alone.
+            bearerSides = bearer > 0;
+            if (bearerSides)
+            {
+                widthInModules += bearer + bearer;
+                symbolLeft += bearer * moduleWidth;
+            }
         }
 
         // The drawn area grows to hold the human readable interpretation in both axes: text hangs below the
@@ -215,6 +228,7 @@ internal static class LinearBarcodeEmitter
         if (shift > 0)
         {
             symbolLeft += shift;
+            frameLeft += shift;
             backgroundLeft += shift;
             backgroundRight += shift;
         }
@@ -242,7 +256,32 @@ internal static class LinearBarcodeEmitter
         }
 
         int[] runs = symbol.RunWidths;
-        IPath[] bars = new IPath[(runs.Length + 1) / 2];
+        int barCount = (runs.Length + 1) / 2;
+        int bearerCount = bearer > 0 ? (bearerSides ? 4 : 2) : 0;
+        IPath[] bars = new IPath[barCount + bearerCount];
+
+        // Section 5.3.2.4 of the GS1 General Specifications gives the bearer bar "a constant thickness", so
+        // the four sections of the frame share one pixel thickness. On every side where the frame is the
+        // outermost ink its outer edge snaps outward with the measured bounds, so no background shows past
+        // it. Where text follows below, the lower edge rounds as the bar edges do, which keeps the clear
+        // space. The bars butt against the inner edges, so the bar height absorbs the fraction of a pixel
+        // that the snapping moves, never the frame.
+        float thickness = 0;
+        float frameTop = 0;
+        float frameBottom = 0;
+        float upperBottom = 0;
+        float lowerTop = 0;
+        if (bearer > 0)
+        {
+            thickness = MathF.Round(bearer * moduleWidth);
+            float exactTop = origin.Y + (topBand * moduleWidth);
+            float exactBottom = origin.Y + ((topBand + symbol.HeightInModules) * moduleWidth);
+            frameTop = topBand > 0 ? MathF.Round(exactTop) : MathF.Floor(exactTop);
+            frameBottom = bottomInModules > symbol.HeightInModules ? MathF.Round(exactBottom) : MathF.Ceiling(exactBottom);
+            upperBottom = frameTop + thickness;
+            lowerTop = frameBottom - thickness;
+        }
+
         float x = symbolLeft;
         for (int i = 0; i < runs.Length; i++)
         {
@@ -255,12 +294,51 @@ internal static class LinearBarcodeEmitter
                 int bar = i >> 1;
                 float barLeft = MathF.Round(x);
                 float barRight = MathF.Round(x + runWidth);
-                float barTop = MathF.Round(origin.Y + ((topBand + symbol.BarTops[bar]) * moduleWidth));
-                float barBottom = MathF.Round(origin.Y + ((topBand + symbol.BarTops[bar] + symbol.BarHeights[bar]) * moduleWidth));
+                float barTop;
+                float barBottom;
+                if (bearer > 0)
+                {
+                    barTop = upperBottom + MathF.Round((symbol.BarTops[bar] - bearer) * moduleWidth);
+                    barBottom = lowerTop - MathF.Round((symbol.HeightInModules - bearer - symbol.BarTops[bar] - symbol.BarHeights[bar]) * moduleWidth);
+                }
+                else
+                {
+                    barTop = MathF.Round(origin.Y + ((topBand + symbol.BarTops[bar]) * moduleWidth));
+                    barBottom = MathF.Round(origin.Y + ((topBand + symbol.BarTops[bar] + symbol.BarHeights[bar]) * moduleWidth));
+                }
+
                 bars[bar] = new RectanglePolygon(barLeft, barTop, barRight - barLeft, barBottom - barTop);
             }
 
             x += runWidth;
+        }
+
+        if (bearer > 0)
+        {
+            // When the quiet zones are drawn the frame closes around them, and the quiet zones absorb the
+            // fraction of a pixel between the snapped outer edge and the exact one. Without them the frame
+            // ends on the bars. The vertical sections run between the horizontal ones so no two rectangles
+            // overlap.
+            float left;
+            float right;
+            if (bearerSides)
+            {
+                left = MathF.Floor(frameLeft);
+                right = MathF.Ceiling(frameLeft + (widthInModules * moduleWidth));
+            }
+            else
+            {
+                left = MathF.Round(symbolLeft);
+                right = MathF.Round(symbolLeft + (symbol.WidthInModules * moduleWidth));
+            }
+
+            bars[barCount] = new RectanglePolygon(left, frameTop, right - left, thickness);
+            bars[barCount + 1] = new RectanglePolygon(left, lowerTop, right - left, thickness);
+            if (bearerSides)
+            {
+                bars[barCount + 2] = new RectanglePolygon(left, upperBottom, thickness, lowerTop - upperBottom);
+                bars[barCount + 3] = new RectanglePolygon(right - thickness, upperBottom, thickness, lowerTop - upperBottom);
+            }
         }
 
         canvas.Fill(options.BarBrush, new PathCollection(bars));

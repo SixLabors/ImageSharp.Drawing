@@ -29,6 +29,28 @@ internal sealed class LinearBarcodeSymbol : BarcodeSymbol
         BarcodeTextPlacement[] text,
         int leadingQuietZone,
         int trailingQuietZone)
+        : this(runWidths, barHeights, barTops, text, leadingQuietZone, trailingQuietZone, 0F)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LinearBarcodeSymbol"/> class.
+    /// </summary>
+    /// <param name="runWidths">The alternating bar and space widths, in modules.</param>
+    /// <param name="barHeights">The height of each bar, in modules.</param>
+    /// <param name="barTops">The top offset of each bar, in modules.</param>
+    /// <param name="text">The human readable interpretation, empty when text is disabled.</param>
+    /// <param name="leadingQuietZone">The quiet zone before the symbol, in modules.</param>
+    /// <param name="trailingQuietZone">The quiet zone after the symbol, in modules.</param>
+    /// <param name="bearerBarThickness">The thickness of the bearer bar that frames the symbol, in modules, or zero when there is none.</param>
+    public LinearBarcodeSymbol(
+        int[] runWidths,
+        float[] barHeights,
+        float[] barTops,
+        BarcodeTextPlacement[] text,
+        int leadingQuietZone,
+        int trailingQuietZone,
+        float bearerBarThickness)
     {
         this.RunWidths = runWidths;
         this.BarHeights = barHeights;
@@ -36,6 +58,7 @@ internal sealed class LinearBarcodeSymbol : BarcodeSymbol
         this.Text = text;
         this.LeadingQuietZone = leadingQuietZone;
         this.TrailingQuietZone = trailingQuietZone;
+        this.BearerBarThickness = bearerBarThickness;
 
         int width = 0;
         for (int i = 0; i < runWidths.Length; i++)
@@ -54,8 +77,15 @@ internal sealed class LinearBarcodeSymbol : BarcodeSymbol
         }
 
         this.widthInModules = width;
-        this.heightInModules = height;
+        this.heightInModules = height + bearerBarThickness;
     }
+
+    /// <summary>
+    /// Gets the thickness in modules of the bearer bar that frames the symbol, or zero when the symbology
+    /// has none. The bars start that far below the symbol top, so the upper bearer bar butts against them,
+    /// and the symbol height includes the lower bearer bar below them.
+    /// </summary>
+    public float BearerBarThickness { get; }
 
     /// <summary>
     /// Gets the alternating bar and space widths in modules. The sequence starts and ends with a bar, so even
