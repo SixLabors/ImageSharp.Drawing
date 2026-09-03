@@ -237,18 +237,25 @@ public class BarcodeLayoutTests
         return Rectangle.FromLTRB(drawnLeft, drawnTop, drawnRight + 1, drawnBottom + 1);
     }
 
+    /// <summary>
+    /// Draws at a one point X dimension and 72 dots per inch for each pixel of module width, so one module
+    /// is <paramref name="moduleWidth"/> pixels, with a 50 point bar height.
+    /// </summary>
+    /// <param name="moduleWidth">The width of one module, in pixels.</param>
+    /// <returns>The options.</returns>
     private static BarcodeOptions CreateOptions(float moduleWidth)
         => new()
         {
-            ModuleWidth = moduleWidth,
-            BarHeight = 100F,
+            Dpi = 72F * moduleWidth,
+            XDimension = BarcodeSymbology.PointXDimension,
+            BarHeight = 50F * BarcodeSymbology.PointXDimension,
             Background = Brushes.Solid(Color.White),
         };
 
     private static BarcodeOptions CreateTextOptions(float moduleWidth)
     {
         BarcodeOptions options = CreateOptions(moduleWidth);
-        options.Font = BarcodeFonts.OcrB.CreateFont(21.5F);
+        options.Font = BarcodeFonts.OcrB.CreateFont(21.5F / moduleWidth);
         return options;
     }
 }

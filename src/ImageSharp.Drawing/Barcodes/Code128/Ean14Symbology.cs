@@ -14,8 +14,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <para>
 /// The input is the element string syntax, <c>(01)</c> and then the GTIN. Spaces are ignored. Give 13
 /// digits, and this class calculates the check digit. Give 14 digits, and this class compares the last
-/// digit with the calculated one. A space divides a calculated check digit from the printed number,
-/// because the caller groups that number.
+/// digit with the calculated one. The interpretation prints the number as the caller grouped it, with a
+/// space before a calculated check digit.
 /// </para>
 /// </summary>
 public sealed class Ean14Symbology : BarcodeSymbology
@@ -26,6 +26,9 @@ public sealed class Ean14Symbology : BarcodeSymbology
     public Ean14Symbology()
     {
     }
+
+    /// <inheritdoc/>
+    public override float NominalXDimension => Code128Encoder.NominalXDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

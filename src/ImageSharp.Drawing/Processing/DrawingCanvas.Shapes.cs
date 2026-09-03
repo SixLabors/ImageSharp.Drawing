@@ -242,10 +242,11 @@ public abstract partial class DrawingCanvas
         Guard.NotNull(options, nameof(options));
 
         BarcodeSymbol symbol = symbology.Encode(text, options);
+        float xDimension = options.XDimension ?? symbology.NominalXDimension;
         switch (symbol)
         {
             case LinearBarcodeSymbol linear:
-                LinearBarcodeEmitter.Emit(this, linear, options, origin);
+                LinearBarcodeEmitter.Emit(this, linear, options, xDimension, origin);
                 break;
 
             default:

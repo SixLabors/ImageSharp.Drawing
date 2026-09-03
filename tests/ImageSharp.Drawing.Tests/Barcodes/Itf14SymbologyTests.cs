@@ -56,7 +56,7 @@ public class Itf14SymbologyTests
 
         BarcodeTextPlacement placement = Assert.Single(symbol.Text);
         Assert.Equal(expected, placement.Text);
-        Assert.Equal(symbol.HeightInModules, placement.BarEdge);
+        Assert.Equal(symbol.HeightInModules + BarcodeTextPlacement.Clearance, placement.TextEdge);
     }
 
     /// <summary>

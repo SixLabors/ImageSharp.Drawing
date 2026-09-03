@@ -78,10 +78,15 @@ internal static class Code93Encoder
     /// <summary>
     /// The bar height as a fraction of the symbol width, quiet zones included, when the caller sets no
     /// height. Section 2.6 of ANSI/AIM BC5-1995 recommends a minimum of 0.2 inches or 15 per cent of the
-    /// symbol length, whichever is greater. The inch floor needs a print resolution the encoder does not
-    /// have, so only the proportional rule applies here.
+    /// symbol length, whichever is greater.
     /// </summary>
     private const float NominalBarHeightFraction = 0.15F;
+
+    /// <summary>
+    /// The smallest bar height in millimetres when the caller sets none: the 0.2 inches of section 2.6 of
+    /// ANSI/AIM BC5-1995.
+    /// </summary>
+    private const float MinimumBarHeightMillimetres = 5.08F;
 
     /// <summary>
     /// Gets the element widths of every symbol character in modules, six to a character, in bar and space
@@ -243,8 +248,9 @@ internal static class Code93Encoder
     public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
     {
         int widthInModules = WidthInModules(runs);
-        float nominalBarHeight = (widthInModules + (QuietZone * 2)) * NominalBarHeightFraction;
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, nominalBarHeight);
+        float xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        float nominalBarHeight = MathF.Max((widthInModules + (QuietZone * 2)) * NominalBarHeightFraction, MinimumBarHeightMillimetres / xDimension);
+        float barHeight = EanUpcEncoder.ResolveBarHeight(options, BarcodeSymbology.PointXDimension, nominalBarHeight);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];
@@ -256,7 +262,7 @@ internal static class Code93Encoder
         BarcodeTextPlacement[] placements = [];
         if (options.Font is not null && text.Length > 0)
         {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight)];
+            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
         }
 
         return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone);

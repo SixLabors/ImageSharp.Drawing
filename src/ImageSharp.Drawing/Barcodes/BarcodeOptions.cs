@@ -7,22 +7,28 @@ using SixLabors.ImageSharp.Drawing.Processing;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Options that control how a barcode is sized and painted.
+/// Options that control how a barcode is sized and painted. The sizes are physical: the X dimension and
+/// the bar height in millimetres, and the resolution that turns them into pixels.
 /// </summary>
 public sealed class BarcodeOptions
 {
     /// <summary>
-    /// Gets or sets the width of one module in pixels. The module is the narrowest nominal element of a
-    /// symbology, which ISO/IEC 15420 calls the X-dimension. Every symbol dimension scales from this value.
-    /// A whole number gives every module the same pixel width. A fractional value still draws crisp bars,
-    /// because bar edges snap to the pixel grid, but their widths differ by one pixel.
+    /// Gets or sets the resolution in dots per inch. One module draws <see cref="XDimension"/> / 25.4 x
+    /// <see cref="Dpi"/> pixels wide, and text renders at this resolution. The default is 96, the CSS
+    /// reference pixel: "1px = 1/96th of 1in".
     /// </summary>
-    public float ModuleWidth { get; set; } = 2F;
+    public float Dpi { get; set; } = 96F;
 
     /// <summary>
-    /// Gets or sets the bar height in pixels. Set <see langword="null"/> to take the nominal height that
-    /// the symbology specification gives for its X-dimension. For EAN-13 at nominal size, ISO/IEC 15420
-    /// gives 22.85 mm bars at a 0.33 mm X-dimension, which is 69.24 modules.
+    /// Gets or sets the X dimension in millimetres: the width of the narrowest element of the symbology,
+    /// which is one module. Set <see langword="null"/> to take the nominal X dimension of the symbology,
+    /// <see cref="BarcodeSymbology.NominalXDimension"/>.
+    /// </summary>
+    public float? XDimension { get; set; }
+
+    /// <summary>
+    /// Gets or sets the bar height in millimetres. Set <see langword="null"/> to take the nominal height
+    /// that the symbology specification gives.
     /// </summary>
     public float? BarHeight { get; set; }
 
@@ -39,17 +45,18 @@ public sealed class BarcodeOptions
     public Brush? Background { get; set; }
 
     /// <summary>
-    /// Gets or sets the font for the human readable interpretation. Set <see langword="null"/> to print no
-    /// text. The specifications set the interpretation in OCR-B, at a size proportional to the X-dimension.
-    /// The caller chooses the font and the size.
+    /// Gets or sets the font for the human readable interpretation, whose size is in points and renders
+    /// at <see cref="Dpi"/>. Set <see langword="null"/> to print no text. The specifications set the
+    /// interpretation in OCR-B, at a size proportional to the X dimension. The caller chooses the font
+    /// and the size.
     /// </summary>
     public Font? Font { get; set; }
 
     /// <summary>
-    /// Gets or sets the font for the caption that a data layer symbology prints above its symbol, such as
-    /// the ISBN line. Set <see langword="null"/> to use <see cref="Font"/>. Its size is the starting point,
-    /// and <see cref="FitCaptionToSymbolWidth"/> then decides the final size. No caption prints below
-    /// 9 point, because the ISBN and ISMN manuals both require 9 point or larger.
+    /// Gets or sets the font for the caption that a data layer symbology prints above its symbol. Set
+    /// <see langword="null"/> to use <see cref="Font"/>. Its size is the starting point, and
+    /// <see cref="FitCaptionToSymbolWidth"/> then decides the final size. No caption prints below 9 point,
+    /// the minimum the ISBN and ISMN manuals set.
     /// </summary>
     public Font? CaptionFont { get; set; }
 

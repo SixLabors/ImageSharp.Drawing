@@ -30,6 +30,9 @@ public sealed class UpcASymbology : BarcodeSymbology
     private static ReadOnlySpan<int> GuardBars => [0, 1, 2, 3, 14, 15, 26, 27, 28, 29];
 
     /// <inheritdoc/>
+    public override float NominalXDimension => EanUpcEncoder.NominalXDimension;
+
+    /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
     {
         Guard.NotNull(text, nameof(text));
@@ -53,7 +56,7 @@ public sealed class UpcASymbology : BarcodeSymbology
 
         EanUpcEncoder.AppendPattern(modules, ref position, 0b101, 3);
 
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, EanUpcEncoder.NominalBarHeight);
+        float barHeight = EanUpcEncoder.ResolveBarHeight(options, EanUpcEncoder.NominalXDimension, EanUpcEncoder.NominalBarHeight);
         EanUpcEncoder.BuildGuardedHeights(BarCount, barHeight, GuardBars, options, out float[] heights, out float[] tops);
 
         // ISO/IEC 15420 prints the number system digit in the leading quiet zone, the check digit in the
@@ -63,7 +66,7 @@ public sealed class UpcASymbology : BarcodeSymbology
         BarcodeTextPlacement[] placements = [];
         if (options.Font is not null)
         {
-            float textLine = barHeight;
+            float textLine = barHeight + BarcodeTextPlacement.Clearance;
             placements = new BarcodeTextPlacement[12];
             placements[0] = new BarcodeTextPlacement(EanUpcEncoder.DigitString(digits[0]), -9F, -2F, BarcodeTextSide.BelowBars, textLine, EanUpcEncoder.QuietZoneDigitScale);
             EanUpcEncoder.FillDigitPlacements(placements, 1, digits, 1, 5, 10F, 7F, BarcodeTextSide.BelowBars, textLine);

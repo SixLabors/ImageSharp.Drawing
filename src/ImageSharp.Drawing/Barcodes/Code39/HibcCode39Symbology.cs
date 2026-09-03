@@ -7,9 +7,9 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// HIBC Code 39, a Health Industry Bar Code. A Code 39 symbol carries it. The symbol carries the flag
-/// character, the data and the modulo 43 check character. Code 39 adds no check character of its own,
-/// because the data already holds one. The human readable interpretation shows that same string between
-/// delimiters. A check character that is a space prints as an underscore.
+/// character, the data and the modulo 43 check character. Code 39 adds no check character of its own.
+/// The human readable interpretation shows that same string between delimiters. A check character that
+/// is a space prints as an underscore.
 /// </summary>
 public sealed class HibcCode39Symbology : BarcodeSymbology
 {

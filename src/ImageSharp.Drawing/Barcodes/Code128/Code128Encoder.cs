@@ -36,6 +36,12 @@ internal static class Code128Encoder
     /// </summary>
     public const int MaximumLength = 500;
 
+    /// <summary>
+    /// The nominal X dimension in millimetres: the 0.495 mm of the general distribution environment,
+    /// section 5.4.7.1 of the GS1 General Specifications.
+    /// </summary>
+    public const float NominalXDimension = 0.495F;
+
     private const int StartA = 103;
     private const int StartB = 104;
     private const int StartC = 105;
@@ -155,7 +161,7 @@ internal static class Code128Encoder
             widthInModules += runs[i];
         }
 
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, NominalBarHeight);
+        float barHeight = EanUpcEncoder.ResolveBarHeight(options, NominalXDimension, NominalBarHeight);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];
@@ -167,7 +173,7 @@ internal static class Code128Encoder
         BarcodeTextPlacement[] placements = [];
         if (options.Font is not null && text.Length > 0)
         {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight)];
+            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
         }
 
         return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone);

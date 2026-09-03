@@ -26,6 +26,9 @@ public sealed class IsbnSymbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
+    public override float NominalXDimension => EanUpcEncoder.NominalXDimension;
+
+    /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
     {
         Guard.NotNull(text, nameof(text));

@@ -31,17 +31,23 @@ public sealed class Itf14Symbology : BarcodeSymbology
     private const int Digits = 14;
 
     /// <summary>
-    /// The bar height in modules when the caller sets none: the 31.75 millimetre minimum of the symbol
-    /// height table in section 5.12.3.2, footnote (****), at the 1.016 millimetre target X of section
-    /// 5.3.2.2.
+    /// The nominal X dimension in millimetres: the 1.016 millimetre target X of section 5.3.2.2.
     /// </summary>
-    private const float NominalBarHeight = 31.75F / 1.016F;
+    private const float XDimension = 1.016F;
 
     /// <summary>
-    /// The bearer bar thickness in modules: the 4.83 millimetres of section 5.3.2.4 at the 1.016
-    /// millimetre target X of section 5.3.2.2.
+    /// The bar height in modules when the caller sets none: the 31.75 millimetre minimum of the symbol
+    /// height table in section 5.12.3.2, footnote (****), at the target X.
     /// </summary>
-    private const float BearerBarThickness = 4.83F / 1.016F;
+    private const float NominalBarHeight = 31.75F / XDimension;
+
+    /// <summary>
+    /// The bearer bar thickness in modules: the 4.83 millimetres of section 5.3.2.4 at the target X.
+    /// </summary>
+    private const float BearerBarThickness = 4.83F / XDimension;
+
+    /// <inheritdoc/>
+    public override float NominalXDimension => XDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
@@ -98,6 +104,6 @@ public sealed class Itf14Symbology : BarcodeSymbology
                     : $"{text}{digits[Digits - 1]}";
         }
 
-        return Interleaved2Of5Encoder.BuildSymbol(Interleaved2Of5Encoder.Encode(digits), readable, options, NominalBarHeight, BearerBarThickness);
+        return Interleaved2Of5Encoder.BuildSymbol(Interleaved2Of5Encoder.Encode(digits), readable, options, XDimension, NominalBarHeight, BearerBarThickness);
     }
 }

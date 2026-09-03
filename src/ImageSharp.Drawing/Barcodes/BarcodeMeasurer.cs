@@ -26,9 +26,10 @@ public static class BarcodeMeasurer
         Guard.NotNull(options, nameof(options));
 
         BarcodeSymbol symbol = symbology.Encode(text, options);
+        float xDimension = options.XDimension ?? symbology.NominalXDimension;
         return symbol switch
         {
-            LinearBarcodeSymbol linear => LinearBarcodeEmitter.Measure(linear, options, origin),
+            LinearBarcodeSymbol linear => LinearBarcodeEmitter.Measure(linear, options, xDimension, origin),
             _ => throw new InvalidOperationException($"Unsupported barcode symbol type: {symbol.GetType()}."),
         };
     }

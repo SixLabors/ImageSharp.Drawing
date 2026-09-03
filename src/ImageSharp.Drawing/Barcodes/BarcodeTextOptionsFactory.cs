@@ -18,11 +18,13 @@ internal static class BarcodeTextOptionsFactory
     /// instance serves both measuring and drawing, so the rectangle measured for a line is the rectangle
     /// the line draws into.
     /// </summary>
-    /// <param name="font">The font the line renders in.</param>
+    /// <param name="font">The font the line renders in, whose size is in points.</param>
+    /// <param name="dpi">The resolution the line renders at, in dots per inch.</param>
     /// <returns>The options.</returns>
-    public static RichTextOptions Create(Font font)
+    public static RichTextOptions Create(Font font, float dpi)
         => new(font)
         {
+            Dpi = dpi,
             HintingMode = HintingMode.Standard
         };
 }

@@ -23,6 +23,12 @@ internal static class EanUpcEncoder
     public const float GuardExtension = 5F;
 
     /// <summary>
+    /// The nominal X dimension in millimetres. Section 5.2.6.6 of the GS1 General Specifications:
+    /// "X-dimension = 0.330 mm".
+    /// </summary>
+    public const float NominalXDimension = 0.33F;
+
+    /// <summary>
     /// The nominal EAN-13, UPC-A and UPC-E bar height in modules: 22.85mm bars at the nominal 0.33mm
     /// X-dimension of ISO/IEC 15420.
     /// </summary>
@@ -294,13 +300,15 @@ internal static class EanUpcEncoder
     }
 
     /// <summary>
-    /// Resolves the digit bar height in modules from the options.
+    /// Resolves the bar height in modules from the options: the caller's height in millimetres divided by
+    /// the X dimension in millimetres, or the nominal height.
     /// </summary>
     /// <param name="options">The barcode options.</param>
+    /// <param name="nominalXDimension">The nominal X dimension of the symbology in millimetres.</param>
     /// <param name="nominalHeight">The nominal height for the symbology, in modules.</param>
     /// <returns>The bar height in modules.</returns>
-    public static float ResolveBarHeight(BarcodeOptions options, float nominalHeight)
-        => options.BarHeight.HasValue ? options.BarHeight.Value / options.ModuleWidth : nominalHeight;
+    public static float ResolveBarHeight(BarcodeOptions options, float nominalXDimension, float nominalHeight)
+        => options.BarHeight.HasValue ? options.BarHeight.Value / (options.XDimension ?? nominalXDimension) : nominalHeight;
 
     /// <summary>
     /// Resolves the font an ISBN, ISMN or ISSN caption prints in. Under
@@ -310,16 +318,17 @@ internal static class EanUpcEncoder
     /// </summary>
     /// <param name="caption">The caption text.</param>
     /// <param name="spanModules">The width the caption prints across, in modules.</param>
-    /// <param name="options">The options that carry the fonts and the module width.</param>
+    /// <param name="moduleWidth">The width of one module in pixels.</param>
+    /// <param name="options">The options that carry the fonts and the resolution.</param>
     /// <returns>The font to print the caption with.</returns>
-    public static Font ResolveCaptionFont(string caption, float spanModules, BarcodeOptions options)
+    public static Font ResolveCaptionFont(string caption, float spanModules, float moduleWidth, BarcodeOptions options)
     {
         Font font = options.CaptionFont ?? options.Font!;
         float size = font.Size;
         if (options.FitCaptionToSymbolWidth)
         {
-            float width = TextMeasurer.Measure(caption, BarcodeTextOptionsFactory.Create(font)).RenderableBounds.Width;
-            size = font.Size * spanModules * options.ModuleWidth / width;
+            float width = TextMeasurer.Measure(caption, BarcodeTextOptionsFactory.Create(font, options.Dpi)).RenderableBounds.Width;
+            size = font.Size * spanModules * moduleWidth / width;
         }
 
         size = MathF.Max(size, MinimumTextPoints);
@@ -339,7 +348,7 @@ internal static class EanUpcEncoder
     /// <param name="firstCellLeft">The left edge of the first character cell, in modules.</param>
     /// <param name="cellAdvance">The distance between successive cell left edges, in modules.</param>
     /// <param name="side">The side of the bars the digits print on.</param>
-    /// <param name="barEdge">The bar edge the digits face, in modules from the symbol top.</param>
+    /// <param name="textEdge">The edge of the ink of the digits, in modules from the symbol top.</param>
     public static void FillDigitPlacements(
         BarcodeTextPlacement[] placements,
         int placementIndex,
@@ -349,7 +358,7 @@ internal static class EanUpcEncoder
         float firstCellLeft,
         float cellAdvance,
         BarcodeTextSide side,
-        float barEdge)
+        float textEdge)
     {
         for (int i = 0; i < digitCount; i++)
         {
@@ -359,7 +368,7 @@ internal static class EanUpcEncoder
                 left,
                 left + 7,
                 side,
-                barEdge);
+                textEdge);
         }
     }
 
@@ -399,7 +408,8 @@ internal static class EanUpcEncoder
     /// <summary>
     /// Encodes thirteen validated digits into an EAN-13 symbol, optionally with a caption above the bars.
     /// The ISBN, ISMN and ISSN symbologies print their own number above their EAN-13 symbol. The caption
-    /// faces the bar tops, and the room it needs belongs to the renderer, which is what knows the font.
+    /// stands one module above the bar tops, and the room it needs belongs to the renderer, which is what
+    /// knows the font.
     /// </summary>
     /// <param name="digits">The thirteen digits, with the check digit already validated.</param>
     /// <param name="options">The options that control layout choices.</param>
@@ -426,23 +436,24 @@ internal static class EanUpcEncoder
 
         AppendPattern(modules, ref position, 0b101, 3);
 
-        float barHeight = ResolveBarHeight(options, NominalBarHeight);
+        float barHeight = ResolveBarHeight(options, NominalXDimension, NominalBarHeight);
         BuildGuardedHeights(Ean13BarCount, barHeight, Ean13GuardBars, options, out float[] heights, out float[] tops);
 
         // ISO/IEC 15420 prints the leading digit in the leading quiet zone and every other digit below its
-        // own symbol character. Digits face the bottom of the digit bars and flow past the extended guard
-        // bars, as in the nominal symbol drawing. A caption faces the bar tops and prints above them.
+        // own symbol character. Digits hang one module below the digit bars and flow past the extended
+        // guard bars, as in the nominal symbol drawing. A caption stands one module above the bar tops.
         BarcodeTextPlacement[] placements = [];
         if (options.Font is not null)
         {
             bool hasCaption = caption is not null;
             placements = new BarcodeTextPlacement[hasCaption ? 14 : 13];
-            placements[0] = new BarcodeTextPlacement(DigitString(digits[0]), -9F, -2F, BarcodeTextSide.BelowBars, barHeight);
-            FillDigitPlacements(placements, 1, digits, 1, 6, 3F, 7F, BarcodeTextSide.BelowBars, barHeight);
-            FillDigitPlacements(placements, 7, digits, 7, 6, 50F, 7F, BarcodeTextSide.BelowBars, barHeight);
+            float textEdge = barHeight + BarcodeTextPlacement.Clearance;
+            placements[0] = new BarcodeTextPlacement(DigitString(digits[0]), -9F, -2F, BarcodeTextSide.BelowBars, textEdge);
+            FillDigitPlacements(placements, 1, digits, 1, 6, 3F, 7F, BarcodeTextSide.BelowBars, textEdge);
+            FillDigitPlacements(placements, 7, digits, 7, 6, 50F, 7F, BarcodeTextSide.BelowBars, textEdge);
             if (hasCaption)
             {
-                placements[13] = new BarcodeTextPlacement(caption!, 0F, Ean13Width, BarcodeTextSide.AboveBars, 0F, 1F, true);
+                placements[13] = new BarcodeTextPlacement(caption!, 0F, Ean13Width, BarcodeTextSide.AboveBars, -BarcodeTextPlacement.Clearance, 1F, true);
             }
         }
 
@@ -473,7 +484,7 @@ internal static class EanUpcEncoder
 
         AppendPattern(modules, ref position, 0b101, 3);
 
-        float barHeight = ResolveBarHeight(options, NominalEan8BarHeight);
+        float barHeight = ResolveBarHeight(options, NominalXDimension, NominalEan8BarHeight);
         BuildGuardedHeights(Ean8BarCount, barHeight, Ean8GuardBars, options, out float[] heights, out float[] tops);
 
         // ISO/IEC 15420 prints every digit below its own symbol character. Digits hang one module below the digit

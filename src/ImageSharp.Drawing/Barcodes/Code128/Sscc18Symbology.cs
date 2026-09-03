@@ -14,8 +14,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <para>
 /// The input is the element string syntax, <c>(00)</c> and then the SSCC. Spaces are ignored. Give 17
 /// digits, and this class calculates the check digit. Give 18 digits, and this class compares the last
-/// digit with the calculated one. A space divides a calculated check digit from the printed number,
-/// because the caller groups that number.
+/// digit with the calculated one. The interpretation prints the number as the caller grouped it, with a
+/// space before a calculated check digit.
 /// </para>
 /// </summary>
 public sealed class Sscc18Symbology : BarcodeSymbology
@@ -26,6 +26,9 @@ public sealed class Sscc18Symbology : BarcodeSymbology
     public Sscc18Symbology()
     {
     }
+
+    /// <inheritdoc/>
+    public override float NominalXDimension => Code128Encoder.NominalXDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

@@ -27,6 +27,9 @@ public sealed class MandsSymbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
+    public override float NominalXDimension => EanUpcEncoder.NominalXDimension;
+
+    /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
     {
         Guard.NotNull(text, nameof(text));
@@ -65,7 +68,7 @@ public sealed class MandsSymbology : BarcodeSymbology
         {
             // A padded number hides its leading zero and its check digit: seven digits spread over the first
             // seven character cells with the eighth cell left empty. The full eight digit form prints as-is.
-            float textLine = digitHeight;
+            float textLine = digitHeight + BarcodeTextPlacement.Clearance;
             int shown = padded ? 7 : 8;
             placements = new BarcodeTextPlacement[shown + 2];
             for (int i = 0; i < shown; i++)

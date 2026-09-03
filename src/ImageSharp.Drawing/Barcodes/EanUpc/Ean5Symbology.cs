@@ -25,6 +25,9 @@ public sealed class Ean5Symbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
+    public override float NominalXDimension => EanUpcEncoder.NominalXDimension;
+
+    /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
     {
         Guard.NotNull(text, nameof(text));

@@ -23,12 +23,13 @@ internal abstract class BarcodeSymbol
 
     /// <summary>
     /// Gets the width in modules of the quiet zone that comes before the symbol. Each symbology sets its
-    /// own quiet zone width. For example, ISO/IEC 15420 requires 11 modules before an EAN-13 symbol.
+    /// own quiet zone width. For example, ISO/IEC 15420 requires 11 modules before an EAN-13 symbol, and
+    /// a postal symbology states its clear zone in inches, which is not a whole number of modules.
     /// </summary>
-    public abstract int LeadingQuietZone { get; }
+    public abstract float LeadingQuietZone { get; }
 
     /// <summary>
     /// Gets the width of the quiet zone that must follow the symbol, in modules.
     /// </summary>
-    public abstract int TrailingQuietZone { get; }
+    public abstract float TrailingQuietZone { get; }
 }
