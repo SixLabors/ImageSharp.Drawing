@@ -84,8 +84,8 @@ fn stroke_normalize_positive_angle(angle: f32) -> f32 {
     return a;
 }
 
-// Port of the CPU stroker's GetArcSubdivisionCount (round cap tessellation): returns the number
-// of interior vertices needed to keep the arc's chordal error within the arc detail scale.
+// Port of the CPU stroker's GetArcSubdivisionCount (round join and cap tessellation): returns the
+// number of interior vertices needed to keep the arc's chordal error within the arc detail scale.
 fn stroke_arc_subdivision_count(radius: f32, sweep: f32, arc_detail_scale: f32) -> u32 {
     let safe_radius = max(radius, TANGENT_THRESH);
     let safe_scale = max(arc_detail_scale, 0.01);
@@ -129,8 +129,8 @@ fn stroke_chain_arc(
 }
 
 // Port of PolygonStroker.CalcArc (round joins): sweeps from offset o1 to offset o2 around corner
-// v1 with a fixed angular step derived from the arc detail scale. Both endpoints are appended,
-// so the caller's chain need not already sit on the arc.
+// v1 with the interior vertex count from stroke_arc_subdivision_count, shared with round caps.
+// Both endpoints are appended, so the caller's chain need not already sit on the arc.
 fn stroke_calc_arc(
     path_ix: u32, last: ptr<function, vec2f>,
     v1: vec2f, o1: vec2f, o2: vec2f,
@@ -141,15 +141,13 @@ fn stroke_calc_arc(
     // must rotate o1; absolute angles of the offsets are not computable here.
     let cross_oo = (o1.x * o2.y) - (o1.y * o2.x);
     let sweep = stroke_normalize_positive_angle(atan2(cross_oo, dot(o1, o2)));
-    let da = acos(half_width / (half_width + (0.125 / arc_detail_scale))) * 2.0;
     stroke_chain_point(path_ix, last, v1 + o1, transform);
-    // Bounded for GPU safety; matches the CPU count for all real detail scales.
-    let n = clamp(i32(sweep / da), 0, 1024);
-    let step = sweep / f32(n + 1);
+    let n = stroke_arc_subdivision_count(half_width, sweep, arc_detail_scale);
+    let step = sweep / f32(n + 1u);
     let rot_c = cos(step);
     let rot_s = sin(step);
     var offset = o1;
-    for (var i = 0; i < n; i += 1) {
+    for (var i = 1u; i <= n; i += 1u) {
         offset = vec2((offset.x * rot_c) - (offset.y * rot_s), (offset.x * rot_s) + (offset.y * rot_c));
         stroke_chain_point(path_ix, last, v1 + offset, transform);
     }
