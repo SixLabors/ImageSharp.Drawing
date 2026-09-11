@@ -1730,6 +1730,109 @@ public partial class WebGPUDrawingBackendTests
     }
 
     [WebGPUTheory]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.MiterRound, 0.01D)]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.MiterRound, 0.5D)]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.MiterRound, 1D)]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.MiterRound, 4D)]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.MiterRound, 16D)]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.Round, 0.01D)]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.Round, 0.5D)]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.Round, 1D)]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.Round, 4D)]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.Round, 16D)]
+    public void DrawPath_Stroke_RoundJoinArcDetailScale_MatchesDefaultOutput<TPixel>(
+        TestImageProvider<TPixel> provider,
+        LineJoin lineJoin,
+        double arcDetailScale)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        // Every corner is sharper than the default miter limit, so MiterRound falls back to the
+        // same round arc as Round.
+        PathBuilder pb = new();
+        pb.AddLine(new PointF(60, 270), new PointF(100, 30));
+        pb.AddLine(new PointF(100, 30), new PointF(140, 270));
+        pb.AddLine(new PointF(140, 270), new PointF(180, 30));
+        pb.AddLine(new PointF(180, 30), new PointF(220, 270));
+        pb.AddLine(new PointF(220, 270), new PointF(260, 30));
+        pb.AddLine(new PointF(260, 30), new PointF(300, 270));
+        pb.AddLine(new PointF(300, 270), new PointF(340, 30));
+        IPath path = pb.Build();
+
+        Pen pen = new SolidPen(new PenOptions(Color.DarkBlue, 24F)
+        {
+            StrokeOptions = new StrokeOptions { LineJoin = lineJoin, ArcDetailScale = arcDetailScale }
+        });
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Draw(pen, path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, $"{lineJoin}_{arcDetailScale}", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0014F);
+        AssertBackendPairReferenceOutputs(provider, $"{lineJoin}_{arcDetailScale}", defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(800, 600, "White", PixelTypes.Rgba32, 1D)]
+    [WithSolidFilledImages(800, 600, "White", PixelTypes.Rgba32, 16D)]
+    public void DrawPath_Stroke_RoundJoinLargeRadius_MatchesDefaultOutput<TPixel>(
+        TestImageProvider<TPixel> provider,
+        double arcDetailScale)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        PathBuilder pb = new();
+        pb.AddLine(new PointF(200, 460), new PointF(400, 140));
+        pb.AddLine(new PointF(400, 140), new PointF(600, 460));
+        IPath path = pb.Build();
+
+        // A 240 pixel pen gives the round join a 120 pixel arc radius.
+        Pen pen = new SolidPen(new PenOptions(Color.DarkBlue, 240F)
+        {
+            StrokeOptions = new StrokeOptions { LineJoin = LineJoin.Round, ArcDetailScale = arcDetailScale }
+        });
+
+        void DrawAction(DrawingCanvas canvas) => canvas.Draw(pen, path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, $"{arcDetailScale}", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0003F);
+        AssertBackendPairReferenceOutputs(provider, $"{arcDetailScale}", defaultImage, nativeSurfaceImage);
+    }
+
+    [WebGPUTheory]
     [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineCap.Butt)]
     [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineCap.Square)]
     [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineCap.Round)]
