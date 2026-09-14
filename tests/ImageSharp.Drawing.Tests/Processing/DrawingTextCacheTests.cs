@@ -183,7 +183,9 @@ public class DrawingTextCacheTests
         for (int worker = 0; worker < workers; worker++)
         {
             int index = worker;
-            tasks[worker] = Task.Run(() =>
+            // Barrier participants need dedicated threads so waiting for their peers does
+            // not starve thread-pool work scheduled by other tests on small CI runners.
+            tasks[worker] = Task.Factory.StartNew(() =>
             {
                 using Image<Rgba32> expected = new(320, 160);
                 lock (serial)
@@ -200,7 +202,7 @@ public class DrawingTextCacheTests
                     ImageComparer.Exact.VerifySimilarity(expected, actual);
                     Assert.Equal(serial.Count, shared.Count);
                 }
-            });
+            }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         }
 
         await Task.WhenAll(tasks);
@@ -224,7 +226,9 @@ public class DrawingTextCacheTests
         for (int worker = 0; worker < workers; worker++)
         {
             int index = worker;
-            tasks[worker] = Task.Run(() =>
+            // Barrier participants need dedicated threads so waiting for their peers does
+            // not starve thread-pool work scheduled by other tests on small CI runners.
+            tasks[worker] = Task.Factory.StartNew(() =>
             {
                 IPath first = new RectanglePolygon(index, 0, 10, 10);
                 IPath second = new RectanglePolygon(index, 10, 10, 10);
@@ -281,7 +285,7 @@ public class DrawingTextCacheTests
                     Assert.Same(acquiredSecond, acquired[1].FillPath);
                     Assert.Equal(runBounds, acquiredRun.Bounds);
                 }
-            });
+            }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         }
 
         await Task.WhenAll(tasks);
