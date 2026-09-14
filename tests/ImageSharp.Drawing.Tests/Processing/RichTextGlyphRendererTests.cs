@@ -14,6 +14,34 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 
 public class RichTextGlyphRendererTests
 {
+    /// <summary>
+    /// Verifies moved text retains cached outline identity and updates its destination.
+    /// </summary>
+    [Fact]
+    public void MovedText_CacheHitReusesOutline()
+    {
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 24);
+        DrawingTextCache cache = new();
+        using RichTextGlyphRenderer first = new(new DrawingOptions(), null, null, Brushes.Solid(Color.Red), cache);
+        TextRenderer.RenderTo(first, "Hello World", new RichTextOptions(font) { Origin = new Vector2(11, 8) });
+        using RichTextGlyphRenderer cached = new(new DrawingOptions(), null, null, Brushes.Solid(Color.Red), cache);
+        TextRenderer.RenderTo(cached, "Hello World", new RichTextOptions(font) { Origin = new Vector2(8, 8) });
+
+        Assert.NotEmpty(first.DrawingOperations);
+        Assert.Equal(first.DrawingOperations.Count, cached.DrawingOperations.Count);
+        for (int i = 0; i < first.DrawingOperations.Count; i++)
+        {
+            DrawingOperation expected = first.DrawingOperations[i];
+            DrawingOperation actual = cached.DrawingOperations[i];
+
+            // Moving text must reuse the vector outline while moving its destination.
+            // Rebuilding an outline at the new origin is not the reference for a cache hit.
+            Assert.Same(expected.Path, actual.Path);
+            Assert.Equal(expected.RenderLocation.X - 3, actual.RenderLocation.X);
+            Assert.Equal(expected.RenderLocation.Y, actual.RenderLocation.Y);
+        }
+    }
+
     [Fact]
     public void SetDecoration_ContiguousRun_EmitsSingleDecorationOperation()
     {
@@ -86,14 +114,14 @@ public class RichTextGlyphRendererTests
             ColorFontSupport = ColorFontSupport.ColrV1
         };
 
-        List<DrawingOperation> operations = [];
         using RichTextGlyphRenderer renderer = new(
             new DrawingOptions(),
             path: null,
             pen: null,
             brush: Brushes.Solid(Color.Black),
-            new DrawingTextCache(),
-            operations);
+            new DrawingTextCache());
+
+        List<DrawingOperation> operations = renderer.DrawingOperations;
 
         // This glyph is a SoftLight composite whose source is a nested SrcIn composite, and
         // the inner source is a linear gradient with no outline. Each composite lowers to one
@@ -192,24 +220,24 @@ public class RichTextGlyphRendererTests
         };
 
         DrawingTextCache cache = new();
-        List<DrawingOperation> fresh = [];
         using RichTextGlyphRenderer freshRenderer = new(
             new DrawingOptions(),
             path: null,
             pen: null,
             brush: Brushes.Solid(Color.Black),
-            cache,
-            fresh);
+            cache);
+
+        List<DrawingOperation> fresh = freshRenderer.DrawingOperations;
         TextRenderer.RenderTo(freshRenderer, 2629, glyphOptions);
 
-        List<DrawingOperation> cached = [];
         using RichTextGlyphRenderer cachedRenderer = new(
             new DrawingOptions(),
             path: null,
             pen: null,
             brush: Brushes.Solid(Color.Black),
-            cache,
-            cached);
+            cache);
+
+        List<DrawingOperation> cached = cachedRenderer.DrawingOperations;
         TextRenderer.RenderTo(cachedRenderer, 2629, glyphOptions);
 
         Assert.NotEmpty(fresh);
@@ -287,18 +315,18 @@ public class RichTextGlyphRendererTests
             options.TextRuns = [.. runs];
         }
 
-        List<DrawingOperation> operations = [];
         using RichTextGlyphRenderer renderer = new(
             new DrawingOptions(),
             path: null,
             pen: null,
             brush: Brushes.Solid(Color.Black),
-            new DrawingTextCache(),
-            operations);
+            new DrawingTextCache());
+
+        List<DrawingOperation> operations = renderer.DrawingOperations;
 
         TextRenderer.RenderTo(renderer, text, options);
 
-        // Dispose clears the caller-owned operation list, so count before leaving scope.
+        // Dispose clears the leased operation list, so count before leaving scope.
         return operations.Count;
     }
 
@@ -310,18 +338,18 @@ public class RichTextGlyphRendererTests
             Origin = origin,
         };
 
-        List<DrawingOperation> operations = [];
         using RichTextGlyphRenderer renderer = new(
             new DrawingOptions(),
             path: null,
             pen: null,
             brush: Brushes.Solid(Color.Black),
-            cache,
-            operations);
+            cache);
+
+        List<DrawingOperation> operations = renderer.DrawingOperations;
 
         TextRenderer.RenderTo(renderer, "H", options);
 
-        // Return the value copy before disposing the renderer, which clears the caller-owned list.
+        // Return the value copy before disposing the renderer, which clears the leased list.
         return Assert.Single(operations);
     }
 }
