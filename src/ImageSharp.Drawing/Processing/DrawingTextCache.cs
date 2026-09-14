@@ -11,15 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// Stores reusable text drawing data shared by one or more drawing canvases.
 /// </summary>
 /// <remarks>
-/// Two tiers are cached. The glyph cache holds one flattened outline per glyph, keyed by glyph id,
-/// size and pen; it is the base layer that avoids re-flattening the same glyph and is shared by
-/// every run. The run-path cache is derived from it: the glyphs of a whole uniform run merged into a
-/// single positioned path, so that redrawing the run collapses to one composition command instead of
-/// one per glyph. The run path is keyed in run-local space, so the same run content drawn at any
-/// position, including a fractionally scrolled one, is a hit. The cost is memory, because the merged
-/// path holds a copy of each glyph's geometry; far fewer run paths than glyph entries are kept, only
-/// whole-run repeats benefit, and a run that differs by a single glyph misses and falls back to the
-/// per-glyph commands.
+/// This class is thread-safe. Concurrent drawing operations must use separate canvas instances.
 /// </remarks>
 public sealed class DrawingTextCache
 {
@@ -35,6 +27,31 @@ public sealed class DrawingTextCache
     /// </summary>
     private const int RunPathCapacityDivisor = 4;
 
+    /// <summary>
+    /// Protects cache metadata and the scratch pool, never glyph construction or drawing.
+    /// </summary>
+    private readonly object sync = new();
+
+    /// <summary>
+    /// Idle draw buffers. Renting transfers exclusive ownership until the renderer is disposed.
+    /// </summary>
+    private readonly Stack<DrawingScratch> scratchPool = new();
+
+    // Two tiers are cached. The glyph cache holds reusable outline data keyed by glyph identity,
+    // size and pen. It avoids rebuilding glyph outlines and supplies the geometry used by every
+    // run. Layered glyphs retain their complete layer and composite-group sequence.
+    //
+    // The run-path cache is derived from the glyph cache: the glyphs of a whole uniform run are
+    // merged into a single positioned path, so redrawing the run requires one composition command
+    // instead of one per glyph. The key uses run-local positions, allowing the same run to be
+    // reused at different locations, including during fractional scrolling. Only whole-run
+    // repeats benefit; a run that differs by one glyph misses and reuses the individual glyph
+    // entries to construct its own combined path.
+    //
+    // Combined paths retain additional geometry, so the run-path cache has a smaller capacity
+    // than the glyph cache. This limits memory retention while preserving reuse of individual
+    // glyphs across different runs.
+    //
     // Both caches are LRU: the dictionary provides O(1) lookup while the linked list
     // tracks usage order (most recently used at the head, eviction from the tail).
 
@@ -96,42 +113,76 @@ public sealed class DrawingTextCache
     /// <summary>
     /// Gets the number of glyph cache entries. Run-path entries are not included.
     /// </summary>
-    public int Count => this.entries.Count;
+    public int Count
+    {
+        get
+        {
+            lock (this.sync)
+            {
+                return this.entries.Count;
+            }
+        }
+    }
 
     /// <summary>
-    /// Gets the reusable drawing-operation scratch list handed to text renderers. Canvases are
-    /// per-frame objects while this cache survives across frames, so hosting the scratch here
-    /// keeps its capacity instead of regrowing a list of large operation structs every draw.
-    /// The list is cleared at the start of each text draw; like the caches on this type it
-    /// assumes single-threaded use.
+    /// Rents exclusive working buffers for one text draw, retaining capacity across frames.
     /// </summary>
-    internal List<DrawingOperation> OperationScratch { get; } = [];
+    /// <returns>The working buffers owned by the renderer until it is disposed.</returns>
+    internal DrawingScratch RentScratch()
+    {
+        lock (this.sync)
+        {
+            if (this.scratchPool.Count > 0)
+            {
+                return this.scratchPool.Pop();
+            }
+        }
+
+        return new DrawingScratch();
+    }
 
     /// <summary>
-    /// Gets the reusable render-pass sort buffer used before text operations are lowered to
-    /// composition commands, hosted here for the same lifetime reason as
-    /// <see cref="OperationScratch"/>. Entries index into the operation list so the sort
-    /// moves pass and index pairs rather than whole operation structs.
+    /// Returns working buffers after all operations have been consumed or the draw has failed.
     /// </summary>
-    internal List<(byte RenderPass, int Sequence)> OperationSortScratch { get; } = [];
+    /// <param name="scratch">The exclusively owned working buffers to return.</param>
+    internal void ReturnScratch(DrawingScratch scratch)
+    {
+        // Drop per-draw references outside the lock while retaining the lists' capacity.
+        scratch.Operations.Clear();
+        scratch.SortBuffer.Clear();
+        scratch.CompositeLayers.Clear();
 
-    /// <summary>
-    /// Gets the reusable stack used to pair nested text composite layer commands.
-    /// </summary>
-    internal List<DrawingCanvasLayer> CompositeLayerScratch { get; } = [];
+        lock (this.sync)
+        {
+            // Match the backend worker pool's bound so a concurrency spike does not retain
+            // arbitrarily many large operation buffers for the lifetime of this cache.
+            if (this.scratchPool.Count < Environment.ProcessorCount)
+            {
+                this.scratchPool.Push(scratch);
+            }
+        }
+    }
 
     /// <summary>
     /// Removes all cached text drawing data.
     /// </summary>
+    /// <remarks>
+    /// Draws already in progress can continue using previously cached data and can populate
+    /// the cache again after this method returns.
+    /// </remarks>
     public void Clear()
     {
-        this.entries.Clear();
-        this.usage.Clear();
-        this.runPathEntries.Clear();
-        this.runPathUsage.Clear();
-        this.OperationScratch.Clear();
-        this.OperationSortScratch.Clear();
-        this.CompositeLayerScratch.Clear();
+        lock (this.sync)
+        {
+            this.entries.Clear();
+            this.usage.Clear();
+            this.runPathEntries.Clear();
+            this.runPathUsage.Clear();
+
+            // Active renderers own their buffers and cached values independently of these
+            // indexes. Clearing must not mutate either while a draw is consuming them.
+            this.scratchPool.Clear();
+        }
     }
 
     /// <summary>
@@ -144,47 +195,51 @@ public sealed class DrawingTextCache
     /// </returns>
     internal bool TryGetValue(RichTextGlyphRenderer.CacheKey key, [NotNullWhen(true)] out List<RichTextGlyphRenderer.GlyphRenderData>? value)
     {
-        if (!this.entries.TryGetValue(key, out LinkedListNode<Entry>? node))
+        lock (this.sync)
         {
-            value = null;
-            return false;
-        }
+            if (!this.entries.TryGetValue(key, out LinkedListNode<Entry>? node))
+            {
+                value = null;
+                return false;
+            }
 
-        // Move the hit to the head so the least recently used entry stays at the tail.
-        this.usage.Remove(node);
-        this.usage.AddFirst(node);
-        value = node.Value.Value;
-        return true;
+            // Move the hit to the head so the least recently used entry stays at the tail.
+            this.usage.Remove(node);
+            this.usage.AddFirst(node);
+            value = node.Value.Value;
+            return true;
+        }
     }
 
     /// <summary>
-    /// Gets existing glyph drawing data for the specified key, or creates a new cache entry.
+    /// Publishes a complete glyph. Ownership of the list transfers to the cache; it must not
+    /// be modified after this call, including when another draw has already populated the key.
     /// </summary>
     /// <param name="key">The glyph cache key.</param>
-    /// <returns>
-    /// The glyph drawing data associated with <paramref name="key"/>.
-    /// </returns>
-    internal List<RichTextGlyphRenderer.GlyphRenderData> GetOrAdd(RichTextGlyphRenderer.CacheKey key)
+    /// <param name="value">The complete glyph entries in callback order.</param>
+    internal void Add(RichTextGlyphRenderer.CacheKey key, List<RichTextGlyphRenderer.GlyphRenderData> value)
     {
-        if (this.TryGetValue(key, out List<RichTextGlyphRenderer.GlyphRenderData>? value))
+        lock (this.sync)
         {
-            return value;
+            // Misses build outside the lock. Keep the first complete result if two draws
+            // built the same key, rather than combining their layer sequences.
+            if (this.entries.ContainsKey(key))
+            {
+                return;
+            }
+
+            LinkedListNode<Entry> node = new(new Entry(key, value));
+            this.usage.AddFirst(node);
+            this.entries.Add(key, node);
+
+            // Evict the least recently used entry once over capacity.
+            if (this.entries.Count > this.Capacity)
+            {
+                LinkedListNode<Entry> last = this.usage.Last!;
+                this.usage.RemoveLast();
+                _ = this.entries.Remove(last.Value.Key);
+            }
         }
-
-        value = [];
-        LinkedListNode<Entry> node = new(new Entry(key, value));
-        this.usage.AddFirst(node);
-        this.entries.Add(key, node);
-
-        // Evict the least recently used entry once over capacity.
-        if (this.entries.Count > this.Capacity)
-        {
-            LinkedListNode<Entry> last = this.usage.Last!;
-            this.usage.RemoveLast();
-            _ = this.entries.Remove(last.Value.Key);
-        }
-
-        return value;
     }
 
     /// <summary>
@@ -197,17 +252,20 @@ public sealed class DrawingTextCache
     /// </returns>
     internal bool TryGetRunPath(RunPathCacheKey key, [NotNullWhen(true)] out IPath? path)
     {
-        if (!this.runPathEntries.TryGetValue(key, out LinkedListNode<RunPathEntry>? node))
+        lock (this.sync)
         {
-            path = null;
-            return false;
-        }
+            if (!this.runPathEntries.TryGetValue(key, out LinkedListNode<RunPathEntry>? node))
+            {
+                path = null;
+                return false;
+            }
 
-        // Move the hit to the head so the least recently used entry stays at the tail.
-        this.runPathUsage.Remove(node);
-        this.runPathUsage.AddFirst(node);
-        path = node.Value.Path;
-        return true;
+            // Move the hit to the head so the least recently used entry stays at the tail.
+            this.runPathUsage.Remove(node);
+            this.runPathUsage.AddFirst(node);
+            path = node.Value.Path;
+            return true;
+        }
     }
 
     /// <summary>
@@ -217,16 +275,30 @@ public sealed class DrawingTextCache
     /// <param name="path">The positioned path to cache.</param>
     internal void AddRunPath(RunPathCacheKey key, IPath path)
     {
-        LinkedListNode<RunPathEntry> node = new(new RunPathEntry(key, path));
-        this.runPathUsage.AddFirst(node);
-        this.runPathEntries.Add(key, node);
+        // Bounds are lazily stored as a nullable struct by paths. Initialize them before
+        // sharing the path so concurrent command creation never races that first write.
+        _ = path.Bounds;
 
-        // Evict the least recently used entry once over capacity.
-        if (this.runPathEntries.Count > this.runPathCapacity)
+        lock (this.sync)
         {
-            LinkedListNode<RunPathEntry> last = this.runPathUsage.Last!;
-            this.runPathUsage.RemoveLast();
-            _ = this.runPathEntries.Remove(last.Value.Key);
+            // Positioned paths are built outside the lock, so concurrent misses may publish
+            // the same key. Keep the first completed path in the cache.
+            if (this.runPathEntries.ContainsKey(key))
+            {
+                return;
+            }
+
+            LinkedListNode<RunPathEntry> node = new(new RunPathEntry(key, path));
+            this.runPathUsage.AddFirst(node);
+            this.runPathEntries.Add(key, node);
+
+            // Evict the least recently used entry once over capacity.
+            if (this.runPathEntries.Count > this.runPathCapacity)
+            {
+                LinkedListNode<RunPathEntry> last = this.runPathUsage.Last!;
+                this.runPathUsage.RemoveLast();
+                _ = this.runPathEntries.Remove(last.Value.Key);
+            }
         }
     }
 
@@ -492,5 +564,26 @@ public sealed class DrawingTextCache
         /// Gets the combined positioned path.
         /// </summary>
         public IPath Path { get; }
+    }
+
+    /// <summary>
+    /// Working buffers leased to one renderer through operation submission and disposal.
+    /// </summary>
+    internal sealed class DrawingScratch
+    {
+        /// <summary>
+        /// Gets the drawing operations emitted by this renderer.
+        /// </summary>
+        public List<DrawingOperation> Operations { get; } = [];
+
+        /// <summary>
+        /// Gets the render-pass index buffer, avoiding sorting full operation structs.
+        /// </summary>
+        public List<(byte RenderPass, int Sequence)> SortBuffer { get; } = [];
+
+        /// <summary>
+        /// Gets the stack pairing nested text composite layer commands.
+        /// </summary>
+        public List<DrawingCanvasLayer> CompositeLayers { get; } = [];
     }
 }

@@ -188,11 +188,16 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
     private CacheKey currentCacheKey;
 
     /// <summary>
-    /// The cache entries for the current glyph key. Assigned on a cache hit and only read on
-    /// hit paths; the miss path appends through the cache-owned list instead, so no per-glyph
-    /// list is allocated here.
+    /// Completed cache entries for the current glyph. Published lists are never modified,
+    /// so a renderer can consume them outside the cache lock, even after eviction or Clear.
     /// </summary>
     private List<GlyphRenderData>? currentCacheEntries;
+
+    /// <summary>
+    /// Entries being built for a cache miss. The list transfers to the cache only after the
+    /// entire glyph has completed, so other draws cannot see an incomplete layer sequence.
+    /// </summary>
+    private List<GlyphRenderData>? pendingCacheEntries;
 
     /// <summary>
     /// The transformed (post-<see cref="DrawingOptions.Transform"/>) bounding-box location
@@ -209,25 +214,18 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
     /// <param name="pen">Default pen for outlined text, or <see langword="null"/> for fill-only.</param>
     /// <param name="brush">Default brush for filled text, or <see langword="null"/> for outline-only.</param>
     /// <param name="glyphCache">Caller-owned glyph cache shared across renderer instances.</param>
-    /// <param name="operations">
-    /// The caller-owned operation list this renderer emits into. Passing the canvas's reusable
-    /// list keeps its capacity across draws instead of regrowing a fresh list per call; it is
-    /// cleared in <see cref="BeginText"/> and must not be shared by concurrently live renderers.
-    /// </param>
     public RichTextGlyphRenderer(
         DrawingOptions drawingOptions,
         IPath? path,
         Pen? pen,
         Brush? brush,
-        DrawingTextCache glyphCache,
-        List<DrawingOperation> operations)
+        DrawingTextCache glyphCache)
         : base(drawingOptions.Transform)
     {
         this.drawingOptions = drawingOptions;
         this.defaultPen = pen;
         this.defaultBrush = brush;
         this.glyphCache = glyphCache;
-        this.DrawingOperations = operations;
         this.currentCompositionMode = drawingOptions.GraphicsOptions.AlphaCompositionMode;
         this.currentBlendingMode = drawingOptions.GraphicsOptions.ColorBlendingMode;
 
@@ -254,6 +252,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
             this.rasterizationRequired = true;
             this.noCache = true;
         }
+
+        this.Scratch = glyphCache.RentScratch();
     }
 
     /// <summary>
@@ -261,7 +261,12 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
     /// After <c>RenderText</c> completes, this list is consumed by
     /// <see cref="DrawingCanvas{TPixel}.DrawTextOperations"/> to build composition commands.
     /// </summary>
-    public List<DrawingOperation> DrawingOperations { get; }
+    public List<DrawingOperation> DrawingOperations => this.Scratch.Operations;
+
+    /// <summary>
+    /// Gets the exclusive working buffers retained until this renderer is disposed.
+    /// </summary>
+    public DrawingTextCache.DrawingScratch Scratch { get; }
 
     /// <summary>
     /// Gets a value indicating whether per-grapheme glyph collections are aggregated.
@@ -660,6 +665,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
         {
             // The layer has already been rendered.
             this.hasLayer = false;
+            this.PublishGlyph();
             return;
         }
 
@@ -713,6 +719,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
                     this.UpdateCache(renderData);
                 }
 
+                this.PublishGlyph();
                 return;
             }
 
@@ -792,6 +799,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
                 GlyphClip = this.currentGlyphClip
             });
         }
+
+        this.PublishGlyph();
     }
 
     /// <summary>
@@ -1029,8 +1038,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
     }
 
     /// <summary>
-    /// Stores a <see cref="GlyphRenderData"/> entry in the glyph cache under the
-    /// current key. Creates the cache list on first insertion for a given key. Every entry
+    /// Appends a <see cref="GlyphRenderData"/> entry to the private pending glyph list.
+    /// Creates the list on the first callback that produces cacheable data. Every entry
     /// is stamped with the glyph's build-time transformed metric origin so layered replays
     /// can derive the positional delta for paint brushes.
     /// </summary>
@@ -1038,7 +1047,30 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
     private void UpdateCache(GlyphRenderData renderData)
     {
         renderData.SourceOrigin = this.currentTransformedBoundsLocation;
-        this.glyphCache.GetOrAdd(this.currentCacheKey).Add(renderData);
+
+        // Path bounds use a lazy nullable-struct field. Materialize it while the translated
+        // path is still private; later canvases may read these bounds concurrently.
+        if (renderData.FillPath is not null)
+        {
+            _ = renderData.FillPath.Bounds;
+        }
+
+        this.pendingCacheEntries ??= [];
+        this.pendingCacheEntries.Add(renderData);
+    }
+
+    /// <summary>
+    /// Publishes a successfully completed glyph without copying its entries.
+    /// </summary>
+    private void PublishGlyph()
+    {
+        // Cache hits and non-cacheable glyphs have no pending list. On a miss, transfer
+        // ownership once, after all layers and group markers have been recorded.
+        if (this.pendingCacheEntries is not null)
+        {
+            this.glyphCache.Add(this.currentCacheKey, this.pendingCacheEntries);
+            this.pendingCacheEntries = null;
+        }
     }
 
     /// <summary>
@@ -1058,8 +1090,10 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
         this.isDisposed = true;
         if (disposing)
         {
-            // The glyph cache is owned outside this renderer and outlives this draw call.
-            this.DrawingOperations.Clear();
+            // Return all buffers even if layout or command submission threw. A partial glyph
+            // remains private and is discarded rather than being published by cleanup.
+            this.pendingCacheEntries = null;
+            this.glyphCache.ReturnScratch(this.Scratch);
         }
 
         base.Dispose(disposing);
