@@ -184,9 +184,19 @@ internal static unsafe partial class WebGPURuntime
         private readonly object singlePixelSync = new();
 
         /// <summary>
-        /// Signals that the one-time background pipeline warm-up no longer uses this state.
+        /// Set while no background pipeline warm-up uses this state.
         /// </summary>
-        private readonly ManualResetEventSlim pipelineWarmupCompleted = new(false);
+        private readonly ManualResetEventSlim pipelineWarmupCompleted = new(true);
+
+        /// <summary>
+        /// Guards <see cref="pipelineWarmupCount"/> and the transitions of <see cref="pipelineWarmupCompleted"/>.
+        /// </summary>
+        private readonly object pipelineWarmupSync = new();
+
+        /// <summary>
+        /// The number of background pipeline warm-ups in flight.
+        /// </summary>
+        private int pipelineWarmupCount;
 
         /// <summary>
         /// Upper bound on pooled status readback buffers; returns beyond it release instead.
@@ -336,10 +346,40 @@ internal static unsafe partial class WebGPURuntime
             => Volatile.Write(ref this.isLost, 1);
 
         /// <summary>
-        /// Signals that background pipeline warm-up has stopped using this state.
+        /// Registers one background pipeline warm-up that uses this state until <see cref="CompletePipelineWarmup"/> is called.
+        /// </summary>
+        public void RegisterPipelineWarmup()
+        {
+            lock (this.pipelineWarmupSync)
+            {
+                if (this.pipelineWarmupCount++ == 0)
+                {
+                    this.pipelineWarmupCompleted.Reset();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Signals that one background pipeline warm-up has stopped using this state.
         /// </summary>
         public void CompletePipelineWarmup()
-            => this.pipelineWarmupCompleted.Set();
+        {
+            lock (this.pipelineWarmupSync)
+            {
+                if (--this.pipelineWarmupCount == 0)
+                {
+                    this.pipelineWarmupCompleted.Set();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Reports whether the compute pipeline for the given key has already been created.
+        /// </summary>
+        /// <param name="pipelineKey">The pipeline cache key.</param>
+        /// <returns><see langword="true"/> when the pipeline exists; otherwise, <see langword="false"/>.</returns>
+        public bool HasCompositeComputePipeline(string pipelineKey)
+            => this.compositeComputePipelines.TryGetValue(pipelineKey, out CompositeComputePipelineInfrastructure? infrastructure) && infrastructure.Pipeline is not null;
 
         /// <summary>
         /// Rents a pooled map-readable status buffer, or creates one when the pool has no buffer
