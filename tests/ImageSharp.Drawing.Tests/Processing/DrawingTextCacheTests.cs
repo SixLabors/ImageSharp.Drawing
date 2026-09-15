@@ -10,6 +10,7 @@ using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 
@@ -289,6 +290,32 @@ public class DrawingTextCacheTests
         }
 
         await Task.WhenAll(tasks);
+    }
+
+    /// <summary>
+    /// Verifies a cached layered glyph replayed at a new position matches a fresh build there.
+    /// Paint brushes are re-created from paints expressed before the drawing transform, so a
+    /// replay that keeps the build position would sample a gradient outside the glyph.
+    /// </summary>
+    [Fact]
+    public void LayeredGlyph_ReplayAtNewPositionMatchesFreshBuild()
+    {
+        Font emojiFont = TestFontUtilities.GetFont(TestFonts.NotoColorEmojiRegular, 48);
+        TextBlock block = new("😀", new RichTextOptions(emojiFont) { ColorFontSupport = ColorFontSupport.ColrV1 });
+        DrawingTextCache shared = new();
+        DrawingOptions options = new();
+        Brush brush = Brushes.Solid(Color.Red);
+
+        using Image<Rgba32> warm = new(320, 160);
+        warm.Mutate(x => x.Paint(options, shared, canvas => canvas.DrawText(block, new PointF(16, 100), 320F, brush, null)));
+
+        using Image<Rgba32> expected = new(320, 160);
+        expected.Mutate(x => x.Paint(options, new DrawingTextCache(), canvas => canvas.DrawText(block, new PointF(200, 20), 320F, brush, null)));
+
+        using Image<Rgba32> actual = new(320, 160);
+        actual.Mutate(x => x.Paint(options, shared, canvas => canvas.DrawText(block, new PointF(200, 20), 320F, brush, null)));
+
+        ImageComparer.Exact.VerifySimilarity(expected, actual);
     }
 
     /// <summary>
