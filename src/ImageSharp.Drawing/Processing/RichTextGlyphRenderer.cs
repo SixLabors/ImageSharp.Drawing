@@ -206,6 +206,11 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
     /// </summary>
     private PointF currentTransformedBoundsLocation;
 
+    // The current glyph's metric origin before the drawing transform. Cached paint brushes
+    // are re-created from paints expressed in this space, so the replay shifts them by the
+    // difference between this origin and the build-time origin before the drawing transform.
+    private Vector2 currentLocalBoundsLocation;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="RichTextGlyphRenderer"/> class.
     /// </summary>
@@ -337,6 +342,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
             this.currentGlyphClip = RectangleF.FromLTRB(min.X, min.Y, max.X, max.Y);
         }
 
+        this.currentLocalBoundsLocation = bounds.Location;
         if (!this.noCache)
         {
             // Transform the font-metric bounds by the drawing transform so that the size
@@ -886,16 +892,16 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
     /// decoration-free cache hit when the font engine is told to skip the glyph entirely,
     /// so no outline is decoded and no path graph is built. Geometry replays from the
     /// anchored per-layer paths, group bounds and the glyph clip are recomputed per draw,
-    /// and paint brushes re-convert with the glyph's positional delta appended to the
-    /// drawing transform, because converted brushes bake device coordinates.
+    /// and paint brushes re-convert from their paints, which are expressed in the space
+    /// before the drawing transform, shifted by the glyph's positional delta in that space
+    /// and then transformed like the build draw's geometry.
     /// </summary>
     /// <param name="entries">The cached entry stream recorded by the build draw.</param>
     /// <param name="currentBoundsLocation">The transformed bounding-box origin for the current glyph instance.</param>
     private void EmitCachedLayeredGlyphOperations(List<GlyphRenderData> entries, PointF currentBoundsLocation)
     {
-        Vector2 currentOrigin = currentBoundsLocation;
-        Vector2 delta = currentOrigin - entries[0].SourceOrigin;
-        Matrix4x4 paintTransform = this.drawingOptions.Transform * Matrix4x4.CreateTranslation(delta.X, delta.Y, 0F);
+        Vector2 delta = this.currentLocalBoundsLocation - entries[0].SourceOrigin;
+        Matrix4x4 paintTransform = Matrix4x4.CreateTranslation(delta.X, delta.Y, 0F) * this.drawingOptions.Transform;
         int replayDepth = 0;
 
         for (int i = 0; i < entries.Count; i++)
@@ -943,7 +949,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
     /// </summary>
     /// <param name="entry">The cached layer entry.</param>
     /// <param name="currentBoundsLocation">The transformed bounding-box origin for the current glyph instance.</param>
-    /// <param name="paintTransform">The drawing transform with the glyph's positional delta appended.</param>
+    /// <param name="paintTransform">The glyph's positional delta before the drawing transform, followed by the drawing transform.</param>
     /// <param name="replayDepth">The current group nesting depth.</param>
     private void EmitCachedLayerFill(GlyphRenderData entry, PointF currentBoundsLocation, Matrix4x4 paintTransform, int replayDepth)
     {
@@ -1040,13 +1046,13 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder
     /// <summary>
     /// Appends a <see cref="GlyphRenderData"/> entry to the private pending glyph list.
     /// Creates the list on the first callback that produces cacheable data. Every entry
-    /// is stamped with the glyph's build-time transformed metric origin so layered replays
-    /// can derive the positional delta for paint brushes.
+    /// is stamped with the glyph's build-time metric origin before the drawing transform so
+    /// layered replays can derive the positional delta for paint brushes.
     /// </summary>
     /// <param name="renderData">The render data to append to the current key's entry list.</param>
     private void UpdateCache(GlyphRenderData renderData)
     {
-        renderData.SourceOrigin = this.currentTransformedBoundsLocation;
+        renderData.SourceOrigin = this.currentLocalBoundsLocation;
 
         // Path bounds use a lazy nullable-struct field. Materialize it while the translated
         // path is still private; later canvases may read these bounds concurrently.
