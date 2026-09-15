@@ -2378,6 +2378,7 @@ internal static class WebGPUSceneEncoder
                 resolved.BrushBounds,
                 resolved.Pen,
                 widthScale,
+                GetResidualStretch(segmentResidual),
                 start,
                 end);
             error = null;
@@ -2422,6 +2423,7 @@ internal static class WebGPUSceneEncoder
                 resolved.BrushBounds,
                 resolved.Pen,
                 widthScale,
+                GetResidualStretch(polylineResidual),
                 geometry);
             error = null;
             return true;
@@ -2683,6 +2685,7 @@ internal static class WebGPUSceneEncoder
             Vector2 scale = MatrixUtilities.GetScale(command.Transform);
             geometry ??= command.Path.ToLinearGeometry(scale);
             float widthScale = GetTransformWidthScale(command.Transform);
+            float residualStretch = GetResidualStretch(MatrixUtilities.GetResidual(scale, command.Transform));
             uint drawTag = GetDrawTag(brush);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
             Rectangle interestBounds = ToTargetLocal(command.RasterizerOptions.Interest, this.rootTargetBounds);
@@ -2735,10 +2738,12 @@ internal static class WebGPUSceneEncoder
                 pathDataOffset,
                 pen,
                 widthScale,
+                residualStretch,
                 this.rootTargetBounds,
                 ref this.PathTags,
                 ref this.PathData,
-                out int geometryLineCount);
+                out int geometryLineCount,
+                out long geometryTileCrossings);
 
             if (encodedPathCount == 0)
             {
@@ -2758,7 +2763,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest, geometryLineCount, -1);
+            this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest, geometryLineCount, geometryTileCrossings);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -2793,6 +2798,7 @@ internal static class WebGPUSceneEncoder
         /// <param name="brushBounds">The absolute brush sampling bounds.</param>
         /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
         /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+        /// <param name="residualStretch">The largest length scale of the residual transform the GPU applies to the points.</param>
         /// <param name="geometry">The prepared open centerline geometry.</param>
         private void AppendExplicitStroke(
             Brush brush,
@@ -2802,6 +2808,7 @@ internal static class WebGPUSceneEncoder
             Rectangle brushBounds,
             Pen pen,
             float widthScale,
+            float residualStretch,
             LinearGeometry geometry)
         {
             uint drawTag = GetDrawTag(brush);
@@ -2856,10 +2863,12 @@ internal static class WebGPUSceneEncoder
                 pathDataOffset,
                 pen,
                 widthScale,
+                residualStretch,
                 this.rootTargetBounds,
                 ref this.PathTags,
                 ref this.PathData,
-                out int geometryLineCount);
+                out int geometryLineCount,
+                out long geometryTileCrossings);
 
             if (encodedPathCount == 0)
             {
@@ -2879,7 +2888,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, -1);
+            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, geometryTileCrossings);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -2914,6 +2923,7 @@ internal static class WebGPUSceneEncoder
         /// <param name="brushBounds">The absolute brush sampling bounds.</param>
         /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
         /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+        /// <param name="residualStretch">The largest length scale of the residual transform the GPU applies to the points.</param>
         /// <param name="start">The segment start point with the transform scale applied.</param>
         /// <param name="end">The segment end point with the transform scale applied.</param>
         private void AppendExplicitStroke(
@@ -2924,6 +2934,7 @@ internal static class WebGPUSceneEncoder
             Rectangle brushBounds,
             Pen pen,
             float widthScale,
+            float residualStretch,
             PointF start,
             PointF end)
         {
@@ -2979,10 +2990,12 @@ internal static class WebGPUSceneEncoder
                 pathDataOffset,
                 pen,
                 widthScale,
+                residualStretch,
                 this.rootTargetBounds,
                 ref this.PathTags,
                 ref this.PathData,
-                out int geometryLineCount);
+                out int geometryLineCount,
+                out long geometryTileCrossings);
 
             if (encodedPathCount == 0)
             {
@@ -3002,7 +3015,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, -1);
+            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, geometryTileCrossings);
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -3434,8 +3447,8 @@ internal static class WebGPUSceneEncoder
         /// <param name="absoluteInterest">The draw object's absolute raster interest bounds.</param>
         /// <param name="lineCount">The draw object's linearized or GPU-expanded line count.</param>
         /// <param name="tileCrossings">
-        /// The exact summed per-line tile-crossing bound when the caller linearized the geometry on the CPU
-        /// (fills), or a negative value to fall back to the bounding-box diagonal bound (strokes, clips).
+        /// The summed per-line tile-crossing bound of the geometry (fills and strokes), or a negative value
+        /// to fall back to the bounding-box diagonal bound (clips).
         /// </param>
         private void AccumulateDrawRowEstimate(Rectangle absoluteInterest, int lineCount, long tileCrossings = -1)
             => this.AccumulateDrawRowEstimateLocal(ToTargetLocal(absoluteInterest, this.rootTargetBounds), lineCount, tileCrossings);
@@ -3448,8 +3461,8 @@ internal static class WebGPUSceneEncoder
         /// <param name="localBounds">The draw object's root-target-local raster interest bounds.</param>
         /// <param name="lineCount">The draw object's linearized or GPU-expanded line count.</param>
         /// <param name="tileCrossings">
-        /// The exact summed per-line tile-crossing bound when the caller linearized the geometry on the CPU
-        /// (fills), or a negative value to fall back to the bounding-box diagonal bound (strokes, clips).
+        /// The summed per-line tile-crossing bound of the geometry (fills and strokes), or a negative value
+        /// to fall back to the bounding-box diagonal bound (clips).
         /// </param>
         private void AccumulateDrawRowEstimateLocal(Rectangle localBounds, int lineCount, long tileCrossings = -1)
         {
@@ -5356,25 +5369,32 @@ internal static class WebGPUSceneEncoder
     /// <param name="destinationOffset">The absolute destination offset applied to every point.</param>
     /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
     /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+    /// <param name="residualStretch">The largest length scale of the residual transform the GPU applies to the points.</param>
     /// <param name="rootTargetBounds">The root target bounds used for target-local conversion.</param>
     /// <param name="pathTags">The path-tag stream.</param>
     /// <param name="pathData">The path-data stream.</param>
     /// <param name="lineCount">Receives the estimated final line workload for the stroke.</param>
+    /// <param name="tileCrossings">Receives the bound on the tile crossings of the emitted stroke lines.</param>
     /// <returns>The number of encoded path objects: 1, or 0 when no contour survived preprocessing.</returns>
     private static int EncodeStrokePath(
         LinearGeometry geometry,
         Point destinationOffset,
         Pen pen,
         float widthScale,
+        float residualStretch,
         in Rectangle rootTargetBounds,
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
-        out int lineCount)
+        out int lineCount,
+        out long tileCrossings)
     {
         float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
         float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
         lineCount = EstimateStrokeLineCount(geometry, pen, widthScale);
         float strokeWidth = pen.StrokeWidth * widthScale;
+        float halfWidth = strokeWidth * 0.5F;
+        float capChainLength = GetStrokeCapChainLength(pen, halfWidth);
+        double outlineLength = 0D;
         int encodedContourCount = 0;
         LinearContour[] contours = (LinearContour[])geometry.Contours;
         PointF[] geometryPoints = (PointF[])geometry.Points;
@@ -5395,17 +5415,40 @@ internal static class WebGPUSceneEncoder
             PointF lastKept = firstPoint;
             int pointIndex = 1;
             int keptCount = 1;
+            Vector2 firstDirection = default;
+            float firstLength = 0F;
+            Vector2 previousDirection = default;
+            float previousLength = 0F;
+            double contourOutlineLength = 0D;
 
             // Count the filtered points and retain only the few values needed to classify the
             // contour. The second pass writes them directly to the scene streams, so no temporary
             // point buffer is rented for each stroke geometry.
-            while (TryGetNextStrokePoint(contourPoints, ref pointIndex, ref previousKept, ref pointLike, out PointF point))
+            while (true)
             {
+                PointF segmentStart = previousKept;
+                if (!TryGetNextStrokePoint(contourPoints, ref pointIndex, ref previousKept, ref pointLike, out PointF point))
+                {
+                    break;
+                }
+
+                Vector2 segment = (Vector2)point - (Vector2)segmentStart;
+                float segmentLength = segment.Length();
+                Vector2 direction = segment / segmentLength;
+                contourOutlineLength += 2D * segmentLength;
                 if (keptCount == 1)
                 {
                     secondPoint = point;
+                    firstDirection = direction;
+                    firstLength = segmentLength;
+                }
+                else
+                {
+                    contourOutlineLength += GetStrokeJoinChainLength(pen, halfWidth, previousDirection, previousLength, direction, segmentLength);
                 }
 
+                previousDirection = direction;
+                previousLength = segmentLength;
                 lastKept = point;
                 keptCount++;
             }
@@ -5430,6 +5473,7 @@ internal static class WebGPUSceneEncoder
             if (segmentCount == 0)
             {
                 EncodePointStrokeContour(pointLike, pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
+                outlineLength += (4D * PointStrokeSegmentHalfLength) + (2D * capChainLength);
                 encodedContourCount++;
                 continue;
             }
@@ -5439,6 +5483,7 @@ internal static class WebGPUSceneEncoder
                 // The CPU stroker emits these as one capped open segment even when declared closed.
                 Span<PointF> segmentPoints = [firstPoint, secondPoint];
                 EncodeOpenStrokeContour(segmentPoints, pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
+                outlineLength += (2D * Vector2.Distance(firstPoint, secondPoint)) + (2D * capChainLength);
                 encodedContourCount++;
                 continue;
             }
@@ -5453,6 +5498,21 @@ internal static class WebGPUSceneEncoder
                     (segmentCount > 1 &&
                      Vector2.DistanceSquared(lastKept, firstPoint) > StrokeMicroSegmentEpsilon * StrokeMicroSegmentEpsilon);
 
+                if (closingSegment && !duplicateClosingPoint)
+                {
+                    Vector2 closingVector = (Vector2)firstPoint - (Vector2)lastKept;
+                    float closingLength = closingVector.Length();
+                    Vector2 closingDirection = closingVector / closingLength;
+                    contourOutlineLength += (2D * closingLength) +
+                        GetStrokeJoinChainLength(pen, halfWidth, previousDirection, previousLength, closingDirection, closingLength) +
+                        GetStrokeJoinChainLength(pen, halfWidth, closingDirection, closingLength, firstDirection, firstLength);
+                }
+                else
+                {
+                    contourOutlineLength += GetStrokeJoinChainLength(pen, halfWidth, previousDirection, previousLength, firstDirection, firstLength);
+                }
+
+                outlineLength += contourOutlineLength;
                 int linetoCount = (emitCount - 1) + (closingSegment ? 1 : 0);
                 Span<uint> contourData = pathData.GetAppendSpan(2 + (linetoCount * 2) + 2);
                 Span<byte> contourTags = pathTags.GetAppendSpan(linetoCount + 1);
@@ -5498,6 +5558,7 @@ internal static class WebGPUSceneEncoder
             }
 
             int openLinetoCount = keptCount - 1;
+            outlineLength += contourOutlineLength + (2D * capChainLength);
             Span<uint> openData = pathData.GetAppendSpan(2 + (openLinetoCount * 2) + 4);
             Span<byte> openTags = pathTags.GetAppendSpan(openLinetoCount + 1);
             int openDataIndex = 0;
@@ -5529,6 +5590,7 @@ internal static class WebGPUSceneEncoder
             encodedContourCount++;
         }
 
+        tileCrossings = BoundStrokeTileCrossings(outlineLength, residualStretch, lineCount);
         if (encodedContourCount == 0)
         {
             return 0;
@@ -5670,10 +5732,12 @@ internal static class WebGPUSceneEncoder
     /// <param name="destinationOffset">The absolute destination offset applied to every point.</param>
     /// <param name="pen">The pen that defines stroke width, joins, and caps.</param>
     /// <param name="widthScale">The transform-derived scale applied to the stroke width.</param>
+    /// <param name="residualStretch">The largest length scale of the residual transform the GPU applies to the points.</param>
     /// <param name="rootTargetBounds">The root target bounds used for target-local conversion.</param>
     /// <param name="pathTags">The path-tag stream.</param>
     /// <param name="pathData">The path-data stream.</param>
     /// <param name="lineCount">Receives the estimated final line workload for the stroke.</param>
+    /// <param name="tileCrossings">Receives the bound on the tile crossings of the emitted stroke lines.</param>
     /// <returns>The number of encoded path objects; always 1.</returns>
     private static int EncodeOpenSegmentStrokePath(
         PointF start,
@@ -5681,10 +5745,12 @@ internal static class WebGPUSceneEncoder
         Point destinationOffset,
         Pen pen,
         float widthScale,
+        float residualStretch,
         in Rectangle rootTargetBounds,
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
-        out int lineCount)
+        out int lineCount,
+        out long tileCrossings)
     {
         float pointTranslateX = destinationOffset.X - rootTargetBounds.X;
         float pointTranslateY = destinationOffset.Y - rootTargetBounds.Y;
@@ -5693,6 +5759,9 @@ internal static class WebGPUSceneEncoder
         EncodeOpenStrokeContour(segmentPoints, pointTranslateX, pointTranslateY, ref pathTags, ref pathData);
         pathTags.Add(PackPathTag(PathTag.Path));
         lineCount = EstimateStrokeLineCountForOpenSegment(pen, widthScale);
+        float halfWidth = pen.StrokeWidth * widthScale * 0.5F;
+        double outlineLength = (2D * Vector2.Distance(start, end)) + (2D * GetStrokeCapChainLength(pen, halfWidth));
+        tileCrossings = BoundStrokeTileCrossings(outlineLength, residualStretch, lineCount);
         return 1;
     }
 
@@ -6223,6 +6292,77 @@ internal static class WebGPUSceneEncoder
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int EstimateStrokeLineCountForOpenSegment(Pen pen, float widthScale)
         => Math.Max(2 + (GetStrokeCapLineCost(pen, widthScale) * 2), 1);
+
+    /// <summary>
+    /// Bounds the tile crossings of the lines the GPU stroker emits for one stroke. One line crosses at most
+    /// (|dx| + |dy|) / 16 + 3 tiles, so the emitted outline crosses at most sqrt(2) times its device-space
+    /// length in tiles plus three per line.
+    /// </summary>
+    /// <param name="outlineLength">The bound on the emitted outline length before the residual transform.</param>
+    /// <param name="residualStretch">The largest length scale of the residual transform the GPU applies to the points.</param>
+    /// <param name="lineCount">The estimated emitted line count.</param>
+    /// <returns>The tile-crossing bound.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static long BoundStrokeTileCrossings(double outlineLength, float residualStretch, int lineCount)
+        => (long)Math.Ceiling(outlineLength * residualStretch * Math.Sqrt(2D) / TileWidth) + (3L * lineCount);
+
+    /// <summary>
+    /// Returns the largest length scale of a residual transform: the Frobenius norm of its 2x2 part, which is
+    /// at least its largest singular value.
+    /// </summary>
+    /// <param name="residual">The residual transform the GPU applies to the points.</param>
+    /// <returns>The length scale; 1 for the identity.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static float GetResidualStretch(Matrix4x4 residual)
+        => residual.IsIdentity
+            ? 1F
+            : MathF.Sqrt((residual.M11 * residual.M11) + (residual.M12 * residual.M12) + (residual.M21 * residual.M21) + (residual.M22 * residual.M22));
+
+    /// <summary>
+    /// Returns the length of the line chain the GPU stroker emits for one cap.
+    /// </summary>
+    /// <param name="pen">The pen that defines the cap style.</param>
+    /// <param name="halfWidth">Half the transform-scaled stroke width.</param>
+    /// <returns>The chain length in pixels.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static float GetStrokeCapChainLength(Pen pen, float halfWidth)
+        => pen.StrokeOptions.LineCap switch
+        {
+            LineCap.Square => 4F * halfWidth,
+            LineCap.Round => MathF.PI * halfWidth,
+            _ => 2F * halfWidth
+        };
+
+    /// <summary>
+    /// Bounds the length of the line chains the GPU stroker emits for one join. The outer chain reaches at most
+    /// the miter apex, the miter limit, the round arc, or the bevel chord. The inner chain reaches at most the
+    /// miter apex or the shorter neighboring segment.
+    /// </summary>
+    /// <param name="pen">The pen that defines the join style and miter limit.</param>
+    /// <param name="halfWidth">Half the transform-scaled stroke width.</param>
+    /// <param name="incoming">The unit direction of the segment entering the join.</param>
+    /// <param name="incomingLength">The length of the segment entering the join.</param>
+    /// <param name="outgoing">The unit direction of the segment leaving the join.</param>
+    /// <param name="outgoingLength">The length of the segment leaving the join.</param>
+    /// <returns>The chain length bound in pixels.</returns>
+    private static float GetStrokeJoinChainLength(Pen pen, float halfWidth, Vector2 incoming, float incomingLength, Vector2 outgoing, float outgoingLength)
+    {
+        float cosTheta = -Vector2.Dot(incoming, outgoing);
+        float sinHalfTheta = MathF.Sqrt(MathF.Max(0F, (1F - cosTheta) * 0.5F));
+        float miterApex = sinHalfTheta > 1E-6F ? halfWidth / sinHalfTheta : float.PositiveInfinity;
+        float innerExtent = MathF.Min(miterApex, MathF.Min(incomingLength, outgoingLength));
+        float miterLimit = (float)Math.Max(pen.StrokeOptions.MiterLimit, 1D);
+        float outerExtent = pen.StrokeOptions.LineJoin switch
+        {
+            LineJoin.Miter => halfWidth * (1F + miterLimit),
+            LineJoin.MiterRevert => MathF.Max(MathF.Min(miterApex, halfWidth * miterLimit), 2F * halfWidth),
+            LineJoin.MiterRound => MathF.Max(MathF.Min(miterApex, halfWidth * miterLimit), MathF.PI * halfWidth),
+            LineJoin.Round => MathF.PI * halfWidth,
+            _ => 2F * halfWidth
+        };
+
+        return (2F * (outerExtent + halfWidth)) + (2F * (innerExtent + halfWidth));
+    }
 
     /// <summary>
     /// Returns the conservative final line cost of one stroke join.
