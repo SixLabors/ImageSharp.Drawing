@@ -40,7 +40,10 @@ internal sealed class PaintProcessor<TPixel> : ImageProcessor<TPixel>
         // The callback only records work. Disposing the canvas finalizes open state
         // (layers, clips) and replays the recorded timeline into the frame, so the
         // using scope is what commits the painting.
-        using DrawingCanvas canvas = source.CreateCanvas(this.Configuration, this.definition.Options);
+        using DrawingCanvas canvas = this.definition.TextCache is null
+            ? source.CreateCanvas(this.Configuration, this.definition.Options)
+            : source.CreateCanvas(this.Configuration, this.definition.Options, this.definition.TextCache);
+
         this.action(canvas);
     }
 }

@@ -26,9 +26,32 @@ public sealed class PaintProcessor : IImageProcessor
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="PaintProcessor"/> class.
+    /// </summary>
+    /// <param name="options">The drawing options used when creating each frame canvas.</param>
+    /// <param name="textCache">The text drawing cache used by each frame canvas.</param>
+    /// <param name="action">The per-frame painting callback.</param>
+    public PaintProcessor(DrawingOptions options, DrawingTextCache textCache, CanvasAction action)
+    {
+        Guard.NotNull(options, nameof(options));
+        Guard.NotNull(textCache, nameof(textCache));
+        Guard.NotNull(action, nameof(action));
+
+        this.Options = options;
+        this.TextCache = textCache;
+        this.Action = action;
+    }
+
+    /// <summary>
     /// Gets the drawing options used when creating each frame canvas.
     /// </summary>
     public DrawingOptions Options { get; }
+
+    /// <summary>
+    /// Gets the text drawing cache used by each frame canvas, or <see langword="null"/> when each
+    /// frame canvas owns a private cache.
+    /// </summary>
+    public DrawingTextCache? TextCache { get; }
 
     /// <summary>
     /// Gets the per-frame painting callback.
