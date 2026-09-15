@@ -69,8 +69,8 @@ internal static class WebGPUSceneDispatch
 
     // The PTCL word budget attributed to each estimated tile crossing when seeding the PTCL
     // scratch capacity. Every crossing belongs to one (draw, tile) pair with segments, and such a
-    // pair writes one CMD_FILL (9 words) plus one paint command of at most 5 words.
-    private const long PtclWordsPerCrossing = 14;
+    // pair writes one CMD_FILL (6 words) plus one paint command of at most 5 words.
+    private const long PtclWordsPerCrossing = 11;
 
     // Coarse allocates the dynamic PTCL tail in PTCL_INCREMENT-word chunks (Shared/ptcl.wgsl); a
     // command that does not fit the remaining chunk starts a new one, so each tile can leave one
