@@ -67,11 +67,6 @@ internal static class WebGPUSceneDispatch
     // validation rejects deeper nesting before anything is dispatched.
     private const int MaxClipStackDepth = 256;
 
-    // The PTCL word budget attributed to each estimated tile crossing when seeding the PTCL
-    // scratch capacity. Every crossing belongs to one (draw, tile) pair with segments, and such a
-    // pair writes one CMD_FILL (6 words) plus one paint command of at most 5 words.
-    private const long PtclWordsPerCrossing = 11;
-
     // Coarse allocates the dynamic PTCL tail in PTCL_INCREMENT-word chunks (Shared/ptcl.wgsl); a
     // command that does not fit the remaining chunk starts a new one, so each tile can leave one
     // partial chunk and each chunk can waste up to one command of headroom.
@@ -2450,6 +2445,7 @@ internal static class WebGPUSceneDispatch
             scene.TotalPathRowCount,
             scene.PathCount,
             scene.EstimatedTileCrossings,
+            scene.EstimatedPtclWords,
             scene.EstimatedBinFootprint,
             (long)scene.TileCountX * scene.TileCountY,
             maxStorageBufferBindingSize);
@@ -2468,6 +2464,7 @@ internal static class WebGPUSceneDispatch
             range.TotalPathRowCount,
             range.PathCount,
             range.EstimatedTileCrossings,
+            range.EstimatedPtclWords,
             range.EstimatedBinFootprint,
             (long)((range.TargetBounds.Width + 15) / 16) * ((range.TargetBounds.Height + 15) / 16),
             maxStorageBufferBindingSize);
@@ -2484,6 +2481,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="totalPathRowCount">The estimated sparse path-row count.</param>
     /// <param name="pathCount">The encoded path count.</param>
     /// <param name="estimatedTileCrossings">The CPU-side upper bound for tile-boundary crossings.</param>
+    /// <param name="estimatedPtclWords">The CPU-side upper bound for the dynamic PTCL words those crossings write.</param>
     /// <param name="estimatedBinFootprint">The CPU-side upper bound for per-(draw, bin) records.</param>
     /// <param name="targetTileCount">The number of tiles in the target, each of which can leave one partial PTCL chunk.</param>
     /// <param name="maxStorageBufferBindingSize">The device-reported maximum size of one storage-buffer binding.</param>
@@ -2494,6 +2492,7 @@ internal static class WebGPUSceneDispatch
         int totalPathRowCount,
         int pathCount,
         long estimatedTileCrossings,
+        long estimatedPtclWords,
         long estimatedBinFootprint,
         long targetTileCount,
         ulong maxStorageBufferBindingSize)
@@ -2511,7 +2510,7 @@ internal static class WebGPUSceneDispatch
             ClampEstimate(estimatedTileCrossings, maxStorageBufferBindingSize, (uint)Unsafe.SizeOf<GpuPathTile>()),
             pathRowFloor);
         uint binningFloor = ClampEstimate(estimatedBinFootprint, maxStorageBufferBindingSize, sizeof(uint));
-        long ptclWords = ((estimatedTileCrossings * PtclWordsPerCrossing * 105L) / 100L) + (targetTileCount * PtclChunkWords);
+        long ptclWords = ((estimatedPtclWords * 105L) / 100L) + (targetTileCount * PtclChunkWords);
         uint ptclFloor = ClampEstimate(ptclWords, maxStorageBufferBindingSize, sizeof(uint));
 
         return new WebGPUSceneBumpSizes(

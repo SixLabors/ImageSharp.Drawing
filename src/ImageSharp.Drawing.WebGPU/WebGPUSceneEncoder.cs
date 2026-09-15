@@ -74,6 +74,11 @@ internal static class WebGPUSceneEncoder
     public const int TileHeight = 16;
 
     /// <summary>
+    /// The PTCL word count of one CMD_FILL command. Must match write_path in coarse.wgsl.
+    /// </summary>
+    private const int PtclFillWords = 6;
+
+    /// <summary>
     /// Half the length of the synthetic horizontal segment substituted for point-like strokes so caps
     /// still render a dot. The full segment length equals <see cref="StrokeMicroSegmentEpsilon"/>, keeping
     /// the substitute just above the micro-segment collapse threshold.
@@ -853,6 +858,7 @@ internal static class WebGPUSceneEncoder
         /// <param name="lineCount">The number of non-horizontal line segments emitted so far.</param>
         /// <param name="estimatedPathRowCount">The accumulated sparse path-row estimate.</param>
         /// <param name="estimatedTileCrossings">The accumulated tile-crossing upper bound.</param>
+        /// <param name="estimatedPtclWords">The accumulated PTCL word upper bound.</param>
         /// <param name="estimatedBinFootprint">The accumulated per-(draw, bin) record upper bound.</param>
         public SceneEncodingCheckpoint(
             int pathTagByteCount,
@@ -868,6 +874,7 @@ internal static class WebGPUSceneEncoder
             int lineCount,
             long estimatedPathRowCount,
             long estimatedTileCrossings,
+            long estimatedPtclWords,
             long estimatedBinFootprint)
         {
             this.PathTagByteCount = pathTagByteCount;
@@ -883,6 +890,7 @@ internal static class WebGPUSceneEncoder
             this.LineCount = lineCount;
             this.EstimatedPathRowCount = estimatedPathRowCount;
             this.EstimatedTileCrossings = estimatedTileCrossings;
+            this.EstimatedPtclWords = estimatedPtclWords;
             this.EstimatedBinFootprint = estimatedBinFootprint;
         }
 
@@ -950,6 +958,11 @@ internal static class WebGPUSceneEncoder
         /// Gets the accumulated tile-crossing upper bound.
         /// </summary>
         public long EstimatedTileCrossings { get; }
+
+        /// <summary>
+        /// Gets the accumulated PTCL word upper bound.
+        /// </summary>
+        public long EstimatedPtclWords { get; }
 
         /// <summary>
         /// Gets the accumulated per-(draw, bin) record upper bound.
@@ -1593,8 +1606,10 @@ internal static class WebGPUSceneEncoder
         // CPU-side scratch-demand estimates accumulated per draw so the first GPU attempt can be
         // seeded near true demand instead of discovering it through the overflow retry protocol.
         // estimatedTileCrossings bounds tile-boundary crossings (segment/seg-count/path-tile
-        // records); estimatedBinFootprint bounds per-(draw, bin) binning records.
+        // records); estimatedPtclWords bounds the dynamic PTCL words those crossings can write;
+        // estimatedBinFootprint bounds per-(draw, bin) binning records.
         private long estimatedTileCrossings;
+        private long estimatedPtclWords;
         private long estimatedBinFootprint;
 
         // Cache of the last emitted 10-word style record. Consecutive draws with identical
@@ -1669,6 +1684,7 @@ internal static class WebGPUSceneEncoder
             this.openLayerBounds = null;
             this.estimatedPathRowCount = 0;
             this.estimatedTileCrossings = 0;
+            this.estimatedPtclWords = 0;
             this.estimatedBinFootprint = 0;
             this.VisibleFillCount = 0;
 
@@ -1798,6 +1814,12 @@ internal static class WebGPUSceneEncoder
         public readonly long EstimatedTileCrossings => this.estimatedTileCrossings;
 
         /// <summary>
+        /// Gets the CPU-side upper-bound estimate of the dynamic PTCL words the scene's tile
+        /// crossings can write: one fill command plus the draw's paint command per crossing.
+        /// </summary>
+        public readonly long EstimatedPtclWords => this.estimatedPtclWords;
+
+        /// <summary>
         /// Gets the CPU-side upper-bound estimate of per-(draw, bin) binning records.
         /// </summary>
         public readonly long EstimatedBinFootprint => this.estimatedBinFootprint;
@@ -1826,6 +1848,7 @@ internal static class WebGPUSceneEncoder
                 this.LineCount,
                 this.estimatedPathRowCount,
                 this.estimatedTileCrossings,
+                this.estimatedPtclWords,
                 this.estimatedBinFootprint);
 
         /// <summary>
@@ -1988,6 +2011,7 @@ internal static class WebGPUSceneEncoder
                 end.LineCount - start.LineCount,
                 checked((int)(end.EstimatedPathRowCount - start.EstimatedPathRowCount)),
                 end.EstimatedTileCrossings - start.EstimatedTileCrossings,
+                end.EstimatedPtclWords - start.EstimatedPtclWords,
                 end.EstimatedBinFootprint - start.EstimatedBinFootprint);
 
         /// <summary>
@@ -2614,7 +2638,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest, geometryLineCount, geometryTileCrossings);
+            this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest, geometryLineCount, geometryTileCrossings, GetPtclPaintWords(drawTag));
             this.FillCount++;
             this.PathCount += encodedPathCount;
 
@@ -2763,7 +2787,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest, geometryLineCount, geometryTileCrossings);
+            this.AccumulateDrawRowEstimate(command.RasterizerOptions.Interest, geometryLineCount, geometryTileCrossings, GetPtclPaintWords(drawTag));
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -2888,7 +2912,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, geometryTileCrossings);
+            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, geometryTileCrossings, GetPtclPaintWords(drawTag));
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -3015,7 +3039,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, geometryTileCrossings);
+            this.AccumulateDrawRowEstimate(rasterizerOptions.Interest, geometryLineCount, geometryTileCrossings, GetPtclPaintWords(drawTag));
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -3343,7 +3367,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimateLocal(clipBounds, clipLineCount);
+            this.AccumulateDrawRowEstimateLocal(clipBounds, clipLineCount, -1, GetPtclPaintWords(GpuSceneDrawTag.EndClip));
             this.PathCount += encodedPathCount;
             this.LineCount += clipLineCount;
             this.InfoWordCount += (int)GpuSceneDrawTag.Map(GpuSceneDrawTag.BeginClip).InfoOffset;
@@ -3430,7 +3454,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle7 = style7;
             this.lastStyle8 = style8;
             this.lastStyle9 = style9;
-            this.AccumulateDrawRowEstimateLocal(layerBounds, clipLineCount);
+            this.AccumulateDrawRowEstimateLocal(layerBounds, clipLineCount, -1, GetPtclPaintWords(GpuSceneDrawTag.EndClip));
             this.PathCount += encodedPathCount;
             this.LineCount += clipLineCount;
             this.InfoWordCount += (int)GpuSceneDrawTag.Map(GpuSceneDrawTag.BeginClip).InfoOffset;
@@ -3450,8 +3474,9 @@ internal static class WebGPUSceneEncoder
         /// The summed per-line tile-crossing bound of the geometry (fills and strokes), or a negative value
         /// to fall back to the bounding-box diagonal bound (clips).
         /// </param>
-        private void AccumulateDrawRowEstimate(Rectangle absoluteInterest, int lineCount, long tileCrossings = -1)
-            => this.AccumulateDrawRowEstimateLocal(ToTargetLocal(absoluteInterest, this.rootTargetBounds), lineCount, tileCrossings);
+        /// <param name="paintWords">The PTCL word count of the draw's paint command.</param>
+        private void AccumulateDrawRowEstimate(Rectangle absoluteInterest, int lineCount, long tileCrossings, int paintWords)
+            => this.AccumulateDrawRowEstimateLocal(ToTargetLocal(absoluteInterest, this.rootTargetBounds), lineCount, tileCrossings, paintWords);
 
         /// <summary>
         /// Adds one draw object's clipped root-target-local footprint to the sparse scratch estimates:
@@ -3464,7 +3489,8 @@ internal static class WebGPUSceneEncoder
         /// The summed per-line tile-crossing bound of the geometry (fills and strokes), or a negative value
         /// to fall back to the bounding-box diagonal bound (clips).
         /// </param>
-        private void AccumulateDrawRowEstimateLocal(Rectangle localBounds, int lineCount, long tileCrossings = -1)
+        /// <param name="paintWords">The PTCL word count of the draw's paint command.</param>
+        private void AccumulateDrawRowEstimateLocal(Rectangle localBounds, int lineCount, long tileCrossings, int paintWords)
         {
             Rectangle clippedBounds = Rectangle.Intersect(localBounds, new Rectangle(0, 0, this.rootTargetBounds.Width, this.rootTargetBounds.Height));
 
@@ -3496,11 +3522,30 @@ internal static class WebGPUSceneEncoder
             long crossings = tileCrossings >= 0 ? Math.Min(tileCrossings, boundingBoxCrossings) : boundingBoxCrossings;
             this.estimatedTileCrossings += crossings;
 
+            // Every crossing belongs to one (draw, tile) pair with segments, and such a pair writes
+            // one CMD_FILL plus the draw's paint command.
+            this.estimatedPtclWords += crossings * (PtclFillWords + paintWords);
+
             // Binning emits one record per (draw, 16x16-tile bin) pair the draw's bounds touch.
             long binsWide = (clippedBounds.Width / (TileWidth * 16)) + 2;
             long binsHigh = (clippedBounds.Height / (TileHeight * 16)) + 2;
             this.estimatedBinFootprint += binsWide * binsHigh;
         }
+
+        /// <summary>
+        /// Returns the PTCL word count of the paint command coarse writes for one draw tag, matching
+        /// the write_* helpers in coarse.wgsl.
+        /// </summary>
+        /// <param name="drawTag">The draw tag.</param>
+        /// <returns>The paint command word count.</returns>
+        private static int GetPtclPaintWords(uint drawTag)
+            => drawTag switch
+            {
+                GpuSceneDrawTag.FillPathGradient => 5,
+                GpuSceneDrawTag.FillImage => 2,
+                GpuSceneDrawTag.BeginClip => 2,
+                _ => 3
+            };
 
         /// <summary>
         /// Encodes the closing record for the next end-layer command in the retained timeline.
@@ -3573,6 +3618,7 @@ internal static class WebGPUSceneEncoder
         /// <param name="gradientRowCount">The number of emitted gradient-ramp rows.</param>
         /// <param name="estimatedPathRowCount">The CPU-side estimate of active tile rows.</param>
         /// <param name="estimatedTileCrossings">The CPU-side upper bound for tile-boundary crossings.</param>
+        /// <param name="estimatedPtclWords">The CPU-side upper bound for the dynamic PTCL words.</param>
         /// <param name="estimatedBinFootprint">The CPU-side upper bound for per-(draw, bin) records.</param>
         /// <param name="pathTagByteCount">The unpadded path-tag byte count.</param>
         /// <param name="pathDataWordCount">The path-data word count.</param>
@@ -3605,6 +3651,7 @@ internal static class WebGPUSceneEncoder
             int gradientRowCount,
             int estimatedPathRowCount,
             long estimatedTileCrossings,
+            long estimatedPtclWords,
             long estimatedBinFootprint,
             int pathTagByteCount,
             int pathDataWordCount,
@@ -3638,6 +3685,7 @@ internal static class WebGPUSceneEncoder
             this.GradientRowCount = gradientRowCount;
             this.EstimatedPathRowCount = estimatedPathRowCount;
             this.EstimatedTileCrossings = estimatedTileCrossings;
+            this.EstimatedPtclWords = estimatedPtclWords;
             this.EstimatedBinFootprint = estimatedBinFootprint;
             this.PathTagByteCount = pathTagByteCount;
             this.PathDataWordCount = pathDataWordCount;
@@ -3767,6 +3815,11 @@ internal static class WebGPUSceneEncoder
         public long EstimatedTileCrossings { get; }
 
         /// <summary>
+        /// Gets the CPU-side upper bound for the dynamic PTCL words.
+        /// </summary>
+        public long EstimatedPtclWords { get; }
+
+        /// <summary>
         /// Gets the CPU-side upper bound for per-(draw, bin) binning records.
         /// </summary>
         public long EstimatedBinFootprint { get; }
@@ -3867,6 +3920,7 @@ internal static class WebGPUSceneEncoder
                 gradientRowCount,
                 encoding.EstimatedPathRowCount,
                 encoding.EstimatedTileCrossings,
+                encoding.EstimatedPtclWords,
                 encoding.EstimatedBinFootprint,
                 pathTagByteCount,
                 pathDataWordCount,
@@ -4029,6 +4083,7 @@ internal static class WebGPUSceneEncoder
                     DivideRoundUp(targetBounds.Width, TileWidth),
                     DivideRoundUp(targetBounds.Height, TileHeight),
                     encoding.EstimatedTileCrossings,
+                    encoding.EstimatedPtclWords,
                     encoding.EstimatedBinFootprint,
                     operations);
 
@@ -4416,6 +4471,7 @@ internal static class WebGPUSceneEncoder
             int profileFillCount = 0;
             long estimatedPathRowCount = 0;
             long estimatedTileCrossings = 0;
+            long estimatedPtclWords = 0;
             long estimatedBinFootprint = 0;
 
             for (int i = 0; i < partitions.Length; i++)
@@ -4441,6 +4497,7 @@ internal static class WebGPUSceneEncoder
                 profileFillCount += partition.ProfileFills?.Count ?? 0;
                 estimatedPathRowCount = Math.Min(estimatedPathRowCount + partition.EstimatedPathRowCount, int.MaxValue);
                 estimatedTileCrossings += partition.EstimatedTileCrossings;
+                estimatedPtclWords += partition.EstimatedPtclWords;
                 estimatedBinFootprint += partition.EstimatedBinFootprint;
             }
 
@@ -4628,6 +4685,7 @@ internal static class WebGPUSceneEncoder
                     DivideRoundUp(targetBounds.Width, TileWidth),
                     DivideRoundUp(targetBounds.Height, TileHeight),
                     estimatedTileCrossings,
+                    estimatedPtclWords,
                     estimatedBinFootprint,
                     []);
 
@@ -7453,6 +7511,7 @@ internal sealed class WebGPUEncodedScene : IDisposable
         0,
         0L,
         0L,
+        0L,
         []);
 
     private readonly IMemoryOwner<uint>? sceneDataOwner;
@@ -7503,6 +7562,7 @@ internal sealed class WebGPUEncodedScene : IDisposable
     /// <param name="tileCountX">The horizontal tile count.</param>
     /// <param name="tileCountY">The vertical tile count.</param>
     /// <param name="estimatedTileCrossings">The CPU-side upper bound for tile-boundary crossings.</param>
+    /// <param name="estimatedPtclWords">The CPU-side upper bound for the dynamic PTCL words.</param>
     /// <param name="estimatedBinFootprint">The CPU-side upper bound for per-(draw, bin) binning records.</param>
     /// <param name="operations">The scene operations associated with the encoded payload.</param>
     public WebGPUEncodedScene(
@@ -7535,6 +7595,7 @@ internal sealed class WebGPUEncodedScene : IDisposable
         int tileCountX,
         int tileCountY,
         long estimatedTileCrossings,
+        long estimatedPtclWords,
         long estimatedBinFootprint,
         WebGPUSceneOperation[] operations)
     {
@@ -7568,6 +7629,7 @@ internal sealed class WebGPUEncodedScene : IDisposable
         this.TileCountX = tileCountX;
         this.TileCountY = tileCountY;
         this.EstimatedTileCrossings = estimatedTileCrossings;
+        this.EstimatedPtclWords = estimatedPtclWords;
         this.EstimatedBinFootprint = estimatedBinFootprint;
 
         int targetCount = operations.Length == 0 ? 0 : 1;
@@ -7653,6 +7715,12 @@ internal sealed class WebGPUEncodedScene : IDisposable
     /// final lines. Bounds the GPU segment, segment-count, and path-tile demand.
     /// </summary>
     public long EstimatedTileCrossings { get; }
+
+    /// <summary>
+    /// Gets the CPU-side upper-bound estimate of the dynamic PTCL words the scene's tile crossings
+    /// can write: one fill command plus the draw's paint command per crossing.
+    /// </summary>
+    public long EstimatedPtclWords { get; }
 
     /// <summary>
     /// Gets the CPU-side upper-bound estimate of per-(draw, bin) binning records.
