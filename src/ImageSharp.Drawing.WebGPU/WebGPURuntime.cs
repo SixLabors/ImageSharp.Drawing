@@ -324,9 +324,16 @@ internal static unsafe partial class WebGPURuntime
 
             try
             {
-                availabilityProbeResult = TryGetOrCreateDevice(out _, out _, out WebGPUEnvironmentError errorCode)
+                availabilityProbeResult = TryGetOrCreateDevice(out WebGPUDeviceHandle? probedDevice, out _, out WebGPUEnvironmentError errorCode)
                     ? WebGPUEnvironmentError.Success
                     : errorCode;
+
+                // Creating the device state here starts the background compile of the scheduling
+                // pipelines at probe time, before the application creates its first target.
+                if (availabilityProbeResult == WebGPUEnvironmentError.Success && probedDevice is not null)
+                {
+                    _ = GetOrCreateDeviceState(GetApi(), probedDevice);
+                }
             }
             catch (InvalidOperationException)
             {

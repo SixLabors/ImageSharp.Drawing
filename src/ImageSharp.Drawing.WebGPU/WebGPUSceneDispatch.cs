@@ -68,10 +68,14 @@ internal static class WebGPUSceneDispatch
     private const int MaxClipStackDepth = 256;
 
     // The PTCL word budget attributed to each estimated tile crossing when seeding the PTCL
-    // scratch capacity. Each crossed tile costs one CMD_FILL (9 words) plus a paint command and
-    // amortized jump/end overhead; the multiplier was calibrated against measured demand
-    // (~6.5 words per crossing on stroke-heavy scenes) with headroom for paint-heavy draws.
-    private const long PtclWordsPerCrossing = 8;
+    // scratch capacity. Every crossing belongs to one (draw, tile) pair with segments, and such a
+    // pair writes one CMD_FILL (9 words) plus one paint command of at most 5 words.
+    private const long PtclWordsPerCrossing = 14;
+
+    // Coarse allocates the dynamic PTCL tail in PTCL_INCREMENT-word chunks (Shared/ptcl.wgsl); a
+    // command that does not fit the remaining chunk starts a new one, so each tile can leave one
+    // partial chunk and each chunk can waste up to one command of headroom.
+    private const long PtclChunkWords = 256;
 
     /// <summary>
     /// Identifies the staged-scene storage binding that exceeded the device limit for one flush attempt.
@@ -2447,6 +2451,7 @@ internal static class WebGPUSceneDispatch
             scene.PathCount,
             scene.EstimatedTileCrossings,
             scene.EstimatedBinFootprint,
+            (long)scene.TileCountX * scene.TileCountY,
             maxStorageBufferBindingSize);
 
     /// <summary>
@@ -2464,6 +2469,7 @@ internal static class WebGPUSceneDispatch
             range.PathCount,
             range.EstimatedTileCrossings,
             range.EstimatedBinFootprint,
+            (long)((range.TargetBounds.Width + 15) / 16) * ((range.TargetBounds.Height + 15) / 16),
             maxStorageBufferBindingSize);
 
     /// <summary>
@@ -2479,6 +2485,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="pathCount">The encoded path count.</param>
     /// <param name="estimatedTileCrossings">The CPU-side upper bound for tile-boundary crossings.</param>
     /// <param name="estimatedBinFootprint">The CPU-side upper bound for per-(draw, bin) records.</param>
+    /// <param name="targetTileCount">The number of tiles in the target, each of which can leave one partial PTCL chunk.</param>
     /// <param name="maxStorageBufferBindingSize">The device-reported maximum size of one storage-buffer binding.</param>
     /// <returns>The retained capacities raised to the known CPU-side lower bounds.</returns>
     private static WebGPUSceneBumpSizes SeedSceneBumpSizes(
@@ -2488,6 +2495,7 @@ internal static class WebGPUSceneDispatch
         int pathCount,
         long estimatedTileCrossings,
         long estimatedBinFootprint,
+        long targetTileCount,
         ulong maxStorageBufferBindingSize)
     {
         uint lineFloor = AddSizingSlack(checked((uint)Math.Max(lineCount, 1)));
@@ -2503,7 +2511,8 @@ internal static class WebGPUSceneDispatch
             ClampEstimate(estimatedTileCrossings, maxStorageBufferBindingSize, (uint)Unsafe.SizeOf<GpuPathTile>()),
             pathRowFloor);
         uint binningFloor = ClampEstimate(estimatedBinFootprint, maxStorageBufferBindingSize, sizeof(uint));
-        uint ptclFloor = ClampEstimate(estimatedTileCrossings * PtclWordsPerCrossing, maxStorageBufferBindingSize, sizeof(uint));
+        long ptclWords = ((estimatedTileCrossings * PtclWordsPerCrossing * 105L) / 100L) + (targetTileCount * PtclChunkWords);
+        uint ptclFloor = ClampEstimate(ptclWords, maxStorageBufferBindingSize, sizeof(uint));
 
         return new WebGPUSceneBumpSizes(
             Math.Max(currentSizes.Lines, lineFloor),
@@ -4030,23 +4039,11 @@ internal static class WebGPUSceneDispatch
     {
         // A single analytic fine pass handles every flush. Aliased coverage is applied per fill inside
         // the shader from the draw-flags aliased bit, so there is no separate aliased pipeline variant.
-        PixelAlphaRepresentation alphaRepresentation = flushContext.TargetDescriptor.AlphaRepresentation;
-        WebGPUTargetNumericEncoding numericEncoding = flushContext.TargetDescriptor.NumericEncoding;
-        byte[] shaderCode = FineAreaComputeShader.GetCode(flushContext.TextureFormat, alphaRepresentation, numericEncoding);
-
-        bool LayoutFactory(WebGPU api, WGPUDeviceImpl* device, out WGPUBindGroupLayoutImpl* layout, out string? layoutError)
-            => FineAreaComputeShader.TryCreateBindGroupLayout(
-                api,
-                device,
+        if (!TryResolveFinePipeline(
+                flushContext.DeviceState,
                 flushContext.TextureFormat,
-                out layout,
-                out layoutError);
-
-        if (!flushContext.DeviceState.TryGetOrCreateCompositeComputePipeline(
-                $"{FineAreaPipelineKey}/{flushContext.TextureFormat}/{alphaRepresentation}/{numericEncoding}",
-                shaderCode,
-                FineAreaComputeShader.EntryPoint,
-                LayoutFactory,
+                flushContext.TargetDescriptor.AlphaRepresentation,
+                flushContext.TargetDescriptor.NumericEncoding,
                 out WGPUBindGroupLayoutImpl* bindGroupLayout,
                 out WGPUComputePipelineImpl* pipeline,
                 out error))
@@ -4425,16 +4422,15 @@ internal static class WebGPUSceneDispatch
     }
 
     /// <summary>
-    /// Queues a background warmup that eagerly compiles every staged-scene compute pipeline for a
-    /// newly created device, plus the fine pipeline for the common target formats. First-ever use
-    /// of the pipeline set on a machine pays multi-second driver shader compilation; warming at
-    /// device creation moves that cost off the first flush and overlaps it with application
-    /// startup. The pipeline caches are thread-safe, so a flush that arrives mid-warmup simply
-    /// blocks on the specific pipelines it needs.
+    /// Queues a background warmup that compiles every scheduling compute pipeline for a newly
+    /// created device, in parallel. The fine pipeline depends on the target format and is compiled
+    /// by <see cref="BeginFinePipelineWarmup"/> when a target is created. The pipeline caches are
+    /// thread-safe, so a flush that arrives mid-warmup waits only for the pipelines it needs.
     /// </summary>
     /// <param name="deviceState">The shared device state whose pipeline caches are warmed.</param>
     public static void BeginPipelineWarmup(WebGPURuntime.DeviceSharedState deviceState)
     {
+        deviceState.RegisterPipelineWarmup();
         bool queued = ThreadPool.UnsafeQueueUserWorkItem(
             static state =>
             {
@@ -4459,74 +4455,133 @@ internal static class WebGPUSceneDispatch
     }
 
     /// <summary>
-    /// Compiles the full staged-scene pipeline set into the shared device caches. Failures are
-    /// deliberately swallowed: warmup is best-effort and the flush path re-attempts creation with
-    /// proper error reporting.
+    /// Queues a background compile of the fine pipeline for one target format. A flush to a target of
+    /// that format then finds the pipeline ready, or waits only for the remaining part of the compile.
+    /// </summary>
+    /// <param name="deviceState">The shared device state whose pipeline cache receives the pipeline.</param>
+    /// <param name="targetDescriptor">The target format, alpha representation, and numeric encoding.</param>
+    public static unsafe void BeginFinePipelineWarmup(WebGPURuntime.DeviceSharedState deviceState, WebGPUTargetDescriptor targetDescriptor)
+    {
+        WebGPUDrawingBackend.GetCompositeTextureFormatInfo(targetDescriptor.Format, out WGPUTextureFormat textureFormat, out _);
+        if (deviceState.HasCompositeComputePipeline(GetFinePipelineKey(textureFormat, targetDescriptor.AlphaRepresentation, targetDescriptor.NumericEncoding)))
+        {
+            return;
+        }
+
+        deviceState.RegisterPipelineWarmup();
+        (WebGPURuntime.DeviceSharedState DeviceState, WGPUTextureFormat TextureFormat, WebGPUTargetDescriptor Descriptor) warmupState = (deviceState, textureFormat, targetDescriptor);
+        bool queued = ThreadPool.UnsafeQueueUserWorkItem(
+            static (state) =>
+            {
+                try
+                {
+                    _ = TryResolveFinePipeline(state.DeviceState, state.TextureFormat, state.Descriptor.AlphaRepresentation, state.Descriptor.NumericEncoding, out _, out _, out _);
+                }
+                catch
+                {
+                    // Best-effort warmup only; the render path surfaces real pipeline failures.
+                }
+                finally
+                {
+                    state.DeviceState.CompletePipelineWarmup();
+                }
+            },
+            warmupState,
+            false);
+
+        if (!queued)
+        {
+            deviceState.CompletePipelineWarmup();
+        }
+    }
+
+    /// <summary>
+    /// Builds the pipeline cache key of the fine pipeline for one target format.
+    /// </summary>
+    /// <param name="textureFormat">The output texture format.</param>
+    /// <param name="alphaRepresentation">The target alpha representation.</param>
+    /// <param name="numericEncoding">The target numeric encoding.</param>
+    /// <returns>The cache key.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static string GetFinePipelineKey(WGPUTextureFormat textureFormat, PixelAlphaRepresentation alphaRepresentation, WebGPUTargetNumericEncoding numericEncoding)
+        => $"{FineAreaPipelineKey}/{textureFormat}/{alphaRepresentation}/{numericEncoding}";
+
+    /// <summary>
+    /// Gets or creates the fine pipeline for one target format.
+    /// </summary>
+    /// <param name="deviceState">The shared device state that caches the pipeline.</param>
+    /// <param name="textureFormat">The output texture format.</param>
+    /// <param name="alphaRepresentation">The target alpha representation.</param>
+    /// <param name="numericEncoding">The target numeric encoding.</param>
+    /// <param name="bindGroupLayout">Receives the fine bind group layout.</param>
+    /// <param name="pipeline">Receives the fine compute pipeline.</param>
+    /// <param name="error">Receives the failure reason when the pipeline cannot be created.</param>
+    /// <returns><see langword="true"/> when the pipeline is available; otherwise, <see langword="false"/>.</returns>
+    private static unsafe bool TryResolveFinePipeline(
+        WebGPURuntime.DeviceSharedState deviceState,
+        WGPUTextureFormat textureFormat,
+        PixelAlphaRepresentation alphaRepresentation,
+        WebGPUTargetNumericEncoding numericEncoding,
+        out WGPUBindGroupLayoutImpl* bindGroupLayout,
+        out WGPUComputePipelineImpl* pipeline,
+        out string? error)
+    {
+        byte[] shaderCode = FineAreaComputeShader.GetCode(textureFormat, alphaRepresentation, numericEncoding);
+
+        bool LayoutFactory(WebGPU api, WGPUDeviceImpl* device, out WGPUBindGroupLayoutImpl* layout, out string? layoutError)
+            => FineAreaComputeShader.TryCreateBindGroupLayout(api, device, textureFormat, out layout, out layoutError);
+
+        return deviceState.TryGetOrCreateCompositeComputePipeline(
+            GetFinePipelineKey(textureFormat, alphaRepresentation, numericEncoding),
+            shaderCode,
+            FineAreaComputeShader.EntryPoint,
+            LayoutFactory,
+            out bindGroupLayout,
+            out pipeline,
+            out error);
+    }
+
+    /// <summary>
+    /// The scheduling shaders in warmup order: the most expensive compiles first, so they start earliest.
+    /// </summary>
+    private static readonly WebGPUSceneShaderId[] SchedulingWarmupOrder =
+    [
+        WebGPUSceneShaderId.PathLowering,
+        WebGPUSceneShaderId.Coarse,
+        WebGPUSceneShaderId.DrawLeaf,
+        WebGPUSceneShaderId.PathCount,
+        WebGPUSceneShaderId.PathTiling,
+        WebGPUSceneShaderId.Binning,
+        WebGPUSceneShaderId.ClipLeaf,
+        WebGPUSceneShaderId.TileAlloc,
+        WebGPUSceneShaderId.PathRowAlloc,
+        WebGPUSceneShaderId.PathRowSpan,
+        WebGPUSceneShaderId.Backdrop,
+        WebGPUSceneShaderId.ClipReduce,
+        WebGPUSceneShaderId.DrawReduce,
+        WebGPUSceneShaderId.PathtagReduce,
+        WebGPUSceneShaderId.PathtagReduce2,
+        WebGPUSceneShaderId.PathtagScan1,
+        WebGPUSceneShaderId.PathtagScan,
+        WebGPUSceneShaderId.PathtagScanSmall,
+        WebGPUSceneShaderId.BboxClear,
+        WebGPUSceneShaderId.PathCountSetup,
+        WebGPUSceneShaderId.PathTilingSetup,
+        WebGPUSceneShaderId.ChunkReset,
+        WebGPUSceneShaderId.Prepare,
+    ];
+
+    /// <summary>
+    /// Compiles every scheduling pipeline into the shared device caches, in parallel. Failures are
+    /// swallowed: warmup is best-effort and the flush path re-attempts creation with proper error
+    /// reporting.
     /// </summary>
     /// <param name="deviceState">The shared device state whose pipeline caches are warmed.</param>
     private static unsafe void WarmPipelines(WebGPURuntime.DeviceSharedState deviceState)
     {
         try
         {
-            // Most expensive shaders first so their driver compilation starts as early as possible.
-            ReadOnlySpan<WebGPUSceneShaderId> order =
-            [
-                WebGPUSceneShaderId.PathLowering,
-                WebGPUSceneShaderId.Coarse,
-                WebGPUSceneShaderId.DrawLeaf,
-                WebGPUSceneShaderId.PathCount,
-                WebGPUSceneShaderId.PathTiling,
-                WebGPUSceneShaderId.Binning,
-                WebGPUSceneShaderId.ClipLeaf,
-                WebGPUSceneShaderId.TileAlloc,
-                WebGPUSceneShaderId.PathRowAlloc,
-                WebGPUSceneShaderId.PathRowSpan,
-                WebGPUSceneShaderId.Backdrop,
-                WebGPUSceneShaderId.ClipReduce,
-                WebGPUSceneShaderId.DrawReduce,
-                WebGPUSceneShaderId.PathtagReduce,
-                WebGPUSceneShaderId.PathtagReduce2,
-                WebGPUSceneShaderId.PathtagScan1,
-                WebGPUSceneShaderId.PathtagScan,
-                WebGPUSceneShaderId.PathtagScanSmall,
-                WebGPUSceneShaderId.BboxClear,
-                WebGPUSceneShaderId.PathCountSetup,
-                WebGPUSceneShaderId.PathTilingSetup,
-                WebGPUSceneShaderId.ChunkReset,
-                WebGPUSceneShaderId.Prepare,
-            ];
-
-            // Warm the format/representation pairs used by the default offscreen target and by
-            // opaque and transparent presentation surfaces. Other supported pairs compile on demand.
-            ReadOnlySpan<(WGPUTextureFormat Format, PixelAlphaRepresentation AlphaRepresentation, WebGPUTargetNumericEncoding NumericEncoding)> fineTargets =
-            [
-                (WGPUTextureFormat.RGBA8Unorm, PixelAlphaRepresentation.Unassociated, WebGPUTargetNumericEncoding.Unit),
-                (WGPUTextureFormat.RGBA8Unorm, PixelAlphaRepresentation.Associated, WebGPUTargetNumericEncoding.Unit),
-                (WGPUTextureFormat.BGRA8Unorm, PixelAlphaRepresentation.Unassociated, WebGPUTargetNumericEncoding.Unit),
-                (WGPUTextureFormat.BGRA8Unorm, PixelAlphaRepresentation.Associated, WebGPUTargetNumericEncoding.Unit)
-            ];
-
-            foreach ((WGPUTextureFormat format, PixelAlphaRepresentation alphaRepresentation, WebGPUTargetNumericEncoding numericEncoding) in fineTargets)
-            {
-                byte[] shaderCode = FineAreaComputeShader.GetCode(format, alphaRepresentation, numericEncoding);
-
-                bool LayoutFactory(WebGPU api, WGPUDeviceImpl* device, out WGPUBindGroupLayoutImpl* layout, out string? layoutError)
-                    => FineAreaComputeShader.TryCreateBindGroupLayout(api, device, format, out layout, out layoutError);
-
-                _ = deviceState.TryGetOrCreateCompositeComputePipeline(
-                    $"{FineAreaPipelineKey}/{format}/{alphaRepresentation}/{numericEncoding}",
-                    shaderCode,
-                    FineAreaComputeShader.EntryPoint,
-                    LayoutFactory,
-                    out _,
-                    out _,
-                    out _);
-            }
-
-            foreach (WebGPUSceneShaderId shaderId in order)
-            {
-                _ = TryResolveComputeShader(deviceState, shaderId, out _, out _, out _);
-            }
+            _ = Parallel.ForEach(SchedulingWarmupOrder, shaderId => TryResolveComputeShader(deviceState, shaderId, out _, out _, out _));
         }
         catch
         {

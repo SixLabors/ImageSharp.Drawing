@@ -54,6 +54,10 @@ internal sealed class WebGPUNativeSurface : NativeSurface
         this.TextureCoordinateOffset = textureCoordinateOffset;
         this.IsPresentationSurface = isPresentationSurface;
         this.RequiresPresentationCopies = requiresPresentationCopies;
+
+        // The target format is known here for the first time. Start the fine pipeline compile for it so
+        // the first flush finds it ready or waits only for the remaining part.
+        WebGPUSceneDispatch.BeginFinePipelineWarmup(WebGPURuntime.GetOrCreateDeviceState(WebGPURuntime.GetApi(), deviceHandle), targetDescriptor);
     }
 
     /// <summary>
