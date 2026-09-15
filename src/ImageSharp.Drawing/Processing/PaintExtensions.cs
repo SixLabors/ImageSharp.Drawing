@@ -42,4 +42,25 @@ public static class PaintExtensions
 
         return source.ApplyProcessor(new PaintProcessor(options, action));
     }
+
+    /// <summary>
+    /// Paints each image frame using the supplied drawing options and text drawing cache.
+    /// </summary>
+    /// <param name="source">The image processing context to paint.</param>
+    /// <param name="options">The drawing options applied when creating each frame canvas.</param>
+    /// <param name="textCache">The text drawing cache used by each frame canvas.</param>
+    /// <param name="action">The per-frame painting callback.</param>
+    /// <returns>The <see cref="IImageProcessingContext"/> so additional processing operations can be chained.</returns>
+    public static IImageProcessingContext Paint(
+        this IImageProcessingContext source,
+        DrawingOptions options,
+        DrawingTextCache textCache,
+        CanvasAction action)
+    {
+        Guard.NotNull(options, nameof(options));
+        Guard.NotNull(textCache, nameof(textCache));
+        Guard.NotNull(action, nameof(action));
+
+        return source.ApplyProcessor(new PaintProcessor(options, textCache, action));
+    }
 }
