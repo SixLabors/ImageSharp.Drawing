@@ -1,0 +1,178 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Avalonia.Controls;
+using Avalonia.Data;
+using Avalonia.Data.Converters;
+using Avalonia.LogicalTree;
+using ControlCatalog.Models;
+
+namespace ControlCatalog.Pages
+{
+    public partial class AutoCompleteBoxPage : ContentPage
+    {
+        private static StateData[] BuildAllStates()
+        {
+            return new StateData[]
+            {
+                new StateData("Alabama","AL","Montgomery"),
+                new StateData("Alaska","AK","Juneau"),
+                new StateData("Arizona","AZ","Phoenix"),
+                new StateData("Arkansas","AR","Little Rock"),
+                new StateData("California","CA","Sacramento"),
+                new StateData("Colorado","CO","Denver"),
+                new StateData("Connecticut","CT","Hartford"),
+                new StateData("Delaware","DE","Dover"),
+                new StateData("Florida","FL","Tallahassee"),
+                new StateData("Georgia","GA","Atlanta"),
+                new StateData("Hawaii","HI","Honolulu"),
+                new StateData("Idaho","ID","Boise"),
+                new StateData("Illinois","IL","Springfield"),
+                new StateData("Indiana","IN","Indianapolis"),
+                new StateData("Iowa","IA","Des Moines"),
+                new StateData("Kansas","KS","Topeka"),
+                new StateData("Kentucky","KY","Frankfort"),
+                new StateData("Louisiana","LA","Baton Rouge"),
+                new StateData("Maine","ME","Augusta"),
+                new StateData("Maryland","MD","Annapolis"),
+                new StateData("Massachusetts","MA","Boston"),
+                new StateData("Michigan","MI","Lansing"),
+                new StateData("Minnesota","MN","St. Paul"),
+                new StateData("Mississippi","MS","Jackson"),
+                new StateData("Missouri","MO","Jefferson City"),
+                new StateData("Montana","MT","Helena"),
+                new StateData("Nebraska","NE","Lincoln"),
+                new StateData("Nevada","NV","Carson City"),
+                new StateData("New Hampshire","NH","Concord"),
+                new StateData("New Jersey","NJ","Trenton"),
+                new StateData("New Mexico","NM","Santa Fe"),
+                new StateData("New York","NY","Albany"),
+                new StateData("North Carolina","NC","Raleigh"),
+                new StateData("North Dakota","ND","Bismarck"),
+                new StateData("Ohio","OH","Columbus"),
+                new StateData("Oklahoma","OK","Oklahoma City"),
+                new StateData("Oregon","OR","Salem"),
+                new StateData("Pennsylvania","PA","Harrisburg"),
+                new StateData("Rhode Island","RI","Providence"),
+                new StateData("South Carolina","SC","Columbia"),
+                new StateData("South Dakota","SD","Pierre"),
+                new StateData("Tennessee","TN","Nashville"),
+                new StateData("Texas","TX","Austin"),
+                new StateData("Utah","UT","Salt Lake City"),
+                new StateData("Vermont","VT","Montpelier"),
+                new StateData("Virginia","VA","Richmond"),
+                new StateData("Washington","WA","Olympia"),
+                new StateData("West Virginia","WV","Charleston"),
+                new StateData("Wisconsin","WI","Madison"),
+                new StateData("Wyoming","WY","Cheyenne"),
+            };
+        }
+        public StateData[] States { get; private set; }
+
+        private static LinkedList<string>[] BuildAllSentences()
+        {
+            return new string[]
+            {
+                "Hello world",
+                "No this is Patrick",
+                "Never gonna give you up",
+                "How does one patch KDE2 under FreeBSD"
+            }
+            .Select(x => new LinkedList<string>(x.Split(' ')))
+            .ToArray();
+        }
+        public LinkedList<string>[] Sentences { get; private set; }
+
+        public AutoCompleteBoxPage()
+        {
+            InitializeComponent();
+
+            States = BuildAllStates();
+            Sentences = BuildAllSentences();
+
+            foreach (AutoCompleteBox box in GetAllAutoCompleteBox().Where(x => x.Name != "CustomAutocompleteBox"))
+            {
+                box.ItemsSource = States;
+            }
+
+            var converter = new FuncMultiValueConverter<string, string>(parts =>
+            {
+                return String.Format("{0} ({1})", parts.ToArray());
+            });
+            var binding = new MultiBinding { Converter = converter };
+            binding.Bindings.Add(CompiledBinding.Create<StateData, string>(s => s.Name));
+            binding.Bindings.Add(CompiledBinding.Create<StateData, string>(s => s.Abbreviation));
+
+            MultiBindingBox.ValueMemberBinding = binding;
+
+            AsyncBox.AsyncPopulator = PopulateAsync;
+
+            CustomAutocompleteBox.ItemsSource = Sentences.SelectMany(x => x);
+            CustomAutocompleteBox.TextFilter = LastWordContains;
+            CustomAutocompleteBox.TextSelector = AppendWord;
+        }
+        private IEnumerable<AutoCompleteBox> GetAllAutoCompleteBox()
+        {
+            return
+                this.GetLogicalDescendants()
+                    .OfType<AutoCompleteBox>();
+        }
+
+        private static bool StringContains(string str, string? query)
+        {
+            if (query == null)
+                return false;
+            return str.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+        private async Task<IEnumerable<object>> PopulateAsync(string? searchText, CancellationToken cancellationToken)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1.5), cancellationToken);
+
+            return
+                States.Where(data => StringContains(data.Name, searchText) || StringContains(data.Capital, searchText))
+                      .ToList();
+        }
+
+        private bool LastWordContains(string? searchText, string? item)
+        {
+            var words = searchText?.Split(' ') ?? Array.Empty<string>();
+            var options = Sentences.Select(x => x.First)
+                .ToArray<LinkedListNode<string>?>();
+            for (var i = 0; i < words.Length; ++i)
+            {
+                var word = words[i];
+                for (var j = 0; word is { } && j < options.Length; ++j)
+                {
+                    if (options[i] is { } option)
+                    {
+                        if (i == words.Length - 1)
+                        {
+                            options[j] = option.Value.ToLower().Contains(word.ToLower()) ? option : null;
+                        }
+                        else
+                        {
+                            options[j] = option.Value.Equals(word, StringComparison.InvariantCultureIgnoreCase) ? option.Next : null;
+                        }
+                    }
+                }
+            }
+
+            return options.Any(x => x != null && x.Value == item);
+        }
+        private string AppendWord(string? text, string? item)
+        {
+            if (item is { })
+            {
+                string[] parts = text?.Split(' ') ?? Array.Empty<string>();
+                if (parts.Length == 0)
+                    return item;
+
+                parts[parts.Length - 1] = item;
+                return string.Join(" ", parts);
+            }
+            return string.Empty;
+        }
+    }
+}

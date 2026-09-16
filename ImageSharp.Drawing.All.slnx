@@ -5,6 +5,7 @@
     <Platform Name="x86" />
   </Configurations>
   <Folder Name="/samples/">
+    <Project Path="samples/AvaloniaControlCatalog/AvaloniaControlCatalog.csproj" />
     <Project Path="samples/DrawingBackendBenchmark/DrawingBackendBenchmark.csproj" />
     <Project Path="samples/DrawShapesWithImageSharp/DrawShapesWithImageSharp.csproj" />
     <Project Path="samples/WebGPUExternalSurfaceDemo/WebGPUExternalSurfaceDemo.csproj" />
@@ -14,6 +15,7 @@
     <File Path="src/Directory.Build.props" />
     <File Path="src/Directory.Build.targets" />
     <Project Path="shared-infrastructure/src/SharedInfrastructure/SharedInfrastructure.shproj" />
+    <Project Path="src/ImageSharp.Drawing.Renderers.Avalonia/ImageSharp.Drawing.Renderers.Avalonia.csproj" />
     <Project Path="src/ImageSharp.Drawing.WebGPU.ShaderGen/ImageSharp.Drawing.WebGPU.ShaderGen.csproj" />
     <Project Path="src/ImageSharp.Drawing.WebGPU/ImageSharp.Drawing.WebGPU.csproj" />
     <Project Path="src/ImageSharp.Drawing/ImageSharp.Drawing.csproj" />

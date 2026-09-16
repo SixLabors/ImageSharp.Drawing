@@ -53,11 +53,11 @@
   Enable when referencing the local imagesharp source
   to prevent missing global usings for the ImageSharp namespaces.
   -->
-  <ItemGroup>
+  <!--<ItemGroup>
     <Using Include="SixLabors.ImageSharp" />
     <Using Include="SixLabors.ImageSharp.PixelFormats" />
     <Using Include="SixLabors.ImageSharp.Processing" />
-  </ItemGroup>
+  </ItemGroup>-->
   
   <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
 
