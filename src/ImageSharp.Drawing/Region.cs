@@ -57,10 +57,10 @@ public sealed class Region
     {
         RectangleF pathBounds = path.Bounds;
 
-        // The finite integer clip ceilings each edge independently to match the path-region
-        // conversion contract; deriving right and bottom from rounded sizes can widen the clip.
-        int clipLeft = (int)MathF.Ceiling(pathBounds.Left);
-        int clipTop = (int)MathF.Ceiling(pathBounds.Top);
+        // The integer clip rounds the bounds outwards so no pixel whose centre lies inside the
+        // path is lost. This is the same rounding the library applies to clip bounds.
+        int clipLeft = (int)MathF.Floor(pathBounds.Left);
+        int clipTop = (int)MathF.Floor(pathBounds.Top);
         int clipRight = (int)MathF.Ceiling(pathBounds.Right);
         int clipBottom = (int)MathF.Ceiling(pathBounds.Bottom);
 
