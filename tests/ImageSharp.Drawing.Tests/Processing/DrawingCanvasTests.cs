@@ -5,7 +5,6 @@ using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
-using Xunit.Abstractions;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 

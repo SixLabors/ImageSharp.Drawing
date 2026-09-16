@@ -1293,6 +1293,7 @@ public sealed class Region
     /// <param name="edges">The edge storage containing the linked order.</param>
     /// <param name="edgeIndex">The edge whose X position may have moved backwards.</param>
     /// <param name="head">The first edge in crossing order.</param>
+#pragma warning disable CA1517 // The method writes edge links through the span indexer.
     private static void MoveEdgeBackward(Span<RegionEdge> edges, int edgeIndex, ref int head)
     {
         int previousIndex = edges[edgeIndex].Previous;
@@ -1337,6 +1338,7 @@ public sealed class Region
             edges[insertionSuccessor].Previous = edgeIndex;
         }
     }
+#pragma warning restore CA1517
 
     /// <summary>
     /// Converts one rectangle to its boundary path.

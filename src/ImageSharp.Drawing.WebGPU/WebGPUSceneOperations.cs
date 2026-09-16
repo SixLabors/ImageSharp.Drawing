@@ -205,6 +205,7 @@ internal readonly struct WebGPUSceneRange
     /// <param name="lineCount">The line count in the range.</param>
     /// <param name="totalPathRowCount">The estimated sparse row count for the range.</param>
     /// <param name="estimatedTileCrossings">The CPU-side upper bound for the range's tile-boundary crossings.</param>
+    /// <param name="estimatedPtclWords">The CPU-side upper bound for the range's dynamic PTCL words.</param>
     /// <param name="estimatedBinFootprint">The CPU-side upper bound for the range's per-(draw, bin) binning records.</param>
     public WebGPUSceneRange(
         Rectangle targetBounds,
@@ -227,6 +228,7 @@ internal readonly struct WebGPUSceneRange
         int lineCount,
         int totalPathRowCount,
         long estimatedTileCrossings,
+        long estimatedPtclWords,
         long estimatedBinFootprint)
     {
         this.TargetBounds = targetBounds;
@@ -249,6 +251,7 @@ internal readonly struct WebGPUSceneRange
         this.LineCount = lineCount;
         this.TotalPathRowCount = totalPathRowCount;
         this.EstimatedTileCrossings = estimatedTileCrossings;
+        this.EstimatedPtclWords = estimatedPtclWords;
         this.EstimatedBinFootprint = estimatedBinFootprint;
     }
 
@@ -351,6 +354,11 @@ internal readonly struct WebGPUSceneRange
     /// Gets the CPU-side upper bound for the range's tile-boundary crossings.
     /// </summary>
     public long EstimatedTileCrossings { get; }
+
+    /// <summary>
+    /// Gets the CPU-side upper bound for the range's dynamic PTCL words.
+    /// </summary>
+    public long EstimatedPtclWords { get; }
 
     /// <summary>
     /// Gets the CPU-side upper bound for the range's per-(draw, bin) binning records.

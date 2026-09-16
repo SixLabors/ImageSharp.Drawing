@@ -14,7 +14,6 @@
     <PackageTags>ImageSharp Drawing Avalonia Graphics Renderer Shapes Paths Text</PackageTags>
     <Description>An ImageSharp.Drawing renderer for Avalonia applications.</Description>
     <Configurations>Debug;Release</Configurations>
-    <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <WarningsAsErrors>Nullable</WarningsAsErrors>
     <RunAnalyzers>false</RunAnalyzers>
@@ -25,6 +24,19 @@
     <RestoreAdditionalProjectSources>https://nuget-feed-all.avaloniaui.net/v3/index.json;$(RestoreAdditionalProjectSources)</RestoreAdditionalProjectSources>
   </PropertyGroup>
 
+  <Choose>
+    <When Condition="$(SIXLABORS_TESTING_PREVIEW) == true">
+      <PropertyGroup>
+        <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+      </PropertyGroup>
+    </When>
+    <Otherwise>
+      <PropertyGroup>
+        <TargetFrameworks>net10.0</TargetFrameworks>
+      </PropertyGroup>
+    </Otherwise>
+  </Choose>
+
   <ItemGroup>
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
     <None Include="..\..\shared-infrastructure\branding\icons\imagesharp.drawing\sixlabors.imagesharp.drawing.128.png" Pack="true" PackagePath="" />
@@ -33,8 +45,6 @@
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Win32" Version="$(AvaloniaVersion)" />
-    <!-- WebGPU's Silk.NET dependency loads DependencyModel 9.0.9, so net8 consumers need the matching JSON runtime assembly. -->
-    <PackageReference Include="System.Text.Json" Version="9.0.9" />
   </ItemGroup>
 
   <ItemGroup>

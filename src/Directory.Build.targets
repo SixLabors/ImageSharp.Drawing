@@ -24,7 +24,7 @@
     See: https://github.com/adamralph/minver#can-i-use-the-version-calculated-by-minver-for-other-purposes
   -->
   <PropertyGroup>
-    <MinVerMinimumMajorMinor>3.0</MinVerMinimumMajorMinor>
+    <MinVerMinimumMajorMinor>4.0</MinVerMinimumMajorMinor>
   </PropertyGroup>
 
   <Target Name="SetIndependentPackageVersionNumber" AfterTargets="MinVer" Condition="'$(IndependentPackageVersionMajor)' != '' and '$(IsContinuousIntegration)' == 'true'">
