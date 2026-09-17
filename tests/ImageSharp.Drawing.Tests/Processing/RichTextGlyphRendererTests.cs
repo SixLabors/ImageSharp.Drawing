@@ -14,6 +14,77 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 
 public class RichTextGlyphRendererTests
 {
+    [Fact]
+    public void TryCreateBrush_RadialGradient_KeepsThePaintSpaceCirclesAndComposesTheTransforms()
+    {
+        // The paint's own transform carries the skew and squash of a COLR PaintTransform, and
+        // the glyph transform follows it. Neither is baked into the circles.
+        Matrix3x2 paintTransform = new(0.99F, 0.03F, -0.02F, 0.75F, 4F, 5F);
+        RadialGradientPaint paint = new()
+        {
+            Center0 = new Vector2(10F, 20F),
+            Radius0 = 0F,
+            Center1 = new Vector2(10F, 20F),
+            Radius1 = 30F,
+            Stops = [new GradientStop(0F, new GlyphColor(255, 0, 0, 255)), new GradientStop(1F, new GlyphColor(0, 0, 255, 255))],
+            Transform = paintTransform
+        };
+
+        Matrix4x4 glyphTransform = Matrix4x4.CreateRotationZ(0.5F) * Matrix4x4.CreateTranslation(100F, 50F, 0F);
+
+        Assert.True(RichTextGlyphRenderer.TryCreateBrush(paint, glyphTransform, out Brush? brush));
+        RadialGradientBrush radial = Assert.IsType<RadialGradientBrush>(brush);
+        Assert.Equal(new PointF(10F, 20F), radial.Center0);
+        Assert.Equal(0F, radial.Radius0);
+        Assert.Equal(new PointF(10F, 20F), radial.Center1);
+        Assert.Equal(30F, radial.Radius1);
+        Assert.Equal(new Matrix4x4(paintTransform) * glyphTransform, radial.GradientTransform);
+    }
+
+    [Fact]
+    public void TryCreateBrush_SweepGradient_KeepsThePaintSpaceCenterAndComposesTheTransforms()
+    {
+        Matrix3x2 paintTransform = new(0.5F, 0.86F, -0.86F, 0.5F, 7F, 9F);
+        SweepGradientPaint paint = new()
+        {
+            Center = new Vector2(15F, 25F),
+            StartAngle = 30F,
+            EndAngle = 300F,
+            Stops = [new GradientStop(0F, new GlyphColor(255, 0, 0, 255)), new GradientStop(1F, new GlyphColor(0, 0, 255, 255))],
+            Transform = paintTransform
+        };
+
+        Matrix4x4 glyphTransform = Matrix4x4.CreateScale(2F, 1F, 1F) * Matrix4x4.CreateTranslation(100F, 50F, 0F);
+
+        Assert.True(RichTextGlyphRenderer.TryCreateBrush(paint, glyphTransform, out Brush? brush));
+        SweepGradientBrush sweep = Assert.IsType<SweepGradientBrush>(brush);
+        Assert.Equal(new PointF(15F, 25F), sweep.Center);
+        Assert.Equal(30F, sweep.StartAngleDegrees);
+        Assert.Equal(300F, sweep.EndAngleDegrees);
+        Assert.Equal(new Matrix4x4(paintTransform) * glyphTransform, sweep.GradientTransform);
+    }
+
+    [Fact]
+    public void TryCreateBrush_LinearGradient_KeepsThePaintSpacePointsAndComposesTheTransforms()
+    {
+        Matrix3x2 paintTransform = new(1F, 0F, 0.5F, 1F, 3F, 4F);
+        LinearGradientPaint paint = new()
+        {
+            P0 = new Vector2(0F, 0F),
+            P1 = new Vector2(100F, 0F),
+            Stops = [new GradientStop(0F, new GlyphColor(255, 0, 0, 255)), new GradientStop(1F, new GlyphColor(0, 0, 255, 255))],
+            Transform = paintTransform
+        };
+
+        Matrix4x4 glyphTransform = Matrix4x4.CreateTranslation(100F, 50F, 0F);
+
+        Assert.True(RichTextGlyphRenderer.TryCreateBrush(paint, glyphTransform, out Brush? brush));
+        LinearGradientBrush linear = Assert.IsType<LinearGradientBrush>(brush);
+        Assert.Equal(new PointF(0F, 0F), linear.StartPoint);
+        Assert.Equal(new PointF(100F, 0F), linear.EndPoint);
+        Assert.Equal(new Matrix4x4(paintTransform) * glyphTransform, linear.GradientTransform);
+    }
+
     /// <summary>
     /// Verifies moved text retains cached outline identity and updates its destination.
     /// </summary>

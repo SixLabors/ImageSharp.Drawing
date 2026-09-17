@@ -18,7 +18,7 @@ internal sealed partial class RichTextGlyphRenderer
     /// Attempts to create an ImageSharp.Drawing <see cref="Brush"/> from a <see cref="Paint"/>.
     /// </summary>
     /// <param name="paint">The paint definition coming from the interpreter.</param>
-    /// <param name="transform">A transform to apply to the brush coordinates.</param>
+    /// <param name="transform">The transform from the glyph's space to the drawing, applied after the paint's own transform.</param>
     /// <param name="brush">The resulting brush, or <see langword="null"/> if the paint is unsupported.</param>
     /// <returns>
     /// <see langword="true"/> if a brush could be created; otherwise, <see langword="false"/>.
@@ -53,7 +53,7 @@ internal sealed partial class RichTextGlyphRenderer
     /// Creates a <see cref="LinearGradientBrush"/> from a <see cref="LinearGradientPaint"/>.
     /// </summary>
     /// <param name="paint">The linear gradient paint.</param>
-    /// <param name="transform">The transform to apply to the gradient points.</param>
+    /// <param name="transform">The transform applied after the paint's own transform.</param>
     /// <param name="brush">The resulting brush.</param>
     /// <returns>
     /// <see langword="true"/> if created; otherwise, <see langword="false"/>.
@@ -66,29 +66,19 @@ internal sealed partial class RichTextGlyphRenderer
         // Map spread method.
         GradientRepetitionMode mode = MapSpread(paint.Spread);
 
+        // The geometry stays in the paint's space. The brush maps every sample through the
+        // inverse of the composed transform, so a skew or a non-uniform scale in the paint's
+        // transform keeps its shape.
+        Matrix4x4 gradientTransform = new Matrix4x4(paint.Transform) * transform;
         PointF p0 = paint.P0;
         PointF p1 = paint.P1;
-        PointF? p2 = paint.P2;
-
-        // Apply any transform defined on the paint.
-        if (!transform.IsIdentity)
+        if (paint.P2.HasValue)
         {
-            p0 = PointF.Transform(p0, transform);
-            p1 = PointF.Transform(p1, transform);
-
-            if (p2.HasValue)
-            {
-                p2 = PointF.Transform(p2.Value, transform);
-            }
-        }
-
-        if (p2.HasValue)
-        {
-            brush = new LinearGradientBrush(p0, p1, p2.Value, mode, stops);
+            brush = new LinearGradientBrush(p0, p1, paint.P2.Value, mode, gradientTransform, stops);
             return true;
         }
 
-        brush = new LinearGradientBrush(p0, p1, mode, stops);
+        brush = new LinearGradientBrush(p0, p1, mode, gradientTransform, stops);
         return true;
     }
 
@@ -96,7 +86,7 @@ internal sealed partial class RichTextGlyphRenderer
     /// Creates a <see cref="RadialGradientBrush"/> from a <see cref="RadialGradientPaint"/>.
     /// </summary>
     /// <param name="paint">The radial gradient paint.</param>
-    /// <param name="transform">The transform to apply to the gradient center point.</param>
+    /// <param name="transform">The transform applied after the paint's own transform.</param>
     /// <param name="brush">The resulting brush.</param>
     /// <returns>
     /// <see langword="true"/> if created; otherwise, <see langword="false"/>.
@@ -109,21 +99,11 @@ internal sealed partial class RichTextGlyphRenderer
         // Map spread method.
         GradientRepetitionMode mode = MapSpread(paint.Spread);
 
-        // Apply any transform defined on the paint.
-        PointF center0 = paint.Center0;
-        PointF center1 = paint.Center1;
-        float radius0 = paint.Radius0;
-        float radius1 = paint.Radius1;
-        if (!transform.IsIdentity)
-        {
-            center0 = PointF.Transform(center0, transform);
-            center1 = PointF.Transform(center1, transform);
-            float scale = MatrixUtilities.GetAverageScale(in transform);
-            radius0 *= scale;
-            radius1 *= scale;
-        }
-
-        brush = new RadialGradientBrush(center0, radius0, center1, radius1, mode, stops);
+        // The circles stay in the paint's space. The brush maps every sample through the
+        // inverse of the composed transform, so a skew or a non-uniform scale in the paint's
+        // transform draws an ellipse instead of a circle.
+        Matrix4x4 gradientTransform = new Matrix4x4(paint.Transform) * transform;
+        brush = new RadialGradientBrush(paint.Center0, paint.Radius0, paint.Center1, paint.Radius1, mode, gradientTransform, stops);
         return true;
     }
 
@@ -131,7 +111,7 @@ internal sealed partial class RichTextGlyphRenderer
     /// Creates a <see cref="SweepGradientBrush"/> from a <see cref="SweepGradientPaint"/>.
     /// </summary>
     /// <param name="paint">The sweep gradient paint.</param>
-    /// <param name="transform">The transform to apply to the gradient center point.</param>
+    /// <param name="transform">The transform applied after the paint's own transform.</param>
     /// <param name="brush">The resulting brush.</param>
     /// <returns>
     /// <see langword="true"/> if created; otherwise, <see langword="false"/>.
@@ -144,14 +124,10 @@ internal sealed partial class RichTextGlyphRenderer
         // Map spread method.
         GradientRepetitionMode mode = MapSpread(paint.Spread);
 
-        // Apply any transform defined on the paint.
-        PointF center = paint.Center;
-        if (!transform.IsIdentity)
-        {
-            center = PointF.Transform(center, transform);
-        }
-
-        brush = new SweepGradientBrush(center, paint.StartAngle, paint.EndAngle, mode, stops);
+        // The center and angles stay in the paint's space. The brush maps every sample through
+        // the inverse of the composed transform.
+        Matrix4x4 gradientTransform = new Matrix4x4(paint.Transform) * transform;
+        brush = new SweepGradientBrush(paint.Center, paint.StartAngle, paint.EndAngle, mode, gradientTransform, stops);
         return true;
     }
 

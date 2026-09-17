@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
@@ -24,7 +25,26 @@ public sealed class LinearGradientBrush : GradientBrush
         PointF p1,
         GradientRepetitionMode repetitionMode,
         params ColorStop[] colorStops)
-        : base(repetitionMode, colorStops)
+        : this(p0, p1, repetitionMode, Matrix4x4.Identity, colorStops)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LinearGradientBrush"/> class using
+    /// a start and end point defined in the gradient's own coordinate space.
+    /// </summary>
+    /// <param name="p0">The start point of the gradient.</param>
+    /// <param name="p1">The end point of the gradient.</param>
+    /// <param name="repetitionMode">Defines how the colors are repeated.</param>
+    /// <param name="gradientTransform">The transform from the gradient's coordinate space to the drawing.</param>
+    /// <param name="colorStops">The ordered color stops of the gradient.</param>
+    public LinearGradientBrush(
+        PointF p0,
+        PointF p1,
+        GradientRepetitionMode repetitionMode,
+        Matrix4x4 gradientTransform,
+        params ColorStop[] colorStops)
+        : base(repetitionMode, gradientTransform, colorStops)
     {
         this.StartPoint = p0;
         this.EndPoint = p1;
@@ -47,7 +67,30 @@ public sealed class LinearGradientBrush : GradientBrush
         PointF rotationPoint,
         GradientRepetitionMode repetitionMode,
         params ColorStop[] colorStops)
-        : base(repetitionMode, colorStops)
+        : this(p0, p1, rotationPoint, repetitionMode, Matrix4x4.Identity, colorStops)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LinearGradientBrush"/> class using
+    /// three points, defined in the gradient's own coordinate space, to define a rotated gradient axis.
+    /// </summary>
+    /// <param name="p0">The first point (start of the gradient).</param>
+    /// <param name="p1">The second point (gradient vector endpoint).</param>
+    /// <param name="rotationPoint">
+    /// The rotation reference point. This defines the rotation of the gradient axis.
+    /// </param>
+    /// <param name="repetitionMode">Defines how the colors are repeated.</param>
+    /// <param name="gradientTransform">The transform from the gradient's coordinate space to the drawing.</param>
+    /// <param name="colorStops">The ordered color stops of the gradient.</param>
+    public LinearGradientBrush(
+        PointF p0,
+        PointF p1,
+        PointF rotationPoint,
+        GradientRepetitionMode repetitionMode,
+        Matrix4x4 gradientTransform,
+        params ColorStop[] colorStops)
+        : base(repetitionMode, gradientTransform, colorStops)
     {
         ResolveAxis(p0, p1, rotationPoint, out PointF start, out PointF end);
         this.StartPoint = start;
@@ -66,11 +109,19 @@ public sealed class LinearGradientBrush : GradientBrush
 
     /// <inheritdoc/>
     public override Brush Transform(Matrix4x4 matrix, Rectangle sourceInterest, Rectangle preparedInterest)
-        => new LinearGradientBrush(
-            PointF.Transform(this.StartPoint, matrix),
-            PointF.Transform(this.EndPoint, matrix),
-            this.RepetitionMode,
-            this.ColorStopsArray);
+    {
+        Matrix4x4 gradientTransform = this.GradientTransform * matrix;
+        if (!MatrixUtilities.IsAffine(in gradientTransform))
+        {
+            return new LinearGradientBrush(
+                PointF.Transform(this.StartPoint, gradientTransform),
+                PointF.Transform(this.EndPoint, gradientTransform),
+                this.RepetitionMode,
+                this.ColorStopsArray);
+        }
+
+        return new LinearGradientBrush(this.StartPoint, this.EndPoint, this.RepetitionMode, gradientTransform, this.ColorStopsArray);
+    }
 
     /// <inheritdoc/>
     public override bool Equals(Brush? other)
@@ -139,22 +190,10 @@ public sealed class LinearGradientBrush : GradientBrush
     {
         if (TPixel.GetPixelTypeInfo().AlphaRepresentation == PixelAlphaRepresentation.Associated)
         {
-            return new LinearGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(
-                configuration,
-                options,
-                canvasWidth,
-                this,
-                this.ColorStopsArray,
-                this.RepetitionMode);
+            return new LinearGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(configuration, options, canvasWidth, this);
         }
 
-        return new LinearGradientBrushRenderer<TPixel, UnassociatedGradientPixelEncoder<TPixel>>(
-            configuration,
-            options,
-            canvasWidth,
-            this,
-            this.ColorStopsArray,
-            this.RepetitionMode);
+        return new LinearGradientBrushRenderer<TPixel, UnassociatedGradientPixelEncoder<TPixel>>(configuration, options, canvasWidth, this);
     }
 
     /// <summary>
@@ -178,22 +217,34 @@ public sealed class LinearGradientBrush : GradientBrush
         /// <param name="options">The graphics options.</param>
         /// <param name="canvasWidth">The canvas width for the current render pass.</param>
         /// <param name="brush">The linear gradient brush.</param>
-        /// <param name="colorStops">The gradient color stops.</param>
-        /// <param name="repetitionMode">Defines how the gradient repeats.</param>
         public LinearGradientBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
             int canvasWidth,
-            LinearGradientBrush brush,
-            ColorStop[] colorStops,
-            GradientRepetitionMode repetitionMode)
-            : base(configuration, options, canvasWidth, colorStops, repetitionMode)
+            LinearGradientBrush brush)
+            : base(configuration, options, canvasWidth, brush)
         {
-            this.start = brush.StartPoint;
+            PointF start = brush.StartPoint;
+            float alongX = brush.EndPoint.X - start.X;
+            float alongY = brush.EndPoint.Y - start.Y;
+            this.alongsSquared = (alongX * alongX) + (alongY * alongY);
 
-            this.alongX = brush.EndPoint.X - this.start.X;
-            this.alongY = brush.EndPoint.Y - this.start.Y;
-            this.alongsSquared = (this.alongX * this.alongX) + (this.alongY * this.alongY);
+            if (this.IsTransformed)
+            {
+                // The projection onto the axis is linear, so the axis folds through the linear
+                // part of the inverse transform and the start point moves to its position in the
+                // drawing. A transformed brush then costs the same per sample as a plain one.
+                Matrix3x2 inverse = this.InverseGradientTransform;
+                float foldedX = (inverse.M11 * alongX) + (inverse.M12 * alongY);
+                float foldedY = (inverse.M21 * alongX) + (inverse.M22 * alongY);
+                start = PointF.Transform(start, brush.GradientTransform);
+                alongX = foldedX;
+                alongY = foldedY;
+            }
+
+            this.start = start;
+            this.alongX = alongX;
+            this.alongY = alongY;
         }
 
         /// <inheritdoc/>
