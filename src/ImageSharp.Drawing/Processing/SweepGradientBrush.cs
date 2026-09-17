@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
@@ -32,7 +33,28 @@ public sealed class SweepGradientBrush : GradientBrush
         float endAngleDegrees,
         GradientRepetitionMode repetitionMode,
         params ColorStop[] colorStops)
-        : base(repetitionMode, colorStops)
+        : this(center, startAngleDegrees, endAngleDegrees, repetitionMode, Matrix4x4.Identity, colorStops)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SweepGradientBrush"/> class with the center and
+    /// angles defined in the gradient's own coordinate space.
+    /// </summary>
+    /// <param name="center">The center point of the sweep gradient.</param>
+    /// <param name="startAngleDegrees">The starting angle, in degrees, measured counter-clockwise from +X on the design grid.</param>
+    /// <param name="endAngleDegrees">The ending angle, in degrees, measured counter-clockwise from +X on the design grid.</param>
+    /// <param name="repetitionMode">Defines how the gradient colors are repeated beyond the interval [0..1].</param>
+    /// <param name="gradientTransform">The transform from the gradient's coordinate space to the drawing.</param>
+    /// <param name="colorStops">The gradient color stops. Ratios must be in [0..1] and are interpreted along the angular sweep.</param>
+    public SweepGradientBrush(
+        PointF center,
+        float startAngleDegrees,
+        float endAngleDegrees,
+        GradientRepetitionMode repetitionMode,
+        Matrix4x4 gradientTransform,
+        params ColorStop[] colorStops)
+        : base(repetitionMode, gradientTransform, colorStops)
     {
         this.Center = center;
         this.StartAngleDegrees = startAngleDegrees;
@@ -57,49 +79,57 @@ public sealed class SweepGradientBrush : GradientBrush
     /// <inheritdoc/>
     public override Brush Transform(Matrix4x4 matrix, Rectangle sourceInterest, Rectangle preparedInterest)
     {
-        PointF tc = PointF.Transform(this.Center, matrix);
-
-        // Treat the brush as two rays starting at the center:
-        // one ray for the start angle and one ray for the end angle.
-        // The important value is the signed angular distance between those rays.
-        // We keep that sign so a reflected transform can turn a counter-clockwise
-        // sweep into a clockwise sweep instead of silently "fixing" it.
-        float sweepDegrees = GetEffectiveSweepDegrees(this.StartAngleDegrees, this.EndAngleDegrees);
-        float startRad = GeometryUtilities.DegreeToRadian(this.StartAngleDegrees);
-        float endRad = GeometryUtilities.DegreeToRadian(this.StartAngleDegrees + sweepDegrees);
-
-        // The public API uses the design-grid convention, which is y-up.
-        // Screen pixels are y-down, so a positive mathematical rotation uses
-        // `center.Y - sin(theta)` rather than `center.Y + sin(theta)`.
-        PointF startDir = PointF.Transform(new PointF(this.Center.X + MathF.Cos(startRad), this.Center.Y - MathF.Sin(startRad)), matrix);
-        PointF endDir = PointF.Transform(new PointF(this.Center.X + MathF.Cos(endRad), this.Center.Y - MathF.Sin(endRad)), matrix);
-
-        // Convert the transformed rays back into brush angles in the same public convention:
-        // counter-clockwise from +X on the design grid.
-        float newStart = NormalizeDirectionDegrees(MathF.Atan2(-(startDir.Y - tc.Y), startDir.X - tc.X) * (180f / MathF.PI));
-        float newEnd = NormalizeDirectionDegrees(MathF.Atan2(-(endDir.Y - tc.Y), endDir.X - tc.X) * (180f / MathF.PI));
-
-        // A negative determinant means the transform flips orientation.
-        // That flips the direction of the sweep, so we use it to decide whether
-        // the end angle should unwrap forwards or backwards from the new start.
-        float determinant = (matrix.M11 * matrix.M22) - (matrix.M12 * matrix.M21);
-        float directionHint = MathF.Sign(sweepDegrees);
-        if (directionHint == 0F)
+        Matrix4x4 gradientTransform = this.GradientTransform * matrix;
+        if (!MatrixUtilities.IsAffine(in gradientTransform))
         {
-            directionHint = 1F;
+            // Perspective has no affine inverse: the center and the two rays project point by
+            // point, and the sign of the sweep follows the orientation of the transform.
+            PointF tc = PointF.Transform(this.Center, gradientTransform);
+
+            // Treat the brush as two rays starting at the center:
+            // one ray for the start angle and one ray for the end angle.
+            // The important value is the signed angular distance between those rays.
+            // We keep that sign so a reflected transform can turn a counter-clockwise
+            // sweep into a clockwise sweep instead of silently "fixing" it.
+            float sweepDegrees = GetEffectiveSweepDegrees(this.StartAngleDegrees, this.EndAngleDegrees);
+            float startRad = GeometryUtilities.DegreeToRadian(this.StartAngleDegrees);
+            float endRad = GeometryUtilities.DegreeToRadian(this.StartAngleDegrees + sweepDegrees);
+
+            // The public API uses the design-grid convention, which is y-up.
+            // Screen pixels are y-down, so a positive mathematical rotation uses
+            // `center.Y - sin(theta)` rather than `center.Y + sin(theta)`.
+            PointF startDir = PointF.Transform(new PointF(this.Center.X + MathF.Cos(startRad), this.Center.Y - MathF.Sin(startRad)), gradientTransform);
+            PointF endDir = PointF.Transform(new PointF(this.Center.X + MathF.Cos(endRad), this.Center.Y - MathF.Sin(endRad)), gradientTransform);
+
+            // Convert the transformed rays back into brush angles in the same public convention:
+            // counter-clockwise from +X on the design grid.
+            float newStart = NormalizeDirectionDegrees(MathF.Atan2(-(startDir.Y - tc.Y), startDir.X - tc.X) * (180f / MathF.PI));
+            float newEnd = NormalizeDirectionDegrees(MathF.Atan2(-(endDir.Y - tc.Y), endDir.X - tc.X) * (180f / MathF.PI));
+
+            // A negative determinant means the transform flips orientation.
+            // That flips the direction of the sweep, so we use it to decide whether
+            // the end angle should unwrap forwards or backwards from the new start.
+            float determinant = (gradientTransform.M11 * gradientTransform.M22) - (gradientTransform.M12 * gradientTransform.M21);
+            float directionHint = MathF.Sign(sweepDegrees);
+            if (directionHint == 0F)
+            {
+                directionHint = 1F;
+            }
+
+            if (determinant < 0F)
+            {
+                directionHint = -directionHint;
+            }
+
+            return new SweepGradientBrush(
+                tc,
+                newStart,
+                UnwrapSweepEndDegrees(newStart, newEnd, directionHint, MathF.Abs(sweepDegrees)),
+                this.RepetitionMode,
+                this.ColorStopsArray);
         }
 
-        if (determinant < 0F)
-        {
-            directionHint = -directionHint;
-        }
-
-        return new SweepGradientBrush(
-            tc,
-            newStart,
-            UnwrapSweepEndDegrees(newStart, newEnd, directionHint, MathF.Abs(sweepDegrees)),
-            this.RepetitionMode,
-            this.ColorStopsArray);
+        return new SweepGradientBrush(this.Center, this.StartAngleDegrees, this.EndAngleDegrees, this.RepetitionMode, gradientTransform, this.ColorStopsArray);
     }
 
     /// <inheritdoc/>
@@ -221,22 +251,10 @@ public sealed class SweepGradientBrush : GradientBrush
     {
         if (TPixel.GetPixelTypeInfo().AlphaRepresentation == PixelAlphaRepresentation.Associated)
         {
-            return new SweepGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(
-                configuration,
-                options,
-                canvasWidth,
-                this,
-                this.ColorStopsArray,
-                this.RepetitionMode);
+            return new SweepGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(configuration, options, canvasWidth, this);
         }
 
-        return new SweepGradientBrushRenderer<TPixel, UnassociatedGradientPixelEncoder<TPixel>>(
-            configuration,
-            options,
-            canvasWidth,
-            this,
-            this.ColorStopsArray,
-            this.RepetitionMode);
+        return new SweepGradientBrushRenderer<TPixel, UnassociatedGradientPixelEncoder<TPixel>>(configuration, options, canvasWidth, this);
     }
 
     /// <summary>
@@ -265,16 +283,12 @@ public sealed class SweepGradientBrush : GradientBrush
         /// <param name="options">The graphics options.</param>
         /// <param name="canvasWidth">The canvas width for the current render pass.</param>
         /// <param name="brush">The sweep gradient brush.</param>
-        /// <param name="colorStops">The gradient color stops (ratios in [0..1]).</param>
-        /// <param name="repetitionMode">Defines how gradient colors are repeated outside [0..1].</param>
         public SweepGradientBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
             int canvasWidth,
-            SweepGradientBrush brush,
-            ColorStop[] colorStops,
-            GradientRepetitionMode repetitionMode)
-            : base(configuration, options, canvasWidth, colorStops, repetitionMode)
+            SweepGradientBrush brush)
+            : base(configuration, options, canvasWidth, brush)
         {
             this.cx = brush.Center.X;
             this.cy = brush.Center.Y;
@@ -288,9 +302,20 @@ public sealed class SweepGradientBrush : GradientBrush
         /// <inheritdoc />
         protected override float PositionOnGradient(float x, float y)
         {
-            // Move the sample into center-relative coordinates.
-            float dx = x - this.cx;
-            float dy = y - this.cy;
+            // Move the sample into center-relative coordinates in the gradient's space.
+            float dx;
+            float dy;
+            if (this.IsTransformed)
+            {
+                Vector2 p = Vector2.Transform(new Vector2(x, y), this.InverseGradientTransform);
+                dx = p.X - this.cx;
+                dy = p.Y - this.cy;
+            }
+            else
+            {
+                dx = x - this.cx;
+                dy = y - this.cy;
+            }
 
             if (dx == 0f && dy == 0f)
             {

@@ -26,7 +26,26 @@ public sealed class RadialGradientBrush : GradientBrush
         float radius,
         GradientRepetitionMode repetitionMode,
         params ColorStop[] colorStops)
-        : base(repetitionMode, colorStops)
+        : this(center, radius, repetitionMode, Matrix4x4.Identity, colorStops)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RadialGradientBrush"/> class using a single circle
+    /// defined in the gradient's own coordinate space.
+    /// </summary>
+    /// <param name="center">The center of the circular gradient.</param>
+    /// <param name="radius">The radius of the circular gradient.</param>
+    /// <param name="repetitionMode">Defines how the colors in the gradient are repeated.</param>
+    /// <param name="gradientTransform">The transform from the gradient's coordinate space to the drawing.</param>
+    /// <param name="colorStops">The ordered gradient stops.</param>
+    public RadialGradientBrush(
+        PointF center,
+        float radius,
+        GradientRepetitionMode repetitionMode,
+        Matrix4x4 gradientTransform,
+        params ColorStop[] colorStops)
+        : base(repetitionMode, gradientTransform, colorStops)
     {
         this.Center0 = center;
         this.Radius0 = radius;
@@ -50,7 +69,30 @@ public sealed class RadialGradientBrush : GradientBrush
         float endRadius,
         GradientRepetitionMode repetitionMode,
         params ColorStop[] colorStops)
-        : base(repetitionMode, colorStops)
+        : this(startCenter, startRadius, endCenter, endRadius, repetitionMode, Matrix4x4.Identity, colorStops)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RadialGradientBrush"/> class using two circles
+    /// defined in the gradient's own coordinate space.
+    /// </summary>
+    /// <param name="startCenter">The center of the starting circle.</param>
+    /// <param name="startRadius">The radius of the starting circle.</param>
+    /// <param name="endCenter">The center of the ending circle.</param>
+    /// <param name="endRadius">The radius of the ending circle.</param>
+    /// <param name="repetitionMode">Defines how the colors in the gradient are repeated.</param>
+    /// <param name="gradientTransform">The transform from the gradient's coordinate space to the drawing.</param>
+    /// <param name="colorStops">The ordered gradient stops.</param>
+    public RadialGradientBrush(
+        PointF startCenter,
+        float startRadius,
+        PointF endCenter,
+        float endRadius,
+        GradientRepetitionMode repetitionMode,
+        Matrix4x4 gradientTransform,
+        params ColorStop[] colorStops)
+        : base(repetitionMode, gradientTransform, colorStops)
     {
         this.Center0 = startCenter;
         this.Radius0 = startRadius;
@@ -86,15 +128,28 @@ public sealed class RadialGradientBrush : GradientBrush
     /// <inheritdoc/>
     public override Brush Transform(Matrix4x4 matrix, Rectangle sourceInterest, Rectangle preparedInterest)
     {
-        PointF tc0 = PointF.Transform(this.Center0, matrix);
-        float scale = MatrixUtilities.GetAverageScale(in matrix);
-        if (this.IsTwoCircle)
+        Matrix4x4 gradientTransform = this.GradientTransform * matrix;
+        if (!MatrixUtilities.IsAffine(in gradientTransform))
         {
-            PointF tc1 = PointF.Transform(this.Center1!.Value, matrix);
-            return new RadialGradientBrush(tc0, this.Radius0 * scale, tc1, this.Radius1!.Value * scale, this.RepetitionMode, this.ColorStopsArray);
+            // Perspective has no affine inverse: the centers project point by point and the
+            // radii scale by the average scale of the linear part.
+            PointF tc0 = PointF.Transform(this.Center0, gradientTransform);
+            float scale = MatrixUtilities.GetAverageScale(in gradientTransform);
+            if (this.IsTwoCircle)
+            {
+                PointF tc1 = PointF.Transform(this.Center1!.Value, gradientTransform);
+                return new RadialGradientBrush(tc0, this.Radius0 * scale, tc1, this.Radius1!.Value * scale, this.RepetitionMode, this.ColorStopsArray);
+            }
+
+            return new RadialGradientBrush(tc0, this.Radius0 * scale, this.RepetitionMode, this.ColorStopsArray);
         }
 
-        return new RadialGradientBrush(tc0, this.Radius0 * scale, this.RepetitionMode, this.ColorStopsArray);
+        if (this.IsTwoCircle)
+        {
+            return new RadialGradientBrush(this.Center0, this.Radius0, this.Center1!.Value, this.Radius1!.Value, this.RepetitionMode, gradientTransform, this.ColorStopsArray);
+        }
+
+        return new RadialGradientBrush(this.Center0, this.Radius0, this.RepetitionMode, gradientTransform, this.ColorStopsArray);
     }
 
     /// <inheritdoc/>
@@ -125,28 +180,10 @@ public sealed class RadialGradientBrush : GradientBrush
     {
         if (TPixel.GetPixelTypeInfo().AlphaRepresentation == PixelAlphaRepresentation.Associated)
         {
-            return new RadialGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(
-                configuration,
-                options,
-                canvasWidth,
-                this.Center0,
-                this.Radius0,
-                this.Center1,
-                this.Radius1,
-                this.ColorStopsArray,
-                this.RepetitionMode);
+            return new RadialGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(configuration, options, canvasWidth, this);
         }
 
-        return new RadialGradientBrushRenderer<TPixel, UnassociatedGradientPixelEncoder<TPixel>>(
-            configuration,
-            options,
-            canvasWidth,
-            this.Center0,
-            this.Radius0,
-            this.Center1,
-            this.Radius1,
-            this.ColorStopsArray,
-            this.RepetitionMode);
+        return new RadialGradientBrushRenderer<TPixel, UnassociatedGradientPixelEncoder<TPixel>>(configuration, options, canvasWidth, this);
     }
 
     /// <summary>
@@ -185,39 +222,33 @@ public sealed class RadialGradientBrush : GradientBrush
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
         /// <param name="canvasWidth">The canvas width for the current render pass.</param>
-        /// <param name="center0">Center of the starting circle.</param>
-        /// <param name="radius0">Radius of the starting circle.</param>
-        /// <param name="center1">Center of the ending circle, or null to use single-circle form.</param>
-        /// <param name="radius1">Radius of the ending circle, or null to use single-circle form.</param>
-        /// <param name="colorStops">Definition of colors.</param>
-        /// <param name="repetitionMode">How the colors are repeated beyond the first gradient.</param>
+        /// <param name="brush">The radial gradient brush.</param>
         public RadialGradientBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
             int canvasWidth,
-            PointF center0,
-            float radius0,
-            PointF? center1,
-            float? radius1,
-            ColorStop[] colorStops,
-            GradientRepetitionMode repetitionMode)
-            : base(configuration, options, canvasWidth, colorStops, repetitionMode)
+            RadialGradientBrush brush)
+            : base(configuration, options, canvasWidth, brush)
         {
+            PointF center0 = brush.Center0;
+            float radius0 = brush.Radius0;
             this.c0x = center0.X;
             this.c0y = center0.Y;
             this.r0 = radius0;
 
-            this.isTwoCircle = center1.HasValue && radius1.HasValue;
+            this.isTwoCircle = brush.IsTwoCircle;
 
             if (this.isTwoCircle)
             {
                 ConicalGradientParameters parameters = CreateConicalGradientParameters(
                     center0,
                     radius0,
-                    center1!.Value,
-                    radius1!.Value);
+                    brush.Center1!.Value,
+                    brush.Radius1!.Value);
 
-                this.radialTransform = parameters.Transform;
+                // The inverse gradient transform folds into the canonical transform, so a
+                // transformed brush costs the same per sample as a plain one.
+                this.radialTransform = this.InverseGradientTransform * parameters.Transform;
                 this.focalX = parameters.FocalX;
                 this.radius = parameters.Radius;
                 this.isStrip = parameters.IsStrip;
@@ -242,9 +273,22 @@ public sealed class RadialGradientBrush : GradientBrush
         {
             if (!this.isTwoCircle)
             {
-                // Single-circle form: the parameter is simply distance from the
-                // center divided by the radius.
-                float ux = x - this.c0x, uy = y - this.c0y;
+                // Single-circle form: the parameter is simply distance from the center divided
+                // by the radius, measured in the gradient's space.
+                float ux;
+                float uy;
+                if (this.IsTransformed)
+                {
+                    Vector2 p = Vector2.Transform(new Vector2(x, y), this.InverseGradientTransform);
+                    ux = p.X - this.c0x;
+                    uy = p.Y - this.c0y;
+                }
+                else
+                {
+                    ux = x - this.c0x;
+                    uy = y - this.c0y;
+                }
+
                 return MathF.Sqrt((ux * ux) + (uy * uy)) / this.r0;
             }
 

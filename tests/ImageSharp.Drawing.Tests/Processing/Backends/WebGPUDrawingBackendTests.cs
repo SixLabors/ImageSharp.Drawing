@@ -2841,6 +2841,87 @@ public partial class WebGPUDrawingBackendTests
         AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
     }
 
+    [WebGPUTheory]
+    [WithSolidFilledImages(420, 200, "White", PixelTypes.Rgba32)]
+    public void FillPath_WithTransformedGradientBrushes_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true },
+            Transform = Matrix4x4.CreateRotationZ(0.2F) * Matrix4x4.CreateTranslation(20F, -10F, 0F)
+        };
+
+        // Squashed, skewed and reflected gradient transforms with a transparent middle stop,
+        // the shapes color emoji fonts produce, under a rotated drawing transform.
+        Matrix4x4 squash = new(1.4F, 0.1F, 0F, 0F, -0.3F, 0.7F, 0F, 0F, 0F, 0F, 1F, 0F, 60F, 70F, 0F, 1F);
+        Matrix4x4 flip = Matrix4x4.CreateScale(-1F, 1F, 1F) * Matrix4x4.CreateTranslation(300F, 0F, 0F);
+        Matrix4x4 skew = new(1F, 0F, 0F, 0F, 0.6F, 1F, 0F, 0F, 0F, 0F, 1F, 0F, 0F, 0F, 0F, 1F);
+        ColorStop[] stops =
+        [
+            new ColorStop(0, Color.Red),
+            new ColorStop(0.5F, Color.Lime.WithAlpha(0F)),
+            new ColorStop(1, Color.Blue)
+        ];
+
+        RectanglePolygon first = new(10, 10, 95, 180);
+        RectanglePolygon second = new(112, 10, 95, 180);
+        RectanglePolygon third = new(215, 10, 95, 180);
+        RectanglePolygon fourth = new(318, 10, 95, 180);
+        Brush twoCircle = new RadialGradientBrush(
+            new PointF(20F, 40F),
+            10F,
+            new PointF(40F, 40F),
+            60F,
+            GradientRepetitionMode.Reflect,
+            squash,
+            stops);
+        Brush singleCircle = new RadialGradientBrush(
+            new PointF(78F, 32F),
+            40F,
+            GradientRepetitionMode.None,
+            squash,
+            stops);
+        Brush sweep = new SweepGradientBrush(
+            new PointF(60F, 100F),
+            20F,
+            340F,
+            GradientRepetitionMode.None,
+            flip,
+            stops);
+        Brush linear = new LinearGradientBrush(
+            new PointF(318F, 0F),
+            new PointF(413F, 0F),
+            GradientRepetitionMode.Repeat,
+            skew,
+            stops);
+
+        void DrawAction(DrawingCanvas canvas)
+        {
+            canvas.Fill(twoCircle, first);
+            canvas.Fill(singleCircle, second);
+            canvas.Fill(sweep, third);
+            canvas.Fill(linear, fourth);
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, null, defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0267F);
+        AssertBackendPairReferenceOutputs(provider, null, defaultImage, nativeSurfaceImage);
+    }
+
     [WebGPUFact]
     public void FillPath_WithSwappedRadialDontFill_ComposesTransparentOutsideGradient()
     {

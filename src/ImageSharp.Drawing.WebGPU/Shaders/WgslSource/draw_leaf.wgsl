@@ -147,6 +147,18 @@ fn main(
         {
             let bbox = path_bbox[m.path_ix];
             let draw_flags = bbox.draw_flags;
+            // Every gradient payload starts with the drawing-to-gradient transform, the inverse
+            // of the brush's gradient transform, so the geometry that follows is in the
+            // gradient's own space.
+            var user_to_gradient = transform_identity();
+            if tag_word == DRAWTAG_FILL_LIN_GRADIENT || tag_word == DRAWTAG_FILL_RAD_GRADIENT ||
+                tag_word == DRAWTAG_FILL_ELLIPTIC_GRADIENT || tag_word == DRAWTAG_FILL_SWEEP_GRADIENT
+            {
+                user_to_gradient = Transform(
+                    bitcast<vec4<f32>>(vec4(scene[dd + 1u], scene[dd + 2u], scene[dd + 3u], scene[dd + 4u])),
+                    bitcast<vec2<f32>>(vec2(scene[dd + 5u], scene[dd + 6u])),
+                    vec3(0.0, 0.0, 1.0));
+            }
             switch tag_word {
                 case DRAWTAG_FILL_COLOR: {
                     info[di] = draw_flags;
@@ -159,8 +171,8 @@ fn main(
                 }
                 case DRAWTAG_FILL_LIN_GRADIENT: {
                     info[di] = draw_flags;
-                    let p0 = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
-                    let p1 = bitcast<vec2<f32>>(vec2(scene[dd + 3u], scene[dd + 4u]));
+                    let p0 = bitcast<vec2<f32>>(vec2(scene[dd + 7u], scene[dd + 8u]));
+                    let p1 = bitcast<vec2<f32>>(vec2(scene[dd + 9u], scene[dd + 10u]));
                     // Encode the gradient as a line equation so fine can
                     // evaluate the parameter as t = dot(p, line_xy) + line_c.
                     let dxy = p1 - p0;
@@ -172,6 +184,15 @@ fn main(
                         line_xy = dxy * scale;
                         line_c = -dot(p0, line_xy);
                     }
+
+                    // The projection is linear, so the drawing-to-gradient transform folds into
+                    // the line equation and fine evaluates it directly in drawing space.
+                    let u = user_to_gradient;
+                    let folded_xy = vec2(
+                        u.matrx.x * line_xy.x + u.matrx.y * line_xy.y,
+                        u.matrx.z * line_xy.x + u.matrx.w * line_xy.y);
+                    line_c = line_c + dot(u.translate, line_xy);
+                    line_xy = folded_xy;
 
                     // The CPU brush defines a zero-length axis as the gradient end. The
                     // initialized equation therefore evaluates t=1 everywhere without NaN.
@@ -185,11 +206,10 @@ fn main(
                     // This epsilon matches what Skia uses
                     let GRADIENT_EPSILON = 1.0 / f32(1u << 12u);
                     info[di] = draw_flags;
-                    var p0 = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
-                    var p1 = bitcast<vec2<f32>>(vec2(scene[dd + 3u], scene[dd + 4u]));
-                    var r0 = bitcast<f32>(scene[dd + 5u]);
-                    var r1 = bitcast<f32>(scene[dd + 6u]);
-                    let user_to_gradient = transform_identity();
+                    var p0 = bitcast<vec2<f32>>(vec2(scene[dd + 7u], scene[dd + 8u]));
+                    var p1 = bitcast<vec2<f32>>(vec2(scene[dd + 9u], scene[dd + 10u]));
+                    var r0 = bitcast<f32>(scene[dd + 11u]);
+                    var r1 = bitcast<f32>(scene[dd + 12u]);
                     var xform = transform_identity();
                     var focal_x = 0.0;
                     var radius = 0.0;
@@ -257,9 +277,9 @@ fn main(
                 }
                 case DRAWTAG_FILL_ELLIPTIC_GRADIENT: {
                     info[di] = draw_flags;
-                    let center = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
-                    let axis_end = bitcast<vec2<f32>>(vec2(scene[dd + 3u], scene[dd + 4u]));
-                    let second_end = bitcast<vec2<f32>>(vec2(scene[dd + 5u], scene[dd + 6u]));
+                    let center = bitcast<vec2<f32>>(vec2(scene[dd + 7u], scene[dd + 8u]));
+                    let axis_end = bitcast<vec2<f32>>(vec2(scene[dd + 9u], scene[dd + 10u]));
+                    let second_end = bitcast<vec2<f32>>(vec2(scene[dd + 11u], scene[dd + 12u]));
                     let dxy = axis_end - center;
                     let axis = length(dxy);
                     let second_axis_len = length(second_end - center);
@@ -305,25 +325,36 @@ fn main(
                         xlat_y = -(m1 * center.x + m3 * center.y);
                     }
 
-                    info[di + 1u] = bitcast<u32>(m0);
-                    info[di + 2u] = bitcast<u32>(m1);
-                    info[di + 3u] = bitcast<u32>(m2);
-                    info[di + 4u] = bitcast<u32>(m3);
-                    info[di + 5u] = bitcast<u32>(xlat_x);
-                    info[di + 6u] = bitcast<u32>(xlat_y);
+                    // Samples pass through the drawing-to-gradient transform before the ellipse
+                    // mapping. Degenerate kinds keep the center as their translation, so it moves
+                    // to its drawing position and the transform folds into the matrix only.
+                    let ellipse = Transform(vec4(m0, m1, m2, m3), vec2(xlat_x, xlat_y), vec3(0.0, 0.0, 1.0));
+                    var composed = transform_mul(ellipse, user_to_gradient);
+                    if kind != ELLIPTIC_GRAD_KIND_NORMAL {
+                        composed.translate = transform_apply(transform_inverse(user_to_gradient), center);
+                    }
+
+                    info[di + 1u] = bitcast<u32>(composed.matrx.x);
+                    info[di + 2u] = bitcast<u32>(composed.matrx.y);
+                    info[di + 3u] = bitcast<u32>(composed.matrx.z);
+                    info[di + 4u] = bitcast<u32>(composed.matrx.w);
+                    info[di + 5u] = bitcast<u32>(composed.translate.x);
+                    info[di + 6u] = bitcast<u32>(composed.translate.y);
                     info[di + 7u] = kind;
                 }
                 case DRAWTAG_FILL_SWEEP_GRADIENT: {
                     info[di] = draw_flags;
-                    let p0 = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
-                    info[di + 1u] = bitcast<u32>(1.0);
-                    info[di + 2u] = bitcast<u32>(0.0);
-                    info[di + 3u] = bitcast<u32>(0.0);
-                    info[di + 4u] = bitcast<u32>(1.0);
-                    info[di + 5u] = bitcast<u32>(-p0.x);
-                    info[di + 6u] = bitcast<u32>(-p0.y);
-                    info[di + 7u] = scene[dd + 3u];
-                    info[di + 8u] = scene[dd + 4u];
+                    let p0 = bitcast<vec2<f32>>(vec2(scene[dd + 7u], scene[dd + 8u]));
+                    // The sample maps into the gradient's space and then becomes center-relative.
+                    let u = user_to_gradient;
+                    info[di + 1u] = bitcast<u32>(u.matrx.x);
+                    info[di + 2u] = bitcast<u32>(u.matrx.y);
+                    info[di + 3u] = bitcast<u32>(u.matrx.z);
+                    info[di + 4u] = bitcast<u32>(u.matrx.w);
+                    info[di + 5u] = bitcast<u32>(u.translate.x - p0.x);
+                    info[di + 6u] = bitcast<u32>(u.translate.y - p0.y);
+                    info[di + 7u] = scene[dd + 9u];
+                    info[di + 8u] = scene[dd + 10u];
                 }
                 case DRAWTAG_FILL_PATH_GRADIENT: {
                     info[di] = draw_flags;

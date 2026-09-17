@@ -101,93 +101,64 @@ public partial class ProcessWithDrawingCanvasTests
             false);
 
     [Fact]
-    public void SweepGradientBrush_Transform_TranslationMovesCenter()
-    {
-        SweepGradientBrush brush = new(
-            new PointF(100, 100),
-            0F,
-            360F,
-            GradientRepetitionMode.None,
-            new ColorStop(0, Color.Red),
-            new ColorStop(1, Color.Blue));
-
-        Matrix4x4 matrix = Matrix4x4.CreateTranslation(50F, 30F, 0F);
-
-        SweepGradientBrush transformed = Assert.IsType<SweepGradientBrush>(brush.Transform(matrix, default, default));
-
-        Assert.Equal(150F, transformed.Center.X, 0.01F);
-        Assert.Equal(130F, transformed.Center.Y, 0.01F);
-    }
-
-    [Fact]
-    public void SweepGradientBrush_Transform_RotationRotatesAngles()
+    public void SweepGradientBrush_Transform_ComposesTheGradientTransform()
     {
         SweepGradientBrush brush = new(
             new PointF(100, 100),
             0F,
             90F,
             GradientRepetitionMode.None,
+            Matrix4x4.CreateRotationZ(MathF.PI / 4F),
             new ColorStop(0, Color.Red),
             new ColorStop(1, Color.Blue));
 
-        // Rotate 90 degrees counter-clockwise in design grid (y-up).
-        // In screen space (y-down), Matrix4x4.CreateRotationZ(pi/2) rotates clockwise,
-        // which corresponds to counter-clockwise on the design grid.
-        Matrix4x4 matrix = Matrix4x4.CreateRotationZ(MathF.PI / 2F);
+        Matrix4x4 matrix = Matrix4x4.CreateScale(2F, 1F, 1F) * Matrix4x4.CreateTranslation(50F, 30F, 0F);
 
         SweepGradientBrush transformed = Assert.IsType<SweepGradientBrush>(brush.Transform(matrix, default, default));
 
-        // The 90-degree sweep should be preserved.
-        float sweep = transformed.EndAngleDegrees - transformed.StartAngleDegrees;
-        Assert.Equal(90F, sweep, 0.5F);
+        // The center and angles stay in the gradient's space; only the transform changes.
+        Assert.Equal(brush.Center, transformed.Center);
+        Assert.Equal(brush.StartAngleDegrees, transformed.StartAngleDegrees);
+        Assert.Equal(brush.EndAngleDegrees, transformed.EndAngleDegrees);
+        Assert.Equal(brush.GradientTransform * matrix, transformed.GradientTransform);
     }
 
     [Fact]
-    public void SweepGradientBrush_Transform_ReflectionFlipsSweepDirection()
+    public void SweepGradientBrush_GradientTransform_ReflectionMirrorsTheSweep()
     {
-        SweepGradientBrush brush = new(
-            new PointF(100, 100),
-            0F,
-            90F,
-            GradientRepetitionMode.None,
-            new ColorStop(0, Color.Red),
-            new ColorStop(1, Color.Blue));
+        // A reflection about x = 100 maps the pixel center x + 0.5 onto 199.5 - x, the center of
+        // pixel 199 - x, so the reflected brush repeats the upright brush mirrored.
+        static SweepGradientBrush Create(Matrix4x4 gradientTransform)
+            => new(
+                new PointF(100F, 100F),
+                0F,
+                360F,
+                GradientRepetitionMode.None,
+                gradientTransform,
+                new ColorStop(0, Color.Red),
+                new ColorStop(1, Color.Blue));
 
-        // Reflect across Y axis (negative determinant).
-        Matrix4x4 matrix = Matrix4x4.CreateScale(-1F, 1F, 1F);
+        Matrix4x4 reflect = Matrix4x4.CreateScale(-1F, 1F, 1F) * Matrix4x4.CreateTranslation(200F, 0F, 0F);
+        using Image<Rgba32> upright = new(200, 200, Color.White.ToPixel<Rgba32>());
+        upright.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(Create(Matrix4x4.Identity))));
 
-        SweepGradientBrush transformed = Assert.IsType<SweepGradientBrush>(brush.Transform(matrix, default, default));
+        using Image<Rgba32> reflected = new(200, 200, Color.White.ToPixel<Rgba32>());
+        reflected.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(Create(reflect))));
 
-        // Reflection should flip the sweep direction: positive 90 becomes negative 90.
-        float sweep = transformed.EndAngleDegrees - transformed.StartAngleDegrees;
-        Assert.Equal(-90F, sweep, 0.5F);
+        for (int y = 0; y < 200; y += 7)
+        {
+            for (int x = 0; x < 200; x += 5)
+            {
+                Assert.Equal(upright[199 - x, y], reflected[x, y]);
+            }
+        }
+
+        // The sweep really runs the other way: at the same pixel the colors differ.
+        Assert.NotEqual(upright[150, 60], reflected[150, 60]);
     }
 
     [Fact]
-    public void SweepGradientBrush_Transform_FullSweepPreserved()
-    {
-        // Equal start/end = full 360 sweep.
-        SweepGradientBrush brush = new(
-            new PointF(50, 50),
-            45F,
-            45F,
-            GradientRepetitionMode.None,
-            new ColorStop(0, Color.Red),
-            new ColorStop(1, Color.Blue));
-
-        Matrix4x4 matrix =
-            Matrix4x4.CreateScale(2F)
-            * Matrix4x4.CreateTranslation(10F, 20F, 0F);
-
-        SweepGradientBrush transformed = Assert.IsType<SweepGradientBrush>(brush.Transform(matrix, default, default));
-
-        // Full sweep should remain a full 360 degrees.
-        float sweep = MathF.Abs(transformed.EndAngleDegrees - transformed.StartAngleDegrees);
-        Assert.Equal(360F, sweep, 0.5F);
-    }
-
-    [Fact]
-    public void RadialGradientBrush_Transform_UsesAverageScaleForRadii()
+    public void RadialGradientBrush_Transform_ComposesTheGradientTransform()
     {
         RadialGradientBrush brush = new(
             new PointF(10, 20),
@@ -195,19 +166,188 @@ public partial class ProcessWithDrawingCanvasTests
             new PointF(30, 40),
             8F,
             GradientRepetitionMode.None,
+            Matrix4x4.CreateRotationZ(MathF.PI / 4F),
             new ColorStop(0, Color.Red),
             new ColorStop(1, Color.Blue));
 
-        Matrix4x4 matrix =
-            Matrix4x4.CreateScale(2F, 4F, 1F)
-            * Matrix4x4.CreateTranslation(5F, 7F, 0F);
+        Matrix4x4 matrix = Matrix4x4.CreateScale(2F, 4F, 1F) * Matrix4x4.CreateTranslation(5F, 7F, 0F);
 
         RadialGradientBrush transformed = Assert.IsType<RadialGradientBrush>(brush.Transform(matrix, default, default));
 
-        Assert.Equal(PointF.Transform(brush.Center0, matrix), transformed.Center0);
-        Assert.Equal(PointF.Transform(brush.Center1.Value, matrix), transformed.Center1.Value);
-        Assert.Equal(12F, transformed.Radius0, 5);
-        Assert.Equal(24F, transformed.Radius1.Value, 5);
+        // The circles stay in the gradient's space; only the transform changes.
+        Assert.Equal(brush.Center0, transformed.Center0);
+        Assert.Equal(brush.Radius0, transformed.Radius0);
+        Assert.Equal(brush.Center1, transformed.Center1);
+        Assert.Equal(brush.Radius1, transformed.Radius1);
+        Assert.Equal(brush.GradientTransform * matrix, transformed.GradientTransform);
+    }
+
+    [Fact]
+    public void RadialGradientBrush_GradientTransform_ScalesTheAxesIndependently()
+    {
+        // Doubling x about the pixel center 100.5 maps the center of pixel 100 + d onto the
+        // center of pixel 100 + d / 2, so the stretched brush equals the round brush sampled at
+        // half the horizontal distance while the vertical axis is untouched.
+        static RadialGradientBrush Create(Matrix4x4 gradientTransform)
+            => new(
+                new PointF(100.5F, 100.5F),
+                8F,
+                GradientRepetitionMode.Repeat,
+                gradientTransform,
+                new ColorStop(0, Color.Red),
+                new ColorStop(1, Color.Blue));
+
+        Matrix4x4 stretch = Matrix4x4.CreateScale(2F, 1F, 1F) * Matrix4x4.CreateTranslation(-100.5F, 0F, 0F);
+        using Image<Rgba32> round = new(200, 200, Color.White.ToPixel<Rgba32>());
+        round.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(Create(Matrix4x4.Identity))));
+
+        using Image<Rgba32> stretched = new(200, 200, Color.White.ToPixel<Rgba32>());
+        stretched.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(Create(stretch))));
+
+        for (int d = -60; d <= 60; d += 2)
+        {
+            Assert.Equal(round[100 + (d / 2), 100], stretched[100 + d, 100]);
+            Assert.Equal(round[100, 100 + d], stretched[100, 100 + d]);
+        }
+
+        // The stretch really widens the rings: at the same pixel the colors differ.
+        Assert.NotEqual(round[110, 100], stretched[110, 100]);
+    }
+
+    [Fact]
+    public void RadialGradientBrush_GradientTransform_SkewsTheCircles()
+    {
+        // The skew x' = x + y - 0.5 maps the center of pixel (x - y, y) onto the center of
+        // pixel (x, y), so the skewed two-circle brush equals the upright brush sampled one
+        // pixel further left per row. The canonical transform is composed once per brush, so
+        // the sample can round differently by one level in a channel.
+        static RadialGradientBrush Create(Matrix4x4 gradientTransform)
+            => new(
+                new PointF(90F, 100F),
+                10F,
+                new PointF(110F, 100F),
+                40F,
+                GradientRepetitionMode.Repeat,
+                gradientTransform,
+                new ColorStop(0, Color.Red),
+                new ColorStop(1, Color.Blue));
+
+        Matrix4x4 skew = new(1F, 0F, 0F, 0F, 1F, 1F, 0F, 0F, 0F, 0F, 1F, 0F, -0.5F, 0F, 0F, 1F);
+        using Image<Rgba32> upright = new(400, 200, Color.White.ToPixel<Rgba32>());
+        upright.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(Create(Matrix4x4.Identity))));
+
+        using Image<Rgba32> skewed = new(400, 200, Color.White.ToPixel<Rgba32>());
+        skewed.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(Create(skew))));
+
+        for (int y = 0; y < 200; y += 7)
+        {
+            for (int x = 200; x < 400; x += 5)
+            {
+                Rgba32 expected = upright[x - y, y];
+                Rgba32 actual = skewed[x, y];
+                Assert.InRange(actual.R, expected.R - 1, expected.R + 1);
+                Assert.InRange(actual.G, expected.G - 1, expected.G + 1);
+                Assert.InRange(actual.B, expected.B - 1, expected.B + 1);
+                Assert.Equal(expected.A, actual.A);
+            }
+        }
+
+        // The skew really slants the rings: at the same pixel the colors differ.
+        Assert.NotEqual(upright[250, 150], skewed[250, 150]);
+    }
+
+    [Fact]
+    public void LinearGradientBrush_GradientTransform_SkewsTheIsoLines()
+    {
+        // The skew x' = x + y - 0.5 maps the center of pixel (x - y, y) onto the center of
+        // pixel (x, y), so the skewed brush equals the upright brush sampled one pixel further
+        // left per row. The axis folds through the inverse transform once per brush, so a
+        // channel can round one level away.
+        static LinearGradientBrush Create(Matrix4x4 gradientTransform)
+            => new(
+                new PointF(0F, 0F),
+                new PointF(100F, 0F),
+                GradientRepetitionMode.Repeat,
+                gradientTransform,
+                new ColorStop(0, Color.Red),
+                new ColorStop(1, Color.Blue));
+
+        Matrix4x4 skew = new(1F, 0F, 0F, 0F, 1F, 1F, 0F, 0F, 0F, 0F, 1F, 0F, -0.5F, 0F, 0F, 1F);
+        using Image<Rgba32> upright = new(400, 200, Color.White.ToPixel<Rgba32>());
+        upright.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(Create(Matrix4x4.Identity))));
+
+        using Image<Rgba32> skewed = new(400, 200, Color.White.ToPixel<Rgba32>());
+        skewed.Mutate(ctx => ctx.Paint(canvas => canvas.Fill(Create(skew))));
+
+        for (int y = 0; y < 200; y += 7)
+        {
+            for (int x = 200; x < 400; x += 5)
+            {
+                Rgba32 expected = upright[x - y, y];
+                Rgba32 actual = skewed[x, y];
+                Assert.InRange(actual.R, expected.R - 1, expected.R + 1);
+                Assert.InRange(actual.G, expected.G - 1, expected.G + 1);
+                Assert.InRange(actual.B, expected.B - 1, expected.B + 1);
+                Assert.Equal(expected.A, actual.A);
+            }
+        }
+
+        // The skew really tilts the bands: at the same pixel the colors differ.
+        Assert.NotEqual(upright[250, 150], skewed[250, 150]);
+    }
+
+    [Fact]
+    public void EllipticGradientBrush_Transform_ComposesTheGradientTransform()
+    {
+        EllipticGradientBrush brush = new(
+            new PointF(50, 50),
+            new PointF(90, 50),
+            0.5F,
+            GradientRepetitionMode.None,
+            Matrix4x4.CreateRotationZ(MathF.PI / 4F),
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Blue));
+
+        Matrix4x4 matrix = Matrix4x4.CreateScale(2F, 4F, 1F) * Matrix4x4.CreateTranslation(5F, 7F, 0F);
+
+        EllipticGradientBrush transformed = Assert.IsType<EllipticGradientBrush>(brush.Transform(matrix, default, default));
+
+        // The ellipse stays in the gradient's space; only the transform changes.
+        Assert.Equal(brush.Center, transformed.Center);
+        Assert.Equal(brush.ReferenceAxisEnd, transformed.ReferenceAxisEnd);
+        Assert.Equal(brush.AxisRatio, transformed.AxisRatio);
+        Assert.Equal(brush.GradientTransform * matrix, transformed.GradientTransform);
+    }
+
+    [Fact]
+    public void GradientBrush_DrawingTransform_MatchesTheGradientTransform()
+    {
+        // A drawing transform reaches the brush through Brush.Transform, so drawing a path with
+        // the transform in the options must equal drawing the transformed path with a brush
+        // that carries the same gradient transform.
+        Matrix4x4 transform = new(1.4F, 0F, 0F, 0F, 0.5F, 0.7F, 0F, 0F, 0F, 0F, 1F, 0F, 30F, 20F, 0F, 1F);
+        RectanglePolygon upper = new(20F, 20F, 160F, 160F);
+        RectanglePolygon lower = new(20F, 120F, 160F, 160F);
+        ColorStop[] stops = [new ColorStop(0, Color.Red), new ColorStop(0.5F, Color.Lime), new ColorStop(1, Color.Blue)];
+
+        RadialGradientBrush radial = new(new PointF(80F, 100F), 10F, new PointF(100F, 100F), 70F, GradientRepetitionMode.Reflect, stops);
+        SweepGradientBrush sweep = new(new PointF(100F, 100F), 30F, 300F, GradientRepetitionMode.None, stops);
+
+        using Image<Rgba32> viaOptions = new(300, 300, Color.White.ToPixel<Rgba32>());
+        viaOptions.Mutate(ctx => ctx.Paint(new DrawingOptions { Transform = transform }, canvas =>
+        {
+            canvas.Fill(radial, upper);
+            canvas.Fill(sweep, lower);
+        }));
+
+        using Image<Rgba32> viaBrush = new(300, 300, Color.White.ToPixel<Rgba32>());
+        viaBrush.Mutate(ctx => ctx.Paint(canvas =>
+        {
+            canvas.Fill(radial.Transform(transform, default, default), upper.Transform(transform));
+            canvas.Fill(sweep.Transform(transform, default, default), lower.Transform(transform));
+        }));
+
+        ImageComparer.Exact.VerifySimilarity(viaBrush, viaOptions);
     }
 
     [Theory]
