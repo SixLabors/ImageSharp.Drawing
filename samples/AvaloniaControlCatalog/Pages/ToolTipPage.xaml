@@ -1,0 +1,95 @@
+<ContentPage Theme="{StaticResource ScrollPage}" xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Header="ToolTip"
+             x:Class="ControlCatalog.Pages.ToolTipPage">
+    <StackPanel Orientation="Vertical"
+                Spacing="4">
+        <TextBlock Classes="h2">A control which pops up a hint when a control is hovered</TextBlock>
+
+        <UniformGrid Columns="2"
+                     Margin="0,16,0,0"
+                     HorizontalAlignment="Center">
+            <ToggleSwitch Margin="5" 
+                          HorizontalAlignment="Center"
+                          IsChecked="{Binding Path=(ToolTip.ServiceEnabled), RelativeSource={RelativeSource AncestorType=ContentPage}}"
+                          Content="Enable ToolTip service" />
+            <ToggleSwitch Margin="5"
+                          IsChecked="{Binding ElementName=Border, Path=(ToolTip.IsOpen)}"
+                          HorizontalAlignment="Center"
+                          Content="ToolTip Open" />
+            <Border Background="{DynamicResource SystemAccentColor}"
+                    Margin="5"
+                    Padding="50"
+                    ToolTip.Tip="This is a ToolTip">
+                <TextBlock>Hover Here</TextBlock>
+            </Border>
+            <Border Name="Border"
+                    Background="{DynamicResource SystemAccentColor}"
+                    Margin="5"
+                    Padding="50"
+                    ToolTip.Placement="Bottom">
+                <ToolTip.Tip>
+                    <StackPanel>
+                        <TextBlock Classes="h1">ToolTip</TextBlock>
+                        <TextBlock Classes="h2">A control which pops up a hint when a control is hovered</TextBlock>
+                    </StackPanel>
+                </ToolTip.Tip>
+                <TextBlock>ToolTip bottom placement</TextBlock>
+            </Border>
+            <Border Background="{DynamicResource SystemAccentColor}"
+                    Margin="5"
+                    Padding="50"
+                    ToolTip.Placement="Custom"
+                    ToolTip.CustomPopupPlacementCallback="CustomPlacementCallback"
+                    ToolTip.Tip="Custom positioned tooltip">
+              <TextBlock>ToolTip custom placement</TextBlock>
+            </Border>
+            <Border Background="{DynamicResource SystemAccentColor}"
+                    Margin="5"
+                    Padding="50"
+                    ToolTip.Tip="Hello"
+                    ToolTip.Placement="Top">
+              <Border.Styles>
+                <Style Selector="Border">
+                  <Style.Animations>
+                    <Animation Duration="0:0:2" IterationCount="Infinite">
+                      <KeyFrame KeyTime="0:0:0">
+                        <Setter Property="ToolTip.HorizontalOffset" Value="0" />
+                        <Setter Property="ToolTip.VerticalOffset" Value="-50" />
+                      </KeyFrame>
+                      <KeyFrame KeyTime="0:0:2" >
+                        <Setter Property="ToolTip.HorizontalOffset" Value="100" />
+                        <Setter Property="ToolTip.VerticalOffset" Value="50" />
+                      </KeyFrame>
+                    </Animation>
+                  </Style.Animations>
+                </Style>
+              </Border.Styles>
+              <TextBlock>Moving offset</TextBlock>
+            </Border>
+
+            <Button IsEnabled="False"
+                    ToolTip.ShowOnDisabled="True"
+                    ToolTip.Tip="This control is disabled"
+                    Margin="5"
+                    Padding="50">
+              <TextBlock>ToolTip on a disabled control</TextBlock>
+            </Button>
+
+          <Border Background="{DynamicResource SystemAccentColor}"
+                  Margin="5"
+                  Padding="50"
+                  ToolTip.Tip="Outer tooltip">
+            <TextBlock Background="{StaticResource SystemAccentColorDark1}" Padding="10" ToolTip.Tip="Inner tooltip" VerticalAlignment="Center">Nested ToolTips</TextBlock>
+          </Border>
+
+          <Border Background="{DynamicResource SystemAccentColor}"
+                  Margin="5"
+                  Padding="50"
+                  ToolTip.ToolTipOpening="ToolTipOpening"
+                  ToolTip.Tip="Should never be visible">
+            <TextBlock VerticalAlignment="Center">ToolTip replaced on the fly</TextBlock>
+          </Border>
+        </UniformGrid>
+    </StackPanel>
+</ContentPage>

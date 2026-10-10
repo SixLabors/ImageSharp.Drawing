@@ -1,0 +1,80 @@
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="TargetFramework;TargetFrameworks">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- The copied upstream catalog follows the net10 SDK language default instead of the repository-wide C# 12 pin. -->
+    <LangVersion>default</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>ControlCatalog</AssemblyName>
+    <RootNamespace>AvaloniaControlCatalog</RootNamespace>
+    <IncludeAvaloniaGenerators>true</IncludeAvaloniaGenerators>
+    <AvaloniaAccessUnstablePrivateApis>true</AvaloniaAccessUnstablePrivateApis>
+    <RunAnalyzers>false</RunAnalyzers>
+    <NoWarn>$(NoWarn);AVA3001</NoWarn>
+    <RestoreConfigFile>$(MSBuildProjectDirectory)\NuGet.Config</RestoreConfigFile>
+    <AvaloniaVersion>12.2.999-cibuild0068621-alpha</AvaloniaVersion>
+    <RestoreAdditionalProjectSources>https://nuget-feed-all.avaloniaui.net/v3/index.json;$(RestoreAdditionalProjectSources)</RestoreAdditionalProjectSources>
+    <EnableAvaloniaXamlCompilation Condition="'$(EnableAvaloniaXamlCompilation)'==''">true</EnableAvaloniaXamlCompilation>
+    <AvaloniaXamlIlVerifyIl Condition="'$(AvaloniaXamlIlVerifyIl)'==''">false</AvaloniaXamlIlVerifyIl>
+    <AvaloniaUseCompiledBindingsByDefault Condition="'$(AvaloniaUseCompiledBindingsByDefault)'==''">true</AvaloniaUseCompiledBindingsByDefault>
+    <AvaloniaNameGeneratorAttachDevTools Condition="'$(AvaloniaNameGeneratorAttachDevTools)' == ''">true</AvaloniaNameGeneratorAttachDevTools>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Upstream builds without SDK implicit usings; this alias preserves its shape references without changing copied pages. -->
+    <Using Include="Avalonia.Controls.Shapes.Path" Alias="Path" />
+    <Compile Update="**\*.xaml.cs">
+      <DependentUpon>%(Filename)</DependentUpon>
+    </Compile>
+    <AvaloniaXaml Include="**\*.xaml">
+      <SubType>Designer</SubType>
+    </AvaloniaXaml>
+    <AvaloniaResource Include="Assets\**\*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Assets\Icon.png" />
+    <None Remove="Assets\image1.jpg" />
+    <None Remove="Assets\image2.jpg" />
+    <None Remove="Assets\image3.jpg" />
+    <None Remove="Assets\image4.jpg" />
+    <None Remove="Assets\image5.jpg" />
+    <None Remove="Assets\image6.jpg" />
+    <None Remove="Assets\image7.jpg" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\Fonts\SourceSansPro-Bold.ttf" />
+    <EmbeddedResource Include="Assets\Fonts\SourceSansPro-BoldItalic.ttf" />
+    <EmbeddedResource Include="Assets\Fonts\SourceSansPro-Italic.ttf" />
+    <EmbeddedResource Include="Assets\Fonts\SourceSansPro-Regular.ttf" />
+    <EmbeddedResource Include="Pages\teapot.bin" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ImageSharp.Drawing.Renderers.Avalonia\ImageSharp.Drawing.Renderers.Avalonia.csproj" />
+    <ProjectReference Include="..\..\src\ImageSharp.Drawing.WebGPU\ImageSharp.Drawing.WebGPU.csproj" />
+    <ProjectReference Include="..\..\src\ImageSharp.Drawing\ImageSharp.Drawing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.HarfBuzz" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Skia" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Themes.Simple" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Win32" Version="$(AvaloniaVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaXaml Update="NavHeaderItem.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </AvaloniaXaml>
+  </ItemGroup>
+
+</Project>
