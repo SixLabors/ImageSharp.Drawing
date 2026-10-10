@@ -13,17 +13,18 @@ internal static class GpuSceneDrawTag
     // These values are not a plain enum because each word also encodes the path-count, clip-count,
     // scene-word-count, and info-word-count increments consumed by the scan/reduction stages.
     // Visible-fill tags carry five extra info words: coverage data plus raster interest. Must match drawtag.wgsl.
+    // Every gradient payload starts with the six words of the drawing-to-gradient transform.
     public const uint Nop = 0U;
     public const uint FillColor = 0x188U;
     public const uint FillRecolor = 0x184U;
-    public const uint FillLinGradient = 0x254U;
-    public const uint FillRadGradient = 0x3DCU;
-    public const uint FillEllipticGradient = 0x35CU;
-    public const uint FillSweepGradient = 0x394U;
+    public const uint FillLinGradient = 0x26CU;
+    public const uint FillRadGradient = 0x3F4U;
+    public const uint FillEllipticGradient = 0x374U;
+    public const uint FillSweepGradient = 0x3ACU;
     public const uint FillPathGradient = 0x190U;
     public const uint FillImage = 0x3D4U;
     public const uint BeginClip = 0x49U;
-    public const uint EndClip = 0x21U;
+    public const uint EndClip = 0x401U;
     public const uint FillInfoFlagsFillRuleBit = 1U;
     public const uint FillInfoFlagsAliasedBit = 0x40000000U;
 
@@ -37,6 +38,6 @@ internal static class GpuSceneDrawTag
         => new(
             tagWord != Nop ? 1U : 0U,
             tagWord & 1U,
-            (tagWord >> 2) & 0x07U,
+            (tagWord >> 2) & 0x0FU,
             (tagWord >> 6) & 0x0FU);
 }

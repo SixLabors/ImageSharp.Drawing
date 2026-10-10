@@ -6556,10 +6556,10 @@ internal static class WebGPUSceneEncoder
             GpuSceneDrawTag.BeginClip => 2,
             GpuSceneDrawTag.FillColor => 2,
             GpuSceneDrawTag.FillRecolor => 1,
-            GpuSceneDrawTag.FillLinGradient => 5,
-            GpuSceneDrawTag.FillRadGradient => 7,
-            GpuSceneDrawTag.FillEllipticGradient => 7,
-            GpuSceneDrawTag.FillSweepGradient => 5,
+            GpuSceneDrawTag.FillLinGradient => 11,
+            GpuSceneDrawTag.FillRadGradient => 13,
+            GpuSceneDrawTag.FillEllipticGradient => 13,
+            GpuSceneDrawTag.FillSweepGradient => 11,
             GpuSceneDrawTag.FillPathGradient => 4,
             GpuSceneDrawTag.FillImage => 5,
             GpuSceneDrawTag.EndClip => 0,
@@ -7146,10 +7146,34 @@ internal static class WebGPUSceneEncoder
         gradientRowCount++;
 
         drawData.Add(indexMode);
+        AppendGradientTransform(brush, ref drawData);
         drawData.Add(BitcastSingle(brush.StartPoint.X));
         drawData.Add(BitcastSingle(brush.StartPoint.Y));
         drawData.Add(BitcastSingle(brush.EndPoint.X));
         drawData.Add(BitcastSingle(brush.EndPoint.Y));
+    }
+
+    /// <summary>
+    /// Appends the transform from drawing coordinates to the gradient's coordinate space, which
+    /// is the affine part of the brush's gradient transform inverted.
+    /// </summary>
+    /// <param name="brush">The gradient brush.</param>
+    /// <param name="drawData">The draw-data stream.</param>
+    private static void AppendGradientTransform(GradientBrush brush, ref OwnedStream<uint> drawData)
+    {
+        // A transform that cannot be inverted has no gradient space. The zero matrix maps every
+        // sample to the origin, so the brush paints one color where the CPU renderer paints nothing.
+        if (!brush.TryGetInverseTransform(out Matrix3x2 m))
+        {
+            m = default;
+        }
+
+        drawData.Add(BitcastSingle(m.M11));
+        drawData.Add(BitcastSingle(m.M12));
+        drawData.Add(BitcastSingle(m.M21));
+        drawData.Add(BitcastSingle(m.M22));
+        drawData.Add(BitcastSingle(m.M31));
+        drawData.Add(BitcastSingle(m.M32));
     }
 
     /// <summary>
@@ -7193,6 +7217,7 @@ internal static class WebGPUSceneEncoder
         }
 
         drawData.Add(indexMode);
+        AppendGradientTransform(brush, ref drawData);
         drawData.Add(BitcastSingle(center0.X));
         drawData.Add(BitcastSingle(center0.Y));
         drawData.Add(BitcastSingle(center1.X));
@@ -7231,6 +7256,7 @@ internal static class WebGPUSceneEncoder
         PointF localSecondEnd = new(localCenter.X + localPerpendicular.X, localCenter.Y + localPerpendicular.Y);
 
         drawData.Add(indexMode);
+        AppendGradientTransform(brush, ref drawData);
         drawData.Add(BitcastSingle(localCenter.X));
         drawData.Add(BitcastSingle(localCenter.Y));
         drawData.Add(BitcastSingle(localAxisEnd.X));
@@ -7272,6 +7298,7 @@ internal static class WebGPUSceneEncoder
         float t1 = t0 + (sweepDegrees / 360F);
 
         drawData.Add(indexMode);
+        AppendGradientTransform(brush, ref drawData);
         drawData.Add(BitcastSingle(brush.Center.X));
         drawData.Add(BitcastSingle(brush.Center.Y));
         drawData.Add(BitcastSingle(t0));

@@ -26,20 +26,21 @@ struct DrawMonoid {
 }
 
 // Each draw object has a 32-bit draw tag, which is a bit-packed
-// version of the draw monoid: bit 0 = clip count, bits 2..4 = scene words,
+// version of the draw monoid: bit 0 = clip count, bits 2..5 = scene words,
 // bits 6..9 = info words (see map_draw_tag).
 // Visible-fill draw tags carry five extra info words: coverage data plus raster interest.
+// Every gradient payload starts with the six words of the drawing-to-gradient transform.
 const DRAWTAG_NOP = 0u;
 const DRAWTAG_FILL_COLOR = 0x188u;
 const DRAWTAG_FILL_RECOLOR = 0x184u;
-const DRAWTAG_FILL_LIN_GRADIENT = 0x254u;
-const DRAWTAG_FILL_RAD_GRADIENT = 0x3dcu;
-const DRAWTAG_FILL_ELLIPTIC_GRADIENT = 0x35cu;
-const DRAWTAG_FILL_SWEEP_GRADIENT = 0x394u;
+const DRAWTAG_FILL_LIN_GRADIENT = 0x26cu;
+const DRAWTAG_FILL_RAD_GRADIENT = 0x3f4u;
+const DRAWTAG_FILL_ELLIPTIC_GRADIENT = 0x374u;
+const DRAWTAG_FILL_SWEEP_GRADIENT = 0x3acu;
 const DRAWTAG_FILL_PATH_GRADIENT = 0x190u;
 const DRAWTAG_FILL_IMAGE = 0x3d4u;
 const DRAWTAG_BEGIN_CLIP = 0x49u;
-const DRAWTAG_END_CLIP = 0x21u;
+const DRAWTAG_END_CLIP = 0x401u;
 
 // The first word of each draw info stream entry contains the flags. This is not part of the
 // draw object stream but is used after the draw objects have been reduced on the GPU.
@@ -88,7 +89,7 @@ fn map_draw_tag(tag_word: u32) -> DrawMonoid {
     var c: DrawMonoid;
     c.path_ix = u32(tag_word != DRAWTAG_NOP);
     c.clip_ix = tag_word & 1u;
-    c.scene_offset = (tag_word >> 2u) & 0x07u;
+    c.scene_offset = (tag_word >> 2u) & 0x0fu;
     c.info_offset = (tag_word >> 6u) & 0x0fu;
     return c;
 }
