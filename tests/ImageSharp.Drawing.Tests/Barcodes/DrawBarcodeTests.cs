@@ -511,103 +511,151 @@ public class DrawBarcodeTests
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Postnet<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new PostnetSymbology(), "01234", CreatePostalOptions());
+        => RunTest(provider, new PostnetSymbology(), "01234", CreateNominalOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Postnet_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new PostnetSymbology(), "01234", CreatePostalTextOptions());
+        => RunTest(provider, new PostnetSymbology(), "01234", CreateNominalTextOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Planet<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new PlanetSymbology(), "01234567890", CreatePostalOptions());
+        => RunTest(provider, new PlanetSymbology(), "01234567890", CreateNominalOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Planet_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new PlanetSymbology(), "01234567890", CreatePostalTextOptions());
+        => RunTest(provider, new PlanetSymbology(), "01234567890", CreateNominalTextOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void RoyalMail<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new RoyalMailSymbology(), "LE28HS9Z", CreatePostalOptions());
+        => RunTest(provider, new RoyalMailSymbology(), "LE28HS9Z", CreateNominalOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void RoyalMail_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new RoyalMailSymbology(), "LE28HS9Z", CreatePostalTextOptions());
+        => RunTest(provider, new RoyalMailSymbology(), "LE28HS9Z", CreateNominalTextOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Kix<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new KixSymbology(), "1231FZ13XHS", CreatePostalOptions());
+        => RunTest(provider, new KixSymbology(), "1231FZ13XHS", CreateNominalOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Kix_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new KixSymbology(), "1231FZ13XHS", CreatePostalTextOptions());
+        => RunTest(provider, new KixSymbology(), "1231FZ13XHS", CreateNominalTextOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Daft<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new DaftSymbology(), "FATDAFTDAD", CreatePostalOptions());
+        => RunTest(provider, new DaftSymbology(), "FATDAFTDAD", CreateNominalOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void IntelligentMail<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new IntelligentMailSymbology(), "0123456709498765432101234567891", CreatePostalOptions());
+        => RunTest(provider, new IntelligentMailSymbology(), "0123456709498765432101234567891", CreateNominalOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void IntelligentMail_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new IntelligentMailSymbology(), "0123456709498765432101234567891", CreatePostalTextOptions());
+        => RunTest(provider, new IntelligentMailSymbology(), "0123456709498765432101234567891", CreateNominalTextOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void AustraliaPost<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new AustraliaPostSymbology(), "6254516251ABC123", CreatePostalOptions());
+        => RunTest(provider, new AustraliaPostSymbology(), "6254516251ABC123", CreateNominalOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void AustraliaPost_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new AustraliaPostSymbology(), "6254516251ABC123", CreatePostalTextOptions());
+        => RunTest(provider, new AustraliaPostSymbology(), "6254516251ABC123", CreateNominalTextOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void JapanPost<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new JapanPostSymbology(), "15400233-16-4-205", CreatePostalOptions());
+        => RunTest(provider, new JapanPostSymbology(), "15400233-16-4-205", CreateNominalOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void JapanPost_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new JapanPostSymbology(), "15400233-16-4-205", CreatePostalTextOptions());
+        => RunTest(provider, new JapanPostSymbology(), "15400233-16-4-205", CreateNominalTextOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void FourStateMailmark<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new FourStateMailmarkSymbology(), "21B2254800659JW5O9QA6Y", CreatePostalOptions());
+        => RunTest(provider, new FourStateMailmarkSymbology(), "21B2254800659JW5O9QA6Y", CreateNominalOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void FourStateMailmark_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(provider, new FourStateMailmarkSymbology(), "21B2254800659JW5O9QA6Y", CreatePostalTextOptions());
+        => RunTest(provider, new FourStateMailmarkSymbology(), "21B2254800659JW5O9QA6Y", CreateNominalTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Code16K<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Code16KSymbology(), "Abcd-1234567890-wxyZ", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Code16K_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Code16KSymbology(), "Abcd-1234567890-wxyZ", CreateNominalTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Code49<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Code49Symbology(), "MULTIPLE ROWS IN CODE 49", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Code49_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Code49Symbology(), "MULTIPLE ROWS IN CODE 49", CreateNominalTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void CodablockF<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new CodablockFSymbology(), "CODABLOCK F 34567890123456789010040digit", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void CodablockF_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new CodablockFSymbology(), "CODABLOCK F 34567890123456789010040digit", CreateNominalTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void HibcCodablockF<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new HibcCodablockFSymbology(), "A123BJC5D6E71", CreateNominalOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void HibcCodablockF_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new HibcCodablockFSymbology(), "A123BJC5D6E71", CreateNominalTextOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
@@ -671,19 +719,19 @@ public class DrawBarcodeTests
         };
 
     /// <summary>
-    /// The postal goldens draw at 144 dots per inch at the X dimension and the bar height of their
-    /// specifications.
+    /// The postal and stacked goldens draw at 144 dots per inch at the X dimension and the bar height of
+    /// their specifications.
     /// </summary>
-    private static BarcodeOptions CreatePostalOptions()
+    private static BarcodeOptions CreateNominalOptions()
         => new()
         {
             Dpi = 144F,
             Background = Brushes.Solid(Color.White),
         };
 
-    private static BarcodeOptions CreatePostalTextOptions()
+    private static BarcodeOptions CreateNominalTextOptions()
     {
-        BarcodeOptions options = CreatePostalOptions();
+        BarcodeOptions options = CreateNominalOptions();
         options.Font = BarcodeFonts.OcrB.CreateFont(10.75F);
         return options;
     }

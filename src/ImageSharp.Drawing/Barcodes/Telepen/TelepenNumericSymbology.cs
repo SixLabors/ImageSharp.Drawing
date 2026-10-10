@@ -27,41 +27,45 @@ public sealed class TelepenNumericSymbology : BarcodeSymbology
             throw new ArgumentException($"Telepen Numeric carries an even number of characters; got {text.Length}.", nameof(text));
         }
 
-        Span<int> buffer = text.Length <= TelepenEncoder.StackBufferLength
-            ? stackalloc int[TelepenEncoder.StackBufferLength / 2]
-            : new int[text.Length / 2];
-        int count = 0;
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
-        int index = 0;
-        int first = 0;
-        while (codePoints.MoveNext())
+        ValueListBuilder<int> buffer = new(stackalloc int[TelepenEncoder.StackBufferLength / 2]);
+        try
         {
-            CodePoint current = codePoints.Current;
-            bool second = (index & 1) == 1;
-            if (current.IsAsciiDigit())
+            SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
+            int index = 0;
+            int first = 0;
+            while (codePoints.MoveNext())
             {
-                if (second)
+                CodePoint current = codePoints.Current;
+                bool second = (index & 1) == 1;
+                if (current.IsAsciiDigit())
                 {
-                    buffer[count++] = TelepenEncoder.NumericPairOffset + (first * 10) + (current.Value - '0');
+                    if (second)
+                    {
+                        buffer.Append(TelepenEncoder.NumericPairOffset + (first * 10) + (current.Value - '0'));
+                    }
+                    else
+                    {
+                        first = current.Value - '0';
+                    }
+                }
+                else if (current.Value == 'X' && second)
+                {
+                    buffer.Append(TelepenEncoder.NumericSingleOffset + first);
                 }
                 else
                 {
-                    first = current.Value - '0';
+                    throw new ArgumentException($"Telepen Numeric carries only digits, and X in the second position of a pair; got {current.ToDisplayString()}.", nameof(text));
                 }
-            }
-            else if (current.Value == 'X' && second)
-            {
-                buffer[count++] = TelepenEncoder.NumericSingleOffset + first;
-            }
-            else
-            {
-                throw new ArgumentException($"Telepen Numeric carries only digits, and X in the second position of a pair; got {current.ToDisplayString()}.", nameof(text));
+
+                index += current.Utf16SequenceLength;
             }
 
-            index += current.Utf16SequenceLength;
+            string readable = options.Font is null ? string.Empty : text;
+            return TelepenEncoder.BuildSymbol(TelepenEncoder.Encode(buffer.AsSpan()), readable, options);
         }
-
-        string readable = options.Font is null ? string.Empty : text;
-        return TelepenEncoder.BuildSymbol(TelepenEncoder.Encode(buffer[..count]), readable, options);
+        finally
+        {
+            buffer.Dispose();
+        }
     }
 }

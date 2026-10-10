@@ -43,48 +43,53 @@ public sealed class PosiCodeSymbology : BarcodeSymbology
         Guard.MustBeLessThanOrEqualTo(text.Length, PosiCodeEncoder.MaximumLength, nameof(text));
 
         bool limited = PosiCodeEncoder.IsLimited(this.Version);
-        Span<int> values = text.Length <= PosiCodeEncoder.StackBufferLength
-            ? stackalloc int[PosiCodeEncoder.StackBufferLength]
-            : new int[text.Length];
-        int count = 0;
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
-        while (codePoints.MoveNext())
+        ValueListBuilder<int> values = new(stackalloc int[PosiCodeEncoder.StackBufferLength]);
+        try
         {
-            CodePoint current = codePoints.Current;
+            SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
+            while (codePoints.MoveNext())
+            {
+                CodePoint current = codePoints.Current;
+                if (limited)
+                {
+                    int codeword = PosiCodeEncoder.LimitedValue(current.Value);
+                    if (codeword < 0)
+                    {
+                        throw new ArgumentException($"Limited PosiCode carries only digits, capital letters, the hyphen and the full stop; got {current.ToDisplayString()}.", nameof(text));
+                    }
+
+                    values.Append(codeword);
+                }
+                else
+                {
+                    if (current.Value > 255)
+                    {
+                        throw new ArgumentException($"PosiCode carries only the characters of ISO/IEC 8859-1; got {current.ToDisplayString()}.", nameof(text));
+                    }
+
+                    values.Append(current.Value);
+                }
+            }
+
+            int[] runs;
             if (limited)
             {
-                int codeword = PosiCodeEncoder.LimitedValue(current.Value);
-                if (codeword < 0)
-                {
-                    throw new ArgumentException($"Limited PosiCode carries only digits, capital letters, the hyphen and the full stop; got {current.ToDisplayString()}.", nameof(text));
-                }
-
-                values[count++] = codeword;
+                runs = PosiCodeEncoder.Encode(values.AsSpan(), this.Version);
             }
             else
             {
-                if (current.Value > 255)
-                {
-                    throw new ArgumentException($"PosiCode carries only the characters of ISO/IEC 8859-1; got {current.ToDisplayString()}.", nameof(text));
-                }
-
-                values[count++] = current.Value;
+                int capacity = values.Length * 4;
+                Span<int> codewords = capacity <= 256 ? stackalloc int[capacity] : new int[capacity];
+                int written = PosiCodeEncoder.ToCodewords(values.AsSpan(), codewords);
+                runs = PosiCodeEncoder.Encode(codewords[..written], this.Version);
             }
-        }
 
-        int[] runs;
-        if (limited)
-        {
-            runs = PosiCodeEncoder.Encode(values[..count], this.Version);
+            string readable = options.Font is null ? string.Empty : text;
+            return PosiCodeEncoder.BuildSymbol(runs, readable, options, this.Version);
         }
-        else
+        finally
         {
-            Span<int> codewords = count * 4 <= 256 ? stackalloc int[count * 4] : new int[count * 4];
-            int written = PosiCodeEncoder.ToCodewords(values[..count], codewords);
-            runs = PosiCodeEncoder.Encode(codewords[..written], this.Version);
+            values.Dispose();
         }
-
-        string readable = options.Font is null ? string.Empty : text;
-        return PosiCodeEncoder.BuildSymbol(runs, readable, options, this.Version);
     }
 }

@@ -69,7 +69,7 @@ internal static class Code128Encoder
     /// bars and three spaces of one to four modules, except the stop character which takes seven. The
     /// leading nibble records the element count and is never read as an element.
     /// </summary>
-    private static ReadOnlySpan<uint> Patterns =>
+    public static ReadOnlySpan<uint> Patterns =>
     [
         0x6212222, 0x6222122, 0x6222221, 0x6121223, 0x6121322, 0x6131222, 0x6122213, 0x6122312,
         0x6132212, 0x6221213, 0x6221312, 0x6231212, 0x6112232, 0x6122132, 0x6122231, 0x6113222,

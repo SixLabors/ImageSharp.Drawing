@@ -173,10 +173,8 @@ internal sealed class LinearBarcodeSymbol : BarcodeSymbol
     /// </summary>
     public float[] BarTops { get; }
 
-    /// <summary>
-    /// Gets the human readable interpretation. The array is empty when the symbol carries no text.
-    /// </summary>
-    public BarcodeTextPlacement[] Text { get; }
+    /// <inheritdoc/>
+    public override BarcodeTextPlacement[] Text { get; }
 
     /// <inheritdoc/>
     public override float WidthInModules => this.widthInModules;

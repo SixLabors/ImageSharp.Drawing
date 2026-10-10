@@ -7,10 +7,11 @@ using SixLabors.ImageSharp.Drawing.Processing;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Converts a <see cref="LinearBarcodeSymbol"/> into canvas commands. All bars render through a single fill of
-/// one path collection. Each text placement draws through one text command.
+/// Converts a <see cref="LinearBarcodeSymbol"/> or a <see cref="StackedBarcodeSymbol"/> into canvas
+/// commands. All bars render through a single fill of one path collection. Each text placement draws
+/// through one text command.
 /// </summary>
-internal static class LinearBarcodeEmitter
+internal static class BarEmitter
 {
     /// <summary>
     /// Renders the symbol onto the canvas.
@@ -21,7 +22,18 @@ internal static class LinearBarcodeEmitter
     /// <param name="xDimension">The width of one module in millimetres.</param>
     /// <param name="origin">The top left corner of everything the call draws, including any text that overhangs the symbol, in pixels.</param>
     public static void Emit(DrawingCanvas canvas, LinearBarcodeSymbol symbol, BarcodeOptions options, float xDimension, PointF origin)
-        => Layout(canvas, symbol, options, xDimension, origin);
+        => Layout(canvas, symbol, new ReadOnlySpan<LinearBarcodeSymbol>(in symbol), [0F], symbol.BearerBarThickness, true, options, xDimension, origin);
+
+    /// <summary>
+    /// Renders the symbol onto the canvas.
+    /// </summary>
+    /// <param name="canvas">The canvas to render onto.</param>
+    /// <param name="symbol">The encoded symbol.</param>
+    /// <param name="options">The sizing and painting options.</param>
+    /// <param name="xDimension">The width of one module in millimetres.</param>
+    /// <param name="origin">The top left corner of everything the call draws, including any text that overhangs the symbol, in pixels.</param>
+    public static void Emit(DrawingCanvas canvas, StackedBarcodeSymbol symbol, BarcodeOptions options, float xDimension, PointF origin)
+        => Layout(canvas, symbol, symbol.Rows, symbol.RowTops, symbol.EdgeBarHeight, false, options, xDimension, origin);
 
     /// <summary>
     /// Measures the area the symbol covers without drawing anything, so a caller can size the image
@@ -33,19 +45,45 @@ internal static class LinearBarcodeEmitter
     /// <param name="origin">The top left corner the symbol would draw from, in pixels.</param>
     /// <returns>The area the symbol covers, including any text that overhangs the bars.</returns>
     public static RectangleF Measure(LinearBarcodeSymbol symbol, BarcodeOptions options, float xDimension, PointF origin)
-        => Layout(null, symbol, options, xDimension, origin);
+        => Layout(null, symbol, new ReadOnlySpan<LinearBarcodeSymbol>(in symbol), [0F], symbol.BearerBarThickness, true, options, xDimension, origin);
+
+    /// <summary>
+    /// Measures the area the symbol covers without drawing anything, so a caller can size the image
+    /// before it draws and no glyph falls outside it.
+    /// </summary>
+    /// <param name="symbol">The encoded symbol.</param>
+    /// <param name="options">The sizing and painting options.</param>
+    /// <param name="xDimension">The width of one module in millimetres.</param>
+    /// <param name="origin">The top left corner the symbol would draw from, in pixels.</param>
+    /// <returns>The area the symbol covers, including any text that overhangs the bars.</returns>
+    public static RectangleF Measure(StackedBarcodeSymbol symbol, BarcodeOptions options, float xDimension, PointF origin)
+        => Layout(null, symbol, symbol.Rows, symbol.RowTops, symbol.EdgeBarHeight, false, options, xDimension, origin);
 
     /// <summary>
     /// Lays the symbol out and, when a canvas is supplied, draws it. Both callers share one pass, so the
-    /// measured area and the drawn area cannot drift apart.
+    /// measured area and the drawn area cannot drift apart. A linear symbol is one row. The rows share
+    /// the width, the run unit and the bar rounding of the first row.
     /// </summary>
     /// <param name="canvas">The canvas to render onto, or <see langword="null"/> to measure only.</param>
     /// <param name="symbol">The encoded symbol.</param>
+    /// <param name="rows">The rows of bars from the top down.</param>
+    /// <param name="rowTops">The top of each row in modules from the symbol top.</param>
+    /// <param name="frame">The thickness in modules of the bars that close the top and the bottom of the symbol, or zero when there are none.</param>
+    /// <param name="frameSides">Whether the frame also has vertical sections when the quiet zones are drawn.</param>
     /// <param name="options">The sizing and painting options.</param>
     /// <param name="xDimension">The width of one module in millimetres.</param>
     /// <param name="origin">The top left corner of everything the call draws, in pixels.</param>
     /// <returns>The area the symbol covers, including any text that overhangs the bars.</returns>
-    private static RectangleF Layout(DrawingCanvas? canvas, LinearBarcodeSymbol symbol, BarcodeOptions options, float xDimension, PointF origin)
+    private static RectangleF Layout(
+        DrawingCanvas? canvas,
+        BarcodeSymbol symbol,
+        ReadOnlySpan<LinearBarcodeSymbol> rows,
+        ReadOnlySpan<float> rowTops,
+        float frame,
+        bool frameSides,
+        BarcodeOptions options,
+        float xDimension,
+        PointF origin)
     {
         Guard.MustBeGreaterThan(options.Dpi, 0, nameof(options.Dpi));
         Guard.MustBeGreaterThan(xDimension, 0, nameof(xDimension));
@@ -59,23 +97,24 @@ internal static class LinearBarcodeEmitter
         // the Japan Post manual gives one bar width, "バー幅 0.6×a/10". Edges rounded from the accumulated
         // exact position alternate between two widths. The text spans stretch with the bar block so they
         // still cover it.
-        bool wholePixelRuns = symbol.UniformBars;
-        float runWidthInPixels = symbol.RunUnit * moduleWidth;
+        LinearBarcodeSymbol first = rows[0];
+        bool wholePixelRuns = first.UniformBars;
+        float runWidthInPixels = first.RunUnit * moduleWidth;
         float blockWidth = symbol.WidthInModules * moduleWidth;
         if (wholePixelRuns)
         {
             blockWidth = 0;
-            for (int i = 0; i < symbol.RunWidths.Length; i++)
+            for (int i = 0; i < first.RunWidths.Length; i++)
             {
-                blockWidth += RunPixels(symbol.RunWidths[i], runWidthInPixels);
+                blockWidth += RunPixels(first.RunWidths[i], runWidthInPixels);
             }
         }
 
         float stretch = wholePixelRuns ? blockWidth / (symbol.WidthInModules * moduleWidth) : 1F;
         float symbolLeft = origin.X;
         float frameLeft = origin.X;
-        float bearer = symbol.BearerBarThickness;
-        bool bearerSides = false;
+        bool frameSpansQuietZones = false;
+        bool sides = false;
         if (options.IncludeQuietZones)
         {
             widthInModules += symbol.LeadingQuietZone + symbol.TrailingQuietZone;
@@ -83,12 +122,14 @@ internal static class LinearBarcodeEmitter
 
             // Section 5.3.2.4 of the GS1 General Specifications runs the bearer bar around the quiet zones,
             // so its vertical sections need the quiet zones on the page. Without them the same clause
-            // permits the horizontal sections alone.
-            bearerSides = bearer > 0;
-            if (bearerSides)
+            // permits the horizontal sections alone. Section 2.1 of USS-16K and of USS-49 gives the top
+            // and bottom separator bars the same reach: they "extend to the ends of the quiet zones".
+            frameSpansQuietZones = frame > 0;
+            sides = frameSpansQuietZones && frameSides;
+            if (sides)
             {
-                widthInModules += bearer + bearer;
-                symbolLeft += bearer * moduleWidth;
+                widthInModules += frame + frame;
+                symbolLeft += frame * moduleWidth;
             }
         }
 
@@ -128,7 +169,7 @@ internal static class LinearBarcodeEmitter
 
                 // What runs into a neighbour is the glyph bounds, so the cap measures those. The
                 // renderable bounds are their union with the advance, and the advance is space the glyph
-                // reserves rather than covers, so capping on it shrinks the text for no gain.
+                // reserves rather than covers.
                 float cellText = TextMeasurer.MeasureBounds(capPlacement.Text, capOptions).Width;
                 if (cellText <= 0)
                 {
@@ -147,8 +188,8 @@ internal static class LinearBarcodeEmitter
         }
 
         // One rule places every line: its ink starts on the edge it names and takes one line height. A line
-        // above the bars pushes the whole bar block down by the room it needs, which is why the band is
-        // measured here, where the fonts are known, rather than guessed at as a constant by each encoder.
+        // above the bars pushes the whole bar block down by the room it needs, and the band holds that
+        // room, measured from the fonts.
         float topBand = 0;
         float bottomInModules = symbol.HeightInModules;
 
@@ -191,7 +232,7 @@ internal static class LinearBarcodeEmitter
 
                 // The rectangle is the union of the glyph bounds and the advance, and both are anchored at
                 // the origin, so the line is measured from its top left corner and placed on the cell
-                // here. A text alignment option would move the glyphs without moving the advance.
+                // here.
                 measureOptions.Origin = PointF.Empty;
 
                 TextMetrics metrics = TextMeasurer.Measure(placement.Text, measureOptions);
@@ -276,25 +317,29 @@ internal static class LinearBarcodeEmitter
             canvas.Fill(options.Background, new RectanglePolygon(bounds.X, bounds.Y, bounds.Width, bounds.Height));
         }
 
-        int[] runs = symbol.RunWidths;
-        int barCount = (runs.Length + 1) / 2;
-        int bearerCount = bearer > 0 ? (bearerSides ? 4 : 2) : 0;
-        IPath[] bars = new IPath[barCount + bearerCount];
+        int barCount = 0;
+        for (int r = 0; r < rows.Length; r++)
+        {
+            barCount += (rows[r].RunWidths.Length + 1) / 2;
+        }
+
+        int frameCount = frame > 0 ? (sides ? 4 : 2) : 0;
+        IPath[] bars = new IPath[barCount + frameCount];
 
         // Section 5.3.2.4 of the GS1 General Specifications gives the bearer bar "a constant thickness", so
-        // the four sections of the frame share one pixel thickness. On every side where the frame is the
+        // the sections of the frame share one pixel thickness. On every side where the frame is the
         // outermost ink its outer edge snaps outward with the measured bounds, so no background shows past
         // it. Where text follows below, the lower edge rounds as the bar edges do, which keeps the clear
-        // space. The bars butt against the inner edges, so the bar height absorbs the fraction of a pixel
-        // that the snapping moves, never the frame.
+        // space. The bars that touch the frame butt against its inner edges, so their height absorbs the
+        // fraction of a pixel that the snapping moves, never the frame.
         float thickness = 0;
         float frameTop = 0;
         float frameBottom = 0;
         float upperBottom = 0;
         float lowerTop = 0;
-        if (bearer > 0)
+        if (frame > 0)
         {
-            thickness = MathF.Round(bearer * moduleWidth);
+            thickness = MathF.Round(frame * moduleWidth);
             float exactTop = origin.Y + (topBand * moduleWidth);
             float exactBottom = origin.Y + ((topBand + symbol.HeightInModules) * moduleWidth);
             frameTop = topBand > 0 ? MathF.Round(exactTop) : MathF.Floor(exactTop);
@@ -303,46 +348,50 @@ internal static class LinearBarcodeEmitter
             lowerTop = frameBottom - thickness;
         }
 
-        float x = symbolLeft;
-        for (int i = 0; i < runs.Length; i++)
+        int index = 0;
+        for (int r = 0; r < rows.Length; r++)
         {
-            float runWidth = wholePixelRuns ? RunPixels(runs[i], runWidthInPixels) : runs[i] * runWidthInPixels;
-            if ((i & 1) == 0)
+            LinearBarcodeSymbol row = rows[r];
+            int[] runs = row.RunWidths;
+            float rowTop = rowTops[r];
+            float x = symbolLeft;
+            for (int i = 0; i < runs.Length; i++)
             {
-                // Each bar edge rounds from its exact accumulated position onto the device pixel grid, so
-                // bars stay crisp for scanning at any module width and rounding cannot drift across the
-                // symbol. Integral module widths, heights and origins round to themselves.
-                int bar = i >> 1;
-                float barLeft = MathF.Round(x);
-                float barRight = MathF.Round(x + runWidth);
-                float barTop;
-                float barBottom;
-                if (bearer > 0)
+                float runWidth = wholePixelRuns ? RunPixels(runs[i], runWidthInPixels) : runs[i] * runWidthInPixels;
+                if ((i & 1) == 0)
                 {
-                    barTop = upperBottom + MathF.Round((symbol.BarTops[bar] - bearer) * moduleWidth);
-                    barBottom = lowerTop - MathF.Round((symbol.HeightInModules - bearer - symbol.BarTops[bar] - symbol.BarHeights[bar]) * moduleWidth);
-                }
-                else
-                {
-                    barTop = MathF.Round(origin.Y + ((topBand + symbol.BarTops[bar]) * moduleWidth));
-                    barBottom = MathF.Round(origin.Y + ((topBand + symbol.BarTops[bar] + symbol.BarHeights[bar]) * moduleWidth));
+                    // Each bar edge rounds from its exact accumulated position onto the device pixel grid,
+                    // so bars stay crisp for scanning at any module width and rounding cannot drift across
+                    // the symbol, and the edge a row shares with the row below it rounds to one pixel row
+                    // for both. Integral module widths, heights and origins round to themselves.
+                    int bar = i >> 1;
+                    float top = rowTop + row.BarTops[bar];
+                    float bottom = top + row.BarHeights[bar];
+                    float barLeft = MathF.Round(x);
+                    float barRight = MathF.Round(x + runWidth);
+                    float barTop = frame > 0 && top == frame
+                        ? upperBottom
+                        : MathF.Round(origin.Y + ((topBand + top) * moduleWidth));
+                    float barBottom = frame > 0 && bottom == symbol.HeightInModules - frame
+                        ? lowerTop
+                        : MathF.Round(origin.Y + ((topBand + bottom) * moduleWidth));
+
+                    bars[index++] = new RectanglePolygon(barLeft, barTop, barRight - barLeft, barBottom - barTop);
                 }
 
-                bars[bar] = new RectanglePolygon(barLeft, barTop, barRight - barLeft, barBottom - barTop);
+                x += runWidth;
             }
-
-            x += runWidth;
         }
 
-        if (bearer > 0)
+        if (frame > 0)
         {
-            // When the quiet zones are drawn the frame closes around them, and the quiet zones absorb the
+            // When the quiet zones are drawn the frame reaches across them, and the quiet zones absorb the
             // fraction of a pixel between the snapped outer edge and the exact one. Without them the frame
             // ends on the bars. The vertical sections run between the horizontal ones so no two rectangles
             // overlap.
             float left;
             float right;
-            if (bearerSides)
+            if (frameSpansQuietZones)
             {
                 left = MathF.Floor(frameLeft);
                 right = MathF.Ceiling(frameLeft + ((widthInModules - symbol.WidthInModules) * moduleWidth) + blockWidth);
@@ -353,12 +402,12 @@ internal static class LinearBarcodeEmitter
                 right = MathF.Round(symbolLeft + blockWidth);
             }
 
-            bars[barCount] = new RectanglePolygon(left, frameTop, right - left, thickness);
-            bars[barCount + 1] = new RectanglePolygon(left, lowerTop, right - left, thickness);
-            if (bearerSides)
+            bars[index++] = new RectanglePolygon(left, frameTop, right - left, thickness);
+            bars[index++] = new RectanglePolygon(left, lowerTop, right - left, thickness);
+            if (sides)
             {
-                bars[barCount + 2] = new RectanglePolygon(left, upperBottom, thickness, lowerTop - upperBottom);
-                bars[barCount + 3] = new RectanglePolygon(right - thickness, upperBottom, thickness, lowerTop - upperBottom);
+                bars[index++] = new RectanglePolygon(left, upperBottom, thickness, lowerTop - upperBottom);
+                bars[index] = new RectanglePolygon(right - thickness, upperBottom, thickness, lowerTop - upperBottom);
             }
         }
 

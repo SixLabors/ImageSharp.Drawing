@@ -72,6 +72,10 @@ public class BarcodeInputValidationTests
     [InlineData(typeof(AustraliaPostSymbology))]
     [InlineData(typeof(JapanPostSymbology))]
     [InlineData(typeof(FourStateMailmarkSymbology))]
+    [InlineData(typeof(Code16KSymbology))]
+    [InlineData(typeof(Code49Symbology))]
+    [InlineData(typeof(CodablockFSymbology))]
+    [InlineData(typeof(HibcCodablockFSymbology))]
     public void RejectsNullText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;
@@ -80,8 +84,8 @@ public class BarcodeInputValidationTests
 
     /// <summary>
     /// Empty text carries no data, and every symbology whose standard fixes a length or requires data
-    /// rejects it. Code 128 is left out: its standard sets no minimum, and an empty symbol is a start
-    /// character, a check character and a stop character.
+    /// rejects it. Code 128 and Code 16K are left out: their standards set no minimum, and an empty symbol
+    /// is a start character, pad and check characters and a stop character.
     /// </summary>
     [Theory]
     [InlineData(typeof(Ean13Symbology))]
@@ -138,6 +142,8 @@ public class BarcodeInputValidationTests
     [InlineData(typeof(AustraliaPostSymbology))]
     [InlineData(typeof(JapanPostSymbology))]
     [InlineData(typeof(FourStateMailmarkSymbology))]
+    [InlineData(typeof(Code49Symbology))]
+    [InlineData(typeof(HibcCodablockFSymbology))]
     public void RejectsEmptyText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;

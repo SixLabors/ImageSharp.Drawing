@@ -32,4 +32,9 @@ internal abstract class BarcodeSymbol
     /// Gets the width of the quiet zone that must follow the symbol, in modules.
     /// </summary>
     public abstract float TrailingQuietZone { get; }
+
+    /// <summary>
+    /// Gets the human readable interpretation. The array is empty when the symbol carries no text.
+    /// </summary>
+    public abstract BarcodeTextPlacement[] Text { get; }
 }
