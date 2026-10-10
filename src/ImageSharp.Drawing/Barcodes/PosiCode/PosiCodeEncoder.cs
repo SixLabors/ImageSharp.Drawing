@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Helpers;
+
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -210,77 +212,84 @@ internal static class PosiCodeEncoder
     {
         // The extended switching looks ahead at how many characters of the other mode follow, so the
         // announced sequence is built first.
-        Span<int> message = values.Length * 3 <= 256 ? stackalloc int[values.Length * 3] : new int[values.Length * 3];
-        int length = 0;
-        bool extended = false;
-        for (int i = 0; i < values.Length; i++)
+        ValueListBuilder<int> message = new(stackalloc int[StackBufferLength * 3]);
+        try
         {
-            int value = values[i];
-            bool high = value >= 128;
-            if (extended != high)
+            bool extended = false;
+            for (int i = 0; i < values.Length; i++)
             {
-                int run = 0;
-                while (i + run < values.Length && (values[i + run] >= 128) == high)
+                int value = values[i];
+                bool high = value >= 128;
+                if (extended != high)
                 {
-                    run++;
+                    int run = 0;
+                    while (i + run < values.Length && (values[i + run] >= 128) == high)
+                    {
+                        run++;
+                    }
+
+                    int limit = i + run == values.Length ? 3 : 5;
+                    if (run < limit)
+                    {
+                        message.Append(Function4);
+                    }
+                    else
+                    {
+                        extended = !extended;
+                        message.Append(Function4);
+                        message.Append(Function4);
+                    }
                 }
 
-                int limit = i + run == values.Length ? 3 : 5;
-                if (run < limit)
-                {
-                    message[length++] = Function4;
-                }
-                else
-                {
-                    extended = !extended;
-                    message[length++] = Function4;
-                    message[length++] = Function4;
-                }
+                message.Append(value & 127);
             }
 
-            message[length++] = value & 127;
-        }
+            int length = message.Length;
+            int written = 0;
+            ReadOnlySpan<int> current = Set0;
+            bool inSet0 = true;
+            int position = 0;
+            while (position < length)
+            {
+                int first = message[position];
+                int next = position + 1 < length ? message[position + 1] : -99;
+                int index = current.IndexOf(first);
+                if (index >= 0)
+                {
+                    codewords[written++] = index;
+                    position++;
+                    continue;
+                }
 
-        int written = 0;
-        ReadOnlySpan<int> current = Set0;
-        bool inSet0 = true;
-        int position = 0;
-        while (position < length)
+                int set2 = Set2.IndexOf(first);
+                if (set2 >= 0)
+                {
+                    codewords[written++] = current.IndexOf(Shift2);
+                    codewords[written++] = set2;
+                    position++;
+                    continue;
+                }
+
+                ReadOnlySpan<int> other = inSet0 ? Set1 : Set0;
+                if (current.IndexOf(next) < 0)
+                {
+                    codewords[written++] = current.IndexOf(inSet0 ? Latch1 : Latch0);
+                    current = other;
+                    inSet0 = !inSet0;
+                    continue;
+                }
+
+                codewords[written++] = current.IndexOf(inSet0 ? Shift1 : Shift0);
+                codewords[written++] = other.IndexOf(first);
+                position++;
+            }
+
+            return written;
+        }
+        finally
         {
-            int first = message[position];
-            int next = position + 1 < length ? message[position + 1] : -99;
-            int index = current.IndexOf(first);
-            if (index >= 0)
-            {
-                codewords[written++] = index;
-                position++;
-                continue;
-            }
-
-            int set2 = Set2.IndexOf(first);
-            if (set2 >= 0)
-            {
-                codewords[written++] = current.IndexOf(Shift2);
-                codewords[written++] = set2;
-                position++;
-                continue;
-            }
-
-            ReadOnlySpan<int> other = inSet0 ? Set1 : Set0;
-            if (current.IndexOf(next) < 0)
-            {
-                codewords[written++] = current.IndexOf(inSet0 ? Latch1 : Latch0);
-                current = other;
-                inSet0 = !inSet0;
-                continue;
-            }
-
-            codewords[written++] = current.IndexOf(inSet0 ? Shift1 : Shift0);
-            codewords[written++] = other.IndexOf(first);
-            position++;
+            message.Dispose();
         }
-
-        return written;
     }
 
     /// <summary>

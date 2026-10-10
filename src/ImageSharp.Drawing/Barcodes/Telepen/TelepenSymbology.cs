@@ -20,23 +20,27 @@ public sealed class TelepenSymbology : BarcodeSymbology
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, TelepenEncoder.MaximumLength, nameof(text));
 
-        Span<int> buffer = text.Length <= TelepenEncoder.StackBufferLength
-            ? stackalloc int[TelepenEncoder.StackBufferLength]
-            : new int[text.Length];
-        int count = 0;
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
-        while (codePoints.MoveNext())
+        ValueListBuilder<int> buffer = new(stackalloc int[TelepenEncoder.StackBufferLength]);
+        try
         {
-            CodePoint current = codePoints.Current;
-            if (!current.IsAscii)
+            SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
+            while (codePoints.MoveNext())
             {
-                throw new ArgumentException($"Telepen carries only ASCII characters; got {current.ToDisplayString()}.", nameof(text));
+                CodePoint current = codePoints.Current;
+                if (!current.IsAscii)
+                {
+                    throw new ArgumentException($"Telepen carries only ASCII characters; got {current.ToDisplayString()}.", nameof(text));
+                }
+
+                buffer.Append(current.Value);
             }
 
-            buffer[count++] = current.Value;
+            string readable = options.Font is null ? string.Empty : text;
+            return TelepenEncoder.BuildSymbol(TelepenEncoder.Encode(buffer.AsSpan()), readable, options);
         }
-
-        string readable = options.Font is null ? string.Empty : text;
-        return TelepenEncoder.BuildSymbol(TelepenEncoder.Encode(buffer[..count]), readable, options);
+        finally
+        {
+            buffer.Dispose();
+        }
     }
 }

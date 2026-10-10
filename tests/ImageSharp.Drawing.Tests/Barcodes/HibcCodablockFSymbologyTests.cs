@@ -1,0 +1,65 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+using SixLabors.ImageSharp.Drawing.Barcodes;
+
+namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
+
+/// <summary>
+/// Encoder tests for <see cref="HibcCodablockFSymbology"/>. Each expected row is the alternating bar and
+/// space module widths of one row, starting with a bar, taken from an independent reference
+/// implementation through its raw encoding API. The rows carry the flag character, the data and the
+/// modulo 43 check character the symbology adds.
+/// </summary>
+public class HibcCodablockFSymbologyTests
+{
+    [Theory]
+
+    // A primary data structure.
+    [InlineData("A123BJC5D6E71", "2114121141311211242312121113231232212232112211321311231121331313211421122331112|2114121141312312122132121123132231121321133121311232212113131131411113232331112|2114121141311122321131411141311131411141311131411141311222314112121122142331112")]
+
+    // A primary and secondary data structure with the separator and the date and lot fields.
+    [InlineData("A99912345/$$52001510X3", "2114121141311211242312121113231131411131414121213121311131231141312222212331112|2114121141312312121132221213221213221131412133112122221132222213123121132331112|2114121141311122323311212211322211321131411141311131411321311223123221122331112")]
+
+    // A secondary data structure on its own.
+    [InlineData("/E123", "2114121141311114222312121132221321131232212232112211321323111131413113212331112|2114121141312312121131411141311131411141311131411141311222131411222312122331112")]
+    public void HibcCodablockF_MatchesReferenceRows(string text, string expected)
+    {
+        StackedBarcodeSymbol symbol = (StackedBarcodeSymbol)new HibcCodablockFSymbology().Encode(text, new BarcodeOptions());
+        string[] rows = expected.Split('|');
+        Assert.Equal((rows.Length * 2) + 1, symbol.Rows.Length);
+        for (int i = 0; i < rows.Length; i++)
+        {
+            Assert.Equal(rows[i], string.Concat(symbol.Rows[(i * 2) + 1].RunWidths));
+        }
+    }
+
+    /// <summary>
+    /// The symbol is the Codablock F symbol of the flag character, the data and the check character, so
+    /// an input that already carries its check character encodes the same way.
+    /// </summary>
+    [Fact]
+    public void HibcCodablockF_ValidatesAGivenCheckCharacter()
+    {
+        StackedBarcodeSymbol calculated = (StackedBarcodeSymbol)new HibcCodablockFSymbology().Encode("A123BJC5D6E71", new BarcodeOptions());
+        StackedBarcodeSymbol given = (StackedBarcodeSymbol)new HibcCodablockFSymbology(8, true).Encode("A123BJC5D6E71G", new BarcodeOptions());
+        StackedBarcodeSymbol plain = (StackedBarcodeSymbol)new CodablockFSymbology().Encode("+A123BJC5D6E71G", new BarcodeOptions());
+        for (int i = 0; i < calculated.Rows.Length; i++)
+        {
+            Assert.Equal(calculated.Rows[i].RunWidths, given.Rows[i].RunWidths);
+            Assert.Equal(calculated.Rows[i].RunWidths, plain.Rows[i].RunWidths);
+        }
+
+        Assert.Throws<ArgumentException>(() => new HibcCodablockFSymbology(8, true).Encode("A123BJC5D6E7Z", new BarcodeOptions()));
+    }
+
+    /// <summary>
+    /// The column count is 4 to 62.
+    /// </summary>
+    [Fact]
+    public void HibcCodablockF_RejectsInvalidColumns()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new HibcCodablockFSymbology(3, false));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new HibcCodablockFSymbology(63, false));
+    }
+}

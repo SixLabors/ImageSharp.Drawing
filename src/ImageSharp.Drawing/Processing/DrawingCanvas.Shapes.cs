@@ -246,7 +246,11 @@ public abstract partial class DrawingCanvas
         switch (symbol)
         {
             case LinearBarcodeSymbol linear:
-                LinearBarcodeEmitter.Emit(this, linear, options, xDimension, origin);
+                BarEmitter.Emit(this, linear, options, xDimension, origin);
+                break;
+
+            case StackedBarcodeSymbol stacked:
+                BarEmitter.Emit(this, stacked, options, xDimension, origin);
                 break;
 
             default:
