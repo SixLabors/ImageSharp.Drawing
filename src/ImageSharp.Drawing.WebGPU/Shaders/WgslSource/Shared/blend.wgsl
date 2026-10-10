@@ -369,6 +369,16 @@ fn compose_source(backdrop: vec4<f32>, source: vec4<f32>, opacity: f32, mode: u3
     }
 
     let normal = mix_mode == MIX_NORMAL;
+
+    // The overlap term is evaluated once, with the operand order of the compose mode
+    // that consumes it. Evaluating it inside each case inlines the whole mix-mode switch
+    // once per case, and the driver compile time of this shader grows with every copy.
+    var overlap = vec3(0.0);
+    if !normal {
+        let dest_first = compose_mode == COMPOSE_DEST_OVER || compose_mode == COMPOSE_DEST_ATOP;
+        overlap = blend_overlap(select(backdrop, scaled, dest_first), select(scaled, backdrop, dest_first), mix_mode);
+    }
+
     switch compose_mode {
         case COMPOSE_CLEAR: {
             return vec4(0.0);
@@ -384,7 +394,7 @@ fn compose_source(backdrop: vec4<f32>, source: vec4<f32>, opacity: f32, mode: u3
                 return compose_over_normal(scaled, backdrop);
             }
 
-            return compose_over(scaled, backdrop, blend_overlap(scaled, backdrop, mix_mode));
+            return compose_over(scaled, backdrop, overlap);
         }
         case COMPOSE_SRC_IN: {
             return compose_in(backdrop, scaled);
@@ -403,14 +413,14 @@ fn compose_source(backdrop: vec4<f32>, source: vec4<f32>, opacity: f32, mode: u3
                 return compose_atop_normal(backdrop, scaled);
             }
 
-            return compose_atop(backdrop, scaled, blend_overlap(backdrop, scaled, mix_mode));
+            return compose_atop(backdrop, scaled, overlap);
         }
         case COMPOSE_DEST_ATOP: {
             if normal {
                 return compose_atop_normal(scaled, backdrop);
             }
 
-            return compose_atop(scaled, backdrop, blend_overlap(scaled, backdrop, mix_mode));
+            return compose_atop(scaled, backdrop, overlap);
         }
         case COMPOSE_XOR: {
             return compose_xor(backdrop, scaled);
@@ -420,14 +430,14 @@ fn compose_source(backdrop: vec4<f32>, source: vec4<f32>, opacity: f32, mode: u3
                 return compose_plus_normal(backdrop, scaled);
             }
 
-            return compose_plus(backdrop, scaled, blend_overlap(backdrop, scaled, mix_mode));
+            return compose_plus(backdrop, scaled, overlap);
         }
         default: {
             if normal {
                 return compose_over_normal(backdrop, scaled);
             }
 
-            return compose_over(backdrop, scaled, blend_overlap(backdrop, scaled, mix_mode));
+            return compose_over(backdrop, scaled, overlap);
         }
     }
 }

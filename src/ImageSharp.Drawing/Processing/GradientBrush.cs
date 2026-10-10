@@ -19,8 +19,20 @@ public abstract class GradientBrush : Brush
     /// <param name="repetitionMode">Defines how the colors are repeated beyond the interval [0..1].</param>
     /// <param name="colorStops">The gradient colors.</param>
     protected GradientBrush(GradientRepetitionMode repetitionMode, params ColorStop[] colorStops)
+        : this(repetitionMode, Matrix4x4.Identity, colorStops)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GradientBrush"/> class.
+    /// </summary>
+    /// <param name="repetitionMode">Defines how the colors are repeated beyond the interval [0..1].</param>
+    /// <param name="gradientTransform">The transform from the gradient's coordinate space to the drawing.</param>
+    /// <param name="colorStops">The gradient colors.</param>
+    protected GradientBrush(GradientRepetitionMode repetitionMode, Matrix4x4 gradientTransform, params ColorStop[] colorStops)
     {
         this.RepetitionMode = repetitionMode;
+        this.GradientTransform = gradientTransform;
 
         InsertionSort(colorStops, (a, b) => a.Ratio.CompareTo(b.Ratio));
         this.ColorStopsArray = colorStops;
@@ -30,6 +42,16 @@ public abstract class GradientBrush : Brush
     /// Gets how the colors are repeated beyond the interval [0..1].
     /// </summary>
     public GradientRepetitionMode RepetitionMode { get; }
+
+    /// <summary>
+    /// Gets the transform from the gradient's coordinate space to the drawing. The geometry of
+    /// the gradient is defined in its own space and every sample is mapped through the inverse
+    /// of this transform, so a skew or a non-uniform scale changes the shape of the gradient.
+    /// The transform is affine: a projective transform applied through
+    /// <see cref="Brush.Transform(Matrix4x4, Rectangle, Rectangle)"/> projects the geometry
+    /// point by point instead, because an affine gradient cannot express perspective.
+    /// </summary>
+    public Matrix4x4 GradientTransform { get; }
 
     /// <summary>
     /// Gets the color stops for this gradient.
@@ -47,6 +69,7 @@ public abstract class GradientBrush : Brush
         if (other is GradientBrush brush)
         {
             return this.RepetitionMode == brush.RepetitionMode
+                && this.GradientTransform.Equals(brush.GradientTransform)
                 && this.ColorStopsArray?.SequenceEqual(brush.ColorStopsArray) == true;
         }
 
@@ -55,7 +78,22 @@ public abstract class GradientBrush : Brush
 
     /// <inheritdoc/>
     public override int GetHashCode()
-        => HashCode.Combine(this.RepetitionMode, this.ColorStopsArray);
+        => HashCode.Combine(this.RepetitionMode, this.GradientTransform, this.ColorStopsArray);
+
+    /// <summary>
+    /// Inverts the affine part of <see cref="GradientTransform"/>, which maps drawing
+    /// coordinates into the gradient's coordinate space.
+    /// </summary>
+    /// <param name="drawingToGradient">The inverted affine transform.</param>
+    /// <returns>
+    /// <see langword="true"/> if the transform can be inverted; otherwise <see langword="false"/>.
+    /// </returns>
+    internal bool TryGetInverseTransform(out Matrix3x2 drawingToGradient)
+    {
+        Matrix4x4 m = this.GradientTransform;
+        Matrix3x2 affine = new(m.M11, m.M12, m.M21, m.M22, m.M41, m.M42);
+        return Matrix3x2.Invert(affine, out drawingToGradient);
+    }
 
     /// <summary>
     /// Sorts the collection in place using a stable insertion sort.
@@ -103,16 +141,15 @@ public abstract class GradientBrush : Brush
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
         /// <param name="canvasWidth">The canvas width for the current render pass.</param>
-        /// <param name="colorStops">An array of color stops sorted by their position.</param>
-        /// <param name="repetitionMode">Defines if and how the gradient should be repeated.</param>
+        /// <param name="brush">The gradient brush.</param>
         protected GradientBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
             int canvasWidth,
-            ColorStop[] colorStops,
-            GradientRepetitionMode repetitionMode)
+            GradientBrush brush)
             : base(configuration, options, canvasWidth)
         {
+            ColorStop[] colorStops = brush.ColorStopsArray;
             this.colorStops = new GradientColorStop[colorStops.Length];
 
             // CSS Color 4 requires alpha to be premultiplied before color interpolation.
@@ -125,8 +162,34 @@ public abstract class GradientBrush : Brush
                 this.colorStops[i] = new GradientColorStop(stop.Ratio, stop.Color.ToScaledVector4(PixelAlphaRepresentation.Associated));
             }
 
-            this.repetitionMode = repetitionMode;
+            this.repetitionMode = brush.RepetitionMode;
+
+            // The inverse of the affine part maps drawing coordinates into the gradient's space.
+            // Derived renderers fold it into their own per-sample mapping. A transform that
+            // cannot be inverted yields NaN positions, which the sampler already paints as
+            // transparent.
+            this.IsTransformed = !brush.GradientTransform.IsIdentity;
+            if (this.IsTransformed)
+            {
+                brush.TryGetInverseTransform(out Matrix3x2 drawingToGradient);
+                this.InverseGradientTransform = drawingToGradient;
+            }
+            else
+            {
+                this.InverseGradientTransform = Matrix3x2.Identity;
+            }
         }
+
+        /// <summary>
+        /// Gets a value indicating whether the brush has a gradient transform, so samples must be
+        /// mapped through <see cref="InverseGradientTransform"/> before the gradient is evaluated.
+        /// </summary>
+        protected bool IsTransformed { get; }
+
+        /// <summary>
+        /// Gets the transform from drawing coordinates to the gradient's coordinate space.
+        /// </summary>
+        protected Matrix3x2 InverseGradientTransform { get; }
 
         /// <summary>
         /// Gets the gradient color for the pixel at the given device coordinate.

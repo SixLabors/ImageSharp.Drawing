@@ -95,12 +95,22 @@ fn read_fill(cmd_ix: u32) -> CmdFill {
     let seg_data = ptcl[cmd_ix + 2u];
     let backdrop = i32(ptcl[cmd_ix + 3u]);
     let coverage_data = ptcl[cmd_ix + 4u];
-    let interest = vec4<f32>(
-        bitcast<f32>(ptcl[cmd_ix + 5u]),
-        bitcast<f32>(ptcl[cmd_ix + 6u]),
-        bitcast<f32>(ptcl[cmd_ix + 7u]),
-        bitcast<f32>(ptcl[cmd_ix + 8u]));
+    let interest = resolve_interest(ptcl[cmd_ix + 5u]);
     return CmdFill(size_and_rule, seg_data, backdrop, coverage_data, interest);
+}
+
+// Resolves the raster interest rectangle referenced by a CMD_FILL or CMD_SOLID: the four
+// words at the info-stream offset, or the whole target for CMD_INTEREST_FULL_TARGET.
+fn resolve_interest(interest_ref: u32) -> vec4<f32> {
+    if interest_ref == CMD_INTEREST_FULL_TARGET {
+        return vec4<f32>(0.0, 0.0, f32(config.target_width), f32(config.target_height));
+    }
+
+    return vec4<f32>(
+        bitcast<f32>(info[interest_ref]),
+        bitcast<f32>(info[interest_ref + 1u]),
+        bitcast<f32>(info[interest_ref + 2u]),
+        bitcast<f32>(info[interest_ref + 3u]));
 }
 
 // Expands one RGBA color stored as two binary16 pairs. Brush payloads use
@@ -109,12 +119,12 @@ fn unpack_color_f16(rg: u32, ba: u32) -> vec4<f32> {
     return vec4(unpack2x16float(rg), unpack2x16float(ba));
 }
 
-// Decodes a CMD_COLOR payload: binary16 associated color and draw flags.
+// Decodes a CMD_COLOR payload: the binary16 associated color from the scene stream and the
+// draw flags from the info stream, both by offset.
 fn read_color(cmd_ix: u32) -> CmdColor {
-    let color_rg = ptcl[cmd_ix + 1u];
-    let color_ba = ptcl[cmd_ix + 2u];
-    let draw_flags = ptcl[cmd_ix + 3u];
-    return CmdColor(color_rg, color_ba, draw_flags);
+    let scene_offset = ptcl[cmd_ix + 1u];
+    let info_offset = ptcl[cmd_ix + 2u];
+    return CmdColor(scene_data[scene_offset], scene_data[scene_offset + 1u], info[info_offset]);
 }
 
 // Decodes a CMD_RECOLOR reference to its target-specialized auxiliary record.
@@ -1167,6 +1177,13 @@ fn main(
     var blend_stack: array<array<vec4<u32>, PIXELS_PER_THREAD>, BLEND_STACK_SPLIT>;
     var clip_depth = 0u;
     var area: array<f32, PIXELS_PER_THREAD>;
+    // Paint commands store their per-pixel source color and coverage here, and the loop tail
+    // composes them at one site. A compose call inlines the blend-mode switch, so one site per
+    // paint command would multiply the shader's compile time.
+    var paint_color: array<vec4<f32>, PIXELS_PER_THREAD>;
+    var paint_coverage: array<f32, PIXELS_PER_THREAD>;
+    var paint_flags = 0u;
+    var paint_pending = false;
     var cmd_ix = tile_ix * PTCL_INITIAL_ALLOC;
     // The first word of each tile's PTCL slot is its blend spill offset.
     let blend_offset = ptcl[cmd_ix];
@@ -1181,31 +1198,28 @@ fn main(
             case CMD_FILL: {
                 let fill = read_fill(cmd_ix);
                 fill_path(fill, local_xy, xy, &area);
-                cmd_ix += 9u;
+                cmd_ix += 6u;
             }
             case CMD_SOLID: {
                 // Full coverage, restricted to the command's raster interest
                 // rectangle.
-                let interest = vec4<f32>(
-                    bitcast<f32>(ptcl[cmd_ix + 1u]),
-                    bitcast<f32>(ptcl[cmd_ix + 2u]),
-                    bitcast<f32>(ptcl[cmd_ix + 3u]),
-                    bitcast<f32>(ptcl[cmd_ix + 4u]));
+                let interest = resolve_interest(ptcl[cmd_ix + 1u]);
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
                     let pixel = xy + vec2<f32>(f32(i), 0.0);
                     area[i] = select(0.0, 1.0, pixel.x >= interest.x && pixel.y >= interest.y && pixel.x < interest.z && pixel.y < interest.w);
                 }
-                cmd_ix += 5u;
+                cmd_ix += 2u;
             }
             case CMD_COLOR: {
                 let color = read_color(cmd_ix);
                 let fg = decode_paint_color(unpack_color_f16(color.color_rg, color.color_ba));
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                    if area[i] != 0.0 {
-                        rgba[i] = compose_draw_with_coverage(rgba[i], fg, area[i], color.draw_flags);
-                    }
+                    paint_color[i] = fg;
+                    paint_coverage[i] = area[i];
                 }
-                cmd_ix += 4u;
+                paint_flags = color.draw_flags;
+                paint_pending = true;
+                cmd_ix += 3u;
             }
             case CMD_RECOLOR: {
                 let recolor = read_recolor(cmd_ix);
@@ -1332,6 +1346,7 @@ fn main(
                 let draw_flags = info[ptcl[cmd_ix + 2u] - 1u];
                 let d = lin.line_x * (xy.x + 0.5) + lin.line_y * (xy.y + 0.5) + lin.line_c;
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+                    paint_coverage[i] = area[i];
                     if area[i] != 0.0 {
                         let my_d = d + lin.line_x * f32(i);
                         let t = extend_mode_normalized(my_d, lin.extend_mode);
@@ -1344,9 +1359,11 @@ fn main(
                         // CPU gradient brushes return a transparent overlay for DontFill samples,
                         // then blend it normally. Destructive composition modes must therefore
                         // still run when no ramp texel is selected.
-                        rgba[i] = compose_draw_with_coverage(rgba[i], fg_rgba, area[i], draw_flags);
+                        paint_color[i] = fg_rgba;
                     }
                 }
+                paint_flags = draw_flags;
+                paint_pending = true;
                 cmd_ix += 3u;
             }
             case CMD_RAD_GRAD: {
@@ -1403,14 +1420,18 @@ fn main(
 
                     // Invalid conical solutions and DontFill both produce the transparent
                     // overlay that the CPU still sends through coverage and composition.
-                    rgba[i] = compose_draw_with_coverage(rgba[i], fg_rgba, area[i], draw_flags);
+                    paint_color[i] = fg_rgba;
+                    paint_coverage[i] = area[i];
                 }
+                paint_flags = draw_flags;
+                paint_pending = true;
                 cmd_ix += 3u;
             }
             case CMD_ELLIPTIC_GRAD: {
                 let elliptic = read_elliptic_grad(cmd_ix);
                 let draw_flags = info[ptcl[cmd_ix + 2u] - 1u];
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+                    paint_coverage[i] = area[i];
                     if area[i] != 0.0 {
                         let my_xy = vec2(xy.x + f32(i) + 0.5, xy.y + 0.5);
                         if elliptic.kind == ELLIPTIC_GRAD_KIND_NORMAL {
@@ -1428,7 +1449,7 @@ fn main(
                                 }
                             }
 
-                            rgba[i] = compose_draw_with_coverage(rgba[i], fg_rgba, area[i], draw_flags);
+                            paint_color[i] = fg_rgba;
                         } else {
                             // Keep the CPU order of operations for a collapsed ellipse: subtract
                             // the center first, then rotate. An affine translation would introduce
@@ -1448,10 +1469,12 @@ fn main(
                                 fg_rgba = textureLoad(gradients, vec2(i32(GRADIENT_WIDTH - 1), i32(elliptic.index)), 0);
                             }
 
-                            rgba[i] = compose_draw_with_coverage(rgba[i], fg_rgba, area[i], draw_flags);
+                            paint_color[i] = fg_rgba;
                         }
                     }
                 }
+                paint_flags = draw_flags;
+                paint_pending = true;
                 cmd_ix += 3u;
             }
             case CMD_SWEEP_GRAD: {
@@ -1459,6 +1482,7 @@ fn main(
                 let draw_flags = info[ptcl[cmd_ix + 2u] - 1u];
                 let scale = 1.0 / (sweep.t1 - sweep.t0);
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+                    paint_coverage[i] = area[i];
                     if area[i] != 0.0 {
                         let my_xy = vec2(xy.x + f32(i) + 0.5, xy.y + 0.5);
                         let local_xy = sweep.matrx.xy * my_xy.x + sweep.matrx.zw * my_xy.y + sweep.xlat;
@@ -1496,26 +1520,31 @@ fn main(
 
                         // DontFill is a transparent brush sample, not an omitted draw, so it
                         // still participates in Src, Clear, and every other composition mode.
-                        rgba[i] = compose_draw_with_coverage(rgba[i], fg_rgba, area[i], draw_flags);
+                        paint_color[i] = fg_rgba;
                     }
                 }
+                paint_flags = draw_flags;
+                paint_pending = true;
                 cmd_ix += 3u;
             }
             case CMD_PATH_GRAD: {
                 let path_grad = read_path_grad(cmd_ix);
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+                    paint_coverage[i] = area[i];
                     if area[i] != 0.0 {
                         let my_xy = vec2(xy.x + f32(i) + 0.5, xy.y + 0.5);
-                        let fg_rgba = evaluate_path_gradient(path_grad, my_xy);
-                        rgba[i] = compose_draw_with_coverage(rgba[i], fg_rgba, area[i], path_grad.draw_flags);
+                        paint_color[i] = evaluate_path_gradient(path_grad, my_xy);
                     }
                 }
+                paint_flags = path_grad.draw_flags;
+                paint_pending = true;
                 cmd_ix += 5u;
             }
             case CMD_IMAGE: {
                 let image = read_image(cmd_ix);
                 let draw_flags = info[ptcl[cmd_ix + 1u] - 1u];
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+                    paint_coverage[i] = 0.0;
                     // We only need to load from the textures if the value will be used.
                     if area[i] != 0.0 {
                         let my_xy = vec2(xy.x + f32(i), xy.y);
@@ -1531,14 +1560,25 @@ fn main(
                             // sources both enter the common composition space.
                             let atlas_color = decode_image_numeric(textureLoad(image_atlas, atlas_uv_clamped, 0), image.signed_unit);
                             let fg_rgba = maybe_premul_alpha(atlas_color, image.alpha_type);
-                            let fg_i = pixel_format(fg_rgba * image.alpha, image.format);
-                            rgba[i] = compose_draw_with_coverage(rgba[i], fg_i, area[i], draw_flags);
+                            paint_color[i] = pixel_format(fg_rgba * image.alpha, image.format);
+                            paint_coverage[i] = area[i];
                         }
                     }
                 }
+                paint_flags = draw_flags;
+                paint_pending = true;
                 cmd_ix += 2u;
             }
             default: {}
+        }
+
+        if paint_pending {
+            for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+                if paint_coverage[i] != 0.0 {
+                    rgba[i] = compose_draw_with_coverage(rgba[i], paint_color[i], paint_coverage[i], paint_flags);
+                }
+            }
+            paint_pending = false;
         }
     }
     for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {

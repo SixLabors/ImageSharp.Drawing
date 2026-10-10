@@ -203,6 +203,31 @@ internal static partial class DefaultRasterizer
     }
 
     /// <summary>
+    /// Returns the tessellation segment count used for one round join or cap arc.
+    /// Ported to the GPU as <c>stroke_arc_subdivision_count</c> in <c>path_lowering.wgsl</c>;
+    /// changes here must be mirrored there.
+    /// </summary>
+    /// <param name="radius">The arc radius.</param>
+    /// <param name="angle">The arc sweep angle in radians.</param>
+    /// <param name="arcDetailScale">The tessellation detail scale.</param>
+    /// <returns>The number of intermediate tessellation points.</returns>
+    public static int GetArcSubdivisionCount(float radius, double angle, double arcDetailScale)
+    {
+        double safeRadius = Math.Max(radius, StrokeDirectionEpsilon);
+        double safeScale = Math.Max(arcDetailScale, 0.01D);
+
+        // Chordal-error step: theta is the largest angular step whose chord midpoint
+        // deviates from the arc by at most 0.125 / scale pixels, so tessellation density
+        // adapts to both radius and requested detail.
+        double ratio = safeRadius / (safeRadius + (0.125D / safeScale));
+        ratio = Math.Clamp(ratio, -1D, 1D);
+        double theta = Math.Acos(ratio) * 2D;
+        return theta <= 0D
+            ? 0
+            : Math.Max(0, (int)(angle / theta));
+    }
+
+    /// <summary>
     /// Expands one stroked centerline geometry once into retained per-band line storage.
     /// </summary>
     /// <param name="geometry">The retained stroke centerline geometry.</param>
@@ -1451,31 +1476,6 @@ internal static partial class DefaultRasterizer
             intervalRight = MathF.Max(intervalRight, x);
             hasIntersection = true;
         }
-    }
-
-    /// <summary>
-    /// Returns the tessellation segment count used for one round join or cap arc.
-    /// Ported to the GPU as <c>stroke_arc_subdivision_count</c> in <c>path_lowering.wgsl</c>;
-    /// changes here must be mirrored there.
-    /// </summary>
-    /// <param name="radius">The arc radius.</param>
-    /// <param name="angle">The arc sweep angle in radians.</param>
-    /// <param name="arcDetailScale">The tessellation detail scale.</param>
-    /// <returns>The number of intermediate tessellation points.</returns>
-    private static int GetArcSubdivisionCount(float radius, double angle, double arcDetailScale)
-    {
-        double safeRadius = Math.Max(radius, StrokeDirectionEpsilon);
-        double safeScale = Math.Max(arcDetailScale, 0.01D);
-
-        // AGG's chordal-error step: theta is the largest angular step whose chord midpoint
-        // deviates from the arc by at most 0.125 / scale pixels, so tessellation density
-        // adapts to both radius and requested detail.
-        double ratio = safeRadius / (safeRadius + (0.125D / safeScale));
-        ratio = Math.Clamp(ratio, -1D, 1D);
-        double theta = Math.Acos(ratio) * 2D;
-        return theta <= 0D
-            ? 0
-            : Math.Max(0, (int)(angle / theta));
     }
 
     /// <summary>

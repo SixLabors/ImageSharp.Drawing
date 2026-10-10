@@ -32,5 +32,20 @@ public class ProcessWithCanvas : BaseImageOperationsExtensionTest
 
         PaintProcessor processor = this.Verify<PaintProcessor>();
         Assert.Equal(this.nonDefaultOptions, processor.Options);
+        Assert.Null(processor.TextCache);
+    }
+
+    [Fact]
+    public void CanvasActionWithOptionsAndTextCache()
+    {
+        DrawingTextCache textCache = new();
+        this.operations.Paint(
+            this.nonDefaultOptions,
+            textCache,
+            canvas => canvas.Clear(Brushes.Solid(Color.Red)));
+
+        PaintProcessor processor = this.Verify<PaintProcessor>();
+        Assert.Equal(this.nonDefaultOptions, processor.Options);
+        Assert.Same(textCache, processor.TextCache);
     }
 }

@@ -6,11 +6,22 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// <inheritdoc cref="PolygonClipper.StrokeOptions" />
 public sealed class StrokeOptions : IEquatable<StrokeOptions?>
 {
+    private double arcDetailScale = 1D;
+
     /// <inheritdoc cref="PolygonClipper.StrokeOptions.MiterLimit" />
     public double MiterLimit { get; set; } = 4D;
 
     /// <inheritdoc cref="PolygonClipper.StrokeOptions.ArcDetailScale" />
-    public double ArcDetailScale { get; set; } = 1D;
+    /// <exception cref="ArgumentOutOfRangeException">The value is not greater than zero.</exception>
+    public double ArcDetailScale
+    {
+        get => this.arcDetailScale;
+        set
+        {
+            Guard.MustBeGreaterThan(value, 0, nameof(this.ArcDetailScale));
+            this.arcDetailScale = value;
+        }
+    }
 
     /// <inheritdoc cref="PolygonClipper.StrokeOptions.LineJoin" />
     public LineJoin LineJoin { get; set; } = LineJoin.Bevel;

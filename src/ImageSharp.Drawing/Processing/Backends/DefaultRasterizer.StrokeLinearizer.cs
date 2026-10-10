@@ -898,7 +898,8 @@ internal static partial class DefaultRasterizer
 
         /// <summary>
         /// Direct port of <c>PolygonStroker.CalcArc</c>. Emits intermediate arc vertices
-        /// around a join center between two offset vectors. Ported to the GPU as
+        /// around a join center between two offset vectors. The interior vertex count comes from
+        /// <see cref="GetArcSubdivisionCount"/>, shared with the round cap arcs. Ported to the GPU as
         /// <c>stroke_calc_arc</c> in <c>path_lowering.wgsl</c>; changes here must be mirrored there.
         /// </summary>
         /// <param name="contour">The active contour state.</param>
@@ -922,11 +923,6 @@ internal static partial class DefaultRasterizer
             float strokeWidth = this.stroke.HalfWidth;
             double a1 = Math.Atan2(dy1, dx1);
             double a2 = Math.Atan2(dy2, dx2);
-
-            // AGG's chordal-error step: da is the largest angular step whose chord stays within
-            // 0.125 / arc-detail-scale pixels of the true arc.
-            double widthAbs = strokeWidth;
-            double da = Math.Acos(widthAbs / (widthAbs + (0.125D / this.stroke.ArcDetailScale))) * 2D;
             this.AppendContourPoint(ref contour, new Vector2(x + dx1, y + dy1), contained);
 
             // Wrap the end angle forward so the sweep is always positive.
@@ -937,8 +933,9 @@ internal static partial class DefaultRasterizer
 
             // Distribute the sweep evenly over n interior points so the last step lands exactly
             // on the end offset.
-            int n = (int)((a2 - a1) / da);
-            da = (a2 - a1) / (n + 1);
+            double sweep = a2 - a1;
+            int n = GetArcSubdivisionCount(strokeWidth, sweep, this.stroke.ArcDetailScale);
+            double da = sweep / (n + 1);
             a1 += da;
             for (int i = 0; i < n; i++)
             {
