@@ -55,8 +55,8 @@ internal static partial class DefaultRasterizer
     private static readonly int WordBitCount = nint.Size * 8;
 
     /// <summary>
-    /// Right-shift that converts an accumulated doubled cell area (max 2 * 256 * 256) down to the
-    /// 0..256 coverage step domain used by <see cref="Context.AreaToCoverage"/>.
+    /// Left-shift that scales a 24.8 winding cover (256 per fully covered pixel) up to the doubled
+    /// cell area domain accumulated by the cells (<see cref="FullCoverageArea"/> per fully covered pixel).
     /// </summary>
     private const int AreaToCoverageShift = 9;
 
@@ -98,24 +98,24 @@ internal static partial class DefaultRasterizer
     private const int CrossingShift = ProfileIdBits + 1;
 
     /// <summary>
-    /// Number of discrete coverage steps per fully covered pixel (one 24.8 unit of winding).
+    /// The doubled cell area of one fully covered pixel (2 * 256 * 256), one 24.8 unit of winding.
     /// </summary>
-    private const int CoverageStepCount = 256;
+    private const int FullCoverageArea = (FixedOne * FixedOne) << 1;
 
     /// <summary>
-    /// Bitmask implementing modulo 2 * <see cref="CoverageStepCount"/> for even-odd wrapping.
+    /// Bitmask implementing modulo 2 * <see cref="FullCoverageArea"/> for even-odd wrapping.
     /// </summary>
-    private const int EvenOddMask = (CoverageStepCount * 2) - 1;
+    private const int EvenOddMask = (FullCoverageArea * 2) - 1;
 
     /// <summary>
     /// Length of one even-odd winding period; values past the midpoint mirror back down.
     /// </summary>
-    private const int EvenOddPeriod = CoverageStepCount * 2;
+    private const int EvenOddPeriod = FullCoverageArea * 2;
 
     /// <summary>
-    /// Multiplier converting integer coverage steps to normalized [0, 1] coverage.
+    /// Multiplier converting doubled cell area to normalized [0, 1] coverage.
     /// </summary>
-    private const float CoverageScale = 1F / CoverageStepCount;
+    private const float CoverageScale = 1F / FullCoverageArea;
 
     /// <summary>
     /// Gets the preferred scene row height used by the CPU rasterizer.
@@ -1625,20 +1625,21 @@ internal static partial class DefaultRasterizer
         /// </summary>
         /// <param name="area">
         /// The accumulated doubled signed area in fixed-point cell units; a fully covered pixel
-        /// corresponds to 2 * 256 * 256, which <see cref="AreaToCoverageShift"/> maps to <see cref="CoverageStepCount"/>.
+        /// corresponds to <see cref="FullCoverageArea"/>.
         /// </param>
         /// <returns>The normalized coverage value in [0, 1].</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private readonly float AreaToCoverage(int area)
         {
-            int signedArea = area >> AreaToCoverageShift;
-            int absoluteArea = signedArea < 0 ? -signedArea : signedArea;
+            // The area keeps its full precision. Quantizing it to 1/256 steps before the blend
+            // moves edge pixels up to one output level away from the exact composite.
+            int absoluteArea = area < 0 ? -area : area;
             float coverage;
 
             if (this.intersectionRule == IntersectionRule.NonZero)
             {
                 // Non-zero winding clamps absolute winding accumulation to [0, 1].
-                if (absoluteArea >= CoverageStepCount)
+                if (absoluteArea >= FullCoverageArea)
                 {
                     coverage = 1F;
                 }
@@ -1649,14 +1650,14 @@ internal static partial class DefaultRasterizer
             }
             else
             {
-                // Even-odd wraps every 2*CoverageStepCount and mirrors second half.
+                // Even-odd wraps every 2 * FullCoverageArea and mirrors the second half.
                 int wrapped = absoluteArea & EvenOddMask;
-                if (wrapped > CoverageStepCount)
+                if (wrapped > FullCoverageArea)
                 {
                     wrapped = EvenOddPeriod - wrapped;
                 }
 
-                coverage = wrapped >= CoverageStepCount ? 1F : wrapped * CoverageScale;
+                coverage = wrapped >= FullCoverageArea ? 1F : wrapped * CoverageScale;
             }
 
             if (this.coverageBoost != 0F)
@@ -1992,10 +1993,12 @@ internal static partial class DefaultRasterizer
             }
 
             // pp/mod/lift/rem implement an integer DDA that advances y at column boundaries
-            // without accumulating rounding error; the remainder carries the exact fraction.
+            // without accumulating rounding error; the remainder carries the exact fraction. The
+            // half-divisor start term rounds every boundary to the nearest unit instead of
+            // flooring it, so the walked edge sits within half a unit of the true line.
             int dx = p1x - p0x;
             int dy = p1y - p0y;
-            int pp = (FixedOne - fx0) * dy;
+            int pp = ((FixedOne - fx0) * dy) + (dx >> 1);
             int cy = p0y + (pp / dx);
 
             this.Cell(rowIndex, columnIndex0, fx0, p0y, FixedOne, cy);
@@ -2073,7 +2076,7 @@ internal static partial class DefaultRasterizer
 
             int dx = p1x - p0x;
             int dy = p0y - p1y;
-            int pp = (FixedOne - fx0) * dy;
+            int pp = ((FixedOne - fx0) * dy) + (dx >> 1);
             int cy = p0y - (pp / dx);
 
             this.Cell(rowIndex, columnIndex0, fx0, p0y, FixedOne, cy);
@@ -2151,7 +2154,7 @@ internal static partial class DefaultRasterizer
 
             int dx = p0x - p1x;
             int dy = p1y - p0y;
-            int pp = fx0 * dy;
+            int pp = (fx0 * dy) + (dx >> 1);
             int cy = p0y + (pp / dx);
 
             this.Cell(rowIndex, columnIndex0, fx0, p0y, 0, cy);
@@ -2229,7 +2232,7 @@ internal static partial class DefaultRasterizer
 
             int dx = p0x - p1x;
             int dy = p0y - p1y;
-            int pp = fx0 * dy;
+            int pp = (fx0 * dy) + (dx >> 1);
             int cy = p0y - (pp / dx);
 
             this.Cell(rowIndex, columnIndex0, fx0, p0y, 0, cy);
@@ -2301,8 +2304,9 @@ internal static partial class DefaultRasterizer
             int fy1 = y1 - (rowIndex1 << FixedShift);
 
             // p/delta/mod/rem implement an integer DDA that advances x at row boundaries
-            // without per-row floating-point math.
-            int p = (FixedOne - fy0) * dx;
+            // without per-row floating-point math. The half-divisor start term rounds every
+            // boundary to the nearest unit instead of flooring it.
+            int p = ((FixedOne - fy0) * dx) + (dy >> 1);
             int delta = p / dy;
             int cx = x0 + delta;
 
@@ -2353,7 +2357,7 @@ internal static partial class DefaultRasterizer
             int fy1 = y1 - (rowIndex1 << FixedShift);
 
             // Upward version of the same integer DDA stepping as LineDownR.
-            int p = fy0 * dx;
+            int p = (fy0 * dx) + (dy >> 1);
             int delta = p / dy;
             int cx = x0 + delta;
 
@@ -2403,7 +2407,7 @@ internal static partial class DefaultRasterizer
             int fy1 = y1 - (rowIndex1 << FixedShift);
 
             // Right-to-left variant of the integer DDA.
-            int p = (FixedOne - fy0) * dx;
+            int p = ((FixedOne - fy0) * dx) + (dy >> 1);
             int delta = p / dy;
             int cx = x0 - delta;
 
@@ -2453,7 +2457,7 @@ internal static partial class DefaultRasterizer
             int fy1 = y1 - (rowIndex1 << FixedShift);
 
             // Upward + right-to-left variant of the integer DDA.
-            int p = fy0 * dx;
+            int p = (fy0 * dx) + (dy >> 1);
             int delta = p / dy;
             int cx = x0 - delta;
 

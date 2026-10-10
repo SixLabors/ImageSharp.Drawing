@@ -38,11 +38,17 @@ const CMD_END_CLIP = 11u;
 const CMD_JUMP = 12u;
 const CMD_PATH_GRAD = 16u;
 
+// CMD_FILL and CMD_SOLID reference their raster interest rectangle by its offset in the
+// info stream. This value marks a draw without an interest block: the whole target.
+const CMD_INTEREST_FULL_TARGET = 0xffffffffu;
+
 // The individual PTCL structs are written here, but read/write is by
 // hand in the relevant shaders
 
 // Fill coverage command: rasterize the tile's segment slice into coverage.
-// Written by coarse write_path, read by fine read_fill.
+// Written by coarse write_path, read by fine read_fill. The command holds five words after
+// the tag: size_and_rule, seg_data, backdrop, coverage_data, and the info-stream offset of
+// the interest rectangle, which read_fill resolves into the vec4 below.
 struct CmdFill {
     size_and_rule: u32, // bit 0 = even-odd, bit 1 = aliased coverage, bits 2.. = segment count
     seg_data: u32, // index of the tile's first Segment in segment storage
@@ -59,7 +65,9 @@ struct CmdJump {
     new_ix: u32,
 }
 
-// Solid color paint.
+// Solid color paint. The command holds two words after the tag: the scene offset of the two
+// packed color words and the info offset of the draw flags, which read_color resolves into
+// the struct below.
 struct CmdColor {
     color_rg: u32, // associated RG packed as binary16
     color_ba: u32, // associated BA packed as binary16

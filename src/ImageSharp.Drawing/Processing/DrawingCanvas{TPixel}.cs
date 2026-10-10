@@ -74,26 +74,6 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     private readonly DrawingTextCache textCache;
 
     /// <summary>
-    /// Reusable operation list handed to each text renderer. Hosted by the text cache because
-    /// canvases are per-frame objects; sharing the cache-owned list keeps its capacity across
-    /// frames instead of regrowing a fresh list of large operation structs per draw.
-    /// </summary>
-    private readonly List<DrawingOperation> textOperations;
-
-    /// <summary>
-    /// Reusable sort buffer for <see cref="DrawTextOperations"/>, hosted by the text cache for
-    /// the same reason as <see cref="textOperations"/>. Only pass and index pairs are sorted;
-    /// the operations themselves stay in place so the per-draw sort moves eight bytes per
-    /// entry instead of the full operation struct.
-    /// </summary>
-    private readonly List<(byte RenderPass, int Sequence)> textOperationSortBuffer;
-
-    /// <summary>
-    /// Reusable stack pairing the begin and end commands for nested text composite layers.
-    /// </summary>
-    private readonly List<DrawingCanvasLayer> textCompositeLayerStack;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class.
     /// </summary>
     /// <param name="configuration">The active processing configuration.</param>
@@ -304,9 +284,6 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         this.targetFrame = targetFrame;
         this.batcher = batcher;
         this.textCache = textCache;
-        this.textOperations = textCache.OperationScratch;
-        this.textOperationSortBuffer = textCache.OperationSortScratch;
-        this.textCompositeLayerStack = textCache.CompositeLayerScratch;
         this.ownsBatcher = ownsBatcher;
         this.ownsTextCache = ownsTextCache;
         this.pendingImageResources = pendingImageResources;
@@ -870,11 +847,11 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             };
         }
 
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, configuredPath, pen, brush, this.textCache, this.textOperations);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, configuredPath, pen, brush, this.textCache);
         TextRenderer renderer = new(glyphRenderer);
         renderer.Render(text, configuredOptions);
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, glyphRenderer.Scratch, effectiveOptions);
     }
 
     /// <inheritdoc />
@@ -901,7 +878,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             Matrix4x4.CreateTranslation(location.X, location.Y, 0) * effectiveOptions.Transform,
             effectiveOptions.TextContrast);
 
-        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache, this.textOperations);
+        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache);
         if (TryGetVisibleTextBounds(state, placedOptions.Transform, out FontRectangle visibleBounds))
         {
             textBlock.RenderTo(glyphRenderer, wrappingLength, visibleBounds);
@@ -911,7 +888,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             textBlock.RenderTo(glyphRenderer, wrappingLength);
         }
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, glyphRenderer.Scratch, placedOptions);
     }
 
     /// <inheritdoc />
@@ -930,10 +907,10 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.textCache, this.textOperations);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.textCache);
         textBlock.RenderTo(glyphRenderer, wrappingLength);
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, glyphRenderer.Scratch, effectiveOptions);
     }
 
     /// <inheritdoc />
@@ -959,10 +936,10 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             Matrix4x4.CreateTranslation(location.X, location.Y, 0) * effectiveOptions.Transform,
             effectiveOptions.TextContrast);
 
-        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache, this.textOperations);
+        using RichTextGlyphRenderer glyphRenderer = new(placedOptions, path: null, pen, brush, this.textCache);
         lineLayout.RenderTo(glyphRenderer);
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, placedOptions);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, glyphRenderer.Scratch, placedOptions);
     }
 
     /// <inheritdoc />
@@ -980,10 +957,10 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.textCache, this.textOperations);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path, pen, brush, this.textCache);
         lineLayout.RenderTo(glyphRenderer);
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, glyphRenderer.Scratch, effectiveOptions);
     }
 
     /// <inheritdoc />
@@ -1000,11 +977,11 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path: null, pen, brush, this.textCache, this.textOperations);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path: null, pen, brush, this.textCache);
         TextRenderer renderer = new(glyphRenderer);
         renderer.Render(glyphId, options);
 
-        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, glyphRenderer.Scratch, effectiveOptions);
     }
 
     /// <inheritdoc />
@@ -1024,11 +1001,11 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path: null, pen, brush, this.textCache, this.textOperations);
+        using RichTextGlyphRenderer glyphRenderer = new(effectiveOptions, path: null, pen, brush, this.textCache);
         TextRenderer renderer = new(glyphRenderer);
         renderer.Render(glyphIds, points, options);
 
-        this.DrawTextOperations(this.BatchGlyphRunOperations(glyphRenderer.DrawingOperations), effectiveOptions);
+        this.DrawTextOperations(this.BatchGlyphRunOperations(glyphRenderer.DrawingOperations), glyphRenderer.Scratch, effectiveOptions);
     }
 
     /// <inheritdoc />
@@ -1809,17 +1786,20 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     /// Converts rendered text operations to composition commands and submits them to the batcher.
     /// </summary>
     /// <param name="operations">Text drawing operations produced by glyph layout/rendering.</param>
+    /// <param name="scratch">The working buffers leased by this draw's renderer.</param>
     /// <param name="drawingOptions">Drawing options applied to each operation.</param>
-    private void DrawTextOperations(List<DrawingOperation> operations, DrawingOptions drawingOptions)
+    private void DrawTextOperations(
+        List<DrawingOperation> operations,
+        DrawingTextCache.DrawingScratch scratch,
+        DrawingOptions drawingOptions)
     {
         // Enforce render-pass ordering while preserving original emission order inside each
         // pass. This preserves overlapping color-font layer compositing semantics (for
         // example emoji mouth/teeth layers) and keeps the composite group markers paired
         // with the fill operations they contain.
-        // The cache-owned buffer keeps its capacity across draws; draw calls never overlap on
-        // one canvas.
-        List<(byte RenderPass, int Sequence)> entries = this.textOperationSortBuffer;
-        entries.Clear();
+        // The renderer leases these buffers until command submission completes. Other canvases
+        // sharing the cache rent different buffers, while sequential draws retain capacity.
+        List<(byte RenderPass, int Sequence)> entries = scratch.SortBuffer;
 
         // Queued glyph commands never carry the canvas transform: glyph geometry arrives with
         // it already applied, and the sub-pixel remainder rides the command itself. One shared
@@ -1840,8 +1820,7 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
             return cmp != 0 ? cmp : a.Sequence.CompareTo(b.Sequence);
         });
 
-        List<DrawingCanvasLayer> compositeLayers = this.textCompositeLayerStack;
-        compositeLayers.Clear();
+        List<DrawingCanvasLayer> compositeLayers = scratch.CompositeLayers;
         DrawingCanvasState state = this.ResolveState();
 
         for (int i = 0; i < entries.Count; i++)
@@ -1887,11 +1866,6 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
                 this.batcher.AddStrokePath(((StrokePathCompositionSceneCommand)command).Command);
             }
         }
-
-        // The buffers outlive the canvas (the text cache hosts them), so drop the layer
-        // references now rather than rooting the final draw's state until the next draw.
-        entries.Clear();
-        compositeLayers.Clear();
     }
 
     /// <summary>

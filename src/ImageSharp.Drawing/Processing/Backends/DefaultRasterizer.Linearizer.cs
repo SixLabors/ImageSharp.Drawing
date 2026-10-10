@@ -700,11 +700,15 @@ internal static partial class DefaultRasterizer
 
             while (currentBand != endBand)
             {
-                // Walk to the band boundary in the direction of travel, interpolating X in
-                // 64-bit so the dx * deltaY product cannot overflow 32-bit fixed point.
+                // Walk to the band boundary in the direction of travel. X at the boundary is
+                // interpolated from the segment's own endpoint and rounded to nearest, so every
+                // boundary sits within half a fixed-point unit of the true edge. Stepping from the
+                // previous boundary instead accumulates the truncation of each division along the
+                // segment. The product is formed in 64-bit so dx * deltaY cannot overflow.
                 int bandBoundaryY = dy > 0 ? bandTopStart + ((currentBand + 1) * bandHeight) : bandTopStart + (currentBand * bandHeight);
-                int deltaY = bandBoundaryY - currentY;
-                int nextX = currentX + (int)(((long)dx * deltaY) / dy);
+                long numerator = (long)dx * (bandBoundaryY - y0);
+                long half = dy / 2;
+                int nextX = x0 + (int)((numerator ^ dy) >= 0 ? (numerator + half) / dy : (numerator - half) / dy);
                 int rowTop = bandTopStart + (currentBand * bandHeight);
 
                 // Each retained segment is stored in the local coordinate space of its owning band.

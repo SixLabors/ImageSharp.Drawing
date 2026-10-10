@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Helpers;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -31,7 +32,32 @@ public sealed class EllipticGradientBrush : GradientBrush
         float axisRatio,
         GradientRepetitionMode repetitionMode,
         params ColorStop[] colorStops)
-        : base(repetitionMode, colorStops)
+        : this(center, referenceAxisEnd, axisRatio, repetitionMode, Matrix4x4.Identity, colorStops)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="EllipticGradientBrush"/> class with the ellipse
+    /// defined in the gradient's own coordinate space.
+    /// </summary>
+    /// <param name="center">The center of the elliptical gradient and 0 for the color stops.</param>
+    /// <param name="referenceAxisEnd">The end point of the reference axis of the ellipse.</param>
+    /// <param name="axisRatio">
+    ///   The ratio of the axis widths.
+    ///   The second axis is perpendicular to the reference axis and its length is the reference axis length
+    ///   multiplied by this factor.
+    /// </param>
+    /// <param name="repetitionMode">Defines how the colors of the gradients are repeated.</param>
+    /// <param name="gradientTransform">The transform from the gradient's coordinate space to the drawing.</param>
+    /// <param name="colorStops">The color stops.</param>
+    public EllipticGradientBrush(
+        PointF center,
+        PointF referenceAxisEnd,
+        float axisRatio,
+        GradientRepetitionMode repetitionMode,
+        Matrix4x4 gradientTransform,
+        params ColorStop[] colorStops)
+        : base(repetitionMode, gradientTransform, colorStops)
     {
         this.Center = center;
         this.ReferenceAxisEnd = referenceAxisEnd;
@@ -56,29 +82,32 @@ public sealed class EllipticGradientBrush : GradientBrush
     /// <inheritdoc/>
     public override Brush Transform(Matrix4x4 matrix, Rectangle sourceInterest, Rectangle preparedInterest)
     {
-        PointF tc = PointF.Transform(this.Center, matrix);
-        PointF tRef = PointF.Transform(this.ReferenceAxisEnd, matrix);
+        Matrix4x4 gradientTransform = this.GradientTransform * matrix;
+        if (!MatrixUtilities.IsAffine(in gradientTransform))
+        {
+            // Perspective has no affine inverse: the center and both axis ends project point by
+            // point and the ratio follows the projected axis lengths.
+            PointF tc = PointF.Transform(this.Center, gradientTransform);
+            PointF tRef = PointF.Transform(this.ReferenceAxisEnd, gradientTransform);
 
-        // Compute a point on the perpendicular (secondary) axis and transform it.
-        float refDx = this.ReferenceAxisEnd.X - this.Center.X;
-        float refDy = this.ReferenceAxisEnd.Y - this.Center.Y;
-        float refLen = MathF.Sqrt((refDx * refDx) + (refDy * refDy));
-        float secondLen = refLen * this.AxisRatio;
+            // Compute a point on the perpendicular (secondary) axis and transform it.
+            float refDx = this.ReferenceAxisEnd.X - this.Center.X;
+            float refDy = this.ReferenceAxisEnd.Y - this.Center.Y;
+            float refLen = MathF.Sqrt((refDx * refDx) + (refDy * refDy));
+            float secondLen = refLen * this.AxisRatio;
 
-        // Perpendicular direction (rotated 90 degrees).
-        PointF secondEnd = new(
-            this.Center.X + (-refDy / refLen * secondLen),
-            this.Center.Y + (refDx / refLen * secondLen));
-        PointF tSec = PointF.Transform(secondEnd, matrix);
+            // Perpendicular direction (rotated 90 degrees).
+            PointF secondEnd = new(this.Center.X + (-refDy / refLen * secondLen), this.Center.Y + (refDx / refLen * secondLen));
+            PointF tSec = PointF.Transform(secondEnd, gradientTransform);
 
-        // Derive new ratio from transformed lengths.
-        float newRefLen = MathF.Sqrt(
-            ((tRef.X - tc.X) * (tRef.X - tc.X)) + ((tRef.Y - tc.Y) * (tRef.Y - tc.Y)));
-        float newSecLen = MathF.Sqrt(
-            ((tSec.X - tc.X) * (tSec.X - tc.X)) + ((tSec.Y - tc.Y) * (tSec.Y - tc.Y)));
-        float newRatio = newRefLen > 0f ? newSecLen / newRefLen : this.AxisRatio;
+            // Derive new ratio from transformed lengths.
+            float newRefLen = MathF.Sqrt(((tRef.X - tc.X) * (tRef.X - tc.X)) + ((tRef.Y - tc.Y) * (tRef.Y - tc.Y)));
+            float newSecLen = MathF.Sqrt(((tSec.X - tc.X) * (tSec.X - tc.X)) + ((tSec.Y - tc.Y) * (tSec.Y - tc.Y)));
+            float newRatio = newRefLen > 0f ? newSecLen / newRefLen : this.AxisRatio;
+            return new EllipticGradientBrush(tc, tRef, newRatio, this.RepetitionMode, this.ColorStopsArray);
+        }
 
-        return new EllipticGradientBrush(tc, tRef, newRatio, this.RepetitionMode, this.ColorStopsArray);
+        return new EllipticGradientBrush(this.Center, this.ReferenceAxisEnd, this.AxisRatio, this.RepetitionMode, gradientTransform, this.ColorStopsArray);
     }
 
     /// <inheritdoc />
@@ -90,22 +119,10 @@ public sealed class EllipticGradientBrush : GradientBrush
     {
         if (TPixel.GetPixelTypeInfo().AlphaRepresentation == PixelAlphaRepresentation.Associated)
         {
-            return new EllipticGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(
-                configuration,
-                options,
-                canvasWidth,
-                this,
-                this.ColorStopsArray,
-                this.RepetitionMode);
+            return new EllipticGradientBrushRenderer<TPixel, AssociatedGradientPixelEncoder<TPixel>>(configuration, options, canvasWidth, this);
         }
 
-        return new EllipticGradientBrushRenderer<TPixel, UnassociatedGradientPixelEncoder<TPixel>>(
-            configuration,
-            options,
-            canvasWidth,
-            this,
-            this.ColorStopsArray,
-            this.RepetitionMode);
+        return new EllipticGradientBrushRenderer<TPixel, UnassociatedGradientPixelEncoder<TPixel>>(configuration, options, canvasWidth, this);
     }
 
     /// <summary>
@@ -134,16 +151,12 @@ public sealed class EllipticGradientBrush : GradientBrush
         /// <param name="options">The graphics options.</param>
         /// <param name="canvasWidth">The canvas width for the current render pass.</param>
         /// <param name="brush">The elliptic gradient brush.</param>
-        /// <param name="colorStops">Definition of colors.</param>
-        /// <param name="repetitionMode">Defines how the gradient colors are repeated.</param>
         public EllipticGradientBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
             int canvasWidth,
-            EllipticGradientBrush brush,
-            ColorStop[] colorStops,
-            GradientRepetitionMode repetitionMode)
-            : base(configuration, options, canvasWidth, colorStops, repetitionMode)
+            EllipticGradientBrush brush)
+            : base(configuration, options, canvasWidth, brush)
         {
             this.center = brush.Center;
 
@@ -162,12 +175,24 @@ public sealed class EllipticGradientBrush : GradientBrush
         /// <inheritdoc />
         protected override float PositionOnGradient(float x, float y)
         {
-            // Translate the sample into center-relative coordinates, then rotate it by the
+            // Map the sample into the gradient's space when the brush is transformed, translate
+            // it into center-relative coordinates, then rotate it by the
             // negated reference-axis angle so the reference axis aligns with local x before
             // measuring against the axis radii. Rotating by the positive angle instead would
             // mirror the ellipse for any orientation that is not a multiple of 90 degrees.
-            float x0 = x - this.center.X;
-            float y0 = y - this.center.Y;
+            float x0;
+            float y0;
+            if (this.IsTransformed)
+            {
+                Vector2 p = Vector2.Transform(new Vector2(x, y), this.InverseGradientTransform);
+                x0 = p.X - this.center.X;
+                y0 = p.Y - this.center.Y;
+            }
+            else
+            {
+                x0 = x - this.center.X;
+                y0 = y - this.center.Y;
+            }
 
             float xR = (x0 * this.cosRotation) + (y0 * this.sinRotation);
             float yR = (y0 * this.cosRotation) - (x0 * this.sinRotation);
