@@ -25,7 +25,9 @@ public sealed class IntelligentMailSymbology : BarcodeSymbology
         Guard.NotNull(text, nameof(text));
         if (text.Length is not (20 or 25 or 29 or 31))
         {
-            throw new ArgumentException($"The Intelligent Mail barcode carries a 20-digit tracking code and a routing code of 0, 5, 9 or 11 digits; got {text.Length} characters.", nameof(text));
+            throw new ArgumentException(
+                $"The Intelligent Mail barcode carries a 20-digit tracking code and a routing code of 0, 5, 9 or 11 digits; got {text.Length} characters.",
+                nameof(text));
         }
 
         UspsPostalEncoder.ValidateDigits(text);

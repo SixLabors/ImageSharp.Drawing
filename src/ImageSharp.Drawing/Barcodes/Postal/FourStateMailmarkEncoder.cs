@@ -246,7 +246,9 @@ internal static class FourStateMailmarkEncoder
             }
         }
 
-        throw new ArgumentException($"The Destination Post Code plus DPS field is XY11 with five spaces or one of the six domestic patterns; got {field.ToString()}.", nameof(field));
+        throw new ArgumentException(
+            $"The Destination Post Code plus DPS field is XY11 with five spaces or one of the six domestic patterns; got {field.ToString()}.",
+            nameof(field));
     }
 
     /// <summary>

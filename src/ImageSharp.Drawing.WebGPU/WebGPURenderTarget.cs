@@ -93,7 +93,13 @@ public sealed class WebGPURenderTarget : IDisposable
     /// <param name="width">The target width in pixels.</param>
     /// <param name="height">The target height in pixels.</param>
     public WebGPURenderTarget(Configuration configuration, WebGPUTextureFormat format, PixelAlphaRepresentation alphaRepresentation, int width, int height)
-        : this(new WebGPUDeviceContext(configuration), true, WebGPUDrawingBackend.CreateOffscreenTargetDescriptor(format, alphaRepresentation), width, height, isPresentationSurface: false)
+        : this(
+            new WebGPUDeviceContext(configuration),
+            true,
+            WebGPUDrawingBackend.CreateOffscreenTargetDescriptor(format, alphaRepresentation),
+            width,
+            height,
+            isPresentationSurface: false)
     {
     }
 

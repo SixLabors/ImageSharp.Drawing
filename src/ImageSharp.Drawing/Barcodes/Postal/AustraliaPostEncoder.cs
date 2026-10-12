@@ -57,7 +57,17 @@ internal static class AustraliaPostEncoder
     /// 6 mm at each end and 2 mm above and below, and the text representation "should appear above the
     /// barcode" and "must be outside of the barcode's minimum Quiet Zone".
     /// </summary>
-    public static readonly FourStateMetrics Metrics = new(0.5F, 1F / 50F, 50, 58, 1.85F / 0.5F, 1.3F / 0.5F, 1.85F / 0.5F, 6F / 0.5F, BarcodeTextSide.AboveBars, 2F / 0.5F);
+    public static readonly FourStateMetrics Metrics = new(
+        0.5F,
+        1F / 50F,
+        50,
+        58,
+        1.85F / 0.5F,
+        1.3F / 0.5F,
+        1.85F / 0.5F,
+        6F / 0.5F,
+        BarcodeTextSide.AboveBars,
+        2F / 0.5F);
 
     private static readonly byte[] Exp = BuildExp();
 
@@ -108,7 +118,9 @@ internal static class AustraliaPostEncoder
     {
         if (text.Length < FixedDigits)
         {
-            throw new ArgumentException($"An Australia Post barcode starts with a 2-digit format control code and an 8-digit sorting code; got {text.Length} characters.", nameof(text));
+            throw new ArgumentException(
+                $"An Australia Post barcode starts with a 2-digit format control code and an 8-digit sorting code; got {text.Length} characters.",
+                nameof(text));
         }
 
         ReadOnlySpan<char> formatControlCode = text.AsSpan(0, 2);
@@ -130,7 +142,9 @@ internal static class AustraliaPostEncoder
         int customerBars = barCount - CustomerFieldStart - TrailingBars;
         if (customer.Length * barsPerCharacter > customerBars)
         {
-            throw new ArgumentException($"The customer information field of format control code {text[..2]} holds {customerBars / barsPerCharacter} characters; got {customer.Length}.", nameof(text));
+            throw new ArgumentException(
+                $"The customer information field of format control code {text[..2]} holds {customerBars / barsPerCharacter} characters; got {customer.Length}.",
+                nameof(text));
         }
 
         Span<byte> values = stackalloc byte[barCount];

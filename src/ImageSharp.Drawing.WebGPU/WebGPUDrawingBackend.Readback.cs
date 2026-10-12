@@ -90,7 +90,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
         if (requiredFeature != default
             && !WebGPURuntime.GetOrCreateDeviceState(api, nativeTarget.DeviceHandle).HasFeature(requiredFeature))
         {
-            throw new NotSupportedException($"The target device does not support WebGPU feature '{requiredFeature}' required to read back pixel type '{typeof(TPixel).Name}'.");
+            throw new NotSupportedException(
+                $"The target device does not support WebGPU feature '{requiredFeature}' required to read back pixel type '{typeof(TPixel).Name}'.");
         }
 
         WGPUQueueImpl* queue = (WGPUQueueImpl*)queueReference.Handle;

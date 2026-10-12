@@ -189,7 +189,8 @@ public readonly struct CompositionCommand
     /// Draw commands do not carry clip state; backends resolve the active clip stack from the
     /// stream commands surrounding each draw.
     /// </remarks>
-    public DrawingClipDescriptor ClipDescriptor => this.clipDescriptor ?? throw new InvalidOperationException("Only begin-clip commands carry a clip descriptor.");
+    public DrawingClipDescriptor ClipDescriptor
+        => this.clipDescriptor ?? throw new InvalidOperationException("Only begin-clip commands carry a clip descriptor.");
 
     /// <summary>
     /// Gets a value indicating whether the command was recorded inside a layer.
@@ -204,7 +205,8 @@ public readonly struct CompositionCommand
     /// <summary>
     /// Gets the canvas bounds available to an Apply command.
     /// </summary>
-    public Rectangle ApplyCanvasBounds => this.applyBarrier?.CanvasBounds ?? throw new InvalidOperationException("Only apply commands carry apply canvas bounds.");
+    public Rectangle ApplyCanvasBounds
+        => this.applyBarrier?.CanvasBounds ?? throw new InvalidOperationException("Only apply commands carry apply canvas bounds.");
 
     /// <summary>
     /// Gets the local bounds within which an Apply command writes its processed output.
@@ -214,7 +216,8 @@ public readonly struct CompositionCommand
     /// <summary>
     /// Gets the image processor carried by an Apply command.
     /// </summary>
-    public Action<IImageProcessingContext> ApplyOperation => this.applyBarrier?.Operation ?? throw new InvalidOperationException("Only apply commands carry an apply operation.");
+    public Action<IImageProcessingContext> ApplyOperation
+        => this.applyBarrier?.Operation ?? throw new InvalidOperationException("Only apply commands carry an apply operation.");
 
     /// <summary>
     /// Gets the layer effect carried by an Apply command, or <see langword="null"/> when the command represents a direct Apply operation.
@@ -225,7 +228,8 @@ public readonly struct CompositionCommand
     /// Gets the offset subtracted from an Apply command's write rectangle when reading the source
     /// pixels, so a write-back recorded at an offset still reads the pre-offset region.
     /// </summary>
-    public Point ApplyWriteBackOffset => this.applyBarrier?.WriteBackOffset ?? throw new InvalidOperationException("Only apply commands carry an apply write-back offset.");
+    public Point ApplyWriteBackOffset
+        => this.applyBarrier?.WriteBackOffset ?? throw new InvalidOperationException("Only apply commands carry an apply write-back offset.");
 
     /// <summary>
     /// Gets the apply barrier carried by an <see cref="CompositionCommandKind.Apply"/> command.

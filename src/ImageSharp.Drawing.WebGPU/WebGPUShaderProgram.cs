@@ -23,7 +23,10 @@ internal sealed class WebGPUShaderProgram
 
     private readonly object moduleSourceSync = new();
     private readonly Dictionary<
-        (PixelAlphaRepresentation AlphaRepresentation, WebGPUTargetNumericEncoding NumericEncoding, BorderWrappingMode? XBorderMode, BorderWrappingMode? YBorderMode),
+        (PixelAlphaRepresentation AlphaRepresentation,
+            WebGPUTargetNumericEncoding NumericEncoding,
+            BorderWrappingMode? XBorderMode,
+            BorderWrappingMode? YBorderMode),
         WebGPUShaderModuleSource> moduleSources = [];
 
     /// <summary>

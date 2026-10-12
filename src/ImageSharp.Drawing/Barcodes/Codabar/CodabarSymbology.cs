@@ -80,7 +80,9 @@ public sealed class CodabarSymbology : BarcodeSymbology
         int minimum = this.CheckCharacter == CheckCharacterMode.Validate ? 4 : 3;
         if (text.Length < minimum)
         {
-            throw new ArgumentException($"Codabar carries a start character, at least one data character and a stop character; got {text.Length} characters.", nameof(text));
+            throw new ArgumentException(
+                $"Codabar carries a start character, at least one data character and a stop character; got {text.Length} characters.",
+                nameof(text));
         }
 
         SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();

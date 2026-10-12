@@ -411,7 +411,9 @@ internal static class WebGPUShaderSourceValidator
                 bool isPublicUniformBinding = name.SequenceEqual("imagesharp_uniforms");
                 if (hasReservedPrefix && (!isPublicUniformBinding || isDeclarationName))
                 {
-                    throw new ArgumentException("WGSL identifiers beginning with 'imagesharp_' are reserved by ImageSharp; only imagesharp_uniforms may be read by user source.", parameterName);
+                    throw new ArgumentException(
+                        "WGSL identifiers beginning with 'imagesharp_' are reserved by ImageSharp; only imagesharp_uniforms may be read by user source.",
+                        parameterName);
                 }
 
                 // Function parameters and structure members have no declaration keyword. Retain

@@ -18,7 +18,10 @@ internal static class CodePointExtensions
     /// <param name="codePoint">The code point to describe.</param>
     /// <returns>The description, in the form <c>U+0041 'A'</c>.</returns>
     public static string ToDisplayString(this CodePoint codePoint)
-        => FormattableString.Invariant(FormattableStringFactory.Create("U+{0:X4} '{1}'", codePoint.Value, CodePoint.IsValid(codePoint.Value) ? codePoint.ToString() : "\ufffd"));
+        => FormattableString.Invariant(FormattableStringFactory.Create(
+            "U+{0:X4} '{1}'",
+            codePoint.Value,
+            CodePoint.IsValid(codePoint.Value) ? codePoint.ToString() : "\ufffd"));
 
     /// <summary>
     /// Returns a value indicating whether the code point is one of the ASCII digits 0 to 9.

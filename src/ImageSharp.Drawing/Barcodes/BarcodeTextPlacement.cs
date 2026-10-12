@@ -88,7 +88,15 @@ internal readonly struct BarcodeTextPlacement
     /// <param name="fontScale">The factor applied to the caller's font size for this placement.</param>
     /// <param name="isCaption">Whether this placement is a data layer caption rendered with the caption font.</param>
     /// <param name="alignment">Where the line stands within its span.</param>
-    public BarcodeTextPlacement(string text, float left, float right, BarcodeTextSide side, float textEdge, float fontScale, bool isCaption, BarcodeTextAlignment alignment)
+    public BarcodeTextPlacement(
+        string text,
+        float left,
+        float right,
+        BarcodeTextSide side,
+        float textEdge,
+        float fontScale,
+        bool isCaption,
+        BarcodeTextAlignment alignment)
     {
         this.Text = text;
         this.Left = left;

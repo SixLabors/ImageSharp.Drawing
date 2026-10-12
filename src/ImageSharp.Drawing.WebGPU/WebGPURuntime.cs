@@ -683,13 +683,15 @@ internal static unsafe partial class WebGPURuntime
             WebGPUEnvironmentError.InstanceCreationFailed => "The WebGPU runtime could not create an instance.",
             WebGPUEnvironmentError.AdapterRequestTimedOut => "Timed out while waiting for the WebGPU adapter request callback.",
             WebGPUEnvironmentError.AdapterRequestFailed => "The WebGPU runtime failed to acquire a WebGPU adapter.",
-            WebGPUEnvironmentError.SoftwareAdapterUnsupported => "The only available WebGPU adapter is a software rasterizer, which this backend does not support; use the CPU drawing backend instead.",
+            WebGPUEnvironmentError.SoftwareAdapterUnsupported =>
+                "The only available WebGPU adapter is a software rasterizer, which this backend does not support; use the CPU drawing backend instead.",
             WebGPUEnvironmentError.DeviceRequestTimedOut => "Timed out while waiting for the WebGPU device request callback.",
             WebGPUEnvironmentError.DeviceRequestFailed => "The WebGPU runtime failed to acquire a WebGPU device.",
             WebGPUEnvironmentError.QueueAcquisitionFailed => "The WebGPU runtime acquired a device but could not retrieve its default queue.",
             WebGPUEnvironmentError.DeviceAcquisitionFailed => "The WebGPU runtime failed to provision a WebGPU device and queue.",
             WebGPUEnvironmentError.ComputePipelineCreationFailed => "The isolated WebGPU compute-pipeline probe reported failure.",
-            WebGPUEnvironmentError.ComputePipelineProbeProcessFailed => "The isolated WebGPU compute-pipeline probe process terminated before it could report a result.",
+            WebGPUEnvironmentError.ComputePipelineProbeProcessFailed =>
+                "The isolated WebGPU compute-pipeline probe process terminated before it could report a result.",
             WebGPUEnvironmentError.WgpuExtensionUnavailable => "The required WGPU extension is unavailable.",
             _ => "The WebGPU runtime failed for an unknown reason."
         };

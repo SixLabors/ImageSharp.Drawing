@@ -876,7 +876,14 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
     /// transform: the window emits a glyph's segments after the shared builder has already been
     /// retargeted to the next glyph, which rotates per glyph when text follows a path.
     /// </summary>
-    private void EmitDecorationSegment(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness, bool rotated, TextRun? run, Matrix4x4 transform)
+    private void EmitDecorationSegment(
+        TextDecorations textDecorations,
+        Vector2 start,
+        Vector2 end,
+        float thickness,
+        bool rotated,
+        TextRun? run,
+        Matrix4x4 transform)
     {
         // Clamp the thickness to whole pixels.
         thickness = MathF.Max(1F, (float)Math.Round(thickness));
@@ -1180,7 +1187,14 @@ internal class BaseGlyphBuilder : IGlyphRenderer, IDisposable
         /// <param name="run">The text run styling the glyph, captured while it was live.</param>
         /// <param name="rotated">Whether the glyph uses vertical layout.</param>
         /// <param name="transform">The composed builder transform of the owning glyph, captured while it was live.</param>
-        public PendingDecoration(Vector2 start, Vector2 end, float thickness, ReadOnlyMemory<float> intersections, TextRun? run, bool rotated, Matrix4x4 transform)
+        public PendingDecoration(
+            Vector2 start,
+            Vector2 end,
+            float thickness,
+            ReadOnlyMemory<float> intersections,
+            TextRun? run,
+            bool rotated,
+            Matrix4x4 transform)
         {
             this.HasValue = true;
             this.Start = start;

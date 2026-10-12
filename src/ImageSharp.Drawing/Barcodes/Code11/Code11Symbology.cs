@@ -92,7 +92,9 @@ public sealed class Code11Symbology : BarcodeSymbology
             // check characters make twelve, so eleven characters cannot carry a valid check.
             if (text.Length == Code11Encoder.TwoCheckCharactersFrom + 1)
             {
-                throw new ArgumentException($"Code 11 cannot carry {text.Length} characters with its check characters: nine data characters take one and ten take two.", nameof(text));
+                throw new ArgumentException(
+                    $"Code 11 cannot carry {text.Length} characters with its check characters: nine data characters take one and ten take two.",
+                    nameof(text));
             }
 
             checkCount = text.Length <= Code11Encoder.TwoCheckCharactersFrom ? 1 : 2;

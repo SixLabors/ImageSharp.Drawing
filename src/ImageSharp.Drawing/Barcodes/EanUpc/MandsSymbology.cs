@@ -74,7 +74,12 @@ public sealed class MandsSymbology : BarcodeSymbology
             for (int i = 0; i < shown; i++)
             {
                 float left = i < 4 ? 3F + (i * 7F) : 36F + ((i - 4) * 7F);
-                placements[i] = new BarcodeTextPlacement(EanUpcEncoder.DigitString(digits[padded ? i + 1 : i]), left, left + 7F, BarcodeTextSide.BelowBars, textLine);
+                placements[i] = new BarcodeTextPlacement(
+                    EanUpcEncoder.DigitString(digits[padded ? i + 1 : i]),
+                    left,
+                    left + 7F,
+                    BarcodeTextSide.BelowBars,
+                    textLine);
             }
 
             placements[shown] = new BarcodeTextPlacement("M", -12F, -5F, BarcodeTextSide.BelowBars, textLine);

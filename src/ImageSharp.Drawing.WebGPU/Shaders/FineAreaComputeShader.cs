@@ -33,7 +33,9 @@ internal static class FineAreaComputeShader
     /// <summary>
     /// Specialized shader bytes per target texture format and alpha representation, guarded by its own monitor.
     /// </summary>
-    private static readonly Dictionary<(WGPUTextureFormat TextureFormat, PixelAlphaRepresentation AlphaRepresentation, WebGPUTargetNumericEncoding NumericEncoding), byte[]> ShaderCache = [];
+    private static readonly Dictionary<
+        (WGPUTextureFormat TextureFormat, PixelAlphaRepresentation AlphaRepresentation, WebGPUTargetNumericEncoding NumericEncoding),
+        byte[]> ShaderCache = [];
 
     /// <summary>
     /// Gets the WGSL entry point used by this shader.
@@ -167,7 +169,8 @@ internal static class FineAreaComputeShader
         {
             WGPUTextureFormat.RGBA8Unorm or WGPUTextureFormat.BGRA8Unorm => "return unpack4x8unorm(pack4x8unorm(color));",
             WGPUTextureFormat.RGBA8Snorm => "return unpack4x8snorm(pack4x8snorm(color));",
-            WGPUTextureFormat.RGBA16Float => "return vec4<f32>(quantize_f16_rtne(color.x), quantize_f16_rtne(color.y), quantize_f16_rtne(color.z), quantize_f16_rtne(color.w));"
+            WGPUTextureFormat.RGBA16Float =>
+                "return vec4<f32>(quantize_f16_rtne(color.x), quantize_f16_rtne(color.y), quantize_f16_rtne(color.z), quantize_f16_rtne(color.w));"
         };
 
         // Fine shading uses associated colors internally. Unassociated targets cross the storage

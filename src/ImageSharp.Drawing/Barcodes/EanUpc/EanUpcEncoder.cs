@@ -283,7 +283,13 @@ internal static class EanUpcEncoder
     /// <param name="options">The options, whose font decides whether the guards extend.</param>
     /// <param name="heights">The resulting per-bar heights in modules.</param>
     /// <param name="tops">The resulting per-bar top offsets in modules.</param>
-    public static void BuildGuardedHeights(int barCount, float barHeight, ReadOnlySpan<int> guardBars, BarcodeOptions options, out float[] heights, out float[] tops)
+    public static void BuildGuardedHeights(
+        int barCount,
+        float barHeight,
+        ReadOnlySpan<int> guardBars,
+        BarcodeOptions options,
+        out float[] heights,
+        out float[] tops)
     {
         heights = new float[barCount];
         tops = new float[barCount];

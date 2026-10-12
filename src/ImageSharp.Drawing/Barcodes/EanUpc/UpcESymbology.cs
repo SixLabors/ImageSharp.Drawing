@@ -90,9 +90,22 @@ public sealed class UpcESymbology : BarcodeSymbology
         {
             float textLine = barHeight + BarcodeTextPlacement.Clearance;
             placements = new BarcodeTextPlacement[8];
-            placements[0] = new BarcodeTextPlacement(EanUpcEncoder.DigitString(text[0]), -9F, -2F, BarcodeTextSide.BelowBars, textLine, EanUpcEncoder.QuietZoneDigitScale);
+            placements[0] = new BarcodeTextPlacement(
+                EanUpcEncoder.DigitString(text[0]),
+                -9F,
+                -2F,
+                BarcodeTextSide.BelowBars,
+                textLine,
+                EanUpcEncoder.QuietZoneDigitScale);
+
             EanUpcEncoder.FillDigitPlacements(placements, 1, text, 1, 6, 3F, 7F, BarcodeTextSide.BelowBars, textLine);
-            placements[7] = new BarcodeTextPlacement(EanUpcEncoder.DigitString((char)('0' + check)), 52F, 59F, BarcodeTextSide.BelowBars, textLine, EanUpcEncoder.QuietZoneDigitScale);
+            placements[7] = new BarcodeTextPlacement(
+                EanUpcEncoder.DigitString((char)('0' + check)),
+                52F,
+                59F,
+                BarcodeTextSide.BelowBars,
+                textLine,
+                EanUpcEncoder.QuietZoneDigitScale);
         }
 
         return new LinearBarcodeSymbol(EanUpcEncoder.ToRuns(modules), heights, tops, placements, 9, 7);

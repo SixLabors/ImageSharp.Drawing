@@ -55,7 +55,9 @@ public sealed class PosiCodeSymbology : BarcodeSymbology
                     int codeword = PosiCodeEncoder.LimitedValue(current.Value);
                     if (codeword < 0)
                     {
-                        throw new ArgumentException($"Limited PosiCode carries only digits, capital letters, the hyphen and the full stop; got {current.ToDisplayString()}.", nameof(text));
+                        throw new ArgumentException(
+                            $"Limited PosiCode carries only digits, capital letters, the hyphen and the full stop; got {current.ToDisplayString()}.",
+                            nameof(text));
                     }
 
                     values.Append(codeword);

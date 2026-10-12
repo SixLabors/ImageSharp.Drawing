@@ -68,10 +68,23 @@ public sealed class UpcASymbology : BarcodeSymbology
         {
             float textLine = barHeight + BarcodeTextPlacement.Clearance;
             placements = new BarcodeTextPlacement[12];
-            placements[0] = new BarcodeTextPlacement(EanUpcEncoder.DigitString(digits[0]), -9F, -2F, BarcodeTextSide.BelowBars, textLine, EanUpcEncoder.QuietZoneDigitScale);
+            placements[0] = new BarcodeTextPlacement(
+                EanUpcEncoder.DigitString(digits[0]),
+                -9F,
+                -2F,
+                BarcodeTextSide.BelowBars,
+                textLine,
+                EanUpcEncoder.QuietZoneDigitScale);
+
             EanUpcEncoder.FillDigitPlacements(placements, 1, digits, 1, 5, 10F, 7F, BarcodeTextSide.BelowBars, textLine);
             EanUpcEncoder.FillDigitPlacements(placements, 6, digits, 6, 5, 50F, 7F, BarcodeTextSide.BelowBars, textLine);
-            placements[11] = new BarcodeTextPlacement(EanUpcEncoder.DigitString(digits[11]), 97F, 104F, BarcodeTextSide.BelowBars, textLine, EanUpcEncoder.QuietZoneDigitScale);
+            placements[11] = new BarcodeTextPlacement(
+                EanUpcEncoder.DigitString(digits[11]),
+                97F,
+                104F,
+                BarcodeTextSide.BelowBars,
+                textLine,
+                EanUpcEncoder.QuietZoneDigitScale);
         }
 
         return new LinearBarcodeSymbol(EanUpcEncoder.ToRuns(modules), heights, tops, placements, 9, 9);

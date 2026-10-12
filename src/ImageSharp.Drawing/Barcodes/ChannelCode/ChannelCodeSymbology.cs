@@ -45,7 +45,9 @@ public sealed class ChannelCodeSymbology : BarcodeSymbology
         Guard.NotNull(text, nameof(text));
         if (text.Length < ChannelCodeEncoder.MinimumLength || text.Length > ChannelCodeEncoder.MaximumLength)
         {
-            throw new ArgumentException($"Channel Code carries {ChannelCodeEncoder.MinimumLength} to {ChannelCodeEncoder.MaximumLength} digits; got {text.Length} characters.", nameof(text));
+            throw new ArgumentException(
+                $"Channel Code carries {ChannelCodeEncoder.MinimumLength} to {ChannelCodeEncoder.MaximumLength} digits; got {text.Length} characters.",
+                nameof(text));
         }
 
         int value = 0;

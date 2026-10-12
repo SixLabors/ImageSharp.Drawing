@@ -236,7 +236,10 @@ internal static class WebGPUSceneEncoder
                         // Boundary-snapped ranges can be empty; empty ranges skip clip seeding so they
                         // do not emit balanced-but-useless clip records.
                         int commandStart = partitionBoundaries is null ? (partitionIndex * commandCount) / partitionCount : partitionBoundaries[partitionIndex];
-                        int commandEnd = partitionBoundaries is null ? ((partitionIndex + 1) * commandCount) / partitionCount : partitionBoundaries[partitionIndex + 1];
+                        int commandEnd = partitionBoundaries is null
+                            ? ((partitionIndex + 1) * commandCount) / partitionCount
+                            : partitionBoundaries[partitionIndex + 1];
+
                         SceneEncodingPlan partitionPlan = plan.GetPartitionPlan(partitionIndex);
                         SupportedSubsetSceneEncoding partitionEncoding = new(allocator, targetRectangle, partitionPlan);
 
@@ -358,7 +361,17 @@ internal static class WebGPUSceneEncoder
         try
         {
             SceneEncodingCheckpoint rangeStart = encoding.BeginPackedIndependentRange(targetBounds, ClipBlendMode, replayActiveClips: true);
-            if (!TryEncodeOrderedOperations(scene, 0, scene.CommandCount, targetBounds, 0, ref encoding, operations, ref rangeStart, ref nextLayerTargetId, out error))
+            if (!TryEncodeOrderedOperations(
+                scene,
+                0,
+                scene.CommandCount,
+                targetBounds,
+                0,
+                ref encoding,
+                operations,
+                ref rangeStart,
+                ref nextLayerTargetId,
+                out error))
             {
                 encodedScene = WebGPUEncodedScene.Empty;
                 return false;
@@ -445,7 +458,17 @@ internal static class WebGPUSceneEncoder
                     operations.Add(new WebGPUSceneOperation(layerBounds, layerTargetId, targetId));
 
                     SceneEncodingCheckpoint childStart = encoding.BeginPackedIndependentRange(layerBounds, ClipBlendMode, replayActiveClips: true);
-                    if (!TryEncodeOrderedOperations(scene, i + 1, layerEnd, layerBounds, layerTargetId, ref encoding, operations, ref childStart, ref nextLayerTargetId, out error))
+                    if (!TryEncodeOrderedOperations(
+                        scene,
+                        i + 1,
+                        layerEnd,
+                        layerBounds,
+                        layerTargetId,
+                        ref encoding,
+                        operations,
+                        ref childStart,
+                        ref nextLayerTargetId,
+                        out error))
                     {
                         return false;
                     }
@@ -598,7 +621,12 @@ internal static class WebGPUSceneEncoder
         IWebGPUShaderEffectSource? shaderEffect = source.ApplyEffect as IWebGPUShaderEffectSource;
         bool hasNativeEffect = shaderEffect is not null;
         GpuImageSource imageSource = hasNativeEffect
-            ? new GpuImageSource(new Size(outputRect.Width, outputRect.Height), brushOffset, WrapMode.Repeat, WrapMode.Repeat, WebGPUShaderEffectWorkingTexture.Descriptor)
+            ? new GpuImageSource(
+                new Size(outputRect.Width, outputRect.Height),
+                brushOffset,
+                WrapMode.Repeat,
+                WrapMode.Repeat,
+                WebGPUShaderEffectWorkingTexture.Descriptor)
             : new GpuImageSource(new Size(outputRect.Width, outputRect.Height), brushOffset, WrapMode.Repeat, WrapMode.Repeat);
 
         RasterizerOptions rasterizerOptions = source.RasterizerOptions;
@@ -620,7 +648,8 @@ internal static class WebGPUSceneEncoder
         WebGPUSceneRange drawRange = encoding.EndPackedIndependentRange(targetBounds, drawStart, closeActiveClips: true);
         operation = hasNativeEffect
             ? new WebGPUSceneOperation(new WebGPUShaderEffectSceneItem(shaderEffect!, outputRect, outputRect, source.ApplyWriteBackOffset, drawRange))
-            : new WebGPUSceneOperation(new WebGPUApplySceneItem(source.ApplyOperation, source.ApplyEffect, outputRect, outputRect, source.ApplyWriteBackOffset, drawRange));
+            : new WebGPUSceneOperation(
+                new WebGPUApplySceneItem(source.ApplyOperation, source.ApplyEffect, outputRect, outputRect, source.ApplyWriteBackOffset, drawRange));
         error = null;
         return true;
     }
@@ -1101,7 +1130,10 @@ internal static class WebGPUSceneEncoder
                 partitionIndex =>
                 {
                     int commandStart = partitionBoundaries is null ? (partitionIndex * commandCount) / partitionCount : partitionBoundaries[partitionIndex];
-                    int commandEnd = partitionBoundaries is null ? ((partitionIndex + 1) * commandCount) / partitionCount : partitionBoundaries[partitionIndex + 1];
+                    int commandEnd = partitionBoundaries is null
+                        ? ((partitionIndex + 1) * commandCount) / partitionCount
+                        : partitionBoundaries[partitionIndex + 1];
+
                     SceneCapacityEstimate estimate = default;
 
                     for (int i = commandStart; i < commandEnd; i++)
@@ -2541,7 +2573,8 @@ internal static class WebGPUSceneEncoder
         /// <param name="transform">The scene transform to classify.</param>
         /// <returns><see langword="true"/> when the transform is a pure translation; otherwise <see langword="false"/>.</returns>
         private static bool IsProfileCompatibleTransform(in GpuSceneTransform transform)
-            => transform.M11 == 1F && transform.M22 == 1F && transform.M12 == 0F && transform.M21 == 0F && transform.M14 == 0F && transform.M24 == 0F && transform.M44 == 1F;
+            => transform.M11 == 1F && transform.M22 == 1F && transform.M12 == 0F && transform.M21 == 0F &&
+                transform.M14 == 0F && transform.M24 == 0F && transform.M44 == 1F;
 
         /// <summary>
         /// Encodes one visible fill command into the path, draw, style, and auxiliary payload streams.
@@ -4628,13 +4661,16 @@ internal static class WebGPUSceneEncoder
 
                     if (partition.GradientRowCount > 0)
                     {
-                        partition.GradientPixels.CopyTo(gradientPixelsOwner!.Memory.Span.Slice(gradientPixelOffset, partition.GradientRowCount * GradientRowWordCount));
+                        partition.GradientPixels.CopyTo(
+                            gradientPixelsOwner!.Memory.Span.Slice(gradientPixelOffset, partition.GradientRowCount * GradientRowWordCount));
+
                         gradientPixelOffset += partition.GradientRowCount * GradientRowWordCount;
                     }
 
                     if (partition.PathGradientDataWordCount > 0)
                     {
-                        partition.PathGradientData.CopyTo(pathGradientDataOwner!.Memory.Span.Slice(pathGradientDataOffset, partition.PathGradientDataWordCount));
+                        partition.PathGradientData.CopyTo(
+                            pathGradientDataOwner!.Memory.Span.Slice(pathGradientDataOffset, partition.PathGradientDataWordCount));
                     }
 
                     gradientRowOffset += partition.GradientRowCount;
@@ -5991,7 +6027,13 @@ internal static class WebGPUSceneEncoder
                         continue;
                     }
 
-                    AppendRectangleContour(new RectangleF(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height), translateX, translateY, ref pathTags, ref pathData);
+                    AppendRectangleContour(
+                        new RectangleF(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height),
+                        translateX,
+                        translateY,
+                        ref pathTags,
+                        ref pathData);
+
                     lineCount += 2;
                 }
 
@@ -7770,7 +7812,9 @@ internal sealed class WebGPUEncodedScene : IDisposable
     /// pixels wide, matching the encoder's fixed gradient ramp width.
     /// </summary>
     public ReadOnlyMemory<uint> GradientPixels
-        => this.gradientPixelsOwner is null ? ReadOnlyMemory<uint>.Empty : this.gradientPixelsOwner.Memory[..(this.GradientRowCount * WebGPUSceneEncoder.GradientRowWordCount)];
+        => this.gradientPixelsOwner is null
+            ? ReadOnlyMemory<uint>.Empty
+            : this.gradientPixelsOwner.Memory[..(this.GradientRowCount * WebGPUSceneEncoder.GradientRowWordCount)];
 
     /// <summary>
     /// Gets the encoded path-gradient payload stream.

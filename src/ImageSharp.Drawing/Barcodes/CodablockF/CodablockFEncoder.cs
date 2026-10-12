@@ -171,7 +171,13 @@ internal static class CodablockFEncoder
     /// <param name="nextControl">Scratch for the distance to the next control character from each position.</param>
     /// <param name="nextLower">Scratch for the distance to the next lower case character from each position.</param>
     /// <param name="values">The builder the character values are written to, one row after another.</param>
-    private static void Encode(ReadOnlySpan<char> text, int columns, Span<int> digits, Span<int> nextControl, Span<int> nextLower, ref ValueListBuilder<int> values)
+    private static void Encode(
+        ReadOnlySpan<char> text,
+        int columns,
+        Span<int> digits,
+        Span<int> nextControl,
+        Span<int> nextLower,
+        ref ValueListBuilder<int> values)
     {
         int n = text.Length;
         digits[n] = 0;

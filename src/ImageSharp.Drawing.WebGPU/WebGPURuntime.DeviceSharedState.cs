@@ -379,7 +379,8 @@ internal static unsafe partial class WebGPURuntime
         /// <param name="pipelineKey">The pipeline cache key.</param>
         /// <returns><see langword="true"/> when the pipeline exists; otherwise, <see langword="false"/>.</returns>
         public bool HasCompositeComputePipeline(string pipelineKey)
-            => this.compositeComputePipelines.TryGetValue(pipelineKey, out CompositeComputePipelineInfrastructure? infrastructure) && infrastructure.Pipeline is not null;
+            => this.compositeComputePipelines.TryGetValue(pipelineKey, out CompositeComputePipelineInfrastructure? infrastructure) &&
+                infrastructure.Pipeline is not null;
 
         /// <summary>
         /// Rents a pooled map-readable status buffer, or creates one when the pool has no buffer

@@ -474,7 +474,18 @@ public sealed partial class DefaultDrawingBackend
                     this.ApplyIntegerRun(clipIndex + 1, y, cursor, startX, runEnd, destination, coverage);
                 }
 
-                this.ApplyRectangleDifferenceInterior(clipIndex, descriptor, rectangle, yCoverage, y, startX, Math.Max(cursor, clipStart), clipEnd, destination, coverage);
+                this.ApplyRectangleDifferenceInterior(
+                    clipIndex,
+                    descriptor,
+                    rectangle,
+                    yCoverage,
+                    y,
+                    startX,
+                    Math.Max(cursor, clipStart),
+                    clipEnd,
+                    destination,
+                    coverage);
+
                 cursor = Math.Max(cursor, clipEnd);
             }
 
