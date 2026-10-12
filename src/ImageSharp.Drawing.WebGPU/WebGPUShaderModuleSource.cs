@@ -123,7 +123,8 @@ internal sealed class WebGPUShaderModuleSource
         _ = builder.AppendLine("@group(0) @binding(3) var imagesharp_filtering_sampler: sampler;");
         _ = builder.AppendLine();
         _ = builder.AppendLine("fn imagesharp_layer_load_scaled(position: vec2<i32>) -> vec4<f32> {");
-        _ = builder.AppendLine("    if (any(position < imagesharp_framework.imagesharp_valid_min) || any(position >= imagesharp_framework.imagesharp_valid_max)) {");
+        _ = builder.AppendLine(
+            "    if (any(position < imagesharp_framework.imagesharp_valid_min) || any(position >= imagesharp_framework.imagesharp_valid_max)) {");
         _ = builder.AppendLine("        return vec4<f32>(0.0);");
         _ = builder.AppendLine("    }");
         _ = builder.AppendLine();
@@ -233,10 +234,13 @@ internal sealed class WebGPUShaderModuleSource
             _ = builder.AppendLine("    let imagesharp_minimum = vec2<i32>(floor(imagesharp_texel_position));");
             _ = builder.AppendLine("    let imagesharp_maximum = imagesharp_minimum + vec2<i32>(1);");
             _ = builder.AppendLine();
-            _ = builder.AppendLine("    if (all(imagesharp_minimum >= imagesharp_framework.imagesharp_valid_min) && all(imagesharp_maximum < imagesharp_framework.imagesharp_valid_max)) {");
+            _ = builder.AppendLine(
+                "    if (all(imagesharp_minimum >= imagesharp_framework.imagesharp_valid_min) && " +
+                "all(imagesharp_maximum < imagesharp_framework.imagesharp_valid_max)) {");
             _ = builder.AppendLine("        let imagesharp_source_position = vec2<f32>(imagesharp_framework.imagesharp_source_origin) + position;");
             _ = builder.AppendLine("        let imagesharp_coordinate = imagesharp_source_position / vec2<f32>(textureDimensions(imagesharp_source));");
-            _ = builder.AppendLine("        let imagesharp_native = textureSampleLevel(imagesharp_source, imagesharp_filtering_sampler, imagesharp_coordinate, 0.0);");
+            _ = builder.AppendLine(
+                "        let imagesharp_native = textureSampleLevel(imagesharp_source, imagesharp_filtering_sampler, imagesharp_coordinate, 0.0);");
 
             if (sourceDescriptor.NumericEncoding == WebGPUTargetNumericEncoding.SignedUnit)
             {
@@ -342,7 +346,9 @@ internal sealed class WebGPUShaderModuleSource
                 _ = builder.AppendLine("    let imagesharp_period = imagesharp_extent * 2;");
                 _ = builder.AppendLine("    let imagesharp_remainder = (value - imagesharp_minimum) % imagesharp_period;");
                 _ = builder.AppendLine("    let imagesharp_offset = (imagesharp_remainder + imagesharp_period) % imagesharp_period;");
-                _ = builder.AppendLine("    let imagesharp_reflected = select(imagesharp_period - 1 - imagesharp_offset, imagesharp_offset, imagesharp_offset < imagesharp_extent);");
+                _ = builder.AppendLine(
+                    "    let imagesharp_reflected = select(imagesharp_period - 1 - imagesharp_offset, " +
+                    "imagesharp_offset, imagesharp_offset < imagesharp_extent);");
                 _ = builder.AppendLine("    return imagesharp_minimum + imagesharp_reflected;");
                 break;
 
@@ -355,7 +361,8 @@ internal sealed class WebGPUShaderModuleSource
                 _ = builder.AppendLine("    let imagesharp_period = (imagesharp_extent * 2) - 2;");
                 _ = builder.AppendLine("    let imagesharp_remainder = (value - imagesharp_minimum) % imagesharp_period;");
                 _ = builder.AppendLine("    let imagesharp_offset = (imagesharp_remainder + imagesharp_period) % imagesharp_period;");
-                _ = builder.AppendLine("    let imagesharp_reflected = select(imagesharp_period - imagesharp_offset, imagesharp_offset, imagesharp_offset < imagesharp_extent);");
+                _ = builder.AppendLine(
+                    "    let imagesharp_reflected = select(imagesharp_period - imagesharp_offset, imagesharp_offset, imagesharp_offset < imagesharp_extent);");
                 _ = builder.AppendLine("    return imagesharp_minimum + imagesharp_reflected;");
                 break;
         }

@@ -501,7 +501,13 @@ internal static class BarEmitter
     /// <param name="options">The sizing and painting options.</param>
     /// <param name="moduleWidth">The width of one module in pixels.</param>
     /// <returns>The font for the placement.</returns>
-    private static Font ResolveFont(BarcodeTextPlacement placement, Font digitFont, ref Font? captionFont, ref Font? scaledFont, BarcodeOptions options, float moduleWidth)
+    private static Font ResolveFont(
+        BarcodeTextPlacement placement,
+        Font digitFont,
+        ref Font? captionFont,
+        ref Font? scaledFont,
+        BarcodeOptions options,
+        float moduleWidth)
     {
         if (placement.IsCaption)
         {

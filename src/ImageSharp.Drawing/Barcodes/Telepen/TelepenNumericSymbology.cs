@@ -54,7 +54,9 @@ public sealed class TelepenNumericSymbology : BarcodeSymbology
                 }
                 else
                 {
-                    throw new ArgumentException($"Telepen Numeric carries only digits, and X in the second position of a pair; got {current.ToDisplayString()}.", nameof(text));
+                    throw new ArgumentException(
+                        $"Telepen Numeric carries only digits, and X in the second position of a pair; got {current.ToDisplayString()}.",
+                        nameof(text));
                 }
 
                 index += current.Utf16SequenceLength;

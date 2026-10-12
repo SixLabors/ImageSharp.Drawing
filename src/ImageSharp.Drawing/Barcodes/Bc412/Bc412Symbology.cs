@@ -50,7 +50,9 @@ public sealed class Bc412Symbology : BarcodeSymbology
         int dataLength = text.Length - supplied;
         if (dataLength < Bc412Encoder.MinimumLength || dataLength > Bc412Encoder.MaximumLength)
         {
-            throw new ArgumentException($"BC412 carries {Bc412Encoder.MinimumLength} to {Bc412Encoder.MaximumLength} data characters; got {dataLength}.", nameof(text));
+            throw new ArgumentException(
+                $"BC412 carries {Bc412Encoder.MinimumLength} to {Bc412Encoder.MaximumLength} data characters; got {dataLength}.",
+                nameof(text));
         }
 
         SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();

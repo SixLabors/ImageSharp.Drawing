@@ -31,8 +31,14 @@ public sealed partial class WebGPUDrawingBackend
 
     private static readonly CompositePixelRegistration[] CompositePixelRegistrations =
     [
-        CompositePixelRegistration.Create<NormalizedByte4>(WebGPUTextureFormat.Rgba8Snorm, PixelAlphaRepresentation.Unassociated, WebGPUTargetNumericEncoding.SignedUnit),
-        CompositePixelRegistration.Create<NormalizedByte4P>(WebGPUTextureFormat.Rgba8Snorm, PixelAlphaRepresentation.Associated, WebGPUTargetNumericEncoding.SignedUnit),
+        CompositePixelRegistration.Create<NormalizedByte4>(
+            WebGPUTextureFormat.Rgba8Snorm,
+            PixelAlphaRepresentation.Unassociated,
+            WebGPUTargetNumericEncoding.SignedUnit),
+        CompositePixelRegistration.Create<NormalizedByte4P>(
+            WebGPUTextureFormat.Rgba8Snorm,
+            PixelAlphaRepresentation.Associated,
+            WebGPUTargetNumericEncoding.SignedUnit),
         CompositePixelRegistration.Create<RgbaHalf>(WebGPUTextureFormat.Rgba16Float, PixelAlphaRepresentation.Unassociated, WebGPUTargetNumericEncoding.Unit),
         CompositePixelRegistration.Create<RgbaHalfP>(WebGPUTextureFormat.Rgba16Float, PixelAlphaRepresentation.Associated, WebGPUTargetNumericEncoding.Unit),
         CompositePixelRegistration.Create<Rgba32>(WebGPUTextureFormat.Rgba8Unorm, PixelAlphaRepresentation.Unassociated, WebGPUTargetNumericEncoding.Unit),

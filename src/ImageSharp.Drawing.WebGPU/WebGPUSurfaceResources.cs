@@ -666,7 +666,8 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
             TextureUsage supportedUsage = (TextureUsage)capabilities.usages;
             if ((supportedUsage & RequiredSurfaceUsage) != RequiredSurfaceUsage)
             {
-                throw new NotSupportedException($"The WebGPU surface does not support the texture usages required by the drawing backend. Supported usages: '{supportedUsage}'.");
+                throw new NotSupportedException(
+                    $"The WebGPU surface does not support the texture usages required by the drawing backend. Supported usages: '{supportedUsage}'.");
             }
 
             // A same-format native copy avoids the presentation shader entirely. Surfaces that
@@ -716,7 +717,10 @@ internal sealed unsafe class WebGPUSurfaceResources : IDisposable
 
                 foreach (WebGPUTextureFormat fallbackFormat in fallbackFormats)
                 {
-                    WebGPUDrawingBackend.GetCompositeTextureFormatInfo(fallbackFormat, out WGPUTextureFormat fallbackNativeFormat, out WGPUFeatureName fallbackFeature);
+                    WebGPUDrawingBackend.GetCompositeTextureFormatInfo(
+                        fallbackFormat,
+                        out WGPUTextureFormat fallbackNativeFormat,
+                        out WGPUFeatureName fallbackFeature);
 
                     if (fallbackFeature != default && !api.AdapterHasFeature(adapter, fallbackFeature))
                     {

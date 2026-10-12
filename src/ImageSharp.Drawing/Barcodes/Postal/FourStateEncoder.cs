@@ -17,7 +17,17 @@ internal static class FourStateEncoder
     /// the human readable interpretation. At the 0.54 mm module a run unit of 0.01 mm is 1/54 module, a
     /// bar is 54 units and a pitch of 1.20 mm, which is 21.17 bars per inch, leaves a space of 66 units.
     /// </summary>
-    public static readonly FourStateMetrics RoyalMail = new(0.54F, 1F / 54F, 54, 66, 1.90F / 0.54F, 1.30F / 0.54F, 1.90F / 0.54F, 2F / 0.54F, BarcodeTextSide.BelowBars, 2F / 0.54F);
+    public static readonly FourStateMetrics RoyalMail = new(
+        0.54F,
+        1F / 54F,
+        54,
+        66,
+        1.90F / 0.54F,
+        1.30F / 0.54F,
+        1.90F / 0.54F,
+        2F / 0.54F,
+        BarcodeTextSide.BelowBars,
+        2F / 0.54F);
 
     /// <summary>
     /// Builds the symbol from bar states.

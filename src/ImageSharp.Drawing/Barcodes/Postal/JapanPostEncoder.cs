@@ -56,7 +56,17 @@ internal static class JapanPostEncoder
     /// space of at least 2 mm above, below, left and right of the barcode, which also stands between the
     /// bars and the human readable interpretation.
     /// </summary>
-    public static readonly FourStateMetrics Metrics = new(0.6F, 1F, 1, 1, 1.2F / 0.6F, 1.2F / 0.6F, 1.2F / 0.6F, 2F / 0.6F, BarcodeTextSide.BelowBars, 2F / 0.6F);
+    public static readonly FourStateMetrics Metrics = new(
+        0.6F,
+        1F,
+        1,
+        1,
+        1.2F / 0.6F,
+        1.2F / 0.6F,
+        1.2F / 0.6F,
+        2F / 0.6F,
+        BarcodeTextSide.BelowBars,
+        2F / 0.6F);
 
     /// <summary>
     /// Gets the bar states of every code value, three per code, as <see cref="FourState"/> values: the
@@ -101,7 +111,9 @@ internal static class JapanPostEncoder
                     codes[count++] = (byte)(letter % 10);
                     break;
                 default:
-                    throw new ArgumentException($"The Japan Post barcode carries only digits, capital letters and the hyphen; got {codePoints.Current.ToDisplayString()}.", nameof(text));
+                    throw new ArgumentException(
+                        $"The Japan Post barcode carries only digits, capital letters and the hyphen; got {codePoints.Current.ToDisplayString()}.",
+                        nameof(text));
             }
         }
 

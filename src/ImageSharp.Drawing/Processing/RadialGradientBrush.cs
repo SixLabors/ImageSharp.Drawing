@@ -146,7 +146,14 @@ public sealed class RadialGradientBrush : GradientBrush
 
         if (this.IsTwoCircle)
         {
-            return new RadialGradientBrush(this.Center0, this.Radius0, this.Center1!.Value, this.Radius1!.Value, this.RepetitionMode, gradientTransform, this.ColorStopsArray);
+            return new RadialGradientBrush(
+                this.Center0,
+                this.Radius0,
+                this.Center1!.Value,
+                this.Radius1!.Value,
+                this.RepetitionMode,
+                gradientTransform,
+                this.ColorStopsArray);
         }
 
         return new RadialGradientBrush(this.Center0, this.Radius0, this.RepetitionMode, gradientTransform, this.ColorStopsArray);

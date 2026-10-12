@@ -124,7 +124,10 @@ internal static class Code49Encoder
     /// start at the first entry, the Y weights at the second and the Z weights at the third; the row count
     /// character weighs 20, 16 and 38.
     /// </summary>
-    private static ReadOnlySpan<byte> Weights => [1, 9, 31, 26, 2, 12, 17, 23, 37, 18, 22, 6, 27, 44, 15, 43, 39, 11, 13, 5, 41, 33, 36, 8, 4, 32, 3, 19, 40, 25, 29, 10, 24, 30];
+    private static ReadOnlySpan<byte> Weights =>
+    [
+        1, 9, 31, 26, 2, 12, 17, 23, 37, 18, 22, 6, 27, 44, 15, 43, 39, 11, 13, 5, 41, 33, 36, 8, 4, 32, 3, 19, 40, 25, 29, 10, 24, 30
+    ];
 
     /// <summary>
     /// Gets the parity of the four symbol characters of rows 1 to 7, Table 2, one bit per symbol
@@ -162,7 +165,9 @@ internal static class Code49Encoder
         int n = text.Length;
         if (n > MaximumText)
         {
-            throw new ArgumentException($"Code 49 carries at most {MaximumText} digits or {Capacity(MaximumRows)} code characters in eight rows; the text is longer.", nameof(text));
+            throw new ArgumentException(
+                $"Code 49 carries at most {MaximumText} digits or {Capacity(MaximumRows)} code characters in eight rows; the text is longer.",
+                nameof(text));
         }
 
         Span<byte> digits = stackalloc byte[MaximumText + 1];
@@ -244,7 +249,9 @@ internal static class Code49Encoder
 
         if (rows > MaximumRows)
         {
-            throw new ArgumentException($"Code 49 carries at most {Capacity(MaximumRows)} code characters in eight rows; the text needs {dataCount}.", nameof(text));
+            throw new ArgumentException(
+                $"Code 49 carries at most {Capacity(MaximumRows)} code characters in eight rows; the text needs {dataCount}.",
+                nameof(text));
         }
 
         int[] codes = new int[rows * CodeCharactersPerRow];

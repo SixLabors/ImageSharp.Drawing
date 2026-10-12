@@ -306,7 +306,15 @@ foreach (FontDesign design in designs)
                 continue;
             }
 
-            CutTerminalStroke(flattened[0].Points.ToArray(), centerlines[strokeIndex], effectiveWidth, strokeIndex, probeInk, strokeEndpoints, buttStroke, outlines);
+            CutTerminalStroke(
+                flattened[0].Points.ToArray(),
+                centerlines[strokeIndex],
+                effectiveWidth,
+                strokeIndex,
+                probeInk,
+                strokeEndpoints,
+                buttStroke,
+                outlines);
         }
 
         // TrueType fills with the nonzero winding rule, so overlapping same-winding contours render
@@ -446,10 +454,24 @@ foreach (FontDesign design in designs)
         float expectedScale = glyphScales[expectedCharacter];
         float expectedCentre = design.W / 2;
         (float[] Bounds, float[][] Inked, float[][] Blank) old = design.Expectations[expectedCharacter];
-        string Probes(float[][] points) => $"[{string.Join(", ", points.Select(point => $"[{Number(expectedCentre + ((point[0] - expectedCentre) * expectedScale))}, {Number(point[1] * expectedScale)}]"))}]";
-        expectationRows.AppendLine(
-            CultureInfo.InvariantCulture,
-            $"            [{Literal(expectedCharacter)}] = ([{Number(expectedMinX)}, {Number(expectedMaxX)}, {Number(expectedMinY)}, {Number(expectedMaxY)}], {Probes(old.Inked)}, {Probes(old.Blank)}),");
+        string Probes(float[][] points) => $"[{string.Join(", ", points.Select(Probe))}]";
+        string Probe(float[] point) => $"[{Number(expectedCentre + ((point[0] - expectedCentre) * expectedScale))}, {Number(point[1] * expectedScale)}]";
+        string bounds = $"[{Number(expectedMinX)}, {Number(expectedMaxX)}, {Number(expectedMinY)}, {Number(expectedMaxY)}]";
+        string key = $"            [{Literal(expectedCharacter)}] = (";
+        string row = $"{key}{bounds}, {Probes(old.Inked)}, {Probes(old.Blank)}),";
+
+        // The .editorconfig limits lines to 160 characters. A longer row puts each tuple element on its own line.
+        if (row.Length <= 160)
+        {
+            expectationRows.AppendLine(row);
+        }
+        else
+        {
+            expectationRows.AppendLine(key);
+            expectationRows.AppendLine(CultureInfo.InvariantCulture, $"                {bounds},");
+            expectationRows.AppendLine(CultureInfo.InvariantCulture, $"                {Probes(old.Inked)},");
+            expectationRows.AppendLine(CultureInfo.InvariantCulture, $"                {Probes(old.Blank)}),");
+        }
     }
 
     string expectationPath = System.IO.Path.Combine(outputDirectory, $"{design.Name}-expectations.txt");
@@ -692,7 +714,15 @@ return 0;
 // endpoint. A buried end stays butt so nothing pokes through the partner stroke. probeInk carries
 // butt-capped ink for every stroke of the glyph, the geometry a terminal is tested against, and
 // strokeEndpoints every open endpoint paired with its stroke index.
-static void CutTerminalStroke(PointF[] points, IPath centerline, float width, int strokeIndex, IPath[] probeInk, List<(int Stroke, Vector2 Point)> strokeEndpoints, StrokeOptions buttStroke, List<IPath> pieces)
+static void CutTerminalStroke(
+    PointF[] points,
+    IPath centerline,
+    float width,
+    int strokeIndex,
+    IPath[] probeInk,
+    List<(int Stroke, Vector2 Point)> strokeEndpoints,
+    StrokeOptions buttStroke,
+    List<IPath> pieces)
 {
     float half = width / 2;
     IPath body = centerline.GenerateOutline(width, buttStroke);

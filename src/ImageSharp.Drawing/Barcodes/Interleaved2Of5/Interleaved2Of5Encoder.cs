@@ -158,7 +158,13 @@ internal static class Interleaved2Of5Encoder
     /// <param name="nominalBarHeight">The bar height in modules a symbol takes when the caller sets none.</param>
     /// <param name="bearerBarThickness">The thickness of the bearer bar in modules, or zero for none.</param>
     /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options, float nominalXDimension, float nominalBarHeight, float bearerBarThickness)
+    public static LinearBarcodeSymbol BuildSymbol(
+        int[] runs,
+        string text,
+        BarcodeOptions options,
+        float nominalXDimension,
+        float nominalBarHeight,
+        float bearerBarThickness)
     {
         int widthInModules = WidthInModules(runs);
         float barHeight = EanUpcEncoder.ResolveBarHeight(options, nominalXDimension, nominalBarHeight);
@@ -174,7 +180,15 @@ internal static class Interleaved2Of5Encoder
         BarcodeTextPlacement[] placements = [];
         if (options.Font is not null && text.Length > 0)
         {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, bearerBarThickness + barHeight + bearerBarThickness + BarcodeTextPlacement.Clearance)];
+            placements =
+            [
+                new BarcodeTextPlacement(
+                    text,
+                    0F,
+                    widthInModules,
+                    BarcodeTextSide.BelowBars,
+                    bearerBarThickness + barHeight + bearerBarThickness + BarcodeTextPlacement.Clearance)
+            ];
         }
 
         return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone, bearerBarThickness);
