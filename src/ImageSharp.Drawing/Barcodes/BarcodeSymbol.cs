@@ -34,6 +34,18 @@ internal abstract class BarcodeSymbol
     public abstract float TrailingQuietZone { get; }
 
     /// <summary>
+    /// Gets the height of the quiet zone above the symbol, in modules. A symbology whose specification
+    /// gives no vertical quiet zone has none.
+    /// </summary>
+    public virtual float TopQuietZone => 0F;
+
+    /// <summary>
+    /// Gets the height of the quiet zone below the symbol, in modules. A symbology whose specification
+    /// gives no vertical quiet zone has none.
+    /// </summary>
+    public virtual float BottomQuietZone => 0F;
+
+    /// <summary>
     /// Gets the human readable interpretation. The array is empty when the symbol carries no text.
     /// </summary>
     public abstract BarcodeTextPlacement[] Text { get; }

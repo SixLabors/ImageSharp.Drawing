@@ -58,16 +58,16 @@ internal static class AustraliaPostEncoder
     /// barcode" and "must be outside of the barcode's minimum Quiet Zone".
     /// </summary>
     public static readonly FourStateMetrics Metrics = new(
-        0.5F,
+        0.5,
         1F / 50F,
         50,
         58,
-        1.85F / 0.5F,
-        1.3F / 0.5F,
-        1.85F / 0.5F,
-        6F / 0.5F,
+        (float)(1.85 / 0.5),
+        (float)(1.3 / 0.5),
+        (float)(1.85 / 0.5),
+        (float)(6 / 0.5),
         BarcodeTextSide.AboveBars,
-        2F / 0.5F);
+        (float)(2 / 0.5));
 
     private static readonly byte[] Exp = BuildExp();
 

@@ -88,8 +88,8 @@ public class FourStateMailmarkSymbologyTests
 
         Assert.Equal(1F / 54F, symbol.RunUnit);
         Assert.Equal(131, symbol.RunWidths.Length);
-        Assert.Equal(2F / 0.54F, symbol.LeadingQuietZone);
-        Assert.Equal(2F / 0.54F, symbol.TrailingQuietZone);
+        Assert.Equal((float)(2 / 0.54), symbol.LeadingQuietZone);
+        Assert.Equal((float)(2 / 0.54), symbol.TrailingQuietZone);
     }
 
     [Fact]
@@ -119,8 +119,8 @@ public class FourStateMailmarkSymbologyTests
 
     private static string States(LinearBarcodeSymbol symbol)
     {
-        float ascender = 1.90F / 0.54F;
-        float tracker = 1.30F / 0.54F;
+        float ascender = (float)(1.90 / 0.54);
+        float tracker = (float)(1.30 / 0.54);
         char[] states = new char[symbol.BarHeights.Length];
         for (int i = 0; i < states.Length; i++)
         {

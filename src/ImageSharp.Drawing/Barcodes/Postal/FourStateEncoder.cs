@@ -18,16 +18,16 @@ internal static class FourStateEncoder
     /// bar is 54 units and a pitch of 1.20 mm, which is 21.17 bars per inch, leaves a space of 66 units.
     /// </summary>
     public static readonly FourStateMetrics RoyalMail = new(
-        0.54F,
+        0.54,
         1F / 54F,
         54,
         66,
-        1.90F / 0.54F,
-        1.30F / 0.54F,
-        1.90F / 0.54F,
-        2F / 0.54F,
+        (float)(1.90 / 0.54),
+        (float)(1.30 / 0.54),
+        (float)(1.90 / 0.54),
+        (float)(2 / 0.54),
         BarcodeTextSide.BelowBars,
-        2F / 0.54F);
+        (float)(2 / 0.54));
 
     /// <summary>
     /// Builds the symbol from bar states.

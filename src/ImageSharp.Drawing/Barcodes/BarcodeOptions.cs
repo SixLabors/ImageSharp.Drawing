@@ -24,13 +24,13 @@ public sealed class BarcodeOptions
     /// which is one module. Set <see langword="null"/> to take the nominal X dimension of the symbology,
     /// <see cref="BarcodeSymbology.NominalXDimension"/>.
     /// </summary>
-    public float? XDimension { get; set; }
+    public double? XDimension { get; set; }
 
     /// <summary>
     /// Gets or sets the bar height in millimetres. Set <see langword="null"/> to take the nominal height
     /// that the symbology specification gives.
     /// </summary>
-    public float? BarHeight { get; set; }
+    public double? BarHeight { get; set; }
 
     /// <summary>
     /// Gets or sets the brush used to fill the bars and dark modules.
@@ -82,6 +82,6 @@ public sealed class BarcodeOptions
     /// <param name="nominalXDimension">The nominal X dimension of the symbology in millimetres, used when <see cref="XDimension"/> is not set.</param>
     /// <param name="nominalHeight">The nominal height of the symbology in modules.</param>
     /// <returns>The bar height in modules.</returns>
-    internal float ResolveBarHeight(float nominalXDimension, float nominalHeight)
-        => this.BarHeight.HasValue ? this.BarHeight.Value / (this.XDimension ?? nominalXDimension) : nominalHeight;
+    internal float ResolveBarHeight(double nominalXDimension, float nominalHeight)
+        => this.BarHeight.HasValue ? (float)(this.BarHeight.Value / (this.XDimension ?? nominalXDimension)) : nominalHeight;
 }

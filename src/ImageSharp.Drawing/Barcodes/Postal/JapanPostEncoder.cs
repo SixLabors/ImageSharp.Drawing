@@ -57,16 +57,16 @@ internal static class JapanPostEncoder
     /// bars and the human readable interpretation.
     /// </summary>
     public static readonly FourStateMetrics Metrics = new(
-        0.6F,
+        0.6,
         1F,
         1,
         1,
-        1.2F / 0.6F,
-        1.2F / 0.6F,
-        1.2F / 0.6F,
-        2F / 0.6F,
+        (float)(1.2 / 0.6),
+        (float)(1.2 / 0.6),
+        (float)(1.2 / 0.6),
+        (float)(2 / 0.6),
         BarcodeTextSide.BelowBars,
-        2F / 0.6F);
+        (float)(2 / 0.6));
 
     /// <summary>
     /// Gets the bar states of every code value, three per code, as <see cref="FourState"/> values: the

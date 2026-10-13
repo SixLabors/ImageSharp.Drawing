@@ -23,7 +23,7 @@ internal static class DataBarEncoder
     /// The nominal X dimension in millimetres, the target X dimension of Table 5-44 of the GS1 General
     /// Specifications.
     /// </summary>
-    public const float NominalXDimension = 0.33F;
+    public const double NominalXDimension = 0.33;
 
     /// <summary>
     /// The nominal height of GS1 DataBar Omnidirectional in modules. Table 5-44 gives 15.19 millimetres at

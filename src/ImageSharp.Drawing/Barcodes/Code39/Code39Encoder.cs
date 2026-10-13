@@ -166,8 +166,8 @@ internal static class Code39Encoder
     /// <returns>The encoded symbol.</returns>
     public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
     {
-        float xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
-        return BuildSymbol(runs, text, options, MathF.Max(WidthInModules(runs) * NominalBarHeightFraction, MinimumBarHeightMillimetres / xDimension));
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        return BuildSymbol(runs, text, options, MathF.Max(WidthInModules(runs) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension)));
     }
 
     /// <summary>

@@ -40,7 +40,7 @@ internal static class Code128Encoder
     /// The nominal X dimension in millimetres: the 0.495 mm of the general distribution environment,
     /// section 5.4.7.1 of the GS1 General Specifications.
     /// </summary>
-    public const float NominalXDimension = 0.495F;
+    public const double NominalXDimension = 0.495;
 
     private const int StartA = 103;
     private const int StartB = 104;

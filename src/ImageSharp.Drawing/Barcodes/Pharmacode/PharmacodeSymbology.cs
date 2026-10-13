@@ -31,7 +31,7 @@ public sealed class PharmacodeSymbology : BarcodeSymbology
     /// <summary>
     /// The nominal X dimension in millimetres: the 0.5 mm thin bar of section 1.2.
     /// </summary>
-    private const float XDimension = 0.5F;
+    private const double XDimension = 0.5;
 
     /// <summary>
     /// The quiet zone in modules on each side: 6 mm at the 0.5 mm module.
@@ -64,7 +64,7 @@ public sealed class PharmacodeSymbology : BarcodeSymbology
     private const float NominalBarHeight = 16F;
 
     /// <inheritdoc/>
-    public override float NominalXDimension => XDimension;
+    public override double NominalXDimension => XDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

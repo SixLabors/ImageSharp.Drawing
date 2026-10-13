@@ -29,7 +29,7 @@ public sealed class IssnSymbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    public override float NominalXDimension => EanUpcEncoder.NominalXDimension;
+    public override double NominalXDimension => EanUpcEncoder.NominalXDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

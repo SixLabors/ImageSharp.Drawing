@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 public sealed class IntelligentMailSymbology : BarcodeSymbology
 {
     /// <inheritdoc/>
-    public override float NominalXDimension => UspsPostalEncoder.NominalXDimension;
+    public override double NominalXDimension => UspsPostalEncoder.NominalXDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

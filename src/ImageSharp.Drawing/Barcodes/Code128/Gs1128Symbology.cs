@@ -31,7 +31,7 @@ public sealed class Gs1128Symbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    public override float NominalXDimension => Code128Encoder.NominalXDimension;
+    public override double NominalXDimension => Code128Encoder.NominalXDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

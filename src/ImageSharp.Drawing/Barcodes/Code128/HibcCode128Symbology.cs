@@ -37,7 +37,7 @@ public sealed class HibcCode128Symbology : BarcodeSymbology
     public bool ValidateCheckCharacter { get; }
 
     /// <inheritdoc/>
-    public override float NominalXDimension => Code128Encoder.NominalXDimension;
+    public override double NominalXDimension => Code128Encoder.NominalXDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

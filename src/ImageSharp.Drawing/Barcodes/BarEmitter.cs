@@ -21,7 +21,7 @@ internal static class BarEmitter
     /// <param name="options">The sizing and painting options.</param>
     /// <param name="xDimension">The width of one module in millimetres.</param>
     /// <param name="origin">The top left corner of everything the call draws, including any text that overhangs the symbol, in pixels.</param>
-    public static void Emit(DrawingCanvas canvas, LinearBarcodeSymbol symbol, BarcodeOptions options, float xDimension, PointF origin)
+    public static void Emit(DrawingCanvas canvas, LinearBarcodeSymbol symbol, BarcodeOptions options, double xDimension, PointF origin)
         => Layout(canvas, symbol, new ReadOnlySpan<LinearBarcodeSymbol>(in symbol), [0F], symbol.BearerBarThickness, true, options, xDimension, origin);
 
     /// <summary>
@@ -32,7 +32,7 @@ internal static class BarEmitter
     /// <param name="options">The sizing and painting options.</param>
     /// <param name="xDimension">The width of one module in millimetres.</param>
     /// <param name="origin">The top left corner of everything the call draws, including any text that overhangs the symbol, in pixels.</param>
-    public static void Emit(DrawingCanvas canvas, StackedBarcodeSymbol symbol, BarcodeOptions options, float xDimension, PointF origin)
+    public static void Emit(DrawingCanvas canvas, StackedBarcodeSymbol symbol, BarcodeOptions options, double xDimension, PointF origin)
         => Layout(canvas, symbol, symbol.Rows, symbol.RowTops, symbol.EdgeBarHeight, false, options, xDimension, origin);
 
     /// <summary>
@@ -44,7 +44,7 @@ internal static class BarEmitter
     /// <param name="xDimension">The width of one module in millimetres.</param>
     /// <param name="origin">The top left corner the symbol would draw from, in pixels.</param>
     /// <returns>The area the symbol covers, including any text that overhangs the bars.</returns>
-    public static RectangleF Measure(LinearBarcodeSymbol symbol, BarcodeOptions options, float xDimension, PointF origin)
+    public static RectangleF Measure(LinearBarcodeSymbol symbol, BarcodeOptions options, double xDimension, PointF origin)
         => Layout(null, symbol, new ReadOnlySpan<LinearBarcodeSymbol>(in symbol), [0F], symbol.BearerBarThickness, true, options, xDimension, origin);
 
     /// <summary>
@@ -56,7 +56,7 @@ internal static class BarEmitter
     /// <param name="xDimension">The width of one module in millimetres.</param>
     /// <param name="origin">The top left corner the symbol would draw from, in pixels.</param>
     /// <returns>The area the symbol covers, including any text that overhangs the bars.</returns>
-    public static RectangleF Measure(StackedBarcodeSymbol symbol, BarcodeOptions options, float xDimension, PointF origin)
+    public static RectangleF Measure(StackedBarcodeSymbol symbol, BarcodeOptions options, double xDimension, PointF origin)
         => Layout(null, symbol, symbol.Rows, symbol.RowTops, symbol.EdgeBarHeight, false, options, xDimension, origin);
 
     /// <summary>
@@ -82,12 +82,12 @@ internal static class BarEmitter
         float frame,
         bool frameSides,
         BarcodeOptions options,
-        float xDimension,
+        double xDimension,
         PointF origin)
     {
         Guard.MustBeGreaterThan(options.Dpi, 0, nameof(options.Dpi));
         Guard.MustBeGreaterThan(xDimension, 0, nameof(xDimension));
-        float moduleWidth = xDimension / 25.4F * options.Dpi;
+        float moduleWidth = (float)(xDimension / 25.4 * options.Dpi);
 
         float widthInModules = symbol.WidthInModules;
 
@@ -189,9 +189,16 @@ internal static class BarEmitter
 
         // One rule places every line: its ink starts on the edge it names and takes one line height. A line
         // above the bars pushes the whole bar block down by the room it needs, and the band holds that
-        // room, measured from the fonts.
+        // room, measured from the fonts. A quiet zone above or below the symbol reserves room the same
+        // way, and where a line also stands on that side the larger of the two holds, because the
+        // encoder places such a line beyond the quiet zone.
         float topBand = 0;
         float bottomInModules = symbol.HeightInModules;
+        if (options.IncludeQuietZones)
+        {
+            topBand = symbol.TopQuietZone;
+            bottomInModules += symbol.BottomQuietZone;
+        }
 
         // A symbol resolves to at most three fonts: the digits, the scaled quiet zone digits and the
         // caption. Each keeps one options instance, and the measuring pass and the drawing pass share it,
@@ -354,10 +361,13 @@ internal static class BarEmitter
             LinearBarcodeSymbol row = rows[r];
             int[] runs = row.RunWidths;
             float rowTop = rowTops[r];
-            float x = symbolLeft;
+
+            // The position adds every run before it. A double holds each product of a whole run and the
+            // run width exactly, so the sum carries no rounding error from the runs before it.
+            double x = symbolLeft;
             for (int i = 0; i < runs.Length; i++)
             {
-                float runWidth = wholePixelRuns ? RunPixels(runs[i], runWidthInPixels) : runs[i] * runWidthInPixels;
+                double runWidth = wholePixelRuns ? RunPixels(runs[i], runWidthInPixels) : runs[i] * (double)runWidthInPixels;
                 if ((i & 1) == 0)
                 {
                     // Each bar edge rounds from its exact accumulated position onto the device pixel grid,
@@ -367,8 +377,8 @@ internal static class BarEmitter
                     int bar = i >> 1;
                     float top = rowTop + row.BarTops[bar];
                     float bottom = top + row.BarHeights[bar];
-                    float barLeft = MathF.Round(x);
-                    float barRight = MathF.Round(x + runWidth);
+                    float barLeft = (float)Math.Round(x);
+                    float barRight = (float)Math.Round(x + runWidth);
                     float barTop = frame > 0 && top == frame
                         ? upperBottom
                         : MathF.Round(origin.Y + ((topBand + top) * moduleWidth));

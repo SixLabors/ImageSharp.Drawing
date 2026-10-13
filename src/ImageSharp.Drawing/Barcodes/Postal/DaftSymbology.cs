@@ -32,7 +32,7 @@ public sealed class DaftSymbology : BarcodeSymbology
         0F);
 
     /// <inheritdoc/>
-    public override float NominalXDimension => Metrics.XDimension;
+    public override double NominalXDimension => Metrics.XDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

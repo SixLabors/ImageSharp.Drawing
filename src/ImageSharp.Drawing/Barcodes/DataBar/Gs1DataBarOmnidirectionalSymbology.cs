@@ -24,7 +24,7 @@ public sealed class Gs1DataBarOmnidirectionalSymbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    public override float NominalXDimension => DataBarEncoder.NominalXDimension;
+    public override double NominalXDimension => DataBarEncoder.NominalXDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

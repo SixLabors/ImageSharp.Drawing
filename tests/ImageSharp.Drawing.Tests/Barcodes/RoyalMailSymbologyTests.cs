@@ -72,8 +72,8 @@ public class RoyalMailSymbologyTests
             Assert.Equal((i & 1) == 0 ? 54 : 66, symbol.RunWidths[i]);
         }
 
-        float ascender = 1.90F / 0.54F;
-        float tracker = 1.30F / 0.54F;
+        float ascender = (float)(1.90 / 0.54);
+        float tracker = (float)(1.30 / 0.54);
         string states = States(symbol);
         for (int i = 0; i < states.Length; i++)
         {
@@ -89,8 +89,8 @@ public class RoyalMailSymbologyTests
             Assert.Equal(expectedHeight, symbol.BarHeights[i]);
         }
 
-        Assert.Equal(2F / 0.54F, symbol.LeadingQuietZone);
-        Assert.Equal(2F / 0.54F, symbol.TrailingQuietZone);
+        Assert.Equal((float)(2 / 0.54), symbol.LeadingQuietZone);
+        Assert.Equal((float)(2 / 0.54), symbol.TrailingQuietZone);
         Assert.Equal(0F, Encode(new DaftSymbology(), "FT").LeadingQuietZone);
     }
 
@@ -130,8 +130,8 @@ public class RoyalMailSymbologyTests
 
     private static string States(LinearBarcodeSymbol symbol)
     {
-        float ascender = 1.90F / 0.54F;
-        float tracker = 1.30F / 0.54F;
+        float ascender = (float)(1.90 / 0.54);
+        float tracker = (float)(1.30 / 0.54);
         char[] states = new char[symbol.BarHeights.Length];
         for (int i = 0; i < states.Length; i++)
         {

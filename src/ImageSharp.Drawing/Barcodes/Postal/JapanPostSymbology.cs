@@ -14,7 +14,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 public sealed class JapanPostSymbology : BarcodeSymbology
 {
     /// <inheritdoc/>
-    public override float NominalXDimension => JapanPostEncoder.Metrics.XDimension;
+    public override double NominalXDimension => JapanPostEncoder.Metrics.XDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

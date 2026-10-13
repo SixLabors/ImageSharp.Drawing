@@ -26,7 +26,7 @@ internal static class EanUpcEncoder
     /// The nominal X dimension in millimetres. Section 5.2.6.6 of the GS1 General Specifications:
     /// "X-dimension = 0.330 mm".
     /// </summary>
-    public const float NominalXDimension = 0.33F;
+    public const double NominalXDimension = 0.33;
 
     /// <summary>
     /// The nominal EAN-13, UPC-A and UPC-E bar height in modules: 22.85mm bars at the nominal 0.33mm

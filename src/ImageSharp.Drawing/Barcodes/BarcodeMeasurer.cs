@@ -26,7 +26,7 @@ public static class BarcodeMeasurer
         Guard.NotNull(options, nameof(options));
 
         BarcodeSymbol symbol = symbology.Encode(text, options);
-        float xDimension = options.XDimension ?? symbology.NominalXDimension;
+        double xDimension = options.XDimension ?? symbology.NominalXDimension;
         return symbol switch
         {
             LinearBarcodeSymbol linear => BarEmitter.Measure(linear, options, xDimension, origin),

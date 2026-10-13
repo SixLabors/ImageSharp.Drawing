@@ -40,7 +40,7 @@ public sealed class AustraliaPostSymbology : BarcodeSymbology
     public AustraliaPostEncodingTable CustomerInformationTable { get; }
 
     /// <inheritdoc/>
-    public override float NominalXDimension => AustraliaPostEncoder.Metrics.XDimension;
+    public override double NominalXDimension => AustraliaPostEncoder.Metrics.XDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

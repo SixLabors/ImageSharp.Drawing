@@ -755,6 +755,36 @@ public class DrawBarcodeTests
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Pdf417<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Pdf417Symbology(), "PDF417 Symbology Standard", CreateOptions(3F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void CompactPdf417<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new CompactPdf417Symbology(), "PDF417 Symbology Standard", CreateOptions(3F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void MicroPdf417<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new MicroPdf417Symbology(), "MicroPDF417", CreateOptions(2F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void HibcPdf417<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new HibcPdf417Symbology(), "A123BJC5D6E71", CreateOptions(3F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void HibcMicroPdf417<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new HibcMicroPdf417Symbology(), "A123BJC5D6E71", CreateOptions(2F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Code32<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new Code32Symbology(), "012345676", CreateOptions());

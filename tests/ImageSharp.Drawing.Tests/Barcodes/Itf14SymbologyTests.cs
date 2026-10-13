@@ -16,7 +16,7 @@ public class Itf14SymbologyTests
 {
     private const string Figure532 = "111122111211211111221221121121211212112111221221111221211111221212222111112111";
 
-    private const float BearerBarThickness = 4.83F / 1.016F;
+    private const float BearerBarThickness = (float)(4.83 / 1.016);
 
     /// <summary>
     /// Figure 5-32 of the GS1 General Specifications shows the number 15400141288763, whose check digit
@@ -72,7 +72,7 @@ public class Itf14SymbologyTests
 
         Assert.Equal(BearerBarThickness, symbol.BearerBarThickness);
         Assert.All(symbol.BarTops, top => Assert.Equal(BearerBarThickness, top));
-        Assert.Equal((31.75F / 1.016F) + BearerBarThickness + BearerBarThickness, symbol.HeightInModules, new ApproximateFloatComparer(1e-3F));
+        Assert.Equal((float)(31.75 / 1.016) + BearerBarThickness + BearerBarThickness, symbol.HeightInModules, new ApproximateFloatComparer(1e-3F));
     }
 
     /// <summary>
