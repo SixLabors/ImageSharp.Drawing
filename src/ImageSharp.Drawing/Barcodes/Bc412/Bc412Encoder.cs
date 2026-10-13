@@ -35,7 +35,7 @@ internal static class Bc412Encoder
     /// <summary>
     /// The nominal X dimension in millimetres: the 0.12 mm module spacing of Table 1 of SEMI T1-95.
     /// </summary>
-    public const float NominalXDimension = 0.12F;
+    public const double NominalXDimension = 0.12;
 
     /// <summary>
     /// The number of characters a caller stack allocates to build symbol data in.
@@ -57,7 +57,7 @@ internal static class Bc412Encoder
     /// The bar height in modules when the caller sets none: the 2.00 mm of Table 1 of SEMI T1-95 at its
     /// 0.12 mm module spacing.
     /// </summary>
-    private const float NominalBarHeight = 2.00F / 0.12F;
+    private const float NominalBarHeight = (float)(2.00 / 0.12);
 
     /// <summary>
     /// Gets the run widths of every character, eight per character in bar and space order, in the

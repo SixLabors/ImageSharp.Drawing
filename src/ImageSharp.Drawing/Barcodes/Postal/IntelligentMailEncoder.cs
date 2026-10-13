@@ -57,12 +57,12 @@ internal static class IntelligentMailEncoder
         UspsPostalEncoder.RunUnit,
         UspsPostalEncoder.BarUnits,
         UspsPostalEncoder.SpaceUnits,
-        (0.145F - 0.048F) / 2F / 0.020F,
-        0.048F / 0.020F,
-        (0.145F - 0.048F) / 2F / 0.020F,
+        (float)((0.145 - 0.048) / 2 / 0.020),
+        (float)(0.048 / 0.020),
+        (float)((0.145 - 0.048) / 2 / 0.020),
         UspsPostalEncoder.ClearZone,
         BarcodeTextSide.BelowBars,
-        0.028F / 0.020F,
+        (float)(0.028 / 0.020),
         BarcodeTextAlignment.Left);
 
     private static readonly int[] FiveOf13 = InitializeNof13Table(5, FiveOf13Length);

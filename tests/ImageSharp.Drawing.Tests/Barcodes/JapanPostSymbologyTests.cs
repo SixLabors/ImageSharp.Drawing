@@ -69,8 +69,8 @@ public class JapanPostSymbologyTests
             Assert.Equal(expectedHeight, symbol.BarHeights[i]);
         }
 
-        Assert.Equal(2F / 0.6F, symbol.LeadingQuietZone);
-        Assert.Equal(2F / 0.6F, symbol.TrailingQuietZone);
+        Assert.Equal((float)(2 / 0.6), symbol.LeadingQuietZone);
+        Assert.Equal((float)(2 / 0.6), symbol.TrailingQuietZone);
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public class JapanPostSymbologyTests
         BarcodeTextPlacement placement = Assert.Single(symbol.Text);
         Assert.Equal("15400233-16-4-205", placement.Text);
         Assert.Equal(BarcodeTextSide.BelowBars, placement.Side);
-        Assert.Equal(6F + (2F / 0.6F), placement.TextEdge, new ApproximateFloatComparer(1e-4F));
+        Assert.Equal(6F + (float)(2 / 0.6), placement.TextEdge, new ApproximateFloatComparer(1e-4F));
     }
 
     [Theory]

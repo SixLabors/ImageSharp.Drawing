@@ -154,8 +154,8 @@ internal static class CodabarEncoder
             widthInModules += runs[i];
         }
 
-        float xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
-        float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, MinimumBarHeightMillimetres / xDimension);
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
         float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, nominalBarHeight);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];

@@ -20,7 +20,7 @@ internal readonly struct FourStateMetrics
     /// <param name="tracker">The height of the tracker, in modules.</param>
     /// <param name="descender">The height of the descender part below the tracker, in modules.</param>
     /// <param name="quietZone">The clear zone at each end of the symbol, in modules.</param>
-    public FourStateMetrics(float xDimension, float runUnit, int barUnits, int spaceUnits, float ascender, float tracker, float descender, float quietZone)
+    public FourStateMetrics(double xDimension, float runUnit, int barUnits, int spaceUnits, float ascender, float tracker, float descender, float quietZone)
         : this(xDimension, runUnit, barUnits, spaceUnits, ascender, tracker, descender, quietZone, BarcodeTextSide.BelowBars, 0F)
     {
     }
@@ -39,7 +39,7 @@ internal readonly struct FourStateMetrics
     /// <param name="textSide">The side of the bars the human readable interpretation stands on.</param>
     /// <param name="textClearance">The clear space between the bars and the human readable interpretation, in modules.</param>
     public FourStateMetrics(
-        float xDimension,
+        double xDimension,
         float runUnit,
         int barUnits,
         int spaceUnits,
@@ -68,7 +68,7 @@ internal readonly struct FourStateMetrics
     /// <param name="textClearance">The clear space between the bars and the human readable interpretation, in modules.</param>
     /// <param name="textAlignment">Where the human readable interpretation stands within the symbol width.</param>
     public FourStateMetrics(
-        float xDimension,
+        double xDimension,
         float runUnit,
         int barUnits,
         int spaceUnits,
@@ -96,7 +96,7 @@ internal readonly struct FourStateMetrics
     /// <summary>
     /// Gets the bar width in millimetres, which is one module.
     /// </summary>
-    public float XDimension { get; }
+    public double XDimension { get; }
 
     /// <summary>
     /// Gets the width of one run unit in modules.

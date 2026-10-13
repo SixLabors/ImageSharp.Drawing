@@ -114,8 +114,8 @@ internal static class ChannelCodeEncoder
             widthInModules += runs[i];
         }
 
-        float xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
-        float nominalBarHeight = MathF.Max(NominalBarHeight, MinimumBarHeightMillimetres / xDimension);
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        float nominalBarHeight = MathF.Max(NominalBarHeight, (float)(MinimumBarHeightMillimetres / xDimension));
         float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, nominalBarHeight);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];

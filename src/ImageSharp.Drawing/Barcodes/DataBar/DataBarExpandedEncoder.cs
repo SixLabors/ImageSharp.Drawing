@@ -24,7 +24,7 @@ internal static class DataBarExpandedEncoder
     /// The nominal X dimension in millimetres, the target X dimension of Table 5-44 of the GS1 General
     /// Specifications.
     /// </summary>
-    public const float NominalXDimension = 0.33F;
+    public const double NominalXDimension = 0.33;
 
     /// <summary>
     /// The height of a row in modules. Section 5.5.2.3.1 of the GS1 General Specifications gives "34X high",

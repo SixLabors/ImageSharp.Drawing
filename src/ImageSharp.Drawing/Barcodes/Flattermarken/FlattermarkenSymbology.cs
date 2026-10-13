@@ -32,7 +32,7 @@ public sealed class FlattermarkenSymbology : BarcodeSymbology
     /// <summary>
     /// The nominal X dimension in millimetres: the 2 mm bar width.
     /// </summary>
-    private const float XDimension = 2F;
+    private const double XDimension = 2;
 
     /// <summary>
     /// The bar height in modules when the caller sets none.
@@ -40,7 +40,7 @@ public sealed class FlattermarkenSymbology : BarcodeSymbology
     private const float NominalBarHeight = 5F;
 
     /// <inheritdoc/>
-    public override float NominalXDimension => XDimension;
+    public override double NominalXDimension => XDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

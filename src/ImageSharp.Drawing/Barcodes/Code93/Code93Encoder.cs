@@ -248,8 +248,8 @@ internal static class Code93Encoder
     public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
     {
         int widthInModules = WidthInModules(runs);
-        float xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
-        float nominalBarHeight = MathF.Max((widthInModules + (QuietZone * 2)) * NominalBarHeightFraction, MinimumBarHeightMillimetres / xDimension);
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        float nominalBarHeight = MathF.Max((widthInModules + (QuietZone * 2)) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
         float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, nominalBarHeight);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];

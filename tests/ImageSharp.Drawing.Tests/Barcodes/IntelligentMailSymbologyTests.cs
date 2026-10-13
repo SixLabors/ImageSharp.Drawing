@@ -105,8 +105,8 @@ public class IntelligentMailSymbologyTests
             Assert.Equal((i & 1) == 0 ? 11 : 14, symbol.RunWidths[i]);
         }
 
-        float extender = 0.0485F / 0.020F;
-        float tracker = 0.048F / 0.020F;
+        float extender = (float)(0.0485 / 0.020);
+        float tracker = (float)(0.048 / 0.020);
         string states = States(symbol);
         ApproximateFloatComparer comparer = new(1e-4F);
         for (int i = 0; i < states.Length; i++)
@@ -152,7 +152,7 @@ public class IntelligentMailSymbologyTests
         Assert.Equal(BarcodeTextSide.BelowBars, placement.Side);
         Assert.Equal(BarcodeTextAlignment.Left, placement.Alignment);
         Assert.Equal(0F, placement.Left);
-        Assert.Equal((0.145F / 0.020F) + (0.028F / 0.020F), placement.TextEdge, new ApproximateFloatComparer(1e-4F));
+        Assert.Equal((float)((0.145 / 0.020) + (0.028 / 0.020)), placement.TextEdge, new ApproximateFloatComparer(1e-4F));
     }
 
     [Theory]
@@ -171,8 +171,8 @@ public class IntelligentMailSymbologyTests
 
     private static string States(LinearBarcodeSymbol symbol)
     {
-        float extender = 0.0485F / 0.020F;
-        float tracker = 0.048F / 0.020F;
+        float extender = (float)(0.0485 / 0.020);
+        float tracker = (float)(0.048 / 0.020);
         char[] states = new char[symbol.BarHeights.Length];
         for (int i = 0; i < states.Length; i++)
         {

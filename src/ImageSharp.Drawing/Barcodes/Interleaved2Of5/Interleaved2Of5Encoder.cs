@@ -129,8 +129,8 @@ internal static class Interleaved2Of5Encoder
     /// <returns>The encoded symbol.</returns>
     public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
     {
-        float xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
-        return BuildSymbol(runs, text, options, MathF.Max(WidthInModules(runs) * NominalBarHeightFraction, MinimumBarHeightMillimetres / xDimension));
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        return BuildSymbol(runs, text, options, MathF.Max(WidthInModules(runs) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension)));
     }
 
     /// <summary>
@@ -162,7 +162,7 @@ internal static class Interleaved2Of5Encoder
         int[] runs,
         string text,
         BarcodeOptions options,
-        float nominalXDimension,
+        double nominalXDimension,
         float nominalBarHeight,
         float bearerBarThickness)
     {

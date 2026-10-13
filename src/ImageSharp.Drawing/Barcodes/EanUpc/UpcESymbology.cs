@@ -31,7 +31,7 @@ public sealed class UpcESymbology : BarcodeSymbology
     private static ReadOnlySpan<int> GuardBars => [0, 1, 14, 15, 16];
 
     /// <inheritdoc/>
-    public override float NominalXDimension => EanUpcEncoder.NominalXDimension;
+    public override double NominalXDimension => EanUpcEncoder.NominalXDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

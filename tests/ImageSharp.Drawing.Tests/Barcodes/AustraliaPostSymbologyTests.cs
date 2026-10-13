@@ -103,8 +103,8 @@ public class AustraliaPostSymbologyTests
             Assert.Equal((i & 1) == 0 ? 50 : 58, symbol.RunWidths[i]);
         }
 
-        float extender = 1.85F / 0.5F;
-        float tracker = 1.3F / 0.5F;
+        float extender = (float)(1.85 / 0.5);
+        float tracker = (float)(1.3 / 0.5);
         string values = Values(symbol);
         ApproximateFloatComparer comparer = new(1e-4F);
         for (int i = 0; i < values.Length; i++)
@@ -145,8 +145,8 @@ public class AustraliaPostSymbologyTests
 
     private static string Values(LinearBarcodeSymbol symbol)
     {
-        float extender = 1.85F / 0.5F;
-        float tracker = 1.3F / 0.5F;
+        float extender = (float)(1.85 / 0.5);
+        float tracker = (float)(1.3 / 0.5);
         char[] values = new char[symbol.BarHeights.Length];
         for (int i = 0; i < values.Length; i++)
         {

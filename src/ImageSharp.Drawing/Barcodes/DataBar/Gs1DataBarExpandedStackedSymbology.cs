@@ -49,7 +49,7 @@ public sealed class Gs1DataBarExpandedStackedSymbology : BarcodeSymbology
     public int Segments { get; }
 
     /// <inheritdoc/>
-    public override float NominalXDimension => DataBarExpandedEncoder.NominalXDimension;
+    public override double NominalXDimension => DataBarExpandedEncoder.NominalXDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

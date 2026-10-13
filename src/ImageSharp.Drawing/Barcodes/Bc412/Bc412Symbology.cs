@@ -39,7 +39,7 @@ public sealed class Bc412Symbology : BarcodeSymbology
     public bool ValidateCheckCharacter { get; }
 
     /// <inheritdoc/>
-    public override float NominalXDimension => Bc412Encoder.NominalXDimension;
+    public override double NominalXDimension => Bc412Encoder.NominalXDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

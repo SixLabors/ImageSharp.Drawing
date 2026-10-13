@@ -33,7 +33,7 @@ public sealed class TwoTrackPharmacodeSymbology : BarcodeSymbology
     /// <summary>
     /// The nominal X dimension in millimetres: the 1 mm bar of section 1.4.
     /// </summary>
-    private const float XDimension = 1F;
+    private const double XDimension = 1;
 
     /// <summary>
     /// The quiet zone in modules on each side: 6 mm at the 1 mm module.
@@ -51,7 +51,7 @@ public sealed class TwoTrackPharmacodeSymbology : BarcodeSymbology
     private const float NominalBarHeight = 8F;
 
     /// <inheritdoc/>
-    public override float NominalXDimension => XDimension;
+    public override double NominalXDimension => XDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

@@ -56,7 +56,7 @@ public class Gs1NorthAmericanCouponSymbologyTests
         Gs1NorthAmericanCouponSymbology symbology = new();
         StackedBarcodeSymbol symbol = (StackedBarcodeSymbol)symbology.Encode("(8110)1061414165432131501101201211014092110256100126663101231", new BarcodeOptions());
         Assert.Equal(8, symbology.Segments);
-        Assert.Equal(0.33F, symbology.NominalXDimension);
+        Assert.Equal(0.33, symbology.NominalXDimension);
         Assert.Equal(200F, symbol.WidthInModules);
         Assert.Equal(34F, symbol.Rows[0].HeightInModules);
         Assert.Equal([1F, 1F, 1F], symbol.Rows.Skip(1).Take(3).Select(row => row.HeightInModules));

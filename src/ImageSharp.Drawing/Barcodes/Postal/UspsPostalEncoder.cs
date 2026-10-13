@@ -19,7 +19,7 @@ internal static class UspsPostalEncoder
     /// <summary>
     /// The nominal X dimension in millimetres: the 0.020 inch bar width.
     /// </summary>
-    public const float NominalXDimension = 0.508F;
+    public const double NominalXDimension = 0.508;
 
     /// <summary>
     /// The width of a run unit in modules.

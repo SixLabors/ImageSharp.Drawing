@@ -21,7 +21,7 @@ internal static class DataBarLimitedEncoder
     /// The nominal X dimension in millimetres, the target X dimension of Table 5-50 of the GS1 General
     /// Specifications.
     /// </summary>
-    public const float NominalXDimension = 0.33F;
+    public const double NominalXDimension = 0.33;
 
     /// <summary>
     /// The height in modules. Section 5.5.2.2 of the GS1 General Specifications: "The minimum height SHALL

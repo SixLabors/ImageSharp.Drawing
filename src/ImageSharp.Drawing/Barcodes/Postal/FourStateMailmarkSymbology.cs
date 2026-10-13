@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 public sealed class FourStateMailmarkSymbology : BarcodeSymbology
 {
     /// <inheritdoc/>
-    public override float NominalXDimension => FourStateEncoder.RoyalMail.XDimension;
+    public override double NominalXDimension => FourStateEncoder.RoyalMail.XDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

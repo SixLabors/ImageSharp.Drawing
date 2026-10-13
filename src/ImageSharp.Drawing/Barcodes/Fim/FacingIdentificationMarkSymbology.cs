@@ -23,7 +23,7 @@ public sealed class FacingIdentificationMarkSymbology : BarcodeSymbology
     /// <summary>
     /// The nominal X dimension in millimetres: the 1/32 inch bar width.
     /// </summary>
-    private const float XDimension = 25.4F / 32F;
+    private const double XDimension = 25.4 / 32;
 
     /// <summary>
     /// The bar height in modules when the caller sets none: 5/8 inch at the 1/32 inch module.
@@ -36,7 +36,7 @@ public sealed class FacingIdentificationMarkSymbology : BarcodeSymbology
     private static ReadOnlySpan<ushort> Patterns => [0b110010011, 0b101101101, 0b110101011, 0b111010111, 0b101000101];
 
     /// <inheritdoc/>
-    public override float NominalXDimension => XDimension;
+    public override double NominalXDimension => XDimension;
 
     /// <inheritdoc/>
     internal override BarcodeSymbol Encode(string text, BarcodeOptions options)

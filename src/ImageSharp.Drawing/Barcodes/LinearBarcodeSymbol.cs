@@ -112,10 +112,12 @@ internal sealed class LinearBarcodeSymbol : BarcodeSymbol
         this.RunUnit = runUnit;
         this.UniformBars = uniformBars;
 
-        float width = 0;
+        // A double holds each product of a whole run and the run unit exactly, so the width carries no
+        // rounding error from the runs it adds.
+        double width = 0;
         for (int i = 0; i < runWidths.Length; i++)
         {
-            width += runWidths[i] * runUnit;
+            width += runWidths[i] * (double)runUnit;
         }
 
         float height = 0;
@@ -128,7 +130,7 @@ internal sealed class LinearBarcodeSymbol : BarcodeSymbol
             }
         }
 
-        this.widthInModules = width;
+        this.widthInModules = (float)width;
         this.heightInModules = height + bearerBarThickness;
     }
 

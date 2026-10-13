@@ -14,7 +14,7 @@ public abstract class BarcodeSymbology
     /// <summary>
     /// The X dimension in millimetres of a symbology whose specification gives none: one point, 25.4 / 72.
     /// </summary>
-    public const float PointXDimension = 25.4F / 72F;
+    public const double PointXDimension = 25.4 / 72;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BarcodeSymbology"/> class.
@@ -28,7 +28,7 @@ public abstract class BarcodeSymbology
     /// specification gives an X dimension returns it, and every other symbology returns
     /// <see cref="PointXDimension"/>. <see cref="BarcodeOptions.XDimension"/> overrides it.
     /// </summary>
-    public virtual float NominalXDimension => PointXDimension;
+    public virtual double NominalXDimension => PointXDimension;
 
     /// <summary>
     /// Encodes the given text into a device-independent symbol measured in modules.

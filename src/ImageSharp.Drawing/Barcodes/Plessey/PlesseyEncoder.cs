@@ -37,7 +37,7 @@ internal static class PlesseyEncoder
     /// <summary>
     /// The nominal X dimension in millimetres: one fifth of the 1.020 mm pitch.
     /// </summary>
-    public const float NominalXDimension = 1.020F / 5F;
+    public const double NominalXDimension = 1.020 / 5;
 
     /// <summary>
     /// The number of check characters a symbol carries, which hold the eight check bits.
