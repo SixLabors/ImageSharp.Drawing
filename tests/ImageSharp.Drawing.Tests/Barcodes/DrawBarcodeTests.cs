@@ -659,6 +659,102 @@ public class DrawBarcodeTests
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarOmnidirectional<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarOmnidirectionalSymbology(), "(01)09521234543213", CreateOptions(46F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarOmnidirectional_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarOmnidirectionalSymbology(), "(01)09521234543213", CreateTextOptions(46F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarTruncated<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarTruncatedSymbology(), "(01)09521234543213", CreateOptions(13F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarTruncated_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarTruncatedSymbology(), "(01)09521234543213", CreateTextOptions(13F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarStacked<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarStackedSymbology(), "(01)09521234543213", CreateOptions(7F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarStacked_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarStackedSymbology(), "(01)09521234543213", CreateTextOptions(7F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarStackedOmnidirectional<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarStackedOmnidirectionalSymbology(), "(01)09521234543213", CreateOptions(46F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarStackedOmnidirectional_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarStackedOmnidirectionalSymbology(), "(01)09521234543213", CreateTextOptions(46F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarLimited<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarLimitedSymbology(), "(01)15012345678907", CreateOptions(10F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarLimited_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarLimitedSymbology(), "(01)15012345678907", CreateTextOptions(10F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarExpanded<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarExpandedSymbology(), "(01)90614141000015(3202)000150", CreateOptions(34F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarExpanded_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarExpandedSymbology(), "(01)90614141000015(3202)000150", CreateTextOptions(34F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarExpandedStacked<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarExpandedStackedSymbology(), "(01)90614141000015(3202)000150", CreateOptions(34F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataBarExpandedStacked_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataBarExpandedStackedSymbology(), "(01)90614141000015(3202)000150", CreateTextOptions(34F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1NorthAmericanCoupon<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1NorthAmericanCouponSymbology(), "(8110)106141416543213500110000310123196000", CreateOptions(34F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1NorthAmericanCoupon_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1NorthAmericanCouponSymbology(), "(8110)106141416543213500110000310123196000", CreateTextOptions(34F));
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Code32<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new Code32Symbology(), "012345676", CreateOptions());

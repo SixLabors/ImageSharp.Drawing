@@ -89,4 +89,10 @@ Copyright (C) 2008-2026 Robin Stuart and the Zint contributors
 The Zint backend is distributed under the BSD 3-Clause License. The full
 license text is available in the Zint repository LICENSE file.
 
+The GS1 DataBar element width routine derives from the combins and getRSSwidths
+functions of ISO/IEC 24724 Annex B, which the Zint backend carries with this
+notice: "Copyright (C) 2006 BSI ... This does not preclude the free use, in the
+course of implementing the standard, of necessary details such as symbols, and
+size, type or grade designations."
+
 ================================================================================
