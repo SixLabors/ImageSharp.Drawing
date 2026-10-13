@@ -43,12 +43,50 @@ LICENSE-APACHE and LICENSE-MIT files.
 License: MIT
 
 Portions of this software were developed with reference to the .NET runtime
-project, including the pooled string building buffer.
-See also: src/ImageSharp.Drawing/Helpers/ValueStringBuilder.cs
+project, including the pooled string and list building buffers.
 
 Copyright (c) .NET Foundation and Contributors
 
 The .NET runtime project is distributed under the MIT License. The full license
 text is available in the .NET runtime repository LICENSE.TXT file.
+
+================================================================================
+
+Barcode Writer in Pure PostScript (https://github.com/bwipp/postscriptbarcode)
+License: MIT
+
+Portions of this software were developed with reference to the Barcode Writer
+in Pure PostScript project, including barcode symbology encodation.
+
+Copyright (c) 2004-2024 Terry Burton
+
+Barcode Writer in Pure PostScript is distributed under the MIT License. The
+full license text is available in the project repository LICENSE file.
+
+================================================================================
+
+bwip-js (https://github.com/metafloor/bwip-js)
+License: MIT
+
+Portions of this software were developed with reference to the bwip-js
+project, including barcode symbology encodation.
+
+Copyright (c) 2011-2026 Mark Warren
+
+The bwip-js project is distributed under the MIT License. The full license text
+is available in the bwip-js repository LICENSE file.
+
+================================================================================
+
+Zint (https://github.com/zint/zint)
+License: BSD-3-Clause
+
+Portions of this software were developed with reference to the Zint barcode
+library backend, including barcode symbology encodation.
+
+Copyright (C) 2008-2026 Robin Stuart and the Zint contributors
+
+The Zint backend is distributed under the BSD 3-Clause License. The full
+license text is available in the Zint repository LICENSE file.
 
 ================================================================================

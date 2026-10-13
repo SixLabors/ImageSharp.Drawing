@@ -96,7 +96,7 @@ public sealed class IssnSymbology : BarcodeSymbology
             }
         }
 
-        digits[12] = (char)('0' + EanUpcEncoder.ComputeCheckDigit(digits[..12]));
+        digits[12] = (char)('0' + Gs1Data.ComputeCheckDigit(digits[..12]));
         char checkChar = check == 10 ? 'X' : (char)('0' + check);
         string? caption = options.Font is null ? null : $"ISSN {issn[..8]}{checkChar}";
         return EanUpcEncoder.BuildEan13(digits, options, caption);

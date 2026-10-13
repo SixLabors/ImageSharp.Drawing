@@ -300,11 +300,13 @@ internal static class AustraliaPostEncoder
 
     private static void ValidateDigits(ReadOnlySpan<char> text, string paramName)
     {
-        for (int i = 0; i < text.Length; i++)
+        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
+        while (codePoints.MoveNext())
         {
-            if (!char.IsAsciiDigit(text[i]))
+            CodePoint current = codePoints.Current;
+            if (!current.IsAsciiDigit())
             {
-                throw new ArgumentException($"The field carries only digits; got {new CodePoint(text[i]).ToDisplayString()}.", paramName);
+                throw new ArgumentException($"The field carries only digits; got {current.ToDisplayString()}.", paramName);
             }
         }
     }

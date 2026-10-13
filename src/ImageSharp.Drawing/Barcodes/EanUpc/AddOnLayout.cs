@@ -35,7 +35,7 @@ internal static class AddOnLayout
         int[] runs = EanUpcEncoder.ToRuns(modules);
         int barCount = (runs.Length + 1) / 2;
 
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, EanUpcEncoder.NominalXDimension, EanUpcEncoder.NominalAddOnBarHeight);
+        float barHeight = options.ResolveBarHeight(EanUpcEncoder.NominalXDimension, EanUpcEncoder.NominalAddOnBarHeight);
 
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];

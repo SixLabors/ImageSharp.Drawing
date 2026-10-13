@@ -249,12 +249,13 @@ public class EanUpcSymbologyTests
         options.BarHeight = 50F * EanUpcEncoder.NominalXDimension;
 
         LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Ean13Symbology().Encode("5901234123457", options);
+        ApproximateFloatComparer comparer = new(1e-3F);
 
         // 16.5 mm at the 0.33 mm X dimension is 50 modules for the digit bars; with text enabled the guard
         // bars gain the 5 module extension of ISO/IEC 15420 on top of that.
-        Assert.Equal(50F, symbol.BarHeights[2], 3);
-        Assert.Equal(55F, symbol.BarHeights[0], 3);
-        Assert.Equal(55F, symbol.HeightInModules, 3);
+        Assert.Equal(50F, symbol.BarHeights[2], comparer);
+        Assert.Equal(55F, symbol.BarHeights[0], comparer);
+        Assert.Equal(55F, symbol.HeightInModules, comparer);
     }
 
     private static LinearBarcodeSymbol Encode(BarcodeSymbology symbology, string text)

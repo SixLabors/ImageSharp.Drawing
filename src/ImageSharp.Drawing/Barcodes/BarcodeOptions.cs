@@ -74,4 +74,14 @@ public sealed class BarcodeOptions
     /// surrounding area clear. CAUTION: scanners reject a symbol without its quiet zones.
     /// </summary>
     public bool IncludeQuietZones { get; set; } = true;
+
+    /// <summary>
+    /// Resolves the bar height in modules: <see cref="BarHeight"/> divided by the X dimension, both in
+    /// millimetres, or the nominal height of the symbology when no bar height is set.
+    /// </summary>
+    /// <param name="nominalXDimension">The nominal X dimension of the symbology in millimetres, used when <see cref="XDimension"/> is not set.</param>
+    /// <param name="nominalHeight">The nominal height of the symbology in modules.</param>
+    /// <returns>The bar height in modules.</returns>
+    internal float ResolveBarHeight(float nominalXDimension, float nominalHeight)
+        => this.BarHeight.HasValue ? this.BarHeight.Value / (this.XDimension ?? nominalXDimension) : nominalHeight;
 }

@@ -56,7 +56,7 @@ public sealed class UpcESymbology : BarcodeSymbology
         // The check digit is computed over the expanded UPC-A number, not the compressed digits, per the
         // zero suppression rules of ISO/IEC 15420.
         Span<char> expanded = stackalloc char[11];
-        int check = EanUpcEncoder.ComputeCheckDigit(Expand(text, expanded));
+        int check = Gs1Data.ComputeCheckDigit(Expand(text, expanded));
         if (text.Length == 8 && text[7] - '0' != check)
         {
             throw new ArgumentException($"UPC-E check digit mismatch: expected {check}, got {text[7]}.", nameof(text));
@@ -79,7 +79,7 @@ public sealed class UpcESymbology : BarcodeSymbology
 
         EanUpcEncoder.AppendPattern(modules, ref position, 0b010101, 6);
 
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, EanUpcEncoder.NominalXDimension, EanUpcEncoder.NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(EanUpcEncoder.NominalXDimension, EanUpcEncoder.NominalBarHeight);
         EanUpcEncoder.BuildGuardedHeights(BarCount, barHeight, GuardBars, options, out float[] heights, out float[] tops);
 
         // ISO/IEC 15420 prints the number system digit in the leading quiet zone, the check digit in the

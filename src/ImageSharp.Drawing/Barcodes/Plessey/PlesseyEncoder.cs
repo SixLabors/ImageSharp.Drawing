@@ -187,7 +187,7 @@ internal static class PlesseyEncoder
             widthInModules += runs[i];
         }
 
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, NominalXDimension, widthInModules * NominalBarHeightFraction);
+        float barHeight = options.ResolveBarHeight(NominalXDimension, widthInModules * NominalBarHeightFraction);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];

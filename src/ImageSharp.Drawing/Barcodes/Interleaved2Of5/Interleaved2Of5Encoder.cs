@@ -167,7 +167,7 @@ internal static class Interleaved2Of5Encoder
         float bearerBarThickness)
     {
         int widthInModules = WidthInModules(runs);
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, nominalXDimension, nominalBarHeight);
+        float barHeight = options.ResolveBarHeight(nominalXDimension, nominalBarHeight);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];

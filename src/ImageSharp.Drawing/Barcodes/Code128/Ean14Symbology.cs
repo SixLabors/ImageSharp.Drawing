@@ -79,7 +79,7 @@ public sealed class Ean14Symbology : BarcodeSymbology
             }
         }
 
-        int check = EanUpcEncoder.ComputeCheckDigit(supplied[..13]);
+        int check = Gs1Data.ComputeCheckDigit(supplied[..13]);
         if (supplied.Length == 14 && supplied[13] - '0' != check)
         {
             throw new ArgumentException($"Incorrect EAN-14 check digit: expected {check}, got {supplied[13]}.", nameof(text));

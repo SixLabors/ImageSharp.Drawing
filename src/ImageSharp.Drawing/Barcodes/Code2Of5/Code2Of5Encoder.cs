@@ -98,7 +98,7 @@ internal static class Code2Of5Encoder
         }
 
         ReadOnlySpan<char> data = checkDigit == CheckCharacterMode.Validate ? text.AsSpan(0, text.Length - 1) : text;
-        int? check = checkDigit == CheckCharacterMode.None ? null : EanUpcEncoder.ComputeCheckDigit(data);
+        int? check = checkDigit == CheckCharacterMode.None ? null : Gs1Data.ComputeCheckDigit(data);
         if (checkDigit == CheckCharacterMode.Validate && text[^1] - '0' != check)
         {
             throw new ArgumentException($"Incorrect check digit: expected {check}, got {text[^1]}.", nameof(text));

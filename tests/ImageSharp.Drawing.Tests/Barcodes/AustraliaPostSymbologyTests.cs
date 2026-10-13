@@ -106,6 +106,7 @@ public class AustraliaPostSymbologyTests
         float extender = 1.85F / 0.5F;
         float tracker = 1.3F / 0.5F;
         string values = Values(symbol);
+        ApproximateFloatComparer comparer = new(1e-4F);
         for (int i = 0; i < values.Length; i++)
         {
             float expectedTop = values[i] is '0' or '1' ? 0F : extender;
@@ -116,8 +117,8 @@ public class AustraliaPostSymbologyTests
                 _ => extender + tracker,
             };
 
-            Assert.Equal(expectedTop, symbol.BarTops[i], 0.0001F);
-            Assert.Equal(expectedHeight, symbol.BarHeights[i], 0.0001F);
+            Assert.Equal(expectedTop, symbol.BarTops[i], comparer);
+            Assert.Equal(expectedHeight, symbol.BarHeights[i], comparer);
         }
 
         Assert.Equal(12F, symbol.LeadingQuietZone);

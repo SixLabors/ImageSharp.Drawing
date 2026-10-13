@@ -82,7 +82,7 @@ public class JapanPostSymbologyTests
         BarcodeTextPlacement placement = Assert.Single(symbol.Text);
         Assert.Equal("15400233-16-4-205", placement.Text);
         Assert.Equal(BarcodeTextSide.BelowBars, placement.Side);
-        Assert.Equal(6F + (2F / 0.6F), placement.TextEdge, 0.0001F);
+        Assert.Equal(6F + (2F / 0.6F), placement.TextEdge, new ApproximateFloatComparer(1e-4F));
     }
 
     [Theory]

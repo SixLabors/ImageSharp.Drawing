@@ -140,7 +140,7 @@ public class Code39SymbologyTests
             widthInModules += run;
         }
 
-        Assert.Equal(widthInModules * 0.15F, symbol.BarHeights[0], 3);
+        Assert.Equal(widthInModules * 0.15F, symbol.BarHeights[0], new ApproximateFloatComparer(1e-3F));
     }
 
     /// <summary>

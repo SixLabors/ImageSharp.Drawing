@@ -72,7 +72,7 @@ public class Itf14SymbologyTests
 
         Assert.Equal(BearerBarThickness, symbol.BearerBarThickness);
         Assert.All(symbol.BarTops, top => Assert.Equal(BearerBarThickness, top));
-        Assert.Equal((31.75F / 1.016F) + BearerBarThickness + BearerBarThickness, symbol.HeightInModules, 3);
+        Assert.Equal((31.75F / 1.016F) + BearerBarThickness + BearerBarThickness, symbol.HeightInModules, new ApproximateFloatComparer(1e-3F));
     }
 
     /// <summary>

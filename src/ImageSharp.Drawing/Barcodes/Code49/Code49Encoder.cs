@@ -343,7 +343,7 @@ internal static class Code49Encoder
     public static StackedBarcodeSymbol BuildSymbol(int[] codes, string text, BarcodeOptions options)
     {
         int rowCount = codes.Length / CodeCharactersPerRow;
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, BarcodeSymbology.PointXDimension, NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, NominalBarHeight);
         LinearBarcodeSymbol separator = new([RowWidth], [SeparatorHeight], [0F], [], 0, 0);
         LinearBarcodeSymbol[] rows = new LinearBarcodeSymbol[(rowCount * 2) - 1];
         ReadOnlySpan<byte> parities = RowParity;

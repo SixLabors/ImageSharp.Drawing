@@ -79,7 +79,7 @@ public sealed class Sscc18Symbology : BarcodeSymbology
             }
         }
 
-        int check = EanUpcEncoder.ComputeCheckDigit(supplied[..17]);
+        int check = Gs1Data.ComputeCheckDigit(supplied[..17]);
         if (supplied.Length == 18 && supplied[17] - '0' != check)
         {
             throw new ArgumentException($"Incorrect SSCC-18 check digit: expected {check}, got {supplied[17]}.", nameof(text));

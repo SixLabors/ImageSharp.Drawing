@@ -108,6 +108,7 @@ public class IntelligentMailSymbologyTests
         float extender = 0.0485F / 0.020F;
         float tracker = 0.048F / 0.020F;
         string states = States(symbol);
+        ApproximateFloatComparer comparer = new(1e-4F);
         for (int i = 0; i < states.Length; i++)
         {
             float expectedTop = states[i] is 'A' or 'F' ? 0F : extender;
@@ -118,8 +119,8 @@ public class IntelligentMailSymbologyTests
                 _ => extender + tracker,
             };
 
-            Assert.Equal(expectedTop, symbol.BarTops[i], 0.0001F);
-            Assert.Equal(expectedHeight, symbol.BarHeights[i], 0.0001F);
+            Assert.Equal(expectedTop, symbol.BarTops[i], comparer);
+            Assert.Equal(expectedHeight, symbol.BarHeights[i], comparer);
         }
 
         Assert.Equal(6.25F, symbol.LeadingQuietZone);
@@ -151,7 +152,7 @@ public class IntelligentMailSymbologyTests
         Assert.Equal(BarcodeTextSide.BelowBars, placement.Side);
         Assert.Equal(BarcodeTextAlignment.Left, placement.Alignment);
         Assert.Equal(0F, placement.Left);
-        Assert.Equal((0.145F / 0.020F) + (0.028F / 0.020F), placement.TextEdge, 0.0001F);
+        Assert.Equal((0.145F / 0.020F) + (0.028F / 0.020F), placement.TextEdge, new ApproximateFloatComparer(1e-4F));
     }
 
     [Theory]

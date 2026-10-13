@@ -70,7 +70,7 @@ public sealed class TwoTrackPharmacodeSymbology : BarcodeSymbology
             value = (value - weight) / 3;
         }
 
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, XDimension, NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(XDimension, NominalBarHeight);
         float halfHeight = barHeight * 0.5F;
         int[] runs = new int[(count * 2) - 1];
         runs.AsSpan().Fill(1);

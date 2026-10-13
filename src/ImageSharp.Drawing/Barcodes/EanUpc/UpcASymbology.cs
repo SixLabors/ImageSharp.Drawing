@@ -56,7 +56,7 @@ public sealed class UpcASymbology : BarcodeSymbology
 
         EanUpcEncoder.AppendPattern(modules, ref position, 0b101, 3);
 
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, EanUpcEncoder.NominalXDimension, EanUpcEncoder.NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(EanUpcEncoder.NominalXDimension, EanUpcEncoder.NominalBarHeight);
         EanUpcEncoder.BuildGuardedHeights(BarCount, barHeight, GuardBars, options, out float[] heights, out float[] tops);
 
         // ISO/IEC 15420 prints the number system digit in the leading quiet zone, the check digit in the

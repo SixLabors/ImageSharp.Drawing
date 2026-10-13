@@ -46,7 +46,7 @@ internal static class FourStateEncoder
             runs[i] = (i & 1) == 0 ? metrics.BarUnits : metrics.SpaceUnits;
         }
 
-        float scale = EanUpcEncoder.ResolveBarHeight(options, metrics.XDimension, metrics.FullBar) / metrics.FullBar;
+        float scale = options.ResolveBarHeight(metrics.XDimension, metrics.FullBar) / metrics.FullBar;
         float ascender = metrics.Ascender * scale;
         float tracker = metrics.Tracker * scale;
         float descender = metrics.Descender * scale;

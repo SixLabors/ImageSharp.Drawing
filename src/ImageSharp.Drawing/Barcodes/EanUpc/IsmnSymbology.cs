@@ -78,7 +78,7 @@ public sealed class IsmnSymbology : BarcodeSymbology
             throw new ArgumentException("ISMN requires M plus 8 digits or the 13 digit 9790 form, with an optional check digit.", nameof(text));
         }
 
-        int check = EanUpcEncoder.ComputeCheckDigit(digits[..12]);
+        int check = Gs1Data.ComputeCheckDigit(digits[..12]);
         bool hasCheck = (mForm && body.Length == 9) || (!mForm && body.Length == 13);
         if (hasCheck && body[body.Length - 1] - '0' != check)
         {

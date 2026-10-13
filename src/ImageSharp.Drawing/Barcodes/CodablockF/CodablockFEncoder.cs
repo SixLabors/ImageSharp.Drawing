@@ -416,7 +416,7 @@ internal static class CodablockFEncoder
         int rowSize = columns + Overhead;
         int rowCount = values.Length / rowSize;
         int width = RowWidth(columns);
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, BarcodeSymbology.PointXDimension, NominalRowHeight(columns));
+        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, NominalRowHeight(columns));
         ReadOnlySpan<uint> patterns = Code128Encoder.Patterns;
 
         LinearBarcodeSymbol edge = new([width], [SeparatorHeight], [0F], [], 0, 0);
