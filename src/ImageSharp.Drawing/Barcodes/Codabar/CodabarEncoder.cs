@@ -156,7 +156,7 @@ internal static class CodabarEncoder
 
         float xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
         float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, MinimumBarHeightMillimetres / xDimension);
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, BarcodeSymbology.PointXDimension, nominalBarHeight);
+        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, nominalBarHeight);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];

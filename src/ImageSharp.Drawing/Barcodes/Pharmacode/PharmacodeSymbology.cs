@@ -94,7 +94,7 @@ public sealed class PharmacodeSymbology : BarcodeSymbology
             }
         }
 
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, XDimension, NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(XDimension, NominalBarHeight);
         float[] heights = new float[count];
         float[] tops = new float[count];
         heights.AsSpan().Fill(barHeight);

@@ -71,7 +71,7 @@ public sealed class FacingIdentificationMarkSymbology : BarcodeSymbology
         }
 
         int[] runs = buffer[..written].ToArray();
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, XDimension, NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(XDimension, NominalBarHeight);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];

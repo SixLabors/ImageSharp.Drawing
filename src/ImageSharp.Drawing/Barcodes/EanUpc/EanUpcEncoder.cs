@@ -152,26 +152,6 @@ internal static class EanUpcEncoder
     ];
 
     /// <summary>
-    /// Computes the GS1 check digit for the given data digits using the standard check digit calculation of
-    /// the GS1 General Specifications: digits are weighted 3 and 1 alternately starting with 3 at the rightmost
-    /// data digit, and the check digit lifts the sum to the next multiple of ten.
-    /// </summary>
-    /// <param name="digits">The data digits, excluding the check digit.</param>
-    /// <returns>The check digit value.</returns>
-    public static int ComputeCheckDigit(ReadOnlySpan<char> digits)
-    {
-        int sum = 0;
-        int weight = 3;
-        for (int i = digits.Length - 1; i >= 0; i--)
-        {
-            sum += (digits[i] - '0') * weight;
-            weight = 4 - weight;
-        }
-
-        return (10 - (sum % 10)) % 10;
-    }
-
-    /// <summary>
     /// Validates that the text holds only the decimal digits 0 to 9, and that its length is the data
     /// length or the data length plus a check digit. When the check digit is present, this method compares
     /// it with the calculated one. When it is absent, this method calculates it. The digits written always
@@ -187,7 +167,7 @@ internal static class EanUpcEncoder
         Guard.MustBeBetweenOrEqualTo(text.Length, dataLength, dataLength + 1, nameof(text));
         ValidateDigits(text);
 
-        int check = ComputeCheckDigit(text[..dataLength]);
+        int check = Gs1Data.ComputeCheckDigit(text[..dataLength]);
         if (text.Length > dataLength && text[dataLength] - '0' != check)
         {
             throw new ArgumentException($"Check digit mismatch: expected {check}, got {text[dataLength]}.", nameof(text));
@@ -304,17 +284,6 @@ internal static class EanUpcEncoder
             heights[guard] = barHeight + GuardExtension;
         }
     }
-
-    /// <summary>
-    /// Resolves the bar height in modules from the options: the caller's height in millimetres divided by
-    /// the X dimension in millimetres, or the nominal height.
-    /// </summary>
-    /// <param name="options">The barcode options.</param>
-    /// <param name="nominalXDimension">The nominal X dimension of the symbology in millimetres.</param>
-    /// <param name="nominalHeight">The nominal height for the symbology, in modules.</param>
-    /// <returns>The bar height in modules.</returns>
-    public static float ResolveBarHeight(BarcodeOptions options, float nominalXDimension, float nominalHeight)
-        => options.BarHeight.HasValue ? options.BarHeight.Value / (options.XDimension ?? nominalXDimension) : nominalHeight;
 
     /// <summary>
     /// Resolves the font an ISBN, ISMN or ISSN caption prints in. Under
@@ -442,7 +411,7 @@ internal static class EanUpcEncoder
 
         AppendPattern(modules, ref position, 0b101, 3);
 
-        float barHeight = ResolveBarHeight(options, NominalXDimension, NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(NominalXDimension, NominalBarHeight);
         BuildGuardedHeights(Ean13BarCount, barHeight, Ean13GuardBars, options, out float[] heights, out float[] tops);
 
         // ISO/IEC 15420 prints the leading digit in the leading quiet zone and every other digit below its
@@ -490,7 +459,7 @@ internal static class EanUpcEncoder
 
         AppendPattern(modules, ref position, 0b101, 3);
 
-        float barHeight = ResolveBarHeight(options, NominalXDimension, NominalEan8BarHeight);
+        float barHeight = options.ResolveBarHeight(NominalXDimension, NominalEan8BarHeight);
         BuildGuardedHeights(Ean8BarCount, barHeight, Ean8GuardBars, options, out float[] heights, out float[] tops);
 
         // ISO/IEC 15420 prints every digit below its own symbol character. Digits hang one module below the digit

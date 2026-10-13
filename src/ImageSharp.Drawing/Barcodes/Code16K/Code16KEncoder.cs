@@ -436,7 +436,7 @@ internal static class Code16KEncoder
     public static StackedBarcodeSymbol BuildSymbol(int[] values, string text, BarcodeOptions options)
     {
         int rowCount = values.Length / CharactersPerRow;
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, BarcodeSymbology.PointXDimension, NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, NominalBarHeight);
         LinearBarcodeSymbol separator = new([RowWidth], [SeparatorHeight], [0F], [], 0, 0);
         LinearBarcodeSymbol[] rows = new LinearBarcodeSymbol[(rowCount * 2) - 1];
         ReadOnlySpan<uint> patterns = Code128Encoder.Patterns;

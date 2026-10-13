@@ -710,11 +710,19 @@ public class DrawBarcodeTests
     /// height: 2 px modules and 100 px bars.
     /// </summary>
     private static BarcodeOptions CreateOptions()
+        => CreateOptions(50F);
+
+    /// <summary>
+    /// Draws at 144 dots per inch with a one point X dimension, so a module is 2 px.
+    /// </summary>
+    /// <param name="barHeight">The bar height in modules.</param>
+    /// <returns>The options.</returns>
+    private static BarcodeOptions CreateOptions(float barHeight)
         => new()
         {
             Dpi = 144F,
             XDimension = BarcodeSymbology.PointXDimension,
-            BarHeight = 50F * BarcodeSymbology.PointXDimension,
+            BarHeight = barHeight * BarcodeSymbology.PointXDimension,
             Background = Brushes.Solid(Color.White),
         };
 
@@ -737,8 +745,16 @@ public class DrawBarcodeTests
     }
 
     private static BarcodeOptions CreateTextOptions()
+        => CreateTextOptions(50F);
+
+    /// <summary>
+    /// Draws at 144 dots per inch with a one point X dimension and the OCR-B font.
+    /// </summary>
+    /// <param name="barHeight">The bar height in modules.</param>
+    /// <returns>The options.</returns>
+    private static BarcodeOptions CreateTextOptions(float barHeight)
     {
-        BarcodeOptions options = CreateOptions();
+        BarcodeOptions options = CreateOptions(barHeight);
 
         // GS1 prints the interpretation 2.75mm high at the 0.33mm X-dimension, so at 144 dots per inch it
         // is 16.7px of ink. The cap ink of this font stands 0.678 em, giving 24.6px, 12.3 points, but the

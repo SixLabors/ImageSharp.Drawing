@@ -89,13 +89,14 @@ public class CodablockFSymbologyTests
     [Fact]
     public void CodablockF_RowHeightFollowsTheColumnCount()
     {
+        ApproximateFloatComparer comparer = new(1e-4F);
         Assert.All(Encode("A", 8).Rows[1].BarHeights, height => Assert.Equal(10F, height));
-        Assert.All(Encode("A", 20).Rows[1].BarHeights, height => Assert.Equal(14F, height, 0.0001F));
+        Assert.All(Encode("A", 20).Rows[1].BarHeights, height => Assert.Equal(14F, height, comparer));
 
         BarcodeOptions options = new() { BarHeight = 12F * BarcodeSymbology.PointXDimension };
         StackedBarcodeSymbol symbol = (StackedBarcodeSymbol)new CodablockFSymbology().Encode("A", options);
-        Assert.All(symbol.Rows[1].BarHeights, height => Assert.Equal(12F, height, 0.0001F));
-        Assert.Equal(27F, symbol.HeightInModules, 0.0001F);
+        Assert.All(symbol.Rows[1].BarHeights, height => Assert.Equal(12F, height, comparer));
+        Assert.Equal(27F, symbol.HeightInModules, comparer);
     }
 
     /// <summary>

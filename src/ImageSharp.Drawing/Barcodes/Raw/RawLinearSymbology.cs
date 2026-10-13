@@ -49,7 +49,7 @@ public sealed class RawLinearSymbology : BarcodeSymbology
             widthInModules += current.Value - '0';
         }
 
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, PointXDimension, widthInModules * NominalBarHeightFraction);
+        float barHeight = options.ResolveBarHeight(PointXDimension, widthInModules * NominalBarHeightFraction);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];

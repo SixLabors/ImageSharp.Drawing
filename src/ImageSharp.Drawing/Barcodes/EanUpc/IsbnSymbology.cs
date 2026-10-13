@@ -71,7 +71,7 @@ public sealed class IsbnSymbology : BarcodeSymbology
                 throw new ArgumentException("An ISBN-13 must start with the 978 or 979 prefix.", nameof(text));
             }
 
-            if (compact.Length == 13 && compact[12] - '0' != EanUpcEncoder.ComputeCheckDigit(compact[..12]))
+            if (compact.Length == 13 && compact[12] - '0' != Gs1Data.ComputeCheckDigit(compact[..12]))
             {
                 throw new ArgumentException("Incorrect ISBN-13 check digit.", nameof(text));
             }
@@ -110,7 +110,7 @@ public sealed class IsbnSymbology : BarcodeSymbology
 
         // The caption always carries the EAN-13 check digit of the encoded form, so the printed number and
         // the symbol agree even when an ISBN-10 was supplied.
-        int eanCheck = EanUpcEncoder.ComputeCheckDigit(digits[..12]);
+        int eanCheck = Gs1Data.ComputeCheckDigit(digits[..12]);
         digits[12] = (char)('0' + eanCheck);
         string? caption = options.Font is null ? null : $"ISBN {captionBody}-{(char)('0' + eanCheck)}";
         return EanUpcEncoder.BuildEan13(digits, options, caption);

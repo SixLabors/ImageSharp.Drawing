@@ -64,11 +64,13 @@ internal static class Gs1Data
                 throw new ArgumentException($"An Application Identifier is two to four digits; got '{identifier}'.", nameof(text));
             }
 
-            for (int i = 0; i < identifier.Length; i++)
+            SpanCodePointEnumerator codePoints = identifier.EnumerateCodePoints();
+            while (codePoints.MoveNext())
             {
-                if (!char.IsAsciiDigit(identifier[i]))
+                CodePoint current = codePoints.Current;
+                if (!current.IsAsciiDigit())
                 {
-                    throw new ArgumentException($"An Application Identifier is all digits; got '{identifier}'.", nameof(text));
+                    throw new ArgumentException($"An Application Identifier is all digits; got {current.ToDisplayString()}.", nameof(text));
                 }
             }
 
@@ -106,6 +108,26 @@ internal static class Gs1Data
         {
             throw new ArgumentException("A GS1 symbol requires at least one element string.", nameof(text));
         }
+    }
+
+    /// <summary>
+    /// Computes the GS1 check digit for the given data digits using the standard check digit calculation of
+    /// the GS1 General Specifications: digits are weighted 3 and 1 alternately starting with 3 at the rightmost
+    /// data digit, and the check digit lifts the sum to the next multiple of ten.
+    /// </summary>
+    /// <param name="digits">The data digits, excluding the check digit.</param>
+    /// <returns>The check digit value.</returns>
+    public static int ComputeCheckDigit(ReadOnlySpan<char> digits)
+    {
+        int sum = 0;
+        int weight = 3;
+        for (int i = digits.Length - 1; i >= 0; i--)
+        {
+            sum += (digits[i] - '0') * weight;
+            weight = 4 - weight;
+        }
+
+        return (10 - (sum % 10)) % 10;
     }
 
     /// <summary>

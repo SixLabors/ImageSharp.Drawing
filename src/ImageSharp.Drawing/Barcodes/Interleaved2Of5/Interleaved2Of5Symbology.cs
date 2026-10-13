@@ -88,7 +88,7 @@ public sealed class Interleaved2Of5Symbology : BarcodeSymbology
         }
 
         ReadOnlySpan<char> data = this.CheckDigit == CheckCharacterMode.Validate ? text.AsSpan(0, text.Length - 1) : text;
-        int? check = this.CheckDigit == CheckCharacterMode.None ? null : EanUpcEncoder.ComputeCheckDigit(data);
+        int? check = this.CheckDigit == CheckCharacterMode.None ? null : Gs1Data.ComputeCheckDigit(data);
         if (this.CheckDigit == CheckCharacterMode.Validate && text[^1] - '0' != check)
         {
             throw new ArgumentException($"Incorrect check digit: expected {check}, got {text[^1]}.", nameof(text));

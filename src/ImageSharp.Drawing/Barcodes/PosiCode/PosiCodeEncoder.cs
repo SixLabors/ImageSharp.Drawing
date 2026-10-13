@@ -356,7 +356,7 @@ internal static class PosiCodeEncoder
         }
 
         // The 15 per cent of Code 39 and Codabar; no document gives a height for PosiCode.
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, BarcodeSymbology.PointXDimension, widthInModules * 0.15F);
+        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, widthInModules * 0.15F);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];

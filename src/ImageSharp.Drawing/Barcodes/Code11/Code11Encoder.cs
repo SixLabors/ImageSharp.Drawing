@@ -165,7 +165,7 @@ internal static class Code11Encoder
             widthInModules += runs[i];
         }
 
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, BarcodeSymbology.PointXDimension, widthInModules * NominalBarHeightFraction);
+        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, widthInModules * NominalBarHeightFraction);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];

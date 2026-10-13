@@ -140,8 +140,9 @@ public class Code49SymbologyTests
 
         BarcodeOptions options = new() { BarHeight = 12F * BarcodeSymbology.PointXDimension };
         symbol = (StackedBarcodeSymbol)new Code49Symbology().Encode("A", options);
-        Assert.All(symbol.Rows[0].BarHeights, height => Assert.Equal(12F, height, 0.0001F));
-        Assert.Equal(27F, symbol.HeightInModules, 0.0001F);
+        ApproximateFloatComparer comparer = new(1e-4F);
+        Assert.All(symbol.Rows[0].BarHeights, height => Assert.Equal(12F, height, comparer));
+        Assert.Equal(27F, symbol.HeightInModules, comparer);
     }
 
     /// <summary>

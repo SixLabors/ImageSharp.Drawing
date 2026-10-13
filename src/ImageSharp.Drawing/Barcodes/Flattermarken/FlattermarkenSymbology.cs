@@ -99,7 +99,7 @@ public sealed class FlattermarkenSymbology : BarcodeSymbology
         }
 
         int[] runs = buffer[..written];
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, XDimension, NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(XDimension, NominalBarHeight);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];

@@ -86,7 +86,7 @@ public sealed class Itf14Symbology : BarcodeSymbology
             throw new ArgumentException($"ITF-14 carries 13 digits and a check digit; got {count}.", nameof(text));
         }
 
-        int check = EanUpcEncoder.ComputeCheckDigit(digits[..(Digits - 1)]);
+        int check = Gs1Data.ComputeCheckDigit(digits[..(Digits - 1)]);
         if (count == Digits && digits[Digits - 1] - '0' != check)
         {
             throw new ArgumentException($"Incorrect check digit: expected {check}, got {digits[Digits - 1]}.", nameof(text));

@@ -161,7 +161,7 @@ internal static class Code128Encoder
             widthInModules += runs[i];
         }
 
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, NominalXDimension, NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(NominalXDimension, NominalBarHeight);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];

@@ -182,7 +182,7 @@ internal static class Code39Encoder
     public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options, float nominalBarHeight)
     {
         int widthInModules = WidthInModules(runs);
-        float barHeight = EanUpcEncoder.ResolveBarHeight(options, BarcodeSymbology.PointXDimension, nominalBarHeight);
+        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, nominalBarHeight);
         int barCount = (runs.Length + 1) / 2;
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];

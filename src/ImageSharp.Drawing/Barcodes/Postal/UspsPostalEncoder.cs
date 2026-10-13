@@ -128,7 +128,7 @@ internal static class UspsPostalEncoder
             runs[i] = (i & 1) == 0 ? BarUnits : SpaceUnits;
         }
 
-        float fullBar = EanUpcEncoder.ResolveBarHeight(options, NominalXDimension, FullBar);
+        float fullBar = options.ResolveBarHeight(NominalXDimension, FullBar);
         float halfBar = fullBar * HalfBar / FullBar;
         float[] heights = new float[barCount];
         float[] tops = new float[barCount];
