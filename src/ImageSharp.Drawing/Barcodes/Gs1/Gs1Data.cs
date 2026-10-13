@@ -131,6 +131,53 @@ internal static class Gs1Data
     }
 
     /// <summary>
+    /// Reads the element string of GS1 Application Identifier (01) and writes the 14 digit GTIN. The input
+    /// is <c>(01)</c> and 13 digits, to which the check digit of section 7.9 of the GS1 General
+    /// Specifications is added, or 14 digits whose last digit is validated as that check digit.
+    /// </summary>
+    /// <param name="text">The element string.</param>
+    /// <param name="gtin">The buffer the 14 digits are written to.</param>
+    /// <exception cref="ArgumentException">The element string is not (01) and 13 or 14 digits, or the check digit is wrong.</exception>
+    public static void ReadGtin(string text, Span<char> gtin)
+    {
+        Guard.NotNull(text, nameof(text));
+
+        if (text.Length is not (17 or 18))
+        {
+            throw new ArgumentException(
+                $"The element string takes the (01) application identifier and 13 or 14 digits; got {text.Length} characters.",
+                nameof(text));
+        }
+
+        if (!text.AsSpan(0, 4).SequenceEqual("(01)"))
+        {
+            throw new ArgumentException("The element string begins with the (01) application identifier.", nameof(text));
+        }
+
+        ReadOnlySpan<char> digits = text.AsSpan(4);
+        SpanCodePointEnumerator codePoints = digits.EnumerateCodePoints();
+        while (codePoints.MoveNext())
+        {
+            CodePoint current = codePoints.Current;
+            if (!current.IsAsciiDigit())
+            {
+                throw new ArgumentException(
+                    $"The GTIN carries only digits; got {current.ToDisplayString()}.",
+                    nameof(text));
+            }
+        }
+
+        int check = ComputeCheckDigit(digits[..13]);
+        if (digits.Length == 14 && digits[13] - '0' != check)
+        {
+            throw new ArgumentException($"Incorrect GTIN check digit: expected {check}, got {digits[13]}.", nameof(text));
+        }
+
+        digits[..13].CopyTo(gtin);
+        gtin[13] = (char)('0' + check);
+    }
+
+    /// <summary>
     /// Gets the total length of an element string whose Application Identifier starts with the given two
     /// digits, or zero when the length is not predefined. Table 7-6 of the GS1 General Specifications
     /// lists these and states that it "is limited to the listed numbers and will remain unchanged", so an
