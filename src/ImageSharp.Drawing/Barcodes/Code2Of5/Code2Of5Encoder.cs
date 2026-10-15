@@ -80,8 +80,14 @@ internal static class Code2Of5Encoder
     /// <param name="printCheckDigit">
     /// Whether a check digit the symbol carries is part of the human readable interpretation.
     /// </param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol Encode(string text, BarcodeOptions options, Code2Of5Variant variant, CheckCharacterMode checkDigit, bool printCheckDigit)
+    /// <param name="symbol">The symbol to write.</param>
+    public static void Encode(
+        string text,
+        BarcodeOptions options,
+        Code2Of5Variant variant,
+        CheckCharacterMode checkDigit,
+        bool printCheckDigit,
+        ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
@@ -104,32 +110,47 @@ internal static class Code2Of5Encoder
             throw new ArgumentException($"Incorrect check digit: expected {check}, got {text[^1]}.", nameof(text));
         }
 
-        Span<char> digitBuffer = stackalloc char[Interleaved2Of5Encoder.StackBufferLength];
-        ValueStringBuilder digits = new(digitBuffer);
-        digits.Append(data);
-        if (check is not null)
+        // The digits the symbol carries are the data and the check digit. The text is at most
+        // MaximumLength digits, so a short symbol works inline and a longer one rents its digits once.
+        int carried = data.Length + (check is null ? 0 : 1);
+        InlineArray64<char> digitStorage = default;
+        PooledBuffer<char> rented = default;
+        Span<char> encoded = carried <= Interleaved2Of5Encoder.InlineBufferLength
+            ? ((Span<char>)digitStorage)[..carried]
+            : (rented = new PooledBuffer<char>(carried)).Span;
+        try
         {
-            digits.Append((char)('0' + check.Value));
+            data.CopyTo(encoded);
+            if (check is not null)
+            {
+                encoded[^1] = (char)('0' + check.Value);
+            }
+
+            ReadOnlySpan<char> readable = check is null || printCheckDigit ? encoded : encoded[..^1];
+            BeginRuns(encoded, variant, ref symbol, out Span<float> heights, out Span<float> tops);
+            Interleaved2Of5Encoder.EndSymbol(heights, tops, readable, options, ref symbol);
         }
-
-        ReadOnlySpan<char> encoded = digits.AsSpan();
-        string readable = options.Font is null
-            ? string.Empty
-            : (check is null || printCheckDigit ? encoded : encoded[..^1]).ToString();
-
-        LinearBarcodeSymbol symbol = Interleaved2Of5Encoder.BuildSymbol(Encode(encoded, variant), readable, options);
-        digits.Dispose();
-        return symbol;
+        finally
+        {
+            rented.Dispose();
+        }
     }
 
     /// <summary>
-    /// Encodes digits into the alternating bar and space run widths the renderer draws, starting with the
-    /// first bar of the start pattern and ending on the last bar of the stop pattern.
+    /// Begins the symbol and writes the alternating bar and space run widths, starting with the first bar
+    /// of the start pattern and ending on the last bar of the stop pattern.
     /// </summary>
     /// <param name="digits">The digits to encode, the check digit included, already validated.</param>
     /// <param name="variant">The symbology whose patterns to use.</param>
-    /// <returns>The run widths in modules.</returns>
-    public static int[] Encode(ReadOnlySpan<char> digits, Code2Of5Variant variant)
+    /// <param name="symbol">The symbol to write.</param>
+    /// <param name="heights">The bar heights of the symbol, to write.</param>
+    /// <param name="tops">The bar tops of the symbol, to write.</param>
+    private static void BeginRuns(
+        ReadOnlySpan<char> digits,
+        Code2Of5Variant variant,
+        ref BarcodeSymbol symbol,
+        out Span<float> heights,
+        out Span<float> tops)
     {
         ReadOnlySpan<byte> start = StartPattern(variant);
         ReadOnlySpan<byte> stop = StopPattern(variant);
@@ -137,7 +158,7 @@ internal static class Code2Of5Encoder
         bool barsOnly = variant is Code2Of5Variant.Industrial or Code2Of5Variant.Iata;
         int elementsPerDigit = barsOnly ? BarElementsPerDigit : MatrixElementsPerDigit;
 
-        int[] runs = new int[(digits.Length * elementsPerDigit) + start.Length + stop.Length];
+        Span<int> runs = symbol.BeginLinear((digits.Length * elementsPerDigit) + start.Length + stop.Length, out heights, out tops);
         int written = 0;
 
         for (int i = 0; i < start.Length; i++)
@@ -169,8 +190,6 @@ internal static class Code2Of5Encoder
         {
             runs[written++] = stop[i];
         }
-
-        return runs;
     }
 
     /// <summary>

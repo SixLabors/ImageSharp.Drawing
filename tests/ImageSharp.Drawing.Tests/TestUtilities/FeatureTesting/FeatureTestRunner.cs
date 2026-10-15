@@ -28,7 +28,7 @@ public static class FeatureTestRunner
     /// <typeparam name="T">The type to deserialize to.</typeparam>
     /// <param name="value">The string value to deserialize.</param>
     /// <returns>The <see cref="T"/> value.</returns>
-    public static T DeserializeForXUnit<T>(string value)
+    public static T DeserializeForXunit<T>(string value)
         where T : IXunitSerializable
         => BasicSerializer.Deserialize<T>(value);
 
@@ -104,7 +104,7 @@ public static class FeatureTestRunner
             ProcessStartInfo processStartInfo = new();
             if (intrinsic.Key != HwIntrinsics.AllowAll)
             {
-                processStartInfo.Environment[$"COMPlus_{intrinsic.Value}"] = "0";
+                processStartInfo.Environment[$"DOTNET_{intrinsic.Value}"] = "0";
 
                 RemoteExecutor.Invoke(
                     action,
@@ -128,7 +128,7 @@ public static class FeatureTestRunner
     /// Runs the given test <paramref name="action"/> within an environment
     /// where the given <paramref name="intrinsics"/> features.
     /// </summary>
-    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <typeparam name="T">The type of argument.</typeparam>
     /// <param name="action">The test action to run.</param>
     /// <param name="intrinsics">The intrinsics features.</param>
     /// <param name="serializable">The value to pass as a parameter to the test action.</param>
@@ -148,7 +148,7 @@ public static class FeatureTestRunner
             ProcessStartInfo processStartInfo = new();
             if (intrinsic.Key != HwIntrinsics.AllowAll)
             {
-                processStartInfo.Environment[$"COMPlus_{intrinsic.Value}"] = "0";
+                processStartInfo.Environment[$"DOTNET_{intrinsic.Value}"] = "0";
 
                 RemoteExecutor.Invoke(
                     action,
@@ -172,7 +172,7 @@ public static class FeatureTestRunner
     /// Runs the given test <paramref name="action"/> within an environment
     /// where the given <paramref name="intrinsics"/> features.
     /// </summary>
-    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <typeparam name="T">The type of argument.</typeparam>
     /// <param name="action">The test action to run.</param>
     /// <param name="intrinsics">The intrinsics features.</param>
     /// <param name="serializable">The value to pass as a parameter to the test action.</param>
@@ -192,7 +192,7 @@ public static class FeatureTestRunner
             ProcessStartInfo processStartInfo = new();
             if (intrinsic.Key != HwIntrinsics.AllowAll)
             {
-                processStartInfo.Environment[$"COMPlus_{intrinsic.Value}"] = "0";
+                processStartInfo.Environment[$"DOTNET_{intrinsic.Value}"] = "0";
 
                 RemoteExecutor.Invoke(
                     action,
@@ -217,8 +217,8 @@ public static class FeatureTestRunner
     /// Runs the given test <paramref name="action"/> within an environment
     /// where the given <paramref name="intrinsics"/> features.
     /// </summary>
-    /// <typeparam name="T">The first type to deserialize to.</typeparam>
-    /// <typeparam name="T2">The second type to deserialize to.</typeparam>
+    /// <typeparam name="T">The type of argument.</typeparam>
+    /// <typeparam name="T2">The addition type of argument.</typeparam>
     /// <param name="action">The test action to run.</param>
     /// <param name="intrinsics">The intrinsics features.</param>
     /// <param name="arg1">The value to pass as a parameter to the test action.</param>
@@ -241,7 +241,7 @@ public static class FeatureTestRunner
             ProcessStartInfo processStartInfo = new();
             if (intrinsic.Key != HwIntrinsics.AllowAll)
             {
-                processStartInfo.Environment[$"COMPlus_{intrinsic.Value}"] = "0";
+                processStartInfo.Environment[$"DOTNET_{intrinsic.Value}"] = "0";
 
                 RemoteExecutor.Invoke(
                     action,
@@ -266,7 +266,7 @@ public static class FeatureTestRunner
     /// Runs the given test <paramref name="action"/> within an environment
     /// where the given <paramref name="intrinsics"/> features.
     /// </summary>
-    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <typeparam name="T">The type of argument.</typeparam>
     /// <param name="action">The test action to run.</param>
     /// <param name="intrinsics">The intrinsics features.</param>
     /// <param name="arg1">The value to pass as a parameter to the test action.</param>
@@ -288,7 +288,7 @@ public static class FeatureTestRunner
             ProcessStartInfo processStartInfo = new();
             if (intrinsic.Key != HwIntrinsics.AllowAll)
             {
-                processStartInfo.Environment[$"COMPlus_{intrinsic.Value}"] = "0";
+                processStartInfo.Environment[$"DOTNET_{intrinsic.Value}"] = "0";
 
                 RemoteExecutor.Invoke(
                     action,
@@ -313,7 +313,7 @@ public static class FeatureTestRunner
     /// Runs the given test <paramref name="action"/> within an environment
     /// where the given <paramref name="intrinsics"/> features.
     /// </summary>
-    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <typeparam name="T">The type of argument.</typeparam>
     /// <param name="action">The test action to run.</param>
     /// <param name="serializable">The value to pass as a parameter to the test action.</param>
     /// <param name="intrinsics">The intrinsics features.</param>
@@ -333,7 +333,7 @@ public static class FeatureTestRunner
             ProcessStartInfo processStartInfo = new();
             if (intrinsic.Key != HwIntrinsics.AllowAll)
             {
-                processStartInfo.Environment[$"COMPlus_{intrinsic.Value}"] = "0";
+                processStartInfo.Environment[$"DOTNET_{intrinsic.Value}"] = "0";
 
                 RemoteExecutor.Invoke(
                     action,
@@ -357,7 +357,7 @@ public static class FeatureTestRunner
     /// Runs the given test <paramref name="action"/> within an environment
     /// where the given <paramref name="intrinsics"/> features.
     /// </summary>
-    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <typeparam name="T">The type of argument.</typeparam>
     /// <param name="action">The test action to run.</param>
     /// <param name="arg0">The value to pass as a parameter #0 to the test action.</param>
     /// <param name="arg1">The value to pass as a parameter #1 to the test action.</param>
@@ -379,7 +379,7 @@ public static class FeatureTestRunner
             ProcessStartInfo processStartInfo = new();
             if (intrinsic.Key != HwIntrinsics.AllowAll)
             {
-                processStartInfo.Environment[$"COMPlus_{intrinsic.Value}"] = "0";
+                processStartInfo.Environment[$"DOTNET_{intrinsic.Value}"] = "0";
 
                 RemoteExecutor.Invoke(
                     action,
@@ -403,10 +403,10 @@ public static class FeatureTestRunner
     internal static Dictionary<HwIntrinsics, string> ToFeatureKeyValueCollection(this HwIntrinsics intrinsics)
     {
         // Loop through and translate the given values into COMPlus equivalents
-        Dictionary<HwIntrinsics, string> features = new();
+        Dictionary<HwIntrinsics, string> features = [];
         foreach (string intrinsic in intrinsics.ToString("G").Split(SplitChars, StringSplitOptions.RemoveEmptyEntries))
         {
-            HwIntrinsics key = (HwIntrinsics)Enum.Parse(typeof(HwIntrinsics), intrinsic);
+            HwIntrinsics key = Enum.Parse<HwIntrinsics>(intrinsic);
             switch (intrinsic)
             {
                 case nameof(HwIntrinsics.AllowAll):
@@ -414,7 +414,22 @@ public static class FeatureTestRunner
                     // Not a COMPlus value. We filter in calling method.
                     features.Add(key, nameof(HwIntrinsics.AllowAll));
                     break;
+#if NET10_0_OR_GREATER
+                case nameof(HwIntrinsics.DisableAVX512F):
 
+                    // .NET 10 groups AVX512F, BW, CD, DQ, and VL under EnableAVX512; EnableAVX512F has no effect.
+                    // https://github.com/dotnet/runtime/blob/v10.0.12/src/coreclr/inc/clrconfigvalues.h
+                    features.Add(key, "EnableAVX512");
+                    break;
+#endif
+#if NET11_0_OR_GREATER
+                case nameof(HwIntrinsics.DisableSSE42):
+
+                    // SSE3 through SSE4.2 and POPCNT are x86-64-v2 baseline in .NET 11+ and the
+                    // switch is inert, so skip it entirely rather than spawn a child that tests nothing.
+                    // https://learn.microsoft.com/en-us/dotnet/core/compatibility/jit/11/minimum-hardware-requirements
+                    break;
+#endif
                 default:
                     features.Add(key, intrinsic.Replace("Disable", "Enable"));
                     break;
@@ -426,40 +441,50 @@ public static class FeatureTestRunner
 }
 
 /// <summary>
-/// See <see href="https://github.com/dotnet/runtime/blob/50ac454d8d8a1915188b2a4bb3fff3b81bf6c0cf/src/coreclr/src/jit/jitconfigvalues.h#L224"/>
-/// <remarks>
-/// <see cref="DisableSIMD"/> ends up impacting all SIMD support(including System.Numerics)
-/// but not things like <see cref="DisableBMI1"/>, <see cref="DisableBMI2"/>, and <see cref="DisableLZCNT"/>.
-/// </remarks>
+/// See <see href="https://github.com/dotnet/runtime/blob/58601ba7da092fe82bb71d087d30df95472968b6/src/coreclr/jit/jitconfigvalues.h#L315"/>
 /// </summary>
 [Flags]
 #pragma warning disable RCS1135 // Declare enum member with zero value (when enum has FlagsAttribute).
-public enum HwIntrinsics
+public enum HwIntrinsics : long
 #pragma warning restore RCS1135 // Declare enum member with zero value (when enum has FlagsAttribute).
 {
     // Use flags so we can pass multiple values without using params.
     // Don't base on 0 or use inverse for All as that doesn't translate to string values.
-    DisableHWIntrinsic = 1 << 0,
-    DisableSSE = 1 << 1,
-    DisableSSE2 = 1 << 2,
-    DisableAES = 1 << 3,
-    DisablePCLMULQDQ = 1 << 4,
-    DisableSSE3 = 1 << 5,
-    DisableSSSE3 = 1 << 6,
-    DisableSSE41 = 1 << 7,
-    DisableSSE42 = 1 << 8,
-    DisablePOPCNT = 1 << 9,
-    DisableAVX = 1 << 10,
-    DisableFMA = 1 << 11,
-    DisableAVX2 = 1 << 12,
-    DisableBMI1 = 1 << 13,
-    DisableBMI2 = 1 << 14,
-    DisableLZCNT = 1 << 15,
-    DisableArm64AdvSimd = 1 << 16,
-    DisableArm64Crc32 = 1 << 17,
-    DisableArm64Dp = 1 << 18,
-    DisableArm64Aes = 1 << 19,
-    DisableArm64Sha1 = 1 << 20,
-    DisableArm64Sha256 = 1 << 21,
-    AllowAll = 1 << 22
+    DisableHWIntrinsic = 1L << 0,
+    DisableSSE42 = 1L << 1,
+    DisableAVX = 1L << 2,
+    DisableAVX2 = 1L << 3,
+    DisableAVX512F = 1L << 4,
+    DisableAVX512v2 = 1L << 5,
+    DisableAVX512v3 = 1L << 6,
+    DisableAVX10v1 = 1L << 7,
+    DisableAVX10v2 = 1L << 8,
+    DisableAPX = 1L << 9,
+    DisableAES = 1L << 10,
+    DisableAVX512VP2INTERSECT = 1L << 11,
+    DisableAVXIFMA = 1L << 12,
+    DisableAVXVNNI = 1L << 13,
+    DisableAVXVNNIINT = 1L << 14,
+    DisableGFNI = 1L << 15,
+    DisableSHA = 1L << 16,
+    DisableVAES = 1L << 17,
+    DisableWAITPKG = 1L << 18,
+    DisableX86Serialize = 1 << 19,
+
+    // Arm64
+    DisableArm64Aes = 1L << 20,
+    DisableArm64Atomics = 1L << 21,
+    DisableArm64Crc32 = 1L << 22,
+    DisableArm64Dczva = 1L << 23,
+    DisableArm64Dp = 1L << 24,
+    DisableArm64Rdm = 1L << 25,
+    DisableArm64Sha1 = 1L << 26,
+    DisableArm64Sha256 = 1L << 27,
+    DisableArm64Sve = 1L << 28,
+    DisableArm64Sve2 = 1L << 29,
+
+    // RISC-V64
+    DisableRiscV64Zba = 1L << 30,
+    DisableRiscV64Zbb = 1L << 31,
+    AllowAll = 1L << 32,
 }

@@ -14,13 +14,16 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 public sealed class TelepenSymbology : BarcodeSymbology
 {
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, TelepenEncoder.MaximumLength, nameof(text));
 
-        ValueListBuilder<int> buffer = new(stackalloc int[TelepenEncoder.StackBufferLength]);
+        // One value for each character, so the buffer never grows: short text works inline and longer text
+        // rents once.
+        InlineArray64<int> bufferStorage = default;
+        ValueListBuilder<int> buffer = text.Length <= TelepenEncoder.InlineBufferLength ? new(bufferStorage) : new(text.Length);
         try
         {
             SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
@@ -35,8 +38,7 @@ public sealed class TelepenSymbology : BarcodeSymbology
                 buffer.Append(current.Value);
             }
 
-            string readable = options.Font is null ? string.Empty : text;
-            return TelepenEncoder.BuildSymbol(TelepenEncoder.Encode(buffer.AsSpan()), readable, options);
+            TelepenEncoder.BuildSymbol(buffer.AsSpan(), text, options, ref symbol);
         }
         finally
         {

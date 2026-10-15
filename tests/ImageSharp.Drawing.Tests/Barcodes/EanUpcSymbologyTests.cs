@@ -18,24 +18,25 @@ public class EanUpcSymbologyTests
     [InlineData("4006381333931", "1,1,1,3,2,1,1,1,1,2,3,1,1,1,4,1,4,1,1,3,1,2,1,1,2,2,2,1,1,1,1,1,1,4,1,1,1,4,1,1,1,4,1,1,3,1,1,2,1,4,1,1,2,2,2,1,1,1,1")]
     [InlineData("9780306406157", "1,1,1,1,3,1,2,3,1,2,1,1,1,2,3,1,4,1,1,1,1,2,3,1,1,1,4,1,1,1,1,1,1,1,3,2,3,2,1,1,1,1,1,4,2,2,2,1,1,2,3,1,1,3,1,2,1,1,1")]
     public void Ean13_EncodesExpectedModuleSequence(string text, string expectedRuns)
-        => Assert.Equal(expectedRuns, RunsToString(Encode(new Ean13Symbology(), text)));
+        => Assert.Equal(expectedRuns, Runs(new Ean13Symbology(), text));
 
     [Fact]
     public void Ean13_ComputesMissingCheckDigit()
         => Assert.Equal(
-            RunsToString(Encode(new Ean13Symbology(), "5901234123457")),
-            RunsToString(Encode(new Ean13Symbology(), "590123412345")));
+            Runs(new Ean13Symbology(), "5901234123457"),
+            Runs(new Ean13Symbology(), "590123412345"));
 
     [Fact]
     public void Ean13_Structure()
     {
-        LinearBarcodeSymbol symbol = Encode(new Ean13Symbology(), "5901234123457");
-
-        // ISO/IEC 15420: 95 modules, 30 bars, an 11 module leading and 7 module trailing quiet zone.
-        Assert.Equal(95, symbol.WidthInModules);
-        Assert.Equal(30, symbol.BarHeights.Length);
-        Assert.Equal(11, symbol.LeadingQuietZone);
-        Assert.Equal(7, symbol.TrailingQuietZone);
+        SymbolEncoder.Encode(new Ean13Symbology(), "5901234123457", new BarcodeOptions(), static (ref symbol) =>
+        {
+            // ISO/IEC 15420: 95 modules, 30 bars, an 11 module leading and 7 module trailing quiet zone.
+            Assert.Equal(95, symbol.WidthInModules);
+            Assert.Equal(30, symbol.BarHeights.Length);
+            Assert.Equal(11, symbol.LeadingQuietZone);
+            Assert.Equal(7, symbol.TrailingQuietZone);
+        });
 
         AssertGuardExtension(new Ean13Symbology(), "5901234123457", [0, 1, 14, 15, 28, 29]);
     }
@@ -44,18 +45,20 @@ public class EanUpcSymbologyTests
     public void Ean13_TextPlacements()
     {
         BarcodeOptions options = CreateTextOptions();
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Ean13Symbology().Encode("5901234123457", options);
+        SymbolEncoder.Encode(new Ean13Symbology(), "5901234123457", options, static (ref symbol) =>
+        {
+            // ISO/IEC 15420: the leading digit prints in the leading quiet zone and every other digit prints
+            // below its own symbol character, so the placement is per digit. Digits hang one module below the
+            // digit bars; the renderer grows the drawn area to hold them.
+            float textEdge = symbol.BarHeights.ToArray().Min() + BarcodeTextPlacement.Clearance;
+            Assert.Equal(13, symbol.Text.Length);
+            Assert.Equal("5901234123457", string.Concat(SymbolEncoder.Texts(ref symbol)));
+            Assert.True(symbol.Text[0].Left < 0);
+            Assert.All(symbol.Text.ToArray(), placement => Assert.Equal(BarcodeTextSide.BelowBars, placement.Side));
+            Assert.All(symbol.Text.ToArray(), placement => Assert.Equal(textEdge, placement.TextEdge));
+        });
 
-        // ISO/IEC 15420: the leading digit prints in the leading quiet zone and every other digit prints
-        // below its own symbol character, so the placement is per digit. Digits hang one module below the
-        // digit bars; the renderer grows the drawn area to hold them.
-        Assert.Equal(13, symbol.Text.Length);
-        Assert.Equal("5901234123457", string.Concat(symbol.Text.Select(placement => placement.Text)));
-        Assert.True(symbol.Text[0].Left < 0);
-        Assert.All(symbol.Text, placement => Assert.Equal(BarcodeTextSide.BelowBars, placement.Side));
-        Assert.All(symbol.Text, placement => Assert.Equal(symbol.BarHeights.Min() + BarcodeTextPlacement.Clearance, placement.TextEdge));
-
-        Assert.Empty(Encode(new Ean13Symbology(), "5901234123457").Text);
+        SymbolEncoder.Encode(new Ean13Symbology(), "5901234123457", new BarcodeOptions(), static (ref symbol) => Assert.True(symbol.Text.IsEmpty));
     }
 
     [Theory]
@@ -70,20 +73,22 @@ public class EanUpcSymbologyTests
     public void Ean8_EncodesExpectedModuleSequence()
         => Assert.Equal(
             "1,1,1,3,1,1,2,1,1,1,4,1,4,1,1,1,2,1,3,1,1,1,1,1,1,2,3,1,3,2,1,1,1,3,1,2,1,1,3,2,1,1,1",
-            RunsToString(Encode(new Ean8Symbology(), "96385074")));
+            Runs(new Ean8Symbology(), "96385074"));
 
     [Fact]
     public void Ean8_Structure()
     {
-        LinearBarcodeSymbol symbol = Encode(new Ean8Symbology(), "9638507");
-
-        // ISO/IEC 15420: 67 modules, 22 bars, 7 module quiet zones on both sides. The 7 digit input
-        // verifies check digit computation: 96385074 carries check digit 4.
-        Assert.Equal(67, symbol.WidthInModules);
-        Assert.Equal(22, symbol.BarHeights.Length);
-        Assert.Equal(7, symbol.LeadingQuietZone);
-        Assert.Equal(7, symbol.TrailingQuietZone);
-        Assert.Equal(RunsToString(Encode(new Ean8Symbology(), "96385074")), RunsToString(symbol));
+        string expected = Runs(new Ean8Symbology(), "96385074");
+        SymbolEncoder.Encode(new Ean8Symbology(), "9638507", new BarcodeOptions(), (ref symbol) =>
+        {
+            // ISO/IEC 15420: 67 modules, 22 bars, 7 module quiet zones on both sides. The 7 digit input
+            // verifies check digit computation: 96385074 carries check digit 4.
+            Assert.Equal(67, symbol.WidthInModules);
+            Assert.Equal(22, symbol.BarHeights.Length);
+            Assert.Equal(7, symbol.LeadingQuietZone);
+            Assert.Equal(7, symbol.TrailingQuietZone);
+            Assert.Equal(expected, RunsToString(ref symbol));
+        });
 
         AssertGuardExtension(new Ean8Symbology(), "96385074", [0, 1, 10, 11, 20, 21]);
     }
@@ -100,20 +105,22 @@ public class EanUpcSymbologyTests
     public void UpcA_EncodesExpectedModuleSequence()
         => Assert.Equal(
             "1,1,1,3,2,1,1,1,4,1,1,1,1,1,4,3,2,1,1,3,2,1,1,3,2,1,1,1,1,1,1,1,2,1,2,2,3,1,1,2,2,2,2,1,1,1,3,2,1,2,3,1,2,1,2,2,1,1,1",
-            RunsToString(Encode(new UpcASymbology(), "036000291452")));
+            Runs(new UpcASymbology(), "036000291452"));
 
     [Fact]
     public void UpcA_Structure()
     {
-        LinearBarcodeSymbol symbol = Encode(new UpcASymbology(), "03600029145");
-
-        // ISO/IEC 15420: the UPC-A symbol shares the 95 module EAN-13 structure with 9 module quiet zones.
-        // The bars of the first and last symbol characters are extended because their digits print in the
-        // quiet zones. The 11 digit input verifies check digit computation: 036000291452 carries check digit 2.
-        Assert.Equal(95, symbol.WidthInModules);
-        Assert.Equal(9, symbol.LeadingQuietZone);
-        Assert.Equal(9, symbol.TrailingQuietZone);
-        Assert.Equal(RunsToString(Encode(new UpcASymbology(), "036000291452")), RunsToString(symbol));
+        string expected = Runs(new UpcASymbology(), "036000291452");
+        SymbolEncoder.Encode(new UpcASymbology(), "03600029145", new BarcodeOptions(), (ref symbol) =>
+        {
+            // ISO/IEC 15420: the UPC-A symbol shares the 95 module EAN-13 structure with 9 module quiet zones.
+            // The bars of the first and last symbol characters are extended because their digits print in the
+            // quiet zones. The 11 digit input verifies check digit computation: 036000291452 carries check digit 2.
+            Assert.Equal(95, symbol.WidthInModules);
+            Assert.Equal(9, symbol.LeadingQuietZone);
+            Assert.Equal(9, symbol.TrailingQuietZone);
+            Assert.Equal(expected, RunsToString(ref symbol));
+        });
 
         AssertGuardExtension(new UpcASymbology(), "036000291452", [0, 1, 2, 3, 14, 15, 26, 27, 28, 29]);
     }
@@ -122,18 +129,19 @@ public class EanUpcSymbologyTests
     public void UpcA_TextPlacements()
     {
         BarcodeOptions options = CreateTextOptions();
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new UpcASymbology().Encode("036000291452", options);
-
-        // ISO/IEC 15420: the number system digit prints in the leading quiet zone, the check digit in the
-        // trailing quiet zone, and every other digit below its own symbol character. The quiet zone digits
-        // print in smaller type: 10/12 of the digit size, matching the reference implementation.
-        Assert.Equal(12, symbol.Text.Length);
-        Assert.Equal("036000291452", string.Concat(symbol.Text.Select(placement => placement.Text)));
-        Assert.True(symbol.Text[0].Left < 0);
-        Assert.True(symbol.Text[11].Left > symbol.WidthInModules);
-        Assert.Equal(10F / 12F, symbol.Text[0].FontScale);
-        Assert.Equal(10F / 12F, symbol.Text[11].FontScale);
-        Assert.All(symbol.Text.Skip(1).Take(10), placement => Assert.Equal(1F, placement.FontScale));
+        SymbolEncoder.Encode(new UpcASymbology(), "036000291452", options, static (ref symbol) =>
+        {
+            // ISO/IEC 15420: the number system digit prints in the leading quiet zone, the check digit in the
+            // trailing quiet zone, and every other digit below its own symbol character. The quiet zone digits
+            // print in smaller type: 10/12 of the digit size, matching the reference implementation.
+            Assert.Equal(12, symbol.Text.Length);
+            Assert.Equal("036000291452", string.Concat(SymbolEncoder.Texts(ref symbol)));
+            Assert.True(symbol.Text[0].Left < 0);
+            Assert.True(symbol.Text[11].Left > symbol.WidthInModules);
+            Assert.Equal(10F / 12F, symbol.Text[0].FontScale);
+            Assert.Equal(10F / 12F, symbol.Text[11].FontScale);
+            Assert.All(symbol.Text[1..11].ToArray(), placement => Assert.Equal(1F, placement.FontScale));
+        });
     }
 
     /// <summary>
@@ -148,20 +156,22 @@ public class EanUpcSymbologyTests
     [InlineData("0291944", "1,1,1,2,2,1,2,2,1,1,3,2,2,2,1,2,1,1,3,1,1,3,2,1,1,3,2,1,1,1,1,1,1")]
     [InlineData("1654321", "1,1,1,1,1,1,4,1,3,2,1,1,1,3,2,1,4,1,1,2,2,1,2,1,2,2,2,1,1,1,1,1,1")]
     public void UpcE_EncodesExpectedModuleSequence(string text, string expectedRuns)
-        => Assert.Equal(expectedRuns, RunsToString(Encode(new UpcESymbology(), text)));
+        => Assert.Equal(expectedRuns, Runs(new UpcESymbology(), text));
 
     [Fact]
     public void UpcE_Structure()
     {
-        LinearBarcodeSymbol symbol = Encode(new UpcESymbology(), "0123456");
-
-        // ISO/IEC 15420: 51 modules, 17 bars, a 9 module leading and 7 module trailing quiet zone. All five
-        // guard bars are extended: two in the left guard pattern and three in the special right guard pattern.
-        Assert.Equal(51, symbol.WidthInModules);
-        Assert.Equal(17, symbol.BarHeights.Length);
-        Assert.Equal(9, symbol.LeadingQuietZone);
-        Assert.Equal(7, symbol.TrailingQuietZone);
-        Assert.Equal(RunsToString(Encode(new UpcESymbology(), "01234565")), RunsToString(symbol));
+        string expected = Runs(new UpcESymbology(), "01234565");
+        SymbolEncoder.Encode(new UpcESymbology(), "0123456", new BarcodeOptions(), (ref symbol) =>
+        {
+            // ISO/IEC 15420: 51 modules, 17 bars, a 9 module leading and 7 module trailing quiet zone. All five
+            // guard bars are extended: two in the left guard pattern and three in the special right guard pattern.
+            Assert.Equal(51, symbol.WidthInModules);
+            Assert.Equal(17, symbol.BarHeights.Length);
+            Assert.Equal(9, symbol.LeadingQuietZone);
+            Assert.Equal(7, symbol.TrailingQuietZone);
+            Assert.Equal(expected, RunsToString(ref symbol));
+        });
 
         AssertGuardExtension(new UpcESymbology(), "01234565", [0, 1, 14, 15, 16]);
     }
@@ -179,35 +189,36 @@ public class EanUpcSymbologyTests
     [InlineData("90200", "1,1,2,2,1,1,3,1,1,3,2,1,1,1,1,2,1,2,2,1,1,3,2,1,1,1,1,1,1,2,3")]
     [InlineData("52495", "1,1,2,1,3,2,1,1,1,2,1,2,2,1,1,2,3,1,1,1,1,3,1,1,2,1,1,1,2,3,1")]
     public void Ean5_EncodesExpectedModuleSequence(string text, string expectedRuns)
-        => Assert.Equal(expectedRuns, RunsToString(Encode(new Ean5Symbology(), text)));
+        => Assert.Equal(expectedRuns, Runs(new Ean5Symbology(), text));
 
     [Fact]
     public void Ean5_Structure()
-    {
-        LinearBarcodeSymbol symbol = Encode(new Ean5Symbology(), "90200");
-
-        // GS1 General Specifications: 47 modules once the leading space module of the add-on guard pattern
-        // is folded into the quiet zone; all add-on bars are uniform in height.
-        Assert.Equal(47, symbol.WidthInModules);
-        Assert.Equal(16, symbol.BarHeights.Length);
-        Assert.All(symbol.BarHeights, height => Assert.Equal(symbol.BarHeights[0], height));
-        Assert.All(symbol.BarTops, top => Assert.Equal(0, top));
-    }
+        => SymbolEncoder.Encode(new Ean5Symbology(), "90200", new BarcodeOptions(), static (ref symbol) =>
+        {
+            // GS1 General Specifications: 47 modules once the leading space module of the add-on guard pattern
+            // is folded into the quiet zone; all add-on bars are uniform in height.
+            float first = symbol.BarHeights[0];
+            Assert.Equal(47, symbol.WidthInModules);
+            Assert.Equal(16, symbol.BarHeights.Length);
+            Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal(first, height));
+            Assert.All(symbol.BarTops.ToArray(), top => Assert.Equal(0, top));
+        });
 
     [Fact]
     public void Ean5_TextPrintsAboveBars()
     {
         BarcodeOptions options = CreateTextOptions();
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Ean5Symbology().Encode("90200", options);
-
-        // GS1 General Specifications: the add-on interpretation prints above the bars, one digit above its
-        // own symbol character. The room it needs belongs to the renderer, which is what knows the font,
-        // so the symbol itself leaves every bar top aligned.
-        Assert.Equal(5, symbol.Text.Length);
-        Assert.Equal("90200", string.Concat(symbol.Text.Select(placement => placement.Text)));
-        Assert.All(symbol.Text, placement => Assert.Equal(BarcodeTextSide.AboveBars, placement.Side));
-        Assert.All(symbol.Text, placement => Assert.Equal(-BarcodeTextPlacement.Clearance, placement.TextEdge));
-        Assert.All(symbol.BarTops, top => Assert.Equal(0, top));
+        SymbolEncoder.Encode(new Ean5Symbology(), "90200", options, static (ref symbol) =>
+        {
+            // GS1 General Specifications: the add-on interpretation prints above the bars, one digit above its
+            // own symbol character. The room it needs belongs to the renderer, which is what knows the font,
+            // so the symbol itself leaves every bar top aligned.
+            Assert.Equal(5, symbol.Text.Length);
+            Assert.Equal("90200", string.Concat(SymbolEncoder.Texts(ref symbol)));
+            Assert.All(symbol.Text.ToArray(), placement => Assert.Equal(BarcodeTextSide.AboveBars, placement.Side));
+            Assert.All(symbol.Text.ToArray(), placement => Assert.Equal(-BarcodeTextPlacement.Clearance, placement.TextEdge));
+            Assert.All(symbol.BarTops.ToArray(), top => Assert.Equal(0, top));
+        });
     }
 
     [Theory]
@@ -221,19 +232,18 @@ public class EanUpcSymbologyTests
     [InlineData("05", "1,1,2,3,2,1,1,1,1,1,3,2,1")]
     [InlineData("53", "1,1,2,1,2,3,1,1,1,1,1,4,1")]
     public void Ean2_EncodesExpectedModuleSequence(string text, string expectedRuns)
-        => Assert.Equal(expectedRuns, RunsToString(Encode(new Ean2Symbology(), text)));
+        => Assert.Equal(expectedRuns, Runs(new Ean2Symbology(), text));
 
     [Fact]
     public void Ean2_Structure()
-    {
-        LinearBarcodeSymbol symbol = Encode(new Ean2Symbology(), "05");
-
-        // GS1 General Specifications: 20 modules once the leading space module of the add-on guard pattern
-        // is folded into the quiet zone. The structure is fixed: 3 guard runs, 4 runs per digit character
-        // and 2 delineator runs, so 13 runs and therefore 7 bars.
-        Assert.Equal(20, symbol.WidthInModules);
-        Assert.Equal(7, symbol.BarHeights.Length);
-    }
+        => SymbolEncoder.Encode(new Ean2Symbology(), "05", new BarcodeOptions(), static (ref symbol) =>
+        {
+            // GS1 General Specifications: 20 modules once the leading space module of the add-on guard pattern
+            // is folded into the quiet zone. The structure is fixed: 3 guard runs, 4 runs per digit character
+            // and 2 delineator runs, so 13 runs and therefore 7 bars.
+            Assert.Equal(20, symbol.WidthInModules);
+            Assert.Equal(7, symbol.BarHeights.Length);
+        });
 
     [Theory]
     [InlineData("5")]
@@ -247,19 +257,34 @@ public class EanUpcSymbologyTests
     {
         BarcodeOptions options = CreateTextOptions();
         options.BarHeight = 50F * EanUpcEncoder.NominalXDimension;
-
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Ean13Symbology().Encode("5901234123457", options);
         ApproximateFloatComparer comparer = new(1e-3F);
 
-        // 16.5 mm at the 0.33 mm X dimension is 50 modules for the digit bars; with text enabled the guard
-        // bars gain the 5 module extension of ISO/IEC 15420 on top of that.
-        Assert.Equal(50F, symbol.BarHeights[2], comparer);
-        Assert.Equal(55F, symbol.BarHeights[0], comparer);
-        Assert.Equal(55F, symbol.HeightInModules, comparer);
+        SymbolEncoder.Encode(new Ean13Symbology(), "5901234123457", options, (ref symbol) =>
+        {
+            // 16.5 mm at the 0.33 mm X dimension is 50 modules for the digit bars; with text enabled the guard
+            // bars gain the 5 module extension of ISO/IEC 15420 on top of that.
+            Assert.Equal(50F, symbol.BarHeights[2], comparer);
+            Assert.Equal(55F, symbol.BarHeights[0], comparer);
+            Assert.Equal(55F, symbol.HeightInModules, comparer);
+        });
     }
 
-    private static LinearBarcodeSymbol Encode(BarcodeSymbology symbology, string text)
-        => (LinearBarcodeSymbol)symbology.Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="symbology">The symbology to encode with.</param>
+    /// <param name="text">The text to encode.</param>
+    private static void Encode(BarcodeSymbology symbology, string text)
+        => SymbolEncoder.Encode(symbology, text, new BarcodeOptions());
+
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="symbology">The symbology to encode with.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol, separated by commas.</returns>
+    private static string Runs(BarcodeSymbology symbology, string text)
+        => SymbolEncoder.Read(symbology, text, new BarcodeOptions(), RunsToString);
 
     private static BarcodeOptions CreateTextOptions()
         => new()
@@ -267,24 +292,40 @@ public class EanUpcSymbologyTests
             Font = BarcodeFonts.OcrB.CreateFont(21.5F),
         };
 
-    private static string RunsToString(LinearBarcodeSymbol symbol)
-        => string.Join(',', symbol.RunWidths);
+    /// <summary>
+    /// Returns the run widths of a symbol, separated by commas.
+    /// </summary>
+    /// <param name="symbol">The encoded symbol.</param>
+    /// <returns>The run widths.</returns>
+    private static string RunsToString(ref BarcodeSymbol symbol)
+        => string.Join(',', symbol.Runs.ToArray());
 
-    private static void AssertGuardExtension(BarcodeSymbology symbology, string text, ReadOnlySpan<int> guardBars)
+    /// <summary>
+    /// Checks the bar heights of a symbol with and without text.
+    /// </summary>
+    /// <param name="symbology">The symbology to encode with.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="guardBars">The indexes of the bars that extend below the digit bars when the symbol carries text.</param>
+    private static void AssertGuardExtension(BarcodeSymbology symbology, string text, int[] guardBars)
     {
         // The guard extension flanks the text row, so it applies only when text is enabled: without a font
         // every bar is uniform (matching the reference implementation); with a font the listed bars descend exactly 5 modules below
         // the digit bars. Every bar is top aligned in both modes.
-        LinearBarcodeSymbol plain = Encode(symbology, text);
-        Assert.All(plain.BarHeights, height => Assert.Equal(plain.BarHeights[0], height));
-
-        LinearBarcodeSymbol withText = (LinearBarcodeSymbol)symbology.Encode(text, CreateTextOptions());
-        float digitHeight = withText.BarHeights.Min();
-        for (int i = 0; i < withText.BarHeights.Length; i++)
+        SymbolEncoder.Encode(symbology, text, new BarcodeOptions(), static (ref plain) =>
         {
-            float expected = guardBars.IndexOf(i) >= 0 ? digitHeight + 5 : digitHeight;
-            Assert.Equal(expected, withText.BarHeights[i]);
-            Assert.Equal(0, withText.BarTops[i]);
-        }
+            float first = plain.BarHeights[0];
+            Assert.All(plain.BarHeights.ToArray(), height => Assert.Equal(first, height));
+        });
+
+        SymbolEncoder.Encode(symbology, text, CreateTextOptions(), (ref withText) =>
+        {
+            float digitHeight = withText.BarHeights.ToArray().Min();
+            for (int i = 0; i < withText.BarHeights.Length; i++)
+            {
+                float expected = Array.IndexOf(guardBars, i) >= 0 ? digitHeight + 5 : digitHeight;
+                Assert.Equal(expected, withText.BarHeights[i]);
+                Assert.Equal(0, withText.BarTops[i]);
+            }
+        });
     }
 }

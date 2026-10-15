@@ -31,11 +31,12 @@ public abstract class BarcodeSymbology
     public virtual double NominalXDimension => PointXDimension;
 
     /// <summary>
-    /// Encodes the given text into a device-independent symbol measured in modules.
+    /// Validates the given text and encodes it into a device-independent symbol measured in modules.
+    /// The text length is checked against the maximum of the symbology before any buffer is sized from it.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="options">The options that control layout choices made during encoding.</param>
-    /// <returns>The encoded <see cref="BarcodeSymbol"/>.</returns>
+    /// <param name="symbol">The symbol to write. It is empty on entry.</param>
     /// <exception cref="ArgumentException">The text is not valid for the symbology.</exception>
-    internal abstract BarcodeSymbol Encode(string text, BarcodeOptions options);
+    internal abstract void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol);
 }

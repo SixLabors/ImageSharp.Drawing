@@ -48,7 +48,9 @@ public sealed class BarcodeOptions
     /// Gets or sets the font for the human readable interpretation, whose size is in points and renders
     /// at <see cref="Dpi"/>. Set <see langword="null"/> to print no text. The specifications set the
     /// interpretation in OCR-B, at a size proportional to the X dimension. The caller chooses the font
-    /// and the size.
+    /// and the size, with two lower limits: the text of a linear or stacked symbol prints at 9 points or
+    /// larger, and the text of a GS1 Data Matrix symbol prints at an em height of 2 mm or larger, which is
+    /// about 5.67 points.
     /// </summary>
     public Font? Font { get; set; }
 

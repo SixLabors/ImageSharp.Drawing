@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.Drawing.Helpers;
-
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -17,7 +15,7 @@ public sealed class JapanPostSymbology : BarcodeSymbology
     public override double NominalXDimension => JapanPostEncoder.Metrics.XDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         if (text.Length == 0)
@@ -25,11 +23,14 @@ public sealed class JapanPostSymbology : BarcodeSymbology
             throw new ArgumentException("The Japan Post barcode carries at least one character.", nameof(text));
         }
 
-        Span<byte> codes = stackalloc byte[JapanPostEncoder.CodeCount];
+        // Codes rejects text that needs more than CodeCount codes, so the text the line repeats is
+        // bounded too.
+        InlineArray24<byte> codeStorage = default;
+        Span<byte> codes = ((Span<byte>)codeStorage)[..JapanPostEncoder.CodeCount];
         JapanPostEncoder.Codes(text, codes);
-        Span<FourState> states = stackalloc FourState[JapanPostEncoder.BarCount];
+        InlineArray128<FourState> stateStorage = default;
+        Span<FourState> states = ((Span<FourState>)stateStorage)[..JapanPostEncoder.BarCount];
         JapanPostEncoder.Bars(codes, states);
-        string readable = options.Font is null ? string.Empty : text;
-        return FourStateEncoder.BuildSymbol(states, JapanPostEncoder.Metrics, readable, options);
+        FourStateEncoder.BuildSymbol(states, JapanPostEncoder.Metrics, text, options, ref symbol);
     }
 }

@@ -35,10 +35,10 @@ public sealed class MicroPdf417Symbology : BarcodeSymbology
     public int? Columns { get; }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
-        return MicroPdf417Encoder.BuildSymbol(text, this.Columns, options);
+        MicroPdf417Encoder.BuildSymbol(text, this.Columns, options, ref symbol);
     }
 }

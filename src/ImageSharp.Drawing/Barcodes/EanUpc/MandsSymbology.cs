@@ -29,8 +29,14 @@ public sealed class MandsSymbology : BarcodeSymbology
     /// <inheritdoc/>
     public override double NominalXDimension => EanUpcEncoder.NominalXDimension;
 
+    /// <summary>
+    /// Gets the indexes of the extended bars: the two bars of each outer guard pattern. The centre guard
+    /// bars stay at digit bar height.
+    /// </summary>
+    private static ReadOnlySpan<int> GuardBars => [0, 1, 20, 21];
+
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
@@ -40,9 +46,10 @@ public sealed class MandsSymbology : BarcodeSymbology
         }
 
         // An M&S number is seven or eight characters, and a seven character one carries an implied
-        // leading zero, so the padded form and its check digit are both built on the stack.
+        // leading zero, so the padded form and its check digit both fit eight inline characters.
         bool padded = text.Length == 7;
-        Span<char> paddedBuffer = stackalloc char[8];
+        InlineArray8<char> paddedStorage = default;
+        Span<char> paddedBuffer = paddedStorage;
         if (padded)
         {
             paddedBuffer[0] = '0';
@@ -53,39 +60,30 @@ public sealed class MandsSymbology : BarcodeSymbology
             text.CopyTo(paddedBuffer);
         }
 
-        Span<char> digitBuffer = stackalloc char[8];
-        ReadOnlySpan<char> digits = EanUpcEncoder.ValidateAndApplyCheckDigit(paddedBuffer[..(padded ? 8 : text.Length)], 7, digitBuffer);
+        InlineArray8<char> digitStorage = default;
+        ReadOnlySpan<char> digits = EanUpcEncoder.ValidateAndApplyCheckDigit(paddedBuffer, 7, digitStorage);
 
-        LinearBarcodeSymbol ean8 = EanUpcEncoder.BuildEan8(digits, options);
+        InlineArray128<byte> moduleStorage = default;
+        Span<byte> modules = ((Span<byte>)moduleStorage)[..EanUpcEncoder.Ean8Width];
+        EanUpcEncoder.WriteEan8Modules(digits, modules);
 
-        // The centre guard bars stay at digit bar height; only the outer guards extend beside the text.
-        float digitHeight = ean8.BarHeights[2];
-        ean8.BarHeights[10] = digitHeight;
-        ean8.BarHeights[11] = digitHeight;
+        EanUpcEncoder.BeginRuns(modules, ref symbol, out Span<float> heights);
+        float digitHeight = options.ResolveBarHeight(EanUpcEncoder.NominalXDimension, EanUpcEncoder.NominalEan8BarHeight);
+        EanUpcEncoder.FillGuardedHeights(heights, digitHeight, GuardBars, options);
 
-        BarcodeTextPlacement[] placements = [];
         if (options.Font is not null)
         {
             // A padded number hides its leading zero and its check digit: seven digits spread over the first
             // seven character cells with the eighth cell left empty. The full eight digit form prints as-is.
             float textLine = digitHeight + BarcodeTextPlacement.Clearance;
-            int shown = padded ? 7 : 8;
-            placements = new BarcodeTextPlacement[shown + 2];
-            for (int i = 0; i < shown; i++)
-            {
-                float left = i < 4 ? 3F + (i * 7F) : 36F + ((i - 4) * 7F);
-                placements[i] = new BarcodeTextPlacement(
-                    EanUpcEncoder.DigitString(digits[padded ? i + 1 : i]),
-                    left,
-                    left + 7F,
-                    BarcodeTextSide.BelowBars,
-                    textLine);
-            }
-
-            placements[shown] = new BarcodeTextPlacement("M", -12F, -5F, BarcodeTextSide.BelowBars, textLine);
-            placements[shown + 1] = new BarcodeTextPlacement("S", 69F, 76F, BarcodeTextSide.BelowBars, textLine);
+            ReadOnlySpan<char> shown = padded ? digits[1..] : digits;
+            symbol.ReserveText(shown.Length + 2, shown.Length + 2);
+            EanUpcEncoder.AddDigits(shown[..4], 3F, 7F, BarcodeTextSide.BelowBars, textLine, ref symbol);
+            EanUpcEncoder.AddDigits(shown[4..], 36F, 7F, BarcodeTextSide.BelowBars, textLine, ref symbol);
+            symbol.AddText("M", -12F, -5F, BarcodeTextSide.BelowBars, textLine);
+            symbol.AddText("S", 69F, 76F, BarcodeTextSide.BelowBars, textLine);
         }
 
-        return new LinearBarcodeSymbol(ean8.RunWidths, ean8.BarHeights, ean8.BarTops, placements, QuietZone, QuietZone);
+        symbol.EndLinear(QuietZone, QuietZone);
     }
 }

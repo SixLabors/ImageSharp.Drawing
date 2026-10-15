@@ -139,14 +139,14 @@ internal static class NorthAmericanCouponCode
     /// <param name="which">The purchase the requirement belongs to, for the error message.</param>
     private static void PurchaseRequirement(ReadOnlySpan<char> data, ref int position, string which)
     {
-        Skip(data, ref position, Digit(data, ref position, 1, 5, $"{which} purchase requirement length indicator"), $"{which} purchase requirement");
-        int code = Digit(data, ref position, 0, 9, $"{which} purchase requirement code");
+        Skip(data, ref position, Digit(data, ref position, 1, 5, which, "requirement length indicator"), which, "requirement");
+        int code = Digit(data, ref position, 0, 9, which, "requirement code");
         if (code is 5 or 6 or 7 or 8)
         {
             throw new ArgumentException($"The {which} purchase requirement code of a coupon code is 0 to 4 or 9; got {code}.", nameof(data));
         }
 
-        Skip(data, ref position, 3, $"{which} purchase family code");
+        Skip(data, ref position, 3, which, "family code");
     }
 
     /// <summary>
@@ -158,7 +158,7 @@ internal static class NorthAmericanCouponCode
     /// <param name="which">The purchase the prefix belongs to, for the error message.</param>
     private static void CompanyPrefix(ReadOnlySpan<char> data, ref int position, string which)
     {
-        int indicator = Digit(data, ref position, 0, 9, $"{which} purchase GS1 Company Prefix length indicator");
+        int indicator = Digit(data, ref position, 0, 9, which, "GS1 Company Prefix length indicator");
         if (indicator is 7 or 8)
         {
             throw new ArgumentException(
@@ -168,7 +168,7 @@ internal static class NorthAmericanCouponCode
 
         if (indicator != 9)
         {
-            Skip(data, ref position, indicator + CompanyPrefixOffset, $"{which} purchase GS1 Company Prefix");
+            Skip(data, ref position, indicator + CompanyPrefixOffset, which, "GS1 Company Prefix");
         }
     }
 
@@ -211,16 +211,30 @@ internal static class NorthAmericanCouponCode
     /// <param name="name">The name of the element, for the error message.</param>
     /// <returns>The digit.</returns>
     private static int Digit(ReadOnlySpan<char> data, ref int position, int minimum, int maximum, string name)
+        => Digit(data, ref position, minimum, maximum, null, name);
+
+    /// <summary>
+    /// Reads one digit of an element of a second or third purchase and checks its range. The name of the
+    /// element joins the purchase only when the error message is built.
+    /// </summary>
+    /// <param name="data">The coupon code.</param>
+    /// <param name="position">The read position.</param>
+    /// <param name="minimum">The smallest value.</param>
+    /// <param name="maximum">The largest value.</param>
+    /// <param name="which">The purchase the element belongs to, or <see langword="null"/> for an element of the coupon.</param>
+    /// <param name="name">The name of the element, for the error message.</param>
+    /// <returns>The digit.</returns>
+    private static int Digit(ReadOnlySpan<char> data, ref int position, int minimum, int maximum, string? which, string name)
     {
         if (position >= data.Length)
         {
-            throw new ArgumentException($"The coupon code is too short: the {name} is missing.", nameof(data));
+            throw new ArgumentException($"The coupon code is too short: the {ElementName(which, name)} is missing.", nameof(data));
         }
 
         int value = data[position++] - '0';
         if (value < minimum || value > maximum)
         {
-            throw new ArgumentException($"The {name} of a coupon code is {minimum} to {maximum}; got {value}.", nameof(data));
+            throw new ArgumentException($"The {ElementName(which, name)} of a coupon code is {minimum} to {maximum}; got {value}.", nameof(data));
         }
 
         return value;
@@ -234,12 +248,34 @@ internal static class NorthAmericanCouponCode
     /// <param name="count">The number of digits.</param>
     /// <param name="name">The name of the element, for the error message.</param>
     private static void Skip(ReadOnlySpan<char> data, ref int position, int count, string name)
+        => Skip(data, ref position, count, null, name);
+
+    /// <summary>
+    /// Skips the digits of an element of a second or third purchase. The name of the element joins the
+    /// purchase only when the error message is built.
+    /// </summary>
+    /// <param name="data">The coupon code.</param>
+    /// <param name="position">The read position.</param>
+    /// <param name="count">The number of digits.</param>
+    /// <param name="which">The purchase the element belongs to, or <see langword="null"/> for an element of the coupon.</param>
+    /// <param name="name">The name of the element, for the error message.</param>
+    private static void Skip(ReadOnlySpan<char> data, ref int position, int count, string? which, string name)
     {
         if (position + count > data.Length)
         {
-            throw new ArgumentException($"The coupon code is too short: the {name} is cut off.", nameof(data));
+            throw new ArgumentException($"The coupon code is too short: the {ElementName(which, name)} is cut off.", nameof(data));
         }
 
         position += count;
     }
+
+    /// <summary>
+    /// Returns the name of an element for an error message: the purchase it belongs to, when it belongs to
+    /// one, and its own name.
+    /// </summary>
+    /// <param name="which">The purchase the element belongs to, or <see langword="null"/>.</param>
+    /// <param name="name">The name of the element.</param>
+    /// <returns>The name for the message.</returns>
+    private static string ElementName(string? which, string name)
+        => which is null ? name : $"{which} purchase {name}";
 }

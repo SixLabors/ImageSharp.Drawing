@@ -145,21 +145,18 @@ internal static class DataBarEncoder
     /// <param name="gtin">The 14 digit GTIN.</param>
     /// <param name="nominalHeight">The nominal height of the variation in modules.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildLinear(ReadOnlySpan<char> gtin, float nominalHeight, BarcodeOptions options)
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildLinear(ReadOnlySpan<char> gtin, float nominalHeight, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         // The element widths start with the guard space, so a zero width bar leads the runs and the widths
         // follow it.
-        int[] runs = new int[ElementCount + 1];
-        _ = EncodeWidths(gtin, runs.AsSpan(1));
+        Span<int> runs = symbol.BeginLinear(ElementCount + 1, out Span<float> heights, out _);
+        _ = EncodeWidths(gtin, runs[1..]);
 
         float barHeight = options.ResolveBarHeight(NominalXDimension, nominalHeight);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        heights.AsSpan().Fill(barHeight);
-
-        BarcodeTextPlacement[] placements = Caption(gtin, Width, barHeight, options);
-        return new LinearBarcodeSymbol(runs, heights, new float[barCount], placements, 0, 0);
+        heights.Fill(barHeight);
+        AddCaption(gtin, Width, barHeight, options, ref symbol);
+        symbol.EndLinear(0, 0);
     }
 
     /// <summary>
@@ -169,15 +166,17 @@ internal static class DataBarEncoder
     /// </summary>
     /// <param name="gtin">The 14 digit GTIN.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static StackedBarcodeSymbol BuildStacked(ReadOnlySpan<char> gtin, BarcodeOptions options)
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildStacked(ReadOnlySpan<char> gtin, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Span<int> widths = stackalloc int[ElementCount];
+        InlineArray64<int> widthStorage = default;
+        Span<int> widths = ((Span<int>)widthStorage)[..ElementCount];
         _ = EncodeWidths(gtin, widths);
 
-        // The three rows share one buffer, which starts zeroed because the project does not skip local
-        // initialization. The separator loop leaves its first module and the last four at zero, light.
-        Span<byte> modules = stackalloc byte[StackedWidth * 3];
+        // The three rows share one buffer, which starts zeroed. The separator loop leaves its first module
+        // and the last four at zero, light.
+        InlineArray256<byte> moduleStorage = default;
+        Span<byte> modules = ((Span<byte>)moduleStorage)[..(StackedWidth * 3)];
         Span<byte> upper = modules[..StackedWidth];
         Span<byte> separator = modules.Slice(StackedWidth, StackedWidth);
         Span<byte> lower = modules.Slice(StackedWidth * 2, StackedWidth);
@@ -197,15 +196,19 @@ internal static class DataBarEncoder
 
         float lowerHeight = options.ResolveBarHeight(NominalXDimension, StackedLowerRowHeight);
         float upperHeight = lowerHeight * StackedUpperRowHeight / StackedLowerRowHeight;
-        LinearBarcodeSymbol[] rows =
-        [
-            DataBarRows.Row(upper, upperHeight),
-            DataBarRows.Row(separator, 1F),
-            DataBarRows.Row(lower, lowerHeight)
-        ];
+        int upperRuns = DataBarRows.RunCount(upper);
+        int separatorRuns = DataBarRows.RunCount(separator);
+        int lowerRuns = DataBarRows.RunCount(lower);
+        symbol.BeginStacked(
+            3,
+            upperRuns + separatorRuns + lowerRuns,
+            ((upperRuns + 1) >> 1) + ((separatorRuns + 1) >> 1) + ((lowerRuns + 1) >> 1));
+        DataBarRows.AddRow(upper, upperHeight, ref symbol);
+        DataBarRows.AddRow(separator, 1F, ref symbol);
+        DataBarRows.AddRow(lower, lowerHeight, ref symbol);
 
-        BarcodeTextPlacement[] placements = Caption(gtin, StackedWidth, upperHeight + 1F + lowerHeight, options);
-        return new StackedBarcodeSymbol(rows, 0F, placements, 0F, 0F);
+        AddCaption(gtin, StackedWidth, upperHeight + 1F + lowerHeight, options, ref symbol);
+        symbol.EndStacked(0F, 0F, 0F);
     }
 
     /// <summary>
@@ -214,15 +217,17 @@ internal static class DataBarEncoder
     /// </summary>
     /// <param name="gtin">The 14 digit GTIN.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static StackedBarcodeSymbol BuildStackedOmnidirectional(ReadOnlySpan<char> gtin, BarcodeOptions options)
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildStackedOmnidirectional(ReadOnlySpan<char> gtin, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Span<int> widths = stackalloc int[ElementCount];
+        InlineArray64<int> widthStorage = default;
+        Span<int> widths = ((Span<int>)widthStorage)[..ElementCount];
         int rightFinder = EncodeWidths(gtin, widths);
 
-        // The five rows share one buffer, which starts zeroed because the project does not skip local
-        // initialization. The separator rows write only some of their modules, and the rest stay light.
-        Span<byte> modules = stackalloc byte[StackedWidth * 5];
+        // The five rows share one buffer, which starts zeroed. The separator rows write only some of their
+        // modules, and the rest stay light.
+        InlineArray256<byte> moduleStorage = default;
+        Span<byte> modules = ((Span<byte>)moduleStorage)[..(StackedWidth * 5)];
         Span<byte> upper = modules[..StackedWidth];
         Span<byte> upperSeparator = modules.Slice(StackedWidth, StackedWidth);
         Span<byte> middleSeparator = modules.Slice(StackedWidth * 2, StackedWidth);
@@ -259,17 +264,24 @@ internal static class DataBarEncoder
         }
 
         float rowHeight = options.ResolveBarHeight(NominalXDimension, StackedOmnidirectionalRowHeight);
-        LinearBarcodeSymbol[] rows =
-        [
-            DataBarRows.Row(upper, rowHeight),
-            DataBarRows.Row(upperSeparator, 1F),
-            DataBarRows.Row(middleSeparator, 1F),
-            DataBarRows.Row(lowerSeparator, 1F),
-            DataBarRows.Row(lower, rowHeight)
-        ];
+        int runCount = 0;
+        int barCount = 0;
+        for (int row = 0; row < 5; row++)
+        {
+            int runs = DataBarRows.RunCount(modules.Slice(row * StackedWidth, StackedWidth));
+            runCount += runs;
+            barCount += (runs + 1) >> 1;
+        }
 
-        BarcodeTextPlacement[] placements = Caption(gtin, StackedWidth, (rowHeight * 2F) + 3F, options);
-        return new StackedBarcodeSymbol(rows, 0F, placements, 0F, 0F);
+        symbol.BeginStacked(5, runCount, barCount);
+        DataBarRows.AddRow(upper, rowHeight, ref symbol);
+        DataBarRows.AddRow(upperSeparator, 1F, ref symbol);
+        DataBarRows.AddRow(middleSeparator, 1F, ref symbol);
+        DataBarRows.AddRow(lowerSeparator, 1F, ref symbol);
+        DataBarRows.AddRow(lower, rowHeight, ref symbol);
+
+        AddCaption(gtin, StackedWidth, (rowHeight * 2F) + 3F, options, ref symbol);
+        symbol.EndStacked(0F, 0F, 0F);
     }
 
     /// <summary>
@@ -297,7 +309,8 @@ internal static class DataBarEncoder
         // even value by the odd combinations, so the quotient and the remainder swap roles.
         // The buffer holds the 32 widths of the four characters, then the odd and the even set of the
         // character being calculated.
-        Span<int> buffer = stackalloc int[40];
+        InlineArray64<int> bufferStorage = default;
+        Span<int> buffer = ((Span<int>)bufferStorage)[..40];
         Span<int> characterWidths = buffer[..32];
         Span<int> odd = buffer.Slice(32, 4);
         Span<int> even = buffer.Slice(36, 4);
@@ -457,22 +470,24 @@ internal static class DataBarEncoder
     }
 
     /// <summary>
-    /// Builds the human readable interpretation below the symbol: the application identifier in
+    /// Adds the human readable interpretation below the symbol: the application identifier in
     /// parentheses and the 14 digits, as section 4.14 of the GS1 General Specifications prints an element
-    /// string.
+    /// string. A symbol without a font carries no text.
     /// </summary>
     /// <param name="gtin">The 14 digit GTIN.</param>
     /// <param name="width">The symbol width in modules.</param>
     /// <param name="height">The symbol height in modules.</param>
     /// <param name="options">The options that carry the font.</param>
-    /// <returns>The placements, empty when the options carry no font.</returns>
-    private static BarcodeTextPlacement[] Caption(ReadOnlySpan<char> gtin, int width, float height, BarcodeOptions options)
+    /// <param name="symbol">The symbol to write.</param>
+    public static void AddCaption(ReadOnlySpan<char> gtin, int width, float height, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         if (options.Font is null)
         {
-            return [];
+            return;
         }
 
-        return [new BarcodeTextPlacement($"(01){gtin}", 0F, width, BarcodeTextSide.BelowBars, height + BarcodeTextPlacement.Clearance)];
+        const string identifier = "(01)";
+        symbol.ReserveText(1, identifier.Length + gtin.Length);
+        symbol.AddText(identifier, gtin, [], 0F, width, BarcodeTextSide.BelowBars, height + BarcodeTextPlacement.Clearance);
     }
 }

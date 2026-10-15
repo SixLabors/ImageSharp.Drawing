@@ -94,9 +94,11 @@ internal static class IntelligentMailEncoder
     {
         UInt128 binary = Binary(text[..TrackingLength], text[TrackingLength..]);
         int fcs = FrameCheckSequence(binary);
-        Span<int> codewords = stackalloc int[CharacterCount];
+        InlineArray10<int> codewordStorage = default;
+        Span<int> codewords = codewordStorage;
         Codewords(binary, fcs, codewords);
-        Span<int> characters = stackalloc int[CharacterCount];
+        InlineArray10<int> characterStorage = default;
+        Span<int> characters = characterStorage;
         Characters(codewords, fcs, characters);
         Bars(characters, states);
     }

@@ -22,7 +22,7 @@ public class Gs1DataBarLimitedSymbologyTests
     [InlineData("(01)1999999999999", "0112422121112151111111211123111114113321114211150")]
     [InlineData("(01)0001234567890", "0111211122111516111111212113111111322231151121150")]
     public void Gs1DataBarLimited_MatchesReferenceWidths(string text, string expected)
-        => Assert.Equal(expected, string.Concat(Encode(text).RunWidths));
+        => Encode(text, (ref symbol) => Assert.Equal(expected, SymbolEncoder.RunString(ref symbol)));
 
     /// <summary>
     /// Section 5.5.2.2 of the GS1 General Specifications: "79X wide, starting with a 1X space and ending with
@@ -30,16 +30,16 @@ public class Gs1DataBarLimitedSymbologyTests
     /// </summary>
     [Fact]
     public void Gs1DataBarLimited_IsSeventyNineModulesWideAndTenHigh()
-    {
-        LinearBarcodeSymbol symbol = Encode("(01)15012345678907");
-        Assert.Equal(79F, symbol.WidthInModules);
-        Assert.Equal(10F, symbol.HeightInModules);
-        Assert.Equal(47, symbol.RunWidths.Length - 2);
-        Assert.Equal(1, symbol.RunWidths[1]);
-        Assert.Equal(5, symbol.RunWidths[^2]);
-        Assert.Equal(0F, symbol.LeadingQuietZone);
-        Assert.Equal(0F, symbol.TrailingQuietZone);
-    }
+        => Encode("(01)15012345678907", static (ref symbol) =>
+        {
+            Assert.Equal(79F, symbol.WidthInModules);
+            Assert.Equal(10F, symbol.HeightInModules);
+            Assert.Equal(47, symbol.Runs.Length - 2);
+            Assert.Equal(1, symbol.Runs[1]);
+            Assert.Equal(5, symbol.Runs[^2]);
+            Assert.Equal(0F, symbol.LeadingQuietZone);
+            Assert.Equal(0F, symbol.TrailingQuietZone);
+        });
 
     /// <summary>
     /// The human readable interpretation is the element string with the check digit, below the bars.
@@ -48,10 +48,12 @@ public class Gs1DataBarLimitedSymbologyTests
     public void Gs1DataBarLimited_TextPrintsTheElementStringWithTheCheckDigit()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Gs1DataBarLimitedSymbology().Encode("(01)1501234567890", options);
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal("(01)15012345678907", placement.Text);
-        Assert.Equal(symbol.HeightInModules + BarcodeTextPlacement.Clearance, placement.TextEdge);
+        SymbolEncoder.Encode(new Gs1DataBarLimitedSymbology(), "(01)1501234567890", options, static (ref symbol) =>
+        {
+            BarcodeTextPlacement placement = Assert.Single(symbol.Text.ToArray());
+            Assert.Equal("(01)15012345678907", symbol.TextOf(placement).ToString());
+            Assert.Equal(symbol.HeightInModules + BarcodeTextPlacement.Clearance, placement.TextEdge);
+        });
     }
 
     /// <summary>
@@ -64,8 +66,13 @@ public class Gs1DataBarLimitedSymbologyTests
     [InlineData("(01)15012345678908")]
     [InlineData("15012345678907")]
     public void Gs1DataBarLimited_RejectsInvalidInput(string text)
-        => Assert.Throws<ArgumentException>(() => Encode(text));
+        => Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new Gs1DataBarLimitedSymbology(), text, new BarcodeOptions()));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new Gs1DataBarLimitedSymbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options and checks the symbol.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="check">The check to run on the encoded symbol.</param>
+    private static void Encode(string text, SymbolEncoder.Check check)
+        => SymbolEncoder.Encode(new Gs1DataBarLimitedSymbology(), text, new BarcodeOptions(), check);
 }

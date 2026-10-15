@@ -36,20 +36,25 @@ public sealed class IdentcodeSymbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Span<char> encoded = stackalloc char[Digits + 1];
+        InlineArray12<char> encodedStorage = default;
+        Span<char> encoded = encodedStorage;
         DeutschePostData.Prepare(text, Digits, encoded);
 
-        ReadOnlySpan<char> digits = encoded;
-        string readable = options.Font is null
-            ? string.Empty
-            : $"{digits[..2]}.{digits[2..5]} {digits[5..8]}.{digits[8..11]} {digits[11]}";
+        // The interpretation groups the twelve digits as 12.345 678.901 2.
+        InlineArray16<char> readableStorage = default;
+        Span<char> readable = readableStorage;
+        encoded[..2].CopyTo(readable);
+        readable[2] = '.';
+        encoded[2..5].CopyTo(readable[3..]);
+        readable[6] = ' ';
+        encoded[5..8].CopyTo(readable[7..]);
+        readable[10] = '.';
+        encoded[8..11].CopyTo(readable[11..]);
+        readable[14] = ' ';
+        readable[15] = encoded[11];
 
-        return Interleaved2Of5Encoder.BuildSymbol(
-            Interleaved2Of5Encoder.Encode(encoded),
-            readable,
-            options,
-            DeutschePostData.NominalBarHeight);
+        Interleaved2Of5Encoder.BuildSymbol(encoded, readable, options, DeutschePostData.NominalBarHeight, ref symbol);
     }
 }

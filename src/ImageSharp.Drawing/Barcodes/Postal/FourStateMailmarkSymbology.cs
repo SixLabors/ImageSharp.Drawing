@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.Drawing.Helpers;
-
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -20,7 +18,7 @@ public sealed class FourStateMailmarkSymbology : BarcodeSymbology
     public override double NominalXDimension => FourStateEncoder.RoyalMail.XDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         int barCount = FourStateMailmarkEncoder.BarCount(text.Length);
@@ -29,9 +27,10 @@ public sealed class FourStateMailmarkSymbology : BarcodeSymbology
             throw new ArgumentException($"A Mailmark application string is 22 characters for barcode C or 26 for barcode L; got {text.Length}.", nameof(text));
         }
 
-        Span<FourState> states = stackalloc FourState[barCount];
+        // Barcode L, the larger, has 79 bars.
+        InlineArray128<FourState> stateStorage = default;
+        Span<FourState> states = ((Span<FourState>)stateStorage)[..barCount];
         FourStateMailmarkEncoder.Encode(text, states);
-        string readable = options.Font is null ? string.Empty : text;
-        return FourStateEncoder.BuildSymbol(states, FourStateEncoder.RoyalMail, readable, options);
+        FourStateEncoder.BuildSymbol(states, FourStateEncoder.RoyalMail, text, options, ref symbol);
     }
 }

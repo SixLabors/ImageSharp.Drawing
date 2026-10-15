@@ -64,6 +64,6 @@ public sealed class Matrix2Of5Symbology : BarcodeSymbology
     public bool PrintCheckDigit { get; }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
-        => Code2Of5Encoder.Encode(text, options, Code2Of5Variant.Matrix, this.CheckDigit, this.PrintCheckDigit);
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+        => Code2Of5Encoder.Encode(text, options, Code2Of5Variant.Matrix, this.CheckDigit, this.PrintCheckDigit, ref symbol);
 }

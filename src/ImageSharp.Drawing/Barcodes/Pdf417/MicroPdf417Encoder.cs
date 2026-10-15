@@ -130,15 +130,21 @@ internal static class MicroPdf417Encoder
     /// <param name="text">The data, the characters U+0000 to U+00FF.</param>
     /// <param name="columns">The number of data columns, 1 to 4, or <see langword="null"/> to choose them from the data.</param>
     /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
+    /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The data is not valid or does not fit the symbol.</exception>
-    public static StackedBarcodeSymbol BuildSymbol(ReadOnlySpan<char> text, int? columns, BarcodeOptions options)
+    public static void BuildSymbol(ReadOnlySpan<char> text, int? columns, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        ValueListBuilder<int> data = new(stackalloc int[Pdf417Codewords.StackBufferLength]);
+        // A character takes at most two data codewords, as in PDF417, and a message format takes one macro
+        // codeword more. The text is bounded, so the builder never grows: short data works inline and
+        // longer data rents once.
+        Guard.MustBeLessThanOrEqualTo(text.Length, Pdf417Codewords.MicroMaximumLength, nameof(text));
+        InlineArray64<int> dataStorage = default;
+        int capacity = (2 * text.Length) + 2;
+        ValueListBuilder<int> data = capacity <= Pdf417Codewords.InlineBufferLength ? new(dataStorage) : new(capacity);
         try
         {
             Pdf417Codewords.EncodeMicro(text, ref data);
-            return BuildSymbol(data.AsSpan(), columns, options);
+            BuildSymbol(data.AsSpan(), columns, options, ref symbol);
         }
         finally
         {
@@ -152,9 +158,9 @@ internal static class MicroPdf417Encoder
     /// <param name="data">The data codewords.</param>
     /// <param name="columns">The number of data columns, 1 to 4, or <see langword="null"/> to choose them from the data.</param>
     /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
+    /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The data does not fit the symbol.</exception>
-    private static StackedBarcodeSymbol BuildSymbol(ReadOnlySpan<int> data, int? columns, BarcodeOptions options)
+    private static void BuildSymbol(ReadOnlySpan<int> data, int? columns, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         ReadOnlySpan<byte> sizes = Sizes;
         int size = 0;
@@ -176,13 +182,13 @@ internal static class MicroPdf417Encoder
         int c = sizes[size];
         int r = sizes[size + 1];
         int k = sizes[size + 2];
-        Span<int> codewords = stackalloc int[MaximumCodewords];
-        codewords = codewords[..(c * r)];
+        InlineArray256<int> codewordStorage = default;
+        Span<int> codewords = ((Span<int>)codewordStorage)[..(c * r)];
         data.CopyTo(codewords);
         codewords[data.Length..^k].Fill(Pdf417Codewords.Pad);
         Pdf417Codewords.AppendErrorCorrection(codewords, k);
 
-        return BuildRows(codewords, c, r, sizes[size + 3], sizes[size + 4], sizes[size + 5], options);
+        BuildRows(codewords, c, r, sizes[size + 3], sizes[size + 4], sizes[size + 5], options, ref symbol);
     }
 
     /// <summary>
@@ -197,23 +203,25 @@ internal static class MicroPdf417Encoder
     /// <param name="centre">The centre row address pattern of the first row, counted from 1.</param>
     /// <param name="right">The right row address pattern of the first row, counted from 1.</param>
     /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    private static StackedBarcodeSymbol BuildRows(ReadOnlySpan<int> codewords, int c, int r, int left, int centre, int right, BarcodeOptions options)
+    /// <param name="symbol">The symbol to write.</param>
+    private static void BuildRows(
+        ReadOnlySpan<int> codewords,
+        int c,
+        int r,
+        int left,
+        int centre,
+        int right,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
     {
         bool hasCentre = c >= 3;
         int centreAfter = c - 2;
         int runCount = (2 * AddressPatternElements) + (c * Pdf417Patterns.ElementCount) + 1 + (hasCentre ? AddressPatternElements : 0);
 
-        // Every row has the same bar count, height and top, so the rows share one heights array and one
-        // tops array.
-        int barCount = (runCount + 1) / 2;
         float rowHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, NominalRowHeight);
-        float[] heights = new float[barCount];
-        heights.AsSpan().Fill(rowHeight);
-        float[] tops = new float[barCount];
 
         ReadOnlySpan<int> patterns = Pdf417Patterns.Modules;
-        LinearBarcodeSymbol[] rows = new LinearBarcodeSymbol[r];
+        symbol.BeginStacked(r, r * runCount, r * ((runCount + 1) >> 1));
         for (int row = 0; row < r; row++)
         {
             // Each row address pattern steps through its table from the first one of the size, and the
@@ -223,7 +231,8 @@ internal static class MicroPdf417Encoder
             int cluster = (row + left - 1) % 3;
             ReadOnlySpan<int> clusterPatterns = patterns.Slice(cluster * Pdf417Patterns.CodewordCount, Pdf417Patterns.CodewordCount);
 
-            int[] runs = new int[runCount];
+            Span<int> runs = symbol.AddRow(runCount, out Span<float> heights, out _);
+            heights.Fill(rowHeight);
             int index = 0;
             Pdf417Patterns.AppendElements(runs, ref index, SideAddressPatterns[leftIndex], AddressPatternModules, AddressPatternElements);
             for (int column = 0; column < c; column++)
@@ -240,10 +249,8 @@ internal static class MicroPdf417Encoder
             int rightModules = SideAddressPatterns[(row + right - 1) % AddressPatternCount];
             Pdf417Patterns.AppendElements(runs, ref index, rightModules, AddressPatternModules, AddressPatternElements);
             runs[index] = 1;
-
-            rows[row] = new LinearBarcodeSymbol(runs, heights, tops, [], 0, 0);
         }
 
-        return new StackedBarcodeSymbol(rows, 0F, [], QuietZone, QuietZone, QuietZone, QuietZone);
+        symbol.EndStacked(0F, QuietZone, QuietZone, QuietZone, QuietZone);
     }
 }

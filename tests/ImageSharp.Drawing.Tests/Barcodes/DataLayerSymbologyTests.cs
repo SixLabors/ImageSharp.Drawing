@@ -24,39 +24,41 @@ public class DataLayerSymbologyTests
     [InlineData("0-306-40615-2", "1,1,1,1,3,1,2,3,1,2,1,1,1,2,3,1,4,1,1,1,1,2,3,1,1,1,4,1,1,1,1,1,1,1,3,2,3,2,1,1,1,1,1,4,2,2,2,1,1,2,3,1,1,3,1,2,1,1,1")]
     [InlineData("3-540-49698", "1,1,1,1,3,1,2,3,1,2,1,1,1,4,1,1,2,3,1,2,3,1,1,3,2,1,1,1,1,1,1,1,1,1,3,2,3,1,1,2,1,1,1,4,3,1,1,2,1,2,1,3,1,1,3,2,1,1,1")]
     public void Isbn_EncodesExpectedModuleSequence(string text, string expectedRuns)
-        => Assert.Equal(expectedRuns, RunsToString(Encode(new IsbnSymbology(), text)));
+        => Assert.Equal(expectedRuns, Encode(new IsbnSymbology(), text));
 
     [Fact]
     public void Isbn_CaptionAndLayout()
     {
         BarcodeOptions options = CreateTextOptions();
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new IsbnSymbology().Encode("978-0-306-40615", options);
+        SymbolEncoder.Encode(new IsbnSymbology(), "978-0-306-40615", options, (ref symbol) =>
+        {
+            // The caption prints the hyphenated ISBN with the EAN-13 check digit above the bars, spanning the
+            // main body of the symbol, and the bars shift down to clear it. The emitter derives the caption
+            // size from that span, so the placement scale is neutral.
+            BarcodeTextPlacement caption = symbol.Text[^1];
+            Assert.Equal("ISBN 978-0-306-40615-7", symbol.TextOf(caption).ToString());
+            Assert.Equal(BarcodeTextSide.AboveBars, caption.Side);
+            Assert.Equal(-BarcodeTextPlacement.Clearance, caption.TextEdge);
+            Assert.Equal(0, caption.Left);
+            Assert.Equal(95, caption.Right);
+            Assert.Equal(1F, caption.FontScale);
+            Assert.True(caption.IsCaption);
+            Assert.Equal(14, symbol.Text.Length);
 
-        // The caption prints the hyphenated ISBN with the EAN-13 check digit above the bars, spanning the
-        // main body of the symbol, and the bars shift down to clear it. The emitter derives the caption
-        // size from that span, so the placement scale is neutral.
-        BarcodeTextPlacement caption = symbol.Text[symbol.Text.Length - 1];
-        Assert.Equal("ISBN 978-0-306-40615-7", caption.Text);
-        Assert.Equal(BarcodeTextSide.AboveBars, caption.Side);
-        Assert.Equal(-BarcodeTextPlacement.Clearance, caption.TextEdge);
-        Assert.Equal(0, caption.Left);
-        Assert.Equal(95, caption.Right);
-        Assert.Equal(1F, caption.FontScale);
-        Assert.True(caption.IsCaption);
-        Assert.Equal(14, symbol.Text.Length);
-
-        // The room a caption needs above the bars belongs to the renderer, which is what knows the font,
-        // so the symbol itself leaves every bar top aligned whether or not it carries a caption.
-        Assert.All(symbol.BarTops, top => Assert.Equal(0, top));
+            // The room a caption needs above the bars belongs to the renderer, which is what knows the font,
+            // so the symbol itself leaves every bar top aligned whether or not it carries a caption.
+            Assert.All(symbol.BarTops.ToArray(), top => Assert.Equal(0, top));
+        });
 
         // An ISBN-10 input captions its converted 978 form.
-        symbol = (LinearBarcodeSymbol)new IsbnSymbology().Encode("0-306-40615-2", options);
-        Assert.Equal("ISBN 978-0-306-40615-7", symbol.Text[symbol.Text.Length - 1].Text);
+        Assert.Equal("ISBN 978-0-306-40615-7", SymbolEncoder.Read(new IsbnSymbology(), "0-306-40615-2", options, SymbolEncoder.Texts)[^1]);
 
         // Without a font there is no caption and no strip.
-        symbol = Encode(new IsbnSymbology(), "978-0-306-40615-7");
-        Assert.Empty(symbol.Text);
-        Assert.All(symbol.BarTops, top => Assert.Equal(0, top));
+        SymbolEncoder.Encode(new IsbnSymbology(), "978-0-306-40615-7", new BarcodeOptions(), (ref symbol) =>
+        {
+            Assert.True(symbol.Text.IsEmpty);
+            Assert.All(symbol.BarTops.ToArray(), top => Assert.Equal(0, top));
+        });
     }
 
     [Theory]
@@ -76,7 +78,7 @@ public class DataLayerSymbologyTests
     [InlineData("979-0-2600-0043-8", "1,1,1,1,3,1,2,2,1,1,3,1,1,2,3,2,1,2,2,4,1,1,1,3,2,1,1,1,1,1,1,1,3,2,1,1,3,2,1,1,3,2,1,1,1,1,3,2,1,4,1,1,1,2,1,3,1,1,1")]
     [InlineData("M-2306-7118", "1,1,1,1,3,1,2,2,1,1,3,1,1,2,3,2,1,2,2,1,1,4,1,3,2,1,1,1,1,1,1,1,1,1,1,4,1,3,1,2,2,2,2,1,2,2,2,1,1,2,1,3,1,3,1,2,1,1,1")]
     public void Ismn_EncodesExpectedModuleSequence(string text, string expectedRuns)
-        => Assert.Equal(expectedRuns, RunsToString(Encode(new IsmnSymbology(), text)));
+        => Assert.Equal(expectedRuns, Encode(new IsmnSymbology(), text));
 
     [Fact]
     public void Ismn_Caption()
@@ -84,11 +86,9 @@ public class DataLayerSymbologyTests
         BarcodeOptions options = CreateTextOptions();
 
         // ISO 10957:2009 displays an ISMN only in its 979-0 form, so an M form input converts for the caption.
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new IsmnSymbology().Encode("M-2306-7118", options);
-        Assert.Equal("ISMN 979-0-2306-7118-7", symbol.Text[symbol.Text.Length - 1].Text);
+        Assert.Equal("ISMN 979-0-2306-7118-7", SymbolEncoder.Read(new IsmnSymbology(), "M-2306-7118", options, SymbolEncoder.Texts)[^1]);
 
-        symbol = (LinearBarcodeSymbol)new IsmnSymbology().Encode("979-0-2600-0043-8", options);
-        Assert.Equal("ISMN 979-0-2600-0043-8", symbol.Text[symbol.Text.Length - 1].Text);
+        Assert.Equal("ISMN 979-0-2600-0043-8", SymbolEncoder.Read(new IsmnSymbology(), "979-0-2600-0043-8", options, SymbolEncoder.Texts)[^1]);
     }
 
     [Theory]
@@ -107,18 +107,16 @@ public class DataLayerSymbologyTests
     [InlineData("0317-8471", "1,1,1,1,3,1,2,2,1,3,1,1,1,2,3,1,4,1,1,1,2,2,2,1,3,1,2,1,1,1,1,1,1,2,1,3,1,1,3,2,1,3,1,2,3,2,1,1,3,2,1,1,2,2,2,1,1,1,1")]
     [InlineData("2434-561X 05", "1,1,1,1,3,1,2,2,1,3,1,2,2,1,2,1,1,3,2,1,1,4,1,1,1,3,2,1,1,1,1,1,1,2,3,1,1,1,1,4,2,2,2,1,3,2,1,1,1,2,3,1,2,2,2,1,1,1,1")]
     public void Issn_EncodesExpectedModuleSequence(string text, string expectedRuns)
-        => Assert.Equal(expectedRuns, RunsToString(Encode(new IssnSymbology(), text)));
+        => Assert.Equal(expectedRuns, Encode(new IssnSymbology(), text));
 
     [Fact]
     public void Issn_Caption()
     {
         BarcodeOptions options = CreateTextOptions();
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new IssnSymbology().Encode("0317-8471", options);
-        Assert.Equal("ISSN 0317-8471", symbol.Text[symbol.Text.Length - 1].Text);
+        Assert.Equal("ISSN 0317-8471", SymbolEncoder.Read(new IssnSymbology(), "0317-8471", options, SymbolEncoder.Texts)[^1]);
 
         // The caption prints the ISSN check character, X for ten, not the sequence variant.
-        symbol = (LinearBarcodeSymbol)new IssnSymbology().Encode("2434-561X 05", options);
-        Assert.Equal("ISSN 2434-561X", symbol.Text[symbol.Text.Length - 1].Text);
+        Assert.Equal("ISSN 2434-561X", SymbolEncoder.Read(new IssnSymbology(), "2434-561X 05", options, SymbolEncoder.Texts)[^1]);
     }
 
     [Theory]
@@ -139,28 +137,30 @@ public class DataLayerSymbologyTests
     public void Mands_EncodesExpectedModuleSequence(string text)
         => Assert.Equal(
             "1,1,1,3,2,1,1,3,2,1,1,1,1,1,4,1,1,3,2,1,1,1,1,1,2,1,2,2,2,2,2,1,2,2,2,1,1,2,1,3,1,1,1",
-            RunsToString(Encode(new MandsSymbology(), text)));
+            Encode(new MandsSymbology(), text));
 
     [Fact]
     public void Mands_Layout()
     {
         BarcodeOptions options = CreateTextOptions();
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new MandsSymbology().Encode("0642118", options);
+        SymbolEncoder.Encode(new MandsSymbology(), "0642118", options, (ref symbol) =>
+        {
+            // Per the reference implementation: the centre guard bars stay at digit height while the outer guards extend, the padded
+            // leading zero and the final cell are hidden, and M and S print in the quiet zones.
+            float digitHeight = symbol.BarHeights.ToArray().Min();
+            Assert.Equal(digitHeight, symbol.BarHeights[10]);
+            Assert.Equal(digitHeight, symbol.BarHeights[11]);
+            Assert.Equal(digitHeight + 5, symbol.BarHeights[0]);
+            Assert.Equal(digitHeight + 5, symbol.BarHeights[21]);
 
-        // Per the reference implementation: the centre guard bars stay at digit height while the outer guards extend, the padded
-        // leading zero and the final cell are hidden, and M and S print in the quiet zones.
-        float digitHeight = symbol.BarHeights.Min();
-        Assert.Equal(digitHeight, symbol.BarHeights[10]);
-        Assert.Equal(digitHeight, symbol.BarHeights[11]);
-        Assert.Equal(digitHeight + 5, symbol.BarHeights[0]);
-        Assert.Equal(digitHeight + 5, symbol.BarHeights[21]);
-
-        Assert.Equal(9, symbol.Text.Length);
-        Assert.Equal("0642118", string.Concat(symbol.Text.Take(7).Select(placement => placement.Text)));
-        Assert.Equal("M", symbol.Text[7].Text);
-        Assert.Equal("S", symbol.Text[8].Text);
-        Assert.True(symbol.Text[7].Left < 0);
-        Assert.True(symbol.Text[8].Left > symbol.WidthInModules);
+            string[] texts = SymbolEncoder.Texts(ref symbol);
+            Assert.Equal(9, texts.Length);
+            Assert.Equal("0642118", string.Concat(texts.Take(7)));
+            Assert.Equal("M", texts[7]);
+            Assert.Equal("S", texts[8]);
+            Assert.True(symbol.Text[7].Left < 0);
+            Assert.True(symbol.Text[8].Left > symbol.WidthInModules);
+        });
     }
 
     [Theory]
@@ -171,8 +171,14 @@ public class DataLayerSymbologyTests
     public void Mands_RejectsInvalidInput(string text)
         => Assert.Throws<ArgumentException>(() => Encode(new MandsSymbology(), text));
 
-    private static LinearBarcodeSymbol Encode(BarcodeSymbology symbology, string text)
-        => (LinearBarcodeSymbol)symbology.Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="symbology">The symbology to encode with.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol, separated by commas.</returns>
+    private static string Encode(BarcodeSymbology symbology, string text)
+        => SymbolEncoder.Read(symbology, text, new BarcodeOptions(), static (ref symbol) => string.Join(',', symbol.Runs.ToArray()));
 
     private static BarcodeOptions CreateTextOptions()
         => new()
@@ -182,7 +188,4 @@ public class DataLayerSymbologyTests
             BarHeight = 50F * BarcodeSymbology.PointXDimension,
             Font = BarcodeFonts.OcrB.CreateFont(10.75F),
         };
-
-    private static string RunsToString(LinearBarcodeSymbol symbol)
-        => string.Join(',', symbol.RunWidths);
 }

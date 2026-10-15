@@ -17,20 +17,33 @@ public sealed class KixSymbology : BarcodeSymbology
     public override double NominalXDimension => FourStateEncoder.RoyalMail.XDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, RoyalMailEncoder.MaximumLength, nameof(text));
         RoyalMailEncoder.Validate(text);
 
-        FourState[] states = new FourState[text.Length * RoyalMailEncoder.BarsPerCharacter];
-        for (int i = 0; i < text.Length; i++)
+        // Four bars for each character. The text is at most MaximumLength characters, so a short symbol
+        // works inline and a longer one rents its states once.
+        int barCount = text.Length * RoyalMailEncoder.BarsPerCharacter;
+        InlineArray128<FourState> stateStorage = default;
+        PooledBuffer<FourState> rented = default;
+        Span<FourState> states = barCount <= 128
+            ? ((Span<FourState>)stateStorage)[..barCount]
+            : (rented = new PooledBuffer<FourState>(barCount)).Span;
+        try
         {
-            RoyalMailEncoder.Append(RoyalMailEncoder.Value(text[i]), states.AsSpan(i * RoyalMailEncoder.BarsPerCharacter));
-        }
+            for (int i = 0; i < text.Length; i++)
+            {
+                RoyalMailEncoder.Append(RoyalMailEncoder.Value(text[i]), states[(i * RoyalMailEncoder.BarsPerCharacter)..]);
+            }
 
-        string readable = options.Font is null ? string.Empty : text;
-        return FourStateEncoder.BuildSymbol(states, FourStateEncoder.RoyalMail, readable, options);
+            FourStateEncoder.BuildSymbol(states, FourStateEncoder.RoyalMail, text, options, ref symbol);
+        }
+        finally
+        {
+            rented.Dispose();
+        }
     }
 }

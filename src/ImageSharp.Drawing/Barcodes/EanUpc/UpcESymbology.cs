@@ -15,7 +15,6 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 public sealed class UpcESymbology : BarcodeSymbology
 {
     private const int Width = 51;
-    private const int BarCount = 17;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UpcESymbology"/> class.
@@ -34,7 +33,7 @@ public sealed class UpcESymbology : BarcodeSymbology
     public override double NominalXDimension => EanUpcEncoder.NominalXDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
@@ -55,7 +54,8 @@ public sealed class UpcESymbology : BarcodeSymbology
 
         // The check digit is computed over the expanded UPC-A number, not the compressed digits, per the
         // zero suppression rules of ISO/IEC 15420.
-        Span<char> expanded = stackalloc char[11];
+        InlineArray12<char> expandedStorage = default;
+        Span<char> expanded = ((Span<char>)expandedStorage)[..11];
         int check = Gs1Data.ComputeCheckDigit(Expand(text, expanded));
         if (text.Length == 8 && text[7] - '0' != check)
         {
@@ -68,7 +68,8 @@ public sealed class UpcESymbology : BarcodeSymbology
             parity = ~parity & 0b111111;
         }
 
-        Span<byte> modules = stackalloc byte[Width];
+        InlineArray64<byte> moduleStorage = default;
+        Span<byte> modules = ((Span<byte>)moduleStorage)[..Width];
         int position = 0;
         EanUpcEncoder.AppendPattern(modules, ref position, 0b101, 3);
         for (int i = 1; i <= 6; i++)
@@ -79,36 +80,23 @@ public sealed class UpcESymbology : BarcodeSymbology
 
         EanUpcEncoder.AppendPattern(modules, ref position, 0b010101, 6);
 
+        EanUpcEncoder.BeginRuns(modules, ref symbol, out Span<float> heights);
         float barHeight = options.ResolveBarHeight(EanUpcEncoder.NominalXDimension, EanUpcEncoder.NominalBarHeight);
-        EanUpcEncoder.BuildGuardedHeights(BarCount, barHeight, GuardBars, options, out float[] heights, out float[] tops);
+        EanUpcEncoder.FillGuardedHeights(heights, barHeight, GuardBars, options);
 
         // ISO/IEC 15420 prints the number system digit in the leading quiet zone, the check digit in the
         // trailing quiet zone and every other digit below its own symbol character. Digits hang one module below the
         // digit bars and flow past the extended guard bars, as in the nominal symbol drawing.
-        BarcodeTextPlacement[] placements = [];
         if (options.Font is not null)
         {
             float textLine = barHeight + BarcodeTextPlacement.Clearance;
-            placements = new BarcodeTextPlacement[8];
-            placements[0] = new BarcodeTextPlacement(
-                EanUpcEncoder.DigitString(text[0]),
-                -9F,
-                -2F,
-                BarcodeTextSide.BelowBars,
-                textLine,
-                EanUpcEncoder.QuietZoneDigitScale);
-
-            EanUpcEncoder.FillDigitPlacements(placements, 1, text, 1, 6, 3F, 7F, BarcodeTextSide.BelowBars, textLine);
-            placements[7] = new BarcodeTextPlacement(
-                EanUpcEncoder.DigitString((char)('0' + check)),
-                52F,
-                59F,
-                BarcodeTextSide.BelowBars,
-                textLine,
-                EanUpcEncoder.QuietZoneDigitScale);
+            symbol.ReserveText(8, 8);
+            symbol.AddText(text.AsSpan(0, 1), -9F, -2F, BarcodeTextSide.BelowBars, textLine, EanUpcEncoder.QuietZoneDigitScale);
+            EanUpcEncoder.AddDigits(text.AsSpan(1, 6), 3F, 7F, BarcodeTextSide.BelowBars, textLine, ref symbol);
+            symbol.AddText([(char)('0' + check)], 52F, 59F, BarcodeTextSide.BelowBars, textLine, EanUpcEncoder.QuietZoneDigitScale);
         }
 
-        return new LinearBarcodeSymbol(EanUpcEncoder.ToRuns(modules), heights, tops, placements, 9, 7);
+        symbol.EndLinear(9, 7);
     }
 
     /// <summary>

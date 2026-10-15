@@ -3,6 +3,7 @@
 
 using System.Buffers;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace SixLabors.ImageSharp.Drawing.Helpers;
 
@@ -11,13 +12,15 @@ namespace SixLabors.ImageSharp.Drawing.Helpers;
 /// enough to stack allocate, and moves to a pooled array only when the list outgrows it, so the common case
 /// allocates nothing and the worst case rents rather than allocates.
 /// <para>
-/// The builder owns the rented array, so every instance must be disposed.
+/// The builder owns the rented array, so every instance must be disposed. The array comes from the shared
+/// <see cref="byte"/> pool, which every element type shares, so the values are unmanaged.
 /// </para>
 /// </summary>
 /// <typeparam name="T">The type of the values.</typeparam>
 internal ref struct ValueListBuilder<T>
+    where T : unmanaged
 {
-    private T[]? pooled;
+    private byte[]? pooled;
     private Span<T> values;
     private int position;
 
@@ -39,8 +42,8 @@ internal ref struct ValueListBuilder<T>
     /// <param name="initialCapacity">The number of values to rent room for.</param>
     public ValueListBuilder(int initialCapacity)
     {
-        this.pooled = ArrayPool<T>.Shared.Rent(initialCapacity);
-        this.values = this.pooled;
+        this.pooled = ArrayPool<byte>.Shared.Rent(initialCapacity * Unsafe.SizeOf<T>());
+        this.values = MemoryMarshal.Cast<byte, T>(this.pooled.AsSpan());
         this.position = 0;
     }
 
@@ -127,14 +130,14 @@ internal ref struct ValueListBuilder<T>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose()
     {
-        T[]? toReturn = this.pooled;
+        byte[]? toReturn = this.pooled;
 
         // Clearing the whole builder stops a caller who keeps using a disposed instance from writing into
         // an array another caller now owns.
         this = default;
         if (toReturn is not null)
         {
-            ArrayPool<T>.Shared.Return(toReturn, RuntimeHelpers.IsReferenceOrContainsReferences<T>());
+            ArrayPool<byte>.Shared.Return(toReturn);
         }
     }
 
@@ -146,18 +149,22 @@ internal ref struct ValueListBuilder<T>
     [MethodImpl(MethodImplOptions.NoInlining)]
     private void Grow(int additionalCapacity)
     {
+        // The byte length of the new array must fit an array, so the element count stops at the largest
+        // array length divided by the element size.
         int newCapacity = (int)Math.Max(
             (uint)(this.position + additionalCapacity),
-            Math.Min((uint)this.values.Length * 2, (uint)Array.MaxLength));
+            Math.Min((uint)this.values.Length * 2, (uint)(Array.MaxLength / Unsafe.SizeOf<T>())));
 
-        T[] rented = ArrayPool<T>.Shared.Rent(newCapacity);
-        this.values[..this.position].CopyTo(rented);
+        byte[] rented = ArrayPool<byte>.Shared.Rent(newCapacity * Unsafe.SizeOf<T>());
+        Span<T> grown = MemoryMarshal.Cast<byte, T>(rented.AsSpan());
+        this.values[..this.position].CopyTo(grown);
 
-        T[]? toReturn = this.pooled;
-        this.values = this.pooled = rented;
+        byte[]? toReturn = this.pooled;
+        this.pooled = rented;
+        this.values = grown;
         if (toReturn is not null)
         {
-            ArrayPool<T>.Shared.Return(toReturn, RuntimeHelpers.IsReferenceOrContainsReferences<T>());
+            ArrayPool<byte>.Shared.Return(toReturn);
         }
     }
 }

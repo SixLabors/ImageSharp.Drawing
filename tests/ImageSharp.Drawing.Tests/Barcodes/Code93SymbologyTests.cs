@@ -18,10 +18,7 @@ public class Code93SymbologyTests
     [InlineData("ABC-123", "1111412111132112122113111211311112131113121114111111231113211111411")]
     [InlineData("TEST93", "1111412112212212112111222112211411111114111131211213111111411")]
     public void MatchesReferenceRuns(string text, string expected)
-    {
-        LinearBarcodeSymbol symbol = Encode(text);
-        Assert.Equal(expected, string.Concat(symbol.RunWidths));
-    }
+        => Assert.Equal(expected, string.Concat(Encode(text)));
 
     /// <summary>
     /// ANSI/AIM BC5-1995 fixes both check characters, so every symbol carries them. Decoding the
@@ -40,8 +37,8 @@ public class Code93SymbologyTests
         const int start = 6;
         const int elements = 6;
 
-        int[] runs = Encode(text).RunWidths;
-        int[] expected = Encode(checks).RunWidths;
+        int[] runs = Encode(text);
+        int[] expected = Encode(checks);
 
         Assert.Equal(
             expected.AsSpan(start, elements * checks.Length).ToArray(),
@@ -61,7 +58,7 @@ public class Code93SymbologyTests
     public void SpansNineModulesPerCharacter(string text)
     {
         int widthInModules = 0;
-        foreach (int run in Encode(text).RunWidths)
+        foreach (int run in Encode(text))
         {
             widthInModules += run;
         }
@@ -83,6 +80,11 @@ public class Code93SymbologyTests
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new Code93Symbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static int[] Encode(string text)
+        => SymbolEncoder.Read(new Code93Symbology(), text, new BarcodeOptions(), static (ref symbol) => symbol.Runs.ToArray());
 }

@@ -43,7 +43,7 @@ public sealed class FlattermarkenSymbology : BarcodeSymbology
     public override double NominalXDimension => XDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
@@ -59,8 +59,9 @@ public sealed class FlattermarkenSymbology : BarcodeSymbology
             }
         }
 
-        // One bar and one space per digit at most, plus a zero width bar at either end.
-        int[] buffer = new int[(text.Length * 2) + 3];
+        // One bar and one space per digit at most, plus a zero width bar at either end. The symbol reserves
+        // that many runs and keeps those written.
+        Span<int> buffer = symbol.BeginLinear((text.Length * 2) + 3, out Span<float> heights, out _);
         int written = 0;
         int space = 0;
         for (int i = 0; i < text.Length; i++)
@@ -98,19 +99,16 @@ public sealed class FlattermarkenSymbology : BarcodeSymbology
             buffer[written++] = 0;
         }
 
-        int[] runs = buffer[..written];
+        symbol.TrimLastRow(written);
         float barHeight = options.ResolveBarHeight(XDimension, NominalBarHeight);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
-        heights.AsSpan().Fill(barHeight);
+        heights[..((written + 1) >> 1)].Fill(barHeight);
 
-        BarcodeTextPlacement[] placements = [];
         if (options.Font is not null)
         {
-            placements = [new BarcodeTextPlacement(text, 0F, text.Length * Window, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
+            symbol.ReserveText(1, text.Length);
+            symbol.AddText(text, 0F, text.Length * Window, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
         }
 
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, 0, 0);
+        symbol.EndLinear(0, 0);
     }
 }

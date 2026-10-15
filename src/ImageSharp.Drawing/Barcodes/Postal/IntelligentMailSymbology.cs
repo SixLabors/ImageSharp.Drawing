@@ -20,7 +20,7 @@ public sealed class IntelligentMailSymbology : BarcodeSymbology
     public override double NominalXDimension => UspsPostalEncoder.NominalXDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         if (text.Length is not (20 or 25 or 29 or 31))
@@ -36,10 +36,15 @@ public sealed class IntelligentMailSymbology : BarcodeSymbology
             throw new ArgumentException($"The second digit of the barcode identifier is 0 to 4; got {text[1]}.", nameof(text));
         }
 
-        Span<FourState> states = stackalloc FourState[IntelligentMailEncoder.BarCount];
+        InlineArray65<FourState> stateStorage = default;
+        Span<FourState> states = stateStorage;
         IntelligentMailEncoder.Encode(text, states);
-        string readable = options.Font is null ? string.Empty : HumanReadable(text);
-        return FourStateEncoder.BuildSymbol(states, IntelligentMailEncoder.Metrics, readable, options);
+
+        // The 31 digits and the six spaces between their groups.
+        InlineArray64<char> lineStorage = default;
+        Span<char> line = lineStorage;
+        int lineLength = options.Font is null ? 0 : HumanReadable(text, line);
+        FourStateEncoder.BuildSymbol(states, IntelligentMailEncoder.Metrics, line[..lineLength], options, ref symbol);
     }
 
     /// <summary>
@@ -48,11 +53,12 @@ public sealed class IntelligentMailSymbology : BarcodeSymbology
     /// digits and the serial number 6, and otherwise 6 and 9.
     /// </summary>
     /// <param name="text">The digits, already validated.</param>
-    /// <returns>The line.</returns>
-    private static string HumanReadable(string text)
+    /// <param name="line">The buffer that receives the line.</param>
+    /// <returns>The length of the line.</returns>
+    private static int HumanReadable(string text, Span<char> line)
     {
         int mailerIdLength = text[5] == '9' ? 9 : 6;
-        ValueStringBuilder builder = new(stackalloc char[text.Length + 6]);
+        ValueStringBuilder builder = new(line);
         builder.Append(text.AsSpan(0, 2));
         builder.Append(' ');
         builder.Append(text.AsSpan(2, 3));
@@ -70,6 +76,6 @@ public sealed class IntelligentMailSymbology : BarcodeSymbology
             position += groups[i];
         }
 
-        return builder.ToString();
+        return builder.Length;
     }
 }

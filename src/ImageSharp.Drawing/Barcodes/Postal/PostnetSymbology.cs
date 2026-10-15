@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.Drawing.Helpers;
-
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -18,7 +16,7 @@ public sealed class PostnetSymbology : BarcodeSymbology
     public override double NominalXDimension => UspsPostalEncoder.NominalXDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         if (text.Length is not (5 or 9 or 11))
@@ -28,10 +26,11 @@ public sealed class PostnetSymbology : BarcodeSymbology
 
         UspsPostalEncoder.ValidateDigits(text);
 
-        Span<char> digits = stackalloc char[text.Length + 1];
+        // At most eleven digits and the correction digit.
+        InlineArray12<char> digitStorage = default;
+        Span<char> digits = ((Span<char>)digitStorage)[..(text.Length + 1)];
         text.AsSpan().CopyTo(digits);
         digits[^1] = (char)('0' + UspsPostalEncoder.CorrectionDigit(text));
-        string readable = options.Font is null ? string.Empty : text;
-        return UspsPostalEncoder.BuildSymbol(digits, readable, options, true);
+        UspsPostalEncoder.BuildSymbol(digits, text, options, true, ref symbol);
     }
 }

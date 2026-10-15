@@ -109,8 +109,8 @@ internal static class DataBarLimitedEncoder
     /// </summary>
     /// <param name="gtin">The 14 digit GTIN, whose first digit is 0 or 1.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol Build(ReadOnlySpan<char> gtin, BarcodeOptions options)
+    /// <param name="symbol">The symbol to write.</param>
+    public static void Build(ReadOnlySpan<char> gtin, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         // The check digit is not encoded: the 13 digits before it are the data value.
         long value = 0;
@@ -120,14 +120,16 @@ internal static class DataBarLimitedEncoder
         }
 
         // The element widths start with the guard space, so a zero width bar leads the runs, and the
-        // symbol ends on the five module space, so a zero width bar closes them.
-        int[] runs = new int[ElementCount + 2];
-        Span<int> widths = runs.AsSpan(1, ElementCount);
+        // symbol ends on the five module space, so a zero width bar closes them. Both zero width bars are
+        // the zeros the symbol storage starts with.
+        Span<int> runs = symbol.BeginLinear(ElementCount + 2, out Span<float> heights, out _);
+        Span<int> widths = runs.Slice(1, ElementCount);
         widths[0] = 1;
         widths[1] = 1;
 
         // The buffer holds the odd and the even set of the character being calculated.
-        Span<int> sets = stackalloc int[14];
+        InlineArray14<int> setStorage = default;
+        Span<int> sets = setStorage;
         Span<int> odd = sets[..7];
         Span<int> even = sets[7..];
         int check = 0;
@@ -179,16 +181,11 @@ internal static class DataBarLimitedEncoder
         widths[46] = 5;
 
         float barHeight = options.ResolveBarHeight(NominalXDimension, Height);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        heights.AsSpan().Fill(barHeight);
+        heights.Fill(barHeight);
 
         // Section 4.14 of the GS1 General Specifications prints an element string with its Application
         // Identifier in parentheses.
-        BarcodeTextPlacement[] placements = options.Font is null
-            ? []
-            : [new BarcodeTextPlacement($"(01){gtin}", 0F, Width, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
-
-        return new LinearBarcodeSymbol(runs, heights, new float[barCount], placements, 0, 0);
+        DataBarEncoder.AddCaption(gtin, Width, barHeight, options, ref symbol);
+        symbol.EndLinear(0, 0);
     }
 }

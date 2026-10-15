@@ -18,10 +18,7 @@ public class Code93ExtendedSymbologyTests
     [InlineData("abc", "1111411222112111131222112112121222112113111211311312111111411")]
     [InlineData("a@b", "1111411222112111133121112221111222112112121121311122211111411")]
     public void MatchesReferenceRuns(string text, string expected)
-    {
-        LinearBarcodeSymbol symbol = Encode(text);
-        Assert.Equal(expected, string.Concat(symbol.RunWidths));
-    }
+        => Assert.Equal(expected, Encode(text));
 
     /// <summary>
     /// A character the base symbology carries takes one symbol character, and any other takes a shift
@@ -36,15 +33,7 @@ public class Code93ExtendedSymbologyTests
     [InlineData("a@b", 6)]
     [InlineData("A", 1)]
     public void SubstitutesToSymbolCharacters(string text, int characters)
-    {
-        int widthInModules = 0;
-        foreach (int run in Encode(text).RunWidths)
-        {
-            widthInModules += run;
-        }
-
-        Assert.Equal((9 * (characters + 4)) + 1, widthInModules);
-    }
+        => Assert.Equal((9 * (characters + 4)) + 1, SymbolEncoder.Read(new Code93ExtendedSymbology(), text, new BarcodeOptions(), SymbolEncoder.RunSum));
 
     /// <summary>
     /// A symbol whose text substitutes to nothing but base characters is the same symbol the base
@@ -52,12 +41,7 @@ public class Code93ExtendedSymbologyTests
     /// </summary>
     [Fact]
     public void MatchesTheBaseSymbologyForBaseCharacters()
-    {
-        LinearBarcodeSymbol extended = Encode("CODE93");
-        LinearBarcodeSymbol plain = (LinearBarcodeSymbol)new Code93Symbology().Encode("CODE93", new BarcodeOptions());
-
-        Assert.Equal(string.Concat(plain.RunWidths), string.Concat(extended.RunWidths));
-    }
+        => Assert.Equal(SymbolEncoder.Read(new Code93Symbology(), "CODE93", new BarcodeOptions(), SymbolEncoder.RunString), Encode("CODE93"));
 
     /// <summary>
     /// The printed line shows the characters the caller gave rather than the symbol characters that stand
@@ -70,10 +54,9 @@ public class Code93ExtendedSymbologyTests
     public void PrintsTheTextAsGiven(string text, string expected)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Code93ExtendedSymbology().Encode(text, options);
+        string[] texts = SymbolEncoder.Read(new Code93ExtendedSymbology(), text, options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal(expected, placement.Text);
+        Assert.Equal(expected, Assert.Single(texts));
     }
 
     /// <summary>
@@ -87,6 +70,11 @@ public class Code93ExtendedSymbologyTests
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new Code93ExtendedSymbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(string text)
+        => SymbolEncoder.Read(new Code93ExtendedSymbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
 }

@@ -26,14 +26,16 @@ public sealed class RawLinearSymbology : BarcodeSymbology
     private const float NominalBarHeightFraction = 0.15F;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
 
+        // An even count of widths ends on a space, so a zero width bar closes the runs. The storage starts
+        // zero, so that bar needs no write.
         bool endsOnSpace = (text.Length & 1) == 0;
-        int[] runs = new int[text.Length + (endsOnSpace ? 1 : 0)];
+        Span<int> runs = symbol.BeginLinear(text.Length + (endsOnSpace ? 1 : 0), out Span<float> heights, out _);
         int widthInModules = 0;
         int index = 0;
         SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
@@ -50,10 +52,7 @@ public sealed class RawLinearSymbology : BarcodeSymbology
         }
 
         float barHeight = options.ResolveBarHeight(PointXDimension, widthInModules * NominalBarHeightFraction);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
-        heights.AsSpan().Fill(barHeight);
-        return new LinearBarcodeSymbol(runs, heights, tops, [], 0, 0);
+        heights.Fill(barHeight);
+        symbol.EndLinear(0, 0);
     }
 }

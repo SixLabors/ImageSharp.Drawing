@@ -21,10 +21,7 @@ public class Code39SymbologyTests
     [InlineData("A", "13113131113111131131131131311")]
     [InlineData("TEST$/+% .", "13113131111111313311311133111111311133111111313311131313111113131113111311131311111313131113311131113311113111131131311")]
     public void MatchesReferenceRuns(string text, string expected)
-    {
-        LinearBarcodeSymbol symbol = Encode(new Code39Symbology(), text);
-        Assert.Equal(expected, string.Concat(symbol.RunWidths));
-    }
+        => Assert.Equal(expected, Encode(new Code39Symbology(), text));
 
     /// <summary>
     /// The check character is the sum of the character values modulo the size of the set, and it is
@@ -32,12 +29,11 @@ public class Code39SymbologyTests
     /// </summary>
     [Theory]
     [InlineData("CODE39", "13113131113131131111311131131111113311313111331111313311111111331131113331111111131131311")]
-    [InlineData("1234567890", "131131311131131111311133111131313311111111133111313113311111113331111111131131313113113111113311311111133131111133111131131131311")]
+    [InlineData(
+        "1234567890",
+        "131131311131131111311133111131313311111111133111313113311111113331111111131131313113113111113311311111133131111133111131131131311")]
     public void MatchesReferenceRunsWithCheckCharacter(string text, string expected)
-    {
-        LinearBarcodeSymbol symbol = Encode(new Code39Symbology(CheckCharacterMode.Compute), text);
-        Assert.Equal(expected, string.Concat(symbol.RunWidths));
-    }
+        => Assert.Equal(expected, Encode(new Code39Symbology(CheckCharacterMode.Compute), text));
 
     /// <summary>
     /// The worked example in Annex A.1.1: the data "CODE 39" has character values 12, 24, 13, 14, 38, 3
@@ -47,8 +43,8 @@ public class Code39SymbologyTests
     [Fact]
     public void MatchesTheWorkedCheckCharacterExample()
         => Assert.Equal(
-            string.Concat(Encode(new Code39Symbology(), "CODE 39R").RunWidths),
-            string.Concat(Encode(new Code39Symbology(CheckCharacterMode.Compute), "CODE 39").RunWidths));
+            Encode(new Code39Symbology(), "CODE 39R"),
+            Encode(new Code39Symbology(CheckCharacterMode.Compute), "CODE 39"));
 
     /// <summary>
     /// A caller who has already calculated the check character supplies it, and the symbol carries it
@@ -57,8 +53,8 @@ public class Code39SymbologyTests
     [Fact]
     public void ValidatesASuppliedCheckCharacter()
         => Assert.Equal(
-            string.Concat(Encode(new Code39Symbology(CheckCharacterMode.Compute), "CODE39").RunWidths),
-            string.Concat(Encode(new Code39Symbology(CheckCharacterMode.Validate), "CODE39W").RunWidths));
+            Encode(new Code39Symbology(CheckCharacterMode.Compute), "CODE39"),
+            Encode(new Code39Symbology(CheckCharacterMode.Validate), "CODE39W"));
 
     [Fact]
     public void RejectsWrongCheckCharacter()
@@ -108,10 +104,9 @@ public class Code39SymbologyTests
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
         Code39Symbology symbology = new(checkCharacter, printCheckCharacter);
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)symbology.Encode("CODE39", options);
+        string[] texts = SymbolEncoder.Read(symbology, "CODE39", options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal(expected, placement.Text);
+        Assert.Equal(expected, Assert.Single(texts));
     }
 
     /// <summary>
@@ -119,12 +114,12 @@ public class Code39SymbologyTests
     /// </summary>
     [Fact]
     public void DrawsEveryBarAtTheFullHeight()
-    {
-        LinearBarcodeSymbol symbol = Encode(new Code39Symbology(), "CODE39");
-
-        Assert.All(symbol.BarHeights, height => Assert.Equal(symbol.BarHeights[0], height));
-        Assert.All(symbol.BarTops, top => Assert.Equal(0, top));
-    }
+        => SymbolEncoder.Encode(new Code39Symbology(), "CODE39", new BarcodeOptions(), (ref symbol) =>
+        {
+            float first = symbol.BarHeights[0];
+            Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal(first, height));
+            Assert.All(symbol.BarTops.ToArray(), top => Assert.Equal(0, top));
+        });
 
     /// <summary>
     /// Section 4.4 e) recommends a bar height of at least "15 % of symbol width excluding quiet zones",
@@ -132,16 +127,8 @@ public class Code39SymbologyTests
     /// </summary>
     [Fact]
     public void DefaultsTheBarHeightToTheRecommendedMinimum()
-    {
-        LinearBarcodeSymbol symbol = Encode(new Code39Symbology(), "CODE39");
-        int widthInModules = 0;
-        foreach (int run in symbol.RunWidths)
-        {
-            widthInModules += run;
-        }
-
-        Assert.Equal(widthInModules * 0.15F, symbol.BarHeights[0], new ApproximateFloatComparer(1e-3F));
-    }
+        => SymbolEncoder.Encode(new Code39Symbology(), "CODE39", new BarcodeOptions(), (ref symbol) =>
+            Assert.Equal(SymbolEncoder.RunSum(ref symbol) * 0.15F, symbol.BarHeights[0], new ApproximateFloatComparer(1e-3F)));
 
     /// <summary>
     /// Section 4.1 c) gives every symbol character "5 bars and 4 spaces" of which "3 wide and 6 narrow",
@@ -151,16 +138,7 @@ public class Code39SymbologyTests
     /// </summary>
     [Fact]
     public void TakesSixteenModulesPerCharacterWithoutTheGapBehindTheStopCharacter()
-    {
-        LinearBarcodeSymbol symbol = Encode(new Code39Symbology(), "CODE39");
-        int widthInModules = 0;
-        foreach (int run in symbol.RunWidths)
-        {
-            widthInModules += run;
-        }
-
-        Assert.Equal(((6 + 2) * 16) - 1, widthInModules);
-    }
+        => Assert.Equal(((6 + 2) * 16) - 1, SymbolEncoder.Read(new Code39Symbology(), "CODE39", new BarcodeOptions(), SymbolEncoder.RunSum));
 
     /// <summary>
     /// The note to section 4.4 gives the width of a symbol including its quiet zones as
@@ -176,16 +154,21 @@ public class Code39SymbologyTests
     [InlineData("TEST$/+% .", CheckCharacterMode.None, 10)]
     public void MatchesTheSymbolWidthFormula(string text, CheckCharacterMode checkCharacter, int characters)
     {
-        LinearBarcodeSymbol symbol = Encode(new Code39Symbology(checkCharacter), text);
-        float drawn = symbol.LeadingQuietZone + symbol.TrailingQuietZone;
-        foreach (int run in symbol.RunWidths)
-        {
-            drawn += run;
-        }
+        float drawn = SymbolEncoder.Read(
+            new Code39Symbology(checkCharacter),
+            text,
+            new BarcodeOptions(),
+            static (ref symbol) => symbol.LeadingQuietZone + symbol.TrailingQuietZone + SymbolEncoder.RunSum(ref symbol));
 
         Assert.Equal(((characters + 2) * ((3 * 3) + 6)) + (characters + 1) + (2 * 10), drawn);
     }
 
-    private static LinearBarcodeSymbol Encode(Code39Symbology symbology, string text)
-        => (LinearBarcodeSymbol)symbology.Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="symbology">The symbology to encode with.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(Code39Symbology symbology, string text)
+        => SymbolEncoder.Read(symbology, text, new BarcodeOptions(), SymbolEncoder.RunString);
 }

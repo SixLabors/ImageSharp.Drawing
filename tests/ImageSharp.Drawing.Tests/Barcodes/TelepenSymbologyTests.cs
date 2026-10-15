@@ -43,7 +43,7 @@ public class TelepenSymbologyTests
     [InlineData("A", "11111111113311313133131111111311331111111111")]
     [InlineData("Telepen", "111111111133311133111111331313311111131311331313313111111111113313131311131111111113131131331111111111")]
     public void MatchesReferenceRuns(string text, string reference)
-        => Assert.Equal(reference[..^1], string.Concat(Encode(text).RunWidths));
+        => Assert.Equal(reference[..^1], Encode(text));
 
     /// <summary>
     /// Every ASCII character encodes to the bars and spaces of the table. A symbol of one character is
@@ -58,7 +58,7 @@ public class TelepenSymbologyTests
         {
             int check = value == 0 ? 127 : (127 - (value % 127)) % 127;
             string expected = Patterns['_'] + Patterns[value] + Patterns[check] + Patterns['z'];
-            Assert.Equal(expected[..^1], string.Concat(Encode(((char)value).ToString()).RunWidths));
+            Assert.Equal(expected[..^1], Encode(((char)value).ToString()));
         }
     }
 
@@ -89,7 +89,7 @@ public class TelepenSymbologyTests
     [InlineData("1X23", "11111111113333333133131311111113111311331111111111")]
     [InlineData("0123456789", "1111111111333111111131113313131131333313111113111131111311131133113111331111111111")]
     public void PacksDigitsInNumericMode(string text, string reference)
-        => Assert.Equal(reference[..^1], string.Concat(EncodeNumeric(text).RunWidths));
+        => Assert.Equal(reference[..^1], EncodeNumeric(text));
 
     /// <summary>
     /// The printed line shows the text as given. It never shows the start code, the check character or
@@ -100,11 +100,11 @@ public class TelepenSymbologyTests
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
 
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new TelepenSymbology().Encode("ABC123", options);
-        Assert.Equal("ABC123", Assert.Single(symbol.Text).Text);
+        string[] texts = SymbolEncoder.Read(new TelepenSymbology(), "ABC123", options, SymbolEncoder.Texts);
+        Assert.Equal("ABC123", Assert.Single(texts));
 
-        LinearBarcodeSymbol numeric = (LinearBarcodeSymbol)new TelepenNumericSymbology().Encode("1X23", options);
-        Assert.Equal("1X23", Assert.Single(numeric.Text).Text);
+        string[] numeric = SymbolEncoder.Read(new TelepenNumericSymbology(), "1X23", options, SymbolEncoder.Texts);
+        Assert.Equal("1X23", Assert.Single(numeric));
     }
 
     /// <summary>
@@ -116,15 +116,7 @@ public class TelepenSymbologyTests
     [InlineData("ABC123")]
     [InlineData("A")]
     public void SpansSixteenModulesPerCharacter(string text)
-    {
-        int widthInModules = 0;
-        foreach (int run in Encode(text).RunWidths)
-        {
-            widthInModules += run;
-        }
-
-        Assert.Equal((16 * (text.Length + 3)) - 1, widthInModules);
-    }
+        => Assert.Equal((16 * (text.Length + 3)) - 1, SymbolEncoder.Read(new TelepenSymbology(), text, new BarcodeOptions(), SymbolEncoder.RunSum));
 
     [Theory]
     [InlineData("")]
@@ -143,9 +135,19 @@ public class TelepenSymbologyTests
     public void RejectsMalformedNumericInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => EncodeNumeric(text));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new TelepenSymbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(string text)
+        => SymbolEncoder.Read(new TelepenSymbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
 
-    private static LinearBarcodeSymbol EncodeNumeric(string text)
-        => (LinearBarcodeSymbol)new TelepenNumericSymbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text in numeric mode with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string EncodeNumeric(string text)
+        => SymbolEncoder.Read(new TelepenNumericSymbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
 }

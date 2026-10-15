@@ -115,14 +115,19 @@ internal static class UspsPostalEncoder
     /// first and last bars of the barcode are frame bars and must always be full bars."
     /// </summary>
     /// <param name="digits">The digits the symbol carries, the correction digit included.</param>
-    /// <param name="text">The human readable interpretation.</param>
+    /// <param name="readable">The human readable interpretation.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="setBitIsFull">Whether a set bit is a full bar, as in POSTNET, rather than a half bar.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(ReadOnlySpan<char> digits, string text, BarcodeOptions options, bool setBitIsFull)
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(
+        ReadOnlySpan<char> digits,
+        ReadOnlySpan<char> readable,
+        BarcodeOptions options,
+        bool setBitIsFull,
+        ref BarcodeSymbol symbol)
     {
         int barCount = (digits.Length * BarsPerDigit) + 2;
-        int[] runs = new int[(barCount * 2) - 1];
+        Span<int> runs = symbol.BeginLinear((barCount * 2) - 1, out Span<float> heights, out Span<float> tops);
         for (int i = 0; i < runs.Length; i++)
         {
             runs[i] = (i & 1) == 0 ? BarUnits : SpaceUnits;
@@ -130,8 +135,6 @@ internal static class UspsPostalEncoder
 
         float fullBar = options.ResolveBarHeight(NominalXDimension, FullBar);
         float halfBar = fullBar * HalfBar / FullBar;
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
         heights[0] = fullBar;
         heights[barCount - 1] = fullBar;
         int bar = 1;
@@ -148,12 +151,12 @@ internal static class UspsPostalEncoder
         }
 
         float widthInModules = ((barCount * BarUnits) + ((barCount - 1) * SpaceUnits)) * RunUnit;
-        BarcodeTextPlacement[] placements = [];
-        if (options.Font is not null && text.Length > 0)
+        if (options.Font is not null && readable.Length > 0)
         {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, fullBar + TextClearance)];
+            symbol.ReserveText(1, readable.Length);
+            symbol.AddText(readable, 0F, widthInModules, BarcodeTextSide.BelowBars, fullBar + TextClearance);
         }
 
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, ClearZone, ClearZone, 0F, RunUnit, true);
+        symbol.EndLinear(ClearZone, ClearZone, 0F, RunUnit, true);
     }
 }

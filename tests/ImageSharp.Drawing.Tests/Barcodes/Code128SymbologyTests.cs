@@ -46,10 +46,7 @@ public class Code128SymbologyTests
     // A single character.
     [InlineData("X", "2112143311213121132331112")]
     public void Code128_MatchesReferenceRuns(string text, string expected)
-    {
-        LinearBarcodeSymbol symbol = Encode(text);
-        Assert.Equal(expected, string.Concat(symbol.RunWidths));
-    }
+        => Encode(text, (ref symbol) => Assert.Equal(expected, SymbolEncoder.RunString(ref symbol)));
 
     /// <summary>
     /// Every symbol starts and ends on a bar, so the run count is odd, and the stop character contributes
@@ -57,33 +54,34 @@ public class Code128SymbologyTests
     /// </summary>
     [Fact]
     public void Code128_StartsAndEndsOnABar()
-    {
-        LinearBarcodeSymbol symbol = Encode("CODE128");
-        Assert.Equal(1, symbol.RunWidths.Length % 2);
-        Assert.Equal("2331112", string.Concat(symbol.RunWidths[^7..]));
-    }
+        => Encode("CODE128", (ref symbol) =>
+        {
+            Assert.Equal(1, symbol.Runs.Length % 2);
+            Assert.Equal("2331112", string.Concat(symbol.Runs[^7..].ToArray()));
+        });
 
     /// <summary>
     /// Section 5.4.4.2 requires a quiet zone of ten times the X-dimension on both sides.
     /// </summary>
     [Fact]
     public void Code128_ReservesTheQuietZones()
-    {
-        LinearBarcodeSymbol symbol = Encode("CODE128");
-        Assert.Equal(10, symbol.LeadingQuietZone);
-        Assert.Equal(10, symbol.TrailingQuietZone);
-    }
+        => Encode("CODE128", (ref symbol) =>
+        {
+            Assert.Equal(10, symbol.LeadingQuietZone);
+            Assert.Equal(10, symbol.TrailingQuietZone);
+        });
 
     /// <summary>
     /// Code 128 carries no guard bars, so every bar runs the full height from the symbol top.
     /// </summary>
     [Fact]
     public void Code128_DrawsEveryBarAtOneHeight()
-    {
-        LinearBarcodeSymbol symbol = Encode("CODE128");
-        Assert.All(symbol.BarTops, top => Assert.Equal(0, top));
-        Assert.All(symbol.BarHeights, height => Assert.Equal(symbol.BarHeights[0], height));
-    }
+        => Encode("CODE128", (ref symbol) =>
+        {
+            float first = symbol.BarHeights[0];
+            Assert.All(symbol.BarTops.ToArray(), top => Assert.Equal(0, top));
+            Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal(first, height));
+        });
 
     /// <summary>
     /// The symbology encodes ASCII 0 to 127; anything above that is rejected rather than mangled.
@@ -92,6 +90,18 @@ public class Code128SymbologyTests
     public void Code128_RejectsNonAscii()
         => Assert.Throws<ArgumentException>(() => Encode("caf\u00e9"));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new Code128Symbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    private static void Encode(string text)
+        => SymbolEncoder.Encode(new Code128Symbology(), text, new BarcodeOptions());
+
+    /// <summary>
+    /// Encodes the text with the default options and checks the symbol.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="check">The check to run on the encoded symbol.</param>
+    private static void Encode(string text, SymbolEncoder.Check check)
+        => SymbolEncoder.Encode(new Code128Symbology(), text, new BarcodeOptions(), check);
 }

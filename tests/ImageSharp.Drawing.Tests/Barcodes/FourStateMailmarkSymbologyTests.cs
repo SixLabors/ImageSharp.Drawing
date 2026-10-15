@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Globalization;
 using SixLabors.ImageSharp.Drawing.Barcodes;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
@@ -25,7 +26,7 @@ public class FourStateMailmarkSymbologyTests
     [InlineData("11000000000000000XY11     ", "TTDTTATDDTTATTDTAATTDTAATDDTTATTDTTDATFTAATDDTAATDDTATATFAADDAATAATDDTAADFTFTA")]
     [InlineData("41038422416563762EF61AH8T ", "DTTFATTDDTATTTATFTDFFFTFDFDAFTTTADTTFDTFDDDTDFDDFTFAADTFDTDTDTFAATAFDDTAATTDTT")]
     public void EncodesTheExamplesOfTheInstructions(string text, string bars)
-        => Assert.Equal(bars, States(Encode(text)));
+        => Assert.Equal(bars, SymbolEncoder.Read(new FourStateMailmarkSymbology(), text, new BarcodeOptions(), States));
 
     /// <summary>
     /// Section 2.2.2 of barcode C, Table 12: the destination "JW5O9QA6Y" has the internal user field
@@ -72,7 +73,7 @@ public class FourStateMailmarkSymbologyTests
     [Fact]
     public void ConvertsTheConsolidatedValueOfExampleTwoToDataNumbers()
     {
-        UInt128 consolidated = UInt128.Parse("354779892418644019776828");
+        UInt128 consolidated = UInt128.Parse("354779892418644019776828", CultureInfo.InvariantCulture);
         byte[] numbers = new byte[16];
         FourStateMailmarkEncoder.DataNumbers(consolidated, numbers, 9);
         Assert.Equal([15, 22, 3, 25, 23, 26, 7, 3, 20, 14, 1, 4, 16, 3, 9, 28], numbers);
@@ -83,21 +84,20 @@ public class FourStateMailmarkSymbologyTests
     /// </summary>
     [Fact]
     public void DrawsTheRoyalMailDimensions()
-    {
-        LinearBarcodeSymbol symbol = Encode("21B2254800659JW5O9QA6Y");
-
-        Assert.Equal(1F / 54F, symbol.RunUnit);
-        Assert.Equal(131, symbol.RunWidths.Length);
-        Assert.Equal((float)(2 / 0.54), symbol.LeadingQuietZone);
-        Assert.Equal((float)(2 / 0.54), symbol.TrailingQuietZone);
-    }
+        => SymbolEncoder.Encode(new FourStateMailmarkSymbology(), "21B2254800659JW5O9QA6Y", new BarcodeOptions(), static (ref symbol) =>
+        {
+            Assert.Equal(1F / 54F, symbol.RunUnit);
+            Assert.Equal(131, symbol.Runs.Length);
+            Assert.Equal((float)(2 / 0.54), symbol.LeadingQuietZone);
+            Assert.Equal((float)(2 / 0.54), symbol.TrailingQuietZone);
+        });
 
     [Fact]
     public void PrintsTheApplicationStringAsGiven()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new FourStateMailmarkSymbology().Encode("21B2254800659JW5O9QA6Y", options);
-        Assert.Equal("21B2254800659JW5O9QA6Y", Assert.Single(symbol.Text).Text);
+        string[] texts = SymbolEncoder.Read(new FourStateMailmarkSymbology(), "21B2254800659JW5O9QA6Y", options, SymbolEncoder.Texts);
+        Assert.Equal("21B2254800659JW5O9QA6Y", Assert.Single(texts));
     }
 
     [Theory]
@@ -112,12 +112,15 @@ public class FourStateMailmarkSymbologyTests
     [InlineData("21B2254800659XY11    ")]
     [InlineData("21B2254800659jw5o9qa6y")]
     public void RejectsMalformedInput(string text)
-        => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
+        => Assert.ThrowsAny<ArgumentException>(() => SymbolEncoder.Encode(new FourStateMailmarkSymbology(), text, new BarcodeOptions()));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new FourStateMailmarkSymbology().Encode(text, new BarcodeOptions());
-
-    private static string States(LinearBarcodeSymbol symbol)
+    /// <summary>
+    /// Reads the bar states of a symbol from the bar tops and heights: F for a full bar, A for an
+    /// ascender, D for a descender and T for a tracker.
+    /// </summary>
+    /// <param name="symbol">The encoded symbol.</param>
+    /// <returns>The bar states.</returns>
+    private static string States(ref BarcodeSymbol symbol)
     {
         float ascender = (float)(1.90 / 0.54);
         float tracker = (float)(1.30 / 0.54);

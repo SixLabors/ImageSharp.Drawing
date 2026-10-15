@@ -68,7 +68,7 @@ public class BarcodeDecodeTests
     /// </summary>
     [Theory]
     [InlineData("(01)09521234543213", "0109521234543213")]
-    [InlineData("(10)ABC123", "10ABC123")]
+    [InlineData("(91)ABC123", "91ABC123")]
     public void Gs1_128_RoundTrips(string text, string expected)
         => AssertDecodes(new Gs1128Symbology(), text, BarcodeFormat.CODE_128, expected);
 
@@ -315,6 +315,68 @@ public class BarcodeDecodeTests
         AssertDecodes(new Ean13Symbology(), "5901234123457", BarcodeFormat.EAN_13, "5901234123457", options);
     }
 
+    /// <summary>
+    /// A Data Matrix symbol decodes to the characters it carries, whichever encodation schemes hold them:
+    /// ASCII digit pairs, C40, Text, X12, EDIFACT and Base 256. A message in format 05 or 06 decodes to
+    /// its header and trailer, which the 05 or 06 Macro stands for.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    [Theory]
+    [InlineData("This is Data Matrix!")]
+    [InlineData("0123456789012345678901234567890123456789")]
+    [InlineData("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")]
+    [InlineData("abcdefghijklmnopqrstuvwxyz")]
+    [InlineData("ABC*DEF>GHI\r123*XYZ>")]
+    [InlineData("ABC.DEF/GHI-JKL@MNO^PQR")]
+    [InlineData("éèêëàâäöüß")]
+    [InlineData("[)>\u001e05\u001d0123456789\u001e\u0004")]
+    public void DataMatrix_RoundTrips(string text)
+        => AssertDecodes(new DataMatrixSymbology(), text, BarcodeFormat.DATA_MATRIX, text);
+
+    [Fact]
+    public void DataMatrixRectangular_RoundTrips()
+        => AssertDecodes(new DataMatrixRectangularSymbology(), "This is Data Matrix!", BarcodeFormat.DATA_MATRIX, "This is Data Matrix!");
+
+    /// <summary>
+    /// The 144 x 144 symbol, the largest, with ten interleaved Reed-Solomon blocks.
+    /// </summary>
+    [Fact]
+    public void DataMatrix_LargestSymbolRoundTrips()
+    {
+        string text = string.Concat(Enumerable.Repeat("0123456789", 311)) + "012345";
+        AssertDecodes(new DataMatrixSymbology(), text, BarcodeFormat.DATA_MATRIX, text);
+    }
+
+    /// <summary>
+    /// Section 5.6.2 of the GS1 General Specifications: the Function 1 Symbol Character at the start marks
+    /// GS1 data, and a separator after a variable length element string is transmitted as &lt;GS&gt;.
+    /// This decoder returns every Function 1 Symbol Character as &lt;GS&gt;, the leading one included,
+    /// rather than the symbology identifier ]d2 of section 5.6.3.3.
+    /// </summary>
+    [Fact]
+    public void Gs1DataMatrix_RoundTrips()
+        => AssertDecodes(
+            new Gs1DataMatrixSymbology(),
+            "(01)09521234543213(10)ABC123(21)XYZ789",
+            BarcodeFormat.DATA_MATRIX,
+            "\u001d0109521234543213" + "10ABC123\u001d" + "21XYZ789");
+
+    [Fact]
+    public void HibcDataMatrix_RoundTrips()
+        => AssertDecodes(new HibcDataMatrixSymbology(), "A123BJC5D6E71", BarcodeFormat.DATA_MATRIX, "+A123BJC5D6E71G");
+
+    /// <summary>
+    /// Section 5.9 of the GS1 General Specifications: the Data Matrix symbol carries the GS1 Digital Link URI
+    /// as plain data, so it decodes to the URI as written.
+    /// </summary>
+    [Fact]
+    public void Gs1DigitalLinkDataMatrix_RoundTrips()
+        => AssertDecodes(
+            new Gs1DigitalLinkDataMatrixSymbology(),
+            "https://id.gs1.org/01/09521234543213/22/ABC%2D123?99=XYZ-987",
+            BarcodeFormat.DATA_MATRIX,
+            "https://id.gs1.org/01/09521234543213/22/ABC%2D123?99=XYZ-987");
+
     private static void AssertDecodes(BarcodeSymbology symbology, string text, BarcodeFormat format, string expected)
         => AssertDecodes(symbology, text, format, expected, CreateOptions(), null);
 
@@ -327,7 +389,7 @@ public class BarcodeDecodeTests
         BarcodeFormat format,
         string expected,
         BarcodeOptions options,
-        Action<BarcodeReaderGeneric>? configureReader)
+        Action<BarcodeReaderGeneric> configureReader)
     {
         // The image holds the symbol and a margin on every side, measured rather than assumed, so a
         // symbology whose symbol is wider than the next is not silently clipped.

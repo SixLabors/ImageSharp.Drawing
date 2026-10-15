@@ -105,17 +105,21 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
     public bool PrintCheckCharacter { get; }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
 
-        // A pair per character bounds the substitution, and the readable interpretation matches it
-        // character for character.
-        Span<char> encodedBuffer = stackalloc char[Code39Encoder.StackBufferLength];
-        Span<char> readableBuffer = stackalloc char[Code39Encoder.StackBufferLength];
-        ValueStringBuilder encoded = new(encodedBuffer);
-        ValueStringBuilder readable = new(readableBuffer);
+        // Each character substitutes to one or two symbol characters, and the symbol carries at most
+        // Code39Encoder.MaximumLength of them, so longer text cannot fit. A pair per character bounds the
+        // substitution, and the readable interpretation matches the text character for character, so
+        // neither builder grows: short text stays inline and longer text rents once.
+        Guard.MustBeLessThanOrEqualTo(text.Length, Code39Encoder.MaximumLength, nameof(text));
+        InlineArray64<char> encodedStorage = default;
+        InlineArray64<char> readableStorage = default;
+        int encodedCapacity = text.Length * 2;
+        ValueStringBuilder encoded = encodedCapacity <= Code39Encoder.InlineBufferLength ? new(encodedStorage) : new(encodedCapacity);
+        ValueStringBuilder readable = text.Length <= Code39Encoder.InlineBufferLength ? new(readableStorage) : new(text.Length);
         try
         {
             // Walking code points rather than UTF-16 units reports a surrogate pair as the one character
@@ -141,34 +145,16 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
             Code39Encoder.Validate(encoded.AsSpan());
             char? check = this.CheckCharacter == CheckCharacterMode.None ? null : Code39Encoder.CheckCharacter(encoded.AsSpan());
 
-            return Code39Encoder.BuildSymbol(
-                Code39Encoder.Encode(encoded.AsSpan(), check),
-                options.Font is null ? string.Empty : this.BuildReadable(readable.AsSpan(), check),
-                options);
+            // The human readable interpretation is the text as given, then the check character the symbol
+            // carries when it prints, between the delimiters that stand for the start and stop character.
+            ReadOnlySpan<char> opening = [ReadableDelimiter];
+            ReadOnlySpan<char> closing = check is not null && this.PrintCheckCharacter ? [check.Value, ReadableDelimiter] : [ReadableDelimiter];
+            Code39Encoder.BuildSymbol(encoded.AsSpan(), check, opening, readable.AsSpan(), closing, options, ref symbol);
         }
         finally
         {
             readable.Dispose();
             encoded.Dispose();
         }
-    }
-
-    /// <summary>
-    /// Builds the human readable interpretation: the text as given, then the check character the symbol
-    /// carries, between the delimiters that stand for the start and stop character.
-    /// </summary>
-    /// <param name="text">The text the symbol carries, spaced to line up with the symbol characters.</param>
-    /// <param name="check">The check character the symbol carries, or <see langword="null"/>.</param>
-    /// <returns>The human readable interpretation.</returns>
-    private string BuildReadable(ReadOnlySpan<char> text, char? check)
-    {
-        Span<char> opening = stackalloc char[1] { ReadableDelimiter };
-        if (check is null || !this.PrintCheckCharacter)
-        {
-            return string.Concat(opening, text, opening);
-        }
-
-        Span<char> closing = stackalloc char[2] { check.Value, ReadableDelimiter };
-        return string.Concat(opening, text, closing);
     }
 }

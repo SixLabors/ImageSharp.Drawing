@@ -18,19 +18,13 @@ public class PznSymbologyTests
     [InlineData("27580899", "1311313111131111313111331111311113113131311331111131131131111113313111311311311111331131111133113111131131311")]
     [InlineData("03752864", "1311313111131111313111133131113133111111111311313131133111111133111131311311311111333111111113311131131131311")]
     public void MatchesReferenceRuns(string text, string expected)
-    {
-        LinearBarcodeSymbol symbol = Encode(new Pzn8Symbology(), text);
-        Assert.Equal(expected, string.Concat(symbol.RunWidths));
-    }
+        => Assert.Equal(expected, Encode(new Pzn8Symbology(), text));
 
     [Theory]
     [InlineData("123456", "131131311113111131313113111131113311113131331111111113311131311331111111333111111133111131131131311")]
     [InlineData("1234562", "131131311113111131313113111131113311113131331111111113311131311331111111333111111133111131131131311")]
     public void MatchesReferenceRunsForTheSevenDigitForm(string text, string expected)
-    {
-        LinearBarcodeSymbol symbol = Encode(new Pzn7Symbology(), text);
-        Assert.Equal(expected, string.Concat(symbol.RunWidths));
-    }
+        => Assert.Equal(expected, Encode(new Pzn7Symbology(), text));
 
     /// <summary>
     /// The worked example in the IFA check digit document: the digits 2758089 weighted 1 to 7 give the
@@ -41,10 +35,9 @@ public class PznSymbologyTests
     public void MatchesTheWorkedCheckDigitExample()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Pzn8Symbology().Encode("2758089", options);
+        string[] texts = SymbolEncoder.Read(new Pzn8Symbology(), "2758089", options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal("PZN - 27580899", placement.Text);
+        Assert.Equal("PZN - 27580899", Assert.Single(texts));
     }
 
     /// <summary>
@@ -54,8 +47,8 @@ public class PznSymbologyTests
     [Fact]
     public void AcceptsTheCheckDigitOfTheWorkedPpnExample()
         => Assert.Equal(
-            string.Concat(Encode(new Pzn8Symbology(), "0375286").RunWidths),
-            string.Concat(Encode(new Pzn8Symbology(), "03752864").RunWidths));
+            Encode(new Pzn8Symbology(), "0375286"),
+            Encode(new Pzn8Symbology(), "03752864"));
 
     [Fact]
     public void RejectsWrongCheckDigit()
@@ -91,10 +84,9 @@ public class PznSymbologyTests
     public void PrintsTheTermAndIdentifierWithoutEncodingThem()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Pzn8Symbology().Encode("03752864", options);
+        string[] texts = SymbolEncoder.Read(new Pzn8Symbology(), "03752864", options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal("PZN - 03752864", placement.Text);
+        Assert.Equal("PZN - 03752864", Assert.Single(texts));
     }
 
     /// <summary>
@@ -103,11 +95,7 @@ public class PznSymbologyTests
     /// </summary>
     [Fact]
     public void DefaultsTheBarHeightToTheNominalCodeHeight()
-    {
-        LinearBarcodeSymbol symbol = Encode(new Pzn8Symbology(), "03752864");
-
-        Assert.Equal(40F, symbol.BarHeights[0]);
-    }
+        => Assert.Equal(40F, SymbolEncoder.Read(new Pzn8Symbology(), "03752864", new BarcodeOptions(), static (ref symbol) => symbol.BarHeights[0]));
 
     /// <summary>
     /// The symbol carries the identifier, the digits and the check digit, and Code 39 adds no check
@@ -115,17 +103,14 @@ public class PznSymbologyTests
     /// </summary>
     [Fact]
     public void AddsNoCode39CheckCharacter()
-    {
-        LinearBarcodeSymbol symbol = Encode(new Pzn8Symbology(), "03752864");
-        int widthInModules = 0;
-        foreach (int run in symbol.RunWidths)
-        {
-            widthInModules += run;
-        }
+        => Assert.Equal(((1 + 8 + 2) * 16) - 1, SymbolEncoder.Read(new Pzn8Symbology(), "03752864", new BarcodeOptions(), SymbolEncoder.RunSum));
 
-        Assert.Equal(((1 + 8 + 2) * 16) - 1, widthInModules);
-    }
-
-    private static LinearBarcodeSymbol Encode(BarcodeSymbology symbology, string text)
-        => (LinearBarcodeSymbol)symbology.Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="symbology">The symbology to encode with.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(BarcodeSymbology symbology, string text)
+        => SymbolEncoder.Read(symbology, text, new BarcodeOptions(), SymbolEncoder.RunString);
 }

@@ -38,21 +38,27 @@ public sealed class HibcCode39Symbology : BarcodeSymbology
     public bool ValidateCheckCharacter { get; }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
-        Span<char> buffer = stackalloc char[HibcData.StackBufferLength];
-        ValueStringBuilder encoded = new(buffer);
+        InlineArray64<char> bufferStorage = default;
+        int capacity = HibcData.PreparedCapacity(text.Length);
+        ValueStringBuilder encoded = capacity <= HibcData.InlineBufferLength ? new(bufferStorage) : new(capacity);
         try
         {
             HibcData.Prepare(text, this.ValidateCheckCharacter, ref encoded);
             Code39Encoder.Validate(encoded.AsSpan());
 
-            return Code39Encoder.BuildSymbol(
-                Code39Encoder.Encode(encoded.AsSpan(), null),
-                options.Font is null ? string.Empty : HibcData.BuildReadable(encoded.AsSpan()),
-                options);
+            ReadOnlySpan<char> data = encoded.AsSpan();
+            Code39Encoder.BuildSymbol(
+                data,
+                null,
+                HibcData.ReadableOpening,
+                HibcData.ReadableBody(data),
+                [HibcData.PrintedCheck(data), HibcData.ReadableClosing],
+                options,
+                ref symbol);
         }
         finally
         {

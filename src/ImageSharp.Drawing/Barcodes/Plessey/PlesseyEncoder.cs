@@ -61,10 +61,16 @@ internal static class PlesseyEncoder
     private const float NominalBarHeightFraction = 0.15F;
 
     /// <summary>
-    /// Gets the generator polynomial of the check, x^8 + x^7 + x^6 + x^5 + x^3 + 1, as its nine
-    /// coefficients from the lowest power to the highest, the order the bits are sent in.
+    /// The generator polynomial of the check, x^8 + x^7 + x^6 + x^5 + x^3 + 1, as its nine coefficients
+    /// from the lowest power to the highest, the order the bits are sent in, in bits 0 to 8: the
+    /// coefficients 1, 1, 1, 1, 0, 1, 0, 0, 1.
     /// </summary>
-    private static ReadOnlySpan<byte> Generator => [1, 1, 1, 1, 0, 1, 0, 0, 1];
+    private const int GeneratorMask = 0b1_0010_1111;
+
+    /// <summary>
+    /// The number of coefficients of the generator polynomial.
+    /// </summary>
+    private const int GeneratorLength = 9;
 
     /// <summary>
     /// Gets the run widths of the start code 1101, sent least significant bit first, so the bits 1, 1,
@@ -102,59 +108,63 @@ internal static class PlesseyEncoder
     {
         // The bit sequence is the data followed by eight zero bits. Wherever a 1 bit stands, the
         // generator is subtracted from that position, which for bits is an exclusive or, and the eight
-        // bits left after the data are the remainder.
-        Span<byte> bits = (text.Length * BitsPerCharacter) + CheckBits <= 256
-            ? stackalloc byte[(text.Length * BitsPerCharacter) + CheckBits]
-            : new byte[(text.Length * BitsPerCharacter) + CheckBits];
-        bits.Clear();
-        for (int i = 0; i < text.Length; i++)
+        // bits left after the data are the remainder. A subtraction at position i reaches only the nine
+        // positions from i, so the division needs only those: the window holds them, bit k for position
+        // i + k. Where position i is 1 the generator is subtracted, which clears it; the window then moves
+        // on one position and takes in the bit nine positions on. After the data the window holds the
+        // eight remainder bits, the same result as writing the whole sequence out.
+        int dataBits = text.Length * BitsPerCharacter;
+        int window = 0;
+        for (int position = 0; position < GeneratorLength; position++)
         {
-            int value = Value(text[i]);
-            for (int bit = 0; bit < BitsPerCharacter; bit++)
-            {
-                bits[(i * BitsPerCharacter) + bit] = (byte)((value >> bit) & 1);
-            }
+            window |= SequenceBit(text, dataBits, position) << position;
         }
 
-        for (int i = 0; i < text.Length * BitsPerCharacter; i++)
+        for (int i = 0; i < dataBits; i++)
         {
-            if (bits[i] == 1)
+            if ((window & 1) != 0)
             {
-                for (int j = 0; j < Generator.Length; j++)
-                {
-                    bits[i + j] ^= Generator[j];
-                }
+                window ^= GeneratorMask;
             }
+
+            window = (window >> 1) | (SequenceBit(text, dataBits, i + GeneratorLength) << (GeneratorLength - 1));
         }
 
-        int remainder = 0;
-        for (int bit = 0; bit < CheckBits; bit++)
-        {
-            remainder |= bits[(text.Length * BitsPerCharacter) + bit] << bit;
-        }
+        int remainder = window & ((1 << CheckBits) - 1);
 
         checks[0] = Characters[remainder & 0xF];
         checks[1] = Characters[remainder >> 4];
     }
 
     /// <summary>
-    /// Encodes text into the alternating bar and space run widths the renderer draws, starting with the
-    /// first bar of the start code and ending on the last bar of the reversed start code.
+    /// Encodes the data and its check characters and builds the symbol. The runs start with the first bar
+    /// of the start code and end on the last bar of the reversed start code. Plessey Code carries no guard
+    /// bars, so every bar runs the full height, and the human readable interpretation sits below the
+    /// symbol: the data, then the check characters when they print.
     /// </summary>
-    /// <param name="text">The data and its two check characters, already validated.</param>
-    /// <returns>The run widths in modules.</returns>
-    public static int[] Encode(ReadOnlySpan<char> text)
+    /// <param name="data">The data, already validated.</param>
+    /// <param name="checks">The two check characters.</param>
+    /// <param name="printedChecks">The check characters the human readable interpretation prints, or none.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(
+        ReadOnlySpan<char> data,
+        ReadOnlySpan<char> checks,
+        ReadOnlySpan<char> printedChecks,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
     {
-        int[] runs = new int[Start.Length + (text.Length * BitsPerCharacter * 2) + Stop.Length];
+        int characters = data.Length + checks.Length;
+        Span<int> runs = symbol.BeginLinear(Start.Length + (characters * BitsPerCharacter * 2) + Stop.Length, out Span<float> heights, out _);
         int written = 0;
         for (int i = 0; i < Start.Length; i++)
         {
             runs[written++] = Start[i];
         }
 
-        for (int i = 0; i < text.Length; i++)
+        for (int i = 0; i < characters; i++)
         {
-            int value = Value(text[i]);
+            int value = Value(i < data.Length ? data[i] : checks[i - data.Length]);
             for (int bit = 0; bit < BitsPerCharacter; bit++)
             {
                 bool one = ((value >> bit) & 1) == 1;
@@ -168,19 +178,6 @@ internal static class PlesseyEncoder
             runs[written++] = Stop[i];
         }
 
-        return runs;
-    }
-
-    /// <summary>
-    /// Builds the symbol from encoded run widths. Plessey Code carries no guard bars, so every bar runs
-    /// the full height, and the human readable interpretation sits below the symbol.
-    /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <param name="text">The human readable interpretation.</param>
-    /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
-    {
         int widthInModules = 0;
         for (int i = 0; i < runs.Length; i++)
         {
@@ -188,20 +185,25 @@ internal static class PlesseyEncoder
         }
 
         float barHeight = options.ResolveBarHeight(NominalXDimension, widthInModules * NominalBarHeightFraction);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
-        for (int i = 0; i < barCount; i++)
+        heights.Fill(barHeight);
+
+        if (options.Font is not null)
         {
-            heights[i] = barHeight;
+            symbol.ReserveText(1, data.Length + printedChecks.Length);
+            symbol.AddText(data, printedChecks, [], 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
         }
 
-        BarcodeTextPlacement[] placements = [];
-        if (options.Font is not null && text.Length > 0)
-        {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
-        }
-
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone);
+        symbol.EndLinear(QuietZone, QuietZone);
     }
+
+    /// <summary>
+    /// Returns one bit of the sequence the check divides: the bits of the data characters, least
+    /// significant bit of each character first, then zero bits.
+    /// </summary>
+    /// <param name="text">The data, already validated.</param>
+    /// <param name="dataBits">The number of data bits.</param>
+    /// <param name="position">The position of the bit in the sequence.</param>
+    /// <returns>The bit, 0 or 1.</returns>
+    private static int SequenceBit(ReadOnlySpan<char> text, int dataBits, int position)
+        => position < dataBits ? (Value(text[position / BitsPerCharacter]) >> (position % BitsPerCharacter)) & 1 : 0;
 }

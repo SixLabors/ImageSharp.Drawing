@@ -27,10 +27,10 @@ internal static class Code39Encoder
     public const int QuietZone = 10;
 
     /// <summary>
-    /// The number of characters a caller stack allocates to build symbol data in. Data this long covers
-    /// the labels the symbology is used for, and anything longer grows into a pooled array.
+    /// The number of characters a caller holds inline to build symbol data in. Data this long covers the
+    /// labels the symbology is used for, and longer data rents its buffer once.
     /// </summary>
-    public const int StackBufferLength = 64;
+    public const int InlineBufferLength = 64;
 
     /// <summary>
     /// The element count of a symbol character and the gap that follows it.
@@ -125,26 +125,79 @@ internal static class Code39Encoder
     }
 
     /// <summary>
-    /// Encodes text into the alternating bar and space run widths the renderer draws, starting with a bar.
-    /// The runs carry the start character, the data, an optional check character and the stop character,
-    /// each followed by its inter-character gap. Section 4.2 separates the characters "within the symbol"
-    /// with that gap, and section 4.3.3 puts the stop character at the right end, so no gap follows it
-    /// and the runs end on a bar. Annex A.1.1 places the check character "immediately following the final
-    /// data character and before the stop character".
+    /// Builds the symbol. Code 39 carries no guard bars, so every bar runs the full height, at the
+    /// proportional height of section 4.4 e), and the human readable interpretation sits below the symbol.
     /// </summary>
-    /// <param name="text">The text to encode, already validated against the character set.</param>
+    /// <param name="data">The data to encode, already validated against the character set.</param>
     /// <param name="check">The check character to carry after the data, or <see langword="null"/>.</param>
-    /// <returns>The run widths in modules.</returns>
-    public static int[] Encode(ReadOnlySpan<char> text, char? check)
+    /// <param name="readablePrefix">The characters of the human readable interpretation before its body.</param>
+    /// <param name="readableBody">The body of the human readable interpretation.</param>
+    /// <param name="readableSuffix">The characters of the human readable interpretation after its body.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(
+        ReadOnlySpan<char> data,
+        char? check,
+        ReadOnlySpan<char> readablePrefix,
+        ReadOnlySpan<char> readableBody,
+        ReadOnlySpan<char> readableSuffix,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
     {
-        int characters = text.Length + (check is null ? 2 : 3);
-        int[] runs = new int[(characters * ElementsPerCharacter) - 1];
+        BeginRuns(data, check, ref symbol, out Span<float> heights);
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        float nominalBarHeight = MathF.Max(WidthInModules(symbol.Runs) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
+        EndSymbol(heights, readablePrefix, readableBody, readableSuffix, options, nominalBarHeight, ref symbol);
+    }
+
+    /// <summary>
+    /// Builds the symbol at a bar height an application standard fixes rather than the proportional
+    /// recommendation of section 4.4 e).
+    /// </summary>
+    /// <param name="data">The data to encode, already validated against the character set.</param>
+    /// <param name="check">The check character to carry after the data, or <see langword="null"/>.</param>
+    /// <param name="readablePrefix">The characters of the human readable interpretation before its body.</param>
+    /// <param name="readableBody">The body of the human readable interpretation.</param>
+    /// <param name="readableSuffix">The characters of the human readable interpretation after its body.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="nominalBarHeight">The bar height in modules a symbol takes when the caller sets none.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(
+        ReadOnlySpan<char> data,
+        char? check,
+        ReadOnlySpan<char> readablePrefix,
+        ReadOnlySpan<char> readableBody,
+        ReadOnlySpan<char> readableSuffix,
+        BarcodeOptions options,
+        float nominalBarHeight,
+        ref BarcodeSymbol symbol)
+    {
+        BeginRuns(data, check, ref symbol, out Span<float> heights);
+        EndSymbol(heights, readablePrefix, readableBody, readableSuffix, options, nominalBarHeight, ref symbol);
+    }
+
+    /// <summary>
+    /// Begins the symbol and writes the alternating bar and space run widths, starting with a bar. The runs
+    /// carry the start character, the data, an optional check character and the stop character, each
+    /// followed by its inter-character gap. Section 4.2 separates the characters "within the symbol" with
+    /// that gap, and section 4.3.3 puts the stop character at the right end, so no gap follows it and the
+    /// runs end on a bar. Annex A.1.1 places the check character "immediately following the final data
+    /// character and before the stop character".
+    /// </summary>
+    /// <param name="data">The data to encode, already validated against the character set.</param>
+    /// <param name="check">The check character to carry after the data, or <see langword="null"/>.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    /// <param name="heights">The bar heights of the symbol, to write.</param>
+    private static void BeginRuns(ReadOnlySpan<char> data, char? check, ref BarcodeSymbol symbol, out Span<float> heights)
+    {
+        int characters = data.Length + (check is null ? 2 : 3);
+        Span<int> runs = symbol.BeginLinear((characters * ElementsPerCharacter) - 1, out heights, out _);
         int written = 0;
 
         AppendPattern(runs, ref written, StartStop);
-        for (int i = 0; i < text.Length; i++)
+        for (int i = 0; i < data.Length; i++)
         {
-            AppendPattern(runs, ref written, AlphanumericCharacterSet.Value(text[i]));
+            AppendPattern(runs, ref written, AlphanumericCharacterSet.Value(data[i]));
         }
 
         if (check is not null)
@@ -153,51 +206,45 @@ internal static class Code39Encoder
         }
 
         AppendElements(runs, ref written, StartStop, ElementsPerCharacter - 1);
-        return runs;
     }
 
     /// <summary>
-    /// Builds the symbol from encoded run widths. Code 39 carries no guard bars, so every bar runs the
-    /// full height, and the human readable interpretation sits below the symbol.
+    /// Sets every bar to the full height, adds the human readable interpretation below the bars when a
+    /// font is set, and ends the symbol, whose runs are written.
     /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <param name="text">The human readable interpretation.</param>
-    /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
-    {
-        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
-        return BuildSymbol(runs, text, options, MathF.Max(WidthInModules(runs) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension)));
-    }
-
-    /// <summary>
-    /// Builds the symbol from encoded run widths, at a bar height an application standard fixes rather
-    /// than the proportional recommendation of section 4.4 e).
-    /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <param name="text">The human readable interpretation.</param>
+    /// <param name="heights">The bar heights to write.</param>
+    /// <param name="readablePrefix">The characters of the human readable interpretation before its body.</param>
+    /// <param name="readableBody">The body of the human readable interpretation.</param>
+    /// <param name="readableSuffix">The characters of the human readable interpretation after its body.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="nominalBarHeight">The bar height in modules a symbol takes when the caller sets none.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options, float nominalBarHeight)
+    /// <param name="symbol">The symbol to write.</param>
+    private static void EndSymbol(
+        Span<float> heights,
+        ReadOnlySpan<char> readablePrefix,
+        ReadOnlySpan<char> readableBody,
+        ReadOnlySpan<char> readableSuffix,
+        BarcodeOptions options,
+        float nominalBarHeight,
+        ref BarcodeSymbol symbol)
     {
-        int widthInModules = WidthInModules(runs);
         float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, nominalBarHeight);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
-        for (int i = 0; i < barCount; i++)
+        heights.Fill(barHeight);
+
+        if (options.Font is not null)
         {
-            heights[i] = barHeight;
+            symbol.ReserveText(1, readablePrefix.Length + readableBody.Length + readableSuffix.Length);
+            symbol.AddText(
+                readablePrefix,
+                readableBody,
+                readableSuffix,
+                0F,
+                WidthInModules(symbol.Runs),
+                BarcodeTextSide.BelowBars,
+                barHeight + BarcodeTextPlacement.Clearance);
         }
 
-        BarcodeTextPlacement[] placements = [];
-        if (options.Font is not null && text.Length > 0)
-        {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
-        }
-
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone);
+        symbol.EndLinear(QuietZone, QuietZone);
     }
 
     /// <summary>

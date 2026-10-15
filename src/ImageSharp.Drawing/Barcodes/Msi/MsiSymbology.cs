@@ -61,7 +61,7 @@ public sealed class MsiSymbology : BarcodeSymbology
     public bool PrintCheckDigits { get; }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
@@ -77,50 +77,53 @@ public sealed class MsiSymbology : BarcodeSymbology
             }
         }
 
-        Span<char> buffer = stackalloc char[MsiEncoder.StackBufferLength];
-        ValueStringBuilder carried = new(buffer);
-        carried.Append(text);
-        switch (this.CheckDigit)
+        // The symbol carries the digits and at most two check digits. The text is at most MaximumLength
+        // digits, so a short symbol works inline and a longer one rents its digits once.
+        InlineArray64<char> carriedStorage = default;
+        int capacity = text.Length + 2;
+        ValueStringBuilder carried = capacity <= MsiEncoder.InlineBufferLength ? new(carriedStorage) : new(capacity);
+        try
         {
-            case MsiCheckDigit.Modulo10:
-                carried.Append((char)('0' + MsiEncoder.Modulo10(text)));
-                break;
+            carried.Append(text);
+            switch (this.CheckDigit)
+            {
+                case MsiCheckDigit.Modulo10:
+                    carried.Append((char)('0' + MsiEncoder.Modulo10(text)));
+                    break;
 
-            case MsiCheckDigit.Modulo1010:
-                carried.Append((char)('0' + MsiEncoder.Modulo10(text)));
-                carried.Append((char)('0' + MsiEncoder.Modulo10(carried.AsSpan())));
-                break;
-
-            case MsiCheckDigit.Modulo11:
-            case MsiCheckDigit.Modulo1110:
-            case MsiCheckDigit.NcrModulo11:
-            case MsiCheckDigit.NcrModulo1110:
-                int maximumWeight = this.CheckDigit is MsiCheckDigit.Modulo11 or MsiCheckDigit.Modulo1110
-                    ? MsiEncoder.IbmMaximumWeight
-                    : MsiEncoder.NcrMaximumWeight;
-                int check = MsiEncoder.Modulo11(text, maximumWeight);
-                if (check == 10)
-                {
-                    throw new ArgumentException("The modulo 11 check value of this data is 10, which one digit cannot carry.", nameof(text));
-                }
-
-                carried.Append((char)('0' + check));
-                if (this.CheckDigit is MsiCheckDigit.Modulo1110 or MsiCheckDigit.NcrModulo1110)
-                {
+                case MsiCheckDigit.Modulo1010:
+                    carried.Append((char)('0' + MsiEncoder.Modulo10(text)));
                     carried.Append((char)('0' + MsiEncoder.Modulo10(carried.AsSpan())));
-                }
+                    break;
 
-                break;
+                case MsiCheckDigit.Modulo11:
+                case MsiCheckDigit.Modulo1110:
+                case MsiCheckDigit.NcrModulo11:
+                case MsiCheckDigit.NcrModulo1110:
+                    int maximumWeight = this.CheckDigit is MsiCheckDigit.Modulo11 or MsiCheckDigit.Modulo1110
+                        ? MsiEncoder.IbmMaximumWeight
+                        : MsiEncoder.NcrMaximumWeight;
+                    int check = MsiEncoder.Modulo11(text, maximumWeight);
+                    if (check == 10)
+                    {
+                        throw new ArgumentException("The modulo 11 check value of this data is 10, which one digit cannot carry.", nameof(text));
+                    }
+
+                    carried.Append((char)('0' + check));
+                    if (this.CheckDigit is MsiCheckDigit.Modulo1110 or MsiCheckDigit.NcrModulo1110)
+                    {
+                        carried.Append((char)('0' + MsiEncoder.Modulo10(carried.AsSpan())));
+                    }
+
+                    break;
+            }
+
+            ReadOnlySpan<char> digits = carried.AsSpan();
+            MsiEncoder.BuildSymbol(digits, this.PrintCheckDigits ? digits : text, options, ref symbol);
         }
-
-        string readable = options.Font is null
-            ? string.Empty
-            : this.PrintCheckDigits
-                ? carried.AsSpan().ToString()
-                : text;
-
-        LinearBarcodeSymbol symbol = MsiEncoder.BuildSymbol(MsiEncoder.Encode(carried.AsSpan()), readable, options);
-        carried.Dispose();
-        return symbol;
+        finally
+        {
+            carried.Dispose();
+        }
     }
 }

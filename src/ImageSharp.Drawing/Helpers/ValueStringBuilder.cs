@@ -3,6 +3,7 @@
 
 using System.Buffers;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace SixLabors.ImageSharp.Drawing.Helpers;
 
@@ -12,12 +13,13 @@ namespace SixLabors.ImageSharp.Drawing.Helpers;
 /// allocates nothing and the worst case rents rather than allocates.
 /// <para>
 /// The builder owns the rented array, so every instance must be disposed. <see cref="ToString"/> disposes
-/// it, so a builder finished with <see cref="ToString"/> needs no further call.
+/// it, so a builder finished with <see cref="ToString"/> needs no further call. The array comes from the
+/// shared <see cref="byte"/> pool, which every element type shares.
 /// </para>
 /// </summary>
 internal ref struct ValueStringBuilder
 {
-    private char[]? pooled;
+    private byte[]? pooled;
     private Span<char> characters;
     private int position;
 
@@ -39,8 +41,8 @@ internal ref struct ValueStringBuilder
     /// <param name="initialCapacity">The number of characters to rent room for.</param>
     public ValueStringBuilder(int initialCapacity)
     {
-        this.pooled = ArrayPool<char>.Shared.Rent(initialCapacity);
-        this.characters = this.pooled;
+        this.pooled = ArrayPool<byte>.Shared.Rent(initialCapacity * sizeof(char));
+        this.characters = MemoryMarshal.Cast<byte, char>(this.pooled.AsSpan());
         this.position = 0;
     }
 
@@ -149,14 +151,14 @@ internal ref struct ValueStringBuilder
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose()
     {
-        char[]? toReturn = this.pooled;
+        byte[]? toReturn = this.pooled;
 
         // Clearing the whole builder stops a caller who keeps using a disposed instance from writing into
         // an array another caller now owns.
         this = default;
         if (toReturn is not null)
         {
-            ArrayPool<char>.Shared.Return(toReturn);
+            ArrayPool<byte>.Shared.Return(toReturn);
         }
     }
 
@@ -168,18 +170,22 @@ internal ref struct ValueStringBuilder
     [MethodImpl(MethodImplOptions.NoInlining)]
     private void Grow(int additionalCapacity)
     {
+        // The byte length of the new array must fit an array, so the character count stops at half the
+        // largest array length.
         int newCapacity = (int)Math.Max(
             (uint)(this.position + additionalCapacity),
-            Math.Min((uint)this.characters.Length * 2, (uint)Array.MaxLength));
+            Math.Min((uint)this.characters.Length * 2, (uint)(Array.MaxLength / sizeof(char))));
 
-        char[] rented = ArrayPool<char>.Shared.Rent(newCapacity);
-        this.characters[..this.position].CopyTo(rented);
+        byte[] rented = ArrayPool<byte>.Shared.Rent(newCapacity * sizeof(char));
+        Span<char> grown = MemoryMarshal.Cast<byte, char>(rented.AsSpan());
+        this.characters[..this.position].CopyTo(grown);
 
-        char[]? toReturn = this.pooled;
-        this.characters = this.pooled = rented;
+        byte[]? toReturn = this.pooled;
+        this.pooled = rented;
+        this.characters = grown;
         if (toReturn is not null)
         {
-            ArrayPool<char>.Shared.Return(toReturn);
+            ArrayPool<byte>.Shared.Return(toReturn);
         }
     }
 }

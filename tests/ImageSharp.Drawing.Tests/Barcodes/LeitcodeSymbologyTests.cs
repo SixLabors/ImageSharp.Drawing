@@ -27,8 +27,7 @@ public class LeitcodeSymbologyTests
     {
         const string reference = "111112211111222121121112211112221112111221211211212112112122111212112121122111";
 
-        LinearBarcodeSymbol symbol = Encode(text);
-        Assert.Equal(reference[..^1].Replace('2', '3'), string.Concat(symbol.RunWidths));
+        Assert.Equal(reference[..^1].Replace('2', '3'), Encode(text));
     }
 
     /// <summary>
@@ -40,10 +39,9 @@ public class LeitcodeSymbologyTests
     public void CalculatesTheDeutschePostCheckDigit()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new LeitcodeSymbology().Encode("2134807501640", options);
+        string[] texts = SymbolEncoder.Read(new LeitcodeSymbology(), "2134807501640", options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal("21348.075.016.40 1", placement.Text);
+        Assert.Equal("21348.075.016.40 1", Assert.Single(texts));
         Assert.Throws<ArgumentException>(() => Encode("21348075016402"));
     }
 
@@ -60,6 +58,11 @@ public class LeitcodeSymbologyTests
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new LeitcodeSymbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(string text)
+        => SymbolEncoder.Read(new LeitcodeSymbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
 }

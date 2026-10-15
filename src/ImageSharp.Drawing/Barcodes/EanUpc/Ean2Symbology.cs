@@ -28,7 +28,7 @@ public sealed class Ean2Symbology : BarcodeSymbology
     public override double NominalXDimension => EanUpcEncoder.NominalXDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
@@ -43,7 +43,8 @@ public sealed class Ean2Symbology : BarcodeSymbology
         // 0 = AA, 1 = AB, 2 = BA and 3 = BB. The remainder bits map to the number sets directly: a set bit is B.
         int parity = ((10 * (text[0] - '0')) + (text[1] - '0')) % 4;
 
-        Span<byte> modules = stackalloc byte[Width];
+        InlineArray32<byte> moduleStorage = default;
+        Span<byte> modules = ((Span<byte>)moduleStorage)[..Width];
         int position = 0;
         EanUpcEncoder.AppendPattern(modules, ref position, 0b1011, 4);
         for (int i = 0; i < 2; i++)
@@ -57,6 +58,6 @@ public sealed class Ean2Symbology : BarcodeSymbology
             EanUpcEncoder.AppendPattern(modules, ref position, numberSet[text[i] - '0'], 7);
         }
 
-        return AddOnLayout.Build(modules, text, options);
+        AddOnLayout.Build(modules, text, options, ref symbol);
     }
 }

@@ -67,7 +67,7 @@ public sealed class Code11Symbology : BarcodeSymbology
     public bool PrintCheckCharacters { get; }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
@@ -84,7 +84,8 @@ public sealed class Code11Symbology : BarcodeSymbology
         }
 
         ReadOnlySpan<char> data = text;
-        Span<char> checks = stackalloc char[2];
+        InlineArray2<char> checkStorage = default;
+        Span<char> checks = checkStorage;
         int checkCount = 0;
         if (this.CheckCharacters == CheckCharacterMode.Validate)
         {
@@ -125,12 +126,6 @@ public sealed class Code11Symbology : BarcodeSymbology
             }
         }
 
-        string readable = options.Font is null
-            ? string.Empty
-            : this.PrintCheckCharacters
-                ? $"{data}{checks[..checkCount]}"
-                : data.ToString();
-
-        return Code11Encoder.BuildSymbol(Code11Encoder.Encode(data, checks[..checkCount]), readable, options);
+        Code11Encoder.BuildSymbol(data, checks[..checkCount], this.PrintCheckCharacters, options, ref symbol);
     }
 }

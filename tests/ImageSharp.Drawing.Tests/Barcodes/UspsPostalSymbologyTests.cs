@@ -24,7 +24,7 @@ public class UspsPostalSymbologyTests
     [InlineData("012345678", "FFFHHHHHHFFHHFHFHHFFHHFHHFHFHFHHFFHHFHHHFFHHFHHFHHFF")]
     [InlineData("01234567890", "FFFHHHHHHFFHHFHFHHFFHHFHHFHFHFHHFFHHFHHHFFHHFHFHFHHFFHHHHFHFHF")]
     public void EncodesPostnet(string text, string bars)
-        => Assert.Equal(bars, Kinds(Encode(new PostnetSymbology(), text)));
+        => Assert.Equal(bars, Encode(new PostnetSymbology(), text));
 
     /// <summary>
     /// PLANET inverts the bars: the two bars of each digit that POSTNET makes full are half bars. The
@@ -36,7 +36,7 @@ public class UspsPostalSymbologyTests
     [InlineData("01234567890", "FHHFFFFFFHHFFHFHFFHHFFHFFHFHFHFFHHFFHFFFHHFFHFHFHFFHHFFFFHFHFF")]
     [InlineData("0123456789012", "FHHFFFFFFHHFFHFHFFHHFFHFFHFHFHFFHHFFHFFFHHFFHFHFHFFHHFFFFFFHHFFHFHFFHFHF")]
     public void EncodesPlanet(string text, string bars)
-        => Assert.Equal(bars, Kinds(Encode(new PlanetSymbology(), text)));
+        => Assert.Equal(bars, Encode(new PlanetSymbology(), text));
 
     /// <summary>
     /// Section 708.4.2.5 of the Domestic Mail Manual: bars 0.020 inch wide at 22 bars per inch, full bars
@@ -46,33 +46,32 @@ public class UspsPostalSymbologyTests
     /// </summary>
     [Fact]
     public void DrawsTheDimensionsOfSectionSevenZeroEightFourTwoFive()
-    {
-        LinearBarcodeSymbol symbol = Encode(new PostnetSymbology(), "01234");
-
-        Assert.Equal(1F / 11F, symbol.RunUnit);
-        Assert.Equal(63, symbol.RunWidths.Length);
-        for (int i = 0; i < symbol.RunWidths.Length; i++)
+        => SymbolEncoder.Encode(new PostnetSymbology(), "01234", new BarcodeOptions(), static (ref symbol) =>
         {
-            Assert.Equal((i & 1) == 0 ? 11 : 14, symbol.RunWidths[i]);
-        }
+            Assert.Equal(1F / 11F, symbol.RunUnit);
+            Assert.Equal(63, symbol.Runs.Length);
+            for (int i = 0; i < symbol.Runs.Length; i++)
+            {
+                Assert.Equal((i & 1) == 0 ? 11 : 14, symbol.Runs[i]);
+            }
 
-        for (int i = 0; i < symbol.BarHeights.Length; i++)
-        {
-            bool full = symbol.BarHeights[i] == 6.25F;
-            Assert.True(full || symbol.BarHeights[i] == 2.5F);
-            Assert.Equal(full ? 0F : 3.75F, symbol.BarTops[i]);
-        }
+            for (int i = 0; i < symbol.BarHeights.Length; i++)
+            {
+                bool full = symbol.BarHeights[i] == 6.25F;
+                Assert.True(full || symbol.BarHeights[i] == 2.5F);
+                Assert.Equal(full ? 0F : 3.75F, symbol.BarTops[i]);
+            }
 
-        Assert.Equal(6.25F, symbol.LeadingQuietZone);
-        Assert.Equal(6.25F, symbol.TrailingQuietZone);
-    }
+            Assert.Equal(6.25F, symbol.LeadingQuietZone);
+            Assert.Equal(6.25F, symbol.TrailingQuietZone);
+        });
 
     [Fact]
     public void PrintsTheDigitsAsGiven()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new PostnetSymbology().Encode("01234", options);
-        Assert.Equal("01234", Assert.Single(symbol.Text).Text);
+        string[] texts = SymbolEncoder.Read(new PostnetSymbology(), "01234", options, SymbolEncoder.Texts);
+        Assert.Equal("01234", Assert.Single(texts));
     }
 
     [Theory]
@@ -95,10 +94,21 @@ public class UspsPostalSymbologyTests
     public void RejectsMalformedPlanetInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(new PlanetSymbology(), text));
 
-    private static LinearBarcodeSymbol Encode(BarcodeSymbology symbology, string text)
-        => (LinearBarcodeSymbol)symbology.Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="symbology">The symbology to encode with.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The bar kinds of the symbol.</returns>
+    private static string Encode(BarcodeSymbology symbology, string text)
+        => SymbolEncoder.Read(symbology, text, new BarcodeOptions(), Kinds);
 
-    private static string Kinds(LinearBarcodeSymbol symbol)
+    /// <summary>
+    /// Reads the bar kinds of a symbol from the bar heights: F for a full bar and H for a half bar.
+    /// </summary>
+    /// <param name="symbol">The encoded symbol.</param>
+    /// <returns>The bar kinds.</returns>
+    private static string Kinds(ref BarcodeSymbol symbol)
     {
         char[] kinds = new char[symbol.BarHeights.Length];
         for (int i = 0; i < kinds.Length; i++)

@@ -139,14 +139,55 @@ internal static class Code16KEncoder
     private static ReadOnlySpan<byte> RowStopValues => [0, 1, 2, 3, 4, 5, 6, 7, 4, 5, 6, 7, 0, 1, 2, 3];
 
     /// <summary>
+    /// Encodes text and builds the symbol.
+    /// </summary>
+    /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
+    /// <param name="readable">The human readable interpretation.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode, or more data than sixteen rows hold.</exception>
+    public static void BuildSymbol(ReadOnlySpan<char> text, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
+    {
+        if (text.Length > MaximumText)
+        {
+            throw new ArgumentException(
+                $"Code 16K carries at most {(MaximumRows * CharactersPerRow) - Overhead} symbol characters in sixteen rows; the text needs more.",
+                nameof(text));
+        }
+
+        // The lookahead tables hold three bytes for every position and one past the end. A data character
+        // costs at most two symbol characters, and the symbol adds three, so the values take twice the
+        // text and three more, and at least the sixteen rows of the largest symbol. The text is bounded
+        // above, so a short text works inline and a longer one rents each buffer once.
+        int tableLength = (text.Length + 1) * 3;
+        int valueLength = Math.Max((text.Length * 2) + Overhead, MaximumRows * CharactersPerRow);
+        InlineArray256<byte> tableStorage = default;
+        InlineArray128<int> valueStorage = default;
+        ValueListBuilder<byte> tables = tableLength <= 256 ? new(tableStorage) : new(tableLength);
+        ValueListBuilder<int> values = valueLength <= 128 ? new(valueStorage) : new(valueLength);
+        try
+        {
+            int total = Encode(text, tables.AppendSpan(tableLength), values.AppendSpan(valueLength));
+            WriteRows(values.AsSpan()[..total], readable, options, ref symbol);
+        }
+        finally
+        {
+            values.Dispose();
+            tables.Dispose();
+        }
+    }
+
+    /// <summary>
     /// Encodes text into the symbol character values of the whole symbol: the starting symbol character,
     /// the data with its code and shift characters, the pad characters and the two check characters, five
     /// per row. Appendix G chooses the starting mode and the code and shift characters.
     /// </summary>
-    /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
-    /// <returns>The symbol character values, five per row.</returns>
+    /// <param name="text">The text to encode, at most <see cref="MaximumText"/> characters.</param>
+    /// <param name="tables">The scratch for the lookahead tables, three bytes for every position and one past the end.</param>
+    /// <param name="values">The buffer that receives the symbol character values.</param>
+    /// <returns>The number of symbol character values, five per row.</returns>
     /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode, or more data than sixteen rows hold.</exception>
-    public static int[] Encode(ReadOnlySpan<char> text)
+    private static int Encode(ReadOnlySpan<char> text, Span<byte> tables, Span<int> values)
     {
         SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
         while (codePoints.MoveNext())
@@ -162,16 +203,11 @@ internal static class Code16KEncoder
 
         int capacity = (MaximumRows * CharactersPerRow) - Overhead;
         int n = text.Length;
-        if (n > MaximumText)
-        {
-            throw new ArgumentException($"Code 16K carries at most {capacity} symbol characters in sixteen rows; the text needs more.", nameof(text));
-        }
 
         // The rules of Appendix G depend on the digit run from a position and on which of a control
         // character or a lower case character comes first. Each table holds that for every position, with
         // one entry past the end, and every entry fits a byte with the text bounded above.
         int lookahead = n + 1;
-        Span<byte> tables = stackalloc byte[(MaximumText + 1) * 3];
         Span<byte> digits = tables[..lookahead];
         Span<byte> nextControl = tables.Slice(lookahead, lookahead);
         Span<byte> nextLower = tables.Slice(lookahead * 2, lookahead);
@@ -188,7 +224,6 @@ internal static class Code16KEncoder
 
         // A data character costs at most two symbol characters, a shift and itself, and the symbol adds
         // the starting symbol character and the two check characters; the pad fills the rest of the rows.
-        Span<int> values = stackalloc int[(MaximumText * 2) + Overhead];
         int count = 1;
         int i = 0;
         int set;
@@ -422,36 +457,33 @@ internal static class Code16KEncoder
         c2 = (c2 + ((total - 1) * c1)) % Modulus;
         values[total - 2] = c1;
         values[total - 1] = c2;
-        return values[..total].ToArray();
+        return total;
     }
 
     /// <summary>
-    /// Builds the symbol from its symbol character values: one row of bars per five values, one module
+    /// Writes the symbol from its symbol character values: one row of bars per five values, one module
     /// separator bars between the rows, and the top and bottom separator bars of section 2.1.
     /// </summary>
     /// <param name="values">The symbol character values, five per row.</param>
-    /// <param name="text">The human readable interpretation.</param>
+    /// <param name="readable">The human readable interpretation.</param>
     /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static StackedBarcodeSymbol BuildSymbol(int[] values, string text, BarcodeOptions options)
+    /// <param name="symbol">The symbol to write.</param>
+    private static void WriteRows(ReadOnlySpan<int> values, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int rowCount = values.Length / CharactersPerRow;
         float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, NominalBarHeight);
-        LinearBarcodeSymbol separator = new([RowWidth], [SeparatorHeight], [0F], [], 0, 0);
-        LinearBarcodeSymbol[] rows = new LinearBarcodeSymbol[(rowCount * 2) - 1];
         ReadOnlySpan<uint> patterns = Code128Encoder.Patterns;
 
-        // Every data row has the same bar count, height and top, so the rows share one heights array and
-        // one tops array.
-        int barCount = (4 + 1 + (CharactersPerRow * 6) + 4 + 1) / 2;
-        float[] heights = new float[barCount];
-        heights.AsSpan().Fill(barHeight);
-        float[] tops = new float[barCount];
+        // Section 2.1: start, guard bar, five characters and stop, 4 + 1 + 30 + 4 elements, on a bar at both
+        // ends. A separator between two rows is one bar across the row width.
+        const int rowRuns = 4 + 1 + (CharactersPerRow * 6) + 4;
+        int separators = rowCount - 1;
+        symbol.BeginStacked(rowCount + separators, (rowCount * rowRuns) + separators, (rowCount * ((rowRuns + 1) >> 1)) + separators);
         for (int row = 0; row < rowCount; row++)
         {
-            // Section 2.1: start, guard bar, five characters and stop, 4 + 1 + 30 + 4 elements, on a bar
-            // at both ends. Table 2 starts every character on a space, which the guard bar leads into.
-            int[] runs = new int[4 + 1 + (CharactersPerRow * 6) + 4];
+            // Table 2 starts every character on a space, which the guard bar leads into.
+            Span<int> runs = symbol.AddRow(rowRuns, out Span<float> heights, out _);
+            heights.Fill(barHeight);
             int index = 0;
             ushort start = StartPatterns[RowStartValues[row]];
             for (int shift = 12; shift >= 0; shift -= 4)
@@ -476,23 +508,24 @@ internal static class Code16KEncoder
                 runs[index++] = (stop >> shift) & 0xF;
             }
 
-            rows[row * 2] = new LinearBarcodeSymbol(runs, heights, tops, [], 0, 0);
             if (row < rowCount - 1)
             {
-                rows[(row * 2) + 1] = separator;
+                Span<int> separator = symbol.AddRow(1, out Span<float> separatorHeight, out _);
+                separator[0] = RowWidth;
+                separatorHeight[0] = SeparatorHeight;
             }
         }
 
         // Appendix D: the human readable interpretation "may accompany the symbol. It should not
         // interfere with the symbol itself nor the quiet zones."
         float heightInModules = (rowCount * barHeight) + ((rowCount + 1) * SeparatorHeight);
-        BarcodeTextPlacement[] placements = [];
-        if (options.Font is not null && text.Length > 0)
+        if (options.Font is not null && readable.Length > 0)
         {
-            placements = [new BarcodeTextPlacement(text, 0F, RowWidth, BarcodeTextSide.BelowBars, heightInModules + BarcodeTextPlacement.Clearance)];
+            symbol.ReserveText(1, readable.Length);
+            symbol.AddText(readable, 0F, RowWidth, BarcodeTextSide.BelowBars, heightInModules + BarcodeTextPlacement.Clearance);
         }
 
-        return new StackedBarcodeSymbol(rows, SeparatorHeight, placements, LeadingQuietZone, TrailingQuietZone);
+        symbol.EndStacked(SeparatorHeight, LeadingQuietZone, TrailingQuietZone);
     }
 
     /// <summary>

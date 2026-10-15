@@ -13,8 +13,9 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <para>
 /// The input is the element string syntax the standard prints, each Application Identifier in parentheses
 /// followed by its data. A symbol carries up to 74 digits or 41 letters. When the first element string is
-/// Application Identifier (01), its check digit must be correct. The human readable interpretation is the
-/// input.
+/// Application Identifier (01), its check digit must be correct. The human readable interpretation prints
+/// the element strings on one line, except an element string of Application Identifier (8200), which does
+/// not print.
 /// </para>
 /// </summary>
 public sealed class Gs1DataBarExpandedSymbology : BarcodeSymbology
@@ -30,16 +31,23 @@ public sealed class Gs1DataBarExpandedSymbology : BarcodeSymbology
     public override double NominalXDimension => DataBarExpandedEncoder.NominalXDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
-        Span<char> buffer = stackalloc char[Gs1Data.StackBufferLength];
-        ValueStringBuilder encoded = new(buffer);
+        InlineArray64<char> bufferStorage = default;
+        int capacity = Gs1Data.PreparedCapacity(text, DataBarExpandedEncoder.MaximumDataCharacters);
+        ValueStringBuilder encoded = capacity <= Gs1Data.InlineBufferLength ? new(bufferStorage) : new(capacity);
         try
         {
             Gs1Data.Prepare(text, ref encoded);
-            return DataBarExpandedEncoder.BuildLinear(encoded.AsSpan(), text, options);
+
+            // The interpretation is never longer than the text, which PreparedCapacity bounds to 122
+            // characters, so the inline buffer always holds it.
+            InlineArray128<char> readableStorage = default;
+            Span<char> readable = readableStorage;
+            int readableLength = options.Font is null ? 0 : Gs1Data.WriteReadable(text, false, readable);
+            DataBarExpandedEncoder.BuildLinear(encoded.AsSpan(), readable[..readableLength], options, ref symbol);
         }
         finally
         {

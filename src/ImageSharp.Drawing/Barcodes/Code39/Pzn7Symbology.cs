@@ -27,6 +27,6 @@ public sealed class Pzn7Symbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
-        => PznData.BuildSymbol(text, Digits, options);
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+        => PznData.BuildSymbol(text, Digits, options, ref symbol);
 }

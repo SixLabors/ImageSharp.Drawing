@@ -67,12 +67,13 @@ public sealed class PharmacodeSymbology : BarcodeSymbology
     public override double NominalXDimension => XDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int value = PharmacodeEncoder.ParseValue(text, MinimumValue, MaximumValue);
 
         // Section 4.4 sets the bars from the lowest position, which is the right end of the symbol.
-        Span<int> bars = stackalloc int[MaximumBars];
+        InlineArray16<int> barStorage = default;
+        Span<int> bars = barStorage;
         int count = 0;
         while (value != 0)
         {
@@ -81,7 +82,7 @@ public sealed class PharmacodeSymbology : BarcodeSymbology
             value = (value - (thick ? 2 : 1)) / 2;
         }
 
-        int[] runs = new int[(count * 2) - 1];
+        Span<int> runs = symbol.BeginLinear((count * 2) - 1, out Span<float> heights, out _);
         int widthInModules = 0;
         for (int i = 0; i < count; i++)
         {
@@ -95,16 +96,14 @@ public sealed class PharmacodeSymbology : BarcodeSymbology
         }
 
         float barHeight = options.ResolveBarHeight(XDimension, NominalBarHeight);
-        float[] heights = new float[count];
-        float[] tops = new float[count];
-        heights.AsSpan().Fill(barHeight);
+        heights.Fill(barHeight);
 
-        BarcodeTextPlacement[] placements = [];
         if (options.Font is not null)
         {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
+            symbol.ReserveText(1, text.Length);
+            symbol.AddText(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
         }
 
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone);
+        symbol.EndLinear(QuietZone, QuietZone);
     }
 }

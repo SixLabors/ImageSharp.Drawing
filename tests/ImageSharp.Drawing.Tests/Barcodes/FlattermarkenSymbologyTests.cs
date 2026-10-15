@@ -22,7 +22,9 @@ public class FlattermarkenSymbologyTests
     [InlineData("123", "0,0,1,8,0,1,1,7,0,2,1,6")]
     [InlineData("11099", "0,0,1,8,0,0,1,8,0,9,0,0,0,8,1,0,0,8,1,0")]
     public void MatchesReferenceRuns(string text, string reference)
-        => Assert.Equal(Merge(reference), string.Join(",", Encode(text).RunWidths));
+        => Assert.Equal(
+            Merge(reference),
+            SymbolEncoder.Read(new FlattermarkenSymbology(), text, new BarcodeOptions(), static (ref symbol) => string.Join(",", symbol.Runs.ToArray())));
 
     /// <summary>
     /// Every digit takes a window of nine modules, so the symbol is nine modules per digit wide whatever
@@ -35,25 +37,19 @@ public class FlattermarkenSymbologyTests
     [InlineData("11099")]
     [InlineData("0123456789")]
     public void SpansNineModulesPerDigit(string text)
-    {
-        LinearBarcodeSymbol symbol = Encode(text);
-        int widthInModules = 0;
-        foreach (int run in symbol.RunWidths)
+        => SymbolEncoder.Encode(new FlattermarkenSymbology(), text, new BarcodeOptions(), (ref symbol) =>
         {
-            widthInModules += run;
-        }
-
-        Assert.Equal(9 * text.Length, widthInModules);
-        Assert.Equal(0, symbol.LeadingQuietZone);
-        Assert.Equal(0, symbol.TrailingQuietZone);
-    }
+            Assert.Equal(9 * text.Length, SymbolEncoder.RunSum(ref symbol));
+            Assert.Equal(0, symbol.LeadingQuietZone);
+            Assert.Equal(0, symbol.TrailingQuietZone);
+        });
 
     [Fact]
     public void PrintsTheDigitsAsGiven()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new FlattermarkenSymbology().Encode("11099", options);
-        Assert.Equal("11099", Assert.Single(symbol.Text).Text);
+        string[] texts = SymbolEncoder.Read(new FlattermarkenSymbology(), "11099", options, SymbolEncoder.Texts);
+        Assert.Equal("11099", Assert.Single(texts));
     }
 
     [Theory]
@@ -62,10 +58,7 @@ public class FlattermarkenSymbologyTests
     [InlineData("1 2")]
     [InlineData("１２")]
     public void RejectsMalformedInput(string text)
-        => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
-
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new FlattermarkenSymbology().Encode(text, new BarcodeOptions());
+        => Assert.ThrowsAny<ArgumentException>(() => SymbolEncoder.Encode(new FlattermarkenSymbology(), text, new BarcodeOptions()));
 
     private static string Merge(string reference)
     {

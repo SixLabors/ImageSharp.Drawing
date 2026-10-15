@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Buffers;
 using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
@@ -52,10 +51,11 @@ internal static class Code128Encoder
     private const int Shift = 98;
 
     /// <summary>
-    /// The longest input that encodes without renting. Section 5.4.1 caps a GS1-128 symbol at 48 data
-    /// characters, so every conforming symbol stays on the stack.
+    /// The longest input that encodes in the inline buffers: 128 values, two for each character, and 256
+    /// distance bytes, four for each character. Section 5.4.1 caps a GS1-128 symbol at 48 data characters,
+    /// so every conforming GS1-128 symbol encodes inline.
     /// </summary>
-    private const int StackLimit = 64;
+    private const int InlineLength = 64;
 
     /// <summary>
     /// The nominal bar height in modules. Section 5.4.7.1 sets the symbol height at 32 millimetres for the
@@ -88,16 +88,29 @@ internal static class Code128Encoder
     ];
 
     /// <summary>
-    /// Encodes text into the alternating bar and space run widths the renderer draws, starting with a bar.
-    /// The runs carry the start character, the code set switches, the check character of section 5.4.3.6
-    /// and the stop character, whose seven elements end the list on a bar.
+    /// Encodes text and builds the symbol. The runs carry the start character, the code set switches, the
+    /// check character of section 5.4.3.6 and the stop character, whose seven elements end the list on a
+    /// bar. Every symbology in the family shares this step, so only the encodation differs between them.
+    /// Code 128 carries no guard bars, so every bar runs the full height, and section 5.4.7.3 prints the
+    /// human readable interpretation below the symbol.
     /// </summary>
     /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
     /// <param name="gs1">Whether this is a GS1 symbol. Such a symbol carries a Function 1 character after
     /// its start character, and encodes every <see cref="Gs1Data.Separator"/> in the text as another one.</param>
-    /// <returns>The run widths in modules.</returns>
+    /// <param name="readablePrefix">The characters of the human readable interpretation before its body.</param>
+    /// <param name="readableBody">The body of the human readable interpretation.</param>
+    /// <param name="readableSuffix">The characters of the human readable interpretation after its body.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode.</exception>
-    public static int[] Encode(ReadOnlySpan<char> text, bool gs1)
+    public static void BuildSymbol(
+        ReadOnlySpan<char> text,
+        bool gs1,
+        ReadOnlySpan<char> readablePrefix,
+        ReadOnlySpan<char> readableBody,
+        ReadOnlySpan<char> readableSuffix,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
     {
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
 
@@ -117,14 +130,21 @@ internal static class Code128Encoder
         }
 
         // A shift costs one extra symbol character, so two per input character bounds the run, and the
-        // start, the optional Function 1, the check and the stop add four more.
+        // start, the optional Function 1, the check and the stop add four more. The text is at most
+        // MaximumLength characters, so the buffers are bounded: short text works inline, and longer text
+        // rents each buffer once.
         int capacity = (text.Length * 2) + 4;
         int lookahead = text.Length + 1;
-        byte[]? rented = null;
-        Span<int> values = capacity <= StackLimit * 2 ? stackalloc int[StackLimit * 2] : new int[capacity];
-        Span<byte> distances = lookahead <= StackLimit
-            ? stackalloc byte[StackLimit * 4]
-            : (rented = ArrayPool<byte>.Shared.Rent(lookahead * 4)).AsSpan(0, lookahead * 4);
+        InlineArray128<int> valueStorage = default;
+        InlineArray256<byte> distanceStorage = default;
+        PooledBuffer<int> rentedValues = default;
+        PooledBuffer<byte> rentedDistances = default;
+        Span<int> values = capacity <= InlineLength * 2
+            ? valueStorage
+            : (rentedValues = new PooledBuffer<int>(capacity)).Span;
+        Span<byte> distances = lookahead <= InlineLength
+            ? distanceStorage
+            : (rentedDistances = new PooledBuffer<byte>(lookahead * 4)).Span;
 
         try
         {
@@ -133,50 +153,42 @@ internal static class Code128Encoder
             Span<byte> digitsFromEven = distances.Slice(lookahead * 2, lookahead);
             Span<byte> digitsFromOdd = distances.Slice(lookahead * 3, lookahead);
             int count = Encode(text, gs1, values, nextOnlyInA, nextOnlyInB, digitsFromEven, digitsFromOdd);
-            return ToRuns(values[..count]);
+
+            // Section 5.4.1 gives every symbol character six elements. Only the stop character differs,
+            // with the four bars and three spaces that close the symbol.
+            Span<int> runs = symbol.BeginLinear(((count - 1) * 6) + 7, out Span<float> heights, out _);
+            WriteRuns(values[..count], runs);
+
+            int widthInModules = 0;
+            for (int i = 0; i < runs.Length; i++)
+            {
+                widthInModules += runs[i];
+            }
+
+            float barHeight = options.ResolveBarHeight(NominalXDimension, NominalBarHeight);
+            heights.Fill(barHeight);
+
+            int readableLength = readablePrefix.Length + readableBody.Length + readableSuffix.Length;
+            if (options.Font is not null && readableLength > 0)
+            {
+                symbol.ReserveText(1, readableLength);
+                symbol.AddText(
+                    readablePrefix,
+                    readableBody,
+                    readableSuffix,
+                    0F,
+                    widthInModules,
+                    BarcodeTextSide.BelowBars,
+                    barHeight + BarcodeTextPlacement.Clearance);
+            }
+
+            symbol.EndLinear(QuietZone, QuietZone);
         }
         finally
         {
-            if (rented is not null)
-            {
-                ArrayPool<byte>.Shared.Return(rented);
-            }
+            rentedValues.Dispose();
+            rentedDistances.Dispose();
         }
-    }
-
-    /// <summary>
-    /// Builds the symbol from encoded run widths. Every symbology in the family shares this step, so only
-    /// the encodation differs between them. Code 128 carries no guard bars, so every bar runs the full
-    /// height, and section 5.4.7.3 prints the human readable interpretation below the symbol.
-    /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <param name="text">The human readable interpretation.</param>
-    /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
-    {
-        int widthInModules = 0;
-        for (int i = 0; i < runs.Length; i++)
-        {
-            widthInModules += runs[i];
-        }
-
-        float barHeight = options.ResolveBarHeight(NominalXDimension, NominalBarHeight);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
-        for (int i = 0; i < barCount; i++)
-        {
-            heights[i] = barHeight;
-        }
-
-        BarcodeTextPlacement[] placements = [];
-        if (options.Font is not null && text.Length > 0)
-        {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
-        }
-
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone);
     }
 
     /// <summary>
@@ -346,16 +358,13 @@ internal static class Code128Encoder
         => value + amount >= byte.MaxValue ? byte.MaxValue : (byte)(value + amount);
 
     /// <summary>
-    /// Converts symbol character values into the run lengths the renderer draws, starting with a bar.
+    /// Writes the run lengths of symbol character values, starting with a bar.
     /// </summary>
     /// <param name="values">The symbol character values, including the start, check and stop characters.</param>
-    /// <returns>The alternating bar and space run widths in modules.</returns>
-    private static int[] ToRuns(ReadOnlySpan<int> values)
+    /// <param name="runs">The alternating bar and space run widths in modules to write.</param>
+    private static void WriteRuns(ReadOnlySpan<int> values, Span<int> runs)
     {
-        // Section 5.4.1 gives every symbol character six elements. Only the stop character differs, with
-        // the four bars and three spaces that close the symbol.
         ReadOnlySpan<uint> patterns = Patterns;
-        int[] runs = new int[((values.Length - 1) * 6) + 7];
         int index = 0;
         for (int i = 0; i < values.Length; i++)
         {
@@ -366,8 +375,6 @@ internal static class Code128Encoder
                 runs[index++] = (int)((pattern >> shift) & 0xF);
             }
         }
-
-        return runs;
     }
 
     /// <summary>

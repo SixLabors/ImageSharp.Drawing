@@ -27,10 +27,10 @@ internal static class Interleaved2Of5Encoder
     public const int QuietZone = 10;
 
     /// <summary>
-    /// The number of characters a caller stack allocates to build symbol data in. Data this long covers
-    /// the labels the symbology is used for, and anything longer grows into a pooled array.
+    /// The number of characters a caller holds inline to build symbol data in. Data this long covers the
+    /// labels the symbology is used for, and longer data rents its buffer once.
     /// </summary>
-    public const int StackBufferLength = 64;
+    public const int InlineBufferLength = 64;
 
     /// <summary>
     /// The element count of one digit, five bars or five spaces.
@@ -83,15 +83,74 @@ internal static class Interleaved2Of5Encoder
     ];
 
     /// <summary>
-    /// Encodes digits into the alternating bar and space run widths the renderer draws, starting with a
-    /// bar. The runs carry the start pattern, the digit pairs and the stop pattern, and end on the bar of
-    /// the stop pattern.
+    /// Encodes digits and builds the symbol at the proportional bar height of section 3.2 of AIM USS-I 2/5.
     /// </summary>
     /// <param name="digits">The digits to encode, an even number of them, already validated.</param>
-    /// <returns>The run widths in modules.</returns>
-    public static int[] Encode(ReadOnlySpan<char> digits)
+    /// <param name="readable">The human readable interpretation.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(ReadOnlySpan<char> digits, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        int[] runs = new int[(digits.Length * ElementsPerDigit) + StartElements + StopElements];
+        BeginRuns(digits, ref symbol, out Span<float> heights, out Span<float> tops);
+        EndSymbol(heights, tops, readable, options, ref symbol);
+    }
+
+    /// <summary>
+    /// Encodes digits and builds the symbol at a bar height an application standard fixes rather than the
+    /// proportional recommendation of section 3.2 of AIM USS-I 2/5.
+    /// </summary>
+    /// <param name="digits">The digits to encode, an even number of them, already validated.</param>
+    /// <param name="readable">The human readable interpretation.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="nominalBarHeight">The bar height in modules a symbol takes when the caller sets none.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(
+        ReadOnlySpan<char> digits,
+        ReadOnlySpan<char> readable,
+        BarcodeOptions options,
+        float nominalBarHeight,
+        ref BarcodeSymbol symbol)
+    {
+        BeginRuns(digits, ref symbol, out Span<float> heights, out Span<float> tops);
+        EndSymbol(heights, tops, readable, options, BarcodeSymbology.PointXDimension, nominalBarHeight, 0F, ref symbol);
+    }
+
+    /// <summary>
+    /// Encodes digits and builds the symbol at a bar height an application standard fixes and inside a
+    /// bearer bar.
+    /// </summary>
+    /// <param name="digits">The digits to encode, an even number of them, already validated.</param>
+    /// <param name="readable">The human readable interpretation.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="nominalXDimension">The nominal X dimension of the application standard in millimetres.</param>
+    /// <param name="nominalBarHeight">The bar height in modules a symbol takes when the caller sets none.</param>
+    /// <param name="bearerBarThickness">The thickness of the bearer bar in modules, or zero for none.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(
+        ReadOnlySpan<char> digits,
+        ReadOnlySpan<char> readable,
+        BarcodeOptions options,
+        double nominalXDimension,
+        float nominalBarHeight,
+        float bearerBarThickness,
+        ref BarcodeSymbol symbol)
+    {
+        BeginRuns(digits, ref symbol, out Span<float> heights, out Span<float> tops);
+        EndSymbol(heights, tops, readable, options, nominalXDimension, nominalBarHeight, bearerBarThickness, ref symbol);
+    }
+
+    /// <summary>
+    /// Begins the symbol and writes the alternating bar and space run widths, starting with a bar. The
+    /// runs carry the start pattern, the digit pairs and the stop pattern, and end on the bar of the stop
+    /// pattern.
+    /// </summary>
+    /// <param name="digits">The digits to encode, an even number of them, already validated.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    /// <param name="heights">The bar heights of the symbol, to write.</param>
+    /// <param name="tops">The bar tops of the symbol, to write.</param>
+    private static void BeginRuns(ReadOnlySpan<char> digits, ref BarcodeSymbol symbol, out Span<float> heights, out Span<float> tops)
+    {
+        Span<int> runs = symbol.BeginLinear((digits.Length * ElementsPerDigit) + StartElements + StopElements, out heights, out tops);
         int written = 0;
 
         for (int i = 0; i < StartElements; i++)
@@ -116,82 +175,71 @@ internal static class Interleaved2Of5Encoder
         runs[written++] = WideElement;
         runs[written++] = 1;
         runs[written] = 1;
-        return runs;
     }
 
     /// <summary>
-    /// Builds the symbol from encoded run widths. Interleaved 2 of 5 carries no guard bars, so every bar
-    /// runs the full height, and the human readable interpretation sits below the symbol.
+    /// Ends a symbol whose runs are written, at the proportional bar height of section 3.2 of AIM USS-I
+    /// 2/5. The 2 of 5 symbologies carry no guard bars, so every bar runs the full height, and the human
+    /// readable interpretation sits below the symbol.
     /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <param name="text">The human readable interpretation.</param>
+    /// <param name="heights">The bar heights to write.</param>
+    /// <param name="tops">The bar tops to write.</param>
+    /// <param name="readable">The human readable interpretation.</param>
     /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
+    /// <param name="symbol">The symbol to write.</param>
+    public static void EndSymbol(
+        Span<float> heights,
+        Span<float> tops,
+        ReadOnlySpan<char> readable,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
     {
         double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
-        return BuildSymbol(runs, text, options, MathF.Max(WidthInModules(runs) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension)));
+        float nominalBarHeight = MathF.Max(WidthInModules(symbol.Runs) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
+        EndSymbol(heights, tops, readable, options, BarcodeSymbology.PointXDimension, nominalBarHeight, 0F, ref symbol);
     }
 
     /// <summary>
-    /// Builds the symbol from encoded run widths, at a bar height an application standard fixes rather
-    /// than the proportional recommendation of section 3.2 of AIM USS-I 2/5.
+    /// Ends a symbol whose runs are written, at a bar height an application standard fixes and inside a
+    /// bearer bar. Section 5.3.2.4 of the GS1 General Specifications butts the bearer bar "directly against
+    /// the top and bottom of the bars", so the bars start one thickness below the symbol top, and the human
+    /// readable interpretation faces the bottom of the lower bearer bar.
     /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <param name="text">The human readable interpretation.</param>
-    /// <param name="options">The options that control layout choices.</param>
-    /// <param name="nominalBarHeight">The bar height in modules a symbol takes when the caller sets none.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options, float nominalBarHeight)
-        => BuildSymbol(runs, text, options, BarcodeSymbology.PointXDimension, nominalBarHeight, 0F);
-
-    /// <summary>
-    /// Builds the symbol from encoded run widths, at a bar height an application standard fixes and inside
-    /// a bearer bar. Section 5.3.2.4 of the GS1 General Specifications butts the bearer bar "directly
-    /// against the top and bottom of the bars", so the bars start one thickness below the symbol top, and
-    /// the human readable interpretation faces the bottom of the lower bearer bar.
-    /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <param name="text">The human readable interpretation.</param>
+    /// <param name="heights">The bar heights to write.</param>
+    /// <param name="tops">The bar tops to write.</param>
+    /// <param name="readable">The human readable interpretation.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="nominalXDimension">The nominal X dimension of the application standard in millimetres.</param>
     /// <param name="nominalBarHeight">The bar height in modules a symbol takes when the caller sets none.</param>
     /// <param name="bearerBarThickness">The thickness of the bearer bar in modules, or zero for none.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(
-        int[] runs,
-        string text,
+    /// <param name="symbol">The symbol to write.</param>
+    private static void EndSymbol(
+        Span<float> heights,
+        Span<float> tops,
+        ReadOnlySpan<char> readable,
         BarcodeOptions options,
         double nominalXDimension,
         float nominalBarHeight,
-        float bearerBarThickness)
+        float bearerBarThickness,
+        ref BarcodeSymbol symbol)
     {
-        int widthInModules = WidthInModules(runs);
+        int widthInModules = WidthInModules(symbol.Runs);
         float barHeight = options.ResolveBarHeight(nominalXDimension, nominalBarHeight);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
-        for (int i = 0; i < barCount; i++)
+        heights.Fill(barHeight);
+        tops.Fill(bearerBarThickness);
+
+        if (options.Font is not null && readable.Length > 0)
         {
-            heights[i] = barHeight;
-            tops[i] = bearerBarThickness;
+            symbol.ReserveText(1, readable.Length);
+            symbol.AddText(
+                readable,
+                0F,
+                widthInModules,
+                BarcodeTextSide.BelowBars,
+                bearerBarThickness + barHeight + bearerBarThickness + BarcodeTextPlacement.Clearance);
         }
 
-        BarcodeTextPlacement[] placements = [];
-        if (options.Font is not null && text.Length > 0)
-        {
-            placements =
-            [
-                new BarcodeTextPlacement(
-                    text,
-                    0F,
-                    widthInModules,
-                    BarcodeTextSide.BelowBars,
-                    bearerBarThickness + barHeight + bearerBarThickness + BarcodeTextPlacement.Clearance)
-            ];
-        }
-
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone, bearerBarThickness);
+        symbol.EndLinear(QuietZone, QuietZone, bearerBarThickness);
     }
 
     /// <summary>
@@ -199,7 +247,7 @@ internal static class Interleaved2Of5Encoder
     /// </summary>
     /// <param name="runs">The alternating bar and space run widths in modules.</param>
     /// <returns>The width in modules.</returns>
-    private static int WidthInModules(int[] runs)
+    private static int WidthInModules(ReadOnlySpan<int> runs)
     {
         int width = 0;
         for (int i = 0; i < runs.Length; i++)

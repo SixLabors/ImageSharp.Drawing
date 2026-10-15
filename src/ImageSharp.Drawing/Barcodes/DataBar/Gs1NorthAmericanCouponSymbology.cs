@@ -60,7 +60,7 @@ public sealed class Gs1NorthAmericanCouponSymbology : BarcodeSymbology
     public override double NominalXDimension => DataBarExpandedEncoder.NominalXDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
@@ -69,8 +69,9 @@ public sealed class Gs1NorthAmericanCouponSymbology : BarcodeSymbology
             throw new ArgumentException("A GS1 North American Coupon carries a single element string, Application Identifier (8110).", nameof(text));
         }
 
-        Span<char> buffer = stackalloc char[Gs1Data.StackBufferLength];
-        ValueStringBuilder encoded = new(buffer);
+        InlineArray64<char> bufferStorage = default;
+        int capacity = Gs1Data.PreparedCapacity(text, DataBarExpandedEncoder.MaximumDataCharacters);
+        ValueStringBuilder encoded = capacity <= Gs1Data.InlineBufferLength ? new(bufferStorage) : new(capacity);
         try
         {
             Gs1Data.Prepare(text, ref encoded);
@@ -89,11 +90,17 @@ public sealed class Gs1NorthAmericanCouponSymbology : BarcodeSymbology
             }
 
             int prefixLength = NorthAmericanCouponCode.Validate(data);
-            string caption = options.Font is null
-                ? string.Empty
-                : string.Concat(data.Slice(1, prefixLength), "-", data.Slice(1 + prefixLength, NorthAmericanCouponCode.OfferCodeLength));
 
-            return DataBarExpandedEncoder.BuildStacked(encoded.AsSpan(), this.Segments, caption, BarcodeTextSide.AboveBars, options);
+            // The caption is the GS1 Company Prefix and the offer code, joined by a hyphen.
+            DataBarExpandedEncoder.BuildStacked(
+                encoded.AsSpan(),
+                this.Segments,
+                data.Slice(1, prefixLength),
+                "-",
+                data.Slice(1 + prefixLength, NorthAmericanCouponCode.OfferCodeLength),
+                BarcodeTextSide.AboveBars,
+                options,
+                ref symbol);
         }
         finally
         {

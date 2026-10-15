@@ -34,13 +34,18 @@ internal static class FourStateEncoder
     /// </summary>
     /// <param name="states">The state of every bar.</param>
     /// <param name="metrics">The dimensions of the symbology.</param>
-    /// <param name="text">The human readable interpretation.</param>
+    /// <param name="readable">The human readable interpretation, or none.</param>
     /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(ReadOnlySpan<FourState> states, FourStateMetrics metrics, string text, BarcodeOptions options)
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(
+        ReadOnlySpan<FourState> states,
+        FourStateMetrics metrics,
+        ReadOnlySpan<char> readable,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
     {
         int barCount = states.Length;
-        int[] runs = new int[(barCount * 2) - 1];
+        Span<int> runs = symbol.BeginLinear((barCount * 2) - 1, out Span<float> heights, out Span<float> tops);
         for (int i = 0; i < runs.Length; i++)
         {
             runs[i] = (i & 1) == 0 ? metrics.BarUnits : metrics.SpaceUnits;
@@ -50,8 +55,6 @@ internal static class FourStateEncoder
         float ascender = metrics.Ascender * scale;
         float tracker = metrics.Tracker * scale;
         float descender = metrics.Descender * scale;
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
         for (int i = 0; i < barCount; i++)
         {
             FourState state = states[i];
@@ -62,15 +65,15 @@ internal static class FourStateEncoder
         }
 
         float widthInModules = ((barCount * metrics.BarUnits) + ((barCount - 1) * metrics.SpaceUnits)) * metrics.RunUnit;
-        BarcodeTextPlacement[] placements = [];
-        if (options.Font is not null && text.Length > 0)
+        if (options.Font is not null && readable.Length > 0)
         {
             float textEdge = metrics.TextSide == BarcodeTextSide.AboveBars
                 ? -metrics.TextClearance
                 : ascender + tracker + descender + metrics.TextClearance;
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, metrics.TextSide, textEdge, metrics.TextAlignment)];
+            symbol.ReserveText(1, readable.Length);
+            symbol.AddText(readable, 0F, widthInModules, metrics.TextSide, textEdge, metrics.TextAlignment);
         }
 
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, metrics.QuietZone, metrics.QuietZone, 0F, metrics.RunUnit, true);
+        symbol.EndLinear(metrics.QuietZone, metrics.QuietZone, 0F, metrics.RunUnit, true);
     }
 }

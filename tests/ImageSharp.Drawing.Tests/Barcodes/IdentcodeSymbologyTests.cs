@@ -27,8 +27,7 @@ public class IdentcodeSymbologyTests
     {
         const string reference = "11112112221111222111111211122121121212211121121221211122121111212111";
 
-        LinearBarcodeSymbol symbol = Encode(text);
-        Assert.Equal(reference[..^1].Replace('2', '3'), string.Concat(symbol.RunWidths));
+        Assert.Equal(reference[..^1].Replace('2', '3'), Encode(text));
     }
 
     /// <summary>
@@ -41,10 +40,9 @@ public class IdentcodeSymbologyTests
     public void CalculatesTheDeutschePostCheckDigit()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new IdentcodeSymbology().Encode("56310243031", options);
+        string[] texts = SymbolEncoder.Read(new IdentcodeSymbology(), "56310243031", options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal("56.310 243.031 3", placement.Text);
+        Assert.Equal("56.310 243.031 3", Assert.Single(texts));
         Assert.Throws<ArgumentException>(() => Encode("563102430314"));
     }
 
@@ -61,6 +59,11 @@ public class IdentcodeSymbologyTests
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new IdentcodeSymbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(string text)
+        => SymbolEncoder.Read(new IdentcodeSymbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
 }

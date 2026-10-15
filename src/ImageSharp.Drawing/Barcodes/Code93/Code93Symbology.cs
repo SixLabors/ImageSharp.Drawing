@@ -23,12 +23,12 @@ public sealed class Code93Symbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
         Code93Encoder.Validate(text);
 
-        return Code93Encoder.BuildSymbol(Code93Encoder.Encode(text), options.Font is null ? string.Empty : text, options);
+        Code93Encoder.BuildSymbol(text, text, options, ref symbol);
     }
 }

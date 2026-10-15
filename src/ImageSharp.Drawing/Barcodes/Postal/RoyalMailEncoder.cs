@@ -99,7 +99,8 @@ internal static class RoyalMailEncoder
     {
         int upper = 0;
         int lower = 0;
-        Span<FourState> states = stackalloc FourState[BarsPerCharacter];
+        InlineArray4<FourState> stateStorage = default;
+        Span<FourState> states = stateStorage;
         for (int i = 0; i < text.Length; i++)
         {
             Append(Value(text[i]), states);

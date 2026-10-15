@@ -34,20 +34,25 @@ public sealed class LeitcodeSymbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Span<char> encoded = stackalloc char[Digits + 1];
+        InlineArray14<char> encodedStorage = default;
+        Span<char> encoded = encodedStorage;
         DeutschePostData.Prepare(text, Digits, encoded);
 
-        ReadOnlySpan<char> digits = encoded;
-        string readable = options.Font is null
-            ? string.Empty
-            : $"{digits[..5]}.{digits[5..8]}.{digits[8..11]}.{digits[11..13]} {digits[13]}";
+        // The interpretation groups the fourteen digits as 12345.678.901.23 4.
+        InlineArray18<char> readableStorage = default;
+        Span<char> readable = readableStorage;
+        encoded[..5].CopyTo(readable);
+        readable[5] = '.';
+        encoded[5..8].CopyTo(readable[6..]);
+        readable[9] = '.';
+        encoded[8..11].CopyTo(readable[10..]);
+        readable[13] = '.';
+        encoded[11..13].CopyTo(readable[14..]);
+        readable[16] = ' ';
+        readable[17] = encoded[13];
 
-        return Interleaved2Of5Encoder.BuildSymbol(
-            Interleaved2Of5Encoder.Encode(encoded),
-            readable,
-            options,
-            DeutschePostData.NominalBarHeight);
+        Interleaved2Of5Encoder.BuildSymbol(encoded, readable, options, DeutschePostData.NominalBarHeight, ref symbol);
     }
 }

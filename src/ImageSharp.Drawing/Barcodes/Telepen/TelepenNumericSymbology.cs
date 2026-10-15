@@ -16,7 +16,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 public sealed class TelepenNumericSymbology : BarcodeSymbology
 {
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
@@ -27,7 +27,11 @@ public sealed class TelepenNumericSymbology : BarcodeSymbology
             throw new ArgumentException($"Telepen Numeric carries an even number of characters; got {text.Length}.", nameof(text));
         }
 
-        ValueListBuilder<int> buffer = new(stackalloc int[TelepenEncoder.StackBufferLength / 2]);
+        // One value for each pair of characters, so the buffer never grows: short text works inline and
+        // longer text rents once.
+        InlineArray32<int> bufferStorage = default;
+        int capacity = text.Length / 2;
+        ValueListBuilder<int> buffer = capacity <= TelepenEncoder.InlineBufferLength / 2 ? new(bufferStorage) : new(capacity);
         try
         {
             SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
@@ -62,8 +66,7 @@ public sealed class TelepenNumericSymbology : BarcodeSymbology
                 index += current.Utf16SequenceLength;
             }
 
-            string readable = options.Font is null ? string.Empty : text;
-            return TelepenEncoder.BuildSymbol(TelepenEncoder.Encode(buffer.AsSpan()), readable, options);
+            TelepenEncoder.BuildSymbol(buffer.AsSpan(), text, options, ref symbol);
         }
         finally
         {

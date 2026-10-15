@@ -31,11 +31,11 @@ public class ChannelCodeSymbologyTests
     [InlineData("576688", "1,1,1,1,1,1,1,1,1,7,5,1,2,1,1,1,1,1,2,1,1,1,1")]
     [InlineData("7742862", "1,1,1,1,1,1,1,1,1,8,6,1,1,1,2,1,1,1,1,1,2,1,1,1,1")]
     public void MatchesReferenceRuns(string text, string reference)
-        => Assert.Equal(reference, string.Join(",", Encode(text, false).RunWidths));
+        => Assert.Equal(reference, Encode(text, false));
 
     [Fact]
     public void DrawsTheShortFinderPattern()
-        => Assert.Equal("1,1,1,1,1,5,4,1,1,1,2,1,1,1,1", string.Join(",", Encode("3493", true).RunWidths));
+        => Assert.Equal("1,1,1,1,1,5,4,1,1,1,2,1,1,1,1", Encode("3493", true));
 
     /// <summary>
     /// The finder pattern is nine modules and every channel adds a space and a bar whose widths sum to a
@@ -50,24 +50,20 @@ public class ChannelCodeSymbologyTests
     [InlineData("7742862")]
     public void SpansFourModulesPerChannel(string text)
     {
-        LinearBarcodeSymbol symbol = Encode(text, false);
-        int widthInModules = 0;
-        foreach (int run in symbol.RunWidths)
+        SymbolEncoder.Encode(new ChannelCodeSymbology(false), text, new BarcodeOptions(), (ref symbol) =>
         {
-            widthInModules += run;
-        }
-
-        Assert.Equal((4 * (text.Length + 1)) + 7, widthInModules);
-        Assert.Equal(1, symbol.LeadingQuietZone);
-        Assert.Equal(2, symbol.TrailingQuietZone);
+            Assert.Equal((4 * (text.Length + 1)) + 7, SymbolEncoder.RunSum(ref symbol));
+            Assert.Equal(1, symbol.LeadingQuietZone);
+            Assert.Equal(2, symbol.TrailingQuietZone);
+        });
     }
 
     [Fact]
     public void PrintsTheDigitsAsGiven()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new ChannelCodeSymbology().Encode("0099", options);
-        Assert.Equal("0099", Assert.Single(symbol.Text).Text);
+        string[] texts = SymbolEncoder.Read(new ChannelCodeSymbology(), "0099", options, SymbolEncoder.Texts);
+        Assert.Equal("0099", Assert.Single(texts));
     }
 
     /// <summary>
@@ -90,6 +86,16 @@ public class ChannelCodeSymbologyTests
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text, false));
 
-    private static LinearBarcodeSymbol Encode(string text, bool shortFinder)
-        => (LinearBarcodeSymbol)new ChannelCodeSymbology(shortFinder).Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="shortFinder">Whether the symbol uses the short finder pattern.</param>
+    /// <returns>The run widths of the symbol, separated by commas.</returns>
+    private static string Encode(string text, bool shortFinder)
+        => SymbolEncoder.Read(
+            new ChannelCodeSymbology(shortFinder),
+            text,
+            new BarcodeOptions(),
+            static (ref symbol) => string.Join(",", symbol.Runs.ToArray()));
 }

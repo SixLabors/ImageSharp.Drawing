@@ -48,17 +48,21 @@ public sealed class Code93ExtendedSymbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
 
-        // A pair per character bounds the substitution, and the readable interpretation matches the input
-        // character for character.
-        Span<char> encodedBuffer = stackalloc char[Code93Encoder.StackBufferLength];
-        Span<char> readableBuffer = stackalloc char[Code93Encoder.StackBufferLength];
-        ValueStringBuilder encoded = new(encodedBuffer);
-        ValueStringBuilder readable = new(readableBuffer);
+        // Each character substitutes to one or two symbol characters, and the symbol carries at most
+        // Code93Encoder.MaximumLength of them, so longer text cannot fit. A pair per character bounds the
+        // substitution, and the readable interpretation matches the input character for character, so
+        // neither builder grows: short text stays inline and longer text rents once.
+        Guard.MustBeLessThanOrEqualTo(text.Length, Code93Encoder.MaximumLength, nameof(text));
+        InlineArray64<char> encodedStorage = default;
+        InlineArray64<char> readableStorage = default;
+        int encodedCapacity = text.Length * 2;
+        ValueStringBuilder encoded = encodedCapacity <= Code93Encoder.InlineBufferLength ? new(encodedStorage) : new(encodedCapacity);
+        ValueStringBuilder readable = text.Length <= Code93Encoder.InlineBufferLength ? new(readableStorage) : new(text.Length);
         try
         {
             // Walking code points rather than UTF-16 units reports a surrogate pair as the one character
@@ -83,10 +87,7 @@ public sealed class Code93ExtendedSymbology : BarcodeSymbology
 
             Guard.MustBeLessThanOrEqualTo(encoded.Length, Code93Encoder.MaximumLength, nameof(text));
 
-            return Code93Encoder.BuildSymbol(
-                Code93Encoder.Encode(encoded.AsSpan()),
-                options.Font is null ? string.Empty : readable.AsSpan().ToString(),
-                options);
+            Code93Encoder.BuildSymbol(encoded.AsSpan(), readable.AsSpan(), options, ref symbol);
         }
         finally
         {

@@ -13,16 +13,29 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class HibcCode39SymbologyTests
 {
-    [Theory]
-    [InlineData("A123BJC5D6E71", "1311313111131113131131111311313113111131113311113131331111111131131131111133311131311311113113311111111133113111333111113111331111111311313131131111311111133131131131311")]
-    [InlineData("12345", "13113131111311131311311311113111331111313133111111111331113131133111111111331131131131311")]
-    [InlineData("$$52001510X3", "131131311113111313111313131111131313111131133111111133111131111331311111133131113113111131311331111131131111311113313111131131113131331111111313111311131131311")]
-    [InlineData("/", "1311313111131113131113131113111331113111131131311")]
-    public void MatchesReferenceRuns(string text, string expected)
+    /// <summary>
+    /// Gets the cases of <see cref="MatchesReferenceRuns"/>.
+    /// </summary>
+    public static TheoryData<string, string> MatchesReferenceRunsData { get; } = new()
     {
-        LinearBarcodeSymbol symbol = Encode(new HibcCode39Symbology(), text);
-        Assert.Equal(expected, string.Concat(symbol.RunWidths));
-    }
+        {
+            "A123BJC5D6E71",
+            "13113131111311131311311113113131131111311133111131313311111111311311311111333111313113111131133111111111331131113331111131113311111113113131" +
+                "31131111311111133131131131311"
+        },
+        { "12345", "13113131111311131311311311113111331111313133111111111331113131133111111111331131131131311" },
+        {
+            "$$52001510X3",
+            "13113131111311131311131313111113131311113113311111113311113111133131111113313111311311113131133111113113111131111331311113113111313133111111" +
+                "1313111311131131311"
+        },
+        { "/", "1311313111131113131113131113111331113111131131311" },
+    };
+
+    [Theory]
+    [MemberData(nameof(MatchesReferenceRunsData))]
+    public void MatchesReferenceRuns(string text, string expected)
+        => Assert.Equal(expected, Encode(new HibcCode39Symbology(), text));
 
     /// <summary>
     /// A caller who has already calculated the check character supplies it, and the symbol carries it
@@ -31,8 +44,8 @@ public class HibcCode39SymbologyTests
     [Fact]
     public void ValidatesASuppliedCheckCharacter()
         => Assert.Equal(
-            string.Concat(Encode(new HibcCode39Symbology(), "A123BJC5D6E71").RunWidths),
-            string.Concat(Encode(new HibcCode39Symbology(true), "A123BJC5D6E71G").RunWidths));
+            Encode(new HibcCode39Symbology(), "A123BJC5D6E71"),
+            Encode(new HibcCode39Symbology(true), "A123BJC5D6E71G"));
 
     [Fact]
     public void RejectsWrongCheckCharacter()
@@ -65,10 +78,9 @@ public class HibcCode39SymbologyTests
     public void PrintsTheFlagAndCheckCharacters(string text, string expected)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new HibcCode39Symbology().Encode(text, options);
+        string[] texts = SymbolEncoder.Read(new HibcCode39Symbology(), text, options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal(expected, placement.Text);
+        Assert.Equal(expected, Assert.Single(texts));
     }
 
     /// <summary>
@@ -77,17 +89,14 @@ public class HibcCode39SymbologyTests
     /// </summary>
     [Fact]
     public void AddsNoCode39CheckCharacter()
-    {
-        LinearBarcodeSymbol symbol = Encode(new HibcCode39Symbology(), "12345");
-        int widthInModules = 0;
-        foreach (int run in symbol.RunWidths)
-        {
-            widthInModules += run;
-        }
+        => Assert.Equal(((1 + 5 + 1 + 2) * 16) - 1, SymbolEncoder.Read(new HibcCode39Symbology(), "12345", new BarcodeOptions(), SymbolEncoder.RunSum));
 
-        Assert.Equal(((1 + 5 + 1 + 2) * 16) - 1, widthInModules);
-    }
-
-    private static LinearBarcodeSymbol Encode(HibcCode39Symbology symbology, string text)
-        => (LinearBarcodeSymbol)symbology.Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="symbology">The symbology to encode with.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(HibcCode39Symbology symbology, string text)
+        => SymbolEncoder.Read(symbology, text, new BarcodeOptions(), SymbolEncoder.RunString);
 }

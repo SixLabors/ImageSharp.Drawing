@@ -22,14 +22,14 @@ public class Gs1DataBarOmnidirectionalSymbologyTests
     [InlineData("(01)99999999999997", "01121131341382114121123113611111117513511111311")]
     [InlineData("(01)00000000000000", "01111112181382117211111111111127119131812111111")]
     public void Gs1DataBarOmnidirectional_MatchesReferenceWidths(string text, string expected)
-        => Assert.Equal(expected, string.Concat(Encode(text).RunWidths));
+        => Assert.Equal(expected, string.Concat(Runs(text)));
 
     /// <summary>
     /// The check digit is calculated when 13 digits are given, so both forms encode the same symbol.
     /// </summary>
     [Fact]
     public void Gs1DataBarOmnidirectional_CalculatesTheCheckDigit()
-        => Assert.Equal(Encode("(01)00012345678905").RunWidths, Encode("(01)0001234567890").RunWidths);
+        => Assert.Equal(Runs("(01)00012345678905"), Runs("(01)0001234567890"));
 
     /// <summary>
     /// Section 5.5.2.1.1 of the GS1 General Specifications: "Its dimensions are 96X wide, starting with a 1X
@@ -39,14 +39,17 @@ public class Gs1DataBarOmnidirectionalSymbologyTests
     [Fact]
     public void Gs1DataBarOmnidirectional_IsNinetySixModulesWideAndFortySixHigh()
     {
-        LinearBarcodeSymbol symbol = Encode("(01)09521234543213");
-        Assert.Equal(96F, symbol.WidthInModules);
-        Assert.Equal(0, symbol.RunWidths[0]);
-        Assert.Equal(1, symbol.RunWidths[1]);
-        Assert.Equal(1, symbol.RunWidths[^1]);
-        Assert.Equal(0F, symbol.LeadingQuietZone);
-        Assert.Equal(0F, symbol.TrailingQuietZone);
-        Assert.Equal(46F, symbol.HeightInModules);
+        SymbolEncoder.Encode(new Gs1DataBarOmnidirectionalSymbology(), "(01)09521234543213", new BarcodeOptions(), static (ref symbol) =>
+        {
+            Assert.Equal(96F, symbol.WidthInModules);
+            Assert.Equal(0, symbol.Runs[0]);
+            Assert.Equal(1, symbol.Runs[1]);
+            Assert.Equal(1, symbol.Runs[^1]);
+            Assert.Equal(0F, symbol.LeadingQuietZone);
+            Assert.Equal(0F, symbol.TrailingQuietZone);
+            Assert.Equal(46F, symbol.HeightInModules);
+        });
+
         Assert.Equal(0.33, new Gs1DataBarOmnidirectionalSymbology().NominalXDimension);
     }
 
@@ -56,14 +59,20 @@ public class Gs1DataBarOmnidirectionalSymbologyTests
     [Fact]
     public void Gs1DataBarOmnidirectional_TextPrintsTheElementStringWithTheCheckDigit()
     {
-        Assert.Empty(Encode("(01)0952123454321").Text);
+        SymbolEncoder.Encode(
+            new Gs1DataBarOmnidirectionalSymbology(),
+            "(01)0952123454321",
+            new BarcodeOptions(),
+            static (ref symbol) => Assert.True(symbol.Text.IsEmpty));
 
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Gs1DataBarOmnidirectionalSymbology().Encode("(01)0952123454321", options);
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal("(01)09521234543213", placement.Text);
-        Assert.Equal(BarcodeTextSide.BelowBars, placement.Side);
-        Assert.Equal(symbol.HeightInModules + BarcodeTextPlacement.Clearance, placement.TextEdge);
+        SymbolEncoder.Encode(new Gs1DataBarOmnidirectionalSymbology(), "(01)0952123454321", options, static (ref symbol) =>
+        {
+            BarcodeTextPlacement placement = Assert.Single(symbol.Text.ToArray());
+            Assert.Equal("(01)09521234543213", symbol.TextOf(placement).ToString());
+            Assert.Equal(BarcodeTextSide.BelowBars, placement.Side);
+            Assert.Equal(symbol.HeightInModules + BarcodeTextPlacement.Clearance, placement.TextEdge);
+        });
     }
 
     /// <summary>
@@ -78,8 +87,13 @@ public class Gs1DataBarOmnidirectionalSymbologyTests
     [InlineData("(01)0952123454321A")]
     [InlineData("(01)09521234543214")]
     public void Gs1DataBarOmnidirectional_RejectsInvalidInput(string text)
-        => Assert.Throws<ArgumentException>(() => Encode(text));
+        => Assert.Throws<ArgumentException>(() => Runs(text));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new Gs1DataBarOmnidirectionalSymbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static int[] Runs(string text)
+        => SymbolEncoder.Read(new Gs1DataBarOmnidirectionalSymbology(), text, new BarcodeOptions(), static (ref symbol) => symbol.Runs.ToArray());
 }
