@@ -487,6 +487,32 @@ public class BarcodeDecodeTests
         => AssertDecodes(new HibcQrCodeSymbology(), "A123BJC5D6E71", BarcodeFormat.QR_CODE, "+A123BJC5D6E71G");
 
     /// <summary>
+    /// Aztec Code symbols decode to their text at each format: compact, full-range and HIBC with its flag and
+    /// check characters.
+    /// </summary>
+    /// <param name="kind">The symbology.</param>
+    /// <param name="text">The text.</param>
+    /// <param name="expected">The decoded text.</param>
+    [Theory]
+    [InlineData("Auto", "This is Aztec Code", "This is Aztec Code")]
+    [InlineData("Auto", "Hello, World! a. b: c\r\nd", "Hello, World! a. b: c\r\nd")]
+    [InlineData("Full", "This is Aztec Code", "This is Aztec Code")]
+    [InlineData("Compact", "Compact", "Compact")]
+    [InlineData("Hibc", "A123BJC5D6E71", "+A123BJC5D6E71G")]
+    public void AztecCode_RoundTrips(string kind, string text, string expected)
+    {
+        BarcodeSymbology symbology = kind switch
+        {
+            "Auto" => new AztecCodeSymbology(),
+            "Full" => new AztecCodeSymbology(23, 6),
+            "Compact" => new AztecCodeCompactSymbology(),
+            _ => new HibcAztecCodeSymbology(),
+        };
+
+        AssertDecodes(symbology, text, BarcodeFormat.AZTEC, expected);
+    }
+
+    /// <summary>
     /// Section 5.9 of the GS1 General Specifications: the QR Code symbol carries the GS1 Digital Link URI as
     /// plain data, so it decodes to the URI as written.
     /// </summary>

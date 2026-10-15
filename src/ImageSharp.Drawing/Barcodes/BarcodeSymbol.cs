@@ -544,7 +544,9 @@ internal struct BarcodeSymbol : IDisposable
     /// Reserves and adds the human readable interpretation of a matrix symbol, one placement below the
     /// symbol across its width. The ink starts below the bottom quiet zone: rule 1a of section 4.14 of the
     /// GS1 General Specifications keeps the interpretation clear of the quiet zones, and section 4.1 of
-    /// ANSI/HIBC 2.6 keeps all marking out of the symbol region, its quiet zones included.
+    /// ANSI/HIBC 2.6 keeps all marking out of the symbol region, its quiet zones included. A symbol with a
+    /// quiet zone narrower than <see cref="BarcodeTextPlacement.Clearance"/>, such as Aztec Code, which needs
+    /// none, keeps that clear space instead.
     /// </summary>
     /// <param name="text">The interpretation, its lines separated by <see cref="BarcodeTextPlacement.LineBreak"/>.</param>
     /// <param name="alignment">Where the lines stand on the width of the symbol.</param>
@@ -557,7 +559,7 @@ internal struct BarcodeSymbol : IDisposable
             0F,
             this.Columns,
             BarcodeTextSide.BelowBars,
-            this.HeightInModules + this.BottomQuietZone,
+            this.HeightInModules + MathF.Max(this.BottomQuietZone, BarcodeTextPlacement.Clearance),
             fontScale,
             false,
             alignment);
