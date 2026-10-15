@@ -251,6 +251,10 @@ public abstract partial class DrawingCanvas
             {
                 MatrixEmitter.Emit(this, ref symbol, options, origin);
             }
+            else if (symbol.Kind == BarcodeSymbolKind.Hexagonal)
+            {
+                HexagonalEmitter.Emit(this, ref symbol, options, origin);
+            }
             else
             {
                 BarEmitter.Emit(this, ref symbol, options, origin);

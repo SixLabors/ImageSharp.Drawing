@@ -899,6 +899,22 @@ public class DrawBarcodeTests
         RunTest(provider, new SwissQrCodeSymbology(), text, new BarcodeOptions { Dpi = 144F, Background = Brushes.Solid(Color.White) });
     }
 
+    /// <summary>
+    /// The 93 character message of Figure 2 of ISO/IEC 16023 at the nominal X dimension of 0.88 mm, Table 7. The
+    /// resolution makes a module 7 pixels, the module pitch of the reference image at its scale of 2.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="provider">The test image provider.</param>
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void MaxiCode<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(
+            provider,
+            new MaxiCodeSymbology(),
+            "THIS IS A 93 CHARACTER CODE SET A MESSAGE THAT FILLS A MODE 4, UNAPPENDED, MAXICODE SYMBOL...",
+            new BarcodeOptions { Dpi = 7F * 25.4F / 0.88F, Background = Brushes.Solid(Color.White) });
+
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void D3Aqr<TPixel>(TestImageProvider<TPixel> provider)

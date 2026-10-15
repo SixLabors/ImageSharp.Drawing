@@ -29,9 +29,12 @@ public static class BarcodeMeasurer
         try
         {
             symbology.Encode(text, options, ref symbol);
-            return symbol.Kind == BarcodeSymbolKind.Matrix
-                ? MatrixEmitter.Measure(ref symbol, options, origin)
-                : BarEmitter.Measure(ref symbol, options, origin);
+            return symbol.Kind switch
+            {
+                BarcodeSymbolKind.Matrix => MatrixEmitter.Measure(ref symbol, options, origin),
+                BarcodeSymbolKind.Hexagonal => HexagonalEmitter.Measure(ref symbol, options, origin),
+                _ => BarEmitter.Measure(ref symbol, options, origin),
+            };
         }
         finally
         {

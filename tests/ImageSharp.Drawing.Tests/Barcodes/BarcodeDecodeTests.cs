@@ -513,6 +513,19 @@ public class BarcodeDecodeTests
     }
 
     /// <summary>
+    /// A MaxiCode symbol decodes to its text: the 93 character message of Figure 2 of ISO/IEC 16023 in mode 4.
+    /// </summary>
+    [Fact]
+    public void MaxiCode_RoundTrips()
+        => AssertDecodes(
+            new MaxiCodeSymbology(),
+            "THIS IS A 93 CHARACTER CODE SET A MESSAGE THAT FILLS A MODE 4, UNAPPENDED, MAXICODE SYMBOL...",
+            BarcodeFormat.MAXICODE,
+            "THIS IS A 93 CHARACTER CODE SET A MESSAGE THAT FILLS A MODE 4, UNAPPENDED, MAXICODE SYMBOL...",
+            new BarcodeOptions { Dpi = 300F },
+            static reader => reader.Options.PureBarcode = true);
+
+    /// <summary>
     /// Section 5.9 of the GS1 General Specifications: the QR Code symbol carries the GS1 Digital Link URI as
     /// plain data, so it decodes to the URI as written.
     /// </summary>
