@@ -48,6 +48,19 @@
     <PackageReference Include="SixLabors.ImageSharp" Version="4.1.2" />
     <PackageReference Include="SixLabors.PolygonClipper" Version="1.0.1" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Update="Helpers\InlineArray.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>InlineArray.tt</DependentUpon>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="Helpers\InlineArray.tt">
+      <Generator>TextTemplatingFileGenerator</Generator>
+      <LastGenOutput>InlineArray.cs</LastGenOutput>
+    </None>
+  </ItemGroup>
 
   <!--
   Enable when referencing the local imagesharp source

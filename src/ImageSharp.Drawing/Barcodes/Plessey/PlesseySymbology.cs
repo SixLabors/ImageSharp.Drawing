@@ -69,7 +69,7 @@ public sealed class PlesseySymbology : BarcodeSymbology
     public override double NominalXDimension => PlesseyEncoder.NominalXDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, PlesseyEncoder.MaximumLength, nameof(text));
@@ -91,20 +91,17 @@ public sealed class PlesseySymbology : BarcodeSymbology
         }
 
         ReadOnlySpan<char> data = this.ValidateCheckCharacters ? text.AsSpan(0, text.Length - PlesseyEncoder.CheckCharacterCount) : text;
-        Span<char> checks = stackalloc char[PlesseyEncoder.CheckCharacterCount];
+        InlineArray2<char> checkStorage = default;
+        Span<char> checks = checkStorage;
         PlesseyEncoder.CheckCharacters(data, checks);
         if (this.ValidateCheckCharacters && !text.AsSpan(data.Length).SequenceEqual(checks))
         {
             throw new ArgumentException($"Incorrect check characters: expected {checks}, got {text.AsSpan(data.Length)}.", nameof(text));
         }
 
-        string carried = this.ValidateCheckCharacters ? text : $"{text}{checks}";
-        string readable = options.Font is null
-            ? string.Empty
-            : this.PrintCheckCharacters
-                ? carried
-                : data.ToString();
-
-        return PlesseyEncoder.BuildSymbol(PlesseyEncoder.Encode(carried), readable, options);
+        // The symbol carries the data and the two check characters, which a validated text already ends
+        // with. The interpretation prints the check characters when the caller asks for them.
+        ReadOnlySpan<char> printedChecks = this.PrintCheckCharacters ? checks : [];
+        PlesseyEncoder.BuildSymbol(data, checks, printedChecks, options, ref symbol);
     }
 }

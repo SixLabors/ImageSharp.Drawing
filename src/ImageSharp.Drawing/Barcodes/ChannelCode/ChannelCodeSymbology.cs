@@ -40,7 +40,7 @@ public sealed class ChannelCodeSymbology : BarcodeSymbology
     public bool ShortFinder { get; }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         if (text.Length < ChannelCodeEncoder.MinimumLength || text.Length > ChannelCodeEncoder.MaximumLength)
@@ -69,7 +69,6 @@ public sealed class ChannelCodeSymbology : BarcodeSymbology
             throw new ArgumentException($"Channel Code carries values up to {maximum} in {text.Length} digits; got {value}.", nameof(text));
         }
 
-        string readable = options.Font is null ? string.Empty : text;
-        return ChannelCodeEncoder.BuildSymbol(ChannelCodeEncoder.Encode(value, text.Length, this.ShortFinder), readable, options);
+        ChannelCodeEncoder.BuildSymbol(value, text.Length, this.ShortFinder, text, options, ref symbol);
     }
 }

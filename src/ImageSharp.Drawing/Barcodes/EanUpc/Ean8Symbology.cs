@@ -22,11 +22,11 @@ public sealed class Ean8Symbology : BarcodeSymbology
     public override double NominalXDimension => EanUpcEncoder.NominalXDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
-        Span<char> digits = stackalloc char[8];
-        return EanUpcEncoder.BuildEan8(EanUpcEncoder.ValidateAndApplyCheckDigit(text, 7, digits), options);
+        InlineArray8<char> digitStorage = default;
+        EanUpcEncoder.BuildEan8(EanUpcEncoder.ValidateAndApplyCheckDigit(text, 7, digitStorage), options, ref symbol);
     }
 }

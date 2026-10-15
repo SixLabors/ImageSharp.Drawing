@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Globalization;
 using SixLabors.ImageSharp.Drawing.Barcodes;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
@@ -19,7 +20,7 @@ public class PharmacodeSymbologyTests
     [InlineData("117480", "3,2,3,2,1,2,1,2,3,2,1,2,3,2,1,2,3,2,3,2,3,2,1,2,3,2,1,2,1,2,3,2")]
     [InlineData("131070", "3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2")]
     public void MatchesReferenceRuns(string text, string reference)
-        => Assert.Equal(reference[..^2], string.Join(",", Encode(text).RunWidths));
+        => Assert.Equal(reference[..^2], string.Join(",", Encode(text)));
 
     /// <summary>
     /// Section 4.3 of the guide values a thin bar in position n at 2 to the power n - 1 and a thick bar at
@@ -37,19 +38,19 @@ public class PharmacodeSymbologyTests
     [InlineData("131070", "TTTTTTTTTTTTTTTT")]
     public void FollowsTheValueTableOfSectionFourThree(string text, string bars)
     {
-        LinearBarcodeSymbol symbol = Encode(text);
+        int[] runs = Encode(text);
         string actual = string.Empty;
         int value = 0;
-        for (int i = 0; i < symbol.RunWidths.Length; i += 2)
+        for (int i = 0; i < runs.Length; i += 2)
         {
-            bool thick = symbol.RunWidths[i] == 3;
+            bool thick = runs[i] == 3;
             actual += thick ? 'T' : 't';
-            int position = (symbol.RunWidths.Length + 1) / 2 - (i / 2);
+            int position = ((runs.Length + 1) / 2) - (i / 2);
             value += (thick ? 2 : 1) << (position - 1);
         }
 
         Assert.Equal(bars, actual);
-        Assert.Equal(int.Parse(text), value);
+        Assert.Equal(int.Parse(text, CultureInfo.InvariantCulture), value);
     }
 
     /// <summary>
@@ -58,14 +59,13 @@ public class PharmacodeSymbologyTests
     /// </summary>
     [Fact]
     public void DrawsTheOneTrackDimensionsOfSectionOneTwo()
-    {
-        LinearBarcodeSymbol symbol = Encode("117480");
-
-        Assert.All(symbol.BarHeights, height => Assert.Equal(16F, height));
-        Assert.All(symbol.BarTops, top => Assert.Equal(0F, top));
-        Assert.Equal(12, symbol.LeadingQuietZone);
-        Assert.Equal(12, symbol.TrailingQuietZone);
-    }
+        => SymbolEncoder.Encode(new PharmacodeSymbology(), "117480", new BarcodeOptions(), static (ref symbol) =>
+        {
+            Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal(16F, height));
+            Assert.All(symbol.BarTops.ToArray(), top => Assert.Equal(0F, top));
+            Assert.Equal(12, symbol.LeadingQuietZone);
+            Assert.Equal(12, symbol.TrailingQuietZone);
+        });
 
     /// <summary>
     /// Section 4.5 of the guide values a lower bar in position n at 3 to the power n - 1, an upper bar at
@@ -81,25 +81,25 @@ public class PharmacodeSymbologyTests
     [InlineData("117480", "LUUULUFFUFF")]
     [InlineData("64570080", "FFFFFFFFFFFFFFFF")]
     public void FollowsTheValueTableOfSectionFourFive(string text, string bars)
-    {
-        LinearBarcodeSymbol symbol = EncodeTwoTrack(text);
-        string actual = string.Empty;
-        int value = 0;
-        int count = symbol.BarHeights.Length;
-        for (int i = 0; i < count; i++)
+        => SymbolEncoder.Encode(new TwoTrackPharmacodeSymbology(), text, new BarcodeOptions(), (ref symbol) =>
         {
-            char kind = symbol.BarHeights[i] == 8F ? 'F' : symbol.BarTops[i] == 4F ? 'L' : 'U';
-            actual += kind;
-            int weight = kind == 'L' ? 1 : kind == 'U' ? 2 : 3;
-            value += weight * (int)Math.Pow(3, count - 1 - i);
-        }
+            string actual = string.Empty;
+            int value = 0;
+            int count = symbol.BarHeights.Length;
+            for (int i = 0; i < count; i++)
+            {
+                char kind = symbol.BarHeights[i] == 8F ? 'F' : symbol.BarTops[i] == 4F ? 'L' : 'U';
+                actual += kind;
+                int weight = kind == 'L' ? 1 : kind == 'U' ? 2 : 3;
+                value += weight * (int)Math.Pow(3, count - 1 - i);
+            }
 
-        Assert.Equal(bars, actual);
-        Assert.Equal(int.Parse(text), value);
-        Assert.All(symbol.RunWidths, run => Assert.Equal(1, run));
-        Assert.Equal(6, symbol.LeadingQuietZone);
-        Assert.Equal(6, symbol.TrailingQuietZone);
-    }
+            Assert.Equal(bars, actual);
+            Assert.Equal(int.Parse(text, CultureInfo.InvariantCulture), value);
+            Assert.All(symbol.Runs.ToArray(), run => Assert.Equal(1, run));
+            Assert.Equal(6, symbol.LeadingQuietZone);
+            Assert.Equal(6, symbol.TrailingQuietZone);
+        });
 
     /// <summary>
     /// The half bars are half of the height the caller sets, and the lower bar starts halfway down. At the
@@ -109,10 +109,11 @@ public class PharmacodeSymbologyTests
     public void ScalesTheHalfBarsWithTheBarHeight()
     {
         BarcodeOptions options = new() { BarHeight = 30F };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new TwoTrackPharmacodeSymbology().Encode("105", options);
-
-        Assert.Equal([30F, 15F, 15F, 30F], symbol.BarHeights);
-        Assert.Equal([0F, 0F, 15F, 0F], symbol.BarTops);
+        SymbolEncoder.Encode(new TwoTrackPharmacodeSymbology(), "105", options, static (ref symbol) =>
+        {
+            Assert.Equal([30F, 15F, 15F, 30F], symbol.BarHeights.ToArray());
+            Assert.Equal([0F, 0F, 15F, 0F], symbol.BarTops.ToArray());
+        });
     }
 
     [Fact]
@@ -120,11 +121,11 @@ public class PharmacodeSymbologyTests
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
 
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new PharmacodeSymbology().Encode("117480", options);
-        Assert.Equal("117480", Assert.Single(symbol.Text).Text);
+        string[] texts = SymbolEncoder.Read(new PharmacodeSymbology(), "117480", options, SymbolEncoder.Texts);
+        Assert.Equal("117480", Assert.Single(texts));
 
-        LinearBarcodeSymbol twoTrack = (LinearBarcodeSymbol)new TwoTrackPharmacodeSymbology().Encode("117480", options);
-        Assert.Equal("117480", Assert.Single(twoTrack.Text).Text);
+        string[] twoTrack = SymbolEncoder.Read(new TwoTrackPharmacodeSymbology(), "117480", options, SymbolEncoder.Texts);
+        Assert.Equal("117480", Assert.Single(twoTrack));
     }
 
     [Theory]
@@ -144,11 +145,13 @@ public class PharmacodeSymbologyTests
     [InlineData("123456789")]
     [InlineData("12A")]
     public void RejectsMalformedTwoTrackInput(string text)
-        => Assert.ThrowsAny<ArgumentException>(() => EncodeTwoTrack(text));
+        => Assert.ThrowsAny<ArgumentException>(() => SymbolEncoder.Encode(new TwoTrackPharmacodeSymbology(), text, new BarcodeOptions()));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new PharmacodeSymbology().Encode(text, new BarcodeOptions());
-
-    private static LinearBarcodeSymbol EncodeTwoTrack(string text)
-        => (LinearBarcodeSymbol)new TwoTrackPharmacodeSymbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static int[] Encode(string text)
+        => SymbolEncoder.Read(new PharmacodeSymbology(), text, new BarcodeOptions(), static (ref symbol) => symbol.Runs.ToArray());
 }

@@ -6,7 +6,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <summary>
 /// One piece of the human readable interpretation of a barcode, positioned in module space. The placement
 /// names the edge its ink starts or ends on and the side of the bars it prints on. The room that the line
-/// needs belongs to the renderer, because only the renderer knows the font.
+/// needs belongs to the renderer, because only the renderer knows the font. The characters are a range of
+/// the character storage of the symbol that holds the placement.
 /// </summary>
 internal readonly struct BarcodeTextPlacement
 {
@@ -20,67 +21,16 @@ internal readonly struct BarcodeTextPlacement
     public const float Clearance = 1F;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="BarcodeTextPlacement"/> struct rendered at the full
-    /// font size.
+    /// The character that starts a new line within the characters of a placement. The lines of one
+    /// placement stack downwards and stand within its span as its alignment gives.
     /// </summary>
-    /// <param name="text">The characters to render.</param>
-    /// <param name="left">The left edge of the horizontal span, in modules.</param>
-    /// <param name="right">The right edge of the horizontal span, in modules.</param>
-    /// <param name="side">The side of the bars the line prints on.</param>
-    /// <param name="textEdge">The edge of the ink of the line, in modules from the symbol top.</param>
-    public BarcodeTextPlacement(string text, float left, float right, BarcodeTextSide side, float textEdge)
-        : this(text, left, right, side, textEdge, 1F)
-    {
-    }
+    public const char LineBreak = '\n';
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BarcodeTextPlacement"/> struct.
     /// </summary>
-    /// <param name="text">The characters to render.</param>
-    /// <param name="left">The left edge of the horizontal span, in modules.</param>
-    /// <param name="right">The right edge of the horizontal span, in modules.</param>
-    /// <param name="side">The side of the bars the line prints on.</param>
-    /// <param name="textEdge">The edge of the ink of the line, in modules from the symbol top.</param>
-    /// <param name="fontScale">The factor applied to the caller's font size for this placement.</param>
-    public BarcodeTextPlacement(string text, float left, float right, BarcodeTextSide side, float textEdge, float fontScale)
-        : this(text, left, right, side, textEdge, fontScale, false)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="BarcodeTextPlacement"/> struct rendered at the full
-    /// font size.
-    /// </summary>
-    /// <param name="text">The characters to render.</param>
-    /// <param name="left">The left edge of the horizontal span, in modules.</param>
-    /// <param name="right">The right edge of the horizontal span, in modules.</param>
-    /// <param name="side">The side of the bars the line prints on.</param>
-    /// <param name="textEdge">The edge of the ink of the line, in modules from the symbol top.</param>
-    /// <param name="alignment">Where the line stands within its span.</param>
-    public BarcodeTextPlacement(string text, float left, float right, BarcodeTextSide side, float textEdge, BarcodeTextAlignment alignment)
-        : this(text, left, right, side, textEdge, 1F, false, alignment)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="BarcodeTextPlacement"/> struct.
-    /// </summary>
-    /// <param name="text">The characters to render.</param>
-    /// <param name="left">The left edge of the horizontal span, in modules.</param>
-    /// <param name="right">The right edge of the horizontal span, in modules.</param>
-    /// <param name="side">The side of the bars the line prints on.</param>
-    /// <param name="textEdge">The edge of the ink of the line, in modules from the symbol top.</param>
-    /// <param name="fontScale">The factor applied to the caller's font size for this placement.</param>
-    /// <param name="isCaption">Whether this placement is a data layer caption rendered with the caption font.</param>
-    public BarcodeTextPlacement(string text, float left, float right, BarcodeTextSide side, float textEdge, float fontScale, bool isCaption)
-        : this(text, left, right, side, textEdge, fontScale, isCaption, BarcodeTextAlignment.Centered)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="BarcodeTextPlacement"/> struct.
-    /// </summary>
-    /// <param name="text">The characters to render.</param>
+    /// <param name="textStart">The index of the first character in the character storage of the symbol.</param>
+    /// <param name="textLength">The number of characters.</param>
     /// <param name="left">The left edge of the horizontal span, in modules.</param>
     /// <param name="right">The right edge of the horizontal span, in modules.</param>
     /// <param name="side">The side of the bars the line prints on.</param>
@@ -89,7 +39,8 @@ internal readonly struct BarcodeTextPlacement
     /// <param name="isCaption">Whether this placement is a data layer caption rendered with the caption font.</param>
     /// <param name="alignment">Where the line stands within its span.</param>
     public BarcodeTextPlacement(
-        string text,
+        int textStart,
+        int textLength,
         float left,
         float right,
         BarcodeTextSide side,
@@ -98,7 +49,8 @@ internal readonly struct BarcodeTextPlacement
         bool isCaption,
         BarcodeTextAlignment alignment)
     {
-        this.Text = text;
+        this.TextStart = textStart;
+        this.TextLength = textLength;
         this.Left = left;
         this.Right = right;
         this.Side = side;
@@ -109,9 +61,14 @@ internal readonly struct BarcodeTextPlacement
     }
 
     /// <summary>
-    /// Gets the characters to render.
+    /// Gets the index of the first character in the character storage of the symbol.
     /// </summary>
-    public string Text { get; }
+    public int TextStart { get; }
+
+    /// <summary>
+    /// Gets the number of characters.
+    /// </summary>
+    public int TextLength { get; }
 
     /// <summary>
     /// Gets the left edge of the horizontal span, in modules. The value is negative for text that prints

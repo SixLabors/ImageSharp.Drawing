@@ -31,13 +31,16 @@ public sealed class Ean14Symbology : BarcodeSymbology
     public override double NominalXDimension => Code128Encoder.NominalXDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
         // The element string is "(01)" and 14 digits, so the longest input is 18 characters once the
-        // spaces the caller may group the number with are dropped.
-        Span<char> compact = stackalloc char[18];
+        // spaces the caller may group the number with are dropped. The caption repeats the input, so the
+        // input is bounded too: at most one grouping space after each of those characters.
+        Guard.MustBeLessThanOrEqualTo(text.Length, 36, nameof(text));
+        InlineArray18<char> compactStorage = default;
+        Span<char> compact = compactStorage;
         int length = 0;
         for (int i = 0; i < text.Length; i++)
         {
@@ -87,18 +90,15 @@ public sealed class Ean14Symbology : BarcodeSymbology
 
         // The symbol carries the identifier and the fourteen digits with no separator, because Table 7-6
         // gives this element string a predefined length.
-        Span<char> encoded = stackalloc char[16];
+        InlineArray16<char> encodedStorage = default;
+        Span<char> encoded = encodedStorage;
         "01".CopyTo(encoded);
         supplied[..13].CopyTo(encoded[2..]);
         encoded[15] = (char)('0' + check);
 
-        string caption = options.Font is null
-            ? string.Empty
-            : supplied.Length == 14 ? text : $"{text} {(char)('0' + check)}";
-
-        return Code128Encoder.BuildSymbol(
-            Code128Encoder.Encode(encoded, true),
-            caption,
-            options);
+        // The caption is the input as given, with the check digit after a space when the input left it
+        // out.
+        ReadOnlySpan<char> suffix = supplied.Length == 14 ? [] : [' ', (char)('0' + check)];
+        Code128Encoder.BuildSymbol(encoded, true, [], text, suffix, options, ref symbol);
     }
 }

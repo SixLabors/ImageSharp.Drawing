@@ -52,17 +52,18 @@ public sealed class HibcMicroPdf417Symbology : BarcodeSymbology
     public bool ValidateCheckCharacter { get; }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
-        Span<char> buffer = stackalloc char[HibcData.StackBufferLength];
-        ValueStringBuilder encoded = new(buffer);
+        InlineArray64<char> bufferStorage = default;
+        int capacity = HibcData.PreparedCapacity(text.Length);
+        ValueStringBuilder encoded = capacity <= HibcData.InlineBufferLength ? new(bufferStorage) : new(capacity);
         try
         {
             HibcData.Prepare(text, this.ValidateCheckCharacter, ref encoded);
 
-            return MicroPdf417Encoder.BuildSymbol(encoded.AsSpan(), this.Columns, options);
+            MicroPdf417Encoder.BuildSymbol(encoded.AsSpan(), this.Columns, options, ref symbol);
         }
         finally
         {

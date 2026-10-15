@@ -56,10 +56,10 @@ public sealed class Pdf417Symbology : BarcodeSymbology
     public int? ErrorCorrectionLevel { get; }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
-        return Pdf417Encoder.BuildSymbol(text, this.Columns, this.ErrorCorrectionLevel, false, options);
+        Pdf417Encoder.BuildSymbol(text, this.Columns, this.ErrorCorrectionLevel, false, options, ref symbol);
     }
 }

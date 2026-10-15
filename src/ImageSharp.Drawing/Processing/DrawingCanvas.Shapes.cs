@@ -241,20 +241,25 @@ public abstract partial class DrawingCanvas
         Guard.NotNull(symbology, nameof(symbology));
         Guard.NotNull(options, nameof(options));
 
-        BarcodeSymbol symbol = symbology.Encode(text, options);
-        double xDimension = options.XDimension ?? symbology.NominalXDimension;
-        switch (symbol)
+        // The symbol lives on this stack frame and in any arrays it rents, which it returns once the emitter
+        // has turned it into canvas commands.
+        BarcodeSymbol symbol = default;
+        try
         {
-            case LinearBarcodeSymbol linear:
-                BarEmitter.Emit(this, linear, options, xDimension, origin);
-                break;
-
-            case StackedBarcodeSymbol stacked:
-                BarEmitter.Emit(this, stacked, options, xDimension, origin);
-                break;
-
-            default:
-                throw new InvalidOperationException($"Unsupported barcode symbol type: {symbol.GetType()}.");
+            symbology.Encode(text, options, ref symbol);
+            double xDimension = options.XDimension ?? symbology.NominalXDimension;
+            if (symbol.Kind == BarcodeSymbolKind.Matrix)
+            {
+                MatrixEmitter.Emit(this, ref symbol, options, xDimension, origin);
+            }
+            else
+            {
+                BarEmitter.Emit(this, ref symbol, options, xDimension, origin);
+            }
+        }
+        finally
+        {
+            symbol.Dispose();
         }
     }
 

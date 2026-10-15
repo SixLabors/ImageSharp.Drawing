@@ -14,6 +14,64 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 public class PosiCodeSymbologyTests
 {
     /// <summary>
+    /// Gets the cases of <see cref="MatchesReferenceRuns"/>.
+    /// </summary>
+    public static TheoryData<PosiCodeVersion, string, string> MatchesReferenceRunsData { get; } = new()
+    {
+        {
+            PosiCodeVersion.A,
+            "ABC123",
+            "1,12,1,1,1,1,1,2,1,8,1,1,1,1,1,7,1,2,1,1,1,6,1,3,1,1,1,3,1,2,1,2,1,2,1,3,1,2,1,1,1,4,1,2,1,1,1,1,1,5,1,1,1,5,1,1,1,1,1,1,1,1,1,1,1,11,1"
+        },
+        {
+            PosiCodeVersion.B,
+            "ABC123",
+            "1,12,1,2,1,3,1,2,1,9,1,2,1,2,1,8,1,3,1,2,1,7,1,4,1,2,1,4,1,3,1,3,1,3,1,4,1,3,1,2,1,5,1,3,1,2,1,2,1,6,1,2,1,6,1,2,1,2,1,2,1,2,1,2,1,12,1"
+        },
+        { PosiCodeVersion.LimitedA, "ABC123", "1,5,1,1,1,1,1,7,1,1,1,1,1,6,1,2,1,1,1,5,1,3,1,1,1,1,1,3,1,2,1,1,1,2,1,3,1,1,1,1,1,4,1,1,1,5,1,1,1,2,1,4,1,1,1" },
+        { PosiCodeVersion.LimitedB, "ABC123", "1,4,1,2,1,2,1,8,1,2,1,2,1,7,1,3,1,2,1,6,1,4,1,2,1,2,1,4,1,3,1,2,1,3,1,4,1,2,1,2,1,5,1,2,1,6,1,2,1,3,1,5,1,2,1" },
+        { PosiCodeVersion.A, "A", "1,12,1,1,1,1,1,2,1,8,1,1,1,1,1,2,1,5,1,1,1,2,1,3,1,1,1,1,1,1,1,1,1,1,1,11,1" },
+        { PosiCodeVersion.A, "abc", "1,12,1,1,1,1,1,2,1,2,1,1,1,7,1,8,1,1,1,1,1,7,1,2,1,1,1,6,1,3,1,1,1,1,1,3,1,5,1,3,1,1,1,1,1,1,1,1,1,1,1,1,1,11,1" },
+        { PosiCodeVersion.A, "aB1", "1,12,1,1,1,1,1,2,1,1,1,2,1,7,1,8,1,1,1,1,1,7,1,2,1,1,1,3,1,2,1,2,1,2,1,4,1,3,1,2,1,2,1,1,1,1,1,1,1,1,1,1,1,11,1" },
+        {
+            PosiCodeVersion.A,
+            "%$/+ -.",
+            "1,12,1,1,1,1,1,2,1,1,1,3,1,6,1,1,1,4,1,5,1,3,1,1,1,6,1,2,1,2,1,6,1,2,1,3,1,5,1,4,1,1,1,5,1,3,1,2,1,5,1,2,1,6,1,1,1,2,1,2,1,1,1,1,1,1,1,1,1,1" +
+                ",1,11,1"
+        },
+        {
+            PosiCodeVersion.A,
+            "\x01\x1B*,:",
+            "1,12,1,1,1,1,1,2,1,1,1,1,1,8,1,8,1,1,1,1,1,1,1,1,1,8,1,3,1,2,1,2,1,1,1,1,1,8,1,1,1,4,1,5,1,1,1,1,1,8,1,3,1,1,1,6,1,1,1,1,1,8,1,2,1,2,1,6,1,1" +
+                ",1,2,1,1,1,1,1,7,1,2,1,1,1,1,1,1,1,1,1,11,1"
+        },
+        {
+            PosiCodeVersion.A,
+            "AÄB",
+            "1,12,1,1,1,1,1,2,1,8,1,1,1,1,1,1,1,1,1,8,1,1,1,1,1,8,1,5,1,4,1,1,1,7,1,2,1,1,1,8,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,11,1"
+        },
+        {
+            PosiCodeVersion.A,
+            "ÄÖÜßäö",
+            "1,12,1,1,1,1,1,2,1,1,1,1,1,8,1,1,1,1,1,8,1,1,1,1,1,8,1,1,1,1,1,8,1,5,1,4,1,1,1,5,1,1,1,4,1,2,1,1,1,7,1,1,1,2,1,4,1,4,1,1,1,5,1,5,1,4,1,1,1,5" +
+                ",1,1,1,4,1,1,1,1,1,1,1,7,1,1,1,3,1,1,1,1,1,1,1,1,1,11,1"
+        },
+        {
+            PosiCodeVersion.A,
+            "ABÄÖÜ",
+            "1,12,1,1,1,1,1,2,1,8,1,1,1,1,1,7,1,2,1,1,1,1,1,1,1,8,1,1,1,1,1,8,1,1,1,1,1,8,1,1,1,1,1,8,1,5,1,4,1,1,1,5,1,1,1,4,1,2,1,1,1,7,1,1,1,2,1,4,1,4" +
+                ",1,3,1,1,1,1,1,2,1,3,1,1,1,1,1,1,1,1,1,11,1"
+        },
+        {
+            PosiCodeVersion.LimitedA,
+            "0123456789",
+            "1,5,1,1,1,1,1,1,1,4,1,1,1,1,1,3,1,2,1,1,1,2,1,3,1,1,1,1,1,4,1,2,1,3,1,1,1,2,1,2,1,2,1,2,1,1,1,3,1,4,1,1,1,1,1,3,1,2,1,1,1,3,1,1,1,2,1,2,1,5," +
+                "1,2,1,1,1,3,1,1,1"
+        },
+        { PosiCodeVersion.LimitedB, "A-.9", "1,4,1,2,1,2,1,8,1,2,1,2,1,2,1,3,1,7,1,2,1,2,1,8,1,4,1,2,1,3,1,3,1,4,1,6,1,3,1,2,1,2,1" },
+    };
+
+    /// <summary>
     /// One vector per version for the same data, then the paths through the character sets of the
     /// standard versions: a latch to the small letters, a shift for one small letter, the symbols of
     /// set 0, shifts to the control characters of set 2, and the function 4 switching of characters at
@@ -23,22 +81,11 @@ public class PosiCodeSymbologyTests
     /// <param name="text">The text to encode.</param>
     /// <param name="reference">The reference run widths, comma separated.</param>
     [Theory]
-    [InlineData(PosiCodeVersion.A, "ABC123", "1,12,1,1,1,1,1,2,1,8,1,1,1,1,1,7,1,2,1,1,1,6,1,3,1,1,1,3,1,2,1,2,1,2,1,3,1,2,1,1,1,4,1,2,1,1,1,1,1,5,1,1,1,5,1,1,1,1,1,1,1,1,1,1,1,11,1")]
-    [InlineData(PosiCodeVersion.B, "ABC123", "1,12,1,2,1,3,1,2,1,9,1,2,1,2,1,8,1,3,1,2,1,7,1,4,1,2,1,4,1,3,1,3,1,3,1,4,1,3,1,2,1,5,1,3,1,2,1,2,1,6,1,2,1,6,1,2,1,2,1,2,1,2,1,2,1,12,1")]
-    [InlineData(PosiCodeVersion.LimitedA, "ABC123", "1,5,1,1,1,1,1,7,1,1,1,1,1,6,1,2,1,1,1,5,1,3,1,1,1,1,1,3,1,2,1,1,1,2,1,3,1,1,1,1,1,4,1,1,1,5,1,1,1,2,1,4,1,1,1")]
-    [InlineData(PosiCodeVersion.LimitedB, "ABC123", "1,4,1,2,1,2,1,8,1,2,1,2,1,7,1,3,1,2,1,6,1,4,1,2,1,2,1,4,1,3,1,2,1,3,1,4,1,2,1,2,1,5,1,2,1,6,1,2,1,3,1,5,1,2,1")]
-    [InlineData(PosiCodeVersion.A, "A", "1,12,1,1,1,1,1,2,1,8,1,1,1,1,1,2,1,5,1,1,1,2,1,3,1,1,1,1,1,1,1,1,1,1,1,11,1")]
-    [InlineData(PosiCodeVersion.A, "abc", "1,12,1,1,1,1,1,2,1,2,1,1,1,7,1,8,1,1,1,1,1,7,1,2,1,1,1,6,1,3,1,1,1,1,1,3,1,5,1,3,1,1,1,1,1,1,1,1,1,1,1,1,1,11,1")]
-    [InlineData(PosiCodeVersion.A, "aB1", "1,12,1,1,1,1,1,2,1,1,1,2,1,7,1,8,1,1,1,1,1,7,1,2,1,1,1,3,1,2,1,2,1,2,1,4,1,3,1,2,1,2,1,1,1,1,1,1,1,1,1,1,1,11,1")]
-    [InlineData(PosiCodeVersion.A, "%$/+ -.", "1,12,1,1,1,1,1,2,1,1,1,3,1,6,1,1,1,4,1,5,1,3,1,1,1,6,1,2,1,2,1,6,1,2,1,3,1,5,1,4,1,1,1,5,1,3,1,2,1,5,1,2,1,6,1,1,1,2,1,2,1,1,1,1,1,1,1,1,1,1,1,11,1")]
-    [InlineData(PosiCodeVersion.A, "\x01\x1B*,:", "1,12,1,1,1,1,1,2,1,1,1,1,1,8,1,8,1,1,1,1,1,1,1,1,1,8,1,3,1,2,1,2,1,1,1,1,1,8,1,1,1,4,1,5,1,1,1,1,1,8,1,3,1,1,1,6,1,1,1,1,1,8,1,2,1,2,1,6,1,1,1,2,1,1,1,1,1,7,1,2,1,1,1,1,1,1,1,1,1,11,1")]
-    [InlineData(PosiCodeVersion.A, "AÄB", "1,12,1,1,1,1,1,2,1,8,1,1,1,1,1,1,1,1,1,8,1,1,1,1,1,8,1,5,1,4,1,1,1,7,1,2,1,1,1,8,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,11,1")]
-    [InlineData(PosiCodeVersion.A, "ÄÖÜßäö", "1,12,1,1,1,1,1,2,1,1,1,1,1,8,1,1,1,1,1,8,1,1,1,1,1,8,1,1,1,1,1,8,1,5,1,4,1,1,1,5,1,1,1,4,1,2,1,1,1,7,1,1,1,2,1,4,1,4,1,1,1,5,1,5,1,4,1,1,1,5,1,1,1,4,1,1,1,1,1,1,1,7,1,1,1,3,1,1,1,1,1,1,1,1,1,11,1")]
-    [InlineData(PosiCodeVersion.A, "ABÄÖÜ", "1,12,1,1,1,1,1,2,1,8,1,1,1,1,1,7,1,2,1,1,1,1,1,1,1,8,1,1,1,1,1,8,1,1,1,1,1,8,1,1,1,1,1,8,1,5,1,4,1,1,1,5,1,1,1,4,1,2,1,1,1,7,1,1,1,2,1,4,1,4,1,3,1,1,1,1,1,2,1,3,1,1,1,1,1,1,1,1,1,11,1")]
-    [InlineData(PosiCodeVersion.LimitedA, "0123456789", "1,5,1,1,1,1,1,1,1,4,1,1,1,1,1,3,1,2,1,1,1,2,1,3,1,1,1,1,1,4,1,2,1,3,1,1,1,2,1,2,1,2,1,2,1,1,1,3,1,4,1,1,1,1,1,3,1,2,1,1,1,3,1,1,1,2,1,2,1,5,1,2,1,1,1,3,1,1,1")]
-    [InlineData(PosiCodeVersion.LimitedB, "A-.9", "1,4,1,2,1,2,1,8,1,2,1,2,1,2,1,3,1,7,1,2,1,2,1,8,1,4,1,2,1,3,1,3,1,4,1,6,1,3,1,2,1,2,1")]
+    [MemberData(nameof(MatchesReferenceRunsData))]
     public void MatchesReferenceRuns(PosiCodeVersion version, string text, string reference)
-        => Assert.Equal(reference, string.Join(",", Encode(version, text).RunWidths));
+        => Assert.Equal(
+            reference,
+            SymbolEncoder.Read(new PosiCodeSymbology(version), text, new BarcodeOptions(), static (ref symbol) => string.Join(",", symbol.Runs.ToArray())));
 
     /// <summary>
     /// The quiet zone is 12G on either side, and 13G for Limited PosiCode B.
@@ -51,18 +98,18 @@ public class PosiCodeSymbologyTests
     [InlineData(PosiCodeVersion.LimitedA, 12)]
     [InlineData(PosiCodeVersion.LimitedB, 13)]
     public void KeepsTheQuietZoneOfTheVersion(PosiCodeVersion version, int expected)
-    {
-        LinearBarcodeSymbol symbol = Encode(version, "ABC123");
-        Assert.Equal(expected, symbol.LeadingQuietZone);
-        Assert.Equal(expected, symbol.TrailingQuietZone);
-    }
+        => SymbolEncoder.Encode(new PosiCodeSymbology(version), "ABC123", new BarcodeOptions(), (ref symbol) =>
+        {
+            Assert.Equal(expected, symbol.LeadingQuietZone);
+            Assert.Equal(expected, symbol.TrailingQuietZone);
+        });
 
     [Fact]
     public void PrintsTheTextAsGiven()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new PosiCodeSymbology().Encode("ABC123", options);
-        Assert.Equal("ABC123", Assert.Single(symbol.Text).Text);
+        string[] texts = SymbolEncoder.Read(new PosiCodeSymbology(), "ABC123", options, SymbolEncoder.Texts);
+        Assert.Equal("ABC123", Assert.Single(texts));
     }
 
     [Theory]
@@ -73,8 +120,5 @@ public class PosiCodeSymbologyTests
     [InlineData(PosiCodeVersion.LimitedA, "A B")]
     [InlineData(PosiCodeVersion.LimitedB, "A$")]
     public void RejectsMalformedInput(PosiCodeVersion version, string text)
-        => Assert.ThrowsAny<ArgumentException>(() => Encode(version, text));
-
-    private static LinearBarcodeSymbol Encode(PosiCodeVersion version, string text)
-        => (LinearBarcodeSymbol)new PosiCodeSymbology(version).Encode(text, new BarcodeOptions());
+        => Assert.ThrowsAny<ArgumentException>(() => SymbolEncoder.Encode(new PosiCodeSymbology(version), text, new BarcodeOptions()));
 }

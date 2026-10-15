@@ -24,7 +24,7 @@ public class Gs1128SymbologyTests
         "2112324111312221222212132133111122321311233111232321211221322123211212232122222221223121314131112331112")]
 
     // A variable length element string, which needs no separator because it is the last one.
-    [InlineData("(10)ABC123", "2112324111312213121141311113231311231313211232212232112211322123212331112")]
+    [InlineData("(91)ABC123", "2112324111314121211141311113231311231313211232212232112211322141212331112")]
 
     // A variable length element string followed by another, so a separator closes the first.
     [InlineData(
@@ -34,10 +34,7 @@ public class Gs1128SymbologyTests
     // The eighteen digit SSCC of Application Identifier 00, twenty characters in all.
     [InlineData("(00)395123451234567895", "2112324111312122222113132131133121311131231122321311233311212411121141131143112331112")]
     public void MatchesReferenceRuns(string text, string expected)
-    {
-        LinearBarcodeSymbol symbol = Encode(text);
-        Assert.Equal(expected, string.Concat(symbol.RunWidths));
-    }
+        => Assert.Equal(expected, Encode(text));
 
     /// <summary>
     /// Section 4.14 rule 2c requires parentheses around the Application Identifiers in the human readable
@@ -47,11 +44,23 @@ public class Gs1128SymbologyTests
     public void PrintsElementStringsWithParentheses()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Gs1128Symbology().Encode("(10)ABC123(01)09521234543213", options);
+        string[] texts = SymbolEncoder.Read(new Gs1128Symbology(), "(10)ABC123(01)09521234543213", options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal("(10)ABC123(01)09521234543213", placement.Text);
-        Assert.DoesNotContain(Gs1Data.Separator.ToString(), placement.Text, StringComparison.Ordinal);
+        string text = Assert.Single(texts);
+        Assert.Equal("(10)ABC123(01)09521234543213", text);
+        Assert.DoesNotContain(Gs1Data.Separator.ToString(), text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Section 4.14 rule 3b: when Application Identifier (8200) appears, its URL does not appear in the
+    /// human readable interpretation.
+    /// </summary>
+    [Fact]
+    public void LeavesTheUrlOfApplicationIdentifier8200OutOfTheText()
+    {
+        BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
+        string[] texts = SymbolEncoder.Read(new Gs1128Symbology(), "(01)09520123456788(8200)http://www.abc.net", options, SymbolEncoder.Texts);
+        Assert.Equal("(01)09520123456788", Assert.Single(texts));
     }
 
     /// <summary>
@@ -80,6 +89,11 @@ public class Gs1128SymbologyTests
     public void RejectsOverlongData()
         => Assert.ThrowsAny<ArgumentException>(() => Encode("(10)" + new string('A', 48)));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new Gs1128Symbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(string text)
+        => SymbolEncoder.Read(new Gs1128Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
 }

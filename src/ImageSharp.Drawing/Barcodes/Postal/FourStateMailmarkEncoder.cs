@@ -183,12 +183,16 @@ internal static class FourStateMailmarkEncoder
         int dataCount = isL ? 19 : 16;
         int checkCount = isL ? 7 : 6;
         int thirtyValued = isL ? 11 : 9;
-        Span<byte> numbers = stackalloc byte[dataCount + checkCount];
+
+        // Barcode L carries 19 data numbers and 7 check numbers.
+        InlineArray26<byte> numberStorage = default;
+        Span<byte> numbers = ((Span<byte>)numberStorage)[..(dataCount + checkCount)];
         DataNumbers(consolidated, numbers[..dataCount], thirtyValued);
         CheckNumbers(numbers[..dataCount], isL ? GeneratorL : GeneratorC, numbers[dataCount..]);
 
         ReadOnlySpan<byte> groups = isL ? ExtenderGroupsL : ExtenderGroupsC;
-        Span<byte> extenderGroups = stackalloc byte[numbers.Length];
+        InlineArray26<byte> groupStorage = default;
+        Span<byte> extenderGroups = ((Span<byte>)groupStorage)[..numbers.Length];
         for (int i = 0; i < numbers.Length; i++)
         {
             extenderGroups[groups[i]] = i < thirtyValued ? EvenSymbols[numbers[i]] : OddSymbols[numbers[i]];
@@ -283,7 +287,10 @@ internal static class FourStateMailmarkEncoder
     public static void CheckNumbers(ReadOnlySpan<byte> data, ReadOnlySpan<byte> generator, Span<byte> check)
     {
         int checkCount = generator.Length - 1;
-        Span<byte> buffer = stackalloc byte[data.Length + checkCount];
+
+        // At most 19 data numbers and 7 check numbers, barcode L.
+        InlineArray26<byte> bufferStorage = default;
+        Span<byte> buffer = ((Span<byte>)bufferStorage)[..(data.Length + checkCount)];
         data.CopyTo(buffer);
         for (int i = 0; i < data.Length; i++)
         {

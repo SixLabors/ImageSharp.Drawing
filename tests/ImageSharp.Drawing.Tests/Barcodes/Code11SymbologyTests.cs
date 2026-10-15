@@ -17,7 +17,7 @@ public class Code11SymbologyTests
     [InlineData("123-45", "113311311131131131331111113111113131313111113311")]
     [InlineData("0123456789", "113311111131311131131131331111113131313111133111111331311311311111113311")]
     public void MatchesReferenceRuns(string text, string reference)
-        => Assert.Equal(reference[..^1], string.Concat(Encode(text).RunWidths));
+        => Assert.Equal(reference[..^1], Encode(text));
 
     /// <summary>
     /// C weights the data from the right, 1 to 10 and around again, and takes the sum modulo 11. For
@@ -35,10 +35,9 @@ public class Code11SymbologyTests
     [InlineData("0123456789", "113311111131311131131131331111113131313111133111111331311311311111111131331111113311")]
     [InlineData("0123456789-", "113311111131311131131131331111113131313111133111111331311311311111113111111131133111113311")]
     public void CalculatesTheCheckCharacters(string text, string reference)
-    {
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Code11Symbology(CheckCharacterMode.Compute).Encode(text, new BarcodeOptions());
-        Assert.Equal(reference[..^1], string.Concat(symbol.RunWidths));
-    }
+        => Assert.Equal(
+            reference[..^1],
+            SymbolEncoder.Read(new Code11Symbology(CheckCharacterMode.Compute), text, new BarcodeOptions(), SymbolEncoder.RunString));
 
     /// <summary>
     /// Supplied check characters are validated against the data and carried once, so the symbol is the
@@ -52,10 +51,10 @@ public class Code11SymbologyTests
     [InlineData("012345678903", "0123456789")]
     public void ValidatesSuppliedCheckCharacters(string text, string data)
     {
-        LinearBarcodeSymbol validated = (LinearBarcodeSymbol)new Code11Symbology(CheckCharacterMode.Validate).Encode(text, new BarcodeOptions());
-        LinearBarcodeSymbol computed = (LinearBarcodeSymbol)new Code11Symbology(CheckCharacterMode.Compute).Encode(data, new BarcodeOptions());
+        string validated = SymbolEncoder.Read(new Code11Symbology(CheckCharacterMode.Validate), text, new BarcodeOptions(), SymbolEncoder.RunString);
+        string computed = SymbolEncoder.Read(new Code11Symbology(CheckCharacterMode.Compute), data, new BarcodeOptions(), SymbolEncoder.RunString);
 
-        Assert.Equal(string.Concat(computed.RunWidths), string.Concat(validated.RunWidths));
+        Assert.Equal(computed, validated);
     }
 
     [Theory]
@@ -64,7 +63,7 @@ public class Code11SymbologyTests
     [InlineData("01234567890")]
     [InlineData("5")]
     public void RejectsWrongOrAmbiguousCheckCharacters(string text)
-        => Assert.Throws<ArgumentException>(() => new Code11Symbology(CheckCharacterMode.Validate).Encode(text, new BarcodeOptions()));
+        => Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new Code11Symbology(CheckCharacterMode.Validate), text, new BarcodeOptions()));
 
     /// <summary>
     /// The printed line shows the data and, by default, the check characters. It never shows the start
@@ -84,10 +83,9 @@ public class Code11SymbologyTests
     public void PrintsTheDataAndTheCheckCharacters(CheckCharacterMode checkCharacters, bool printCheckCharacters, string text, string expected)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Code11Symbology(checkCharacters, printCheckCharacters).Encode(text, options);
+        string[] texts = SymbolEncoder.Read(new Code11Symbology(checkCharacters, printCheckCharacters), text, options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal(expected, placement.Text);
+        Assert.Equal(expected, Assert.Single(texts));
     }
 
     /// <summary>
@@ -104,15 +102,7 @@ public class Code11SymbologyTests
     [InlineData("123-45", 77)]
     [InlineData("0123456789", 115)]
     public void SpansSevenOrNineModulesPerCharacter(string text, int expected)
-    {
-        int widthInModules = 0;
-        foreach (int run in Encode(text).RunWidths)
-        {
-            widthInModules += run;
-        }
-
-        Assert.Equal(expected, widthInModules);
-    }
+        => Assert.Equal(expected, SymbolEncoder.Read(new Code11Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunSum));
 
     [Theory]
     [InlineData("")]
@@ -123,6 +113,11 @@ public class Code11SymbologyTests
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new Code11Symbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(string text)
+        => SymbolEncoder.Read(new Code11Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
 }

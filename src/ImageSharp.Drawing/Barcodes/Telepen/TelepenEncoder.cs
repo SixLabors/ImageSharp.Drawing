@@ -25,10 +25,10 @@ internal static class TelepenEncoder
     public const int QuietZone = 10;
 
     /// <summary>
-    /// The number of characters a caller stack allocates to build symbol data in. Longer data grows into
-    /// a pooled array.
+    /// The number of characters a caller holds inline to build symbol data in. Longer data rents its
+    /// buffer once.
     /// </summary>
-    public const int StackBufferLength = 64;
+    public const int InlineBufferLength = 64;
 
     /// <summary>
     /// The start code, "binary 01011111 (ASCII _)".
@@ -104,16 +104,20 @@ internal static class TelepenEncoder
     }
 
     /// <summary>
-    /// Encodes character values into the alternating bar and space run widths the renderer draws,
-    /// starting with the first bar of the start code and ending on the last bar of the stop code. The
-    /// runs carry the start code, the values, the check character and the stop code.
+    /// Encodes character values and builds the symbol. The runs start with the first bar of the start code
+    /// and end on the last bar of the stop code, and carry the start code, the values, the check character
+    /// and the stop code. Telepen carries no guard bars, so every bar runs the full height, and the human
+    /// readable interpretation sits below the symbol.
     /// </summary>
     /// <param name="values">The character values the symbol carries, already validated.</param>
-    /// <returns>The run widths in modules.</returns>
-    public static int[] Encode(ReadOnlySpan<int> values)
+    /// <param name="readable">The human readable interpretation.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(ReadOnlySpan<int> values, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        // Every character is at most eight bars and eight spaces, and the stop code ends on a bar.
-        int[] runs = new int[(values.Length + 3) * ModulesPerCharacter];
+        // Every character is at most eight bars and eight spaces, so the symbol reserves that many runs and
+        // keeps those it writes. The stop code ends on a bar, so the space written after it is dropped.
+        Span<int> runs = symbol.BeginLinear((values.Length + 3) * ModulesPerCharacter, out Span<float> heights, out _);
         int written = 0;
         Append(runs, ref written, Start);
         for (int i = 0; i < values.Length; i++)
@@ -123,19 +127,9 @@ internal static class TelepenEncoder
 
         Append(runs, ref written, CheckCharacter(values));
         Append(runs, ref written, Stop);
-        return runs[..(written - 1)];
-    }
+        symbol.TrimLastRow(written - 1);
+        runs = runs[..(written - 1)];
 
-    /// <summary>
-    /// Builds the symbol from encoded run widths. Telepen carries no guard bars, so every bar runs the
-    /// full height, and the human readable interpretation sits below the symbol.
-    /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <param name="text">The human readable interpretation.</param>
-    /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
-    {
         int widthInModules = 0;
         for (int i = 0; i < runs.Length; i++)
         {
@@ -145,21 +139,15 @@ internal static class TelepenEncoder
         double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
         float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
         float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, nominalBarHeight);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
-        for (int i = 0; i < barCount; i++)
+        heights[..((runs.Length + 1) >> 1)].Fill(barHeight);
+
+        if (options.Font is not null && readable.Length > 0)
         {
-            heights[i] = barHeight;
+            symbol.ReserveText(1, readable.Length);
+            symbol.AddText(readable, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
         }
 
-        BarcodeTextPlacement[] placements = [];
-        if (options.Font is not null && text.Length > 0)
-        {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
-        }
-
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone);
+        symbol.EndLinear(QuietZone, QuietZone);
     }
 
     /// <summary>

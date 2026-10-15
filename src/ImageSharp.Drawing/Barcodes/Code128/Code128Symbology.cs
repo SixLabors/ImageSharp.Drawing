@@ -21,10 +21,10 @@ public sealed class Code128Symbology : BarcodeSymbology
     public override double NominalXDimension => Code128Encoder.NominalXDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
-        return Code128Encoder.BuildSymbol(Code128Encoder.Encode(text, false), text, options);
+        Code128Encoder.BuildSymbol(text, false, [], text, [], options, ref symbol);
     }
 }

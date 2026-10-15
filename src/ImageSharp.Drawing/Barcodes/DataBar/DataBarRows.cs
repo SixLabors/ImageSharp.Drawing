@@ -10,18 +10,14 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class DataBarRows
 {
     /// <summary>
-    /// Builds one row from its modules.
+    /// Returns the number of runs of a row: one for each change of module color and one more, and a zero
+    /// width bar at an end that is light, so even run indexes stay bars.
     /// </summary>
     /// <param name="modules">The modules of the row, 1 for dark.</param>
-    /// <param name="height">The height of the row in modules.</param>
-    /// <returns>The row.</returns>
-    public static LinearBarcodeSymbol Row(ReadOnlySpan<byte> modules, float height)
+    /// <returns>The run count.</returns>
+    public static int RunCount(ReadOnlySpan<byte> modules)
     {
-        // A row that starts or ends light gets a zero width bar at that end, so even run indexes stay
-        // bars. The zero width bars are the default zeros of the array.
-        int leading = modules[0] == 0 ? 1 : 0;
-        int trailing = modules[^1] == 0 ? 1 : 0;
-        int count = 1 + leading + trailing;
+        int count = 1 + (modules[0] == 0 ? 1 : 0) + (modules[^1] == 0 ? 1 : 0);
         for (int i = 1; i < modules.Length; i++)
         {
             if (modules[i] != modules[i - 1])
@@ -30,7 +26,21 @@ internal static class DataBarRows
             }
         }
 
-        int[] runs = new int[count];
+        return count;
+    }
+
+    /// <summary>
+    /// Adds one row to a stacked symbol from its modules.
+    /// </summary>
+    /// <param name="modules">The modules of the row, 1 for dark.</param>
+    /// <param name="height">The height of the row in modules.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void AddRow(ReadOnlySpan<byte> modules, float height, ref BarcodeSymbol symbol)
+    {
+        // A row that starts or ends light gets a zero width bar at that end, so even run indexes stay
+        // bars. The zero width bars are the zeros the symbol storage starts with.
+        int leading = modules[0] == 0 ? 1 : 0;
+        Span<int> runs = symbol.AddRow(RunCount(modules), out Span<float> heights, out _);
         int run = leading;
         int width = 1;
         for (int i = 1; i < modules.Length; i++)
@@ -47,9 +57,6 @@ internal static class DataBarRows
         }
 
         runs[run] = width;
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        heights.AsSpan().Fill(height);
-        return new LinearBarcodeSymbol(runs, heights, new float[barCount], [], 0, 0);
+        heights.Fill(height);
     }
 }

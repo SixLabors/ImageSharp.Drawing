@@ -70,7 +70,7 @@ public sealed class CodabarSymbology : BarcodeSymbology
     public bool PrintCheckCharacter { get; }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, CodabarEncoder.MaximumLength, nameof(text));
@@ -104,12 +104,15 @@ public sealed class CodabarSymbology : BarcodeSymbology
             index += current.Utf16SequenceLength;
         }
 
-        string body = text;
+        // The symbol carries the start character and the data, then the check character, then the stop
+        // character. A supplied check character stands before the stop character in the text.
+        char stop = text[^1];
+        ReadOnlySpan<char> head = text.AsSpan(0, text.Length - 1);
         char? check = null;
         if (this.CheckCharacter == CheckCharacterMode.Validate)
         {
-            body = string.Concat(text.AsSpan(0, text.Length - 2), text.AsSpan(text.Length - 1));
-            check = CodabarEncoder.CheckCharacter(body);
+            head = text.AsSpan(0, text.Length - 2);
+            check = CodabarEncoder.CheckCharacter(head, stop);
             if (text[^2] != check)
             {
                 throw new ArgumentException($"Incorrect check character: expected {check}, got {text[^2]}.", nameof(text));
@@ -117,15 +120,9 @@ public sealed class CodabarSymbology : BarcodeSymbology
         }
         else if (this.CheckCharacter == CheckCharacterMode.Compute)
         {
-            check = CodabarEncoder.CheckCharacter(body);
+            check = CodabarEncoder.CheckCharacter(head, stop);
         }
 
-        string readable = options.Font is null
-            ? string.Empty
-            : check is null || !this.PrintCheckCharacter
-                ? body
-                : $"{body.AsSpan(0, body.Length - 1)}{check.Value}{body.AsSpan(body.Length - 1)}";
-
-        return CodabarEncoder.BuildSymbol(CodabarEncoder.Encode(body, check), readable, options);
+        CodabarEncoder.BuildSymbol(head, stop, check, this.PrintCheckCharacter, options, ref symbol);
     }
 }

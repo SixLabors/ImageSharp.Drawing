@@ -26,10 +26,7 @@ public class Sscc18SymbologyTests
     [InlineData("(00)106141411234567897")]
     [InlineData("(00) 1 0614141 1234567 89")]
     public void MatchesReferenceRuns(string text)
-    {
-        LinearBarcodeSymbol symbol = Encode(text);
-        Assert.Equal(Expected, string.Concat(symbol.RunWidths));
-    }
+        => Assert.Equal(Expected, Encode(text));
 
     /// <summary>
     /// A supplied check digit is verified against section 7.9 of the GS1 General Specifications.
@@ -58,12 +55,16 @@ public class Sscc18SymbologyTests
     public void PrintsAComputedCheckDigitAfterASpace()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Sscc18Symbology().Encode("(00)10614141123456789", options);
+        string[] texts = SymbolEncoder.Read(new Sscc18Symbology(), "(00)10614141123456789", options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal("(00)10614141123456789 7", placement.Text);
+        Assert.Equal("(00)10614141123456789 7", Assert.Single(texts));
     }
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new Sscc18Symbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(string text)
+        => SymbolEncoder.Read(new Sscc18Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
 }

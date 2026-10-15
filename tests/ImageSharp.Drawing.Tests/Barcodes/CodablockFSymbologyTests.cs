@@ -14,50 +14,114 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class CodablockFSymbologyTests
 {
-    [Theory]
-
-    // Upper case, a space and a long digit run over four rows of eight columns.
-    [InlineData("CODABLOCK F 34567890123456789010040digit", 8, "2114121141311214211313211331211123131113231311231321311331211313212122222331112|2114121141312312121123312122221323112122221131411311233311212411121122322331112|2114121131411321312141211122321311233311212411122141212213121213221323112331112|2114121141311221321231221412211421121221141421121241122131311133212214112331112")]
-
-    // Mixed case and a space, padded to two rows.
-    [InlineData("Codablock F", 8, "2114121141311114221313211341111412211211241214212211141341111411222211322331112|2114121141312312122412112122221323111131411141311131412214111223122113312331112")]
-
-    // Digits alone: every row starts in code set C.
-    [InlineData("12345678", 8, "2114121131412122221122321311233311212411121141311131411141311131412412112331112|2114121141312312121131411141311131411141311131411141311322123221122131132331112")]
-
-    // A single character.
-    [InlineData("A", 8, "2114121141311114221113231131411141311131411141311131411141311131412113312331112|2114121141312312121131411141311131411141311131411141311123311114221312222331112")]
-
-    // No data at all: two rows of pad characters round the check characters.
-    [InlineData("", 8, "2114121141311114221131411141311131411141311131411141311131411141313131212331112|2114121141312312121131411141311131411141311131411141311114221114224121212331112")]
-
-    // Punctuation and lower case.
-    [InlineData("Hello, World!", 8, "2114121141311114222311131122142211142211141341111122322122223113211241122331112|2114121141312312121341111212412211141412212221221131411221143141112312122331112")]
-
-    // Lower case, control characters and upper case: shifts and latches between code sets A and B.
-    [InlineData("abcDEF", 8, "2114121141311114221211241214211411223111411211241214211123131321132212132331112|2114121141312312121323111131411141311131411141311131414131111212233122122331112")]
-
-    // Forty digits over three rows.
-    [InlineData("1234567890123456789012345678901234567890", 8, "2114121131412221221122321311233311212411122141211122321311233311211323112331112|2114121131411123312411122141211122321311233311212411122141211122322222212331112|2114121131411321311311233311212411122141211141311131413221122411122131312331112")]
-
-    // Twelve columns.
-    [InlineData("The quick brown fox jumps over the lazy dog 0123456789", 12, "2114121141311411222133111224111122142122221211421242111421121411222412112122221214211212411121332331112|2114121141312312121341114211122411122122221124121341114212112122221422111242114131111112421211242331112|2114121141311122321142122122221341114112121122141212412122221241121224111122142122222211142211142331112|2114121141311221321211242141212121412122221412211341111221142122221131412221223121311131234311112331112|2114121131411133211411222121411141311131411141311131411141311131411141311131412321214311112313112331112")]
-
-    // Four columns, the narrowest symbol.
-    [InlineData("ABCDEFGHIJ", 4, "2114121141311211241113231311231313211123132321212331112|2114121141312312121321131323112113132311131131412331112|2114121141311122322313111121331212231111433113212331112")]
-
-    // Four columns with an odd digit run.
-    [InlineData("12345", 4, "2114121131412122221122321311231141312132121421122331112|2114121141312312121131411141311211241412211223122331112")]
-    public void CodablockF_MatchesReferenceRows(string text, int columns, string expected)
+    /// <summary>
+    /// Gets the cases of <see cref="CodablockF_MatchesReferenceRows"/>.
+    /// </summary>
+    public static TheoryData<string, int, string> CodablockF_MatchesReferenceRowsData { get; } = new()
     {
-        StackedBarcodeSymbol symbol = Encode(text, columns);
-        string[] rows = expected.Split('|');
-        Assert.Equal((rows.Length * 2) + 1, symbol.Rows.Length);
-        for (int i = 0; i < rows.Length; i++)
+        // Upper case, a space and a long digit run over four rows of eight columns.
         {
-            Assert.Equal(rows[i], string.Concat(symbol.Rows[(i * 2) + 1].RunWidths));
-        }
-    }
+            "CODABLOCK F 34567890123456789010040digit",
+            8,
+            "2114121141311214211313211331211123131113231311231321311331211313212122222331112|" +
+                "2114121141312312121123312122221323112122221131411311233311212411121122322331112|" +
+                "2114121131411321312141211122321311233311212411122141212213121213221323112331112|" +
+                "2114121141311221321231221412211421121221141421121241122131311133212214112331112"
+        },
+
+        // Mixed case and a space, padded to two rows.
+        {
+            "Codablock F",
+            8,
+            "2114121141311114221313211341111412211211241214212211141341111411222211322331112|" +
+                "2114121141312312122412112122221323111131411141311131412214111223122113312331112"
+        },
+
+        // Digits alone: every row starts in code set C.
+        {
+            "12345678",
+            8,
+            "2114121131412122221122321311233311212411121141311131411141311131412412112331112|" +
+                "2114121141312312121131411141311131411141311131411141311322123221122131132331112"
+        },
+
+        // A single character.
+        {
+            "A",
+            8,
+            "2114121141311114221113231131411141311131411141311131411141311131412113312331112|" +
+                "2114121141312312121131411141311131411141311131411141311123311114221312222331112"
+        },
+
+        // No data at all: two rows of pad characters round the check characters.
+        {
+            string.Empty,
+            8,
+            "2114121141311114221131411141311131411141311131411141311131411141313131212331112|" +
+                "2114121141312312121131411141311131411141311131411141311114221114224121212331112"
+        },
+
+        // Punctuation and lower case.
+        {
+            "Hello, World!",
+            8,
+            "2114121141311114222311131122142211142211141341111122322122223113211241122331112|" +
+                "2114121141312312121341111212412211141412212221221131411221143141112312122331112"
+        },
+
+        // Lower case, control characters and upper case: shifts and latches between code sets A and B.
+        {
+            "abcDEF",
+            8,
+            "2114121141311114221211241214211411223111411211241214211123131321132212132331112|" +
+                "2114121141312312121323111131411141311131411141311131414131111212233122122331112"
+        },
+
+        // Forty digits over three rows.
+        {
+            "1234567890123456789012345678901234567890",
+            8,
+            "2114121131412221221122321311233311212411122141211122321311233311211323112331112|" +
+                "2114121131411123312411122141211122321311233311212411122141211122322222212331112|" +
+                "2114121131411321311311233311212411122141211141311131413221122411122131312331112"
+        },
+
+        // Twelve columns.
+        {
+            "The quick brown fox jumps over the lazy dog 0123456789",
+            12,
+            "2114121141311411222133111224111122142122221211421242111421121411222412112122221214211212411121332331112|" +
+                "2114121141312312121341114211122411122122221124121341114212112122221422111242114131111112421211242331112|" +
+                "2114121141311122321142122122221341114112121122141212412122221241121224111122142122222211142211142331112|" +
+                "2114121141311221321211242141212121412122221412211341111221142122221131412221223121311131234311112331112|" +
+                "2114121131411133211411222121411141311131411141311131411141311131411141311131412321214311112313112331112"
+        },
+
+        // Four columns, the narrowest symbol.
+        {
+            "ABCDEFGHIJ",
+            4,
+            "2114121141311211241113231311231313211123132321212331112|" +
+                "2114121141312312121321131323112113132311131131412331112|" +
+                "2114121141311122322313111121331212231111433113212331112"
+        },
+
+        // Four columns with an odd digit run.
+        { "12345", 4, "2114121131412122221122321311231141312132121421122331112|2114121141312312121131411141311211241412211223122331112" },
+    };
+
+    [Theory]
+    [MemberData(nameof(CodablockF_MatchesReferenceRowsData))]
+    public void CodablockF_MatchesReferenceRows(string text, int columns, string expected)
+        => Encode(text, columns, (ref symbol) =>
+        {
+            string[] rows = expected.Split('|');
+            Assert.Equal((rows.Length * 2) + 1, symbol.Rows.Length);
+            for (int i = 0; i < rows.Length; i++)
+            {
+                Assert.Equal(rows[i], SymbolEncoder.RunString(ref symbol, symbol.Rows[(i * 2) + 1]));
+            }
+        });
 
     /// <summary>
     /// A row is eleven modules per character and thirteen for the stop character. A separator row keeps
@@ -69,18 +133,18 @@ public class CodablockFSymbologyTests
     [InlineData(8, 145, 123)]
     [InlineData(12, 189, 167)]
     public void CodablockF_RowsSeparatorsAndEdgesFollowTheReferences(int columns, int width, int fill)
-    {
-        StackedBarcodeSymbol symbol = Encode("ABCDEFGHIJ", columns);
-        Assert.Equal(width, symbol.WidthInModules);
-        Assert.Equal([width], symbol.Rows[0].RunWidths);
-        Assert.Equal([width], symbol.Rows[^1].RunWidths);
-        Assert.Equal([2, 1, 1, 4, 1, 2, fill, 3, 3, 1, 1, 1, 2], symbol.Rows[2].RunWidths);
-        Assert.All(symbol.Rows[2].BarHeights, height => Assert.Equal(1F, height));
-        Assert.Equal(0F, symbol.EdgeBarHeight);
-        Assert.Equal(10F, symbol.LeadingQuietZone);
-        Assert.Equal(10F, symbol.TrailingQuietZone);
-        Assert.Empty(symbol.Text);
-    }
+        => Encode("ABCDEFGHIJ", columns, (ref symbol) =>
+        {
+            Assert.Equal(width, symbol.WidthInModules);
+            Assert.Equal([width], SymbolEncoder.RowRuns(ref symbol, symbol.Rows[0]));
+            Assert.Equal([width], SymbolEncoder.RowRuns(ref symbol, symbol.Rows[^1]));
+            Assert.Equal([2, 1, 1, 4, 1, 2, fill, 3, 3, 1, 1, 1, 2], SymbolEncoder.RowRuns(ref symbol, symbol.Rows[2]));
+            Assert.All(SymbolEncoder.RowBarHeights(ref symbol, symbol.Rows[2]), height => Assert.Equal(1F, height));
+            Assert.Equal(0F, symbol.FrameThickness);
+            Assert.Equal(10F, symbol.LeadingQuietZone);
+            Assert.Equal(10F, symbol.TrailingQuietZone);
+            Assert.True(symbol.Text.IsEmpty);
+        });
 
     /// <summary>
     /// The nominal row height is ten modules, or 0.55 modules per data column plus three when that is
@@ -90,13 +154,15 @@ public class CodablockFSymbologyTests
     public void CodablockF_RowHeightFollowsTheColumnCount()
     {
         ApproximateFloatComparer comparer = new(1e-4F);
-        Assert.All(Encode("A", 8).Rows[1].BarHeights, height => Assert.Equal(10F, height));
-        Assert.All(Encode("A", 20).Rows[1].BarHeights, height => Assert.Equal(14F, height, comparer));
+        Encode("A", 8, (ref symbol) => Assert.All(SymbolEncoder.RowBarHeights(ref symbol, symbol.Rows[1]), height => Assert.Equal(10F, height)));
+        Encode("A", 20, (ref symbol) => Assert.All(SymbolEncoder.RowBarHeights(ref symbol, symbol.Rows[1]), height => Assert.Equal(14F, height, comparer)));
 
         BarcodeOptions options = new() { BarHeight = 12F * BarcodeSymbology.PointXDimension };
-        StackedBarcodeSymbol symbol = (StackedBarcodeSymbol)new CodablockFSymbology().Encode("A", options);
-        Assert.All(symbol.Rows[1].BarHeights, height => Assert.Equal(12F, height, comparer));
-        Assert.Equal(27F, symbol.HeightInModules, comparer);
+        SymbolEncoder.Encode(new CodablockFSymbology(), "A", options, (ref symbol) =>
+        {
+            Assert.All(SymbolEncoder.RowBarHeights(ref symbol, symbol.Rows[1]), height => Assert.Equal(12F, height, comparer));
+            Assert.Equal(27F, symbol.HeightInModules, comparer);
+        });
     }
 
     /// <summary>
@@ -110,7 +176,7 @@ public class CodablockFSymbologyTests
     [InlineData("12345678")]
     public void CodablockF_CheckCharactersFollowTheReferences(string text)
     {
-        int[] values = CodablockFEncoder.Encode(text, 8);
+        int[] values = SymbolEncoder.Read(new CodablockFSymbology(8), text, new BarcodeOptions(), DataRowValues);
         int rowSize = 8 + CodablockFEncoder.Overhead;
         int k1 = 0;
         int k2 = 0;
@@ -150,13 +216,15 @@ public class CodablockFSymbologyTests
     public void CodablockF_TextPrintsBelowTheBottomBar()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        StackedBarcodeSymbol symbol = (StackedBarcodeSymbol)new CodablockFSymbology().Encode("Codablock F", options);
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal("Codablock F", placement.Text);
-        Assert.Equal(BarcodeTextSide.BelowBars, placement.Side);
-        Assert.Equal(symbol.HeightInModules + BarcodeTextPlacement.Clearance, placement.TextEdge);
-        Assert.Equal(0F, placement.Left);
-        Assert.Equal(145F, placement.Right);
+        SymbolEncoder.Encode(new CodablockFSymbology(), "Codablock F", options, (ref symbol) =>
+        {
+            BarcodeTextPlacement placement = Assert.Single(symbol.Text.ToArray());
+            Assert.Equal("Codablock F", symbol.TextOf(placement).ToString());
+            Assert.Equal(BarcodeTextSide.BelowBars, placement.Side);
+            Assert.Equal(symbol.HeightInModules + BarcodeTextPlacement.Clearance, placement.TextEdge);
+            Assert.Equal(0F, placement.Left);
+            Assert.Equal(145F, placement.Right);
+        });
     }
 
     /// <summary>
@@ -168,13 +236,56 @@ public class CodablockFSymbologyTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new CodablockFSymbology(3));
         Assert.Throws<ArgumentOutOfRangeException>(() => new CodablockFSymbology(63));
-        Assert.Throws<ArgumentException>(() => Encode("café", 8));
-        Assert.Throws<ArgumentException>(() => Encode(new string('A', 44 * 4), 4));
-        Assert.NotNull(Encode(new string('A', (44 * 4) - 2), 4));
+        Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new CodablockFSymbology(8), "café", new BarcodeOptions()));
+        Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new CodablockFSymbology(4), new string('A', 44 * 4), new BarcodeOptions()));
+        Encode(new string('A', (44 * 4) - 2), 4, (ref symbol) => Assert.Equal(BarcodeSymbolKind.Stacked, symbol.Kind));
     }
 
-    private static StackedBarcodeSymbol Encode(string text, int columns)
-        => (StackedBarcodeSymbol)new CodablockFSymbology(columns).Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options and checks the symbol.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="columns">The number of data columns in a row.</param>
+    /// <param name="check">The check to run on the encoded symbol.</param>
+    private static void Encode(string text, int columns, SymbolEncoder.Check check)
+        => SymbolEncoder.Encode(new CodablockFSymbology(columns), text, new BarcodeOptions(), check);
+
+    /// <summary>
+    /// Reads the Code 128 character values of every data row of a symbol, from the top. Every symbol
+    /// character but the stop character is six runs; the stop character closes each row with seven.
+    /// </summary>
+    /// <param name="symbol">The encoded symbol.</param>
+    /// <returns>The character values, one data row after another.</returns>
+    private static int[] DataRowValues(ref BarcodeSymbol symbol)
+    {
+        ReadOnlySpan<uint> patterns = Code128Encoder.Patterns;
+        List<int> values = [];
+
+        // The data rows stand between the top edge bar and the separators, at the odd row indexes.
+        for (int r = 1; r < symbol.Rows.Length; r += 2)
+        {
+            BarcodeRow row = symbol.Rows[r];
+            ReadOnlySpan<int> runs = symbol.Runs.Slice(row.RunStart, row.RunCount);
+            int index = 0;
+            while (index < runs.Length)
+            {
+                // A pattern packs its element count in the leading nibble, then the elements.
+                int elements = runs.Length - index == 7 ? 7 : 6;
+                uint pattern = (uint)elements;
+                for (int e = 0; e < elements; e++)
+                {
+                    pattern = (pattern << 4) | (uint)runs[index + e];
+                }
+
+                int value = patterns.IndexOf(pattern);
+                Assert.True(value >= 0);
+                values.Add(value);
+                index += elements;
+            }
+        }
+
+        return [.. values];
+    }
 
     private static int Map(int value, bool alphabetic)
     {

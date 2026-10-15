@@ -35,10 +35,10 @@ public sealed class CodablockFSymbology : BarcodeSymbology
     public int Columns { get; }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
-        return CodablockFEncoder.BuildSymbol(CodablockFEncoder.Encode(text, this.Columns), this.Columns, text, options);
+        CodablockFEncoder.BuildSymbol(text, this.Columns, [], text, [], options, ref symbol);
     }
 }

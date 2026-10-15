@@ -73,41 +73,37 @@ internal static class ChannelCodeEncoder
     public static int MaximumValue(int digits) => MaximumValues[digits - MinimumLength];
 
     /// <summary>
-    /// Encodes a value into the alternating bar and space run widths the renderer draws, starting with
-    /// the first bar of the finder pattern and ending on the bar of the last channel.
+    /// Encodes a value and builds the symbol. The runs start with the first bar of the finder pattern and
+    /// end on the bar of the last channel. Channel Code carries no guard bars, so every bar runs the full
+    /// height, and the human readable interpretation sits below the symbol.
     /// </summary>
     /// <param name="value">The value, within the range of the channel count.</param>
     /// <param name="digits">The number of digits, which sets the channel count.</param>
     /// <param name="shortFinder">Whether the finder pattern is the short form of three bars.</param>
-    /// <returns>The run widths in modules.</returns>
-    public static int[] Encode(int value, int digits, bool shortFinder)
+    /// <param name="readable">The human readable interpretation.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(
+        int value,
+        int digits,
+        bool shortFinder,
+        ReadOnlySpan<char> readable,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
     {
         int channels = digits + ChannelsBeyondDigits;
         int finder = shortFinder ? ShortFinderElements : FinderElements;
-        int[] runs = new int[finder + (channels * 2)];
-        runs.AsSpan(0, finder).Fill(1);
+        Span<int> runs = symbol.BeginLinear(finder + (channels * 2), out Span<float> heights, out _);
+        runs[..finder].Fill(1);
 
         Enumeration enumeration = new(channels, value);
         enumeration.NextSpace(3, channels, channels);
         for (int channel = 0; channel < channels; channel++)
         {
-            runs[finder + (channel * 2)] = enumeration.Spaces[channel + 3];
-            runs[finder + (channel * 2) + 1] = enumeration.Bars[channel + 3];
+            runs[finder + (channel * 2)] = enumeration.Space(channel + 3);
+            runs[finder + (channel * 2) + 1] = enumeration.Bar(channel + 3);
         }
 
-        return runs;
-    }
-
-    /// <summary>
-    /// Builds the symbol from encoded run widths. Channel Code carries no guard bars, so every bar runs
-    /// the full height, and the human readable interpretation sits below the symbol.
-    /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <param name="text">The human readable interpretation.</param>
-    /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
-    {
         int widthInModules = 0;
         for (int i = 0; i < runs.Length; i++)
         {
@@ -117,46 +113,63 @@ internal static class ChannelCodeEncoder
         double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
         float nominalBarHeight = MathF.Max(NominalBarHeight, (float)(MinimumBarHeightMillimetres / xDimension));
         float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, nominalBarHeight);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
-        for (int i = 0; i < barCount; i++)
+        heights.Fill(barHeight);
+
+        if (options.Font is not null && readable.Length > 0)
         {
-            heights[i] = barHeight;
+            symbol.ReserveText(1, readable.Length);
+            symbol.AddText(readable, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
         }
 
-        BarcodeTextPlacement[] placements = [];
-        if (options.Font is not null && text.Length > 0)
-        {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
-        }
-
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, LeadingQuietZone, TrailingQuietZone);
+        symbol.EndLinear(LeadingQuietZone, TrailingQuietZone);
     }
 
     /// <summary>
     /// Walks the space and bar sequences of a channel count in the order of the standard and stops at
-    /// the sequence whose position is the target value. The first three entries of each array are the
-    /// end of the finder pattern, which the width rules look back at.
+    /// the sequence whose position is the target value. The first three entries of each sequence are the
+    /// end of the finder pattern, which the width rules look back at. The eight channels of a seven digit
+    /// symbol and those three entries take eleven of the twelve inline places.
     /// </summary>
-    private sealed class Enumeration
+    private struct Enumeration
     {
         private readonly int channels;
         private readonly int target;
+        private InlineArray12<int> bars;
+        private InlineArray12<int> spaces;
         private int value;
         private bool found;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Enumeration"/> struct.
+        /// </summary>
+        /// <param name="channels">The number of channels.</param>
+        /// <param name="target">The value whose sequence the walk stops at.</param>
         public Enumeration(int channels, int target)
         {
             this.channels = channels;
             this.target = target;
-            this.Bars = [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0];
-            this.Spaces = [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0];
+
+            // The end of the finder pattern: three narrow bars, and the two narrow spaces between them.
+            this.bars[0] = 1;
+            this.bars[1] = 1;
+            this.bars[2] = 1;
+            this.spaces[1] = 1;
+            this.spaces[2] = 1;
         }
 
-        public int[] Bars { get; }
+        /// <summary>
+        /// Returns the width of a bar of the sequence the walk stopped at.
+        /// </summary>
+        /// <param name="index">The element index.</param>
+        /// <returns>The width in modules.</returns>
+        public readonly int Bar(int index) => this.bars[index];
 
-        public int[] Spaces { get; }
+        /// <summary>
+        /// Returns the width of a space of the sequence the walk stopped at.
+        /// </summary>
+        /// <param name="index">The element index.</param>
+        /// <returns>The width in modules.</returns>
+        public readonly int Space(int index) => this.spaces[index];
 
         /// <summary>
         /// Tries every width of space i within the width left for spaces. The last space takes all the
@@ -170,7 +183,7 @@ internal static class ChannelCodeEncoder
             int first = i < this.channels + 2 ? 1 : maximumSpace;
             for (int space = first; space <= maximumSpace && !this.found; space++)
             {
-                this.Spaces[i] = space;
+                this.spaces[i] = space;
                 this.NextBar(i, maximumSpace + 1 - space, maximumBar);
             }
         }
@@ -185,18 +198,18 @@ internal static class ChannelCodeEncoder
         /// <param name="maximumBar">The width left for the bars.</param>
         private void NextBar(int i, int maximumSpace, int maximumBar)
         {
-            int first = this.Spaces[i] + this.Bars[i - 1] + this.Bars[i - 2] + this.Spaces[i - 1] > 4 ? 1 : 2;
+            int first = this.spaces[i] + this.bars[i - 1] + this.bars[i - 2] + this.spaces[i - 1] > 4 ? 1 : 2;
             if (i < this.channels + 2)
             {
                 for (int bar = first; bar <= maximumBar && !this.found; bar++)
                 {
-                    this.Bars[i] = bar;
+                    this.bars[i] = bar;
                     this.NextSpace(i + 1, maximumBar + 1 - bar, maximumSpace);
                 }
             }
             else if (first <= maximumBar)
             {
-                this.Bars[i] = maximumBar;
+                this.bars[i] = maximumBar;
                 if (this.value == this.target)
                 {
                     this.found = true;

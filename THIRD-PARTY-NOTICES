@@ -96,3 +96,19 @@ course of implementing the standard, of necessary details such as symbols, and
 size, type or grade designations."
 
 ================================================================================
+
+GS1 Barcode Syntax Dictionary (https://github.com/gs1/gs1-syntax-dictionary)
+License: Apache-2.0
+
+Portions of this software incorporate the GS1 Barcode Syntax Dictionary and
+were developed with reference to its Syntax Tests.
+
+Copyright (c) 2020-2021 BWIPP project
+Copyright (c) 2020-2021 Zint Project
+Copyright (c) 2021-2026 GS1 AISBL
+
+The GS1 Barcode Syntax Dictionary is distributed under the Apache License,
+Version 2.0. The full license text is available in the gs1-syntax-dictionary
+repository LICENSE file.
+
+================================================================================

@@ -24,7 +24,7 @@ public class RoyalMailSymbologyTests
     [InlineData("B31HQ", "ADFTADTAFTDAFDFATADFTAFDTF")]
     [InlineData("SN34RD1A", "AFTFTFDTADTAFDTFAFTADTFADTDAFDADAADDAF")]
     public void EncodesRoyalMail(string text, string bars)
-        => Assert.Equal(bars, States(Encode(new RoyalMailSymbology(), text)));
+        => Assert.Equal(bars, Encode(new RoyalMailSymbology(), text));
 
     /// <summary>
     /// KIX is the same characters without the start bar, the check character and the stop bar.
@@ -35,11 +35,11 @@ public class RoyalMailSymbologyTests
     [InlineData("1231FZ13XHS", "TDAFTDFADTAFTDAFDAADFFTTTDAFDTAFFATDDFATFTFT")]
     [InlineData("2500GG30", "TDFADDAATTFFTTFFDAFTDAFTDTAFTTFF")]
     public void EncodesKix(string text, string bars)
-        => Assert.Equal(bars, States(Encode(new KixSymbology(), text)));
+        => Assert.Equal(bars, Encode(new KixSymbology(), text));
 
     [Fact]
     public void EncodesDaftAsGiven()
-        => Assert.Equal("FATDAFTDAD", States(Encode(new DaftSymbology(), "FATDAFTDAD")));
+        => Assert.Equal("FATDAFTDAD", Encode(new DaftSymbology(), "FATDAFTDAD"));
 
     /// <summary>
     /// The check character of the checksum calculation table. The reference symbol carries it in the four
@@ -64,34 +64,36 @@ public class RoyalMailSymbologyTests
     [Fact]
     public void DrawsTheDimensionsOfTableEleven()
     {
-        LinearBarcodeSymbol symbol = Encode(new KixSymbology(), "2500GG30");
-
-        Assert.Equal(1F / 54F, symbol.RunUnit);
-        for (int i = 0; i < symbol.RunWidths.Length; i++)
+        SymbolEncoder.Encode(new KixSymbology(), "2500GG30", new BarcodeOptions(), static (ref symbol) =>
         {
-            Assert.Equal((i & 1) == 0 ? 54 : 66, symbol.RunWidths[i]);
-        }
-
-        float ascender = (float)(1.90 / 0.54);
-        float tracker = (float)(1.30 / 0.54);
-        string states = States(symbol);
-        for (int i = 0; i < states.Length; i++)
-        {
-            float expectedTop = states[i] is 'A' or 'F' ? 0F : ascender;
-            float expectedHeight = states[i] switch
+            Assert.Equal(1F / 54F, symbol.RunUnit);
+            for (int i = 0; i < symbol.Runs.Length; i++)
             {
-                'T' => tracker,
-                'F' => ascender + tracker + ascender,
-                _ => ascender + tracker,
-            };
+                Assert.Equal((i & 1) == 0 ? 54 : 66, symbol.Runs[i]);
+            }
 
-            Assert.Equal(expectedTop, symbol.BarTops[i]);
-            Assert.Equal(expectedHeight, symbol.BarHeights[i]);
-        }
+            float ascender = (float)(1.90 / 0.54);
+            float tracker = (float)(1.30 / 0.54);
+            string states = States(ref symbol);
+            for (int i = 0; i < states.Length; i++)
+            {
+                float expectedTop = states[i] is 'A' or 'F' ? 0F : ascender;
+                float expectedHeight = states[i] switch
+                {
+                    'T' => tracker,
+                    'F' => ascender + tracker + ascender,
+                    _ => ascender + tracker,
+                };
 
-        Assert.Equal((float)(2 / 0.54), symbol.LeadingQuietZone);
-        Assert.Equal((float)(2 / 0.54), symbol.TrailingQuietZone);
-        Assert.Equal(0F, Encode(new DaftSymbology(), "FT").LeadingQuietZone);
+                Assert.Equal(expectedTop, symbol.BarTops[i]);
+                Assert.Equal(expectedHeight, symbol.BarHeights[i]);
+            }
+
+            Assert.Equal((float)(2 / 0.54), symbol.LeadingQuietZone);
+            Assert.Equal((float)(2 / 0.54), symbol.TrailingQuietZone);
+        });
+
+        Assert.Equal(0F, SymbolEncoder.Read(new DaftSymbology(), "FT", new BarcodeOptions(), static (ref symbol) => symbol.LeadingQuietZone));
     }
 
     [Fact]
@@ -99,11 +101,10 @@ public class RoyalMailSymbologyTests
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
 
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new RoyalMailSymbology().Encode("LE28HS9Z", options);
-        Assert.Equal("LE28HS9Z", Assert.Single(symbol.Text).Text);
+        string[] texts = SymbolEncoder.Read(new RoyalMailSymbology(), "LE28HS9Z", options, SymbolEncoder.Texts);
+        Assert.Equal("LE28HS9Z", Assert.Single(texts));
 
-        LinearBarcodeSymbol daft = (LinearBarcodeSymbol)new DaftSymbology().Encode("FATD", options);
-        Assert.Empty(daft.Text);
+        Assert.Empty(SymbolEncoder.Read(new DaftSymbology(), "FATD", options, SymbolEncoder.Texts));
     }
 
     [Theory]
@@ -125,10 +126,22 @@ public class RoyalMailSymbologyTests
     public void RejectsMalformedDaftInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(new DaftSymbology(), text));
 
-    private static LinearBarcodeSymbol Encode(BarcodeSymbology symbology, string text)
-        => (LinearBarcodeSymbol)symbology.Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="symbology">The symbology to encode with.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The bar states of the symbol.</returns>
+    private static string Encode(BarcodeSymbology symbology, string text)
+        => SymbolEncoder.Read(symbology, text, new BarcodeOptions(), States);
 
-    private static string States(LinearBarcodeSymbol symbol)
+    /// <summary>
+    /// Reads the bar states of a symbol from the bar tops and heights: F for a full bar, A for an
+    /// ascender, D for a descender and T for a tracker.
+    /// </summary>
+    /// <param name="symbol">The encoded symbol.</param>
+    /// <returns>The bar states.</returns>
+    private static string States(ref BarcodeSymbol symbol)
     {
         float ascender = (float)(1.90 / 0.54);
         float tracker = (float)(1.30 / 0.54);

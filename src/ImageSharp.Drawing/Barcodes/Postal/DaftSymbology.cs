@@ -35,28 +35,41 @@ public sealed class DaftSymbology : BarcodeSymbology
     public override double NominalXDimension => Metrics.XDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
 
-        FourState[] states = new FourState[text.Length];
-        int index = 0;
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
-        while (codePoints.MoveNext())
+        // One bar for each letter. The text is at most MaximumLength letters, so a short symbol works
+        // inline and a longer one rents its states once.
+        InlineArray128<FourState> stateStorage = default;
+        PooledBuffer<FourState> rented = default;
+        Span<FourState> states = text.Length <= 128
+            ? ((Span<FourState>)stateStorage)[..text.Length]
+            : (rented = new PooledBuffer<FourState>(text.Length)).Span;
+        try
         {
-            CodePoint current = codePoints.Current;
-            states[index++] = current.Value switch
+            int index = 0;
+            SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
+            while (codePoints.MoveNext())
             {
-                'D' => FourState.Descender,
-                'A' => FourState.Ascender,
-                'F' => FourState.Full,
-                'T' => FourState.Tracker,
-                _ => throw new ArgumentException($"A DAFT symbol carries only the letters D, A, F and T; got {current.ToDisplayString()}.", nameof(text)),
-            };
-        }
+                CodePoint current = codePoints.Current;
+                states[index++] = current.Value switch
+                {
+                    'D' => FourState.Descender,
+                    'A' => FourState.Ascender,
+                    'F' => FourState.Full,
+                    'T' => FourState.Tracker,
+                    _ => throw new ArgumentException($"A DAFT symbol carries only the letters D, A, F and T; got {current.ToDisplayString()}.", nameof(text)),
+                };
+            }
 
-        return FourStateEncoder.BuildSymbol(states, Metrics, string.Empty, options);
+            FourStateEncoder.BuildSymbol(states, Metrics, [], options, ref symbol);
+        }
+        finally
+        {
+            rented.Dispose();
+        }
     }
 }

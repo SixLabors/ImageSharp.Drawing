@@ -26,7 +26,7 @@ public class AustraliaPostSymbologyTests
     [InlineData("6254516251ABC123", "1320021211120120021201000001002300301302333333333333313133002021313")]
     [InlineData("1139549554", "1301011030121130121211331210131132213")]
     public void EncodesTheDiagramsOfTheSpecification(string text, string bars)
-        => Assert.Equal(bars, Values(Encode(text, AustraliaPostEncodingTable.Character)));
+        => Assert.Equal(bars, Encode(text, AustraliaPostEncodingTable.Character));
 
     /// <summary>
     /// The N Encoding Table in the customer information field, and the C Encoding Table with small
@@ -42,7 +42,7 @@ public class AustraliaPostSymbologyTests
     [InlineData("5954516251ABC12", AustraliaPostEncodingTable.Character, "1312301211120120021201000001002300301330233311111013")]
     [InlineData("6254516251ABC123 #xy", AustraliaPostEncodingTable.Character, "1320021211120120021201000001002300301302003013331332322122322001113")]
     public void EncodesBothCustomerInformationTables(string text, AustraliaPostEncodingTable table, string bars)
-        => Assert.Equal(bars, Values(Encode(text, table)));
+        => Assert.Equal(bars, Encode(text, table));
 
     /// <summary>
     /// Diagram 10: the information symbols 4 20 49 37 49 38 23 give the parity symbols 54 17 53 58.
@@ -66,7 +66,7 @@ public class AustraliaPostSymbologyTests
     [InlineData("8754516251", "1322211211120120021201320300031333213")]
     [InlineData("9254516251", "1330021211120120021201330203101201213")]
     public void EncodesTheOtherStandardFormatControlCodes(string text, string bars)
-        => Assert.Equal(bars, Values(Encode(text, AustraliaPostEncodingTable.Character)));
+        => Assert.Equal(bars, Encode(text, AustraliaPostEncodingTable.Character));
 
     /// <summary>
     /// Diagram 14: the text representation of the barcode of 1196184209 is "11 96184209 32 57 38 54",
@@ -76,15 +76,16 @@ public class AustraliaPostSymbologyTests
     public void PrintsTheTextRepresentationOfDiagramFourteen()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new AustraliaPostSymbology().Encode("1196184209", options);
+        SymbolEncoder.Encode(new AustraliaPostSymbology(), "1196184209", options, static (ref symbol) =>
+        {
+            BarcodeTextPlacement placement = Assert.Single(symbol.Text.ToArray());
+            Assert.Equal("11 96184209 32 57 38 54", symbol.TextOf(placement).ToString());
+            Assert.Equal(BarcodeTextSide.AboveBars, placement.Side);
+            Assert.Equal(-4F, placement.TextEdge);
+        });
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal("11 96184209 32 57 38 54", placement.Text);
-        Assert.Equal(BarcodeTextSide.AboveBars, placement.Side);
-        Assert.Equal(-4F, placement.TextEdge);
-
-        LinearBarcodeSymbol withCustomer = (LinearBarcodeSymbol)new AustraliaPostSymbology().Encode("6254516251ABC123", options);
-        Assert.StartsWith("62 54516251 ABC123 ", Assert.Single(withCustomer.Text).Text);
+        string[] withCustomer = SymbolEncoder.Read(new AustraliaPostSymbology(), "6254516251ABC123", options, SymbolEncoder.Texts);
+        Assert.StartsWith("62 54516251 ABC123 ", Assert.Single(withCustomer));
     }
 
     /// <summary>
@@ -93,37 +94,36 @@ public class AustraliaPostSymbologyTests
     /// </summary>
     [Fact]
     public void DrawsTheDimensionsOfTheSpecification()
-    {
-        LinearBarcodeSymbol symbol = Encode("1154516251", AustraliaPostEncodingTable.Character);
-
-        Assert.Equal(1F / 50F, symbol.RunUnit);
-        Assert.Equal(73, symbol.RunWidths.Length);
-        for (int i = 0; i < symbol.RunWidths.Length; i++)
+        => SymbolEncoder.Encode(new AustraliaPostSymbology(AustraliaPostEncodingTable.Character), "1154516251", new BarcodeOptions(), static (ref symbol) =>
         {
-            Assert.Equal((i & 1) == 0 ? 50 : 58, symbol.RunWidths[i]);
-        }
-
-        float extender = (float)(1.85 / 0.5);
-        float tracker = (float)(1.3 / 0.5);
-        string values = Values(symbol);
-        ApproximateFloatComparer comparer = new(1e-4F);
-        for (int i = 0; i < values.Length; i++)
-        {
-            float expectedTop = values[i] is '0' or '1' ? 0F : extender;
-            float expectedHeight = values[i] switch
+            Assert.Equal(1F / 50F, symbol.RunUnit);
+            Assert.Equal(73, symbol.Runs.Length);
+            for (int i = 0; i < symbol.Runs.Length; i++)
             {
-                '3' => tracker,
-                '0' => extender + tracker + extender,
-                _ => extender + tracker,
-            };
+                Assert.Equal((i & 1) == 0 ? 50 : 58, symbol.Runs[i]);
+            }
 
-            Assert.Equal(expectedTop, symbol.BarTops[i], comparer);
-            Assert.Equal(expectedHeight, symbol.BarHeights[i], comparer);
-        }
+            float extender = (float)(1.85 / 0.5);
+            float tracker = (float)(1.3 / 0.5);
+            string values = Values(ref symbol);
+            ApproximateFloatComparer comparer = new(1e-4F);
+            for (int i = 0; i < values.Length; i++)
+            {
+                float expectedTop = values[i] is '0' or '1' ? 0F : extender;
+                float expectedHeight = values[i] switch
+                {
+                    '3' => tracker,
+                    '0' => extender + tracker + extender,
+                    _ => extender + tracker,
+                };
 
-        Assert.Equal(12F, symbol.LeadingQuietZone);
-        Assert.Equal(12F, symbol.TrailingQuietZone);
-    }
+                Assert.Equal(expectedTop, symbol.BarTops[i], comparer);
+                Assert.Equal(expectedHeight, symbol.BarHeights[i], comparer);
+            }
+
+            Assert.Equal(12F, symbol.LeadingQuietZone);
+            Assert.Equal(12F, symbol.TrailingQuietZone);
+        });
 
     [Theory]
     [InlineData("", AustraliaPostEncodingTable.Character)]
@@ -140,10 +140,22 @@ public class AustraliaPostSymbologyTests
     public void RejectsMalformedInput(string text, AustraliaPostEncodingTable table)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text, table));
 
-    private static LinearBarcodeSymbol Encode(string text, AustraliaPostEncodingTable table)
-        => (LinearBarcodeSymbol)new AustraliaPostSymbology(table).Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="table">The table that encodes the customer information field.</param>
+    /// <returns>The bar values of the symbol.</returns>
+    private static string Encode(string text, AustraliaPostEncodingTable table)
+        => SymbolEncoder.Read(new AustraliaPostSymbology(table), text, new BarcodeOptions(), Values);
 
-    private static string Values(LinearBarcodeSymbol symbol)
+    /// <summary>
+    /// Reads the bar values of a symbol from the bar tops and heights: 0 for a full bar, 1 for an
+    /// ascender, 2 for a descender and 3 for a tracker.
+    /// </summary>
+    /// <param name="symbol">The encoded symbol.</param>
+    /// <returns>The bar values.</returns>
+    private static string Values(ref BarcodeSymbol symbol)
     {
         float extender = (float)(1.85 / 0.5);
         float tracker = (float)(1.3 / 0.5);

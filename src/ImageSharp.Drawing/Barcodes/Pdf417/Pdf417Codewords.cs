@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Buffers;
 using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
@@ -26,10 +25,10 @@ internal static class Pdf417Codewords
     public const int MicroMaximumLength = 366;
 
     /// <summary>
-    /// The number of codewords a caller stack allocates for <see cref="Encode"/> to build in. Data this
-    /// long covers short labels, and anything longer grows into a pooled array.
+    /// The number of codewords a caller holds inline for <see cref="Encode"/> to build in. Data this long
+    /// covers short labels, and longer data rents its buffer once.
     /// </summary>
-    public const int StackBufferLength = 64;
+    public const int InlineBufferLength = 64;
 
     /// <summary>
     /// The codeword that pads the data codewords to fill the symbol matrix, section 5.9.2.
@@ -212,11 +211,6 @@ internal static class Pdf417Codewords
     private const int Unreachable = int.MaxValue / 2;
 
     /// <summary>
-    /// The number of characters below which <see cref="Encode"/> keeps its working tables on the stack.
-    /// </summary>
-    private const int StackLimit = 32;
-
-    /// <summary>
     /// The characters of the Mixed sub-mode with the values 0 to 24, Table 5. The space is value 26.
     /// </summary>
     private const string MixedCharacters = "0123456789&\r\t,:#-.$/+%*=^";
@@ -305,14 +299,16 @@ internal static class Pdf417Codewords
         // The run tables take length + 1 entries each, the last one the zero that ends every run. The
         // text tables take four sub-mode entries per character for the latch sources and the shift
         // targets of the search, and three tokens per character, the most a character can need: a latch
-        // of two values and the character itself.
+        // of two values and the character itself. The tables of a short text stay inline, and a longer
+        // text rents them once; the text is bounded by the maximum length of the symbology.
         int length = text.Length;
         int runLength = length + 1;
         int size = (3 * runLength) + (2 * SubModes * length) + (3 * length) + 1;
-        int[]? rented = null;
-        Span<int> tables = length <= StackLimit
-            ? stackalloc int[(3 * (StackLimit + 1)) + (2 * SubModes * StackLimit) + (3 * StackLimit) + 1]
-            : (rented = ArrayPool<int>.Shared.Rent(size)).AsSpan(0, size);
+        InlineArray256<int> tableStorage = default;
+        PooledBuffer<int> rented = default;
+        Span<int> tables = size <= 256
+            ? ((Span<int>)tableStorage)[..size]
+            : (rented = new PooledBuffer<int>(size)).Span;
 
         try
         {
@@ -403,10 +399,7 @@ internal static class Pdf417Codewords
         }
         finally
         {
-            if (rented is not null)
-            {
-                ArrayPool<int>.Shared.Return(rented);
-            }
+            rented.Dispose();
         }
     }
 
@@ -421,47 +414,69 @@ internal static class Pdf417Codewords
         // The generator polynomial g(x) = (x - 3)(x - 3^2) ... (x - 3^k), expanded one factor at a time.
         // Multiplying by (x - r) gives each coefficient as the coefficient below it less r times itself,
         // so the update runs from the top down in place. The coefficients of x^0 to x^(k-1) are the
-        // alpha values of Annex F; the coefficient of x^k is 1.
-        Span<int> alpha = stackalloc int[MaximumErrorCorrection + 1];
-        alpha[0] = 1;
-        int root = 1;
-        for (int degree = 1; degree <= count; degree++)
+        // alpha values of Annex F; the coefficient of x^k is 1. Each factor reads the coefficient above the
+        // product before it writes it, so the coefficients start zero. Levels 0 to 5 take at most 64
+        // coefficients, which stay inline; a higher level rents its coefficients once.
+        InlineArray65<int> alphaStorage = default;
+        PooledBuffer<int> rented = default;
+        bool inline = count < 65;
+        Span<int> alpha = inline
+            ? ((Span<int>)alphaStorage)[..(count + 1)]
+            : (rented = new PooledBuffer<int>(count + 1)).Span;
+
+        try
         {
-            root = (root * 3) % Modulus;
-            int negated = Modulus - root;
-            for (int j = degree; j > 0; j--)
+            // The inline coefficients start zero; a rented array holds the values of its last use.
+            if (!inline)
             {
-                alpha[j] = (alpha[j - 1] + (negated * alpha[j])) % Modulus;
+                alpha.Clear();
             }
 
-            alpha[0] = (negated * alpha[0]) % Modulus;
+            alpha[0] = 1;
+            int root = 1;
+            for (int degree = 1; degree <= count; degree++)
+            {
+                root = (root * 3) % Modulus;
+                int negated = Modulus - root;
+                for (int j = degree; j > 0; j--)
+                {
+                    alpha[j] = (alpha[j - 1] + (negated * alpha[j])) % Modulus;
+                }
+
+                alpha[0] = (negated * alpha[0]) % Modulus;
+            }
+
+            // The division of d(x) x^k by g(x) of section 5.10, step 3, with the error correction
+            // codewords E(k-1) to E(0) as the register. The register lives in place of the error
+            // correction codewords, E(j) at index dataCount + k - 1 - j, so the codewords come out most
+            // significant first.
+            int dataCount = codewords.Length - count;
+            Span<int> register = codewords[dataCount..];
+            register.Clear();
+            for (int i = 0; i < dataCount; i++)
+            {
+                int t1 = (codewords[i] + register[0]) % Modulus;
+                for (int j = count - 1; j > 0; j--)
+                {
+                    int t3 = Modulus - ((t1 * alpha[j]) % Modulus);
+                    register[count - 1 - j] = (register[count - j] + t3) % Modulus;
+                }
+
+                register[count - 1] = (Modulus - ((t1 * alpha[0]) % Modulus)) % Modulus;
+            }
+
+            // Step 4: each codeword is the complement of its register value.
+            for (int j = 0; j < count; j++)
+            {
+                if (register[j] != 0)
+                {
+                    register[j] = Modulus - register[j];
+                }
+            }
         }
-
-        // The division of d(x) x^k by g(x) of section 5.10, step 3, with the error correction codewords
-        // E(k-1) to E(0) as the register. The register lives in place of the error correction codewords,
-        // E(j) at index dataCount + k - 1 - j, so the codewords come out most significant first.
-        int dataCount = codewords.Length - count;
-        Span<int> register = codewords[dataCount..];
-        register.Clear();
-        for (int i = 0; i < dataCount; i++)
+        finally
         {
-            int t1 = (codewords[i] + register[0]) % Modulus;
-            for (int j = count - 1; j > 0; j--)
-            {
-                int t3 = Modulus - ((t1 * alpha[j]) % Modulus);
-                register[count - 1 - j] = (register[count - j] + t3) % Modulus;
-            }
-
-            register[count - 1] = (Modulus - ((t1 * alpha[0]) % Modulus)) % Modulus;
-        }
-
-        // Step 4: each codeword is the complement of its register value.
-        for (int j = 0; j < count; j++)
-        {
-            if (register[j] != 0)
-            {
-                register[j] = Modulus - register[j];
-            }
+            rented.Dispose();
         }
     }
 
@@ -473,8 +488,10 @@ internal static class Pdf417Codewords
     /// <param name="codewords">The builder the codewords are written to.</param>
     private static void EncodeNumeric(ReadOnlySpan<char> digits, ref ValueListBuilder<int> codewords)
     {
-        Span<byte> number = stackalloc byte[NumericGroup + 1];
-        Span<int> group = stackalloc int[(NumericGroup / 3) + 1];
+        InlineArray64<byte> numberStorage = default;
+        InlineArray16<int> groupStorage = default;
+        Span<byte> number = ((Span<byte>)numberStorage)[..(NumericGroup + 1)];
+        Span<int> group = ((Span<int>)groupStorage)[..((NumericGroup / 3) + 1)];
         for (int start = 0; start < digits.Length; start += NumericGroup)
         {
             int length = Math.Min(NumericGroup, digits.Length - start);
@@ -575,8 +592,10 @@ internal static class Pdf417Codewords
         // character leaves the encoder in, so these two tables are the whole path.
         Span<int> latches = search[..(SubModes * length)];
         Span<int> shifts = search.Slice(SubModes * length, SubModes * length);
-        Span<int> cost = stackalloc int[SubModes];
-        Span<int> next = stackalloc int[SubModes];
+        InlineArray4<int> costStorage = default;
+        InlineArray4<int> nextStorage = default;
+        Span<int> cost = costStorage;
+        Span<int> next = nextStorage;
         cost.Fill(Unreachable);
         cost[subMode] = 0;
 

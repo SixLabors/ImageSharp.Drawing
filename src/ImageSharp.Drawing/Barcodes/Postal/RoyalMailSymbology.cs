@@ -19,27 +19,40 @@ public sealed class RoyalMailSymbology : BarcodeSymbology
     public override double NominalXDimension => FourStateEncoder.RoyalMail.XDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, RoyalMailEncoder.MaximumLength, nameof(text));
         RoyalMailEncoder.Validate(text);
 
+        // Four bars for each character and the check character, and the start and stop bars. The text is
+        // at most MaximumLength characters, so a short symbol works inline and a longer one rents its
+        // states once.
         int barCount = ((text.Length + 1) * RoyalMailEncoder.BarsPerCharacter) + 2;
-        FourState[] states = new FourState[barCount];
-        states[0] = FourState.Ascender;
-        int bar = 1;
-        for (int i = 0; i < text.Length; i++)
+        InlineArray128<FourState> stateStorage = default;
+        PooledBuffer<FourState> rented = default;
+        Span<FourState> states = barCount <= 128
+            ? ((Span<FourState>)stateStorage)[..barCount]
+            : (rented = new PooledBuffer<FourState>(barCount)).Span;
+        try
         {
-            RoyalMailEncoder.Append(RoyalMailEncoder.Value(text[i]), states.AsSpan(bar));
-            bar += RoyalMailEncoder.BarsPerCharacter;
+            states[0] = FourState.Ascender;
+            int bar = 1;
+            for (int i = 0; i < text.Length; i++)
+            {
+                RoyalMailEncoder.Append(RoyalMailEncoder.Value(text[i]), states[bar..]);
+                bar += RoyalMailEncoder.BarsPerCharacter;
+            }
+
+            RoyalMailEncoder.Append(RoyalMailEncoder.Value(RoyalMailEncoder.CheckCharacter(text)), states[bar..]);
+            states[barCount - 1] = FourState.Full;
+
+            FourStateEncoder.BuildSymbol(states, FourStateEncoder.RoyalMail, text, options, ref symbol);
         }
-
-        RoyalMailEncoder.Append(RoyalMailEncoder.Value(RoyalMailEncoder.CheckCharacter(text)), states.AsSpan(bar));
-        states[barCount - 1] = FourState.Full;
-
-        string readable = options.Font is null ? string.Empty : text;
-        return FourStateEncoder.BuildSymbol(states, FourStateEncoder.RoyalMail, readable, options);
+        finally
+        {
+            rented.Dispose();
+        }
     }
 }

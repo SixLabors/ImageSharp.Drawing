@@ -71,7 +71,7 @@ public sealed class Interleaved2Of5Symbology : BarcodeSymbology
     public bool PrintCheckDigit { get; }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
@@ -97,28 +97,31 @@ public sealed class Interleaved2Of5Symbology : BarcodeSymbology
         // The digits the symbol carries: a leading zero when the count would otherwise be odd, the data
         // and the check digit. Section 2.2.1 of AIM USS-I 2/5 requires the even count, and Appendix C
         // notes that "a leading zero will be required if an even number of data characters are to be
-        // appended with one check character".
+        // appended with one check character". The text is at most MaximumLength digits, so a short symbol
+        // works inline and a longer one rents its digits once.
         int carried = data.Length + (check is null ? 0 : 1);
-        Span<char> digitBuffer = stackalloc char[Interleaved2Of5Encoder.StackBufferLength];
-        ValueStringBuilder digits = new(digitBuffer);
-        if ((carried & 1) == 1)
+        int padding = carried & 1;
+        int length = carried + padding;
+        InlineArray64<char> digitStorage = default;
+        PooledBuffer<char> rented = default;
+        Span<char> encoded = length <= Interleaved2Of5Encoder.InlineBufferLength
+            ? ((Span<char>)digitStorage)[..length]
+            : (rented = new PooledBuffer<char>(length)).Span;
+        try
         {
-            digits.Append('0');
-        }
+            encoded[0] = '0';
+            data.CopyTo(encoded[padding..]);
+            if (check is not null)
+            {
+                encoded[^1] = (char)('0' + check.Value);
+            }
 
-        digits.Append(data);
-        if (check is not null)
+            ReadOnlySpan<char> readable = check is null || this.PrintCheckDigit ? encoded : encoded[..^1];
+            Interleaved2Of5Encoder.BuildSymbol(encoded, readable, options, ref symbol);
+        }
+        finally
         {
-            digits.Append((char)('0' + check.Value));
+            rented.Dispose();
         }
-
-        ReadOnlySpan<char> encoded = digits.AsSpan();
-        string readable = options.Font is null
-            ? string.Empty
-            : (check is null || this.PrintCheckDigit ? encoded : encoded[..^1]).ToString();
-
-        LinearBarcodeSymbol symbol = Interleaved2Of5Encoder.BuildSymbol(Interleaved2Of5Encoder.Encode(encoded), readable, options);
-        digits.Dispose();
-        return symbol;
     }
 }

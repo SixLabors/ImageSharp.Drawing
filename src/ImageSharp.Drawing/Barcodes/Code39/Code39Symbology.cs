@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.Drawing.Helpers;
-
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -69,7 +67,7 @@ public sealed class Code39Symbology : BarcodeSymbology
     public bool PrintCheckCharacter { get; }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Code39Encoder.Validate(text);
@@ -83,28 +81,10 @@ public sealed class Code39Symbology : BarcodeSymbology
                 nameof(text));
         }
 
-        return Code39Encoder.BuildSymbol(
-            Code39Encoder.Encode(data, check),
-            options.Font is null ? string.Empty : this.BuildReadable(data, check),
-            options);
-    }
-
-    /// <summary>
-    /// Builds the human readable interpretation: the data, then the check character the symbol carries,
-    /// between the delimiters that stand for the start and stop character.
-    /// </summary>
-    /// <param name="data">The data the symbol carries, without the check character.</param>
-    /// <param name="check">The check character the symbol carries, or <see langword="null"/>.</param>
-    /// <returns>The human readable interpretation.</returns>
-    private string BuildReadable(ReadOnlySpan<char> data, char? check)
-    {
-        Span<char> opening = stackalloc char[1] { ReadableDelimiter };
-        if (check is null || !this.PrintCheckCharacter)
-        {
-            return string.Concat(opening, data, opening);
-        }
-
-        Span<char> closing = stackalloc char[2] { check.Value, ReadableDelimiter };
-        return string.Concat(opening, data, closing);
+        // The human readable interpretation is the data, then the check character the symbol carries
+        // when it prints, between the delimiters that stand for the start and stop character.
+        ReadOnlySpan<char> opening = [ReadableDelimiter];
+        ReadOnlySpan<char> closing = check is not null && this.PrintCheckCharacter ? [check.Value, ReadableDelimiter] : [ReadableDelimiter];
+        Code39Encoder.BuildSymbol(data, check, opening, data, closing, options, ref symbol);
     }
 }

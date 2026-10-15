@@ -22,7 +22,7 @@ public class JapanPostSymbologyTests
     [InlineData("1234567", "FDFFTFDADFAFADFTFDAFAFDTDATDATDATDATDATDATDATDATDATDATDATDATDAFFFDF")]
     [InlineData("15400233-16-4-205", "FDFFTFTFFADFTTFTTFDADFADFATFTFFTDAFTFTFADTFTFDAFTTFTFTDATDATDADAFDF")]
     public void EncodesJapanPost(string text, string bars)
-        => Assert.Equal(bars, States(Encode(text)));
+        => Assert.Equal(bars, Encode(text));
 
     /// <summary>
     /// A letter is CC1, CC2 or CC3 followed by a digit: A is CC1 and 0, K is CC2 and 0, Z is CC3 and 5.
@@ -38,7 +38,7 @@ public class JapanPostSymbologyTests
 
         JapanPostEncoder.Codes("1234567890-ABC", codes);
         Assert.Equal(0, JapanPostEncoder.CheckCode(codes));
-        Assert.Equal("FDFFTFDADFAFADFTFDAFAFDADFTFFFTTTFTDATFTTDATFFTDATFDATDATDATDAFTTDF", States(Encode("1234567890-ABC")));
+        Assert.Equal("FDFFTFDADFAFADFTFDAFAFDADFTFFFTTTFTDATFTTDATFFTDATFDATDATDATDAFTTDF", Encode("1234567890-ABC"));
     }
 
     /// <summary>
@@ -47,42 +47,42 @@ public class JapanPostSymbologyTests
     /// </summary>
     [Fact]
     public void DrawsTheDimensionsOfTheManual()
-    {
-        LinearBarcodeSymbol symbol = Encode("1234567");
-
-        Assert.Equal(1F, symbol.RunUnit);
-        Assert.Equal(133, symbol.RunWidths.Length);
-        Assert.All(symbol.RunWidths, width => Assert.Equal(1, width));
-
-        string states = States(symbol);
-        for (int i = 0; i < states.Length; i++)
+        => SymbolEncoder.Encode(new JapanPostSymbology(), "1234567", new BarcodeOptions(), static (ref symbol) =>
         {
-            float expectedTop = states[i] is 'A' or 'F' ? 0F : 2F;
-            float expectedHeight = states[i] switch
+            Assert.Equal(1F, symbol.RunUnit);
+            Assert.Equal(133, symbol.Runs.Length);
+            Assert.All(symbol.Runs.ToArray(), width => Assert.Equal(1, width));
+
+            string states = States(ref symbol);
+            for (int i = 0; i < states.Length; i++)
             {
-                'T' => 2F,
-                'F' => 6F,
-                _ => 4F,
-            };
+                float expectedTop = states[i] is 'A' or 'F' ? 0F : 2F;
+                float expectedHeight = states[i] switch
+                {
+                    'T' => 2F,
+                    'F' => 6F,
+                    _ => 4F,
+                };
 
-            Assert.Equal(expectedTop, symbol.BarTops[i]);
-            Assert.Equal(expectedHeight, symbol.BarHeights[i]);
-        }
+                Assert.Equal(expectedTop, symbol.BarTops[i]);
+                Assert.Equal(expectedHeight, symbol.BarHeights[i]);
+            }
 
-        Assert.Equal((float)(2 / 0.6), symbol.LeadingQuietZone);
-        Assert.Equal((float)(2 / 0.6), symbol.TrailingQuietZone);
-    }
+            Assert.Equal((float)(2 / 0.6), symbol.LeadingQuietZone);
+            Assert.Equal((float)(2 / 0.6), symbol.TrailingQuietZone);
+        });
 
     [Fact]
     public void PrintsTheTextAsGivenBelowTheClearSpace()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new JapanPostSymbology().Encode("15400233-16-4-205", options);
-
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal("15400233-16-4-205", placement.Text);
-        Assert.Equal(BarcodeTextSide.BelowBars, placement.Side);
-        Assert.Equal(6F + (float)(2 / 0.6), placement.TextEdge, new ApproximateFloatComparer(1e-4F));
+        SymbolEncoder.Encode(new JapanPostSymbology(), "15400233-16-4-205", options, static (ref symbol) =>
+        {
+            BarcodeTextPlacement placement = Assert.Single(symbol.Text.ToArray());
+            Assert.Equal("15400233-16-4-205", symbol.TextOf(placement).ToString());
+            Assert.Equal(BarcodeTextSide.BelowBars, placement.Side);
+            Assert.Equal(6F + (float)(2 / 0.6), placement.TextEdge, new ApproximateFloatComparer(1e-4F));
+        });
     }
 
     [Theory]
@@ -95,10 +95,21 @@ public class JapanPostSymbologyTests
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new JapanPostSymbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The bar states of the symbol.</returns>
+    private static string Encode(string text)
+        => SymbolEncoder.Read(new JapanPostSymbology(), text, new BarcodeOptions(), States);
 
-    private static string States(LinearBarcodeSymbol symbol)
+    /// <summary>
+    /// Reads the bar states of a symbol from the bar tops and heights: F for a full bar, A for an
+    /// ascender, D for a descender and T for a tracker.
+    /// </summary>
+    /// <param name="symbol">The encoded symbol.</param>
+    /// <returns>The bar states.</returns>
+    private static string States(ref BarcodeSymbol symbol)
     {
         char[] states = new char[symbol.BarHeights.Length];
         for (int i = 0; i < states.Length; i++)

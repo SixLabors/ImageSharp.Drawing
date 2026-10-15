@@ -38,11 +38,6 @@ internal static class Bc412Encoder
     public const double NominalXDimension = 0.12;
 
     /// <summary>
-    /// The number of characters a caller stack allocates to build symbol data in.
-    /// </summary>
-    public const int StackBufferLength = 32;
-
-    /// <summary>
     /// The position of the check character in the symbol: after the first data character.
     /// </summary>
     public const int CheckPosition = 1;
@@ -113,15 +108,17 @@ internal static class Bc412Encoder
     }
 
     /// <summary>
-    /// Encodes the characters the symbol carries into the alternating bar and space run widths the
-    /// renderer draws, starting with the bar of the start character and ending on the last bar of the
-    /// stop character.
+    /// Encodes the characters the symbol carries and builds the symbol. The runs start with the bar of the
+    /// start character and end on the last bar of the stop character. BC412 carries no guard bars, so
+    /// every bar runs the full height, and the human readable interpretation, the carried characters, sits
+    /// below the symbol.
     /// </summary>
     /// <param name="carried">The first data character, the check character and the remaining data.</param>
-    /// <returns>The run widths in modules.</returns>
-    public static int[] Encode(ReadOnlySpan<char> carried)
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(ReadOnlySpan<char> carried, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        int[] runs = new int[2 + (carried.Length * RunsPerCharacter) + 3];
+        Span<int> runs = symbol.BeginLinear(2 + (carried.Length * RunsPerCharacter) + 3, out Span<float> heights, out _);
         int written = 0;
         runs[written++] = 1;
         runs[written++] = 2;
@@ -137,19 +134,7 @@ internal static class Bc412Encoder
         runs[written++] = 1;
         runs[written++] = 1;
         runs[written] = 1;
-        return runs;
-    }
 
-    /// <summary>
-    /// Builds the symbol from encoded run widths. BC412 carries no guard bars, so every bar runs the full
-    /// height, and the human readable interpretation sits below the symbol.
-    /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <param name="text">The human readable interpretation.</param>
-    /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
-    {
         int widthInModules = 0;
         for (int i = 0; i < runs.Length; i++)
         {
@@ -157,20 +142,14 @@ internal static class Bc412Encoder
         }
 
         float barHeight = options.ResolveBarHeight(NominalXDimension, NominalBarHeight);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
-        for (int i = 0; i < barCount; i++)
+        heights.Fill(barHeight);
+
+        if (options.Font is not null)
         {
-            heights[i] = barHeight;
+            symbol.ReserveText(1, carried.Length);
+            symbol.AddText(carried, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
         }
 
-        BarcodeTextPlacement[] placements = [];
-        if (options.Font is not null && text.Length > 0)
-        {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
-        }
-
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone);
+        symbol.EndLinear(QuietZone, QuietZone);
     }
 }

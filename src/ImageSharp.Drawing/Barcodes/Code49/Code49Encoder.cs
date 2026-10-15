@@ -136,14 +136,31 @@ internal static class Code49Encoder
     private static ReadOnlySpan<byte> RowParity => [0b1001, 0b0101, 0b1100, 0b0011, 0b1010, 0b0110, 0b1111];
 
     /// <summary>
+    /// Encodes text and builds the symbol.
+    /// </summary>
+    /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
+    /// <param name="readable">The human readable interpretation.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    /// <exception cref="ArgumentException">The text is empty, carries a character the symbology cannot encode, or holds more data than eight rows carry.</exception>
+    public static void BuildSymbol(ReadOnlySpan<char> text, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
+    {
+        // Eight code characters for each of at most eight rows.
+        InlineArray64<int> codeStorage = default;
+        int count = Encode(text, codeStorage);
+        WriteRows(((ReadOnlySpan<int>)codeStorage)[..count], readable, options, ref symbol);
+    }
+
+    /// <summary>
     /// Encodes text into the code characters of the whole symbol, eight per row: the data with its shift
     /// characters, the pad, the row check characters, the row count character and the symbol check
     /// characters, laid out as Table 3 does.
     /// </summary>
     /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
-    /// <returns>The code character values, eight per row.</returns>
+    /// <param name="codes">The buffer that receives the code character values, eight per row for eight rows.</param>
+    /// <returns>The number of code character values, eight per row.</returns>
     /// <exception cref="ArgumentException">The text is empty, carries a character the symbology cannot encode, or holds more data than eight rows carry.</exception>
-    public static int[] Encode(ReadOnlySpan<char> text)
+    public static int Encode(ReadOnlySpan<char> text, Span<int> codes)
     {
         if (text.Length == 0)
         {
@@ -170,7 +187,9 @@ internal static class Code49Encoder
                 nameof(text));
         }
 
-        Span<byte> digits = stackalloc byte[MaximumText + 1];
+        // The text is at most MaximumText characters, so the digit runs and the values fit inline.
+        InlineArray128<byte> digitStorage = default;
+        Span<byte> digits = ((Span<byte>)digitStorage)[..(MaximumText + 1)];
         digits[n] = 0;
         for (int p = n - 1; p >= 0; p--)
         {
@@ -178,7 +197,8 @@ internal static class Code49Encoder
         }
 
         // A character costs at most a shift and itself, and a numeric shift opens and closes each run.
-        Span<int> values = stackalloc int[(MaximumText * 2) + 2];
+        InlineArray256<int> valueStorage = default;
+        Span<int> values = ((Span<int>)valueStorage)[..((MaximumText * 2) + 2)];
         int count = 0;
         int i = 0;
         bool numeric = false;
@@ -254,7 +274,7 @@ internal static class Code49Encoder
                 nameof(text));
         }
 
-        int[] codes = new int[rows * CodeCharactersPerRow];
+        codes = codes[..(rows * CodeCharactersPerRow)];
         int next = first;
         for (int row = 0; row < rows; row++)
         {
@@ -329,40 +349,36 @@ internal static class Code49Encoder
         }
 
         codes[last + 7] = lastSum % RowModulus;
-        return codes;
+        return codes.Length;
     }
 
     /// <summary>
-    /// Builds the symbol from its code characters: one row of bars per eight, one module separator bars
+    /// Writes the symbol from its code characters: one row of bars per eight, one module separator bars
     /// between the rows, and the top and bottom separator bars of section 2.1.
     /// </summary>
     /// <param name="codes">The code character values, eight per row.</param>
-    /// <param name="text">The human readable interpretation.</param>
+    /// <param name="readable">The human readable interpretation.</param>
     /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static StackedBarcodeSymbol BuildSymbol(int[] codes, string text, BarcodeOptions options)
+    /// <param name="symbol">The symbol to write.</param>
+    private static void WriteRows(ReadOnlySpan<int> codes, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int rowCount = codes.Length / CodeCharactersPerRow;
         float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, NominalBarHeight);
-        LinearBarcodeSymbol separator = new([RowWidth], [SeparatorHeight], [0F], [], 0, 0);
-        LinearBarcodeSymbol[] rows = new LinearBarcodeSymbol[(rowCount * 2) - 1];
         ReadOnlySpan<byte> parities = RowParity;
         ReadOnlySpan<ushort> even = Code49Patterns.Even;
         ReadOnlySpan<ushort> odd = Code49Patterns.Odd;
 
-        // Every data row has the same bar count, height and top, so the rows share one heights array and
-        // one tops array.
-        int barCount = (RowRunCount + 1) / 2;
-        float[] heights = new float[barCount];
-        heights.AsSpan().Fill(barHeight);
-        float[] tops = new float[barCount];
+        // A separator between two rows is one bar across the row width.
+        int separators = rowCount - 1;
+        symbol.BeginStacked(rowCount + separators, (rowCount * RowRunCount) + separators, (rowCount * ((RowRunCount + 1) >> 1)) + separators);
         for (int row = 0; row < rowCount; row++)
         {
             // Section 2.1.5: the start pattern is a one module bar and a one module space, and the stop
             // pattern a four module bar. Every symbol character begins with a bar and ends with a space,
             // so the row is one run of bits from the start bar to the stop bar.
             int parity = row < rowCount - 1 ? parities[row] : 0;
-            int[] runs = new int[RowRunCount];
+            Span<int> runs = symbol.AddRow(RowRunCount, out Span<float> heights, out _);
+            heights.Fill(barHeight);
             int length = 0;
             bool bar;
             runs[length] = 1;
@@ -391,23 +407,24 @@ internal static class Code49Encoder
             }
 
             runs[length++] = 4;
-            rows[row * 2] = new LinearBarcodeSymbol(runs, heights, tops, [], 0, 0);
             if (row < rowCount - 1)
             {
-                rows[(row * 2) + 1] = separator;
+                Span<int> separator = symbol.AddRow(1, out Span<float> separatorHeight, out _);
+                separator[0] = RowWidth;
+                separatorHeight[0] = SeparatorHeight;
             }
         }
 
         // Appendix C: the human readable interpretation "may accompany the symbol. It should not
         // interfere with the symbol itself nor the quiet zones."
         float heightInModules = (rowCount * barHeight) + ((rowCount + 1) * SeparatorHeight);
-        BarcodeTextPlacement[] placements = [];
-        if (options.Font is not null && text.Length > 0)
+        if (options.Font is not null && readable.Length > 0)
         {
-            placements = [new BarcodeTextPlacement(text, 0F, RowWidth, BarcodeTextSide.BelowBars, heightInModules + BarcodeTextPlacement.Clearance)];
+            symbol.ReserveText(1, readable.Length);
+            symbol.AddText(readable, 0F, RowWidth, BarcodeTextSide.BelowBars, heightInModules + BarcodeTextPlacement.Clearance);
         }
 
-        return new StackedBarcodeSymbol(rows, SeparatorHeight, placements, LeadingQuietZone, TrailingQuietZone);
+        symbol.EndStacked(SeparatorHeight, LeadingQuietZone, TrailingQuietZone);
     }
 
     /// <summary>

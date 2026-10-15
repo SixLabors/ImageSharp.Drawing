@@ -25,13 +25,18 @@ public static class BarcodeMeasurer
         Guard.NotNull(symbology, nameof(symbology));
         Guard.NotNull(options, nameof(options));
 
-        BarcodeSymbol symbol = symbology.Encode(text, options);
-        double xDimension = options.XDimension ?? symbology.NominalXDimension;
-        return symbol switch
+        BarcodeSymbol symbol = default;
+        try
         {
-            LinearBarcodeSymbol linear => BarEmitter.Measure(linear, options, xDimension, origin),
-            StackedBarcodeSymbol stacked => BarEmitter.Measure(stacked, options, xDimension, origin),
-            _ => throw new InvalidOperationException($"Unsupported barcode symbol type: {symbol.GetType()}."),
-        };
+            symbology.Encode(text, options, ref symbol);
+            double xDimension = options.XDimension ?? symbology.NominalXDimension;
+            return symbol.Kind == BarcodeSymbolKind.Matrix
+                ? MatrixEmitter.Measure(ref symbol, options, xDimension, origin)
+                : BarEmitter.Measure(ref symbol, options, xDimension, origin);
+        }
+        finally
+        {
+            symbol.Dispose();
+        }
     }
 }

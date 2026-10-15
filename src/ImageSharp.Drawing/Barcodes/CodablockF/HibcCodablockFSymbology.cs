@@ -48,21 +48,26 @@ public sealed class HibcCodablockFSymbology : BarcodeSymbology
     public bool ValidateCheckCharacter { get; }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
-        Span<char> buffer = stackalloc char[HibcData.StackBufferLength];
-        ValueStringBuilder encoded = new(buffer);
+        InlineArray64<char> bufferStorage = default;
+        int capacity = HibcData.PreparedCapacity(text.Length);
+        ValueStringBuilder encoded = capacity <= HibcData.InlineBufferLength ? new(bufferStorage) : new(capacity);
         try
         {
             HibcData.Prepare(text, this.ValidateCheckCharacter, ref encoded);
 
-            return CodablockFEncoder.BuildSymbol(
-                CodablockFEncoder.Encode(encoded.AsSpan(), this.Columns),
+            ReadOnlySpan<char> data = encoded.AsSpan();
+            CodablockFEncoder.BuildSymbol(
+                data,
                 this.Columns,
-                options.Font is null ? string.Empty : HibcData.BuildReadable(encoded.AsSpan()),
-                options);
+                HibcData.ReadableOpening,
+                HibcData.ReadableBody(data),
+                [HibcData.PrintedCheck(data), HibcData.ReadableClosing],
+                options,
+                ref symbol);
         }
         finally
         {

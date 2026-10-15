@@ -785,6 +785,122 @@ public class DrawBarcodeTests
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void DataMatrix<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new DataMatrixSymbology(), "This is Data Matrix!", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void DataMatrixRectangular<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new DataMatrixRectangularSymbology(), "This is Data Matrix!", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void DataMatrixRectangularExtension<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new DataMatrixRectangularExtensionSymbology(), "This is Data Matrix rectangular extension", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataMatrix<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataMatrixSymbology(), "(01)09521234543213(17)120508(10)ABCD1234(410)9501101020917", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataMatrix_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataMatrixSymbology(), "(01)09521234543213(17)120508(10)ABCD1234(410)9501101020917", CreateMatrixTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataMatrixRectangular<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataMatrixRectangularSymbology(), "(01)09521234543213(17)120508(10)ABCD1234(410)9501101020917", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataMatrixRectangular_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DataMatrixRectangularSymbology(), "(01)09521234543213(17)120508(10)ABCD1234(410)9501101020917", CreateMatrixTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void HibcDataMatrix<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new HibcDataMatrixSymbology(), "A999BJC5D6E71", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void HibcDataMatrix_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new HibcDataMatrixSymbology(), "A999BJC5D6E71", CreateMatrixTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void HibcDataMatrixRectangular<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new HibcDataMatrixRectangularSymbology(), "A999BJC5D6E71", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void HibcDataMatrixRectangular_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new HibcDataMatrixRectangularSymbology(), "A999BJC5D6E71", CreateMatrixTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Mailmark2D<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Mailmark2DSymbology(Mailmark2DType.Type29), "JGB 012100123412345678AB19XY1A 0             www.xyz.com", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DigitalLinkDataMatrix<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DigitalLinkDataMatrixSymbology(), "https://id.gs1.org/01/09521234543213/22/ABC%2D123?99=XYZ-987", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DigitalLinkDataMatrix_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(
+            provider,
+            new Gs1DigitalLinkDataMatrixSymbology(),
+            "https://id.gs1.org/01/09521234543213/22/ABC%2D123?99=XYZ-987",
+            CreateMatrixTextOptions());
+
+    /// <summary>
+    /// Without the quiet zones the symbol starts at the draw origin, the text still starts one quiet zone
+    /// below the symbol, and no clear space surrounds the text.
+    /// </summary>
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DataMatrix_WithText_NoQuietZones<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        BarcodeOptions options = CreateMatrixTextOptions();
+        options.IncludeQuietZones = false;
+        RunTest(provider, new Gs1DataMatrixSymbology(), "(01)09521234543213(17)120508(10)ABCD1234(410)9501101020917", options);
+    }
+
+    /// <summary>
+    /// Without the quiet zones a centred line wider than the symbol shifts the rendering right, so the
+    /// line starts at the draw origin.
+    /// </summary>
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void HibcDataMatrix_WithText_NoQuietZones<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        BarcodeOptions options = CreateMatrixTextOptions();
+        options.IncludeQuietZones = false;
+        RunTest(provider, new HibcDataMatrixSymbology(), "A999BJC5D6E71", options);
+    }
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Code32<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new Code32Symbology(), "012345676", CreateOptions());
@@ -867,6 +983,29 @@ public class DrawBarcodeTests
     {
         BarcodeOptions options = CreateNominalOptions();
         options.Font = BarcodeFonts.OcrB.CreateFont(10.75F);
+        return options;
+    }
+
+    /// <summary>
+    /// The matrix goldens draw at 144 dots per inch with a two point X dimension, so a module is 4 px.
+    /// </summary>
+    private static BarcodeOptions CreateMatrixOptions()
+        => new()
+        {
+            Dpi = 144F,
+            XDimension = 2 * BarcodeSymbology.PointXDimension,
+            Background = Brushes.Solid(Color.White),
+        };
+
+    /// <summary>
+    /// Draws the matrix symbols with the OCR-B font at 9 points. Its cap ink stands 0.678 em, 2.15mm, which
+    /// meets the 2mm character height of section 4.14 rule 2a.iii of the GS1 General Specifications.
+    /// </summary>
+    /// <returns>The options.</returns>
+    private static BarcodeOptions CreateMatrixTextOptions()
+    {
+        BarcodeOptions options = CreateMatrixOptions();
+        options.Font = BarcodeFonts.OcrB.CreateFont(9F);
         return options;
     }
 

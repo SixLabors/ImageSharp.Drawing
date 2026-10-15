@@ -27,30 +27,24 @@ internal static class AddOnLayout
     /// Builds the symbol for an encoded add-on module stream.
     /// </summary>
     /// <param name="modules">The module stream, where 1 is a dark module.</param>
-    /// <param name="text">The digits of the human readable interpretation.</param>
+    /// <param name="digits">The digits of the human readable interpretation.</param>
     /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The add-on symbol.</returns>
-    public static LinearBarcodeSymbol Build(ReadOnlySpan<byte> modules, string text, BarcodeOptions options)
+    /// <param name="symbol">The symbol to write.</param>
+    public static void Build(ReadOnlySpan<byte> modules, ReadOnlySpan<char> digits, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        int[] runs = EanUpcEncoder.ToRuns(modules);
-        int barCount = (runs.Length + 1) / 2;
-
+        EanUpcEncoder.BeginRuns(modules, ref symbol, out Span<float> heights);
         float barHeight = options.ResolveBarHeight(EanUpcEncoder.NominalXDimension, EanUpcEncoder.NominalAddOnBarHeight);
-
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
-        Array.Fill(heights, barHeight);
+        heights.Fill(barHeight);
 
         // Section 5.2.5 of the GS1 General Specifications prints the add-on interpretation above the bars.
         // Each digit prints above its own symbol character; the character cells start after the guard
         // pattern and advance by the seven character modules plus the two delineator modules.
-        BarcodeTextPlacement[] placements = [];
         if (options.Font is not null)
         {
-            placements = new BarcodeTextPlacement[text.Length];
-            EanUpcEncoder.FillDigitPlacements(placements, 0, text, 0, text.Length, 4F, 9F, BarcodeTextSide.AboveBars, -BarcodeTextPlacement.Clearance);
+            symbol.ReserveText(digits.Length, digits.Length);
+            EanUpcEncoder.AddDigits(digits, 4F, 9F, BarcodeTextSide.AboveBars, -BarcodeTextPlacement.Clearance, ref symbol);
         }
 
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, LeadingQuietZone, TrailingQuietZone);
+        symbol.EndLinear(LeadingQuietZone, TrailingQuietZone);
     }
 }

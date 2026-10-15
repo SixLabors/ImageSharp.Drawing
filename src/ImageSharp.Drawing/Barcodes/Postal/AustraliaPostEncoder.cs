@@ -113,8 +113,8 @@ internal static class AustraliaPostEncoder
     /// <param name="text">The format control code, the sorting code and the customer information.</param>
     /// <param name="table">The encoding table of the customer information.</param>
     /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol Encode(string text, AustraliaPostEncodingTable table, BarcodeOptions options)
+    /// <param name="symbol">The symbol to write.</param>
+    public static void Encode(string text, AustraliaPostEncodingTable table, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         if (text.Length < FixedDigits)
         {
@@ -147,7 +147,9 @@ internal static class AustraliaPostEncoder
                 nameof(text));
         }
 
-        Span<byte> values = stackalloc byte[barCount];
+        // The longest barcode, format control code 62, has 67 bars.
+        InlineArray128<byte> valueStorage = default;
+        Span<byte> values = ((Span<byte>)valueStorage)[..barCount];
         values[0] = 1;
         values[1] = 3;
         int bar = 2;
@@ -183,13 +185,15 @@ internal static class AustraliaPostEncoder
         values[bar..parityStart].Fill(3);
 
         int dataSymbols = (parityStart - 2) / 3;
-        Span<byte> symbols = stackalloc byte[dataSymbols];
+        InlineArray24<byte> symbolStorage = default;
+        Span<byte> symbols = ((Span<byte>)symbolStorage)[..dataSymbols];
         for (int i = 0; i < dataSymbols; i++)
         {
             symbols[i] = SymbolValue(values, 2 + (i * 3));
         }
 
-        Span<byte> parity = stackalloc byte[ParitySymbols];
+        InlineArray4<byte> parityStorage = default;
+        Span<byte> parity = parityStorage;
         Parity(symbols, parity);
         for (int i = 0; i < ParitySymbols; i++)
         {
@@ -202,7 +206,8 @@ internal static class AustraliaPostEncoder
         values[barCount - 2] = 1;
         values[barCount - 1] = 3;
 
-        Span<FourState> states = stackalloc FourState[barCount];
+        InlineArray128<FourState> stateStorage = default;
+        Span<FourState> states = ((Span<FourState>)stateStorage)[..barCount];
         for (int i = 0; i < barCount; i++)
         {
             states[i] = values[i] switch
@@ -214,8 +219,12 @@ internal static class AustraliaPostEncoder
             };
         }
 
-        string readable = options.Font is null ? string.Empty : TextRepresentation(text, parity);
-        return FourStateEncoder.BuildSymbol(states, Metrics, readable, options);
+        // The representation holds the ten digits, at most fifteen customer characters, the four parity
+        // values of at most two digits and the spaces between them.
+        InlineArray64<char> lineStorage = default;
+        Span<char> line = lineStorage;
+        int lineLength = options.Font is null ? 0 : TextRepresentation(text, parity, line);
+        FourStateEncoder.BuildSymbol(states, Metrics, line[..lineLength], options, ref symbol);
     }
 
     /// <summary>
@@ -227,7 +236,9 @@ internal static class AustraliaPostEncoder
     /// <param name="parity">The buffer that receives the parity symbols C3, C2, C1 and C0.</param>
     public static void Parity(ReadOnlySpan<byte> data, Span<byte> parity)
     {
-        Span<byte> buffer = stackalloc byte[data.Length + ParitySymbols];
+        // At most 21 data symbols and the four parity symbols.
+        InlineArray32<byte> bufferStorage = default;
+        Span<byte> buffer = ((Span<byte>)bufferStorage)[..(data.Length + ParitySymbols)];
         data.CopyTo(buffer);
         for (int i = 0; i < data.Length; i++)
         {
@@ -264,10 +275,11 @@ internal static class AustraliaPostEncoder
     /// </summary>
     /// <param name="text">The text as given.</param>
     /// <param name="parity">The parity symbols.</param>
-    /// <returns>The text representation.</returns>
-    private static string TextRepresentation(string text, ReadOnlySpan<byte> parity)
+    /// <param name="line">The buffer that receives the text representation.</param>
+    /// <returns>The length of the text representation.</returns>
+    private static int TextRepresentation(string text, ReadOnlySpan<byte> parity, Span<char> line)
     {
-        ValueStringBuilder builder = new(stackalloc char[text.Length + 16]);
+        ValueStringBuilder builder = new(line);
         builder.Append(text.AsSpan(0, 2));
         builder.Append(' ');
         builder.Append(text.AsSpan(2, 8));
@@ -289,7 +301,7 @@ internal static class AustraliaPostEncoder
             builder.Append((char)('0' + (value % 10)));
         }
 
-        return builder.ToString();
+        return builder.Length;
     }
 
     private static int AppendNumeric(char digit, Span<byte> values, int bar)

@@ -22,10 +22,10 @@ internal static class PosiCodeEncoder
     public const int MaximumLength = 500;
 
     /// <summary>
-    /// The number of characters a caller stack allocates to build symbol data in. Longer data grows into
-    /// a pooled array.
+    /// The number of characters a caller holds inline to build symbol data in. Longer data rents its
+    /// buffer once.
     /// </summary>
-    public const int StackBufferLength = 64;
+    public const int InlineBufferLength = 64;
 
     /// <summary>
     /// The number of data codewords in the standard character sets.
@@ -211,8 +211,12 @@ internal static class PosiCodeEncoder
     public static int ToCodewords(ReadOnlySpan<int> values, Span<int> codewords)
     {
         // The extended switching looks ahead at how many characters of the other mode follow, so the
-        // announced sequence is built first.
-        ValueListBuilder<int> message = new(stackalloc int[StackBufferLength * 3]);
+        // announced sequence is built first. Each value takes at most two function 4 characters before it,
+        // so the sequence is at most three times as long and the builder never grows: short data works
+        // inline and longer data rents once.
+        InlineArray128<int> messageStorage = default;
+        int capacity = values.Length * 3;
+        ValueListBuilder<int> message = capacity <= 128 ? new(messageStorage) : new(capacity);
         try
         {
             bool extended = false;
@@ -293,14 +297,22 @@ internal static class PosiCodeEncoder
     }
 
     /// <summary>
-    /// Encodes codewords into the alternating bar and space run widths the renderer draws, starting with
-    /// the first bar of the start character and ending on the last bar of the stop character. The runs
-    /// carry the start character, the codewords, the check character and the stop character.
+    /// Encodes codewords and builds the symbol. The runs start with the first bar of the start character
+    /// and end on the last bar of the stop character, and carry the start character, the codewords, the
+    /// check character and the stop character. PosiCode carries no guard bars, so every bar runs the full
+    /// height, and the human readable interpretation sits below the symbol.
     /// </summary>
     /// <param name="codewords">The codewords the symbol carries.</param>
-    /// <param name="version">The version.</param>
-    /// <returns>The run widths in modules.</returns>
-    public static int[] Encode(ReadOnlySpan<int> codewords, PosiCodeVersion version)
+    /// <param name="version">The version, which sets the patterns and the quiet zone.</param>
+    /// <param name="readable">The human readable interpretation.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(
+        ReadOnlySpan<int> codewords,
+        PosiCodeVersion version,
+        ReadOnlySpan<char> readable,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
     {
         ReadOnlySpan<string> patterns = version switch
         {
@@ -312,7 +324,7 @@ internal static class PosiCodeEncoder
 
         string start = patterns[^2];
         string stop = patterns[^1];
-        int[] runs = new int[start.Length + (codewords.Length * RunsPerCharacter) + CheckRuns + stop.Length];
+        Span<int> runs = symbol.BeginLinear(start.Length + (codewords.Length * RunsPerCharacter) + CheckRuns + stop.Length, out Span<float> heights, out _);
         int written = 0;
         for (int i = 0; i < start.Length; i++)
         {
@@ -328,27 +340,13 @@ internal static class PosiCodeEncoder
             }
         }
 
-        AppendCheck(codewords, version, runs.AsSpan(written, CheckRuns));
+        AppendCheck(codewords, version, runs.Slice(written, CheckRuns));
         written += CheckRuns;
         for (int i = 0; i < stop.Length; i++)
         {
             runs[written++] = stop[i] - '0';
         }
 
-        return runs;
-    }
-
-    /// <summary>
-    /// Builds the symbol from encoded run widths. PosiCode carries no guard bars, so every bar runs the
-    /// full height, and the human readable interpretation sits below the symbol.
-    /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <param name="text">The human readable interpretation.</param>
-    /// <param name="options">The options that control layout choices.</param>
-    /// <param name="version">The version, which sets the quiet zone.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options, PosiCodeVersion version)
-    {
         int widthInModules = 0;
         for (int i = 0; i < runs.Length; i++)
         {
@@ -357,22 +355,16 @@ internal static class PosiCodeEncoder
 
         // The 15 per cent of Code 39 and Codabar; no document gives a height for PosiCode.
         float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, widthInModules * 0.15F);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
-        for (int i = 0; i < barCount; i++)
-        {
-            heights[i] = barHeight;
-        }
+        heights.Fill(barHeight);
 
-        BarcodeTextPlacement[] placements = [];
-        if (options.Font is not null && text.Length > 0)
+        if (options.Font is not null && readable.Length > 0)
         {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
+            symbol.ReserveText(1, readable.Length);
+            symbol.AddText(readable, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
         }
 
         int quietZone = QuietZone(version);
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, quietZone, quietZone);
+        symbol.EndLinear(quietZone, quietZone);
     }
 
     /// <summary>
@@ -416,7 +408,8 @@ internal static class PosiCodeEncoder
             value = (value & 1023) + 45;
         }
 
-        Span<int> distances = stackalloc int[6];
+        InlineArray6<int> distanceStorage = default;
+        Span<int> distances = distanceStorage;
         distances.Fill(2);
         int row = 0;
         int column = 0;

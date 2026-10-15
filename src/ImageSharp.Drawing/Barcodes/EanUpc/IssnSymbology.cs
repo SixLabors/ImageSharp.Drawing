@@ -32,7 +32,7 @@ public sealed class IssnSymbology : BarcodeSymbology
     public override double NominalXDimension => EanUpcEncoder.NominalXDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
@@ -74,7 +74,8 @@ public sealed class IssnSymbology : BarcodeSymbology
         // ISO 3297 check: weights 8 down to 2 over the seven data digits, modulus 11, X representing ten.
         // The encoded form is thirteen digits: the 977 prefix, the seven data digits, the sequence
         // variant and the EAN-13 check digit.
-        Span<char> digits = stackalloc char[13];
+        InlineArray14<char> digitStorage = default;
+        Span<char> digits = ((Span<char>)digitStorage)[..13];
         "977".CopyTo(digits);
         issn[..4].CopyTo(digits[3..]);
         issn.Slice(5, 3).CopyTo(digits[7..]);
@@ -98,7 +99,13 @@ public sealed class IssnSymbology : BarcodeSymbology
 
         digits[12] = (char)('0' + Gs1Data.ComputeCheckDigit(digits[..12]));
         char checkChar = check == 10 ? 'X' : (char)('0' + check);
-        string? caption = options.Font is null ? null : $"ISSN {issn[..8]}{checkChar}";
-        return EanUpcEncoder.BuildEan13(digits, options, caption);
+        if (options.Font is null)
+        {
+            EanUpcEncoder.BuildEan13(digits, options, ref symbol);
+        }
+        else
+        {
+            EanUpcEncoder.BuildEan13(digits, options, "ISSN ", issn[..8], [checkChar], ref symbol);
+        }
     }
 }

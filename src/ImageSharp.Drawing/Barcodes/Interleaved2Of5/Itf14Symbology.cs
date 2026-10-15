@@ -50,12 +50,16 @@ public sealed class Itf14Symbology : BarcodeSymbology
     public override double NominalXDimension => XDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
 
-        Span<char> digits = stackalloc char[Digits];
+        // The interpretation repeats the input, which may group the digits with spaces, so the input is
+        // bounded at one grouping space after each digit.
+        Guard.MustBeLessThanOrEqualTo(text.Length, Digits * 2, nameof(text));
+        InlineArray14<char> digitStorage = default;
+        Span<char> digits = digitStorage;
         int count = 0;
         bool hasSpaces = false;
         SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
@@ -94,16 +98,21 @@ public sealed class Itf14Symbology : BarcodeSymbology
 
         digits[Digits - 1] = (char)('0' + check);
 
-        string readable = string.Empty;
-        if (options.Font is not null)
+        // The interpretation is the input as given, with the check digit after it when the input left it
+        // out, set off by a space when the input groups its digits with spaces.
+        int readableLength = text.Length + (count == Digits ? 0 : hasSpaces ? 2 : 1);
+        InlineArray32<char> readableStorage = default;
+        Span<char> readable = ((Span<char>)readableStorage)[..readableLength];
+        text.CopyTo(readable);
+        if (count != Digits)
         {
-            readable = count == Digits
-                ? text
-                : hasSpaces
-                    ? $"{text} {digits[Digits - 1]}"
-                    : $"{text}{digits[Digits - 1]}";
+            readable[^1] = digits[Digits - 1];
+            if (hasSpaces)
+            {
+                readable[^2] = ' ';
+            }
         }
 
-        return Interleaved2Of5Encoder.BuildSymbol(Interleaved2Of5Encoder.Encode(digits), readable, options, XDimension, NominalBarHeight, BearerBarThickness);
+        Interleaved2Of5Encoder.BuildSymbol(digits, readable, options, XDimension, NominalBarHeight, BearerBarThickness, ref symbol);
     }
 }

@@ -96,37 +96,43 @@ internal static class CodabarEncoder
     /// character are added, and the check character is the one whose value lifts the sum to the next
     /// multiple of sixteen.
     /// </summary>
-    /// <param name="text">The start character, the data and the stop character.</param>
+    /// <param name="head">The start character and the data.</param>
+    /// <param name="stop">The stop character.</param>
     /// <returns>The check character.</returns>
-    public static char CheckCharacter(ReadOnlySpan<char> text)
+    public static char CheckCharacter(ReadOnlySpan<char> head, char stop)
     {
-        int sum = 0;
-        for (int i = 0; i < text.Length; i++)
+        int sum = Value(stop);
+        for (int i = 0; i < head.Length; i++)
         {
-            sum += Value(text[i]);
+            sum += Value(head[i]);
         }
 
         return Characters[(FirstStartStop - (sum % FirstStartStop)) % FirstStartStop];
     }
 
     /// <summary>
-    /// Encodes text into the alternating bar and space run widths the renderer draws, starting with a bar.
-    /// The runs carry the start character, the data, an optional check character and the stop character,
-    /// each followed by its inter-character gap except the stop character, so the runs end on a bar.
-    /// The check character sits before the stop character.
+    /// Encodes the characters and builds the symbol. The runs carry the start character, the data, an
+    /// optional check character and the stop character, each followed by its inter-character gap except
+    /// the stop character, so the runs end on a bar. The check character sits before the stop character.
+    /// Codabar carries no guard bars, so every bar runs the full height, and the human readable
+    /// interpretation sits below the symbol: the start character and the data, the check character when it
+    /// prints, and the stop character.
     /// </summary>
-    /// <param name="text">The start character, the data and the stop character, already validated.</param>
+    /// <param name="head">The start character and the data, already validated.</param>
+    /// <param name="stop">The stop character, already validated.</param>
     /// <param name="check">The check character to carry before the stop character, or <see langword="null"/>.</param>
-    /// <returns>The run widths in modules.</returns>
-    public static int[] Encode(ReadOnlySpan<char> text, char? check)
+    /// <param name="printCheck">Whether the check character is part of the human readable interpretation.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(ReadOnlySpan<char> head, char stop, char? check, bool printCheck, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        int characters = text.Length + (check is null ? 0 : 1);
-        int[] runs = new int[(characters * (ElementsPerCharacter + 1)) - 1];
+        int characters = head.Length + 1 + (check is null ? 0 : 1);
+        Span<int> runs = symbol.BeginLinear((characters * (ElementsPerCharacter + 1)) - 1, out Span<float> heights, out _);
         int written = 0;
 
-        for (int i = 0; i < text.Length - 1; i++)
+        for (int i = 0; i < head.Length; i++)
         {
-            Append(runs, ref written, Value(text[i]), true);
+            Append(runs, ref written, Value(head[i]), true);
         }
 
         if (check is not null)
@@ -134,20 +140,8 @@ internal static class CodabarEncoder
             Append(runs, ref written, Value(check.Value), true);
         }
 
-        Append(runs, ref written, Value(text[^1]), false);
-        return runs;
-    }
+        Append(runs, ref written, Value(stop), false);
 
-    /// <summary>
-    /// Builds the symbol from encoded run widths. Codabar carries no guard bars, so every bar runs the
-    /// full height, and the human readable interpretation sits below the symbol.
-    /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <param name="text">The human readable interpretation.</param>
-    /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
-    {
         int widthInModules = 0;
         for (int i = 0; i < runs.Length; i++)
         {
@@ -157,21 +151,16 @@ internal static class CodabarEncoder
         double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
         float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
         float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, nominalBarHeight);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
-        for (int i = 0; i < barCount; i++)
+        heights.Fill(barHeight);
+
+        if (options.Font is not null)
         {
-            heights[i] = barHeight;
+            ReadOnlySpan<char> tail = check is not null && printCheck ? [check.Value, stop] : [stop];
+            symbol.ReserveText(1, head.Length + tail.Length);
+            symbol.AddText(head, tail, [], 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
         }
 
-        BarcodeTextPlacement[] placements = [];
-        if (options.Font is not null && text.Length > 0)
-        {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
-        }
-
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone);
+        symbol.EndLinear(QuietZone, QuietZone);
     }
 
     /// <summary>

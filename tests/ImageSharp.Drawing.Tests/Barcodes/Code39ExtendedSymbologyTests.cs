@@ -12,17 +12,26 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 /// </summary>
 public class Code39ExtendedSymbologyTests
 {
-    [Theory]
-    [InlineData("abc", "1311313111131113131131111311311311131311113113113113111313113131131111131131311")]
-    [InlineData("Code39", "1311313111313113111113111313113111311311131113131111113311311311131311311133111131331111111133113111131131311")]
-    [InlineData("a@b", "1311313111131113131131111311311113131311133111113113111313111131131131131131311")]
-    [InlineData("A\tB", "13113131113111131131131313111111311331111131131131131131311")]
-    [InlineData("Hello, World!", "131131311131111331111311131311311133111113111313111131111331131113131111311113311311131311311131131113131113111131111331133111311133311111111311131311311131131113111313113111113311131113131111311113311311131311111133113113131113113111131131131131311")]
-    public void MatchesReferenceRuns(string text, string expected)
+    /// <summary>
+    /// Gets the cases of <see cref="MatchesReferenceRuns"/>.
+    /// </summary>
+    public static TheoryData<string, string> MatchesReferenceRunsData { get; } = new()
     {
-        LinearBarcodeSymbol symbol = Encode(new Code39ExtendedSymbology(), text);
-        Assert.Equal(expected, string.Concat(symbol.RunWidths));
-    }
+        { "abc", "1311313111131113131131111311311311131311113113113113111313113131131111131131311" },
+        { "Code39", "1311313111313113111113111313113111311311131113131111113311311311131311311133111131331111111133113111131131311" },
+        { "a@b", "1311313111131113131131111311311113131311133111113113111313111131131131131131311" },
+        { "A\tB", "13113131113111131131131313111111311331111131131131131131311" },
+        {
+            "Hello, World!",
+            "13113131113111133111131113131131113311111311131311113111133113111313111131111331131113131131113113111313111311113111133113311131113331111111" +
+                "1311131311311131131113111313113111113311131113131111311113311311131311111133113113131113113111131131131131311"
+        },
+    };
+
+    [Theory]
+    [MemberData(nameof(MatchesReferenceRunsData))]
+    public void MatchesReferenceRuns(string text, string expected)
+        => Assert.Equal(expected, Encode(new Code39ExtendedSymbology(), text));
 
     /// <summary>
     /// Table A.2 maps every one of the 128 ASCII values, so encoding the whole set and reading it back
@@ -34,8 +43,7 @@ public class Code39ExtendedSymbologyTests
     {
         for (int value = 0; value < 128; value++)
         {
-            LinearBarcodeSymbol symbol = Encode(new Code39ExtendedSymbology(), ((char)value).ToString());
-            Assert.NotEmpty(symbol.RunWidths);
+            Assert.NotEmpty(Encode(new Code39ExtendedSymbology(), ((char)value).ToString()));
         }
     }
 
@@ -51,10 +59,9 @@ public class Code39ExtendedSymbologyTests
     public void PrintsTheTextAsGiven(string text, string expected)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Code39ExtendedSymbology().Encode(text, options);
+        string[] texts = SymbolEncoder.Read(new Code39ExtendedSymbology(), text, options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal(expected, placement.Text);
+        Assert.Equal(expected, Assert.Single(texts));
     }
 
     /// <summary>
@@ -76,6 +83,12 @@ public class Code39ExtendedSymbologyTests
     public void RejectsCheckCharacterValidation()
         => Assert.Throws<ArgumentException>(() => new Code39ExtendedSymbology(CheckCharacterMode.Validate));
 
-    private static LinearBarcodeSymbol Encode(Code39ExtendedSymbology symbology, string text)
-        => (LinearBarcodeSymbol)symbology.Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="symbology">The symbology to encode with.</param>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(Code39ExtendedSymbology symbology, string text)
+        => SymbolEncoder.Read(symbology, text, new BarcodeOptions(), SymbolEncoder.RunString);
 }

@@ -18,10 +18,10 @@ public sealed class Code49Symbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
-        return Code49Encoder.BuildSymbol(Code49Encoder.Encode(text), text, options);
+        Code49Encoder.BuildSymbol(text, text, options, ref symbol);
     }
 }

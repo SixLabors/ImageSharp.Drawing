@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.Drawing.Helpers;
-
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -43,9 +41,9 @@ public sealed class AustraliaPostSymbology : BarcodeSymbology
     public override double NominalXDimension => AustraliaPostEncoder.Metrics.XDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
-        return AustraliaPostEncoder.Encode(text, this.CustomerInformationTable, options);
+        AustraliaPostEncoder.Encode(text, this.CustomerInformationTable, options, ref symbol);
     }
 }

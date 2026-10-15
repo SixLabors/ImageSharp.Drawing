@@ -59,20 +59,14 @@ internal static class EanUpcEncoder
     public const float MinimumTextPoints = 9F;
 
     /// <summary>
-    /// The width of an EAN-13 symbol in modules, and the bar count within it.
+    /// The width of an EAN-8 symbol in modules.
     /// </summary>
-    private const int Ean13Width = 95;
-
-    private const int Ean13BarCount = 30;
+    public const int Ean8Width = 67;
 
     /// <summary>
-    /// The width of an EAN-8 symbol in modules, and the bar count within it.
+    /// The width of an EAN-13 symbol in modules.
     /// </summary>
-    private const int Ean8Width = 67;
-
-    private const int Ean8BarCount = 22;
-
-    private static readonly string[] DigitStrings = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+    private const int Ean13Width = 95;
 
     /// <summary>
     /// Gets the indexes of the extended bars of an EAN-13 symbol: the two bars of each of the left,
@@ -216,12 +210,13 @@ internal static class EanUpcEncoder
     }
 
     /// <summary>
-    /// Converts a module stream into alternating bar and space run widths. The stream must start and end with
-    /// a dark module so that even run indexes are bars.
+    /// Begins a linear symbol from a module stream and writes its alternating bar and space run widths. The
+    /// stream must start and end with a dark module so that even run indexes are bars.
     /// </summary>
     /// <param name="modules">The module stream, where 1 is a dark module.</param>
-    /// <returns>The run widths in modules.</returns>
-    public static int[] ToRuns(ReadOnlySpan<byte> modules)
+    /// <param name="symbol">The symbol to write.</param>
+    /// <param name="heights">The bar heights of the symbol, to write.</param>
+    public static void BeginRuns(ReadOnlySpan<byte> modules, ref BarcodeSymbol symbol, out Span<float> heights)
     {
         int count = 1;
         for (int i = 1; i < modules.Length; i++)
@@ -232,7 +227,7 @@ internal static class EanUpcEncoder
             }
         }
 
-        int[] runs = new int[count];
+        Span<int> runs = symbol.BeginLinear(count, out heights, out _);
         int run = 0;
         int width = 1;
         for (int i = 1; i < modules.Length; i++)
@@ -249,31 +244,20 @@ internal static class EanUpcEncoder
         }
 
         runs[run] = width;
-        return runs;
     }
 
     /// <summary>
-    /// Builds the bar height and top offset arrays for a symbol whose bars are top aligned. When the options
-    /// carry a font the listed guard bars extend downwards by <see cref="GuardExtension"/> to flank the text
-    /// row. Without text, all bars are uniform.
+    /// Writes the bar heights of a symbol whose bars are top aligned. When the options carry a font the
+    /// listed guard bars extend downwards by <see cref="GuardExtension"/> to flank the text row. Without
+    /// text, all bars are uniform.
     /// </summary>
-    /// <param name="barCount">The number of bars in the symbol.</param>
+    /// <param name="heights">The per-bar heights in modules to write.</param>
     /// <param name="barHeight">The digit bar height in modules.</param>
     /// <param name="guardBars">The indexes of the extended bars.</param>
     /// <param name="options">The options, whose font decides whether the guards extend.</param>
-    /// <param name="heights">The resulting per-bar heights in modules.</param>
-    /// <param name="tops">The resulting per-bar top offsets in modules.</param>
-    public static void BuildGuardedHeights(
-        int barCount,
-        float barHeight,
-        ReadOnlySpan<int> guardBars,
-        BarcodeOptions options,
-        out float[] heights,
-        out float[] tops)
+    public static void FillGuardedHeights(Span<float> heights, float barHeight, ReadOnlySpan<int> guardBars, BarcodeOptions options)
     {
-        heights = new float[barCount];
-        tops = new float[barCount];
-        Array.Fill(heights, barHeight);
+        heights.Fill(barHeight);
         if (options.Font is null)
         {
             return;
@@ -296,7 +280,7 @@ internal static class EanUpcEncoder
     /// <param name="moduleWidth">The width of one module in pixels.</param>
     /// <param name="options">The options that carry the fonts and the resolution.</param>
     /// <returns>The font to print the caption with.</returns>
-    public static Font ResolveCaptionFont(string caption, float spanModules, float moduleWidth, BarcodeOptions options)
+    public static Font ResolveCaptionFont(ReadOnlySpan<char> caption, float spanModules, float moduleWidth, BarcodeOptions options)
     {
         Font font = options.CaptionFont ?? options.Font!;
         float size = font.Size;
@@ -311,49 +295,30 @@ internal static class EanUpcEncoder
     }
 
     /// <summary>
-    /// Fills one text placement per digit, each centered in its own character cell. ISO/IEC 15420 prints
+    /// Adds one text placement per digit, each centered in its own character cell. ISO/IEC 15420 prints
     /// every digit of the interpretation below (or above, for add-ons) its own symbol character rather than
     /// centering digit groups, so placement is per digit.
     /// </summary>
-    /// <param name="placements">The placement array to fill.</param>
-    /// <param name="placementIndex">The first index to fill in <paramref name="placements"/>.</param>
-    /// <param name="digits">The digit characters.</param>
-    /// <param name="digitIndex">The first digit to place.</param>
-    /// <param name="digitCount">The number of digits to place.</param>
+    /// <param name="digits">The digits to place.</param>
     /// <param name="firstCellLeft">The left edge of the first character cell, in modules.</param>
     /// <param name="cellAdvance">The distance between successive cell left edges, in modules.</param>
     /// <param name="side">The side of the bars the digits print on.</param>
     /// <param name="textEdge">The edge of the ink of the digits, in modules from the symbol top.</param>
-    public static void FillDigitPlacements(
-        BarcodeTextPlacement[] placements,
-        int placementIndex,
+    /// <param name="symbol">The symbol to write, with room for the digits reserved.</param>
+    public static void AddDigits(
         ReadOnlySpan<char> digits,
-        int digitIndex,
-        int digitCount,
         float firstCellLeft,
         float cellAdvance,
         BarcodeTextSide side,
-        float textEdge)
+        float textEdge,
+        ref BarcodeSymbol symbol)
     {
-        for (int i = 0; i < digitCount; i++)
+        for (int i = 0; i < digits.Length; i++)
         {
             float left = firstCellLeft + (i * cellAdvance);
-            placements[placementIndex + i] = new BarcodeTextPlacement(
-                DigitString(digits[digitIndex + i]),
-                left,
-                left + 7,
-                side,
-                textEdge);
+            symbol.AddText(digits.Slice(i, 1), left, left + 7, side, textEdge);
         }
     }
-
-    /// <summary>
-    /// Returns the cached single character string for a digit, avoiding a string allocation per placement.
-    /// </summary>
-    /// <param name="digit">The digit character, 0-9.</param>
-    /// <returns>The single character string.</returns>
-    public static string DigitString(char digit)
-        => DigitStrings[digit - '0'];
 
     /// <summary>
     /// Returns the prefix of a hyphenated number that contains the given count of digits, preserving the
@@ -363,7 +328,7 @@ internal static class EanUpcEncoder
     /// <param name="text">The hyphenated input.</param>
     /// <param name="digitCount">The number of digits the prefix must contain.</param>
     /// <returns>The hyphenated prefix.</returns>
-    public static string TakeHyphenatedPrefix(ReadOnlySpan<char> text, int digitCount)
+    public static ReadOnlySpan<char> TakeHyphenatedPrefix(ReadOnlySpan<char> text, int digitCount)
     {
         int digits = 0;
         int end = 0;
@@ -377,22 +342,111 @@ internal static class EanUpcEncoder
             end++;
         }
 
-        return new string(text[..end]);
+        return text[..end];
     }
 
     /// <summary>
-    /// Encodes thirteen validated digits into an EAN-13 symbol, optionally with a caption above the bars.
-    /// The ISBN, ISMN and ISSN symbologies print their own number above their EAN-13 symbol. The caption
-    /// stands one module above the bar tops, and the room it needs belongs to the renderer, which is what
-    /// knows the font.
+    /// Encodes thirteen validated digits into an EAN-13 symbol.
     /// </summary>
     /// <param name="digits">The thirteen digits, with the check digit already validated.</param>
     /// <param name="options">The options that control layout choices.</param>
-    /// <param name="caption">The text above the bars, or <see langword="null"/> for none.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildEan13(ReadOnlySpan<char> digits, BarcodeOptions options, string? caption)
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildEan13(ReadOnlySpan<char> digits, BarcodeOptions options, ref BarcodeSymbol symbol)
+        => BuildEan13(digits, options, false, [], [], [], ref symbol);
+
+    /// <summary>
+    /// Encodes thirteen validated digits into an EAN-13 symbol with a caption above the bars. The ISBN, ISMN
+    /// and ISSN symbologies print their own number above their EAN-13 symbol. The caption stands one module
+    /// above the bar tops, and the room it needs belongs to the renderer, which is what knows the font.
+    /// </summary>
+    /// <param name="digits">The thirteen digits, with the check digit already validated.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="captionPrefix">The characters of the caption before its body.</param>
+    /// <param name="captionBody">The body of the caption.</param>
+    /// <param name="captionSuffix">The characters of the caption after its body.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildEan13(
+        ReadOnlySpan<char> digits,
+        BarcodeOptions options,
+        ReadOnlySpan<char> captionPrefix,
+        ReadOnlySpan<char> captionBody,
+        ReadOnlySpan<char> captionSuffix,
+        ref BarcodeSymbol symbol)
+        => BuildEan13(digits, options, true, captionPrefix, captionBody, captionSuffix, ref symbol);
+
+    /// <summary>
+    /// Encodes eight validated digits into an EAN-8 symbol.
+    /// </summary>
+    /// <param name="digits">The eight digits, with the check digit already validated.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildEan8(ReadOnlySpan<char> digits, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Span<byte> modules = stackalloc byte[Ean13Width];
+        InlineArray128<byte> moduleStorage = default;
+        Span<byte> modules = ((Span<byte>)moduleStorage)[..Ean8Width];
+        WriteEan8Modules(digits, modules);
+
+        BeginRuns(modules, ref symbol, out Span<float> heights);
+        float barHeight = options.ResolveBarHeight(NominalXDimension, NominalEan8BarHeight);
+        FillGuardedHeights(heights, barHeight, Ean8GuardBars, options);
+
+        // ISO/IEC 15420 prints every digit below its own symbol character. Digits hang one module below the digit
+        // bars and flow past the extended guard bars, as in the nominal symbol drawing.
+        if (options.Font is not null)
+        {
+            symbol.ReserveText(8, 8);
+            AddDigits(digits[..4], 3F, 7F, BarcodeTextSide.BelowBars, barHeight, ref symbol);
+            AddDigits(digits[4..], 36F, 7F, BarcodeTextSide.BelowBars, barHeight, ref symbol);
+        }
+
+        symbol.EndLinear(7, 7);
+    }
+
+    /// <summary>
+    /// Writes the modules of an EAN-8 symbol: the guard patterns, four digits of number set A and four of
+    /// number set C.
+    /// </summary>
+    /// <param name="digits">The eight digits, with the check digit already validated.</param>
+    /// <param name="modules">The <see cref="Ean8Width"/> modules to write, 1 for dark.</param>
+    public static void WriteEan8Modules(ReadOnlySpan<char> digits, Span<byte> modules)
+    {
+        int position = 0;
+        AppendPattern(modules, ref position, 0b101, 3);
+        for (int i = 0; i < 4; i++)
+        {
+            AppendPattern(modules, ref position, NumberSetA[digits[i] - '0'], 7);
+        }
+
+        AppendPattern(modules, ref position, 0b01010, 5);
+        for (int i = 4; i < 8; i++)
+        {
+            AppendPattern(modules, ref position, NumberSetC[digits[i] - '0'], 7);
+        }
+
+        AppendPattern(modules, ref position, 0b101, 3);
+    }
+
+    /// <summary>
+    /// Encodes thirteen validated digits into an EAN-13 symbol, with or without a caption above the bars.
+    /// </summary>
+    /// <param name="digits">The thirteen digits, with the check digit already validated.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="hasCaption">Whether the symbol carries a caption above the bars.</param>
+    /// <param name="captionPrefix">The characters of the caption before its body.</param>
+    /// <param name="captionBody">The body of the caption.</param>
+    /// <param name="captionSuffix">The characters of the caption after its body.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    private static void BuildEan13(
+        ReadOnlySpan<char> digits,
+        BarcodeOptions options,
+        bool hasCaption,
+        ReadOnlySpan<char> captionPrefix,
+        ReadOnlySpan<char> captionBody,
+        ReadOnlySpan<char> captionSuffix,
+        ref BarcodeSymbol symbol)
+    {
+        InlineArray128<byte> moduleStorage = default;
+        Span<byte> modules = ((Span<byte>)moduleStorage)[..Ean13Width];
         int position = 0;
         AppendPattern(modules, ref position, 0b101, 3);
 
@@ -411,67 +465,37 @@ internal static class EanUpcEncoder
 
         AppendPattern(modules, ref position, 0b101, 3);
 
+        BeginRuns(modules, ref symbol, out Span<float> heights);
         float barHeight = options.ResolveBarHeight(NominalXDimension, NominalBarHeight);
-        BuildGuardedHeights(Ean13BarCount, barHeight, Ean13GuardBars, options, out float[] heights, out float[] tops);
+        FillGuardedHeights(heights, barHeight, Ean13GuardBars, options);
 
         // ISO/IEC 15420 prints the leading digit in the leading quiet zone and every other digit below its
         // own symbol character. Digits hang one module below the digit bars and flow past the extended
         // guard bars, as in the nominal symbol drawing. A caption stands one module above the bar tops.
-        BarcodeTextPlacement[] placements = [];
         if (options.Font is not null)
         {
-            bool hasCaption = caption is not null;
-            placements = new BarcodeTextPlacement[hasCaption ? 14 : 13];
+            int captionLength = captionPrefix.Length + captionBody.Length + captionSuffix.Length;
+            symbol.ReserveText(hasCaption ? 14 : 13, 13 + captionLength);
             float textEdge = barHeight + BarcodeTextPlacement.Clearance;
-            placements[0] = new BarcodeTextPlacement(DigitString(digits[0]), -9F, -2F, BarcodeTextSide.BelowBars, textEdge);
-            FillDigitPlacements(placements, 1, digits, 1, 6, 3F, 7F, BarcodeTextSide.BelowBars, textEdge);
-            FillDigitPlacements(placements, 7, digits, 7, 6, 50F, 7F, BarcodeTextSide.BelowBars, textEdge);
+            symbol.AddText(digits[..1], -9F, -2F, BarcodeTextSide.BelowBars, textEdge);
+            AddDigits(digits[1..7], 3F, 7F, BarcodeTextSide.BelowBars, textEdge, ref symbol);
+            AddDigits(digits[7..13], 50F, 7F, BarcodeTextSide.BelowBars, textEdge, ref symbol);
             if (hasCaption)
             {
-                placements[13] = new BarcodeTextPlacement(caption!, 0F, Ean13Width, BarcodeTextSide.AboveBars, -BarcodeTextPlacement.Clearance, 1F, true);
+                symbol.AddText(
+                    captionPrefix,
+                    captionBody,
+                    captionSuffix,
+                    0F,
+                    Ean13Width,
+                    BarcodeTextSide.AboveBars,
+                    -BarcodeTextPlacement.Clearance,
+                    1F,
+                    true,
+                    BarcodeTextAlignment.Centered);
             }
         }
 
-        return new LinearBarcodeSymbol(ToRuns(modules), heights, tops, placements, 11, 7);
-    }
-
-    /// <summary>
-    /// Encodes eight validated digits into an EAN-8 symbol.
-    /// </summary>
-    /// <param name="digits">The eight digits, with the check digit already validated.</param>
-    /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildEan8(ReadOnlySpan<char> digits, BarcodeOptions options)
-    {
-        Span<byte> modules = stackalloc byte[Ean8Width];
-        int position = 0;
-        AppendPattern(modules, ref position, 0b101, 3);
-        for (int i = 0; i < 4; i++)
-        {
-            AppendPattern(modules, ref position, NumberSetA[digits[i] - '0'], 7);
-        }
-
-        AppendPattern(modules, ref position, 0b01010, 5);
-        for (int i = 4; i < 8; i++)
-        {
-            AppendPattern(modules, ref position, NumberSetC[digits[i] - '0'], 7);
-        }
-
-        AppendPattern(modules, ref position, 0b101, 3);
-
-        float barHeight = options.ResolveBarHeight(NominalXDimension, NominalEan8BarHeight);
-        BuildGuardedHeights(Ean8BarCount, barHeight, Ean8GuardBars, options, out float[] heights, out float[] tops);
-
-        // ISO/IEC 15420 prints every digit below its own symbol character. Digits hang one module below the digit
-        // bars and flow past the extended guard bars, as in the nominal symbol drawing.
-        BarcodeTextPlacement[] placements = [];
-        if (options.Font is not null)
-        {
-            placements = new BarcodeTextPlacement[8];
-            FillDigitPlacements(placements, 0, digits, 0, 4, 3F, 7F, BarcodeTextSide.BelowBars, barHeight);
-            FillDigitPlacements(placements, 4, digits, 4, 4, 36F, 7F, BarcodeTextSide.BelowBars, barHeight);
-        }
-
-        return new LinearBarcodeSymbol(ToRuns(modules), heights, tops, placements, 7, 7);
+        symbol.EndLinear(11, 7);
     }
 }

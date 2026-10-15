@@ -121,17 +121,26 @@ internal static class Code11Encoder
     }
 
     /// <summary>
-    /// Encodes data into the alternating bar and space run widths the renderer draws, starting with a
-    /// bar. The runs carry the start character, the data, the check characters and the stop character,
-    /// each followed by its inter-character gap except the stop character, so the runs end on a bar.
+    /// Encodes data and builds the symbol. The runs carry the start character, the data, the check
+    /// characters and the stop character, each followed by its inter-character gap except the stop
+    /// character, so the runs end on a bar. Code 11 carries no guard bars, so every bar runs the full
+    /// height, and the human readable interpretation sits below the symbol: the data, with the check
+    /// characters when they print.
     /// </summary>
     /// <param name="data">The data to encode, already validated.</param>
     /// <param name="checks">The check characters to carry after the data, none, one or two.</param>
-    /// <returns>The run widths in modules.</returns>
-    public static int[] Encode(ReadOnlySpan<char> data, ReadOnlySpan<char> checks)
+    /// <param name="printChecks">Whether the check characters are part of the human readable interpretation.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(
+        ReadOnlySpan<char> data,
+        ReadOnlySpan<char> checks,
+        bool printChecks,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
     {
         int characters = data.Length + checks.Length + 2;
-        int[] runs = new int[(characters * (ElementsPerCharacter + 1)) - 1];
+        Span<int> runs = symbol.BeginLinear((characters * (ElementsPerCharacter + 1)) - 1, out Span<float> heights, out _);
         int written = 0;
 
         Append(runs, ref written, StartStop, true);
@@ -146,19 +155,7 @@ internal static class Code11Encoder
         }
 
         Append(runs, ref written, StartStop, false);
-        return runs;
-    }
 
-    /// <summary>
-    /// Builds the symbol from encoded run widths. Code 11 carries no guard bars, so every bar runs the
-    /// full height, and the human readable interpretation sits below the symbol.
-    /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <param name="text">The human readable interpretation.</param>
-    /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
-    {
         int widthInModules = 0;
         for (int i = 0; i < runs.Length; i++)
         {
@@ -166,21 +163,16 @@ internal static class Code11Encoder
         }
 
         float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, widthInModules * NominalBarHeightFraction);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
-        for (int i = 0; i < barCount; i++)
+        heights.Fill(barHeight);
+
+        if (options.Font is not null)
         {
-            heights[i] = barHeight;
+            ReadOnlySpan<char> printed = printChecks ? checks : [];
+            symbol.ReserveText(1, data.Length + printed.Length);
+            symbol.AddText(data, printed, [], 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
         }
 
-        BarcodeTextPlacement[] placements = [];
-        if (options.Font is not null && text.Length > 0)
-        {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
-        }
-
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone);
+        symbol.EndLinear(QuietZone, QuietZone);
     }
 
     /// <summary>

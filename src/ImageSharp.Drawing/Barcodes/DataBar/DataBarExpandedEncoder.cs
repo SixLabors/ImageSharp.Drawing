@@ -44,6 +44,13 @@ internal static class DataBarExpandedEncoder
     public const int MaximumStackedSegments = 20;
 
     /// <summary>
+    /// The most data characters a symbol carries. Section 2.6.10 of the GS1 General Specifications: GS1
+    /// DataBar Expanded Versions "SHALL NOT be used when symbols require more than 74 numeric or 41
+    /// alphabetic characters of data".
+    /// </summary>
+    public const int MaximumDataCharacters = 74;
+
+    /// <summary>
     /// The height of each of the three separator rows between two rows of a stacked symbol, in modules.
     /// Section 5.5.2.3.2: "Its structure includes a 3X high separator pattern between rows."
     /// </summary>
@@ -190,25 +197,26 @@ internal static class DataBarExpandedEncoder
     /// <param name="text">The prepared element strings, with a separator after every variable length element string but the last.</param>
     /// <param name="caption">The human readable interpretation.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
-    /// <returns>The encoded symbol.</returns>
+    /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The data carries a character the symbology cannot encode, or more data than 21 data characters hold.</exception>
-    public static LinearBarcodeSymbol BuildLinear(ReadOnlySpan<char> text, string caption, BarcodeOptions options)
+    public static void BuildLinear(ReadOnlySpan<char> text, ReadOnlySpan<char> caption, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Span<int> characters = stackalloc int[MaximumSymbolCharacters * 8];
+        InlineArray256<int> characterStorage = default;
+        Span<int> characters = ((Span<int>)characterStorage)[..(MaximumSymbolCharacters * 8)];
         int symbolCharacters = EncodeCharacters(text, MaximumSymbolCharacters, characters);
         ReadOnlySpan<byte> finders = Finders(symbolCharacters);
 
         // A zero width bar, the guard space and bar, the characters with a finder after every second one, and
         // the guard space and bar. The symbol ends on a bar or a space, so a zero width bar closes the runs
-        // when it ends on a space.
+        // when it ends on a space. The zero width bars are the zeros the symbol storage starts with.
         int elements = 3 + (symbolCharacters * 8) + (finders.Length * 5) + 2;
-        int[] runs = new int[elements + ((elements & 1) == 0 ? 1 : 0)];
+        Span<int> runs = symbol.BeginLinear(elements + ((elements & 1) == 0 ? 1 : 0), out Span<float> heights, out _);
         runs[1] = 1;
         runs[2] = 1;
         int position = 3;
         for (int c = 0; c < symbolCharacters; c++)
         {
-            characters.Slice(c * 8, 8).CopyTo(runs.AsSpan(position));
+            characters.Slice(c * 8, 8).CopyTo(runs[position..]);
             position += 8;
             if ((c & 1) == 0)
             {
@@ -224,9 +232,7 @@ internal static class DataBarExpandedEncoder
         runs[position + 1] = 1;
 
         float barHeight = options.ResolveBarHeight(NominalXDimension, RowHeight);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        heights.AsSpan().Fill(barHeight);
+        heights.Fill(barHeight);
 
         int width = 0;
         foreach (int run in runs)
@@ -234,11 +240,13 @@ internal static class DataBarExpandedEncoder
             width += run;
         }
 
-        BarcodeTextPlacement[] placements = options.Font is null
-            ? []
-            : [new BarcodeTextPlacement(caption, 0F, width, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
+        if (options.Font is not null)
+        {
+            symbol.ReserveText(1, caption.Length);
+            symbol.AddText(caption, 0F, width, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
+        }
 
-        return new LinearBarcodeSymbol(runs, heights, new float[barCount], placements, 0, 0);
+        symbol.EndLinear(0, 0);
     }
 
     /// <summary>
@@ -248,136 +256,202 @@ internal static class DataBarExpandedEncoder
     /// </summary>
     /// <param name="text">The prepared element strings, with a separator after every variable length element string but the last.</param>
     /// <param name="segments">The number of segments in a full row, even and from 2 to 20.</param>
-    /// <param name="caption">The human readable interpretation.</param>
+    /// <param name="captionPrefix">The characters of the human readable interpretation before its body.</param>
+    /// <param name="captionBody">The body of the human readable interpretation.</param>
+    /// <param name="captionSuffix">The characters of the human readable interpretation after its body.</param>
     /// <param name="side">The side of the symbol the human readable interpretation prints on.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
-    /// <returns>The encoded symbol.</returns>
+    /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The data carries a character the symbology cannot encode, or more data than 21 data characters hold.</exception>
-    public static StackedBarcodeSymbol BuildStacked(ReadOnlySpan<char> text, int segments, string caption, BarcodeTextSide side, BarcodeOptions options)
+    public static void BuildStacked(
+        ReadOnlySpan<char> text,
+        int segments,
+        ReadOnlySpan<char> captionPrefix,
+        ReadOnlySpan<char> captionBody,
+        ReadOnlySpan<char> captionSuffix,
+        BarcodeTextSide side,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
     {
-        Span<int> characters = stackalloc int[MaximumSymbolCharacters * 8];
+        InlineArray256<int> characterStorage = default;
+        Span<int> characters = ((Span<int>)characterStorage)[..(MaximumSymbolCharacters * 8)];
         int symbolCharacters = EncodeCharacters(text, segments, characters);
         ReadOnlySpan<byte> finders = Finders(symbolCharacters);
         int rowCount = (symbolCharacters + segments - 1) / segments;
-
-        // The buffer holds a row and the separator row that is its inverse.
-        Span<byte> buffer = stackalloc byte[(MaximumRowWidth + 1) * 2];
-        Span<byte> row = buffer[..(MaximumRowWidth + 1)];
-        Span<byte> separator = buffer[(MaximumRowWidth + 1)..];
-
         float rowHeight = options.ResolveBarHeight(NominalXDimension, RowHeight);
-        LinearBarcodeSymbol[] rows = new LinearBarcodeSymbol[(rowCount * 4) - 3];
-        LinearBarcodeSymbol? middle = null;
-        int width = 0;
-        for (int r = 0; r < rowCount; r++)
+
+        // The buffer holds a row, the separator row that is its inverse, and the middle separator row, each
+        // one module wider than the widest row, since a partial last row can move one module right. It is
+        // rented once, outside the row loops.
+        int stride = MaximumRowWidth + 1;
+        PooledBuffer<byte> buffer = new(stride * 3);
+        try
         {
-            // A row of segments that is not a whole number of segment pairs on both sides starts every second
-            // row with its guard bar, so the colours of the row alternate from row to row.
-            int length = 0;
-            byte colour = (byte)((segments & 3) != 0 && (r & 1) == 1 ? 1 : 0);
-            AppendElement(row, ref length, ref colour, 1);
-            AppendElement(row, ref length, ref colour, 1);
-            int first = r * segments;
-            int last = Math.Min(first + segments, symbolCharacters);
-            int finderCount = 0;
-            for (int c = first; c < last; c++)
+            Span<byte> row = buffer.Span[..stride];
+            Span<byte> separator = buffer.Span.Slice(stride, stride);
+            Span<byte> middle = buffer.Span.Slice(stride * 2, stride);
+
+            // The run count of a row is known only once its modules are composed, so a first pass composes
+            // every row to count the runs, and the symbol reserves its storage once. Between two rows stand
+            // the separator of the upper row, the middle separator and the separator of the lower row.
+            int width = 0;
+            int runCount = 0;
+            int barCount = 0;
+            for (int r = 0; r < rowCount; r++)
             {
-                for (int k = 0; k < 8; k++)
+                ComposeRow(r, rowCount, segments, symbolCharacters, characters, finders, row, separator, ref width);
+                int rowRuns = DataBarRows.RunCount(row[..width]);
+                int separatorRuns = DataBarRows.RunCount(separator[..width]);
+                int separatorUses = (r > 0 ? 1 : 0) + (r < rowCount - 1 ? 1 : 0);
+                runCount += rowRuns + (separatorUses * separatorRuns);
+                barCount += ((rowRuns + 1) >> 1) + (separatorUses * ((separatorRuns + 1) >> 1));
+            }
+
+            ComposeMiddle(middle[..width]);
+            int middleRuns = DataBarRows.RunCount(middle[..width]);
+            runCount += (rowCount - 1) * middleRuns;
+            barCount += (rowCount - 1) * ((middleRuns + 1) >> 1);
+
+            symbol.BeginStacked((rowCount * 4) - 3, runCount, barCount);
+            for (int r = 0; r < rowCount; r++)
+            {
+                ComposeRow(r, rowCount, segments, symbolCharacters, characters, finders, row, separator, ref width);
+                if (r > 0)
                 {
-                    AppendElement(row, ref length, ref colour, characters[(c * 8) + k]);
+                    DataBarRows.AddRow(separator[..width], SeparatorHeight, ref symbol);
                 }
 
-                if ((c & 1) == 0)
+                DataBarRows.AddRow(row[..width], rowHeight, ref symbol);
+                if (r < rowCount - 1)
                 {
-                    ReadOnlySpan<byte> finder = FinderWidths.Slice(finders[c / 2] * 5, 5);
-                    for (int k = 0; k < 5; k++)
-                    {
-                        AppendElement(row, ref length, ref colour, finder[k]);
-                    }
-
-                    finderCount++;
-                }
-            }
-
-            AppendElement(row, ref length, ref colour, 1);
-            AppendElement(row, ref length, ref colour, 1);
-
-            // The separator is the inverse of the row, inside four light modules at each end. Over the 15
-            // modules of a finder pattern the light modules break into narrow elements instead, so the
-            // separator does not read as part of the finder. A finder follows the 2 guard modules and the 17
-            // of the first character, and every 49 modules after that pairs of finders stand 98 apart.
-            Span<byte> rowModules = row[..length];
-            Span<byte> separatorModules = separator[..length];
-            for (int i = 0; i < length; i++)
-            {
-                separatorModules[i] = (byte)(1 - rowModules[i]);
-            }
-
-            for (int start = 19; start <= length - 13; start += 98)
-            {
-                AlternateOverFinder(rowModules, separatorModules, start);
-            }
-
-            for (int start = 68; start <= length - 13; start += 98)
-            {
-                AlternateOverFinder(rowModules, separatorModules, start);
-            }
-
-            separatorModules[..4].Clear();
-            separatorModules[^4..].Clear();
-
-            // With a whole number of segment pairs on both sides every second row reads right to left. A
-            // partial last row with an odd number of finders keeps its direction and moves one module right.
-            if ((segments & 3) == 0 && (r & 1) == 1)
-            {
-                if (r == rowCount - 1 && last - first < segments && (finderCount & 1) == 1)
-                {
-                    row[..length].CopyTo(row[1..]);
-                    separator[..length].CopyTo(separator[1..]);
-                    row[0] = 0;
-                    separator[0] = 0;
-                    length++;
-                }
-                else
-                {
-                    row[..length].Reverse();
-                    separator[..length].Reverse();
+                    DataBarRows.AddRow(separator[..width], SeparatorHeight, ref symbol);
+                    DataBarRows.AddRow(middle[..width], SeparatorHeight, ref symbol);
                 }
             }
 
-            // The first row is a full row, and a shorter last row fills to its width with light modules.
-            if (r == 0)
+            if (options.Font is not null)
             {
-                width = length;
-            }
-            else
-            {
-                row[length..width].Clear();
-                separator[length..width].Clear();
+                float height = (rowCount * rowHeight) + ((rowCount - 1) * 3F * SeparatorHeight);
+                float textEdge = side == BarcodeTextSide.AboveBars ? -BarcodeTextPlacement.Clearance : height + BarcodeTextPlacement.Clearance;
+                symbol.ReserveText(1, captionPrefix.Length + captionBody.Length + captionSuffix.Length);
+                symbol.AddText(captionPrefix, captionBody, captionSuffix, 0F, width, side, textEdge);
             }
 
-            LinearBarcodeSymbol separatorRow = DataBarRows.Row(separator[..width], SeparatorHeight);
-            if (r > 0)
+            symbol.EndStacked(0F, 0F, 0F);
+        }
+        finally
+        {
+            buffer.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Composes the modules of one row of a stacked symbol and of the separator row that is its inverse.
+    /// </summary>
+    /// <param name="r">The row index from the top.</param>
+    /// <param name="rowCount">The number of rows.</param>
+    /// <param name="segments">The number of segments in a full row.</param>
+    /// <param name="symbolCharacters">The number of symbol characters.</param>
+    /// <param name="characters">The element widths of the symbol characters, 8 each.</param>
+    /// <param name="finders">The finder pattern values.</param>
+    /// <param name="row">The buffer that receives the modules of the row, 1 for dark.</param>
+    /// <param name="separator">The buffer that receives the modules of the separator row.</param>
+    /// <param name="width">The width of the symbol in modules, set by the first row, which is a full row.</param>
+    private static void ComposeRow(
+        int r,
+        int rowCount,
+        int segments,
+        int symbolCharacters,
+        ReadOnlySpan<int> characters,
+        ReadOnlySpan<byte> finders,
+        Span<byte> row,
+        Span<byte> separator,
+        ref int width)
+    {
+        // A row of segments that is not a whole number of segment pairs on both sides starts every second
+        // row with its guard bar, so the colours of the row alternate from row to row.
+        int length = 0;
+        byte colour = (byte)((segments & 3) != 0 && (r & 1) == 1 ? 1 : 0);
+        AppendElement(row, ref length, ref colour, 1);
+        AppendElement(row, ref length, ref colour, 1);
+        int first = r * segments;
+        int last = Math.Min(first + segments, symbolCharacters);
+        int finderCount = 0;
+        for (int c = first; c < last; c++)
+        {
+            for (int k = 0; k < 8; k++)
             {
-                rows[(r * 4) - 1] = separatorRow;
+                AppendElement(row, ref length, ref colour, characters[(c * 8) + k]);
             }
 
-            rows[r * 4] = DataBarRows.Row(row[..width], rowHeight);
-            if (r < rowCount - 1)
+            if ((c & 1) == 0)
             {
-                rows[(r * 4) + 1] = separatorRow;
-                middle ??= Middle(width, separator);
-                rows[(r * 4) + 2] = middle;
+                ReadOnlySpan<byte> finder = FinderWidths.Slice(finders[c / 2] * 5, 5);
+                for (int k = 0; k < 5; k++)
+                {
+                    AppendElement(row, ref length, ref colour, finder[k]);
+                }
+
+                finderCount++;
             }
         }
 
-        float height = (rowCount * rowHeight) + ((rowCount - 1) * 3F * SeparatorHeight);
-        float textEdge = side == BarcodeTextSide.AboveBars ? -BarcodeTextPlacement.Clearance : height + BarcodeTextPlacement.Clearance;
-        BarcodeTextPlacement[] placements = options.Font is null
-            ? []
-            : [new BarcodeTextPlacement(caption, 0F, width, side, textEdge)];
+        AppendElement(row, ref length, ref colour, 1);
+        AppendElement(row, ref length, ref colour, 1);
 
-        return new StackedBarcodeSymbol(rows, 0F, placements, 0F, 0F);
+        // The separator is the inverse of the row, inside four light modules at each end. Over the 15
+        // modules of a finder pattern the light modules break into narrow elements instead, so the
+        // separator does not read as part of the finder. A finder follows the 2 guard modules and the 17
+        // of the first character, and every 49 modules after that pairs of finders stand 98 apart.
+        Span<byte> rowModules = row[..length];
+        Span<byte> separatorModules = separator[..length];
+        for (int i = 0; i < length; i++)
+        {
+            separatorModules[i] = (byte)(1 - rowModules[i]);
+        }
+
+        for (int start = 19; start <= length - 13; start += 98)
+        {
+            AlternateOverFinder(rowModules, separatorModules, start);
+        }
+
+        for (int start = 68; start <= length - 13; start += 98)
+        {
+            AlternateOverFinder(rowModules, separatorModules, start);
+        }
+
+        separatorModules[..4].Clear();
+        separatorModules[^4..].Clear();
+
+        // With a whole number of segment pairs on both sides every second row reads right to left. A
+        // partial last row with an odd number of finders keeps its direction and moves one module right.
+        if ((segments & 3) == 0 && (r & 1) == 1)
+        {
+            if (r == rowCount - 1 && last - first < segments && (finderCount & 1) == 1)
+            {
+                row[..length].CopyTo(row[1..]);
+                separator[..length].CopyTo(separator[1..]);
+                row[0] = 0;
+                separator[0] = 0;
+                length++;
+            }
+            else
+            {
+                row[..length].Reverse();
+                separator[..length].Reverse();
+            }
+        }
+
+        // The first row is a full row, and a shorter last row fills to its width with light modules.
+        if (r == 0)
+        {
+            width = length;
+        }
+        else
+        {
+            row[length..width].Clear();
+            separator[length..width].Clear();
+        }
     }
 
     /// <summary>
@@ -391,14 +465,16 @@ internal static class DataBarExpandedEncoder
     /// <returns>The number of symbol characters.</returns>
     private static int EncodeCharacters(ReadOnlySpan<char> text, int segments, Span<int> characters)
     {
-        Span<byte> bits = stackalloc byte[MaximumBits];
+        InlineArray256<byte> bitStorage = default;
+        Span<byte> bits = ((Span<byte>)bitStorage)[..MaximumBits];
         int dataCharacters = EncodeBits(text, segments, bits) / 12;
         int symbolCharacters = dataCharacters + 1;
         ReadOnlySpan<byte> finders = Finders(symbolCharacters);
 
         // The check value is the weighted sum of the data character widths modulo 211, and the check
         // character adds the symbol length to it.
-        Span<int> sets = stackalloc int[8];
+        InlineArray8<int> setStorage = default;
+        Span<int> sets = setStorage;
         int check = 0;
         for (int d = 0; d < dataCharacters; d++)
         {
@@ -887,23 +963,19 @@ internal static class DataBarExpandedEncoder
     }
 
     /// <summary>
-    /// Builds the middle separator row: narrow dark and light modules alternating, inside four light
+    /// Composes the middle separator row: narrow dark and light modules alternating, inside four light
     /// modules at each end.
     /// </summary>
-    /// <param name="width">The width of the symbol in modules.</param>
-    /// <param name="modules">Scratch of at least <paramref name="width"/> modules.</param>
-    /// <returns>The row.</returns>
-    private static LinearBarcodeSymbol Middle(int width, Span<byte> modules)
+    /// <param name="middle">The buffer that receives the modules, one for each module of the symbol width.</param>
+    private static void ComposeMiddle(Span<byte> middle)
     {
-        Span<byte> middle = modules[..width];
-        for (int i = 0; i < width; i++)
+        for (int i = 0; i < middle.Length; i++)
         {
             middle[i] = (byte)(i & 1);
         }
 
         middle[..4].Clear();
         middle[^4..].Clear();
-        return DataBarRows.Row(middle, SeparatorHeight);
     }
 
     /// <summary>

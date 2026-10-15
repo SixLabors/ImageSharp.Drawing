@@ -34,10 +34,10 @@ internal static class Code93Encoder
     public const int QuietZone = 10;
 
     /// <summary>
-    /// The number of characters a caller stack allocates to build symbol data in. Data this long covers
-    /// the labels the symbology is used for, and anything longer grows into a pooled array.
+    /// The number of characters a caller holds inline to build symbol data in. Data this long covers the
+    /// labels the symbology is used for, and longer data rents its buffer once.
     /// </summary>
-    public const int StackBufferLength = 64;
+    public const int InlineBufferLength = 64;
 
     /// <summary>
     /// The element count of a symbol character. ANSI/AIM BC5-1995 gives every character three bars and
@@ -156,16 +156,19 @@ internal static class Code93Encoder
     }
 
     /// <summary>
-    /// Encodes symbol characters into the alternating bar and space run widths the renderer draws,
-    /// starting with a bar. The runs carry the start character, the data, both check characters and the
-    /// stop character, in the order ANSI/AIM BC5-1995 gives. That standard fixes both check characters,
-    /// so the caller cannot turn them off.
+    /// Encodes symbol characters and builds the symbol. The runs carry the start character, the data, both
+    /// check characters and the stop character, in the order ANSI/AIM BC5-1995 gives. That standard fixes
+    /// both check characters, so the caller cannot turn them off. Code 93 carries no guard bars, so every
+    /// bar runs the full height, and the human readable interpretation sits below the symbol.
     /// </summary>
     /// <param name="text">The symbol characters to encode, shift characters included.</param>
-    /// <returns>The run widths in modules.</returns>
-    public static int[] Encode(ReadOnlySpan<char> text)
+    /// <param name="readable">The human readable interpretation.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(ReadOnlySpan<char> text, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        int[] runs = new int[((text.Length + CheckCharacters) * ElementsPerCharacter) + StartStopElements];
+        int runCount = ((text.Length + CheckCharacters) * ElementsPerCharacter) + StartStopElements;
+        Span<int> runs = symbol.BeginLinear(runCount, out Span<float> heights, out _);
         int written = 0;
 
         for (int i = 0; i < ElementsPerCharacter; i++)
@@ -187,7 +190,19 @@ internal static class Code93Encoder
             runs[written++] = StartStopPattern[i];
         }
 
-        return runs;
+        int widthInModules = WidthInModules(runs);
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        float nominalBarHeight = MathF.Max((widthInModules + (QuietZone * 2)) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
+        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, nominalBarHeight);
+        heights.Fill(barHeight);
+
+        if (options.Font is not null && readable.Length > 0)
+        {
+            symbol.ReserveText(1, readable.Length);
+            symbol.AddText(readable, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
+        }
+
+        symbol.EndLinear(QuietZone, QuietZone);
     }
 
     /// <summary>
@@ -238,42 +253,11 @@ internal static class Code93Encoder
     }
 
     /// <summary>
-    /// Builds the symbol from encoded run widths. Code 93 carries no guard bars, so every bar runs the
-    /// full height, and the human readable interpretation sits below the symbol.
-    /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <param name="text">The human readable interpretation.</param>
-    /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
-    {
-        int widthInModules = WidthInModules(runs);
-        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
-        float nominalBarHeight = MathF.Max((widthInModules + (QuietZone * 2)) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
-        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, nominalBarHeight);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
-        for (int i = 0; i < barCount; i++)
-        {
-            heights[i] = barHeight;
-        }
-
-        BarcodeTextPlacement[] placements = [];
-        if (options.Font is not null && text.Length > 0)
-        {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
-        }
-
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone);
-    }
-
-    /// <summary>
     /// Returns the width of the runs in modules.
     /// </summary>
     /// <param name="runs">The alternating bar and space run widths in modules.</param>
     /// <returns>The width in modules.</returns>
-    private static int WidthInModules(int[] runs)
+    private static int WidthInModules(ReadOnlySpan<int> runs)
     {
         int width = 0;
         for (int i = 0; i < runs.Length; i++)
@@ -290,7 +274,7 @@ internal static class Code93Encoder
     /// <param name="runs">The run widths being written.</param>
     /// <param name="written">The number of runs written so far.</param>
     /// <param name="value">The value of the character to write.</param>
-    private static void AppendPattern(int[] runs, ref int written, int value)
+    private static void AppendPattern(Span<int> runs, ref int written, int value)
     {
         ReadOnlySpan<byte> pattern = Patterns.Slice(value * ElementsPerCharacter, ElementsPerCharacter);
         for (int i = 0; i < pattern.Length; i++)

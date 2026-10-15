@@ -26,10 +26,11 @@ public sealed class Gs1DataBarTruncatedSymbology : BarcodeSymbology
     public override double NominalXDimension => DataBarEncoder.NominalXDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Span<char> gtin = stackalloc char[14];
+        InlineArray14<char> gtinStorage = default;
+        Span<char> gtin = gtinStorage;
         Gs1Data.ReadGtin(text, gtin);
-        return DataBarEncoder.BuildLinear(gtin, DataBarEncoder.TruncatedHeight, options);
+        DataBarEncoder.BuildLinear(gtin, DataBarEncoder.TruncatedHeight, options, ref symbol);
     }
 }

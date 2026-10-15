@@ -21,7 +21,7 @@ public class FacingIdentificationMarkSymbologyTests
     [InlineData("D", "1,1,1,1,1,3,1,3,1,1,1,1,1")]
     [InlineData("E", "1,3,1,7,1,3,1")]
     public void MatchesThePatterns(string text, string reference)
-        => Assert.Equal(reference, string.Join(",", Encode(text).RunWidths));
+        => Assert.Equal(reference, Encode(text));
 
     /// <summary>
     /// Every pattern is 17/32 inch wide, 17 modules, and its bars 5/8 inch high, 20 modules, with no
@@ -37,13 +37,14 @@ public class FacingIdentificationMarkSymbologyTests
     public void SpansSeventeenModules(string text)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new FacingIdentificationMarkSymbology().Encode(text, options);
-
-        Assert.Equal(17F, symbol.WidthInModules);
-        Assert.All(symbol.BarHeights, height => Assert.Equal(20F, height));
-        Assert.Equal(0, symbol.LeadingQuietZone);
-        Assert.Equal(0, symbol.TrailingQuietZone);
-        Assert.Empty(symbol.Text);
+        SymbolEncoder.Encode(new FacingIdentificationMarkSymbology(), text, options, static (ref symbol) =>
+        {
+            Assert.Equal(17F, symbol.WidthInModules);
+            Assert.All(symbol.BarHeights.ToArray(), height => Assert.Equal(20F, height));
+            Assert.Equal(0, symbol.LeadingQuietZone);
+            Assert.Equal(0, symbol.TrailingQuietZone);
+            Assert.True(symbol.Text.IsEmpty);
+        });
     }
 
     [Theory]
@@ -55,6 +56,15 @@ public class FacingIdentificationMarkSymbologyTests
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new FacingIdentificationMarkSymbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol, separated by commas.</returns>
+    private static string Encode(string text)
+        => SymbolEncoder.Read(
+            new FacingIdentificationMarkSymbology(),
+            text,
+            new BarcodeOptions(),
+            static (ref symbol) => string.Join(",", symbol.Runs.ToArray()));
 }

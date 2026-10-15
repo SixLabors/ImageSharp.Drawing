@@ -16,7 +16,7 @@ public class MsiSymbologyTests
     [InlineData("1234567", "2112121221121221121212212112211212122112211221211212212121121")]
     [InlineData("0", "2112121212121")]
     public void MatchesReferenceRuns(string text, string reference)
-        => Assert.Equal(reference, string.Concat(Encode(text, MsiCheckDigit.None).RunWidths));
+        => Assert.Equal(reference, Encode(text, MsiCheckDigit.None));
 
     /// <summary>
     /// The expected runs are the reference implementation's for each check digit calculation. For 1234567 the
@@ -33,7 +33,7 @@ public class MsiSymbologyTests
     [InlineData(MsiCheckDigit.NcrModulo11, "211212122112122112121221211221121212211221122121121221212121121221121")]
     [InlineData(MsiCheckDigit.NcrModulo1110, "21121212211212211212122121122112121221122112212112122121212112122112121212121")]
     public void CalculatesTheCheckDigits(MsiCheckDigit checkDigit, string reference)
-        => Assert.Equal(reference, string.Concat(Encode("1234567", checkDigit).RunWidths));
+        => Assert.Equal(reference, Encode("1234567", checkDigit));
 
     /// <summary>
     /// The printed line shows the data and, by default, the check digits. For 1234567 the modulo 10 check
@@ -57,10 +57,9 @@ public class MsiSymbologyTests
     public void PrintsTheDataAndTheCheckDigits(MsiCheckDigit checkDigit, bool printCheckDigits, string expected)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new MsiSymbology(checkDigit, printCheckDigits).Encode("1234567", options);
+        string[] texts = SymbolEncoder.Read(new MsiSymbology(checkDigit, printCheckDigits), "1234567", options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal(expected, placement.Text);
+        Assert.Equal(expected, Assert.Single(texts));
     }
 
     /// <summary>
@@ -85,15 +84,7 @@ public class MsiSymbologyTests
     [InlineData("1234567")]
     [InlineData("0")]
     public void SpansTwelveModulesPerDigit(string text)
-    {
-        int widthInModules = 0;
-        foreach (int run in Encode(text, MsiCheckDigit.None).RunWidths)
-        {
-            widthInModules += run;
-        }
-
-        Assert.Equal((12 * text.Length) + 7, widthInModules);
-    }
+        => Assert.Equal((12 * text.Length) + 7, SymbolEncoder.Read(new MsiSymbology(MsiCheckDigit.None), text, new BarcodeOptions(), SymbolEncoder.RunSum));
 
     [Theory]
     [InlineData("")]
@@ -103,6 +94,12 @@ public class MsiSymbologyTests
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text, MsiCheckDigit.None));
 
-    private static LinearBarcodeSymbol Encode(string text, MsiCheckDigit checkDigit)
-        => (LinearBarcodeSymbol)new MsiSymbology(checkDigit).Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="checkDigit">The check digit scheme.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(string text, MsiCheckDigit checkDigit)
+        => SymbolEncoder.Read(new MsiSymbology(checkDigit), text, new BarcodeOptions(), SymbolEncoder.RunString);
 }

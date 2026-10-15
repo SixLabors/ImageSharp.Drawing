@@ -54,13 +54,14 @@ public sealed class TwoTrackPharmacodeSymbology : BarcodeSymbology
     public override double NominalXDimension => XDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int value = PharmacodeEncoder.ParseValue(text, MinimumValue, MaximumValue);
 
         // The weight of each bar from the lowest position: 1 for a lower bar, 2 for an upper bar and 3
         // for a full bar.
-        Span<int> weights = stackalloc int[MaximumBars];
+        InlineArray16<int> weightStorage = default;
+        Span<int> weights = weightStorage;
         int count = 0;
         while (value != 0)
         {
@@ -72,10 +73,8 @@ public sealed class TwoTrackPharmacodeSymbology : BarcodeSymbology
 
         float barHeight = options.ResolveBarHeight(XDimension, NominalBarHeight);
         float halfHeight = barHeight * 0.5F;
-        int[] runs = new int[(count * 2) - 1];
-        runs.AsSpan().Fill(1);
-        float[] heights = new float[count];
-        float[] tops = new float[count];
+        Span<int> runs = symbol.BeginLinear((count * 2) - 1, out Span<float> heights, out Span<float> tops);
+        runs.Fill(1);
         for (int i = 0; i < count; i++)
         {
             int weight = weights[count - 1 - i];
@@ -83,12 +82,12 @@ public sealed class TwoTrackPharmacodeSymbology : BarcodeSymbology
             tops[i] = weight == 1 ? halfHeight : 0F;
         }
 
-        BarcodeTextPlacement[] placements = [];
         if (options.Font is not null)
         {
-            placements = [new BarcodeTextPlacement(text, 0F, runs.Length, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
+            symbol.ReserveText(1, text.Length);
+            symbol.AddText(text, 0F, runs.Length, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
         }
 
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone);
+        symbol.EndLinear(QuietZone, QuietZone);
     }
 }

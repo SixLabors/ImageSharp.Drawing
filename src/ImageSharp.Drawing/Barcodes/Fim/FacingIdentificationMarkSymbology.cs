@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.Drawing.Helpers;
-
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -39,7 +37,7 @@ public sealed class FacingIdentificationMarkSymbology : BarcodeSymbology
     public override double NominalXDimension => XDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         if (text.Length != 1 || text[0] < 'A' || text[0] > 'E')
@@ -48,9 +46,10 @@ public sealed class FacingIdentificationMarkSymbology : BarcodeSymbology
         }
 
         // Every bar is one module, and the space to the next bar is one module for every empty
-        // position between them plus one for the pitch.
+        // position between them plus one for the pitch. A bar and a space for every position bounds the
+        // runs, and the symbol keeps those written.
         int pattern = Patterns[text[0] - 'A'];
-        Span<int> buffer = stackalloc int[(Positions * 2) - 1];
+        Span<int> buffer = symbol.BeginLinear((Positions * 2) - 1, out Span<float> heights, out _);
         int written = 0;
         int space = 0;
         for (int position = Positions - 1; position >= 0; position--)
@@ -70,12 +69,9 @@ public sealed class FacingIdentificationMarkSymbology : BarcodeSymbology
             space = 0;
         }
 
-        int[] runs = buffer[..written].ToArray();
+        symbol.TrimLastRow(written);
         float barHeight = options.ResolveBarHeight(XDimension, NominalBarHeight);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
-        heights.AsSpan().Fill(barHeight);
-        return new LinearBarcodeSymbol(runs, heights, tops, [], 0, 0);
+        heights[..((written + 1) >> 1)].Fill(barHeight);
+        symbol.EndLinear(0, 0);
     }
 }

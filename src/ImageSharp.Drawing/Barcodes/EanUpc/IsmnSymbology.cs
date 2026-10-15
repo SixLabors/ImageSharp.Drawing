@@ -29,12 +29,15 @@ public sealed class IsmnSymbology : BarcodeSymbology
     public override double NominalXDimension => EanUpcEncoder.NominalXDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
-        // An ISMN is at most seventeen characters, so the hyphenless form is built on the stack.
-        Span<char> compactBuffer = stackalloc char[text.Length];
+        // An ISMN is at most seventeen characters: thirteen digits and four hyphens. Longer text is
+        // rejected before any buffer, so the hyphenless form fits eighteen inline characters.
+        Guard.MustBeLessThanOrEqualTo(text.Length, 17, nameof(text));
+        InlineArray18<char> compactStorage = default;
+        Span<char> compactBuffer = compactStorage;
         int compactLength = 0;
         for (int i = 0; i < text.Length; i++)
         {
@@ -58,19 +61,23 @@ public sealed class IsmnSymbology : BarcodeSymbology
         }
 
         // The encoded form is thirteen digits: twelve data digits and the check digit the caption repeats.
-        Span<char> digits = stackalloc char[13];
-        string captionBody;
+        InlineArray14<char> digitStorage = default;
+        Span<char> digits = ((Span<char>)digitStorage)[..13];
+        ReadOnlySpan<char> captionPrefix;
+        ReadOnlySpan<char> captionBody;
         if (mForm && body.Length is 8 or 9)
         {
             // ISO 10957:2009 displays an ISMN only in its 979-0 form, so the caption converts the older
             // M prefix rather than echoing it.
             "9790".CopyTo(digits);
             body[..8].CopyTo(digits[4..]);
-            captionBody = "979-0-" + EanUpcEncoder.TakeHyphenatedPrefix(text.AsSpan(text[1] == '-' ? 2 : 1), 8);
+            captionPrefix = "ISMN 979-0-";
+            captionBody = EanUpcEncoder.TakeHyphenatedPrefix(text.AsSpan(text[1] == '-' ? 2 : 1), 8);
         }
         else if (!mForm && body.Length is 12 or 13 && body.StartsWith("9790", StringComparison.Ordinal))
         {
             body[..12].CopyTo(digits);
+            captionPrefix = "ISMN ";
             captionBody = EanUpcEncoder.TakeHyphenatedPrefix(text, 12);
         }
         else
@@ -86,7 +93,13 @@ public sealed class IsmnSymbology : BarcodeSymbology
         }
 
         digits[12] = (char)('0' + check);
-        string? caption = options.Font is null ? null : $"ISMN {captionBody}-{(char)('0' + check)}";
-        return EanUpcEncoder.BuildEan13(digits, options, caption);
+        if (options.Font is null)
+        {
+            EanUpcEncoder.BuildEan13(digits, options, ref symbol);
+        }
+        else
+        {
+            EanUpcEncoder.BuildEan13(digits, options, captionPrefix, captionBody, ['-', digits[12]], ref symbol);
+        }
     }
 }

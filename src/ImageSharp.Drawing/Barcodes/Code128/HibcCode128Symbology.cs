@@ -40,20 +40,26 @@ public sealed class HibcCode128Symbology : BarcodeSymbology
     public override double NominalXDimension => Code128Encoder.NominalXDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
-        Span<char> buffer = stackalloc char[HibcData.StackBufferLength];
-        ValueStringBuilder encoded = new(buffer);
+        InlineArray64<char> bufferStorage = default;
+        int capacity = HibcData.PreparedCapacity(text.Length);
+        ValueStringBuilder encoded = capacity <= HibcData.InlineBufferLength ? new(bufferStorage) : new(capacity);
         try
         {
             HibcData.Prepare(text, this.ValidateCheckCharacter, ref encoded);
 
-            return Code128Encoder.BuildSymbol(
-                Code128Encoder.Encode(encoded.AsSpan(), false),
-                options.Font is null ? string.Empty : HibcData.BuildReadable(encoded.AsSpan()),
-                options);
+            ReadOnlySpan<char> data = encoded.AsSpan();
+            Code128Encoder.BuildSymbol(
+                data,
+                false,
+                HibcData.ReadableOpening,
+                HibcData.ReadableBody(data),
+                [HibcData.PrintedCheck(data), HibcData.ReadableClosing],
+                options,
+                ref symbol);
         }
         finally
         {

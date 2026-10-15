@@ -21,7 +21,7 @@ public class PlesseySymbologyTests
     [InlineData("F", "32321432323232321432141432141414541412323")]
     [InlineData("1234567", "32321432321414141432141432321414141432143214321414323214323232141414141414321432541412323")]
     public void MatchesReferenceRuns(string text, string reference)
-        => Assert.Equal(reference, string.Concat(Encode(text).RunWidths));
+        => Assert.Equal(reference, Encode(text));
 
     /// <summary>
     /// The check characters hold the eight bit remainder of the data bits divided by the generator
@@ -41,10 +41,9 @@ public class PlesseySymbologyTests
     public void CalculatesTheCheckCharacters(string text, string expected)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new PlesseySymbology().Encode(text, options);
+        string[] texts = SymbolEncoder.Read(new PlesseySymbology(), text, options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal(expected, placement.Text);
+        Assert.Equal(expected, Assert.Single(texts));
     }
 
     /// <summary>
@@ -54,11 +53,11 @@ public class PlesseySymbologyTests
     [Fact]
     public void ValidatesSuppliedCheckCharacters()
     {
-        LinearBarcodeSymbol validated = (LinearBarcodeSymbol)new PlesseySymbology(true).Encode("01234ABCDDC", new BarcodeOptions());
+        string validated = SymbolEncoder.Read(new PlesseySymbology(true), "01234ABCDDC", new BarcodeOptions(), SymbolEncoder.RunString);
 
-        Assert.Equal(Sample, string.Concat(validated.RunWidths));
-        Assert.Throws<ArgumentException>(() => new PlesseySymbology(true).Encode("01234ABCDCD", new BarcodeOptions()));
-        Assert.Throws<ArgumentException>(() => new PlesseySymbology(true).Encode("DC", new BarcodeOptions()));
+        Assert.Equal(Sample, validated);
+        Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new PlesseySymbology(true), "01234ABCDCD", new BarcodeOptions()));
+        Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new PlesseySymbology(true), "DC", new BarcodeOptions()));
     }
 
     /// <summary>
@@ -77,10 +76,9 @@ public class PlesseySymbologyTests
     public void PrintsTheDataAndTheCheckCharacters(bool validateCheckCharacters, bool printCheckCharacters, string text, string expected)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new PlesseySymbology(validateCheckCharacters, printCheckCharacters).Encode(text, options);
+        string[] texts = SymbolEncoder.Read(new PlesseySymbology(validateCheckCharacters, printCheckCharacters), text, options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal(expected, placement.Text);
+        Assert.Equal(expected, Assert.Single(texts));
     }
 
     /// <summary>
@@ -93,15 +91,7 @@ public class PlesseySymbologyTests
     [InlineData("0")]
     [InlineData("01234ABCD")]
     public void SpansTwentyModulesPerCharacter(string text)
-    {
-        int widthInModules = 0;
-        foreach (int run in Encode(text).RunWidths)
-        {
-            widthInModules += run;
-        }
-
-        Assert.Equal((20 * text.Length) + 85, widthInModules);
-    }
+        => Assert.Equal((20 * text.Length) + 85, SymbolEncoder.Read(new PlesseySymbology(), text, new BarcodeOptions(), SymbolEncoder.RunSum));
 
     [Theory]
     [InlineData("")]
@@ -112,6 +102,11 @@ public class PlesseySymbologyTests
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new PlesseySymbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(string text)
+        => SymbolEncoder.Read(new PlesseySymbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
 }

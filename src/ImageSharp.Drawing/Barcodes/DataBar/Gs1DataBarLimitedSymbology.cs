@@ -28,15 +28,16 @@ public sealed class Gs1DataBarLimitedSymbology : BarcodeSymbology
     public override double NominalXDimension => DataBarLimitedEncoder.NominalXDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Span<char> gtin = stackalloc char[14];
+        InlineArray14<char> gtinStorage = default;
+        Span<char> gtin = gtinStorage;
         Gs1Data.ReadGtin(text, gtin);
         if (gtin[0] is not ('0' or '1'))
         {
             throw new ArgumentException($"GS1 DataBar Limited carries a GTIN whose first digit is 0 or 1; got {gtin[0]}.", nameof(text));
         }
 
-        return DataBarLimitedEncoder.Build(gtin, options);
+        DataBarLimitedEncoder.Build(gtin, options, ref symbol);
     }
 }

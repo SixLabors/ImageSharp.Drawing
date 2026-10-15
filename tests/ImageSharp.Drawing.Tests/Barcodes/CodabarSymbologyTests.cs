@@ -27,7 +27,7 @@ public class CodabarSymbologyTests
     [InlineData("A-$:/.+B", "1133131111133111113311113111313131311131313131111131313113131131")]
     [InlineData("A1B", "113313111111331113131131")]
     public void MatchesReferenceRuns(string text, string reference)
-        => Assert.Equal(reference[..^1], string.Concat(Encode(text).RunWidths));
+        => Assert.Equal(reference[..^1], Encode(text));
 
     /// <summary>
     /// The check character lifts the sum of the values of the start character, the data and the stop
@@ -38,8 +38,8 @@ public class CodabarSymbologyTests
     [Fact]
     public void CalculatesTheModuloSixteenCheckCharacter()
     {
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new CodabarSymbology(CheckCharacterMode.Compute).Encode("A40156B", new BarcodeOptions());
-        Assert.Equal("1133131111311311111113311111331131111311131111311131313113131131"[..^1], string.Concat(symbol.RunWidths));
+        string runs = SymbolEncoder.Read(new CodabarSymbology(CheckCharacterMode.Compute), "A40156B", new BarcodeOptions(), SymbolEncoder.RunString);
+        Assert.Equal("1133131111311311111113311111331131111311131111311131313113131131"[..^1], runs);
     }
 
     /// <summary>
@@ -49,11 +49,11 @@ public class CodabarSymbologyTests
     [Fact]
     public void ValidatesASuppliedCheckCharacter()
     {
-        LinearBarcodeSymbol validated = (LinearBarcodeSymbol)new CodabarSymbology(CheckCharacterMode.Validate).Encode("A40156+B", new BarcodeOptions());
-        LinearBarcodeSymbol computed = (LinearBarcodeSymbol)new CodabarSymbology(CheckCharacterMode.Compute).Encode("A40156B", new BarcodeOptions());
+        string validated = SymbolEncoder.Read(new CodabarSymbology(CheckCharacterMode.Validate), "A40156+B", new BarcodeOptions(), SymbolEncoder.RunString);
+        string computed = SymbolEncoder.Read(new CodabarSymbology(CheckCharacterMode.Compute), "A40156B", new BarcodeOptions(), SymbolEncoder.RunString);
 
-        Assert.Equal(string.Concat(computed.RunWidths), string.Concat(validated.RunWidths));
-        Assert.Throws<ArgumentException>(() => new CodabarSymbology(CheckCharacterMode.Validate).Encode("A40156-B", new BarcodeOptions()));
+        Assert.Equal(computed, validated);
+        Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new CodabarSymbology(CheckCharacterMode.Validate), "A40156-B", new BarcodeOptions()));
     }
 
     /// <summary>
@@ -74,10 +74,9 @@ public class CodabarSymbologyTests
     public void PrintsTheInputAsGiven(CheckCharacterMode checkCharacter, bool printCheckCharacter, string text, string expected)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new CodabarSymbology(checkCharacter, printCheckCharacter).Encode(text, options);
+        string[] texts = SymbolEncoder.Read(new CodabarSymbology(checkCharacter, printCheckCharacter), text, options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal(expected, placement.Text);
+        Assert.Equal(expected, Assert.Single(texts));
     }
 
     /// <summary>
@@ -94,11 +93,7 @@ public class CodabarSymbologyTests
     [InlineData("A1B", 0)]
     public void SpansTwelveModulesPerCharacter(string text, int wideDataCharacters)
     {
-        int widthInModules = 0;
-        foreach (int run in Encode(text).RunWidths)
-        {
-            widthInModules += run;
-        }
+        int widthInModules = SymbolEncoder.Read(new CodabarSymbology(), text, new BarcodeOptions(), SymbolEncoder.RunSum);
 
         Assert.Equal((12 * text.Length) + (2 * wideDataCharacters) + 3, widthInModules);
     }
@@ -116,6 +111,11 @@ public class CodabarSymbologyTests
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new CodabarSymbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(string text)
+        => SymbolEncoder.Read(new CodabarSymbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
 }

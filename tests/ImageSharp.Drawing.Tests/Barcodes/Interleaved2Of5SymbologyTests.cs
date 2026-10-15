@@ -19,10 +19,7 @@ public class Interleaved2Of5SymbologyTests
     [InlineData("1234", "1111211211112221211211122111")]
     [InlineData("0123456789", "1111121121211212221111211211221121112121121221121122112111")]
     public void MatchesReferenceRuns(string text, string reference)
-    {
-        LinearBarcodeSymbol symbol = Encode(text);
-        Assert.Equal(Widen(reference), string.Concat(symbol.RunWidths));
-    }
+        => Assert.Equal(Widen(reference), Encode(text));
 
     /// <summary>
     /// Section 5.3.2.1.1 of the GS1 General Specifications pairs the digits, so an odd count takes a
@@ -31,8 +28,8 @@ public class Interleaved2Of5SymbologyTests
     [Fact]
     public void PadsAnOddCountWithALeadingZero()
     {
-        Assert.Equal(string.Concat(Encode("0123").RunWidths), string.Concat(Encode("123").RunWidths));
-        Assert.Equal(Widen("1111121121211212221111212111"), string.Concat(Encode("123").RunWidths));
+        Assert.Equal(Encode("0123"), Encode("123"));
+        Assert.Equal(Widen("1111121121211212221111212111"), Encode("123"));
     }
 
     /// <summary>
@@ -48,10 +45,9 @@ public class Interleaved2Of5SymbologyTests
     [InlineData("12345", "11112112111122212112111221112112122111")]
     [InlineData("1234", "11111211212112122211112112112112212111")]
     public void CalculatesTheCheckDigitOfSectionSevenNine(string text, string reference)
-    {
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Interleaved2Of5Symbology(CheckCharacterMode.Compute).Encode(text, new BarcodeOptions());
-        Assert.Equal(Widen(reference), string.Concat(symbol.RunWidths));
-    }
+        => Assert.Equal(
+            Widen(reference),
+            SymbolEncoder.Read(new Interleaved2Of5Symbology(CheckCharacterMode.Compute), text, new BarcodeOptions(), SymbolEncoder.RunString));
 
     /// <summary>
     /// A supplied check digit is validated against the data and carried once, so the symbol is the one
@@ -60,11 +56,16 @@ public class Interleaved2Of5SymbologyTests
     [Fact]
     public void ValidatesASuppliedCheckDigit()
     {
-        LinearBarcodeSymbol validated = (LinearBarcodeSymbol)new Interleaved2Of5Symbology(CheckCharacterMode.Validate).Encode("123457", new BarcodeOptions());
-        LinearBarcodeSymbol computed = (LinearBarcodeSymbol)new Interleaved2Of5Symbology(CheckCharacterMode.Compute).Encode("12345", new BarcodeOptions());
+        string validated = SymbolEncoder.Read(
+            new Interleaved2Of5Symbology(CheckCharacterMode.Validate),
+            "123457",
+            new BarcodeOptions(),
+            SymbolEncoder.RunString);
 
-        Assert.Equal(string.Concat(computed.RunWidths), string.Concat(validated.RunWidths));
-        Assert.Throws<ArgumentException>(() => new Interleaved2Of5Symbology(CheckCharacterMode.Validate).Encode("123456", new BarcodeOptions()));
+        string computed = SymbolEncoder.Read(new Interleaved2Of5Symbology(CheckCharacterMode.Compute), "12345", new BarcodeOptions(), SymbolEncoder.RunString);
+
+        Assert.Equal(computed, validated);
+        Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new Interleaved2Of5Symbology(CheckCharacterMode.Validate), "123456", new BarcodeOptions()));
     }
 
     /// <summary>
@@ -80,10 +81,9 @@ public class Interleaved2Of5SymbologyTests
     public void PrintsTheDigitsTheSymbolCarries(CheckCharacterMode checkDigit, bool printCheckDigit, string text, string expected)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Interleaved2Of5Symbology(checkDigit, printCheckDigit).Encode(text, options);
+        string[] texts = SymbolEncoder.Read(new Interleaved2Of5Symbology(checkDigit, printCheckDigit), text, options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal(expected, placement.Text);
+        Assert.Equal(expected, Assert.Single(texts));
     }
 
     /// <summary>
@@ -98,15 +98,7 @@ public class Interleaved2Of5SymbologyTests
     [InlineData("123", 2)]
     [InlineData("0123456789", 5)]
     public void SpansTheWidthOfSectionFiveThreeTwoTwo(string text, int pairs)
-    {
-        int widthInModules = 0;
-        foreach (int run in Encode(text).RunWidths)
-        {
-            widthInModules += run;
-        }
-
-        Assert.Equal((pairs * ((4 * 3) + 6)) + 3 + 6, widthInModules);
-    }
+        => Assert.Equal((pairs * ((4 * 3) + 6)) + 3 + 6, SymbolEncoder.Read(new Interleaved2Of5Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunSum));
 
     [Theory]
     [InlineData("")]
@@ -116,8 +108,13 @@ public class Interleaved2Of5SymbologyTests
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new Interleaved2Of5Symbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(string text)
+        => SymbolEncoder.Read(new Interleaved2Of5Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
 
     private static string Widen(string reference)
         => reference[..^1].Replace('2', '3');

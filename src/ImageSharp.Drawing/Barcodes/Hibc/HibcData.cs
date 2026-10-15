@@ -19,10 +19,20 @@ internal static class HibcData
     public const int MaximumLength = 500;
 
     /// <summary>
-    /// The number of characters a caller stack allocates for <see cref="Prepare"/> to build in. Data this
-    /// long covers the labels the standard is used for, and anything longer grows into a pooled array.
+    /// The number of characters a caller holds inline for <see cref="Prepare"/> to build in. Data this
+    /// long covers the labels the standard is used for, and longer data rents its buffer once.
     /// </summary>
-    public const int StackBufferLength = 64;
+    public const int InlineBufferLength = 64;
+
+    /// <summary>
+    /// The delimiter that opens the human readable interpretation, with the flag character after it.
+    /// </summary>
+    public const string ReadableOpening = "*+";
+
+    /// <summary>
+    /// The delimiter that closes the human readable interpretation.
+    /// </summary>
+    public const char ReadableClosing = '*';
 
     /// <summary>
     /// The character that begins the encoded data.
@@ -35,19 +45,23 @@ internal static class HibcData
     private const int FlagCharacterValue = 41;
 
     /// <summary>
-    /// The delimiter that opens the human readable interpretation, with the flag character after it.
-    /// </summary>
-    private const string ReadableOpening = "*+";
-
-    /// <summary>
-    /// The delimiter that closes the human readable interpretation.
-    /// </summary>
-    private const char ReadableClosing = '*';
-
-    /// <summary>
     /// The character that stands in for a check character that is a space, which cannot be read as one.
     /// </summary>
     private const char PrintedSpace = '_';
+
+    /// <summary>
+    /// The character that joins primary and secondary data in one symbol, section 2.2.1.1 of ANSI/HIBC 2.6.
+    /// </summary>
+    private const char ConcatenationCharacter = '/';
+
+    /// <summary>
+    /// Returns the number of characters <see cref="Prepare"/> writes at most for the text: the flag
+    /// character, the data and the check character. <see cref="Prepare"/> rejects text longer than
+    /// <see cref="MaximumLength"/>, so the capacity never passes that length plus two.
+    /// </summary>
+    /// <param name="textLength">The length of the text.</param>
+    /// <returns>The capacity the prepared data needs.</returns>
+    public static int PreparedCapacity(int textLength) => Math.Min(textLength, MaximumLength) + 2;
 
     /// <summary>
     /// Validates the given text against the HIBC character set, calculates the check character over the
@@ -108,15 +122,64 @@ internal static class HibcData
     }
 
     /// <summary>
-    /// Builds the human readable interpretation of encoded data: the same string between delimiters, with
-    /// a check character that is a space shown as an underscore.
+    /// Returns the body of the human readable interpretation of encoded data: the data between the flag
+    /// character and the check character. The interpretation is <see cref="ReadableOpening"/>, the body,
+    /// <see cref="PrintedCheck"/> and <see cref="ReadableClosing"/>.
     /// </summary>
     /// <param name="encoded">The encoded data, as <see cref="Prepare"/> wrote it.</param>
-    /// <returns>The human readable interpretation.</returns>
-    public static string BuildReadable(ReadOnlySpan<char> encoded)
+    /// <returns>The body.</returns>
+    public static ReadOnlySpan<char> ReadableBody(ReadOnlySpan<char> encoded) => encoded[1..^1];
+
+    /// <summary>
+    /// Returns the check character as the human readable interpretation prints it: a space shows as an
+    /// underscore.
+    /// </summary>
+    /// <param name="encoded">The encoded data, as <see cref="Prepare"/> wrote it.</param>
+    /// <returns>The printed check character.</returns>
+    public static char PrintedCheck(ReadOnlySpan<char> encoded)
     {
         char check = encoded[^1];
-        Span<char> tail = stackalloc char[2] { check == ' ' ? PrintedSpace : check, ReadableClosing };
-        return string.Concat(ReadableOpening, encoded[1..^1], tail);
+        return check == ' ' ? PrintedSpace : check;
+    }
+
+    /// <summary>
+    /// Returns the number of characters <see cref="WriteMatrixReadable"/> writes at most for encoded data:
+    /// the encoded data, the two delimiters and one line break.
+    /// </summary>
+    /// <param name="encodedLength">The length of the encoded data.</param>
+    /// <returns>The capacity the interpretation needs.</returns>
+    public static int MatrixReadableCapacity(int encodedLength) => encodedLength + 3;
+
+    /// <summary>
+    /// Writes the human readable interpretation of encoded data that a two-dimensional symbol carries.
+    /// Section 3.0 of ANSI/HIBC 2.6 gives every symbology the same interpretation:
+    /// <see cref="ReadableOpening"/>, the body, <see cref="PrintedCheck"/> and <see cref="ReadableClosing"/>.
+    /// The figure of section 4.3.3 prints primary and secondary data that one symbol concatenates on two
+    /// lines, broken after the character that joins them.
+    /// </summary>
+    /// <param name="encoded">The encoded data, as <see cref="Prepare"/> wrote it.</param>
+    /// <param name="readable">The buffer the interpretation is written to, <see cref="MatrixReadableCapacity"/> long.</param>
+    /// <returns>The number of characters written.</returns>
+    public static int WriteMatrixReadable(ReadOnlySpan<char> encoded, Span<char> readable)
+    {
+        ReadOnlySpan<char> body = ReadableBody(encoded);
+        ReadableOpening.CopyTo(readable);
+        int written = ReadableOpening.Length;
+
+        // Section 3.0 uses the join character only between the primary and the secondary data.
+        int join = body.IndexOf(ConcatenationCharacter);
+        if (join >= 0)
+        {
+            body[..(join + 1)].CopyTo(readable[written..]);
+            written += join + 1;
+            readable[written++] = BarcodeTextPlacement.LineBreak;
+            body = body[(join + 1)..];
+        }
+
+        body.CopyTo(readable[written..]);
+        written += body.Length;
+        readable[written++] = PrintedCheck(encoded);
+        readable[written++] = ReadableClosing;
+        return written;
     }
 }

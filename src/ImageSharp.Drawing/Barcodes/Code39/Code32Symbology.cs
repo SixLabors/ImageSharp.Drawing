@@ -55,7 +55,7 @@ public sealed class Code32Symbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeBetweenOrEqualTo(text.Length, Digits, Digits + 1, nameof(text));
@@ -98,7 +98,8 @@ public sealed class Code32Symbology : BarcodeSymbology
             throw new ArgumentException($"Incorrect AIC check digit: expected {check}, got {text[Digits]}.", nameof(text));
         }
 
-        Span<char> printed = stackalloc char[Digits + 1];
+        InlineArray10<char> printedStorage = default;
+        Span<char> printed = ((Span<char>)printedStorage)[..(Digits + 1)];
         text.AsSpan(0, Digits).CopyTo(printed);
         printed[Digits] = (char)('0' + check);
 
@@ -108,16 +109,15 @@ public sealed class Code32Symbology : BarcodeSymbology
             number = (number * 10) + (printed[i] - '0');
         }
 
-        Span<char> encoded = stackalloc char[Base32Length];
+        InlineArray6<char> encodedStorage = default;
+        Span<char> encoded = encodedStorage;
         for (int i = Base32Length - 1; i >= 0; i--)
         {
             encoded[i] = Base32Characters[number % Base32Characters.Length];
             number /= Base32Characters.Length;
         }
 
-        return Code39Encoder.BuildSymbol(
-            Code39Encoder.Encode(encoded, null),
-            options.Font is null ? string.Empty : string.Concat(stackalloc char[1] { FieldIdentifier }, printed),
-            options);
+        // The interpretation is the field identifier, then the nine digits of the code.
+        Code39Encoder.BuildSymbol(encoded, null, [FieldIdentifier], printed, [], options, ref symbol);
     }
 }

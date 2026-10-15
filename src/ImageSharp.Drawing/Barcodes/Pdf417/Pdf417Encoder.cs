@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Buffers;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
@@ -81,15 +80,28 @@ internal static class Pdf417Encoder
     /// <param name="errorCorrectionLevel">The error correction level, 0 to 8, or <see langword="null"/> to choose it from the data.</param>
     /// <param name="compact">Whether the symbol is Compact PDF417, Annex G.</param>
     /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
+    /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The data is not valid or does not fit the symbol.</exception>
-    public static StackedBarcodeSymbol BuildSymbol(ReadOnlySpan<char> text, int? columns, int? errorCorrectionLevel, bool compact, BarcodeOptions options)
+    public static void BuildSymbol(
+        ReadOnlySpan<char> text,
+        int? columns,
+        int? errorCorrectionLevel,
+        bool compact,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
     {
-        ValueListBuilder<int> data = new(stackalloc int[Pdf417Codewords.StackBufferLength]);
+        // A character takes at most two data codewords: a numeric or text run costs less than two for each
+        // character with its latch, a single byte shifted out of Text Compaction mode costs two, and a byte
+        // run costs one latch and at most one codeword for each byte. The text is bounded, so the builder
+        // never grows: short data works inline and longer data rents once.
+        Guard.MustBeLessThanOrEqualTo(text.Length, Pdf417Codewords.MaximumLength, nameof(text));
+        InlineArray64<int> dataStorage = default;
+        int capacity = (2 * text.Length) + 1;
+        ValueListBuilder<int> data = capacity <= Pdf417Codewords.InlineBufferLength ? new(dataStorage) : new(capacity);
         try
         {
             Pdf417Codewords.Encode(text, ref data);
-            return BuildSymbol(data.AsSpan(), columns, errorCorrectionLevel, compact, options);
+            BuildSymbol(data.AsSpan(), columns, errorCorrectionLevel, compact, options, ref symbol);
         }
         finally
         {
@@ -105,9 +117,15 @@ internal static class Pdf417Encoder
     /// <param name="errorCorrectionLevel">The error correction level, 0 to 8, or <see langword="null"/> to choose it from the data.</param>
     /// <param name="compact">Whether the symbol is Compact PDF417, Annex G.</param>
     /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
+    /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The data does not fit the symbol.</exception>
-    private static StackedBarcodeSymbol BuildSymbol(ReadOnlySpan<int> data, int? columns, int? errorCorrectionLevel, bool compact, BarcodeOptions options)
+    private static void BuildSymbol(
+        ReadOnlySpan<int> data,
+        int? columns,
+        int? errorCorrectionLevel,
+        bool compact,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
     {
         // The data codewords, the Symbol Length Descriptor and at least the two error correction
         // codewords of level 0 must fit in the largest matrix.
@@ -157,20 +175,20 @@ internal static class Pdf417Encoder
         // codewords, which fill the rest of the data region with 900.
         int total = c * r;
         int n = total - k;
-        int[] rented = ArrayPool<int>.Shared.Rent(total);
+        PooledBuffer<int> rented = new(total);
         try
         {
-            Span<int> codewords = rented.AsSpan(0, total);
+            Span<int> codewords = rented.Span;
             codewords[0] = n;
             data.CopyTo(codewords[1..]);
             codewords[(m + 1)..n].Fill(Pdf417Codewords.Pad);
             Pdf417Codewords.AppendErrorCorrection(codewords, k);
 
-            return BuildRows(codewords, c, r, level, compact, options);
+            BuildRows(codewords, c, r, level, compact, options, ref symbol);
         }
         finally
         {
-            ArrayPool<int>.Shared.Return(rented);
+            rented.Dispose();
         }
     }
 
@@ -185,8 +203,8 @@ internal static class Pdf417Encoder
     /// <param name="level">The error correction level.</param>
     /// <param name="compact">Whether the symbol is Compact PDF417.</param>
     /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    private static StackedBarcodeSymbol BuildRows(ReadOnlySpan<int> codewords, int c, int r, int level, bool compact, BarcodeOptions options)
+    /// <param name="symbol">The symbol to write.</param>
+    private static void BuildRows(ReadOnlySpan<int> codewords, int c, int r, int level, bool compact, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         // A row of a full symbol is the start character, c + 2 symbol characters and the stop character;
         // a compact row is the start character, c + 1 symbol characters and one bar.
@@ -194,16 +212,10 @@ internal static class Pdf417Encoder
             ? Start.Length + ((c + 1) * Pdf417Patterns.ElementCount) + 1
             : Start.Length + ((c + 2) * Pdf417Patterns.ElementCount) + Stop.Length;
 
-        // Every row has the same bar count, height and top, so the rows share one heights array and one
-        // tops array.
-        int barCount = (runCount + 1) / 2;
         float rowHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, NominalRowHeight);
-        float[] heights = new float[barCount];
-        heights.AsSpan().Fill(rowHeight);
-        float[] tops = new float[barCount];
 
         ReadOnlySpan<int> patterns = Pdf417Patterns.Modules;
-        LinearBarcodeSymbol[] rows = new LinearBarcodeSymbol[r];
+        symbol.BeginStacked(r, r * runCount, r * ((runCount + 1) >> 1));
         for (int row = 0; row < r; row++)
         {
             // Section 5.11.1: row 1 uses cluster 0, row 2 cluster 3 and row 3 cluster 6, repeating. The
@@ -225,7 +237,8 @@ internal static class Pdf417Encoder
                 _ => (columnValue, levelValue),
             };
 
-            int[] runs = new int[runCount];
+            Span<int> runs = symbol.AddRow(runCount, out Span<float> heights, out _);
+            heights.Fill(rowHeight);
             Start.CopyTo(runs);
             int index = Start.Length;
             Pdf417Patterns.AppendCharacter(runs, ref index, clusterPatterns[left]);
@@ -241,12 +254,10 @@ internal static class Pdf417Encoder
             else
             {
                 Pdf417Patterns.AppendCharacter(runs, ref index, clusterPatterns[right]);
-                Stop.CopyTo(runs.AsSpan(index));
+                Stop.CopyTo(runs[index..]);
             }
-
-            rows[row] = new LinearBarcodeSymbol(runs, heights, tops, [], 0, 0);
         }
 
-        return new StackedBarcodeSymbol(rows, 0F, [], QuietZone, QuietZone, QuietZone, QuietZone);
+        symbol.EndStacked(0F, QuietZone, QuietZone, QuietZone, QuietZone);
     }
 }

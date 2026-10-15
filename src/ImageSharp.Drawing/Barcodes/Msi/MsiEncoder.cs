@@ -24,10 +24,10 @@ internal static class MsiEncoder
     public const int QuietZone = 10;
 
     /// <summary>
-    /// The number of characters a caller stack allocates to build symbol data in. Longer data grows into
-    /// a pooled array.
+    /// The number of characters a caller holds inline to build symbol data in. Longer data rents its
+    /// buffer once.
     /// </summary>
-    public const int StackBufferLength = 64;
+    public const int InlineBufferLength = 64;
 
     /// <summary>
     /// The highest weight of the IBM modulo 11 calculation, after which the weights return to 2.
@@ -104,14 +104,17 @@ internal static class MsiEncoder
     }
 
     /// <summary>
-    /// Encodes digits into the alternating bar and space run widths the renderer draws, starting with the
-    /// bar of the start character and ending on the last bar of the stop character.
+    /// Encodes digits and builds the symbol. The runs start with the bar of the start character and end on
+    /// the last bar of the stop character. MSI carries no guard bars, so every bar runs the full height,
+    /// and the human readable interpretation sits below the symbol.
     /// </summary>
     /// <param name="digits">The digits to encode, the check digits included, already validated.</param>
-    /// <returns>The run widths in modules.</returns>
-    public static int[] Encode(ReadOnlySpan<char> digits)
+    /// <param name="readable">The human readable interpretation.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    public static void BuildSymbol(ReadOnlySpan<char> digits, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        int[] runs = new int[2 + (digits.Length * BitsPerDigit * 2) + 3];
+        Span<int> runs = symbol.BeginLinear(2 + (digits.Length * BitsPerDigit * 2) + 3, out Span<float> heights, out _);
         int written = 0;
         runs[written++] = 2;
         runs[written++] = 1;
@@ -130,19 +133,7 @@ internal static class MsiEncoder
         runs[written++] = 1;
         runs[written++] = 2;
         runs[written] = 1;
-        return runs;
-    }
 
-    /// <summary>
-    /// Builds the symbol from encoded run widths. MSI carries no guard bars, so every bar runs the full
-    /// height, and the human readable interpretation sits below the symbol.
-    /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <param name="text">The human readable interpretation.</param>
-    /// <param name="options">The options that control layout choices.</param>
-    /// <returns>The encoded symbol.</returns>
-    public static LinearBarcodeSymbol BuildSymbol(int[] runs, string text, BarcodeOptions options)
-    {
         int widthInModules = 0;
         for (int i = 0; i < runs.Length; i++)
         {
@@ -150,20 +141,14 @@ internal static class MsiEncoder
         }
 
         float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, widthInModules * NominalBarHeightFraction);
-        int barCount = (runs.Length + 1) / 2;
-        float[] heights = new float[barCount];
-        float[] tops = new float[barCount];
-        for (int i = 0; i < barCount; i++)
+        heights.Fill(barHeight);
+
+        if (options.Font is not null && readable.Length > 0)
         {
-            heights[i] = barHeight;
+            symbol.ReserveText(1, readable.Length);
+            symbol.AddText(readable, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
         }
 
-        BarcodeTextPlacement[] placements = [];
-        if (options.Font is not null && text.Length > 0)
-        {
-            placements = [new BarcodeTextPlacement(text, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance)];
-        }
-
-        return new LinearBarcodeSymbol(runs, heights, tops, placements, QuietZone, QuietZone);
+        symbol.EndLinear(QuietZone, QuietZone);
     }
 }

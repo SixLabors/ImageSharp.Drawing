@@ -19,10 +19,7 @@ public class Code32SymbologyTests
     [InlineData("00000000", "1311313111111331311111133131111113313111111331311111133131111113313111131131311")]
     [InlineData("09999999", "1311313111113311113113313111113131131111113111331111131131311111313311131131311")]
     public void MatchesReferenceRuns(string text, string expected)
-    {
-        LinearBarcodeSymbol symbol = Encode(text);
-        Assert.Equal(expected, string.Concat(symbol.RunWidths));
-    }
+        => Assert.Equal(expected, Encode(text));
 
     /// <summary>
     /// Section 3 doubles the second, fourth, sixth and eighth digits and sums the quotient and remainder
@@ -34,10 +31,9 @@ public class Code32SymbologyTests
     public void CalculatesTheCheckDigitOfSectionThree()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Code32Symbology().Encode("01234567", options);
+        string[] texts = SymbolEncoder.Read(new Code32Symbology(), "01234567", options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal("A012345676", placement.Text);
+        Assert.Equal("A012345676", Assert.Single(texts));
     }
 
     [Fact]
@@ -64,15 +60,7 @@ public class Code32SymbologyTests
     [InlineData("00000000", "000000")]
     [InlineData("09999999", "2ZCS7T")]
     public void CarriesSixBase32Characters(string text, string expected)
-    {
-        LinearBarcodeSymbol symbol = Encode(text);
-
-        Assert.Equal(
-            string.Concat(new Code39Symbology().Encode(expected, new BarcodeOptions()) is LinearBarcodeSymbol code39
-                ? code39.RunWidths
-                : []),
-            string.Concat(symbol.RunWidths));
-    }
+        => Assert.Equal(SymbolEncoder.Read(new Code39Symbology(), expected, new BarcodeOptions(), SymbolEncoder.RunString), Encode(text));
 
     /// <summary>
     /// Area 3 prints the letter A and then the nine digits. That letter is the field identifier for
@@ -82,10 +70,9 @@ public class Code32SymbologyTests
     public void PrintsTheFieldIdentifierAndTheNineDigits()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Code32Symbology().Encode("012345676", options);
+        string[] texts = SymbolEncoder.Read(new Code32Symbology(), "012345676", options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal("A012345676", placement.Text);
+        Assert.Equal("A012345676", Assert.Single(texts));
     }
 
     /// <summary>
@@ -94,17 +81,13 @@ public class Code32SymbologyTests
     /// </summary>
     [Fact]
     public void AddsNoCode39CheckCharacter()
-    {
-        LinearBarcodeSymbol symbol = Encode("012345676");
-        int widthInModules = 0;
-        foreach (int run in symbol.RunWidths)
-        {
-            widthInModules += run;
-        }
+        => Assert.Equal(((6 + 2) * 16) - 1, SymbolEncoder.Read(new Code32Symbology(), "012345676", new BarcodeOptions(), SymbolEncoder.RunSum));
 
-        Assert.Equal(((6 + 2) * 16) - 1, widthInModules);
-    }
-
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new Code32Symbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(string text)
+        => SymbolEncoder.Read(new Code32Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
 }

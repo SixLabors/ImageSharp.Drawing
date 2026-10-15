@@ -31,7 +31,7 @@ public class Itf14SymbologyTests
     [InlineData("1 54 00141 28876 3", Figure532)]
     [InlineData("0123456789012", "111112112121121222111121121122112111212112122112112211121121211212211112212111")]
     public void MatchesReferenceRuns(string text, string reference)
-        => Assert.Equal(Widen(reference), string.Concat(Encode(text).RunWidths));
+        => Assert.Equal(Widen(reference), SymbolEncoder.Read(new Itf14Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunString));
 
     [Fact]
     public void RejectsAWrongCheckDigit()
@@ -52,11 +52,12 @@ public class Itf14SymbologyTests
     public void PrintsTheFourteenDigits(string text, string expected)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Itf14Symbology().Encode(text, options);
-
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal(expected, placement.Text);
-        Assert.Equal(symbol.HeightInModules + BarcodeTextPlacement.Clearance, placement.TextEdge);
+        SymbolEncoder.Encode(new Itf14Symbology(), text, options, (ref symbol) =>
+        {
+            BarcodeTextPlacement placement = Assert.Single(symbol.Text.ToArray());
+            Assert.Equal(expected, symbol.TextOf(placement).ToString());
+            Assert.Equal(symbol.HeightInModules + BarcodeTextPlacement.Clearance, placement.TextEdge);
+        });
     }
 
     /// <summary>
@@ -67,13 +68,12 @@ public class Itf14SymbologyTests
     /// </summary>
     [Fact]
     public void FramesTheBarsWithTheBearerBarOfSectionFiveThreeTwoFour()
-    {
-        LinearBarcodeSymbol symbol = Encode("15400141288763");
-
-        Assert.Equal(BearerBarThickness, symbol.BearerBarThickness);
-        Assert.All(symbol.BarTops, top => Assert.Equal(BearerBarThickness, top));
-        Assert.Equal((float)(31.75 / 1.016) + BearerBarThickness + BearerBarThickness, symbol.HeightInModules, new ApproximateFloatComparer(1e-3F));
-    }
+        => SymbolEncoder.Encode(new Itf14Symbology(), "15400141288763", new BarcodeOptions(), static (ref symbol) =>
+        {
+            Assert.Equal(BearerBarThickness, symbol.FrameThickness);
+            Assert.All(symbol.BarTops.ToArray(), top => Assert.Equal(BearerBarThickness, top));
+            Assert.Equal((float)(31.75 / 1.016) + BearerBarThickness + BearerBarThickness, symbol.HeightInModules, new ApproximateFloatComparer(1e-3F));
+        });
 
     /// <summary>
     /// Section 5.3.2.2 of the GS1 General Specifications measures a symbol as <c>(P(4N+6)+N+6)X</c>
@@ -82,15 +82,7 @@ public class Itf14SymbologyTests
     /// </summary>
     [Fact]
     public void SpansTheWidthOfSectionFiveThreeTwoTwo()
-    {
-        int widthInModules = 0;
-        foreach (int run in Encode("15400141288763").RunWidths)
-        {
-            widthInModules += run;
-        }
-
-        Assert.Equal((7 * ((4 * 3) + 6)) + 3 + 6, widthInModules);
-    }
+        => Assert.Equal((7 * ((4 * 3) + 6)) + 3 + 6, SymbolEncoder.Read(new Itf14Symbology(), "15400141288763", new BarcodeOptions(), SymbolEncoder.RunSum));
 
     [Theory]
     [InlineData("")]
@@ -101,8 +93,12 @@ public class Itf14SymbologyTests
     public void RejectsMalformedInput(string text)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new Itf14Symbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    private static void Encode(string text)
+        => SymbolEncoder.Encode(new Itf14Symbology(), text, new BarcodeOptions());
 
     private static string Widen(string reference)
         => reference[..^1].Replace('2', '3');

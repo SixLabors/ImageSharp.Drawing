@@ -36,14 +36,19 @@ public sealed class PosiCodeSymbology : BarcodeSymbology
     public PosiCodeVersion Version { get; }
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, PosiCodeEncoder.MaximumLength, nameof(text));
 
         bool limited = PosiCodeEncoder.IsLimited(this.Version);
-        ValueListBuilder<int> values = new(stackalloc int[PosiCodeEncoder.StackBufferLength]);
+
+        // One value for each character, so the builder never grows: short text works inline and longer
+        // text rents once.
+        InlineArray64<int> valueStorage = default;
+        ValueListBuilder<int> values = text.Length <= PosiCodeEncoder.InlineBufferLength ? new(valueStorage) : new(text.Length);
+        PooledBuffer<int> rentedCodewords = default;
         try
         {
             SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
@@ -73,25 +78,26 @@ public sealed class PosiCodeSymbology : BarcodeSymbology
                 }
             }
 
-            int[] runs;
             if (limited)
             {
-                runs = PosiCodeEncoder.Encode(values.AsSpan(), this.Version);
+                PosiCodeEncoder.BuildSymbol(values.AsSpan(), this.Version, text, options, ref symbol);
             }
             else
             {
+                // ToCodewords writes at most four codewords for each value.
+                InlineArray128<int> codewordStorage = default;
                 int capacity = values.Length * 4;
-                Span<int> codewords = capacity <= 256 ? stackalloc int[capacity] : new int[capacity];
+                Span<int> codewords = capacity <= 128
+                    ? codewordStorage
+                    : (rentedCodewords = new PooledBuffer<int>(capacity)).Span;
                 int written = PosiCodeEncoder.ToCodewords(values.AsSpan(), codewords);
-                runs = PosiCodeEncoder.Encode(codewords[..written], this.Version);
+                PosiCodeEncoder.BuildSymbol(codewords[..written], this.Version, text, options, ref symbol);
             }
-
-            string readable = options.Font is null ? string.Empty : text;
-            return PosiCodeEncoder.BuildSymbol(runs, readable, options, this.Version);
         }
         finally
         {
             values.Dispose();
+            rentedCodewords.Dispose();
         }
     }
 }

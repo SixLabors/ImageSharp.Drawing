@@ -79,7 +79,7 @@ public class BarcodeInputValidationTests
     public void RejectsNullText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;
-        Assert.Throws<ArgumentNullException>(() => symbology.Encode(null!, new BarcodeOptions()));
+        Assert.Throws<ArgumentNullException>(() => SymbolEncoder.Encode(symbology, null!, new BarcodeOptions()));
     }
 
     /// <summary>
@@ -147,7 +147,7 @@ public class BarcodeInputValidationTests
     public void RejectsEmptyText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;
-        Assert.ThrowsAny<ArgumentException>(() => symbology.Encode(string.Empty, new BarcodeOptions()));
+        Assert.ThrowsAny<ArgumentException>(() => SymbolEncoder.Encode(symbology, string.Empty, new BarcodeOptions()));
     }
 
     /// <summary>
@@ -157,5 +157,5 @@ public class BarcodeInputValidationTests
     [Fact]
     public void Code128_RejectsDataBeyondTheMaximumLength()
         => Assert.ThrowsAny<ArgumentException>(
-            () => new Code128Symbology().Encode(new string('A', 501), new BarcodeOptions()));
+            () => SymbolEncoder.Encode(new Code128Symbology(), new string('A', 501), new BarcodeOptions()));
 }

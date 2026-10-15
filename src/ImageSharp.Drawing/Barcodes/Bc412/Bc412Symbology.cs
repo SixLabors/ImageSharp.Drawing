@@ -42,7 +42,7 @@ public sealed class Bc412Symbology : BarcodeSymbology
     public override double NominalXDimension => Bc412Encoder.NominalXDimension;
 
     /// <inheritdoc/>
-    internal override BarcodeSymbol Encode(string text, BarcodeOptions options)
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
 
@@ -66,8 +66,10 @@ public sealed class Bc412Symbology : BarcodeSymbology
         }
 
         // The data without the check character, then the characters the symbol carries: the first
-        // data character, the check character and the remaining data.
-        Span<char> data = stackalloc char[Bc412Encoder.MaximumLength];
+        // data character, the check character and the remaining data. A symbol carries at most 18 data
+        // characters.
+        InlineArray18<char> dataStorage = default;
+        Span<char> data = dataStorage;
         data[0] = text[0];
         text.AsSpan(1 + supplied).CopyTo(data[1..]);
         data = data[..dataLength];
@@ -78,13 +80,13 @@ public sealed class Bc412Symbology : BarcodeSymbology
             throw new ArgumentException($"Incorrect check character: expected {check}, got {text[Bc412Encoder.CheckPosition]}.", nameof(text));
         }
 
-        Span<char> carried = stackalloc char[Bc412Encoder.MaximumLength + 1];
+        InlineArray19<char> carriedStorage = default;
+        Span<char> carried = carriedStorage;
         carried[0] = data[0];
         carried[Bc412Encoder.CheckPosition] = check;
         data[1..].CopyTo(carried[(Bc412Encoder.CheckPosition + 1)..]);
         carried = carried[..(dataLength + 1)];
 
-        string readable = options.Font is null ? string.Empty : carried.ToString();
-        return Bc412Encoder.BuildSymbol(Bc412Encoder.Encode(carried), readable, options);
+        Bc412Encoder.BuildSymbol(carried, options, ref symbol);
     }
 }

@@ -26,10 +26,7 @@ public class Ean14SymbologyTests
     [InlineData("(01)09521234543213")]
     [InlineData("(01) 09521234543213")]
     public void MatchesReferenceRuns(string text)
-    {
-        LinearBarcodeSymbol symbol = Encode(text);
-        Assert.Equal(Expected, string.Concat(symbol.RunWidths));
-    }
+        => Assert.Equal(Expected, Encode(text));
 
     /// <summary>
     /// A supplied check digit is verified against section 7.9 of the GS1 General Specifications.
@@ -58,12 +55,16 @@ public class Ean14SymbologyTests
     public void PrintsAComputedCheckDigitAfterASpace()
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new Ean14Symbology().Encode("(01)0952123454321", options);
+        string[] texts = SymbolEncoder.Read(new Ean14Symbology(), "(01)0952123454321", options, SymbolEncoder.Texts);
 
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal("(01)0952123454321 3", placement.Text);
+        Assert.Equal("(01)0952123454321 3", Assert.Single(texts));
     }
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new Ean14Symbology().Encode(text, new BarcodeOptions());
+    /// <summary>
+    /// Encodes the text with the default options.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>The run widths of the symbol.</returns>
+    private static string Encode(string text)
+        => SymbolEncoder.Read(new Ean14Symbology(), text, new BarcodeOptions(), SymbolEncoder.RunString);
 }

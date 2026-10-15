@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Globalization;
 using SixLabors.ImageSharp.Drawing.Barcodes;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
@@ -25,7 +26,7 @@ public class IntelligentMailSymbologyTests
     public void ConvertsTheDigitsToBinary(string text, string hex)
     {
         UInt128 binary = IntelligentMailEncoder.Binary(text.AsSpan(0, 20), text.AsSpan(20));
-        Assert.Equal(hex, binary.ToString("X26"));
+        Assert.Equal(hex, binary.ToString("X26", CultureInfo.InvariantCulture));
     }
 
     /// <summary>
@@ -86,7 +87,7 @@ public class IntelligentMailSymbologyTests
     [InlineData("01234567094987654321012345678", "ADFTTAFDTTTTFATTADTAAATFTFTATDAAAFDDADATATDTDTTDFDTDATADADTDFFTFA")]
     [InlineData("0123456709498765432101234567891", "AADTFFDFTDADTAADAATFDTDDAAADDTDTTDAFADADDDTFFFDDTTTADFAAADFTDAADA")]
     public void EncodesTheBars(string text, string bars)
-        => Assert.Equal(bars, States(Encode(text)));
+        => Assert.Equal(bars, SymbolEncoder.Read(new IntelligentMailSymbology(), text, new BarcodeOptions(), States));
 
     /// <summary>
     /// Figure 6 at the 0.020 inch module: bars of 11 run units of 1/550 inch, spaces of 14, a full bar of
@@ -95,37 +96,36 @@ public class IntelligentMailSymbologyTests
     /// </summary>
     [Fact]
     public void DrawsTheDimensionsOfFigureSix()
-    {
-        LinearBarcodeSymbol symbol = Encode("0123456709498765432101234567891");
-
-        Assert.Equal(1F / 11F, symbol.RunUnit);
-        Assert.Equal(129, symbol.RunWidths.Length);
-        for (int i = 0; i < symbol.RunWidths.Length; i++)
+        => SymbolEncoder.Encode(new IntelligentMailSymbology(), "0123456709498765432101234567891", new BarcodeOptions(), static (ref symbol) =>
         {
-            Assert.Equal((i & 1) == 0 ? 11 : 14, symbol.RunWidths[i]);
-        }
-
-        float extender = (float)(0.0485 / 0.020);
-        float tracker = (float)(0.048 / 0.020);
-        string states = States(symbol);
-        ApproximateFloatComparer comparer = new(1e-4F);
-        for (int i = 0; i < states.Length; i++)
-        {
-            float expectedTop = states[i] is 'A' or 'F' ? 0F : extender;
-            float expectedHeight = states[i] switch
+            Assert.Equal(1F / 11F, symbol.RunUnit);
+            Assert.Equal(129, symbol.Runs.Length);
+            for (int i = 0; i < symbol.Runs.Length; i++)
             {
-                'T' => tracker,
-                'F' => extender + tracker + extender,
-                _ => extender + tracker,
-            };
+                Assert.Equal((i & 1) == 0 ? 11 : 14, symbol.Runs[i]);
+            }
 
-            Assert.Equal(expectedTop, symbol.BarTops[i], comparer);
-            Assert.Equal(expectedHeight, symbol.BarHeights[i], comparer);
-        }
+            float extender = (float)(0.0485 / 0.020);
+            float tracker = (float)(0.048 / 0.020);
+            string states = States(ref symbol);
+            ApproximateFloatComparer comparer = new(1e-4F);
+            for (int i = 0; i < states.Length; i++)
+            {
+                float expectedTop = states[i] is 'A' or 'F' ? 0F : extender;
+                float expectedHeight = states[i] switch
+                {
+                    'T' => tracker,
+                    'F' => extender + tracker + extender,
+                    _ => extender + tracker,
+                };
 
-        Assert.Equal(6.25F, symbol.LeadingQuietZone);
-        Assert.Equal(6.25F, symbol.TrailingQuietZone);
-    }
+                Assert.Equal(expectedTop, symbol.BarTops[i], comparer);
+                Assert.Equal(expectedHeight, symbol.BarHeights[i], comparer);
+            }
+
+            Assert.Equal(6.25F, symbol.LeadingQuietZone);
+            Assert.Equal(6.25F, symbol.TrailingQuietZone);
+        });
 
     /// <summary>
     /// Section 2.4.3: the fields of the tracking code and the groups of the routing code, separated by
@@ -145,14 +145,15 @@ public class IntelligentMailSymbologyTests
     public void PrintsTheFieldsOfSectionTwoFourThree(string text, string expected)
     {
         BarcodeOptions options = new() { Font = BarcodeFonts.OcrB.CreateFont(12F) };
-        LinearBarcodeSymbol symbol = (LinearBarcodeSymbol)new IntelligentMailSymbology().Encode(text, options);
-
-        BarcodeTextPlacement placement = Assert.Single(symbol.Text);
-        Assert.Equal(expected, placement.Text);
-        Assert.Equal(BarcodeTextSide.BelowBars, placement.Side);
-        Assert.Equal(BarcodeTextAlignment.Left, placement.Alignment);
-        Assert.Equal(0F, placement.Left);
-        Assert.Equal((float)((0.145 / 0.020) + (0.028 / 0.020)), placement.TextEdge, new ApproximateFloatComparer(1e-4F));
+        SymbolEncoder.Encode(new IntelligentMailSymbology(), text, options, (ref symbol) =>
+        {
+            BarcodeTextPlacement placement = Assert.Single(symbol.Text.ToArray());
+            Assert.Equal(expected, symbol.TextOf(placement).ToString());
+            Assert.Equal(BarcodeTextSide.BelowBars, placement.Side);
+            Assert.Equal(BarcodeTextAlignment.Left, placement.Alignment);
+            Assert.Equal(0F, placement.Left);
+            Assert.Equal((float)((0.145 / 0.020) + (0.028 / 0.020)), placement.TextEdge, new ApproximateFloatComparer(1e-4F));
+        });
     }
 
     [Theory]
@@ -164,12 +165,15 @@ public class IntelligentMailSymbologyTests
     [InlineData("05234567094987654321")]
     [InlineData("０1234567094987654321")]
     public void RejectsMalformedInput(string text)
-        => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
+        => Assert.ThrowsAny<ArgumentException>(() => SymbolEncoder.Encode(new IntelligentMailSymbology(), text, new BarcodeOptions()));
 
-    private static LinearBarcodeSymbol Encode(string text)
-        => (LinearBarcodeSymbol)new IntelligentMailSymbology().Encode(text, new BarcodeOptions());
-
-    private static string States(LinearBarcodeSymbol symbol)
+    /// <summary>
+    /// Reads the bar states of a symbol from the bar tops and heights: F for a full bar, A for an
+    /// ascender, D for a descender and T for a tracker.
+    /// </summary>
+    /// <param name="symbol">The encoded symbol.</param>
+    /// <returns>The bar states.</returns>
+    private static string States(ref BarcodeSymbol symbol)
     {
         float extender = (float)(0.0485 / 0.020);
         float tracker = (float)(0.048 / 0.020);
