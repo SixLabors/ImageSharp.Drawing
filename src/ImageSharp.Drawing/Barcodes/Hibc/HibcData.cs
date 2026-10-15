@@ -182,4 +182,31 @@ internal static class HibcData
         readable[written++] = ReadableClosing;
         return written;
     }
+
+    /// <summary>
+    /// Adds the human readable interpretation of encoded data below a built matrix symbol, as
+    /// <see cref="WriteMatrixReadable"/> writes it, centered on the symbol as the figures of sections 4.3.1
+    /// and 4.3.3 of ANSI/HIBC 2.6 print it.
+    /// </summary>
+    /// <param name="encoded">The encoded data, as <see cref="Prepare"/> wrote it.</param>
+    /// <param name="symbol">The built symbol.</param>
+    public static void AddMatrixReadable(ReadOnlySpan<char> encoded, ref BarcodeSymbol symbol)
+    {
+        // Prepare bounds the encoded data, so the buffer is bounded too, and longer data rents it once.
+        InlineArray64<char> readableStorage = default;
+        PooledBuffer<char> rented = default;
+        int capacity = MatrixReadableCapacity(encoded.Length);
+        Span<char> readable = capacity <= InlineBufferLength
+            ? ((Span<char>)readableStorage)[..capacity]
+            : (rented = new PooledBuffer<char>(capacity)).Span;
+        try
+        {
+            int written = WriteMatrixReadable(encoded, readable);
+            symbol.AddMatrixText(readable[..written], BarcodeTextAlignment.Centered, 1F);
+        }
+        finally
+        {
+            rented.Dispose();
+        }
+    }
 }

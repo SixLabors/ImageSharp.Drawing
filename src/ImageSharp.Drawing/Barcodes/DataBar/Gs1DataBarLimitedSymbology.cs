@@ -25,9 +25,6 @@ public sealed class Gs1DataBarLimitedSymbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    public override double NominalXDimension => DataBarLimitedEncoder.NominalXDimension;
-
-    /// <inheritdoc/>
     internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         InlineArray14<char> gtinStorage = default;

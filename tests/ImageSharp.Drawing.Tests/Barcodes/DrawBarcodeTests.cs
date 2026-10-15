@@ -863,6 +863,84 @@ public class DrawBarcodeTests
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void QrCode<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new QrCodeSymbology(), "https://sixlabors.com/", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void MicroQrCode<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new MicroQrCodeSymbology(), "Micro QR!", CreateMatrixOptions());
+
+    /// <summary>
+    /// Example 1 of Annex A of the QR-bill guidelines, Table 17, drawn at the 46 mm width of section 6.4 with
+    /// the Swiss cross of section 6.4.2 over its centre.
+    /// </summary>
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void SwissQrCode<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        const string text = "SPC\n0200\n1\nCH6431961000004421557\nS\nMax Muster & Söhne\nMusterstrasse\n123\n8000\nSeldwyla\nCH\n\n\n\n\n\n\n\n50.00\nCHF\n"
+            + "S\nSimon Muster\nMusterstrasse\n1\n8000\nSeldwyla\nCH\nQRR\n000008207791225857421286694\nPayment of travel\nEPD\n\n\n";
+        RunTest(provider, new SwissQrCodeSymbology(), text, new BarcodeOptions { Dpi = 144F, Background = Brushes.Solid(Color.White) });
+    }
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void D3Aqr<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new D3AqrSymbology(2842), "HTTPS://ID.GS1.ORG/01/09521234543213/22/ABC%2D123?99=XYZ-987", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void RectangularMicroQrCode<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new RectangularMicroQrCodeSymbology(), "https://sixlabors.com/", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1QrCode<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1QrCodeSymbology(), "(01)09521234543213(17)120508(10)ABCD1234(410)9501101020917", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1QrCode_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1QrCodeSymbology(), "(01)09521234543213(17)120508(10)ABCD1234(410)9501101020917", CreateMatrixTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void HibcQrCode<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new HibcQrCodeSymbology(), "A999BJC5D6E71", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void HibcQrCode_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new HibcQrCodeSymbology(), "A999BJC5D6E71", CreateMatrixTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DigitalLinkQrCode<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DigitalLinkQrCodeSymbology(), "https://id.gs1.org/01/09521234543213/22/ABC%2D123?99=XYZ-987", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DigitalLinkQrCode_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(
+            provider,
+            new Gs1DigitalLinkQrCodeSymbology(),
+            "https://id.gs1.org/01/09521234543213/22/ABC%2D123?99=XYZ-987",
+            CreateMatrixTextOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Gs1DigitalLinkDataMatrix_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(

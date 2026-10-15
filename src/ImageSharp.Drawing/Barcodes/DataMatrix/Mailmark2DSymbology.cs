@@ -26,6 +26,12 @@ public sealed class Mailmark2DSymbology : BarcodeSymbology
     private const int ClearZone = 4;
 
     /// <summary>
+    /// The X dimension in millimetres a symbol takes when the caller sets none: 0.5 mm, the module size
+    /// section 2.4 recommends from the range of 0.5 mm to 0.7 mm.
+    /// </summary>
+    private const double NominalXDimension = 0.5;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="Mailmark2DSymbology"/> class.
     /// </summary>
     /// <param name="type">The barcode type, which sets the symbol size.</param>
@@ -36,12 +42,6 @@ public sealed class Mailmark2DSymbology : BarcodeSymbology
     /// Gets the barcode type.
     /// </summary>
     public Mailmark2DType Type { get; }
-
-    /// <summary>
-    /// Gets the nominal X dimension of 0.5 mm, the module size section 2.4 recommends from the range of
-    /// 0.5 mm to 0.7 mm.
-    /// </summary>
-    public override double NominalXDimension => 0.5;
 
     /// <inheritdoc/>
     internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
@@ -130,7 +130,16 @@ public sealed class Mailmark2DSymbology : BarcodeSymbology
             _ => (16, 48),
         };
 
-        DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.SquareOrRectangular, rows, columns, RoyalMailLength, ClearZone, ref symbol);
+        DataMatrixEncoder.BuildSymbol(
+            text,
+            false,
+            DataMatrixFormat.SquareOrRectangular,
+            rows,
+            columns,
+            RoyalMailLength,
+            ClearZone,
+            options.XDimension ?? NominalXDimension,
+            ref symbol);
     }
 
     /// <summary>

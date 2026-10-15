@@ -53,6 +53,12 @@ public sealed class LeitcodeSymbology : BarcodeSymbology
         readable[16] = ' ';
         readable[17] = encoded[13];
 
-        Interleaved2Of5Encoder.BuildSymbol(encoded, readable, options, DeutschePostData.NominalBarHeight, ref symbol);
+        Interleaved2Of5Encoder.BuildSymbol(
+            encoded,
+            readable,
+            options,
+            options.XDimension ?? DeutschePostData.NominalXDimension,
+            DeutschePostData.NominalBarHeight,
+            ref symbol);
     }
 }

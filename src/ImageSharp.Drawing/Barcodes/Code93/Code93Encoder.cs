@@ -168,7 +168,8 @@ internal static class Code93Encoder
     public static void BuildSymbol(ReadOnlySpan<char> text, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int runCount = ((text.Length + CheckCharacters) * ElementsPerCharacter) + StartStopElements;
-        Span<int> runs = symbol.BeginLinear(runCount, out Span<float> heights, out _);
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        Span<int> runs = symbol.BeginLinear(runCount, xDimension, out Span<float> heights, out _);
         int written = 0;
 
         for (int i = 0; i < ElementsPerCharacter; i++)
@@ -191,9 +192,8 @@ internal static class Code93Encoder
         }
 
         int widthInModules = WidthInModules(runs);
-        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
         float nominalBarHeight = MathF.Max((widthInModules + (QuietZone * 2)) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
-        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, nominalBarHeight);
+        float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);
         heights.Fill(barHeight);
 
         if (options.Font is not null && readable.Length > 0)

@@ -210,7 +210,8 @@ internal static class DataBarExpandedEncoder
         // the guard space and bar. The symbol ends on a bar or a space, so a zero width bar closes the runs
         // when it ends on a space. The zero width bars are the zeros the symbol storage starts with.
         int elements = 3 + (symbolCharacters * 8) + (finders.Length * 5) + 2;
-        Span<int> runs = symbol.BeginLinear(elements + ((elements & 1) == 0 ? 1 : 0), out Span<float> heights, out _);
+        double xDimension = options.XDimension ?? NominalXDimension;
+        Span<int> runs = symbol.BeginLinear(elements + ((elements & 1) == 0 ? 1 : 0), xDimension, out Span<float> heights, out _);
         runs[1] = 1;
         runs[2] = 1;
         int position = 3;
@@ -231,7 +232,7 @@ internal static class DataBarExpandedEncoder
         runs[position] = 1;
         runs[position + 1] = 1;
 
-        float barHeight = options.ResolveBarHeight(NominalXDimension, RowHeight);
+        float barHeight = options.ResolveBarHeight(xDimension, RowHeight);
         heights.Fill(barHeight);
 
         int width = 0;
@@ -278,7 +279,8 @@ internal static class DataBarExpandedEncoder
         int symbolCharacters = EncodeCharacters(text, segments, characters);
         ReadOnlySpan<byte> finders = Finders(symbolCharacters);
         int rowCount = (symbolCharacters + segments - 1) / segments;
-        float rowHeight = options.ResolveBarHeight(NominalXDimension, RowHeight);
+        double xDimension = options.XDimension ?? NominalXDimension;
+        float rowHeight = options.ResolveBarHeight(xDimension, RowHeight);
 
         // The buffer holds a row, the separator row that is its inverse, and the middle separator row, each
         // one module wider than the widest row, since a partial last row can move one module right. It is
@@ -312,7 +314,7 @@ internal static class DataBarExpandedEncoder
             runCount += (rowCount - 1) * middleRuns;
             barCount += (rowCount - 1) * ((middleRuns + 1) >> 1);
 
-            symbol.BeginStacked((rowCount * 4) - 3, runCount, barCount);
+            symbol.BeginStacked((rowCount * 4) - 3, runCount, barCount, xDimension);
             for (int r = 0; r < rowCount; r++)
             {
                 ComposeRow(r, rowCount, segments, symbolCharacters, characters, finders, row, separator, ref width);

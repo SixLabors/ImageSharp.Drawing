@@ -48,6 +48,12 @@ internal static class Gs1Linters
     private static readonly SearchValues<char> CharacterSet39 = SearchValues.Create("#-/0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
 
     /// <summary>
+    /// The characters of an International Bank Account Number in electronic form, ISO 13616: digits and
+    /// capital letters.
+    /// </summary>
+    private static readonly SearchValues<char> Iban = SearchValues.Create("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+
+    /// <summary>
     /// GS1 AI encodable character set 64, Table 7-22, without its pad character.
     /// </summary>
     private static readonly SearchValues<char> CharacterSet64 =
@@ -66,20 +72,6 @@ internal static class Gs1Linters
         0x88, 0x88, 0x97, 0x08, 0x08, 0x22, 0x22, 0x22, 0x2d, 0xe1, 0x02, 0x88, 0x88, 0x88, 0xa2, 0x22,
         0x32, 0x0a, 0x1b, 0x22, 0x22, 0x22, 0xa2, 0x03, 0xe2, 0x08, 0x08, 0xc8, 0x08, 0x88, 0x88, 0xa8,
         0x88, 0x88, 0x88, 0x9a, 0x89, 0x00, 0x20, 0x21, 0xe0, 0x80, 0x22, 0x2a, 0x00, 0x08, 0x21, 0x02,
-    ];
-
-    /// <summary>
-    /// Gets the ISO 3166-1 alpha-2 country codes as a bit field, code XY at bit index
-    /// 26 x (X - 'A') + (Y - 'A'), laid out as <see cref="Iso3166Numeric"/>.
-    /// </summary>
-    private static ReadOnlySpan<byte> Iso3166Alpha2Codes =>
-    [
-        0x1e, 0x9a, 0xfb, 0x77, 0xf7, 0xbd, 0xbb, 0x7b, 0xe4, 0xfc, 0x21, 0xa8, 0x01, 0x2b, 0x00, 0x70,
-        0x00, 0x3a, 0x90, 0x0d, 0xf9, 0xdf, 0xa8, 0x00, 0xb1, 0x60, 0x18, 0x1e, 0xf0, 0x02, 0x02, 0xc0,
-        0x00, 0xb8, 0xd4, 0x2f, 0x82, 0x81, 0xf2, 0xbf, 0x3f, 0xff, 0xeb, 0xa4, 0xd2, 0x10, 0x00, 0x80,
-        0x02, 0x3c, 0xf1, 0xca, 0x80, 0x00, 0x00, 0x02, 0x00, 0x8a, 0x8f, 0xbf, 0xe7, 0x5c, 0xdd, 0xf9,
-        0x59, 0x82, 0x08, 0x20, 0xea, 0xa1, 0x02, 0x00, 0x40, 0x02, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00,
-        0x10, 0x20, 0x02, 0x00, 0x80,
     ];
 
     /// <summary>
@@ -321,10 +313,7 @@ internal static class Gs1Linters
                 break;
 
             case Gs1Linter.Iso3166Alpha2:
-                if (data.Length != 2
-                    || !char.IsAsciiLetterUpper(data[0])
-                    || !char.IsAsciiLetterUpper(data[1])
-                    || !IsSet(Iso3166Alpha2Codes, (26 * (data[0] - 'A')) + (data[1] - 'A')))
+                if (!Iso3166.IsAlpha2Code(data))
                 {
                     ThrowInvalidData(identifier, $"carries '{data}', which is not an ISO 3166-1 alpha-2 country code", nameof(data));
                 }
@@ -740,29 +729,14 @@ internal static class Gs1Linters
 
         Check(Gs1Linter.Iso3166Alpha2, identifier, data[..2]);
 
-        // The remainder is kept below 97 after each character, so the long number never needs to be held.
-        int remainder = 0;
-        for (int i = 0; i < data.Length; i++)
+        // The electronic form holds digits and capital letters only.
+        int invalid = data.IndexOfAnyExcept(Iban);
+        if (invalid >= 0)
         {
-            char c = data[(i + 4) % data.Length];
-            int value;
-            if (char.IsAsciiDigit(c))
-            {
-                value = c - '0';
-                remainder = ((remainder * 10) + value) % 97;
-            }
-            else if (char.IsAsciiLetterUpper(c))
-            {
-                value = c - 'A' + 10;
-                remainder = ((remainder * 100) + value) % 97;
-            }
-            else
-            {
-                ThrowInvalidData(identifier, $"carries '{c}', which an International Bank Account Number does not hold", nameof(data));
-            }
+            ThrowInvalidData(identifier, $"carries '{data[invalid]}', which an International Bank Account Number does not hold", nameof(data));
         }
 
-        if (remainder != 1)
+        if (Iso7064.Mod97(data) != 1)
         {
             ThrowInvalidData(identifier, "has incorrect International Bank Account Number check digits", nameof(data));
         }

@@ -149,7 +149,7 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
             // carries when it prints, between the delimiters that stand for the start and stop character.
             ReadOnlySpan<char> opening = [ReadableDelimiter];
             ReadOnlySpan<char> closing = check is not null && this.PrintCheckCharacter ? [check.Value, ReadableDelimiter] : [ReadableDelimiter];
-            Code39Encoder.BuildSymbol(encoded.AsSpan(), check, opening, readable.AsSpan(), closing, options, ref symbol);
+            Code39Encoder.BuildSymbol(encoded.AsSpan(), check, opening, readable.AsSpan(), closing, options, options.XDimension ?? PointXDimension, ref symbol);
         }
         finally
         {

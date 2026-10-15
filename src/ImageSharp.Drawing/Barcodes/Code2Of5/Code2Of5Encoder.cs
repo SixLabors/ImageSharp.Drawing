@@ -127,7 +127,7 @@ internal static class Code2Of5Encoder
             }
 
             ReadOnlySpan<char> readable = check is null || printCheckDigit ? encoded : encoded[..^1];
-            BeginRuns(encoded, variant, ref symbol, out Span<float> heights, out Span<float> tops);
+            BeginRuns(encoded, variant, options.XDimension ?? BarcodeSymbology.PointXDimension, ref symbol, out Span<float> heights, out Span<float> tops);
             Interleaved2Of5Encoder.EndSymbol(heights, tops, readable, options, ref symbol);
         }
         finally
@@ -142,12 +142,14 @@ internal static class Code2Of5Encoder
     /// </summary>
     /// <param name="digits">The digits to encode, the check digit included, already validated.</param>
     /// <param name="variant">The symbology whose patterns to use.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <param name="heights">The bar heights of the symbol, to write.</param>
     /// <param name="tops">The bar tops of the symbol, to write.</param>
     private static void BeginRuns(
         ReadOnlySpan<char> digits,
         Code2Of5Variant variant,
+        double xDimension,
         ref BarcodeSymbol symbol,
         out Span<float> heights,
         out Span<float> tops)
@@ -158,7 +160,7 @@ internal static class Code2Of5Encoder
         bool barsOnly = variant is Code2Of5Variant.Industrial or Code2Of5Variant.Iata;
         int elementsPerDigit = barsOnly ? BarElementsPerDigit : MatrixElementsPerDigit;
 
-        Span<int> runs = symbol.BeginLinear((digits.Length * elementsPerDigit) + start.Length + stop.Length, out heights, out tops);
+        Span<int> runs = symbol.BeginLinear((digits.Length * elementsPerDigit) + start.Length + stop.Length, xDimension, out heights, out tops);
         int written = 0;
 
         for (int i = 0; i < start.Length; i++)

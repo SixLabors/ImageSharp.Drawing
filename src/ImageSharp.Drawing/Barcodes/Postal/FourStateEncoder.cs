@@ -45,13 +45,14 @@ internal static class FourStateEncoder
         ref BarcodeSymbol symbol)
     {
         int barCount = states.Length;
-        Span<int> runs = symbol.BeginLinear((barCount * 2) - 1, out Span<float> heights, out Span<float> tops);
+        double xDimension = options.XDimension ?? metrics.XDimension;
+        Span<int> runs = symbol.BeginLinear((barCount * 2) - 1, xDimension, out Span<float> heights, out Span<float> tops);
         for (int i = 0; i < runs.Length; i++)
         {
             runs[i] = (i & 1) == 0 ? metrics.BarUnits : metrics.SpaceUnits;
         }
 
-        float scale = options.ResolveBarHeight(metrics.XDimension, metrics.FullBar) / metrics.FullBar;
+        float scale = options.ResolveBarHeight(xDimension, metrics.FullBar) / metrics.FullBar;
         float ascender = metrics.Ascender * scale;
         float tracker = metrics.Tracker * scale;
         float descender = metrics.Descender * scale;

@@ -34,6 +34,12 @@ internal static class PznData
     private const float NominalBarHeight = 40F;
 
     /// <summary>
+    /// The X dimension in millimetres a symbol takes when the caller sets none: the nominal module width
+    /// of 0.25 mm that IFA gives.
+    /// </summary>
+    private const double NominalXDimension = 0.25;
+
+    /// <summary>
     /// The modulus of the check digit. IFA: "The check digit of the PZN is calculated based on mod 11."
     /// </summary>
     private const int CheckModulus = 11;
@@ -98,6 +104,15 @@ internal static class PznData
         text.AsSpan(0, digits).CopyTo(encoded[1..]);
         encoded[^1] = (char)('0' + check);
 
-        Code39Encoder.BuildSymbol(encoded, null, ReadablePrefix, encoded[1..], [], options, NominalBarHeight, ref symbol);
+        Code39Encoder.BuildSymbol(
+            encoded,
+            null,
+            ReadablePrefix,
+            encoded[1..],
+            [],
+            options,
+            options.XDimension ?? NominalXDimension,
+            NominalBarHeight,
+            ref symbol);
     }
 }

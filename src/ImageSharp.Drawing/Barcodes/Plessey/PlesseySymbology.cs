@@ -66,9 +66,6 @@ public sealed class PlesseySymbology : BarcodeSymbology
     public bool PrintCheckCharacters { get; }
 
     /// <inheritdoc/>
-    public override double NominalXDimension => PlesseyEncoder.NominalXDimension;
-
-    /// <inheritdoc/>
     internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));

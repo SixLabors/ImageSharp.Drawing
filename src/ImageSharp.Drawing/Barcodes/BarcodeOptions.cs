@@ -21,8 +21,11 @@ public sealed class BarcodeOptions
 
     /// <summary>
     /// Gets or sets the X dimension in millimetres: the width of the narrowest element of the symbology,
-    /// which is one module. Set <see langword="null"/> to take the nominal X dimension of the symbology,
-    /// <see cref="BarcodeSymbology.NominalXDimension"/>.
+    /// which is one module. Set <see langword="null"/> to take the nominal X dimension the specification of
+    /// the symbology gives. Where the specification fixes the width of the whole symbol, as for
+    /// <see cref="SwissQrCodeSymbology"/>, the nominal X dimension is that width divided by the module count
+    /// of the symbol. Where the specification gives no X dimension, it is one point,
+    /// <see cref="BarcodeSymbology.PointXDimension"/>.
     /// </summary>
     public double? XDimension { get; set; }
 
@@ -81,9 +84,9 @@ public sealed class BarcodeOptions
     /// Resolves the bar height in modules: <see cref="BarHeight"/> divided by the X dimension, both in
     /// millimetres, or the nominal height of the symbology when no bar height is set.
     /// </summary>
-    /// <param name="nominalXDimension">The nominal X dimension of the symbology in millimetres, used when <see cref="XDimension"/> is not set.</param>
+    /// <param name="xDimension">The X dimension of the symbol in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
     /// <param name="nominalHeight">The nominal height of the symbology in modules.</param>
     /// <returns>The bar height in modules.</returns>
-    internal float ResolveBarHeight(double nominalXDimension, float nominalHeight)
-        => this.BarHeight.HasValue ? (float)(this.BarHeight.Value / (this.XDimension ?? nominalXDimension)) : nominalHeight;
+    internal float ResolveBarHeight(double xDimension, float nominalHeight)
+        => this.BarHeight.HasValue ? (float)(this.BarHeight.Value / xDimension) : nominalHeight;
 }

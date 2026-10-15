@@ -47,9 +47,6 @@ public sealed class Itf14Symbology : BarcodeSymbology
     private const float BearerBarThickness = (float)(4.83 / XDimension);
 
     /// <inheritdoc/>
-    public override double NominalXDimension => XDimension;
-
-    /// <inheritdoc/>
     internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
@@ -113,6 +110,6 @@ public sealed class Itf14Symbology : BarcodeSymbology
             }
         }
 
-        Interleaved2Of5Encoder.BuildSymbol(digits, readable, options, XDimension, NominalBarHeight, BearerBarThickness, ref symbol);
+        Interleaved2Of5Encoder.BuildSymbol(digits, readable, options, options.XDimension ?? XDimension, NominalBarHeight, BearerBarThickness, ref symbol);
     }
 }

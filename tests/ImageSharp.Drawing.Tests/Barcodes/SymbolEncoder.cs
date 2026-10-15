@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Text;
 using SixLabors.ImageSharp.Drawing.Barcodes;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
@@ -215,5 +216,42 @@ internal static class SymbolEncoder
         }
 
         return texts;
+    }
+
+    /// <summary>
+    /// Writes the modules of a matrix symbol as rows of hexadecimal digits separated by a vertical bar, the
+    /// form the reference grids take.
+    /// </summary>
+    /// <param name="symbol">The encoded symbol.</param>
+    /// <returns>The grid.</returns>
+    public static string ModuleGrid(ref BarcodeSymbol symbol)
+    {
+        StringBuilder builder = new();
+        for (int r = 0; r < symbol.MatrixRows; r++)
+        {
+            if (r > 0)
+            {
+                builder.Append('|');
+            }
+
+            // Four modules make one hexadecimal digit, the leftmost module the most significant bit. A
+            // row whose width is not a multiple of four pads its last digit with light modules.
+            for (int c = 0; c < symbol.Columns; c += 4)
+            {
+                int digit = 0;
+                for (int b = 0; b < 4; b++)
+                {
+                    digit <<= 1;
+                    if (c + b < symbol.Columns && symbol.Modules[(r * symbol.Columns) + c + b])
+                    {
+                        digit |= 1;
+                    }
+                }
+
+                builder.Append("0123456789abcdef"[digit]);
+            }
+        }
+
+        return builder.ToString();
     }
 }

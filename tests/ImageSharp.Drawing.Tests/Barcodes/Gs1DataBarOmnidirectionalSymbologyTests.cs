@@ -48,9 +48,8 @@ public class Gs1DataBarOmnidirectionalSymbologyTests
             Assert.Equal(0F, symbol.LeadingQuietZone);
             Assert.Equal(0F, symbol.TrailingQuietZone);
             Assert.Equal(46F, symbol.HeightInModules);
+            Assert.Equal(0.33, symbol.XDimension);
         });
-
-        Assert.Equal(0.33, new Gs1DataBarOmnidirectionalSymbology().NominalXDimension);
     }
 
     /// <summary>

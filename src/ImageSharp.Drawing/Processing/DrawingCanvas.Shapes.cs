@@ -247,14 +247,13 @@ public abstract partial class DrawingCanvas
         try
         {
             symbology.Encode(text, options, ref symbol);
-            double xDimension = options.XDimension ?? symbology.NominalXDimension;
             if (symbol.Kind == BarcodeSymbolKind.Matrix)
             {
-                MatrixEmitter.Emit(this, ref symbol, options, xDimension, origin);
+                MatrixEmitter.Emit(this, ref symbol, options, origin);
             }
             else
             {
-                BarEmitter.Emit(this, ref symbol, options, xDimension, origin);
+                BarEmitter.Emit(this, ref symbol, options, origin);
             }
         }
         finally

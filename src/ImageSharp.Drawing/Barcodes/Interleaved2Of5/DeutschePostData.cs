@@ -24,6 +24,13 @@ internal static class DeutschePostData
     public const float NominalBarHeight = 50F;
 
     /// <summary>
+    /// The X dimension in millimetres a symbol takes when the caller sets none: 0.5 mm, the widest narrow
+    /// module Deutsche Post permits, at which <see cref="NominalBarHeight"/> and the quiet zone are
+    /// stated.
+    /// </summary>
+    public const double NominalXDimension = 0.5;
+
+    /// <summary>
     /// The modulus of the check digit.
     /// </summary>
     private const int CheckModulus = 10;

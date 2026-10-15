@@ -98,6 +98,19 @@ public class PznSymbologyTests
         => Assert.Equal(40F, SymbolEncoder.Read(new Pzn8Symbology(), "03752864", new BarcodeOptions(), static (ref symbol) => symbol.BarHeights[0]));
 
     /// <summary>
+    /// IFA gives a nominal module width of 0.25 mm, so a symbol without an X dimension of the caller draws
+    /// its modules at 0.25 mm and its 40 module bars 10 mm high. An X dimension of the caller replaces it.
+    /// </summary>
+    [Fact]
+    public void DefaultsTheModuleWidthToTheNominalModuleWidth()
+    {
+        BarcodeOptions options = new() { XDimension = 0.3 };
+
+        Assert.Equal(0.25, SymbolEncoder.Read(new Pzn8Symbology(), "03752864", new BarcodeOptions(), static (ref symbol) => symbol.XDimension));
+        Assert.Equal(0.3, SymbolEncoder.Read(new Pzn8Symbology(), "03752864", options, static (ref symbol) => symbol.XDimension));
+    }
+
+    /// <summary>
     /// The symbol carries the identifier, the digits and the check digit, and Code 39 adds no check
     /// character of its own.
     /// </summary>

@@ -363,14 +363,15 @@ internal static class Code49Encoder
     private static void WriteRows(ReadOnlySpan<int> codes, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int rowCount = codes.Length / CodeCharactersPerRow;
-        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, NominalBarHeight);
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
         ReadOnlySpan<byte> parities = RowParity;
         ReadOnlySpan<ushort> even = Code49Patterns.Even;
         ReadOnlySpan<ushort> odd = Code49Patterns.Odd;
 
         // A separator between two rows is one bar across the row width.
         int separators = rowCount - 1;
-        symbol.BeginStacked(rowCount + separators, (rowCount * RowRunCount) + separators, (rowCount * ((RowRunCount + 1) >> 1)) + separators);
+        symbol.BeginStacked(rowCount + separators, (rowCount * RowRunCount) + separators, (rowCount * ((RowRunCount + 1) >> 1)) + separators, xDimension);
         for (int row = 0; row < rowCount; row++)
         {
             // Section 2.1.5: the start pattern is a one module bar and a one module space, and the stop

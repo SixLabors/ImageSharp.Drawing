@@ -60,6 +60,18 @@ public class IdentcodeSymbologyTests
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
     /// <summary>
+    /// Deutsche Post permits a narrow module of 0.375 mm to 0.5 mm and requires a height of at least 25 mm.
+    /// A symbol without an X dimension of the caller draws at 0.5 mm with bars of 50 modules, 25 mm.
+    /// </summary>
+    [Fact]
+    public void DefaultsToTheWidestModuleAndTheLeastHeight()
+        => SymbolEncoder.Encode(new IdentcodeSymbology(), "56310243031", new BarcodeOptions(), static (ref symbol) =>
+        {
+            Assert.Equal(0.5, symbol.XDimension);
+            Assert.Equal(25.0, symbol.BarHeights[0] * symbol.XDimension);
+        });
+
+    /// <summary>
     /// Encodes the text with the default options.
     /// </summary>
     /// <param name="text">The text to encode.</param>

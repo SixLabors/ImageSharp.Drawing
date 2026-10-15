@@ -127,13 +127,14 @@ internal static class UspsPostalEncoder
         ref BarcodeSymbol symbol)
     {
         int barCount = (digits.Length * BarsPerDigit) + 2;
-        Span<int> runs = symbol.BeginLinear((barCount * 2) - 1, out Span<float> heights, out Span<float> tops);
+        double xDimension = options.XDimension ?? NominalXDimension;
+        Span<int> runs = symbol.BeginLinear((barCount * 2) - 1, xDimension, out Span<float> heights, out Span<float> tops);
         for (int i = 0; i < runs.Length; i++)
         {
             runs[i] = (i & 1) == 0 ? BarUnits : SpaceUnits;
         }
 
-        float fullBar = options.ResolveBarHeight(NominalXDimension, FullBar);
+        float fullBar = options.ResolveBarHeight(xDimension, FullBar);
         float halfBar = fullBar * HalfBar / FullBar;
         heights[0] = fullBar;
         heights[barCount - 1] = fullBar;

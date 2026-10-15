@@ -18,10 +18,9 @@ internal static class BarEmitter
     /// <param name="canvas">The canvas to render onto.</param>
     /// <param name="symbol">The encoded linear or stacked symbol.</param>
     /// <param name="options">The sizing and painting options.</param>
-    /// <param name="xDimension">The width of one module in millimetres.</param>
     /// <param name="origin">The top left corner of everything the call draws, including any text that overhangs the symbol, in pixels.</param>
-    public static void Emit(DrawingCanvas canvas, ref BarcodeSymbol symbol, BarcodeOptions options, double xDimension, PointF origin)
-        => Layout(canvas, ref symbol, options, xDimension, origin);
+    public static void Emit(DrawingCanvas canvas, ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
+        => Layout(canvas, ref symbol, options, origin);
 
     /// <summary>
     /// Measures the area the symbol covers without drawing anything, so a caller can size the image
@@ -29,11 +28,10 @@ internal static class BarEmitter
     /// </summary>
     /// <param name="symbol">The encoded linear or stacked symbol.</param>
     /// <param name="options">The sizing and painting options.</param>
-    /// <param name="xDimension">The width of one module in millimetres.</param>
     /// <param name="origin">The top left corner the symbol would draw from, in pixels.</param>
     /// <returns>The area the symbol covers, including any text that overhangs the bars.</returns>
-    public static RectangleF Measure(ref BarcodeSymbol symbol, BarcodeOptions options, double xDimension, PointF origin)
-        => Layout(null, ref symbol, options, xDimension, origin);
+    public static RectangleF Measure(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
+        => Layout(null, ref symbol, options, origin);
 
     /// <summary>
     /// Lays the symbol out and, when a canvas is supplied, draws it. Both callers share one pass, so the
@@ -43,14 +41,13 @@ internal static class BarEmitter
     /// <param name="canvas">The canvas to render onto, or <see langword="null"/> to measure only.</param>
     /// <param name="symbol">The encoded linear or stacked symbol.</param>
     /// <param name="options">The sizing and painting options.</param>
-    /// <param name="xDimension">The width of one module in millimetres.</param>
     /// <param name="origin">The top left corner of everything the call draws, in pixels.</param>
     /// <returns>The area the symbol covers, including any text that overhangs the bars.</returns>
-    private static RectangleF Layout(DrawingCanvas? canvas, ref BarcodeSymbol symbol, BarcodeOptions options, double xDimension, PointF origin)
+    private static RectangleF Layout(DrawingCanvas? canvas, ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
     {
         Guard.MustBeGreaterThan(options.Dpi, 0, nameof(options.Dpi));
-        Guard.MustBeGreaterThan(xDimension, 0, nameof(xDimension));
-        float moduleWidth = (float)(xDimension / 25.4 * options.Dpi);
+        Guard.MustBeGreaterThan(symbol.XDimension, 0, nameof(options.XDimension));
+        float moduleWidth = (float)(symbol.XDimension / 25.4 * options.Dpi);
 
         ReadOnlySpan<BarcodeRow> rows = symbol.Rows;
         ReadOnlySpan<int> allRuns = symbol.Runs;

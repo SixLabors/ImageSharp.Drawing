@@ -50,6 +50,13 @@ public sealed class DataMatrixRectangularExtensionSymbology : BarcodeSymbology
     {
         Guard.NotNull(text, nameof(text));
 
-        DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.RectangularExtension, this.Rows ?? 0, this.Columns ?? 0, ref symbol);
+        DataMatrixEncoder.BuildSymbol(
+            text,
+            false,
+            DataMatrixFormat.RectangularExtension,
+            this.Rows ?? 0,
+            this.Columns ?? 0,
+            options.XDimension ?? PointXDimension,
+            ref symbol);
     }
 }
