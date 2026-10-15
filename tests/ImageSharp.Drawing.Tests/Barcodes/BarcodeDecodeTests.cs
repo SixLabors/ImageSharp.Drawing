@@ -88,6 +88,22 @@ public class BarcodeDecodeTests
         => AssertDecodes(new Sscc18Symbology(), "(00)106141411234567897", BarcodeFormat.CODE_128, "00106141411234567897");
 
     /// <summary>
+    /// An Intelligent Mail package barcode decodes to the routing code, the Function 1 character that
+    /// section 2.2.1 of USPS2000508 places after the ZIP Code, and the PIC. The decoder reports Function 1
+    /// characters only when it reads the symbol as GS1: the first as the symbology identifier ]C1 and the
+    /// second as the group separator.
+    /// </summary>
+    [Fact]
+    public void IntelligentMailPackage_RoundTrips()
+        => AssertDecodes(
+            new IntelligentMailPackageSymbology("USPS TRACKING #"),
+            "(420)123456789(92)12391234567812345670",
+            BarcodeFormat.CODE_128,
+            "]C1420123456789\u001D9212391234567812345670",
+            CreateOptions(),
+            static reader => reader.Options.AssumeGS1 = true);
+
+    /// <summary>
     /// A HIBC Code 128 decodes to the flag character, the data and the check character, which is what the
     /// symbol carries; the delimiters belong to the human readable interpretation alone.
     /// </summary>
