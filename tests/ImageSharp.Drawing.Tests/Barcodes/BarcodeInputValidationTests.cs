@@ -76,6 +76,10 @@ public class BarcodeInputValidationTests
     [InlineData(typeof(Code49Symbology))]
     [InlineData(typeof(CodablockFSymbology))]
     [InlineData(typeof(HibcCodablockFSymbology))]
+    [InlineData(typeof(AztecCodeSymbology))]
+    [InlineData(typeof(AztecCodeCompactSymbology))]
+    [InlineData(typeof(AztecRuneSymbology))]
+    [InlineData(typeof(HibcAztecCodeSymbology))]
     public void RejectsNullText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;
@@ -144,6 +148,10 @@ public class BarcodeInputValidationTests
     [InlineData(typeof(FourStateMailmarkSymbology))]
     [InlineData(typeof(Code49Symbology))]
     [InlineData(typeof(HibcCodablockFSymbology))]
+    [InlineData(typeof(AztecCodeSymbology))]
+    [InlineData(typeof(AztecCodeCompactSymbology))]
+    [InlineData(typeof(AztecRuneSymbology))]
+    [InlineData(typeof(HibcAztecCodeSymbology))]
     public void RejectsEmptyText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;
