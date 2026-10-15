@@ -26,5 +26,11 @@ internal enum BarcodeSymbolKind
     /// <summary>
     /// A grid of square modules.
     /// </summary>
-    Matrix
+    Matrix,
+
+    /// <summary>
+    /// Offset rows of hexagonal modules around a circular finder, the form of MaxiCode. The modules are a grid
+    /// of rows and columns in which every odd row stands half a module to the right.
+    /// </summary>
+    Hexagonal,
 }

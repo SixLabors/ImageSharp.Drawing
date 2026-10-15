@@ -391,6 +391,31 @@ internal struct BarcodeSymbol : IDisposable
     }
 
     /// <summary>
+    /// Begins a hexagonal symbol: rows of hexagonal modules X wide, every odd row half a module to the right,
+    /// the rows √3/2 X apart. The modules start light.
+    /// </summary>
+    /// <param name="columns">The number of module columns.</param>
+    /// <param name="rows">The number of module rows.</param>
+    /// <param name="sideQuietZone">The quiet zone on the left and the right, in X.</param>
+    /// <param name="endQuietZone">The quiet zone on the top and the bottom, in X.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="XDimension"/>.</param>
+    /// <returns>The modules to write, row-major, true for a dark module.</returns>
+    public Span<bool> BeginHexagonal(int columns, int rows, float sideQuietZone, float endQuietZone, double xDimension)
+    {
+        Span<bool> modules = this.BeginMatrix(columns, rows, 0, xDimension);
+        this.Kind = BarcodeSymbolKind.Hexagonal;
+
+        // The pointed hexagons are 2/√3 X tall, and the rows stand √3/2 X apart, so the symbol is that tall
+        // over its last row.
+        this.HeightInModules = (float)(((rows - 1) * Math.Sqrt(3) / 2) + (2 / Math.Sqrt(3)));
+        this.LeadingQuietZone = sideQuietZone;
+        this.TrailingQuietZone = sideQuietZone;
+        this.TopQuietZone = endQuietZone;
+        this.BottomQuietZone = endQuietZone;
+        return modules;
+    }
+
+    /// <summary>
     /// Reserves the text placements and their characters. The encoder calls it once, before it adds any
     /// text.
     /// </summary>
