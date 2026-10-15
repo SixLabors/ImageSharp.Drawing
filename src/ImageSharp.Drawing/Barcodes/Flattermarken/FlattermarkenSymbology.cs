@@ -40,9 +40,6 @@ public sealed class FlattermarkenSymbology : BarcodeSymbology
     private const float NominalBarHeight = 5F;
 
     /// <inheritdoc/>
-    public override double NominalXDimension => XDimension;
-
-    /// <inheritdoc/>
     internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
@@ -61,7 +58,8 @@ public sealed class FlattermarkenSymbology : BarcodeSymbology
 
         // One bar and one space per digit at most, plus a zero width bar at either end. The symbol reserves
         // that many runs and keeps those written.
-        Span<int> buffer = symbol.BeginLinear((text.Length * 2) + 3, out Span<float> heights, out _);
+        double xDimension = options.XDimension ?? XDimension;
+        Span<int> buffer = symbol.BeginLinear((text.Length * 2) + 3, xDimension, out Span<float> heights, out _);
         int written = 0;
         int space = 0;
         for (int i = 0; i < text.Length; i++)
@@ -100,7 +98,7 @@ public sealed class FlattermarkenSymbology : BarcodeSymbology
         }
 
         symbol.TrimLastRow(written);
-        float barHeight = options.ResolveBarHeight(XDimension, NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
         heights[..((written + 1) >> 1)].Fill(barHeight);
 
         if (options.Font is not null)

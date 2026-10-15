@@ -28,9 +28,6 @@ public sealed class Gs1DataBarExpandedSymbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    public override double NominalXDimension => DataBarExpandedEncoder.NominalXDimension;
-
-    /// <inheritdoc/>
     internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));

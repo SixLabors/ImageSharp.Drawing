@@ -156,7 +156,8 @@ internal static class Code128Encoder
 
             // Section 5.4.1 gives every symbol character six elements. Only the stop character differs,
             // with the four bars and three spaces that close the symbol.
-            Span<int> runs = symbol.BeginLinear(((count - 1) * 6) + 7, out Span<float> heights, out _);
+            double xDimension = options.XDimension ?? NominalXDimension;
+            Span<int> runs = symbol.BeginLinear(((count - 1) * 6) + 7, xDimension, out Span<float> heights, out _);
             WriteRuns(values[..count], runs);
 
             int widthInModules = 0;
@@ -165,7 +166,7 @@ internal static class Code128Encoder
                 widthInModules += runs[i];
             }
 
-            float barHeight = options.ResolveBarHeight(NominalXDimension, NominalBarHeight);
+            float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
             heights.Fill(barHeight);
 
             int readableLength = readablePrefix.Length + readableBody.Length + readableSuffix.Length;

@@ -26,9 +26,6 @@ public sealed class MandsSymbology : BarcodeSymbology
     {
     }
 
-    /// <inheritdoc/>
-    public override double NominalXDimension => EanUpcEncoder.NominalXDimension;
-
     /// <summary>
     /// Gets the indexes of the extended bars: the two bars of each outer guard pattern. The centre guard
     /// bars stay at digit bar height.
@@ -67,8 +64,8 @@ public sealed class MandsSymbology : BarcodeSymbology
         Span<byte> modules = ((Span<byte>)moduleStorage)[..EanUpcEncoder.Ean8Width];
         EanUpcEncoder.WriteEan8Modules(digits, modules);
 
-        EanUpcEncoder.BeginRuns(modules, ref symbol, out Span<float> heights);
-        float digitHeight = options.ResolveBarHeight(EanUpcEncoder.NominalXDimension, EanUpcEncoder.NominalEan8BarHeight);
+        EanUpcEncoder.BeginRuns(modules, options.XDimension ?? EanUpcEncoder.NominalXDimension, ref symbol, out Span<float> heights);
+        float digitHeight = options.ResolveBarHeight(symbol.XDimension, EanUpcEncoder.NominalEan8BarHeight);
         EanUpcEncoder.FillGuardedHeights(heights, digitHeight, GuardBars, options);
 
         if (options.Font is not null)

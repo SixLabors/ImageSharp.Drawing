@@ -471,14 +471,15 @@ internal static class Code16KEncoder
     private static void WriteRows(ReadOnlySpan<int> values, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int rowCount = values.Length / CharactersPerRow;
-        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, NominalBarHeight);
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
         ReadOnlySpan<uint> patterns = Code128Encoder.Patterns;
 
         // Section 2.1: start, guard bar, five characters and stop, 4 + 1 + 30 + 4 elements, on a bar at both
         // ends. A separator between two rows is one bar across the row width.
         const int rowRuns = 4 + 1 + (CharactersPerRow * 6) + 4;
         int separators = rowCount - 1;
-        symbol.BeginStacked(rowCount + separators, (rowCount * rowRuns) + separators, (rowCount * ((rowRuns + 1) >> 1)) + separators);
+        symbol.BeginStacked(rowCount + separators, (rowCount * rowRuns) + separators, (rowCount * ((rowRuns + 1) >> 1)) + separators, xDimension);
         for (int row = 0; row < rowCount; row++)
         {
             // Table 2 starts every character on a space, which the guard bar leads into.

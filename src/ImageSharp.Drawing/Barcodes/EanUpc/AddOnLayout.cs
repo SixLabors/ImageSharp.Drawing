@@ -32,8 +32,8 @@ internal static class AddOnLayout
     /// <param name="symbol">The symbol to write.</param>
     public static void Build(ReadOnlySpan<byte> modules, ReadOnlySpan<char> digits, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        EanUpcEncoder.BeginRuns(modules, ref symbol, out Span<float> heights);
-        float barHeight = options.ResolveBarHeight(EanUpcEncoder.NominalXDimension, EanUpcEncoder.NominalAddOnBarHeight);
+        EanUpcEncoder.BeginRuns(modules, options.XDimension ?? EanUpcEncoder.NominalXDimension, ref symbol, out Span<float> heights);
+        float barHeight = options.ResolveBarHeight(symbol.XDimension, EanUpcEncoder.NominalAddOnBarHeight);
         heights.Fill(barHeight);
 
         // Section 5.2.5 of the GS1 General Specifications prints the add-on interpretation above the bars.

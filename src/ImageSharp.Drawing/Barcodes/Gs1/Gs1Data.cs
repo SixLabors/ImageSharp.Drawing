@@ -50,6 +50,36 @@ internal static class Gs1Data
     public static float TextScale(Font font) => MathF.Max(1F, MinimumTextHeight * 72F / 25.4F / font.Size);
 
     /// <summary>
+    /// Adds the human readable interpretation of element strings below a built matrix symbol, one element
+    /// string on each line, as <see cref="WriteReadable(ReadOnlySpan{char}, bool, Span{char})"/> writes them.
+    /// The lines start on the left edge of the symbol, as Example 1 of section 2.3 of the GS1 DataMatrix
+    /// Guideline prints them.
+    /// </summary>
+    /// <param name="text">The element strings, in the element string syntax that <see cref="Prepare"/> accepted.</param>
+    /// <param name="font">The font of the caller, which <see cref="TextScale"/> lifts to <see cref="MinimumTextHeight"/>.</param>
+    /// <param name="symbol">The built symbol.</param>
+    public static void AddMatrixReadable(ReadOnlySpan<char> text, Font font, ref BarcodeSymbol symbol)
+    {
+        // The text is bounded by the capacity of the symbology, so the buffer is too, and longer text rents
+        // it once.
+        InlineArray64<char> readableStorage = default;
+        PooledBuffer<char> rented = default;
+        int capacity = ReadableCapacity(text.Length);
+        Span<char> readable = capacity <= InlineBufferLength
+            ? ((Span<char>)readableStorage)[..capacity]
+            : (rented = new PooledBuffer<char>(capacity)).Span;
+        try
+        {
+            int written = WriteReadable(text, true, readable);
+            symbol.AddMatrixText(readable[..written], BarcodeTextAlignment.Left, TextScale(font));
+        }
+        finally
+        {
+            rented.Dispose();
+        }
+    }
+
+    /// <summary>
     /// Returns the number of characters <see cref="Prepare"/> writes at most for the text, after it checks
     /// that the text can prepare into no more than the given number of characters. The prepared data drops
     /// the two parentheses of each element string and adds at most one separator between two of them, so

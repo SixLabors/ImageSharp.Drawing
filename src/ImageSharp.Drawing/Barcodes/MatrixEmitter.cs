@@ -21,10 +21,9 @@ internal static class MatrixEmitter
     /// <param name="canvas">The canvas to render onto.</param>
     /// <param name="symbol">The encoded matrix symbol.</param>
     /// <param name="options">The sizing and painting options.</param>
-    /// <param name="xDimension">The width of one module in millimetres.</param>
     /// <param name="origin">The top left corner of everything the call draws, in pixels.</param>
-    public static void Emit(DrawingCanvas canvas, ref BarcodeSymbol symbol, BarcodeOptions options, double xDimension, PointF origin)
-        => Layout(canvas, ref symbol, options, xDimension, origin);
+    public static void Emit(DrawingCanvas canvas, ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
+        => Layout(canvas, ref symbol, options, origin);
 
     /// <summary>
     /// Measures the area the symbol covers without drawing anything, so a caller can size the image
@@ -32,11 +31,10 @@ internal static class MatrixEmitter
     /// </summary>
     /// <param name="symbol">The encoded matrix symbol.</param>
     /// <param name="options">The sizing and painting options.</param>
-    /// <param name="xDimension">The width of one module in millimetres.</param>
     /// <param name="origin">The top left corner the symbol would draw from, in pixels.</param>
     /// <returns>The area the symbol covers, including the quiet zones when they are drawn and the text.</returns>
-    public static RectangleF Measure(ref BarcodeSymbol symbol, BarcodeOptions options, double xDimension, PointF origin)
-        => Layout(null, ref symbol, options, xDimension, origin);
+    public static RectangleF Measure(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
+        => Layout(null, ref symbol, options, origin);
 
     /// <summary>
     /// Lays the symbol out and, when a canvas is supplied, draws it. Both callers share one pass, so the
@@ -45,14 +43,13 @@ internal static class MatrixEmitter
     /// <param name="canvas">The canvas to render onto, or <see langword="null"/> to measure only.</param>
     /// <param name="symbol">The encoded matrix symbol.</param>
     /// <param name="options">The sizing and painting options.</param>
-    /// <param name="xDimension">The width of one module in millimetres.</param>
     /// <param name="origin">The top left corner of everything the call draws, in pixels.</param>
     /// <returns>The area the symbol covers.</returns>
-    private static RectangleF Layout(DrawingCanvas? canvas, ref BarcodeSymbol symbol, BarcodeOptions options, double xDimension, PointF origin)
+    private static RectangleF Layout(DrawingCanvas? canvas, ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
     {
         Guard.MustBeGreaterThan(options.Dpi, 0, nameof(options.Dpi));
-        Guard.MustBeGreaterThan(xDimension, 0, nameof(xDimension));
-        float moduleWidth = (float)(xDimension / 25.4 * options.Dpi);
+        Guard.MustBeGreaterThan(symbol.XDimension, 0, nameof(options.XDimension));
+        float moduleWidth = (float)(symbol.XDimension / 25.4 * options.Dpi);
 
         // A matrix symbol has the same quiet zone on all four sides.
         int quietZone = options.IncludeQuietZones ? (int)symbol.LeadingQuietZone : 0;
@@ -61,10 +58,13 @@ internal static class MatrixEmitter
 
         // Each edge rounds from its exact position onto the device pixel grid, so the modules stay crisp
         // and rounding cannot drift across the symbol. The positions are products of a whole module count
-        // and the module width, calculated in double from the origin, and the edge two neighbours share
-        // rounds to one pixel for both.
-        double symbolLeft = origin.X + ((double)quietZone * moduleWidth);
-        double symbolTop = origin.Y + ((double)quietZone * moduleWidth);
+        // and the module width, calculated in double from the corner of the symbol, and the edge two
+        // neighbours share rounds to one pixel for both. The corner itself starts on a whole pixel: when a
+        // module is not a whole number of pixels, the modules alternate between two widths, and a corner
+        // between pixels would make that pattern depend on the width of the quiet zone, so the two outer
+        // rings of a finder pattern could round to different widths.
+        double symbolLeft = Math.Round(origin.X + ((double)quietZone * moduleWidth));
+        double symbolTop = Math.Round(origin.Y + ((double)quietZone * moduleWidth));
 
         // The quiet zones and the modules set the drawn area, and the human readable interpretation below
         // the symbol extends it: downwards by its lines, and to either side by a line wider than the
@@ -163,6 +163,62 @@ internal static class MatrixEmitter
             runCount += bytes[rowStart] & bytes[rowStart - 1];
         }
 
+        // A Swiss cross covers a square at the centre of the symbol whose edges need not fall on module edges.
+        // A run under the square splits into its parts outside it, up to four, and the black parts of the
+        // cross join the runs, so one fill draws both. The square and the cross edges round onto the pixel
+        // grid as the module edges do. This pass counts the parts, so the array is sized exactly.
+        float crossSize = symbol.SwissCrossSize;
+        double crossLeft = symbolLeft + ((columns - crossSize) / 2D * moduleWidth);
+        double crossTop = symbolTop + ((rows - crossSize) / 2D * moduleWidth);
+        double crossSide = (double)crossSize * moduleWidth;
+        RectangleF hole = RectangleF.Empty;
+        InlineArray4<RectangleF> pieceStorage = default;
+        Span<RectangleF> pieces = pieceStorage;
+        if (crossSize > 0)
+        {
+            hole = RectangleF.FromLTRB(
+                (float)Math.Round(crossLeft),
+                (float)Math.Round(crossTop),
+                (float)Math.Round(crossLeft + crossSide),
+                (float)Math.Round(crossTop + crossSide));
+
+            runCount += SwissCross.DarkEdges.Length / 4;
+            for (int r = 0; r < rows; r++)
+            {
+                float rowTop = (float)Math.Round(symbolTop + ((double)r * moduleWidth));
+                float rowBottom = (float)Math.Round(symbolTop + ((double)(r + 1) * moduleWidth));
+                if (rowBottom <= hole.Top || rowTop >= hole.Bottom)
+                {
+                    continue;
+                }
+
+                ReadOnlySpan<bool> row = modules.Slice(r * columns, columns);
+                int c = 0;
+                while (c < columns)
+                {
+                    if (!row[c])
+                    {
+                        c++;
+                        continue;
+                    }
+
+                    int start = c;
+                    while (c < columns && row[c])
+                    {
+                        c++;
+                    }
+
+                    RectangleF run = RectangleF.FromLTRB(
+                        (float)Math.Round(symbolLeft + ((double)start * moduleWidth)),
+                        rowTop,
+                        (float)Math.Round(symbolLeft + ((double)c * moduleWidth)),
+                        rowBottom);
+
+                    runCount += Subtract(run, hole, pieces) - 1;
+                }
+            }
+        }
+
         // The path retains the rectangles until the canvas flushes, so it owns this array.
         RectangleF[] runs = new RectangleF[runCount];
         float pathLeft = float.MaxValue;
@@ -192,11 +248,37 @@ internal static class MatrixEmitter
 
                 float runLeft = (float)Math.Round(symbolLeft + ((double)start * moduleWidth));
                 float runRight = (float)Math.Round(symbolLeft + ((double)c * moduleWidth));
-                runs[index++] = RectangleF.FromLTRB(runLeft, rowTop, runRight, rowBottom);
+                RectangleF run = RectangleF.FromLTRB(runLeft, rowTop, runRight, rowBottom);
                 pathLeft = MathF.Min(pathLeft, runLeft);
                 pathTop = MathF.Min(pathTop, rowTop);
                 pathRight = MathF.Max(pathRight, runRight);
                 pathBottom = MathF.Max(pathBottom, rowBottom);
+                if (crossSize == 0)
+                {
+                    runs[index++] = run;
+                    continue;
+                }
+
+                // The parts lie within the run, so the run edges still bound the path.
+                int count = Subtract(run, hole, pieces);
+                pieces[..count].CopyTo(runs.AsSpan(index));
+                index += count;
+            }
+        }
+
+        // The cross graphic scales from its own units to the side of the square. Its black parts lie within
+        // the square, which lies within the symbol, so the module edges still bound the path.
+        if (crossSize > 0)
+        {
+            double scale = crossSide / SwissCross.Side;
+            ReadOnlySpan<float> edges = SwissCross.DarkEdges;
+            for (int e = 0; e < edges.Length; e += 4)
+            {
+                runs[index++] = RectangleF.FromLTRB(
+                    (float)Math.Round(crossLeft + (edges[e] * scale)),
+                    (float)Math.Round(crossTop + (edges[e + 1] * scale)),
+                    (float)Math.Round(crossLeft + (edges[e + 2] * scale)),
+                    (float)Math.Round(crossTop + (edges[e + 3] * scale)));
             }
         }
 
@@ -221,5 +303,47 @@ internal static class MatrixEmitter
         }
 
         return bounds;
+    }
+
+    /// <summary>
+    /// Writes the parts of a run outside a hole: the part above the hole, the part below it, and the parts
+    /// to its left and right within its height.
+    /// </summary>
+    /// <param name="run">The run.</param>
+    /// <param name="hole">The hole.</param>
+    /// <param name="pieces">The buffer that receives the parts, at least four long.</param>
+    /// <returns>The number of parts, 0 to 4. A run clear of the hole is its only part.</returns>
+    private static int Subtract(RectangleF run, RectangleF hole, Span<RectangleF> pieces)
+    {
+        if (run.Right <= hole.Left || run.Left >= hole.Right || run.Bottom <= hole.Top || run.Top >= hole.Bottom)
+        {
+            pieces[0] = run;
+            return 1;
+        }
+
+        int count = 0;
+        if (run.Top < hole.Top)
+        {
+            pieces[count++] = RectangleF.FromLTRB(run.Left, run.Top, run.Right, hole.Top);
+        }
+
+        if (run.Bottom > hole.Bottom)
+        {
+            pieces[count++] = RectangleF.FromLTRB(run.Left, hole.Bottom, run.Right, run.Bottom);
+        }
+
+        float top = MathF.Max(run.Top, hole.Top);
+        float bottom = MathF.Min(run.Bottom, hole.Bottom);
+        if (run.Left < hole.Left)
+        {
+            pieces[count++] = RectangleF.FromLTRB(run.Left, top, hole.Left, bottom);
+        }
+
+        if (run.Right > hole.Right)
+        {
+            pieces[count++] = RectangleF.FromLTRB(hole.Right, top, run.Right, bottom);
+        }
+
+        return count;
     }
 }

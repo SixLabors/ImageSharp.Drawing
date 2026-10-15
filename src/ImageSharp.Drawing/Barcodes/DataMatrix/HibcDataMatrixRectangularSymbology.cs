@@ -52,10 +52,10 @@ public sealed class HibcDataMatrixRectangularSymbology : BarcodeSymbology
         try
         {
             HibcData.Prepare(text, this.ValidateCheckCharacter, ref encoded);
-            DataMatrixEncoder.BuildSymbol(encoded.AsSpan(), false, DataMatrixFormat.Rectangular, 0, 0, ref symbol);
+            DataMatrixEncoder.BuildSymbol(encoded.AsSpan(), false, DataMatrixFormat.Rectangular, 0, 0, options.XDimension ?? PointXDimension, ref symbol);
             if (options.Font is not null)
             {
-                DataMatrixEncoder.AddHibcReadable(encoded.AsSpan(), ref symbol);
+                HibcData.AddMatrixReadable(encoded.AsSpan(), ref symbol);
             }
         }
         finally

@@ -24,13 +24,6 @@ public abstract class BarcodeSymbology
     }
 
     /// <summary>
-    /// Gets the nominal X dimension in millimetres, the width of one module. A symbology whose
-    /// specification gives an X dimension returns it, and every other symbology returns
-    /// <see cref="PointXDimension"/>. <see cref="BarcodeOptions.XDimension"/> overrides it.
-    /// </summary>
-    public virtual double NominalXDimension => PointXDimension;
-
-    /// <summary>
     /// Validates the given text and encodes it into a device-independent symbol measured in modules.
     /// The text length is checked against the maximum of the symbology before any buffer is sized from it.
     /// </summary>

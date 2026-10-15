@@ -35,7 +35,8 @@ public sealed class RawLinearSymbology : BarcodeSymbology
         // An even count of widths ends on a space, so a zero width bar closes the runs. The storage starts
         // zero, so that bar needs no write.
         bool endsOnSpace = (text.Length & 1) == 0;
-        Span<int> runs = symbol.BeginLinear(text.Length + (endsOnSpace ? 1 : 0), out Span<float> heights, out _);
+        double xDimension = options.XDimension ?? PointXDimension;
+        Span<int> runs = symbol.BeginLinear(text.Length + (endsOnSpace ? 1 : 0), xDimension, out Span<float> heights, out _);
         int widthInModules = 0;
         int index = 0;
         SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
@@ -51,7 +52,7 @@ public sealed class RawLinearSymbology : BarcodeSymbology
             widthInModules += current.Value - '0';
         }
 
-        float barHeight = options.ResolveBarHeight(PointXDimension, widthInModules * NominalBarHeightFraction);
+        float barHeight = options.ResolveBarHeight(xDimension, widthInModules * NominalBarHeightFraction);
         heights.Fill(barHeight);
         symbol.EndLinear(0, 0);
     }

@@ -127,7 +127,8 @@ internal static class CodabarEncoder
     public static void BuildSymbol(ReadOnlySpan<char> head, char stop, char? check, bool printCheck, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int characters = head.Length + 1 + (check is null ? 0 : 1);
-        Span<int> runs = symbol.BeginLinear((characters * (ElementsPerCharacter + 1)) - 1, out Span<float> heights, out _);
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        Span<int> runs = symbol.BeginLinear((characters * (ElementsPerCharacter + 1)) - 1, xDimension, out Span<float> heights, out _);
         int written = 0;
 
         for (int i = 0; i < head.Length; i++)
@@ -148,9 +149,8 @@ internal static class CodabarEncoder
             widthInModules += runs[i];
         }
 
-        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
         float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
-        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, nominalBarHeight);
+        float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);
         heights.Fill(barHeight);
 
         if (options.Font is not null)

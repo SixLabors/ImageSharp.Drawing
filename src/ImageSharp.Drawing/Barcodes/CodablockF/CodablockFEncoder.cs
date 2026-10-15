@@ -431,7 +431,8 @@ internal static class CodablockFEncoder
         int rowSize = columns + Overhead;
         int rowCount = values.Length / rowSize;
         int width = RowWidth(columns);
-        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, NominalRowHeight(columns));
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        float barHeight = options.ResolveBarHeight(xDimension, NominalRowHeight(columns));
         ReadOnlySpan<uint> patterns = Code128Encoder.Patterns;
 
         // The rows from the top: a solid edge bar, each data row with a separator below it but the last,
@@ -443,7 +444,8 @@ internal static class CodablockFEncoder
         symbol.BeginStacked(
             (rowCount * 2) + 1,
             2 + (rowCount * dataRuns) + (separators * separatorRuns),
-            2 + (rowCount * ((dataRuns + 1) >> 1)) + (separators * ((separatorRuns + 1) >> 1)));
+            2 + (rowCount * ((dataRuns + 1) >> 1)) + (separators * ((separatorRuns + 1) >> 1)),
+            xDimension);
 
         AddEdge(width, ref symbol);
         for (int row = 0; row < rowCount; row++)

@@ -84,6 +84,14 @@ public class Code32SymbologyTests
         => Assert.Equal(((6 + 2) * 16) - 1, SymbolEncoder.Read(new Code32Symbology(), "012345676", new BarcodeOptions(), SymbolEncoder.RunSum));
 
     /// <summary>
+    /// Allegato A: "lo spessore nominale delle barre e degli spazi stretti è di mm 0,250", so a symbol
+    /// without an X dimension of the caller draws its modules at 0.25 mm.
+    /// </summary>
+    [Fact]
+    public void DefaultsTheModuleWidthToTheNominalWidth()
+        => Assert.Equal(0.25, SymbolEncoder.Read(new Code32Symbology(), "012345676", new BarcodeOptions(), static (ref symbol) => symbol.XDimension));
+
+    /// <summary>
     /// Encodes the text with the default options.
     /// </summary>
     /// <param name="text">The text to encode.</param>

@@ -21,6 +21,6 @@ public sealed class DataMatrixRectangularSymbology : BarcodeSymbology
     {
         Guard.NotNull(text, nameof(text));
 
-        DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.Rectangular, 0, 0, ref symbol);
+        DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.Rectangular, 0, 0, options.XDimension ?? PointXDimension, ref symbol);
     }
 }

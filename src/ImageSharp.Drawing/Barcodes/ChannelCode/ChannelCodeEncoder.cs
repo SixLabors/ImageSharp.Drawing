@@ -93,7 +93,8 @@ internal static class ChannelCodeEncoder
     {
         int channels = digits + ChannelsBeyondDigits;
         int finder = shortFinder ? ShortFinderElements : FinderElements;
-        Span<int> runs = symbol.BeginLinear(finder + (channels * 2), out Span<float> heights, out _);
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        Span<int> runs = symbol.BeginLinear(finder + (channels * 2), xDimension, out Span<float> heights, out _);
         runs[..finder].Fill(1);
 
         Enumeration enumeration = new(channels, value);
@@ -110,9 +111,8 @@ internal static class ChannelCodeEncoder
             widthInModules += runs[i];
         }
 
-        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
         float nominalBarHeight = MathF.Max(NominalBarHeight, (float)(MinimumBarHeightMillimetres / xDimension));
-        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, nominalBarHeight);
+        float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);
         heights.Fill(barHeight);
 
         if (options.Font is not null && readable.Length > 0)

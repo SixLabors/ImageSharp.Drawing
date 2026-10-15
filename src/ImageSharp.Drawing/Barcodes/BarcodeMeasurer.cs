@@ -29,10 +29,9 @@ public static class BarcodeMeasurer
         try
         {
             symbology.Encode(text, options, ref symbol);
-            double xDimension = options.XDimension ?? symbology.NominalXDimension;
             return symbol.Kind == BarcodeSymbolKind.Matrix
-                ? MatrixEmitter.Measure(ref symbol, options, xDimension, origin)
-                : BarEmitter.Measure(ref symbol, options, xDimension, origin);
+                ? MatrixEmitter.Measure(ref symbol, options, origin)
+                : BarEmitter.Measure(ref symbol, options, origin);
         }
         finally
         {

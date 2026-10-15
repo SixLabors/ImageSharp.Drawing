@@ -17,6 +17,12 @@ internal sealed class GaloisField
     public static readonly GaloisField DataMatrix = new(256, 301);
 
     /// <summary>
+    /// The field of QR Code, section 6.5.2 of ISO/IEC 18004: GF(2^8) with the primitive polynomial
+    /// x^8 + x^4 + x^3 + x^2 + 1, 285 decimal.
+    /// </summary>
+    public static readonly GaloisField QrCode = new(256, 285);
+
+    /// <summary>
     /// The powers of alpha, alpha^i at index i, written twice: for i from 0 to size - 2 and again from
     /// size - 1 to 2 x (size - 2). The sum of two logarithms is at most 2 x (size - 2), so a product reads its
     /// power directly, with no reduction modulo size - 1.

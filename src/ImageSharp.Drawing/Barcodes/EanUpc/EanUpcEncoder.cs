@@ -214,9 +214,10 @@ internal static class EanUpcEncoder
     /// stream must start and end with a dark module so that even run indexes are bars.
     /// </summary>
     /// <param name="modules">The module stream, where 1 is a dark module.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <param name="heights">The bar heights of the symbol, to write.</param>
-    public static void BeginRuns(ReadOnlySpan<byte> modules, ref BarcodeSymbol symbol, out Span<float> heights)
+    public static void BeginRuns(ReadOnlySpan<byte> modules, double xDimension, ref BarcodeSymbol symbol, out Span<float> heights)
     {
         int count = 1;
         for (int i = 1; i < modules.Length; i++)
@@ -227,7 +228,7 @@ internal static class EanUpcEncoder
             }
         }
 
-        Span<int> runs = symbol.BeginLinear(count, out heights, out _);
+        Span<int> runs = symbol.BeginLinear(count, xDimension, out heights, out _);
         int run = 0;
         int width = 1;
         for (int i = 1; i < modules.Length; i++)
@@ -386,8 +387,8 @@ internal static class EanUpcEncoder
         Span<byte> modules = ((Span<byte>)moduleStorage)[..Ean8Width];
         WriteEan8Modules(digits, modules);
 
-        BeginRuns(modules, ref symbol, out Span<float> heights);
-        float barHeight = options.ResolveBarHeight(NominalXDimension, NominalEan8BarHeight);
+        BeginRuns(modules, options.XDimension ?? NominalXDimension, ref symbol, out Span<float> heights);
+        float barHeight = options.ResolveBarHeight(symbol.XDimension, NominalEan8BarHeight);
         FillGuardedHeights(heights, barHeight, Ean8GuardBars, options);
 
         // ISO/IEC 15420 prints every digit below its own symbol character. Digits hang one module below the digit
@@ -465,8 +466,8 @@ internal static class EanUpcEncoder
 
         AppendPattern(modules, ref position, 0b101, 3);
 
-        BeginRuns(modules, ref symbol, out Span<float> heights);
-        float barHeight = options.ResolveBarHeight(NominalXDimension, NominalBarHeight);
+        BeginRuns(modules, options.XDimension ?? NominalXDimension, ref symbol, out Span<float> heights);
+        float barHeight = options.ResolveBarHeight(symbol.XDimension, NominalBarHeight);
         FillGuardedHeights(heights, barHeight, Ean13GuardBars, options);
 
         // ISO/IEC 15420 prints the leading digit in the leading quiet zone and every other digit below its

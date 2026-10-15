@@ -29,9 +29,6 @@ public sealed class UpcASymbology : BarcodeSymbology
     private static ReadOnlySpan<int> GuardBars => [0, 1, 2, 3, 14, 15, 26, 27, 28, 29];
 
     /// <inheritdoc/>
-    public override double NominalXDimension => EanUpcEncoder.NominalXDimension;
-
-    /// <inheritdoc/>
     internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
@@ -57,8 +54,8 @@ public sealed class UpcASymbology : BarcodeSymbology
 
         EanUpcEncoder.AppendPattern(modules, ref position, 0b101, 3);
 
-        EanUpcEncoder.BeginRuns(modules, ref symbol, out Span<float> heights);
-        float barHeight = options.ResolveBarHeight(EanUpcEncoder.NominalXDimension, EanUpcEncoder.NominalBarHeight);
+        EanUpcEncoder.BeginRuns(modules, options.XDimension ?? EanUpcEncoder.NominalXDimension, ref symbol, out Span<float> heights);
+        float barHeight = options.ResolveBarHeight(symbol.XDimension, EanUpcEncoder.NominalBarHeight);
         EanUpcEncoder.FillGuardedHeights(heights, barHeight, GuardBars, options);
 
         // ISO/IEC 15420 prints the number system digit in the leading quiet zone, the check digit in the

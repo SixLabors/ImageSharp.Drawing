@@ -150,10 +150,11 @@ internal static class DataBarEncoder
     {
         // The element widths start with the guard space, so a zero width bar leads the runs and the widths
         // follow it.
-        Span<int> runs = symbol.BeginLinear(ElementCount + 1, out Span<float> heights, out _);
+        double xDimension = options.XDimension ?? NominalXDimension;
+        Span<int> runs = symbol.BeginLinear(ElementCount + 1, xDimension, out Span<float> heights, out _);
         _ = EncodeWidths(gtin, runs[1..]);
 
-        float barHeight = options.ResolveBarHeight(NominalXDimension, nominalHeight);
+        float barHeight = options.ResolveBarHeight(xDimension, nominalHeight);
         heights.Fill(barHeight);
         AddCaption(gtin, Width, barHeight, options, ref symbol);
         symbol.EndLinear(0, 0);
@@ -194,7 +195,8 @@ internal static class DataBarEncoder
 
         separator[1..4].Clear();
 
-        float lowerHeight = options.ResolveBarHeight(NominalXDimension, StackedLowerRowHeight);
+        double xDimension = options.XDimension ?? NominalXDimension;
+        float lowerHeight = options.ResolveBarHeight(xDimension, StackedLowerRowHeight);
         float upperHeight = lowerHeight * StackedUpperRowHeight / StackedLowerRowHeight;
         int upperRuns = DataBarRows.RunCount(upper);
         int separatorRuns = DataBarRows.RunCount(separator);
@@ -202,7 +204,8 @@ internal static class DataBarEncoder
         symbol.BeginStacked(
             3,
             upperRuns + separatorRuns + lowerRuns,
-            ((upperRuns + 1) >> 1) + ((separatorRuns + 1) >> 1) + ((lowerRuns + 1) >> 1));
+            ((upperRuns + 1) >> 1) + ((separatorRuns + 1) >> 1) + ((lowerRuns + 1) >> 1),
+            xDimension);
         DataBarRows.AddRow(upper, upperHeight, ref symbol);
         DataBarRows.AddRow(separator, 1F, ref symbol);
         DataBarRows.AddRow(lower, lowerHeight, ref symbol);
@@ -263,7 +266,8 @@ internal static class DataBarEncoder
             middleSeparator[i] = 1;
         }
 
-        float rowHeight = options.ResolveBarHeight(NominalXDimension, StackedOmnidirectionalRowHeight);
+        double xDimension = options.XDimension ?? NominalXDimension;
+        float rowHeight = options.ResolveBarHeight(xDimension, StackedOmnidirectionalRowHeight);
         int runCount = 0;
         int barCount = 0;
         for (int row = 0; row < 5; row++)
@@ -273,7 +277,7 @@ internal static class DataBarEncoder
             barCount += (runs + 1) >> 1;
         }
 
-        symbol.BeginStacked(5, runCount, barCount);
+        symbol.BeginStacked(5, runCount, barCount, xDimension);
         DataBarRows.AddRow(upper, rowHeight, ref symbol);
         DataBarRows.AddRow(upperSeparator, 1F, ref symbol);
         DataBarRows.AddRow(middleSeparator, 1F, ref symbol);

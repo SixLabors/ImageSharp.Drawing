@@ -117,7 +117,8 @@ internal static class TelepenEncoder
     {
         // Every character is at most eight bars and eight spaces, so the symbol reserves that many runs and
         // keeps those it writes. The stop code ends on a bar, so the space written after it is dropped.
-        Span<int> runs = symbol.BeginLinear((values.Length + 3) * ModulesPerCharacter, out Span<float> heights, out _);
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        Span<int> runs = symbol.BeginLinear((values.Length + 3) * ModulesPerCharacter, xDimension, out Span<float> heights, out _);
         int written = 0;
         Append(runs, ref written, Start);
         for (int i = 0; i < values.Length; i++)
@@ -136,9 +137,8 @@ internal static class TelepenEncoder
             widthInModules += runs[i];
         }
 
-        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
         float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
-        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, nominalBarHeight);
+        float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);
         heights[..((runs.Length + 1) >> 1)].Fill(barHeight);
 
         if (options.Font is not null && readable.Length > 0)

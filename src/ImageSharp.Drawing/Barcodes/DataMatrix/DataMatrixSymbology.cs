@@ -53,11 +53,18 @@ public sealed class DataMatrixSymbology : BarcodeSymbology
 
         if (this.Rows.HasValue)
         {
-            DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.SquareOrRectangular, this.Rows.Value, this.Columns!.Value, ref symbol);
+            DataMatrixEncoder.BuildSymbol(
+                text,
+                false,
+                DataMatrixFormat.SquareOrRectangular,
+                this.Rows.Value,
+                this.Columns!.Value,
+                options.XDimension ?? PointXDimension,
+                ref symbol);
         }
         else
         {
-            DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.Square, 0, 0, ref symbol);
+            DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.Square, 0, 0, options.XDimension ?? PointXDimension, ref symbol);
         }
     }
 }

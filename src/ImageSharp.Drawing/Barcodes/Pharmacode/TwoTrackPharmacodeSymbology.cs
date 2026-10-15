@@ -51,9 +51,6 @@ public sealed class TwoTrackPharmacodeSymbology : BarcodeSymbology
     private const float NominalBarHeight = 8F;
 
     /// <inheritdoc/>
-    public override double NominalXDimension => XDimension;
-
-    /// <inheritdoc/>
     internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int value = PharmacodeEncoder.ParseValue(text, MinimumValue, MaximumValue);
@@ -71,9 +68,10 @@ public sealed class TwoTrackPharmacodeSymbology : BarcodeSymbology
             value = (value - weight) / 3;
         }
 
-        float barHeight = options.ResolveBarHeight(XDimension, NominalBarHeight);
+        double xDimension = options.XDimension ?? XDimension;
+        float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
         float halfHeight = barHeight * 0.5F;
-        Span<int> runs = symbol.BeginLinear((count * 2) - 1, out Span<float> heights, out Span<float> tops);
+        Span<int> runs = symbol.BeginLinear((count * 2) - 1, xDimension, out Span<float> heights, out Span<float> tops);
         runs.Fill(1);
         for (int i = 0; i < count; i++)
         {

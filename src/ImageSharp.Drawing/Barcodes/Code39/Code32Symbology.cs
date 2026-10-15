@@ -48,6 +48,12 @@ public sealed class Code32Symbology : BarcodeSymbology
     private const int Base32Length = 6;
 
     /// <summary>
+    /// The X dimension in millimetres a symbol takes when the caller sets none. Allegato A: "lo spessore
+    /// nominale delle barre e degli spazi stretti è di mm 0,250".
+    /// </summary>
+    private const double NominalXDimension = 0.25;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="Code32Symbology"/> class.
     /// </summary>
     public Code32Symbology()
@@ -118,6 +124,6 @@ public sealed class Code32Symbology : BarcodeSymbology
         }
 
         // The interpretation is the field identifier, then the nine digits of the code.
-        Code39Encoder.BuildSymbol(encoded, null, [FieldIdentifier], printed, [], options, ref symbol);
+        Code39Encoder.BuildSymbol(encoded, null, [FieldIdentifier], printed, [], options, options.XDimension ?? NominalXDimension, ref symbol);
     }
 }

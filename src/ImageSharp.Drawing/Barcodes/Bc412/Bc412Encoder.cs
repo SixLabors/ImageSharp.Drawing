@@ -118,7 +118,8 @@ internal static class Bc412Encoder
     /// <param name="symbol">The symbol to write.</param>
     public static void BuildSymbol(ReadOnlySpan<char> carried, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Span<int> runs = symbol.BeginLinear(2 + (carried.Length * RunsPerCharacter) + 3, out Span<float> heights, out _);
+        double xDimension = options.XDimension ?? NominalXDimension;
+        Span<int> runs = symbol.BeginLinear(2 + (carried.Length * RunsPerCharacter) + 3, xDimension, out Span<float> heights, out _);
         int written = 0;
         runs[written++] = 1;
         runs[written++] = 2;
@@ -141,7 +142,7 @@ internal static class Bc412Encoder
             widthInModules += runs[i];
         }
 
-        float barHeight = options.ResolveBarHeight(NominalXDimension, NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
         heights.Fill(barHeight);
 
         if (options.Font is not null)

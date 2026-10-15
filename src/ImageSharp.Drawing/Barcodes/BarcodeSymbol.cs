@@ -155,6 +155,20 @@ internal struct BarcodeSymbol : IDisposable
     public int MatrixRows { get; private set; }
 
     /// <summary>
+    /// Gets the X dimension in millimetres, the width of one module: the X dimension of the options, else
+    /// the nominal X dimension the specification of the symbology gives for this symbol. The encoder
+    /// resolves it once, measures every height it states in millimetres with it, and the emitter draws the
+    /// modules at it.
+    /// </summary>
+    public double XDimension { get; private set; }
+
+    /// <summary>
+    /// Gets the side in modules of the Swiss cross centred on a matrix symbol, or 0 when the symbol has
+    /// none. The cross covers its square completely, so the modules under the square do not draw.
+    /// </summary>
+    public float SwissCrossSize { get; private set; }
+
+    /// <summary>
     /// Gets the rows of a linear or stacked symbol from the top down. A linear symbol has one row.
     /// </summary>
     public readonly ReadOnlySpan<BarcodeRow> Rows => Slice<BarcodeRow>(this.layoutBuffer, 0, this.rowCount);
@@ -197,12 +211,14 @@ internal struct BarcodeSymbol : IDisposable
     /// Begins a linear symbol of one row.
     /// </summary>
     /// <param name="runCount">The number of runs.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="XDimension"/>.</param>
     /// <param name="barHeights">The bar heights to write, one for each run at an even index.</param>
     /// <param name="barTops">The bar tops to write, in modules from the top of the symbol.</param>
     /// <returns>The run widths to write, in run units.</returns>
-    public Span<int> BeginLinear(int runCount, out Span<float> barHeights, out Span<float> barTops)
+    public Span<int> BeginLinear(int runCount, double xDimension, out Span<float> barHeights, out Span<float> barTops)
     {
         this.Kind = BarcodeSymbolKind.Linear;
+        this.XDimension = xDimension;
         this.Reserve(1, runCount, (runCount + 1) >> 1);
         return this.AddRow(runCount, out barHeights, out barTops);
     }
@@ -213,9 +229,11 @@ internal struct BarcodeSymbol : IDisposable
     /// <param name="rowCount">The number of rows.</param>
     /// <param name="runCount">The number of runs of all rows.</param>
     /// <param name="barCount">The number of bars of all rows: for each row, half its run count rounded up.</param>
-    public void BeginStacked(int rowCount, int runCount, int barCount)
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="XDimension"/>.</param>
+    public void BeginStacked(int rowCount, int runCount, int barCount, double xDimension)
     {
         this.Kind = BarcodeSymbolKind.Stacked;
+        this.XDimension = xDimension;
         this.Reserve(rowCount, runCount, barCount);
     }
 
@@ -327,10 +345,12 @@ internal struct BarcodeSymbol : IDisposable
     /// <param name="columns">The number of module columns.</param>
     /// <param name="rows">The number of module rows.</param>
     /// <param name="quietZone">The quiet zone on each of the four sides, in modules.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="XDimension"/>.</param>
     /// <returns>The modules to write, row-major, true for a dark module.</returns>
-    public Span<bool> BeginMatrix(int columns, int rows, int quietZone)
+    public Span<bool> BeginMatrix(int columns, int rows, int quietZone, double xDimension)
     {
         this.Kind = BarcodeSymbolKind.Matrix;
+        this.XDimension = xDimension;
         this.Columns = columns;
         this.MatrixRows = rows;
         this.WidthInModules = columns;
@@ -495,6 +515,35 @@ internal struct BarcodeSymbol : IDisposable
 
         this.charCount = start + length;
     }
+
+    /// <summary>
+    /// Reserves and adds the human readable interpretation of a matrix symbol, one placement below the
+    /// symbol across its width. The ink starts below the bottom quiet zone: rule 1a of section 4.14 of the
+    /// GS1 General Specifications keeps the interpretation clear of the quiet zones, and section 4.1 of
+    /// ANSI/HIBC 2.6 keeps all marking out of the symbol region, its quiet zones included.
+    /// </summary>
+    /// <param name="text">The interpretation, its lines separated by <see cref="BarcodeTextPlacement.LineBreak"/>.</param>
+    /// <param name="alignment">Where the lines stand on the width of the symbol.</param>
+    /// <param name="fontScale">The factor applied to the font size of the caller.</param>
+    public void AddMatrixText(ReadOnlySpan<char> text, BarcodeTextAlignment alignment, float fontScale)
+    {
+        this.ReserveText(1, text.Length);
+        this.AddText(
+            text,
+            0F,
+            this.Columns,
+            BarcodeTextSide.BelowBars,
+            this.HeightInModules + this.BottomQuietZone,
+            fontScale,
+            false,
+            alignment);
+    }
+
+    /// <summary>
+    /// Adds a Swiss cross to the centre of a built matrix symbol.
+    /// </summary>
+    /// <param name="size">The side of the cross in modules.</param>
+    public void AddSwissCross(float size) => this.SwissCrossSize = size;
 
     /// <summary>
     /// Returns the rented buffers to the shared pool.

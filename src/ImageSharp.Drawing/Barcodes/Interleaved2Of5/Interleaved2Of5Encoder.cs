@@ -88,10 +88,11 @@ internal static class Interleaved2Of5Encoder
     /// <param name="digits">The digits to encode, an even number of them, already validated.</param>
     /// <param name="readable">The human readable interpretation.</param>
     /// <param name="options">The options that control layout choices.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
     /// <param name="symbol">The symbol to write.</param>
-    public static void BuildSymbol(ReadOnlySpan<char> digits, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
+    public static void BuildSymbol(ReadOnlySpan<char> digits, ReadOnlySpan<char> readable, BarcodeOptions options, double xDimension, ref BarcodeSymbol symbol)
     {
-        BeginRuns(digits, ref symbol, out Span<float> heights, out Span<float> tops);
+        BeginRuns(digits, xDimension, ref symbol, out Span<float> heights, out Span<float> tops);
         EndSymbol(heights, tops, readable, options, ref symbol);
     }
 
@@ -102,17 +103,19 @@ internal static class Interleaved2Of5Encoder
     /// <param name="digits">The digits to encode, an even number of them, already validated.</param>
     /// <param name="readable">The human readable interpretation.</param>
     /// <param name="options">The options that control layout choices.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
     /// <param name="nominalBarHeight">The bar height in modules a symbol takes when the caller sets none.</param>
     /// <param name="symbol">The symbol to write.</param>
     public static void BuildSymbol(
         ReadOnlySpan<char> digits,
         ReadOnlySpan<char> readable,
         BarcodeOptions options,
+        double xDimension,
         float nominalBarHeight,
         ref BarcodeSymbol symbol)
     {
-        BeginRuns(digits, ref symbol, out Span<float> heights, out Span<float> tops);
-        EndSymbol(heights, tops, readable, options, BarcodeSymbology.PointXDimension, nominalBarHeight, 0F, ref symbol);
+        BeginRuns(digits, xDimension, ref symbol, out Span<float> heights, out Span<float> tops);
+        EndSymbol(heights, tops, readable, options, nominalBarHeight, 0F, ref symbol);
     }
 
     /// <summary>
@@ -122,7 +125,7 @@ internal static class Interleaved2Of5Encoder
     /// <param name="digits">The digits to encode, an even number of them, already validated.</param>
     /// <param name="readable">The human readable interpretation.</param>
     /// <param name="options">The options that control layout choices.</param>
-    /// <param name="nominalXDimension">The nominal X dimension of the application standard in millimetres.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
     /// <param name="nominalBarHeight">The bar height in modules a symbol takes when the caller sets none.</param>
     /// <param name="bearerBarThickness">The thickness of the bearer bar in modules, or zero for none.</param>
     /// <param name="symbol">The symbol to write.</param>
@@ -130,13 +133,13 @@ internal static class Interleaved2Of5Encoder
         ReadOnlySpan<char> digits,
         ReadOnlySpan<char> readable,
         BarcodeOptions options,
-        double nominalXDimension,
+        double xDimension,
         float nominalBarHeight,
         float bearerBarThickness,
         ref BarcodeSymbol symbol)
     {
-        BeginRuns(digits, ref symbol, out Span<float> heights, out Span<float> tops);
-        EndSymbol(heights, tops, readable, options, nominalXDimension, nominalBarHeight, bearerBarThickness, ref symbol);
+        BeginRuns(digits, xDimension, ref symbol, out Span<float> heights, out Span<float> tops);
+        EndSymbol(heights, tops, readable, options, nominalBarHeight, bearerBarThickness, ref symbol);
     }
 
     /// <summary>
@@ -145,12 +148,13 @@ internal static class Interleaved2Of5Encoder
     /// pattern.
     /// </summary>
     /// <param name="digits">The digits to encode, an even number of them, already validated.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <param name="heights">The bar heights of the symbol, to write.</param>
     /// <param name="tops">The bar tops of the symbol, to write.</param>
-    private static void BeginRuns(ReadOnlySpan<char> digits, ref BarcodeSymbol symbol, out Span<float> heights, out Span<float> tops)
+    private static void BeginRuns(ReadOnlySpan<char> digits, double xDimension, ref BarcodeSymbol symbol, out Span<float> heights, out Span<float> tops)
     {
-        Span<int> runs = symbol.BeginLinear((digits.Length * ElementsPerDigit) + StartElements + StopElements, out heights, out tops);
+        Span<int> runs = symbol.BeginLinear((digits.Length * ElementsPerDigit) + StartElements + StopElements, xDimension, out heights, out tops);
         int written = 0;
 
         for (int i = 0; i < StartElements; i++)
@@ -194,9 +198,8 @@ internal static class Interleaved2Of5Encoder
         BarcodeOptions options,
         ref BarcodeSymbol symbol)
     {
-        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
-        float nominalBarHeight = MathF.Max(WidthInModules(symbol.Runs) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
-        EndSymbol(heights, tops, readable, options, BarcodeSymbology.PointXDimension, nominalBarHeight, 0F, ref symbol);
+        float nominalBarHeight = MathF.Max(WidthInModules(symbol.Runs) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / symbol.XDimension));
+        EndSymbol(heights, tops, readable, options, nominalBarHeight, 0F, ref symbol);
     }
 
     /// <summary>
@@ -209,7 +212,6 @@ internal static class Interleaved2Of5Encoder
     /// <param name="tops">The bar tops to write.</param>
     /// <param name="readable">The human readable interpretation.</param>
     /// <param name="options">The options that control layout choices.</param>
-    /// <param name="nominalXDimension">The nominal X dimension of the application standard in millimetres.</param>
     /// <param name="nominalBarHeight">The bar height in modules a symbol takes when the caller sets none.</param>
     /// <param name="bearerBarThickness">The thickness of the bearer bar in modules, or zero for none.</param>
     /// <param name="symbol">The symbol to write.</param>
@@ -218,13 +220,12 @@ internal static class Interleaved2Of5Encoder
         Span<float> tops,
         ReadOnlySpan<char> readable,
         BarcodeOptions options,
-        double nominalXDimension,
         float nominalBarHeight,
         float bearerBarThickness,
         ref BarcodeSymbol symbol)
     {
         int widthInModules = WidthInModules(symbol.Runs);
-        float barHeight = options.ResolveBarHeight(nominalXDimension, nominalBarHeight);
+        float barHeight = options.ResolveBarHeight(symbol.XDimension, nominalBarHeight);
         heights.Fill(barHeight);
         tops.Fill(bearerBarThickness);
 

@@ -377,6 +377,111 @@ public class BarcodeDecodeTests
             BarcodeFormat.DATA_MATRIX,
             "https://id.gs1.org/01/09521234543213/22/ABC%2D123?99=XYZ-987");
 
+    /// <summary>
+    /// QR Code at each error correction level, in Numeric, Alphanumeric and Byte mode segments.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="level">The error correction level.</param>
+    [Theory]
+    [InlineData("QR Code Symbol", QrErrorCorrectionLevel.L)]
+    [InlineData("Hello, World!", QrErrorCorrectionLevel.M)]
+    [InlineData("https://sixlabors.com/products/imagesharp-drawing/", QrErrorCorrectionLevel.Q)]
+    [InlineData("123456789012ABCDEFGH123456789012abcdefgh", QrErrorCorrectionLevel.H)]
+    [InlineData("MiXeD cAsE 42 MiXeD $%*+-./:", QrErrorCorrectionLevel.M)]
+    public void QrCode_RoundTrips(string text, QrErrorCorrectionLevel level)
+        => AssertDecodes(new QrCodeSymbology(level), text, BarcodeFormat.QR_CODE, text);
+
+    /// <summary>
+    /// Section 6.3.4: Byte mode carries ISO/IEC 8859-1. The decoder guesses the character set of Byte mode
+    /// data, so the test names it.
+    /// </summary>
+    [Fact]
+    public void QrCode_Iso88591RoundTrips()
+        => AssertDecodes(
+            new QrCodeSymbology(),
+            "éèêëàâäöüß",
+            BarcodeFormat.QR_CODE,
+            "éèêëàâäöüß",
+            CreateOptions(),
+            static reader => reader.Options.CharacterSet = "ISO-8859-1");
+
+    /// <summary>
+    /// Table 7: a version 40-L symbol holds 7089 digits in 25 interleaved Reed-Solomon blocks.
+    /// </summary>
+    [Fact]
+    public void QrCode_LargestSymbolRoundTrips()
+    {
+        string text = string.Concat(Enumerable.Repeat("0123456789", 708)) + "012345678";
+        AssertDecodes(new QrCodeSymbology(QrErrorCorrectionLevel.L), text, BarcodeFormat.QR_CODE, text);
+    }
+
+    /// <summary>
+    /// Sections 6.4.8.1 and 13.4 of ISO/IEC 18004: in FNC1 first position mode, a separator is "%" in
+    /// Alphanumeric mode or &lt;GS&gt; in Byte mode, both transmitted as &lt;GS&gt;, and "%%" is a "%" in the
+    /// data. The decoder returns the data without the symbology identifier ]Q3 of section 5.7.4.3 of the GS1
+    /// General Specifications.
+    /// </summary>
+    /// <param name="text">The element strings to encode.</param>
+    /// <param name="expected">The transmitted data.</param>
+    [Theory]
+    [InlineData("(01)09521234543213(10)ABC123(21)XYZ789", "0109521234543213" + "10ABC123\u001d" + "21XYZ789")]
+    [InlineData("(01)09521234543213(10)AB%CD(21)12%34", "0109521234543213" + "10AB%CD\u001d" + "2112%34")]
+    [InlineData("(01)09521234543213(21)abc-def/123(10)xyz", "0109521234543213" + "21abc-def/123\u001d" + "10xyz")]
+    public void Gs1QrCode_RoundTrips(string text, string expected)
+        => AssertDecodes(new Gs1QrCodeSymbology(), text, BarcodeFormat.QR_CODE, expected);
+
+    /// <summary>
+    /// Section 4.1.1 of the Swiss Implementation Guidelines for the QR-bill: the data is UTF-8. The symbol
+    /// draws 46 mm wide with the Swiss cross over its centre, and the error correction recovers the modules
+    /// the cross covers. The decoder guesses the character set of Byte mode data, so the test names it.
+    /// </summary>
+    [Fact]
+    public void SwissQrCode_RoundTrips()
+    {
+        // Example 3 of Annex A, Table 19, with a message of characters that take two and three bytes in UTF-8.
+        const string text = "SPC\n0200\n1\nCH5204835012345671000\nS\nMuster Stiftung\nP.O. box\n\n3001\nBern\nCH\n\n\n\n\n\n\n\n\nCHF\n"
+            + "\n\n\n\n\n\n\nNON\n\nSpende 100 € Ș ț ő ÿ\nEPD\n\n\n";
+        AssertDecodes(
+            new SwissQrCodeSymbology(),
+            text,
+            BarcodeFormat.QR_CODE,
+            text,
+            new BarcodeOptions { Dpi = 150F },
+            static reader => reader.Options.CharacterSet = "UTF-8");
+    }
+
+    /// <summary>
+    /// The D3 component stands outside the host QR Code symbol, so the host decodes as a QR Code symbol at
+    /// every host ratio.
+    /// </summary>
+    /// <param name="hostRatio">The width of a D3 module in host modules.</param>
+    [Theory]
+    [InlineData(D3AqrHostRatio.Two)]
+    [InlineData(D3AqrHostRatio.TwoAndAHalf)]
+    [InlineData(D3AqrHostRatio.Three)]
+    public void D3Aqr_RoundTrips(D3AqrHostRatio hostRatio)
+        => AssertDecodes(
+            new D3AqrSymbology(2842, QrErrorCorrectionLevel.M, hostRatio),
+            "HTTPS://ID.GS1.ORG/01/09521234543213/22/ABC%2D123?99=XYZ-987",
+            BarcodeFormat.QR_CODE,
+            "HTTPS://ID.GS1.ORG/01/09521234543213/22/ABC%2D123?99=XYZ-987");
+
+    [Fact]
+    public void HibcQrCode_RoundTrips()
+        => AssertDecodes(new HibcQrCodeSymbology(), "A123BJC5D6E71", BarcodeFormat.QR_CODE, "+A123BJC5D6E71G");
+
+    /// <summary>
+    /// Section 5.9 of the GS1 General Specifications: the QR Code symbol carries the GS1 Digital Link URI as
+    /// plain data, so it decodes to the URI as written.
+    /// </summary>
+    [Fact]
+    public void Gs1DigitalLinkQrCode_RoundTrips()
+        => AssertDecodes(
+            new Gs1DigitalLinkQrCodeSymbology(),
+            "https://id.gs1.org/01/09521234543213/22/ABC%2D123?99=XYZ-987",
+            BarcodeFormat.QR_CODE,
+            "https://id.gs1.org/01/09521234543213/22/ABC%2D123?99=XYZ-987");
+
     private static void AssertDecodes(BarcodeSymbology symbology, string text, BarcodeFormat format, string expected)
         => AssertDecodes(symbology, text, format, expected, CreateOptions(), null);
 

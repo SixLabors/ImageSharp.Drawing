@@ -218,10 +218,11 @@ internal static class MicroPdf417Encoder
         int centreAfter = c - 2;
         int runCount = (2 * AddressPatternElements) + (c * Pdf417Patterns.ElementCount) + 1 + (hasCentre ? AddressPatternElements : 0);
 
-        float rowHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, NominalRowHeight);
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        float rowHeight = options.ResolveBarHeight(xDimension, NominalRowHeight);
 
         ReadOnlySpan<int> patterns = Pdf417Patterns.Modules;
-        symbol.BeginStacked(r, r * runCount, r * ((runCount + 1) >> 1));
+        symbol.BeginStacked(r, r * runCount, r * ((runCount + 1) >> 1), xDimension);
         for (int row = 0; row < r; row++)
         {
             // Each row address pattern steps through its table from the first one of the size, and the

@@ -35,7 +35,7 @@ public sealed class Gs1DigitalLinkDataMatrixSymbology : BarcodeSymbology
         if (options.Font is null)
         {
             Gs1DigitalLink.Validate(text);
-            DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.Square, 0, 0, ref symbol);
+            DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.Square, 0, 0, options.XDimension ?? PointXDimension, ref symbol);
             return;
         }
 
@@ -50,8 +50,8 @@ public sealed class Gs1DigitalLinkDataMatrixSymbology : BarcodeSymbology
         try
         {
             int written = Gs1DigitalLink.Validate(text, readable);
-            DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.Square, 0, 0, ref symbol);
-            DataMatrixEncoder.AddReadable(readable[..written], BarcodeTextAlignment.Left, Gs1Data.TextScale(options.Font), ref symbol);
+            DataMatrixEncoder.BuildSymbol(text, false, DataMatrixFormat.Square, 0, 0, options.XDimension ?? PointXDimension, ref symbol);
+            symbol.AddMatrixText(readable[..written], BarcodeTextAlignment.Left, Gs1Data.TextScale(options.Font));
         }
         finally
         {

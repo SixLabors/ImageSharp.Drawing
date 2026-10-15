@@ -324,7 +324,9 @@ internal static class PosiCodeEncoder
 
         string start = patterns[^2];
         string stop = patterns[^1];
-        Span<int> runs = symbol.BeginLinear(start.Length + (codewords.Length * RunsPerCharacter) + CheckRuns + stop.Length, out Span<float> heights, out _);
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        int runCount = start.Length + (codewords.Length * RunsPerCharacter) + CheckRuns + stop.Length;
+        Span<int> runs = symbol.BeginLinear(runCount, xDimension, out Span<float> heights, out _);
         int written = 0;
         for (int i = 0; i < start.Length; i++)
         {
@@ -354,7 +356,7 @@ internal static class PosiCodeEncoder
         }
 
         // The 15 per cent of Code 39 and Codabar; no document gives a height for PosiCode.
-        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, widthInModules * 0.15F);
+        float barHeight = options.ResolveBarHeight(xDimension, widthInModules * 0.15F);
         heights.Fill(barHeight);
 
         if (options.Font is not null && readable.Length > 0)

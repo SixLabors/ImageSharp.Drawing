@@ -155,7 +155,8 @@ internal static class PlesseyEncoder
         ref BarcodeSymbol symbol)
     {
         int characters = data.Length + checks.Length;
-        Span<int> runs = symbol.BeginLinear(Start.Length + (characters * BitsPerCharacter * 2) + Stop.Length, out Span<float> heights, out _);
+        double xDimension = options.XDimension ?? NominalXDimension;
+        Span<int> runs = symbol.BeginLinear(Start.Length + (characters * BitsPerCharacter * 2) + Stop.Length, xDimension, out Span<float> heights, out _);
         int written = 0;
         for (int i = 0; i < Start.Length; i++)
         {
@@ -184,7 +185,7 @@ internal static class PlesseyEncoder
             widthInModules += runs[i];
         }
 
-        float barHeight = options.ResolveBarHeight(NominalXDimension, widthInModules * NominalBarHeightFraction);
+        float barHeight = options.ResolveBarHeight(xDimension, widthInModules * NominalBarHeightFraction);
         heights.Fill(barHeight);
 
         if (options.Font is not null)

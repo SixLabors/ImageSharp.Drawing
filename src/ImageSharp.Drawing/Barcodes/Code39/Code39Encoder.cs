@@ -134,6 +134,7 @@ internal static class Code39Encoder
     /// <param name="readableBody">The body of the human readable interpretation.</param>
     /// <param name="readableSuffix">The characters of the human readable interpretation after its body.</param>
     /// <param name="options">The options that control layout choices.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
     /// <param name="symbol">The symbol to write.</param>
     public static void BuildSymbol(
         ReadOnlySpan<char> data,
@@ -142,10 +143,10 @@ internal static class Code39Encoder
         ReadOnlySpan<char> readableBody,
         ReadOnlySpan<char> readableSuffix,
         BarcodeOptions options,
+        double xDimension,
         ref BarcodeSymbol symbol)
     {
-        BeginRuns(data, check, ref symbol, out Span<float> heights);
-        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        BeginRuns(data, check, xDimension, ref symbol, out Span<float> heights);
         float nominalBarHeight = MathF.Max(WidthInModules(symbol.Runs) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
         EndSymbol(heights, readablePrefix, readableBody, readableSuffix, options, nominalBarHeight, ref symbol);
     }
@@ -160,6 +161,7 @@ internal static class Code39Encoder
     /// <param name="readableBody">The body of the human readable interpretation.</param>
     /// <param name="readableSuffix">The characters of the human readable interpretation after its body.</param>
     /// <param name="options">The options that control layout choices.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
     /// <param name="nominalBarHeight">The bar height in modules a symbol takes when the caller sets none.</param>
     /// <param name="symbol">The symbol to write.</param>
     public static void BuildSymbol(
@@ -169,10 +171,11 @@ internal static class Code39Encoder
         ReadOnlySpan<char> readableBody,
         ReadOnlySpan<char> readableSuffix,
         BarcodeOptions options,
+        double xDimension,
         float nominalBarHeight,
         ref BarcodeSymbol symbol)
     {
-        BeginRuns(data, check, ref symbol, out Span<float> heights);
+        BeginRuns(data, check, xDimension, ref symbol, out Span<float> heights);
         EndSymbol(heights, readablePrefix, readableBody, readableSuffix, options, nominalBarHeight, ref symbol);
     }
 
@@ -186,12 +189,13 @@ internal static class Code39Encoder
     /// </summary>
     /// <param name="data">The data to encode, already validated against the character set.</param>
     /// <param name="check">The check character to carry after the data, or <see langword="null"/>.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <param name="heights">The bar heights of the symbol, to write.</param>
-    private static void BeginRuns(ReadOnlySpan<char> data, char? check, ref BarcodeSymbol symbol, out Span<float> heights)
+    private static void BeginRuns(ReadOnlySpan<char> data, char? check, double xDimension, ref BarcodeSymbol symbol, out Span<float> heights)
     {
         int characters = data.Length + (check is null ? 2 : 3);
-        Span<int> runs = symbol.BeginLinear((characters * ElementsPerCharacter) - 1, out heights, out _);
+        Span<int> runs = symbol.BeginLinear((characters * ElementsPerCharacter) - 1, xDimension, out heights, out _);
         int written = 0;
 
         AppendPattern(runs, ref written, StartStop);
@@ -228,7 +232,7 @@ internal static class Code39Encoder
         float nominalBarHeight,
         ref BarcodeSymbol symbol)
     {
-        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, nominalBarHeight);
+        float barHeight = options.ResolveBarHeight(symbol.XDimension, nominalBarHeight);
         heights.Fill(barHeight);
 
         if (options.Font is not null)

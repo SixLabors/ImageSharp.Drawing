@@ -40,10 +40,10 @@ public sealed class Gs1DataMatrixSymbology : BarcodeSymbology
         try
         {
             Gs1Data.Prepare(text, ref encoded);
-            DataMatrixEncoder.BuildSymbol(encoded.AsSpan(), true, DataMatrixFormat.Square, 0, 0, ref symbol);
+            DataMatrixEncoder.BuildSymbol(encoded.AsSpan(), true, DataMatrixFormat.Square, 0, 0, options.XDimension ?? PointXDimension, ref symbol);
             if (options.Font is not null)
             {
-                DataMatrixEncoder.AddGs1Readable(text, options.Font, ref symbol);
+                Gs1Data.AddMatrixReadable(text, options.Font, ref symbol);
             }
         }
         finally

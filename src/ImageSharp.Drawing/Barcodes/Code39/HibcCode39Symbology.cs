@@ -58,6 +58,7 @@ public sealed class HibcCode39Symbology : BarcodeSymbology
                 HibcData.ReadableBody(data),
                 [HibcData.PrintedCheck(data), HibcData.ReadableClosing],
                 options,
+                options.XDimension ?? PointXDimension,
                 ref symbol);
         }
         finally

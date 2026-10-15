@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.InteropServices;
-using SixLabors.Fonts;
 using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
@@ -126,90 +125,18 @@ internal static class DataMatrixEncoder
     /// <param name="format">The symbol format.</param>
     /// <param name="rows">The number of rows, or 0 to choose the size from the data.</param>
     /// <param name="columns">The number of columns, or 0 to choose the size from the data.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The data is not valid or does not fit the symbol.</exception>
-    public static void BuildSymbol(ReadOnlySpan<char> text, bool gs1, DataMatrixFormat format, int rows, int columns, ref BarcodeSymbol symbol)
-        => BuildSymbol(text, gs1, format, rows, columns, 0, QuietZone, ref symbol);
-
-    /// <summary>
-    /// Adds the human readable interpretation of GS1 element strings below a built symbol, one element
-    /// string on each line. The lines start on the left edge of the symbol, as Example 1 of section 2.3 of
-    /// the GS1 DataMatrix Guideline prints them.
-    /// </summary>
-    /// <param name="text">The element strings, in the element string syntax that <see cref="Gs1Data.Prepare"/> accepted.</param>
-    /// <param name="font">The font of the caller, which <see cref="Gs1Data.TextScale"/> lifts to the smallest height of the GS1 General Specifications.</param>
-    /// <param name="symbol">The built symbol.</param>
-    public static void AddGs1Readable(ReadOnlySpan<char> text, Font font, ref BarcodeSymbol symbol)
-    {
-        // The text is bounded by the capacity of the symbology, so the buffer is too, and longer text rents
-        // it once.
-        InlineArray64<char> readableStorage = default;
-        PooledBuffer<char> rented = default;
-        int capacity = Gs1Data.ReadableCapacity(text.Length);
-        Span<char> readable = capacity <= Gs1Data.InlineBufferLength
-            ? ((Span<char>)readableStorage)[..capacity]
-            : (rented = new PooledBuffer<char>(capacity)).Span;
-        try
-        {
-            int written = Gs1Data.WriteReadable(text, true, readable);
-            AddReadable(readable[..written], BarcodeTextAlignment.Left, Gs1Data.TextScale(font), ref symbol);
-        }
-        finally
-        {
-            rented.Dispose();
-        }
-    }
-
-    /// <summary>
-    /// Adds the human readable interpretation of HIBC data below a built symbol, centred on the symbol as
-    /// the figures of sections 4.3.1 and 4.3.3 of ANSI/HIBC 2.6 print it.
-    /// </summary>
-    /// <param name="encoded">The encoded data, as <see cref="HibcData.Prepare"/> wrote it.</param>
-    /// <param name="symbol">The built symbol.</param>
-    public static void AddHibcReadable(ReadOnlySpan<char> encoded, ref BarcodeSymbol symbol)
-    {
-        // HibcData.Prepare bounds the encoded data, so the buffer is bounded too, and longer data rents it
-        // once.
-        InlineArray64<char> readableStorage = default;
-        PooledBuffer<char> rented = default;
-        int capacity = HibcData.MatrixReadableCapacity(encoded.Length);
-        Span<char> readable = capacity <= HibcData.InlineBufferLength
-            ? ((Span<char>)readableStorage)[..capacity]
-            : (rented = new PooledBuffer<char>(capacity)).Span;
-        try
-        {
-            int written = HibcData.WriteMatrixReadable(encoded, readable);
-            AddReadable(readable[..written], BarcodeTextAlignment.Centered, 1F, ref symbol);
-        }
-        finally
-        {
-            rented.Dispose();
-        }
-    }
-
-    /// <summary>
-    /// Adds a human readable interpretation below a built symbol. The ink starts below the bottom quiet
-    /// zone: rule 1a of section 4.14 of the GS1 General Specifications keeps the interpretation clear of
-    /// the quiet zones, and section 4.1 of ANSI/HIBC 2.6 keeps all marking out of the symbol region, its
-    /// quiet zones included.
-    /// </summary>
-    /// <param name="readable">The interpretation, its lines separated by <see cref="BarcodeTextPlacement.LineBreak"/>.</param>
-    /// <param name="alignment">Where the lines stand on the width of the symbol.</param>
-    /// <param name="fontScale">The factor applied to the font size of the caller.</param>
-    /// <param name="symbol">The built symbol.</param>
-    public static void AddReadable(ReadOnlySpan<char> readable, BarcodeTextAlignment alignment, float fontScale, ref BarcodeSymbol symbol)
-    {
-        symbol.ReserveText(1, readable.Length);
-        symbol.AddText(
-            readable,
-            0F,
-            symbol.Columns,
-            BarcodeTextSide.BelowBars,
-            symbol.HeightInModules + symbol.BottomQuietZone,
-            fontScale,
-            false,
-            alignment);
-    }
+    public static void BuildSymbol(
+        ReadOnlySpan<char> text,
+        bool gs1,
+        DataMatrixFormat format,
+        int rows,
+        int columns,
+        double xDimension,
+        ref BarcodeSymbol symbol)
+        => BuildSymbol(text, gs1, format, rows, columns, 0, QuietZone, xDimension, ref symbol);
 
     /// <summary>
     /// Encodes the text into a symbol.
@@ -224,6 +151,7 @@ internal static class DataMatrixEncoder
     /// <param name="columns">The number of columns, or 0 to choose the size from the data.</param>
     /// <param name="c40Prefix">The number of characters at the start of the data that encode in C40 encodation, or 0.</param>
     /// <param name="quietZone">The quiet zone on each of the four sides, in modules.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The data is not valid or does not fit the symbol.</exception>
     public static void BuildSymbol(
@@ -234,6 +162,7 @@ internal static class DataMatrixEncoder
         int columns,
         int c40Prefix,
         int quietZone,
+        double xDimension,
         ref BarcodeSymbol symbol)
     {
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
@@ -338,7 +267,7 @@ internal static class DataMatrixEncoder
                 throw new ArgumentException($"The data takes {written} data codewords, more than the Data Matrix symbol holds.", nameof(text));
             }
 
-            BuildMatrix(Sizes[chosen], codewords.Span[..written], quietZone, ref symbol);
+            BuildMatrix(Sizes[chosen], codewords.Span[..written], quietZone, xDimension, ref symbol);
         }
         finally
         {
@@ -353,8 +282,9 @@ internal static class DataMatrixEncoder
     /// <param name="size">The symbol size.</param>
     /// <param name="data">The data codewords, without pad codewords.</param>
     /// <param name="quietZone">The quiet zone on each of the four sides, in modules.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
     /// <param name="symbol">The symbol to write.</param>
-    private static void BuildMatrix(DataMatrixSize size, ReadOnlySpan<int> data, int quietZone, ref BarcodeSymbol symbol)
+    private static void BuildMatrix(DataMatrixSize size, ReadOnlySpan<int> data, int quietZone, double xDimension, ref BarcodeSymbol symbol)
     {
         int dataCount = size.DataCodewords;
         int total = dataCount + size.ErrorCodewords;
@@ -393,7 +323,7 @@ internal static class DataMatrixEncoder
             // -1 for an empty module, then 0 or 1.
             Span<sbyte> matrix = MemoryMarshal.Cast<byte, sbyte>(buffer.Span.Slice(total * sizeof(int), mappingLength));
             Place(matrix, size.MappingRows, size.MappingColumns, codewords);
-            Frame(size, matrix, symbol.BeginMatrix(size.Columns, size.Rows, quietZone));
+            Frame(size, matrix, symbol.BeginMatrix(size.Columns, size.Rows, quietZone, xDimension));
         }
         finally
         {

@@ -212,10 +212,11 @@ internal static class Pdf417Encoder
             ? Start.Length + ((c + 1) * Pdf417Patterns.ElementCount) + 1
             : Start.Length + ((c + 2) * Pdf417Patterns.ElementCount) + Stop.Length;
 
-        float rowHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, NominalRowHeight);
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        float rowHeight = options.ResolveBarHeight(xDimension, NominalRowHeight);
 
         ReadOnlySpan<int> patterns = Pdf417Patterns.Modules;
-        symbol.BeginStacked(r, r * runCount, r * ((runCount + 1) >> 1));
+        symbol.BeginStacked(r, r * runCount, r * ((runCount + 1) >> 1), xDimension);
         for (int row = 0; row < r; row++)
         {
             // Section 5.11.1: row 1 uses cluster 0, row 2 cluster 3 and row 3 cluster 6, repeating. The

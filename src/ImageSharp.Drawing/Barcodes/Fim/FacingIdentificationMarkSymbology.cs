@@ -34,9 +34,6 @@ public sealed class FacingIdentificationMarkSymbology : BarcodeSymbology
     private static ReadOnlySpan<ushort> Patterns => [0b110010011, 0b101101101, 0b110101011, 0b111010111, 0b101000101];
 
     /// <inheritdoc/>
-    public override double NominalXDimension => XDimension;
-
-    /// <inheritdoc/>
     internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
@@ -49,7 +46,8 @@ public sealed class FacingIdentificationMarkSymbology : BarcodeSymbology
         // position between them plus one for the pitch. A bar and a space for every position bounds the
         // runs, and the symbol keeps those written.
         int pattern = Patterns[text[0] - 'A'];
-        Span<int> buffer = symbol.BeginLinear((Positions * 2) - 1, out Span<float> heights, out _);
+        double xDimension = options.XDimension ?? XDimension;
+        Span<int> buffer = symbol.BeginLinear((Positions * 2) - 1, xDimension, out Span<float> heights, out _);
         int written = 0;
         int space = 0;
         for (int position = Positions - 1; position >= 0; position--)
@@ -70,7 +68,7 @@ public sealed class FacingIdentificationMarkSymbology : BarcodeSymbology
         }
 
         symbol.TrimLastRow(written);
-        float barHeight = options.ResolveBarHeight(XDimension, NominalBarHeight);
+        float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
         heights[..((written + 1) >> 1)].Fill(barHeight);
         symbol.EndLinear(0, 0);
     }

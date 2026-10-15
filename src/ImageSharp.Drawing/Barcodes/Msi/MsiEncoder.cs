@@ -114,7 +114,8 @@ internal static class MsiEncoder
     /// <param name="symbol">The symbol to write.</param>
     public static void BuildSymbol(ReadOnlySpan<char> digits, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Span<int> runs = symbol.BeginLinear(2 + (digits.Length * BitsPerDigit * 2) + 3, out Span<float> heights, out _);
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        Span<int> runs = symbol.BeginLinear(2 + (digits.Length * BitsPerDigit * 2) + 3, xDimension, out Span<float> heights, out _);
         int written = 0;
         runs[written++] = 2;
         runs[written++] = 1;
@@ -140,7 +141,7 @@ internal static class MsiEncoder
             widthInModules += runs[i];
         }
 
-        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, widthInModules * NominalBarHeightFraction);
+        float barHeight = options.ResolveBarHeight(xDimension, widthInModules * NominalBarHeightFraction);
         heights.Fill(barHeight);
 
         if (options.Font is not null && readable.Length > 0)

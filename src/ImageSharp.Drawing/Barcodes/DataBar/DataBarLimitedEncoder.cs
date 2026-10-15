@@ -122,7 +122,8 @@ internal static class DataBarLimitedEncoder
         // The element widths start with the guard space, so a zero width bar leads the runs, and the
         // symbol ends on the five module space, so a zero width bar closes them. Both zero width bars are
         // the zeros the symbol storage starts with.
-        Span<int> runs = symbol.BeginLinear(ElementCount + 2, out Span<float> heights, out _);
+        double xDimension = options.XDimension ?? NominalXDimension;
+        Span<int> runs = symbol.BeginLinear(ElementCount + 2, xDimension, out Span<float> heights, out _);
         Span<int> widths = runs.Slice(1, ElementCount);
         widths[0] = 1;
         widths[1] = 1;
@@ -180,7 +181,7 @@ internal static class DataBarLimitedEncoder
         widths[45] = 1;
         widths[46] = 5;
 
-        float barHeight = options.ResolveBarHeight(NominalXDimension, Height);
+        float barHeight = options.ResolveBarHeight(xDimension, Height);
         heights.Fill(barHeight);
 
         // Section 4.14 of the GS1 General Specifications prints an element string with its Application

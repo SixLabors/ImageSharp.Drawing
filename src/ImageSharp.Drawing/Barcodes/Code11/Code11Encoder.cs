@@ -140,7 +140,8 @@ internal static class Code11Encoder
         ref BarcodeSymbol symbol)
     {
         int characters = data.Length + checks.Length + 2;
-        Span<int> runs = symbol.BeginLinear((characters * (ElementsPerCharacter + 1)) - 1, out Span<float> heights, out _);
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        Span<int> runs = symbol.BeginLinear((characters * (ElementsPerCharacter + 1)) - 1, xDimension, out Span<float> heights, out _);
         int written = 0;
 
         Append(runs, ref written, StartStop, true);
@@ -162,7 +163,7 @@ internal static class Code11Encoder
             widthInModules += runs[i];
         }
 
-        float barHeight = options.ResolveBarHeight(BarcodeSymbology.PointXDimension, widthInModules * NominalBarHeightFraction);
+        float barHeight = options.ResolveBarHeight(xDimension, widthInModules * NominalBarHeightFraction);
         heights.Fill(barHeight);
 
         if (options.Font is not null)
