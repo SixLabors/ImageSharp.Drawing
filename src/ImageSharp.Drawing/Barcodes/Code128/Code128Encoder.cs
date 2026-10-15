@@ -111,6 +111,52 @@ internal static class Code128Encoder
         ReadOnlySpan<char> readableSuffix,
         BarcodeOptions options,
         ref BarcodeSymbol symbol)
+        => BuildSymbol(
+            text,
+            gs1,
+            readablePrefix,
+            readableBody,
+            readableSuffix,
+            [],
+            options.XDimension ?? NominalXDimension,
+            NominalBarHeight,
+            BarcodeTextPlacement.Clearance,
+            0F,
+            options,
+            ref symbol);
+
+    /// <summary>
+    /// Encodes text and builds the symbol at the dimensions of an application standard that sets its own
+    /// X dimension, bar height and space between the bars and the human readable interpretation, and
+    /// that can print a second line above the bars.
+    /// </summary>
+    /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
+    /// <param name="gs1">Whether this is a GS1 symbol. Such a symbol carries a Function 1 character after
+    /// its start character, and encodes every <see cref="Gs1Data.Separator"/> in the text as another one.</param>
+    /// <param name="readablePrefix">The characters of the human readable interpretation before its body.</param>
+    /// <param name="readableBody">The body of the human readable interpretation.</param>
+    /// <param name="readableSuffix">The characters of the human readable interpretation after its body.</param>
+    /// <param name="above">The line above the bars, or empty for none.</param>
+    /// <param name="xDimension">The X dimension in millimetres.</param>
+    /// <param name="nominalBarHeight">The bar height in modules when the options set none.</param>
+    /// <param name="textClearance">The space between the bars and the human readable interpretation in modules.</param>
+    /// <param name="aboveClearance">The space between the bars and the ink of the line above them in modules.</param>
+    /// <param name="options">The options that control layout choices.</param>
+    /// <param name="symbol">The symbol to write.</param>
+    /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode.</exception>
+    public static void BuildSymbol(
+        ReadOnlySpan<char> text,
+        bool gs1,
+        ReadOnlySpan<char> readablePrefix,
+        ReadOnlySpan<char> readableBody,
+        ReadOnlySpan<char> readableSuffix,
+        ReadOnlySpan<char> above,
+        double xDimension,
+        float nominalBarHeight,
+        float textClearance,
+        float aboveClearance,
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
     {
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
 
@@ -156,7 +202,6 @@ internal static class Code128Encoder
 
             // Section 5.4.1 gives every symbol character six elements. Only the stop character differs,
             // with the four bars and three spaces that close the symbol.
-            double xDimension = options.XDimension ?? NominalXDimension;
             Span<int> runs = symbol.BeginLinear(((count - 1) * 6) + 7, xDimension, out Span<float> heights, out _);
             WriteRuns(values[..count], runs);
 
@@ -166,13 +211,13 @@ internal static class Code128Encoder
                 widthInModules += runs[i];
             }
 
-            float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
+            float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);
             heights.Fill(barHeight);
 
             int readableLength = readablePrefix.Length + readableBody.Length + readableSuffix.Length;
-            if (options.Font is not null && readableLength > 0)
+            if (options.Font is not null && readableLength + above.Length > 0)
             {
-                symbol.ReserveText(1, readableLength);
+                symbol.ReserveText(above.IsEmpty ? 1 : 2, readableLength + above.Length);
                 symbol.AddText(
                     readablePrefix,
                     readableBody,
@@ -180,7 +225,14 @@ internal static class Code128Encoder
                     0F,
                     widthInModules,
                     BarcodeTextSide.BelowBars,
-                    barHeight + BarcodeTextPlacement.Clearance);
+                    barHeight + textClearance);
+
+                // The line above the bars spans the symbol and its quiet zones, which the emitter keeps
+                // it within.
+                if (!above.IsEmpty)
+                {
+                    symbol.AddText(above, -QuietZone, widthInModules + QuietZone, BarcodeTextSide.AboveBars, -aboveClearance);
+                }
             }
 
             symbol.EndLinear(QuietZone, QuietZone);

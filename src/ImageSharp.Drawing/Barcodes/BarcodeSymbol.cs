@@ -169,6 +169,30 @@ internal struct BarcodeSymbol : IDisposable
     public float SwissCrossSize { get; private set; }
 
     /// <summary>
+    /// Gets the thickness in modules of the identification bars of a linear symbol, or 0 when the symbol
+    /// has none. One bar stands above the topmost text line and one below the lowest, each spanning the
+    /// symbol and its quiet zones.
+    /// </summary>
+    public float IdentificationBarThickness { get; private set; }
+
+    /// <summary>
+    /// Gets the clear space in modules between an identification bar and the ink of the text line next to it.
+    /// </summary>
+    public float IdentificationBarClearance { get; private set; }
+
+    /// <summary>
+    /// Gets the smallest printed height of the characters of the text lines in modules, or 0 when the
+    /// symbology states none.
+    /// </summary>
+    public float TextHeightMinimum { get; private set; }
+
+    /// <summary>
+    /// Gets the largest printed height of the characters of the text lines in modules, or 0 when the
+    /// symbology states none.
+    /// </summary>
+    public float TextHeightMaximum { get; private set; }
+
+    /// <summary>
     /// Gets the rows of a linear or stacked symbol from the top down. A linear symbol has one row.
     /// </summary>
     public readonly ReadOnlySpan<BarcodeRow> Rows => Slice<BarcodeRow>(this.layoutBuffer, 0, this.rowCount);
@@ -544,6 +568,29 @@ internal struct BarcodeSymbol : IDisposable
     /// </summary>
     /// <param name="size">The side of the cross in modules.</param>
     public void AddSwissCross(float size) => this.SwissCrossSize = size;
+
+    /// <summary>
+    /// Adds identification bars to a built linear symbol that carries a text line above and below its bars.
+    /// </summary>
+    /// <param name="thickness">The thickness of each bar in modules.</param>
+    /// <param name="clearance">The clear space between each bar and the ink of its text line in modules.</param>
+    public void AddIdentificationBars(float thickness, float clearance)
+    {
+        this.IdentificationBarThickness = thickness;
+        this.IdentificationBarClearance = clearance;
+    }
+
+    /// <summary>
+    /// Sets the range of the printed height of the characters of the text lines, which the emitter measures
+    /// as the height of the ink of each line.
+    /// </summary>
+    /// <param name="minimum">The smallest height in modules.</param>
+    /// <param name="maximum">The largest height in modules.</param>
+    public void SetTextHeight(float minimum, float maximum)
+    {
+        this.TextHeightMinimum = minimum;
+        this.TextHeightMaximum = maximum;
+    }
 
     /// <summary>
     /// Returns the rented buffers to the shared pool.

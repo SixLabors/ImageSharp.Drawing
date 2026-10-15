@@ -129,6 +129,15 @@ internal static class BarEmitter
         if (digitFont is not null)
         {
             float cap = float.MaxValue;
+
+            // A symbology that states the printed height of its characters gives a range of ink heights.
+            // Ink height scales with the font size, so each line gives the sizes that put its ink on the
+            // two limits. The caller's size is clamped into the range, and the minimum wins over the cap
+            // as the 9 point floor does.
+            float minimumHeight = symbol.TextHeightMinimum * moduleWidth;
+            float maximumHeight = symbol.TextHeightMaximum * moduleWidth;
+            float sizeAtMinimum = 0;
+            float sizeAtMaximum = float.MaxValue;
             RichTextOptions capOptions = BarcodeTextOptionsFactory.Create(digitFont, options.Dpi);
             for (int i = 0; i < text.Length; i++)
             {
@@ -141,17 +150,24 @@ internal static class BarEmitter
                 // What runs into a neighbour is the glyph bounds, so the cap measures those. The
                 // renderable bounds are their union with the advance, and the advance is space the glyph
                 // reserves rather than covers.
-                float cellText = TextMeasurer.MeasureBounds(symbol.TextOf(in capPlacement), capOptions).Width;
-                if (cellText <= 0)
+                FontRectangle ink = TextMeasurer.MeasureBounds(symbol.TextOf(in capPlacement), capOptions);
+                if (ink.Width <= 0)
                 {
                     continue;
                 }
 
                 float cell = (capPlacement.Right - capPlacement.Left) * moduleWidth * stretch;
-                cap = MathF.Min(cap, digitFont.Size * cell / (cellText * capPlacement.FontScale));
+                cap = MathF.Min(cap, digitFont.Size * cell / (ink.Width * capPlacement.FontScale));
+                if (maximumHeight > 0)
+                {
+                    float inkHeight = ink.Height * capPlacement.FontScale;
+                    sizeAtMinimum = MathF.Max(sizeAtMinimum, digitFont.Size * minimumHeight / inkHeight);
+                    sizeAtMaximum = MathF.Min(sizeAtMaximum, digitFont.Size * maximumHeight / inkHeight);
+                }
             }
 
-            float capped = MathF.Max(MathF.Min(digitFont.Size, cap), EanUpcEncoder.MinimumTextPoints);
+            float size = MathF.Min(MathF.Max(digitFont.Size, sizeAtMinimum), sizeAtMaximum);
+            float capped = MathF.Max(MathF.Min(size, cap), MathF.Max(sizeAtMinimum, EanUpcEncoder.MinimumTextPoints));
             if (capped != digitFont.Size)
             {
                 digitFont = new Font(digitFont, capped);
@@ -188,6 +204,14 @@ internal static class BarEmitter
         float belowInk = float.MaxValue;
         float belowBaseline = 0;
         float aboveInk = 0;
+
+        // The far ink edges of the lines, the top of the line above the bars and the bottom of the line
+        // below them, which the identification bars stand clear of. The edges are in modules from the
+        // symbol top, at the text edge the lines round to.
+        float aboveInkTop = float.MaxValue;
+        float belowInkBottom = float.MinValue;
+        float aboveEdge = float.NaN;
+        float belowEdge = float.NaN;
         if (digitFont is not null)
         {
             for (int i = 0; i < text.Length; i++)
@@ -222,9 +246,12 @@ internal static class BarEmitter
                 if (placement.Side == BarcodeTextSide.AboveBars)
                 {
                     aboveInk = MathF.Max(aboveInk, metrics.Bounds.Bottom);
+                    aboveInkTop = MathF.Min(aboveInkTop, metrics.Bounds.Top);
                 }
                 else
                 {
+                    belowInkBottom = MathF.Max(belowInkBottom, metrics.Bounds.Bottom);
+
                     // The quiet zone digits of a UPC symbol print smaller than the rest of the line. The
                     // tallest line sets where the line sits, and every line on it shares that baseline.
                     LineMetrics line = metrics.LineMetrics[0];
@@ -247,12 +274,44 @@ internal static class BarEmitter
                 if (placement.Side == BarcodeTextSide.AboveBars)
                 {
                     topBand = MathF.Max(topBand, (aboveInk / moduleWidth) - placement.TextEdge);
+                    aboveEdge = float.IsNaN(aboveEdge) ? placement.TextEdge : MathF.Min(aboveEdge, placement.TextEdge);
                 }
                 else
                 {
                     bottomInModules = MathF.Max(bottomInModules, placement.TextEdge + ((belowHeight - belowInk) / moduleWidth));
+                    belowEdge = float.IsNaN(belowEdge) ? placement.TextEdge : MathF.Max(belowEdge, placement.TextEdge);
                 }
             }
+        }
+
+        // An identification bar stands its clearance beyond the far ink edge of the line on its side, and
+        // spans the symbol and its quiet zones whether or not the quiet zones are drawn, because section
+        // 2.4.3 of USPS2000508 extends the bars "at least the total combined width of the barcode and the
+        // minimum clear zones". The bar edges round away from the text, and the text edge itself rounds
+        // by up to half a pixel, so each band reserves two pixels more than the exact room.
+        float identificationThickness = 0;
+        float identificationClearance = symbol.IdentificationBarClearance * moduleWidth;
+        bool upperIdentificationBar = false;
+        bool lowerIdentificationBar = false;
+        if (symbol.IdentificationBarThickness > 0)
+        {
+            identificationThickness = MathF.Max(1F, MathF.Round(symbol.IdentificationBarThickness * moduleWidth));
+            float reserve = (identificationClearance + identificationThickness + 2F) / moduleWidth;
+            upperIdentificationBar = !float.IsNaN(aboveEdge);
+            lowerIdentificationBar = !float.IsNaN(belowEdge);
+            if (upperIdentificationBar)
+            {
+                topBand = MathF.Max(topBand, ((aboveInk - aboveInkTop) / moduleWidth) - aboveEdge + reserve);
+            }
+
+            if (lowerIdentificationBar)
+            {
+                bottomInModules = MathF.Max(bottomInModules, belowEdge + ((belowInkBottom - belowInk) / moduleWidth) + reserve);
+            }
+
+            float barsStart = symbolLeft - (symbol.LeadingQuietZone * moduleWidth);
+            backgroundLeft = MathF.Min(backgroundLeft, barsStart);
+            backgroundRight = MathF.Max(backgroundRight, barsStart + ((symbol.LeadingQuietZone + symbol.TrailingQuietZone) * moduleWidth) + blockWidth);
         }
 
         // A baseline rounds onto the device pixel grid, which lifts its ink by up to half a pixel. The band
@@ -303,9 +362,10 @@ internal static class BarEmitter
         }
 
         int frameCount = frame > 0 ? (sides ? 4 : 2) : 0;
+        int identificationCount = (upperIdentificationBar ? 1 : 0) + (lowerIdentificationBar ? 1 : 0);
 
         // The path retains the rectangles until the canvas flushes, so it owns this array.
-        RectangleF[] bars = new RectangleF[barCount + frameCount];
+        RectangleF[] bars = new RectangleF[barCount + frameCount + identificationCount];
         float barsLeft = float.MaxValue;
         float barsTop = float.MaxValue;
         float barsRight = float.MinValue;
@@ -401,7 +461,7 @@ internal static class BarEmitter
             if (sides)
             {
                 bars[index++] = new RectangleF(left, upperBottom, thickness, lowerTop - upperBottom);
-                bars[index] = new RectangleF(right - thickness, upperBottom, thickness, lowerTop - upperBottom);
+                bars[index++] = new RectangleF(right - thickness, upperBottom, thickness, lowerTop - upperBottom);
             }
 
             // The frame spans the bars, so it sets the horizontal extent and the top and bottom.
@@ -409,6 +469,32 @@ internal static class BarEmitter
             barsTop = MathF.Min(barsTop, frameTop);
             barsRight = MathF.Max(barsRight, right);
             barsBottom = MathF.Max(barsBottom, lowerTop + thickness);
+        }
+
+        if (identificationCount > 0)
+        {
+            // The bars stand on the text edges the lines draw at, so the clearance holds to the drawn ink.
+            // The edge next to the text rounds away from it, and both bars share one pixel thickness.
+            float left = MathF.Floor(symbolLeft - (symbol.LeadingQuietZone * moduleWidth));
+            float right = MathF.Ceiling(symbolLeft + blockWidth + (symbol.TrailingQuietZone * moduleWidth));
+            if (upperIdentificationBar)
+            {
+                float edge = MathF.Round(origin.Y + ((topBand + aboveEdge) * moduleWidth));
+                float bottom = MathF.Floor(edge - (aboveInk - aboveInkTop) - identificationClearance);
+                bars[index++] = RectangleF.FromLTRB(left, bottom - identificationThickness, right, bottom);
+                barsTop = MathF.Min(barsTop, bottom - identificationThickness);
+            }
+
+            if (lowerIdentificationBar)
+            {
+                float edge = MathF.Round(origin.Y + ((topBand + belowEdge) * moduleWidth));
+                float top = MathF.Ceiling(edge + (belowInkBottom - belowInk) + identificationClearance);
+                bars[index] = RectangleF.FromLTRB(left, top, right, top + identificationThickness);
+                barsBottom = MathF.Max(barsBottom, top + identificationThickness);
+            }
+
+            barsLeft = MathF.Min(barsLeft, left);
+            barsRight = MathF.Max(barsRight, right);
         }
 
         canvas.Fill(options.BarBrush, new BarcodePath(bars, RectangleF.FromLTRB(barsLeft, barsTop, barsRight, barsBottom)));
