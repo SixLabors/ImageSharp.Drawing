@@ -38,4 +38,9 @@ internal enum BarcodeSymbolKind
     /// A grid of round dots, the form of DotCode. The modules are a grid of square cells, and each dark module is a dot centred in its cell.
     /// </summary>
     Dotted,
+
+    /// <summary>
+    /// A grid of square modules in several colours, the form of Ultracode. Each module is a <see cref="BarcodeModuleColor"/>.
+    /// </summary>
+    Colored,
 }

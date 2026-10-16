@@ -28,7 +28,7 @@ public static class BarcodeMeasurer
             symbology.Encode(text, options, ref symbol);
             return symbol.Kind switch
             {
-                BarcodeSymbolKind.Matrix or BarcodeSymbolKind.Dotted => MatrixEmitter.Measure(ref symbol, options, origin),
+                BarcodeSymbolKind.Matrix or BarcodeSymbolKind.Dotted or BarcodeSymbolKind.Colored => MatrixEmitter.Measure(ref symbol, options, origin),
                 BarcodeSymbolKind.Hexagonal => HexagonalEmitter.Measure(ref symbol, options, origin),
                 _ => BarEmitter.Measure(ref symbol, options, origin),
             };

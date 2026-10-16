@@ -225,6 +225,11 @@ internal struct BarcodeSymbol : IDisposable
     public readonly ReadOnlySpan<bool> Modules => Slice<bool>(this.layoutBuffer, 0, this.moduleCount);
 
     /// <summary>
+    /// Gets the module colours of a colour symbol, row-major.
+    /// </summary>
+    public readonly ReadOnlySpan<BarcodeModuleColor> ModuleColors => Slice<BarcodeModuleColor>(this.layoutBuffer, 0, this.moduleCount);
+
+    /// <summary>
     /// Gets the human readable interpretation. The span is empty when the symbol carries no text.
     /// </summary>
     public readonly ReadOnlySpan<BarcodeTextPlacement> Text => Slice<BarcodeTextPlacement>(this.textBuffer, 0, this.textCount);
@@ -462,6 +467,22 @@ internal struct BarcodeSymbol : IDisposable
         Span<bool> modules = this.BeginMatrix(columns, rows, quietZone, xDimension);
         this.Kind = BarcodeSymbolKind.Dotted;
         return modules;
+    }
+
+    /// <summary>
+    /// Begins a colour symbol: a grid of square modules, each a <see cref="BarcodeModuleColor"/>. The modules start light.
+    /// </summary>
+    /// <param name="columns">The number of module columns.</param>
+    /// <param name="rows">The number of module rows.</param>
+    /// <param name="quietZone">The quiet zone on each of the four sides, in modules.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="XDimension"/>.</param>
+    /// <returns>The module colours to write, row-major.</returns>
+    public Span<BarcodeModuleColor> BeginColored(int columns, int rows, int quietZone, double xDimension)
+    {
+        // A colour takes one byte, as a bool does, so the module buffer holds the colours.
+        Span<bool> modules = this.BeginMatrix(columns, rows, quietZone, xDimension);
+        this.Kind = BarcodeSymbolKind.Colored;
+        return MemoryMarshal.Cast<bool, BarcodeModuleColor>(modules);
     }
 
     /// <summary>
