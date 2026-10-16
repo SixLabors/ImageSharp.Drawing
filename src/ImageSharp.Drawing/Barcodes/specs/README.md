@@ -128,6 +128,8 @@ The standards each symbology is built to. Files marked *held* are in this folder
 - DotCode: AIM ISS DotCode Symbology Specification 4.0 (sold),
   <https://web.aimglobal.org/external/wcpages/wcecommerce/eComItemDetailsPage.aspx?ItemID=651>
 - GS1 DotCode: GS1 General Specifications section 5.8
+- Ultracode: AIM Ultracode (sold), <https://web.aimglobal.org/external/wcpages/wcecommerce/eComItemDetailsPage.aspx?ItemID=52>; ISO/IEC CD 25449 (committee
+  draft), <https://www.iso.org/standard/90433.html>
 
 ## Postal
 

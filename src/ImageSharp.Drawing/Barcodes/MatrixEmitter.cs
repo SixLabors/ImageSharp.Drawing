@@ -134,15 +134,19 @@ internal static class MatrixEmitter
             canvas.Fill(options.Background, new RectanglePolygon(bounds.X, bounds.Y, bounds.Width, bounds.Height));
         }
 
-        // A dotted symbol draws each dark module as a dot; every other matrix symbol draws runs of modules.
+        // A dotted symbol draws each dark module as a dot, a colour symbol draws runs of each colour, and every other matrix symbol draws runs of dark modules.
         ModuleGrid grid = new(symbolLeft, symbolTop, moduleWidth);
-        if (symbol.Kind == BarcodeSymbolKind.Dotted)
+        switch (symbol.Kind)
         {
-            FillDots(canvas, ref symbol, options.BarBrush, in grid);
-        }
-        else
-        {
-            FillRuns(canvas, ref symbol, options.BarBrush, in grid);
+            case BarcodeSymbolKind.Dotted:
+                FillDots(canvas, ref symbol, options.BarBrush, in grid);
+                break;
+            case BarcodeSymbolKind.Colored:
+                FillColorRuns(canvas, ref symbol, options.BarBrush, in grid);
+                break;
+            default:
+                FillRuns(canvas, ref symbol, options.BarBrush, in grid);
+                break;
         }
 
         if (font is not null && textOptions is not null)
@@ -339,6 +343,105 @@ internal static class MatrixEmitter
         // The cells hold every circle, so they bound the path.
         RectangleF cells = new((float)symbolLeft, (float)symbolTop, columns * moduleWidth, rows * moduleWidth);
         canvas.Fill(brush, new BarcodePath(centres, moduleWidth / 2, cells));
+    }
+
+    /// <summary>
+    /// Fills the modules of a colour symbol: each run of adjacent modules of one colour in a row is one rectangle, and each colour is one fill of one
+    /// <see cref="BarcodePath"/>. Dark modules take the bar brush and light modules stay the background, as in every other symbol; the four data colours are
+    /// fixed, because a reader tells them apart by hue.
+    /// </summary>
+    /// <param name="canvas">The canvas to render onto.</param>
+    /// <param name="symbol">The encoded colour symbol.</param>
+    /// <param name="barBrush">The brush of the dark modules.</param>
+    /// <param name="grid">The position and the module width of the modules on the pixel grid.</param>
+    private static void FillColorRuns(DrawingCanvas canvas, ref BarcodeSymbol symbol, Brush barBrush, in ModuleGrid grid)
+    {
+        int columns = symbol.Columns;
+        int rows = symbol.MatrixRows;
+        ReadOnlySpan<byte> modules = MemoryMarshal.Cast<BarcodeModuleColor, byte>(symbol.ModuleColors);
+
+        // The first pass counts the runs of every colour, so each colour's rectangle array is sized exactly; the paths retain the arrays until the canvas
+        // flushes. A run starts at the first module that is not light and ends where its colour changes. Light modules are the background.
+        const int colorCount = (int)BarcodeModuleColor.Green + 1;
+        InlineArray6<int> countStorage = default;
+        Span<int> counts = countStorage;
+        for (int r = 0; r < rows; r++)
+        {
+            ReadOnlySpan<byte> row = modules.Slice(r * columns, columns);
+            int end = 0;
+            while (NextColorRun(row, ref end, out int start))
+            {
+                counts[row[start]]++;
+            }
+        }
+
+        InlineArray6<RectangleF[]> runStorage = default;
+        Span<RectangleF[]> runs = runStorage;
+        InlineArray6<RectangleF> boundsStorage = default;
+        Span<RectangleF> bounds = boundsStorage;
+        for (int c = (int)BarcodeModuleColor.Dark; c < colorCount; c++)
+        {
+            runs[c] = new RectangleF[counts[c]];
+            counts[c] = 0;
+        }
+
+        // The second pass writes each run to the array of its colour, and grows the bounds of that colour's path.
+        for (int r = 0; r < rows; r++)
+        {
+            ReadOnlySpan<byte> row = modules.Slice(r * columns, columns);
+            float rowTop = grid.RowEdge(r);
+            float rowBottom = grid.RowEdge(r + 1);
+            int end = 0;
+            while (NextColorRun(row, ref end, out int start))
+            {
+                int c = row[start];
+                RectangleF run = RectangleF.FromLTRB(grid.ColumnEdge(start), rowTop, grid.ColumnEdge(end), rowBottom);
+                bounds[c] = counts[c] == 0 ? run : RectangleF.Union(bounds[c], run);
+                runs[c][counts[c]++] = run;
+            }
+        }
+
+        for (int c = (int)BarcodeModuleColor.Dark; c < colorCount; c++)
+        {
+            if (counts[c] == 0)
+            {
+                continue;
+            }
+
+            Brush brush = (BarcodeModuleColor)c switch
+            {
+                BarcodeModuleColor.Dark => barBrush,
+                BarcodeModuleColor.Cyan => Brushes.Solid(Color.Cyan),
+                BarcodeModuleColor.Magenta => Brushes.Solid(Color.Magenta),
+                BarcodeModuleColor.Yellow => Brushes.Solid(Color.Yellow),
+                _ => Brushes.Solid(Color.Lime),
+            };
+
+            canvas.Fill(brush, new BarcodePath(runs[c], bounds[c]));
+        }
+    }
+
+    /// <summary>
+    /// Finds the next run of one colour in a row of a colour symbol: a maximal sequence of modules of one colour other than light.
+    /// </summary>
+    /// <param name="row">The module colours of the row.</param>
+    /// <param name="end">On entry, the column the search starts at. On exit, the column after the run, or the row length when no run remains.</param>
+    /// <param name="start">The first column of the run.</param>
+    /// <returns><see langword="true"/> when a run was found.</returns>
+    private static bool NextColorRun(ReadOnlySpan<byte> row, ref int end, out int start)
+    {
+        int offset = row[end..].IndexOfAnyExcept((byte)BarcodeModuleColor.Light);
+        if (offset < 0)
+        {
+            start = row.Length;
+            end = row.Length;
+            return false;
+        }
+
+        start = end + offset;
+        int length = row[start..].IndexOfAnyExcept(row[start]);
+        end = length < 0 ? row.Length : start + length;
+        return true;
     }
 
     /// <summary>

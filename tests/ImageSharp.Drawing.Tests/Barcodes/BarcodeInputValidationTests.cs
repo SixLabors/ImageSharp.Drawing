@@ -83,6 +83,7 @@ public class BarcodeInputValidationTests
     [InlineData(typeof(CodeOneSymbology))]
     [InlineData(typeof(HanXinSymbology))]
     [InlineData(typeof(DotCodeSymbology))]
+    [InlineData(typeof(UltracodeSymbology))]
     public void RejectsNullText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;
@@ -158,6 +159,7 @@ public class BarcodeInputValidationTests
     [InlineData(typeof(CodeOneSymbology))]
     [InlineData(typeof(HanXinSymbology))]
     [InlineData(typeof(DotCodeSymbology))]
+    [InlineData(typeof(UltracodeSymbology))]
     public void RejectsEmptyText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;

@@ -247,7 +247,7 @@ public abstract partial class DrawingCanvas
         try
         {
             symbology.Encode(text, options, ref symbol);
-            if (symbol.Kind is BarcodeSymbolKind.Matrix or BarcodeSymbolKind.Dotted)
+            if (symbol.Kind is BarcodeSymbolKind.Matrix or BarcodeSymbolKind.Dotted or BarcodeSymbolKind.Colored)
             {
                 MatrixEmitter.Emit(this, ref symbol, options, origin);
             }
