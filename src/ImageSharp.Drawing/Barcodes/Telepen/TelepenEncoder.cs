@@ -1,15 +1,15 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
+
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Encodation for the Telepen symbology. Every character is an ASCII value with an even parity bit,
-/// sent least significant bit first, and the bits become bars and spaces with a fixed 3:1 ratio: a 1 bit
-/// is a narrow bar and a narrow space, the bits 00 are a wide bar and a narrow space, the bits 010 are a
-/// wide bar and a wide space, and the bits 01 and, after them, 10 are a narrow bar and a wide space.
-/// Every character is sixteen modules. A symbol is the start code, the data, the modulo 127 check
-/// character and the stop code, without gaps.
+/// Encodation for the Telepen symbology. Every character is an ASCII value with an even parity bit, sent least significant bit first, and the bits become bars
+/// and spaces with a fixed 3:1 ratio: a 1 bit is a narrow bar and a narrow space, the bits 00 are a wide bar and a narrow space, the bits 010 are a wide bar
+/// and a wide space, and the bits 01 and, after them, 10 are a narrow bar and a wide space. Every character is sixteen modules. A symbol is the start code, the
+/// data, the modulo 127 check character and the stop code, without gaps.
 /// </summary>
 internal static class TelepenEncoder
 {
@@ -19,14 +19,12 @@ internal static class TelepenEncoder
     public const int MaximumLength = 500;
 
     /// <summary>
-    /// The quiet zone in modules on each side: the "minimum quiet zone width of 10X or 2.54 mm,
-    /// whichever is greater".
+    /// The quiet zone in modules on each side: the "minimum quiet zone width of 10X or 2.54 mm, whichever is greater".
     /// </summary>
     public const int QuietZone = 10;
 
     /// <summary>
-    /// The number of characters a caller holds inline to build symbol data in. Longer data rents its
-    /// buffer once.
+    /// The number of characters a caller holds inline to build symbol data in. Longer data rents its buffer once.
     /// </summary>
     public const int InlineBufferLength = 64;
 
@@ -66,8 +64,18 @@ internal static class TelepenEncoder
     private const int ModulesPerCharacter = 16;
 
     /// <summary>
-    /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no
-    /// height: 15 per cent, and at least <see cref="MinimumBarHeightMillimetres"/>.
+    /// The number of characters a symbol carries beyond its data: the start code, the check character and the stop code.
+    /// </summary>
+    private const int FrameCharacters = 3;
+
+    /// <summary>
+    /// The width of a wide bar or space in modules, from the fixed 3:1 ratio. A narrow bar or space is one module.
+    /// </summary>
+    private const int WideElement = 3;
+
+    /// <summary>
+    /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no height: 15 per cent, and at least
+    /// <see cref="MinimumBarHeightMillimetres"/>.
     /// </summary>
     private const float NominalBarHeightFraction = 0.15F;
 
@@ -77,19 +85,18 @@ internal static class TelepenEncoder
     private const float MinimumBarHeightMillimetres = 6.35F;
 
     /// <summary>
-    /// Calculates the check character over the character values the symbol carries: "Add the ASCII
-    /// values of each character excluding the start and stop characters. Divide by 127. Unless remainder
-    /// equals zero subtract from 127. The character whose ASCII value is the result is the check
-    /// character." For data of NUL characters alone "the check character is exceptionally ASCII 127".
+    /// Calculates the check character over the character values the symbol carries: "Add the ASCII values of each character excluding the start and stop
+    /// characters. Divide by 127. Unless remainder equals zero subtract from 127. The character whose ASCII value is the result is the check character." For
+    /// data of NUL characters alone "the check character is exceptionally ASCII 127".
     /// </summary>
     /// <param name="values">The character values the symbol carries.</param>
     /// <returns>The value of the check character.</returns>
     public static int CheckCharacter(ReadOnlySpan<int> values)
     {
         int sum = 0;
-        for (int i = 0; i < values.Length; i++)
+        foreach (int value in values)
         {
-            sum += values[i];
+            sum += value;
         }
 
         if (sum == 0)
@@ -102,9 +109,8 @@ internal static class TelepenEncoder
     }
 
     /// <summary>
-    /// Encodes character values and builds the symbol. The runs start with the first bar of the start code
-    /// and end on the last bar of the stop code, and carry the start code, the values, the check character
-    /// and the stop code. Telepen carries no guard bars, so every bar runs the full height, and the human
+    /// Encodes character values and builds the symbol. The runs start with the first bar of the start code and end on the last bar of the stop code, and carry
+    /// the start code, the values, the check character and the stop code. Telepen carries no guard bars, so every bar runs the full height, and the human
     /// readable interpretation sits below the symbol.
     /// </summary>
     /// <param name="values">The character values the symbol carries, already validated.</param>
@@ -113,15 +119,15 @@ internal static class TelepenEncoder
     /// <param name="symbol">The symbol to write.</param>
     public static void BuildSymbol(ReadOnlySpan<int> values, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        // Every character is at most eight bars and eight spaces, so the symbol reserves that many runs and
+        // Every run is at least one module and a character is sixteen modules, so a character is at most sixteen runs. The symbol reserves that many runs and
         // keeps those it writes. The stop code ends on a bar, so the space written after it is dropped.
         double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
-        Span<int> runs = symbol.BeginLinear((values.Length + 3) * ModulesPerCharacter, xDimension, out Span<float> heights, out _);
+        Span<int> runs = symbol.BeginLinear((values.Length + FrameCharacters) * ModulesPerCharacter, xDimension, out Span<float> heights, out _);
         int written = 0;
         Append(runs, ref written, Start);
-        for (int i = 0; i < values.Length; i++)
+        foreach (int value in values)
         {
-            Append(runs, ref written, values[i]);
+            Append(runs, ref written, value);
         }
 
         Append(runs, ref written, CheckCharacter(values));
@@ -145,12 +151,10 @@ internal static class TelepenEncoder
     }
 
     /// <summary>
-    /// Writes the bars and spaces of one character. The seven ASCII bits take an even parity bit as
-    /// their eighth, and the eight bits are read least significant first. A 1 bit is a narrow bar and a
-    /// narrow space. The bits 00 are a wide bar and a narrow space, and the bits 010 are a wide bar and a
-    /// wide space. The bits 01 followed by a 1 are a narrow bar and a wide space, after which the bits
-    /// 10 are the same pair, so a lone 0 bit always pairs with a later one. Even parity gives every
-    /// character an even number of 0 bits, so the pairing always closes inside the character.
+    /// Writes the bars and spaces of one character. The seven ASCII bits take an even parity bit as their eighth, and the eight bits are read least significant
+    /// first. A 1 bit is a narrow bar and a narrow space. The bits 00 are a wide bar and a narrow space, and the bits 010 are a wide bar and a wide space. The
+    /// bits 01 followed by a 1 are a narrow bar and a wide space, after which the bits 10 are the same pair, so a lone 0 bit always pairs with a later one.
+    /// Even parity gives every character an even number of 0 bits, so the pairing always closes inside the character.
     /// </summary>
     /// <param name="runs">The buffer the widths are written to.</param>
     /// <param name="written">The write position, advanced by the element count.</param>
@@ -158,57 +162,53 @@ internal static class TelepenEncoder
     private static void Append(Span<int> runs, ref int written, int value)
     {
         int bits = value;
-        if ((System.Numerics.BitOperations.PopCount((uint)value) & 1) == 1)
+        if ((BitOperations.PopCount((uint)value) & 1) == 1)
         {
             bits |= 1 << (BitsPerCharacter - 1);
         }
 
+        // Every step writes one bar and one space. The pair is narrow and narrow unless a 0 bit is involved, and the step consumes one to three bits.
         int i = 0;
         bool open = false;
         while (i < BitsPerCharacter)
         {
-            int bit = (bits >> i) & 1;
+            int bar = 1;
+            int space = 1;
+            int consumed = 1;
             if (open)
+            {
+                // A pair opened by 01 stays open across 1 bits and closes on the bits 10.
+                if (((bits >> (i + 1)) & 1) == 0)
+                {
+                    space = WideElement;
+                    consumed = 2;
+                    open = false;
+                }
+            }
+            else if (((bits >> i) & 1) == 0)
             {
                 if (((bits >> (i + 1)) & 1) == 0)
                 {
-                    runs[written++] = 1;
-                    runs[written++] = 3;
-                    i += 2;
-                    open = false;
+                    bar = WideElement;
+                    consumed = 2;
+                }
+                else if (((bits >> (i + 2)) & 1) == 0)
+                {
+                    bar = WideElement;
+                    space = WideElement;
+                    consumed = 3;
                 }
                 else
                 {
-                    runs[written++] = 1;
-                    runs[written++] = 1;
-                    i++;
+                    space = WideElement;
+                    consumed = 2;
+                    open = true;
                 }
             }
-            else if (bit == 1)
-            {
-                runs[written++] = 1;
-                runs[written++] = 1;
-                i++;
-            }
-            else if (((bits >> (i + 1)) & 1) == 0)
-            {
-                runs[written++] = 3;
-                runs[written++] = 1;
-                i += 2;
-            }
-            else if (((bits >> (i + 2)) & 1) == 0)
-            {
-                runs[written++] = 3;
-                runs[written++] = 3;
-                i += 3;
-            }
-            else
-            {
-                runs[written++] = 1;
-                runs[written++] = 3;
-                i += 2;
-                open = true;
-            }
+
+            runs[written++] = bar;
+            runs[written++] = space;
+            i += consumed;
         }
     }
 }

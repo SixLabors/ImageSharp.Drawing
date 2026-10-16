@@ -6,17 +6,14 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Encodes MaxiCode symbols: 144 six-bit codewords in 33 rows of 30 hexagonal modules around a circular finder.
-/// The primary message of 10 data and 10 check codewords carries the mode and, in modes 2 and 3, the
-/// structured carrier message of postal code, country code and class of service. The secondary message
-/// carries the data in two interleaved Reed-Solomon blocks. The code set search finds the shortest sequence of
-/// code set latches, shifts and characters.
+/// Encodes MaxiCode symbols: 144 six-bit codewords in 33 rows of 30 hexagonal modules around a circular finder. The primary message of 10 data and 10 check
+/// codewords carries the mode and, in modes 2 and 3, the structured carrier message of postal code, country code and class of service. The secondary message
+/// carries the data in two interleaved Reed-Solomon blocks. The code set search finds the shortest sequence of code set latches, shifts and characters.
 /// </summary>
 internal static class MaxiCodeEncoder
 {
     /// <summary>
-    /// The longest data the secondary message can hold: 93 codewords of digits in numeric shift, 9 digits
-    /// in 6 codewords.
+    /// The longest data the secondary message can hold: 93 codewords of digits in numeric shift, 9 digits in 6 codewords.
     /// </summary>
     public const int MaximumDataLength = 138;
 
@@ -25,16 +22,55 @@ internal static class MaxiCodeEncoder
     private const int CodewordCount = 144;
     private const int Unreached = int.MaxValue;
 
-    private const int SetA = 0;
-    private const int SetB = 1;
-    private const int SetC = 2;
-    private const int SetD = 3;
-    private const int SetE = 4;
+    /// <summary>
+    /// The number of code sets, A to E.
+    /// </summary>
+    private const int CodeSetCount = 5;
+
+    /// <summary>
+    /// The positions the code set search keeps, a power of two so a position maps to its row with a mask. The longest operation reads 9 characters back.
+    /// </summary>
+    private const int RingLength = 16;
 
     /// <summary>
     /// The codeword that latches from code set C, D or E to code set A.
     /// </summary>
     private const int LatchA = 58;
+
+    /// <summary>
+    /// The codeword of the numeric shift, NS, which carries nine digits in the five codewords after it.
+    /// </summary>
+    private const int NumericShiftCodeword = 31;
+
+    /// <summary>
+    /// The codeword that shifts two characters into code set A from B, 2 SHIFT A.
+    /// </summary>
+    private const int TwoShiftACodeword = 56;
+
+    /// <summary>
+    /// The codeword that shifts three characters into code set A from B, 3 SHIFT A.
+    /// </summary>
+    private const int ThreeShiftACodeword = 57;
+
+    /// <summary>
+    /// The codeword that shifts one character into code set B from A, SHIFT B, or into code set A from B, SHIFT A.
+    /// </summary>
+    private const int ShiftCodeword = 59;
+
+    /// <summary>
+    /// The codeword that shifts one character into code set C.
+    /// </summary>
+    private const int ShiftCCodeword = 60;
+
+    /// <summary>
+    /// The codeword that shifts one character into code set D.
+    /// </summary>
+    private const int ShiftDCodeword = 61;
+
+    /// <summary>
+    /// The codeword that shifts one character into code set E.
+    /// </summary>
+    private const int ShiftECodeword = 62;
 
     /// <summary>
     /// The data codewords of the secondary message of modes 2 and 3.
@@ -52,19 +88,39 @@ internal static class MaxiCodeEncoder
     private const int StandardCapacity = 93;
 
     /// <summary>
-    /// The value of each byte in each code set, set x 256 + byte, or 0xFF where the code set has no such
-    /// character.
-    /// </summary>
-    private static readonly byte[] SetValues = BuildSetValues();
-
-    /// <summary>
     /// The field of the Reed-Solomon codes: GF(64) with the polynomial x^6 + x + 1, 67 decimal.
     /// </summary>
     private static readonly GaloisField Field = new(64, 67);
 
     /// <summary>
-    /// The operations of the code set search, in the order the search tries them. Equal lengths keep the
-    /// first operation found.
+    /// The code sets of Table 3, in the row and column order of the latch, pad and value tables.
+    /// </summary>
+    private enum CodeSet : byte
+    {
+        A,
+        B,
+        C,
+        D,
+        E,
+    }
+
+    /// <summary>
+    /// A set of code sets, bit n for the code set of value n in <see cref="CodeSet"/>.
+    /// </summary>
+    [Flags]
+    private enum CodeSets : byte
+    {
+        None = 0,
+        A = 1,
+        B = 2,
+        C = 4,
+        D = 8,
+        E = 16,
+    }
+
+    /// <summary>
+    /// The operations of the code set search, in the order the search tries them. Equal lengths keep the first operation found. The character operations follow
+    /// the code sets A to E in order.
     /// </summary>
     private enum Operation : byte
     {
@@ -84,9 +140,8 @@ internal static class MaxiCodeEncoder
     }
 
     /// <summary>
-    /// Gets the codewords of the latch into each code set, row, from each code set, column, written in the
-    /// code set it latches from: a latch A or B is one codeword, and a lock into C, D or E is the shift into
-    /// that code set followed by the lock. 0 marks no codeword.
+    /// Gets the codewords of the latch into each code set, row, from each code set, column, written in the code set it latches from: a latch A or B is one
+    /// codeword, and a lock into C, D or E is the shift into that code set followed by the lock. 0 marks no codeword.
     /// </summary>
     private static ReadOnlySpan<byte> LatchCodes =>
     [
@@ -108,8 +163,7 @@ internal static class MaxiCodeEncoder
     private static ReadOnlySpan<short> OrientationModules => [28, 29, 280, 281, 311, 457, 488, 500, 530, 670, 700, 677, 707];
 
     /// <summary>
-    /// Gets the module of each codeword bit, as row x 30 + column: bit b of codeword c, the most significant
-    /// bit first, is entry 6c + b.
+    /// Gets the module of each codeword bit, as row x 30 + column: bit b of codeword c, the most significant bit first, is entry 6c + b.
     /// </summary>
     private static ReadOnlySpan<short> ModuleMap =>
     [
@@ -160,35 +214,124 @@ internal static class MaxiCodeEncoder
     ];
 
     /// <summary>
+    /// Gets the value of each byte in each code set of Table 3, at index code set x 256 + byte, or 0xFF where the code set has no such byte. Code sets A to E
+    /// follow in turn, 256 bytes each. A byte that two values of one code set stand for takes the later value.
+    /// </summary>
+    private static ReadOnlySpan<byte> SetValues =>
+    [
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 28, 29, 30, 255,
+        32, 255, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+        48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 255, 255, 255, 255, 255,
+        255, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 28, 29, 30, 255,
+        47, 53, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 48, 255, 49, 50,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 51, 37, 38, 39, 40, 41,
+        52, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 42, 43, 44, 45, 46,
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 32, 54, 34, 35, 36,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 28, 29, 30, 255,
+        59, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 37, 255, 38, 255, 255, 255,
+        255, 39, 40, 41, 255, 42, 255, 255, 255, 43, 44, 255, 45, 46, 47, 255,
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 32, 33, 34, 35, 36,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 28, 29, 30, 255,
+        59, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 47, 48, 49, 50, 51, 52,
+        53, 54, 55, 56, 57, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 37, 255, 255, 255, 255, 255, 255, 38, 255, 255, 39, 255, 255, 255, 40,
+        41, 255, 255, 255, 42, 255, 255, 43, 44, 255, 255, 45, 255, 255, 255, 46,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 32, 33, 34, 35, 36,
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 30, 32, 33, 34, 35,
+        59, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 36,
+        37, 255, 38, 39, 40, 41, 42, 43, 255, 44, 255, 255, 255, 45, 46, 255,
+        255, 255, 255, 255, 255, 255, 47, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    ];
+
+    /// <summary>
     /// Builds a MaxiCode symbol.
     /// </summary>
     /// <param name="text">The text, characters U+0000 to U+00FF.</param>
-    /// <param name="mode">The mode, 2 to 6, or 0 for mode 5 when the data fits and mode 4 otherwise.</param>
+    /// <param name="mode">The mode, or <see langword="null"/> for mode 5 when the data fits and mode 4 otherwise.</param>
     /// <param name="xDimension">The X dimension in millimetres.</param>
     /// <param name="symbol">The symbol to write.</param>
-    /// <exception cref="ArgumentException">The text is empty, has a character above U+00FF, breaks a rule of
-    /// the structured carrier message, or does not fit.</exception>
-    public static void BuildSymbol(ReadOnlySpan<char> text, int mode, double xDimension, ref BarcodeSymbol symbol)
+    /// <exception cref="ArgumentException">The text is empty, has a character above U+00FF, breaks a rule of the structured carrier message, or does not
+    /// fit.</exception>
+    public static void BuildSymbol(ReadOnlySpan<char> text, MaxiCodeMode? mode, double xDimension, ref BarcodeSymbol symbol)
     {
         if (text.IsEmpty)
         {
             throw new ArgumentException("MaxiCode needs at least one character.", nameof(text));
         }
 
-        int invalid = text.IndexOfAnyExceptInRange('\0', '\u00FF');
+        int invalid = text.IndexOfAnyExceptInRange('\0', 'ÿ');
         if (invalid >= 0)
         {
             throw new ArgumentException($"MaxiCode encodes U+0000 to U+00FF; got {text.CodePointAt(invalid).ToDisplayString()}.", nameof(text));
         }
 
+        bool carrier = mode is MaxiCodeMode.StructuredCarrierNumeric or MaxiCodeMode.StructuredCarrierAlphanumeric;
         InlineArray10<int> primaryStorage = default;
         Span<int> primary = primaryStorage;
         scoped ReadOnlySpan<char> data = text;
         InlineArray256<char> carrierDataStorage = default;
         Span<char> carrierData = ((Span<char>)carrierDataStorage)[..MaximumDataLength];
-        if (mode is 2 or 3)
+        if (carrier)
         {
-            data = carrierData[..ParseStructuredCarrier(text, mode, primary, carrierData)];
+            data = carrierData[..ParseStructuredCarrier(text, mode!.Value, primary, carrierData)];
         }
 
         if (data.Length > MaximumDataLength)
@@ -196,41 +339,36 @@ internal static class MaxiCodeEncoder
             throw new ArgumentException($"MaxiCode holds at most {MaximumDataLength} characters of data; got {data.Length}.", nameof(text));
         }
 
-        // No mode holds more than StandardCapacity codewords, and the closing latch takes one more. The search
-        // writes no longer message, and the capacity check below rejects it.
+        // No mode holds more than StandardCapacity codewords, and the closing latch takes one more. The search writes no longer message, and the capacity check
+        // below rejects it.
         InlineArray128<int> messageStorage = default;
         Span<int> message = ((Span<int>)messageStorage)[..(StandardCapacity + 1)];
-        int messageLength = EncodeMessage(data, message, out int endCodeSet);
-        if (mode == 0)
+        int messageLength = EncodeMessage(data, message, out CodeSet endCodeSet);
+        MaxiCodeMode chosen = mode ?? (messageLength <= EnhancedCapacity ? MaxiCodeMode.FullErrorCorrection : MaxiCodeMode.Standard);
+        int capacity = chosen switch
         {
-            mode = messageLength <= EnhancedCapacity ? 5 : 4;
-        }
-
-        int capacity = mode switch
-        {
-            2 or 3 => CarrierCapacity,
-            5 => EnhancedCapacity,
+            MaxiCodeMode.StructuredCarrierNumeric or MaxiCodeMode.StructuredCarrierAlphanumeric => CarrierCapacity,
+            MaxiCodeMode.FullErrorCorrection => EnhancedCapacity,
             _ => StandardCapacity,
         };
 
         if (messageLength > capacity)
         {
-            throw new ArgumentException($"A mode {mode} MaxiCode holds at most {capacity} codewords of data.", nameof(text));
+            throw new ArgumentException($"A mode {(int)chosen} MaxiCode holds at most {capacity} codewords of data.", nameof(text));
         }
 
-        // A message that ends in a code set without a pad codeword latches back to code set A when the
-        // capacity of the chosen mode leaves room to pad.
-        int pad = PadCodes[endCodeSet];
+        // A message that ends in a code set without a pad codeword latches back to code set A when the capacity of the chosen mode leaves room to pad.
+        int pad = PadCodes[(int)endCodeSet];
         if (pad == 0 && messageLength < capacity)
         {
             message[messageLength++] = LatchA;
-            pad = PadCodes[SetA];
+            pad = PadCodes[(int)CodeSet.A];
         }
 
         InlineArray256<int> codewordsStorage = default;
         Span<int> codewords = ((Span<int>)codewordsStorage)[..CodewordCount];
         int secondaryLength;
-        if (mode is 2 or 3)
+        if (carrier)
         {
             primary.CopyTo(codewords);
             secondaryLength = CarrierCapacity;
@@ -240,12 +378,12 @@ internal static class MaxiCodeEncoder
         }
         else
         {
-            // The mode is the first codeword and the message follows it, through the 9 remaining data
-            // codewords of the primary message and on into the secondary message.
+            // The mode is the first codeword and the message follows it, through the 9 remaining data codewords of the primary message and on into the
+            // secondary message.
             secondaryLength = capacity + 1 - 10;
             codewords[..10].Fill(pad);
             codewords.Slice(20, secondaryLength).Fill(pad);
-            codewords[0] = mode;
+            codewords[0] = (int)chosen;
             int head = Math.Min(messageLength, 9);
             message[..head].CopyTo(codewords[1..]);
             message[head..messageLength].CopyTo(codewords[20..]);
@@ -253,8 +391,7 @@ internal static class MaxiCodeEncoder
 
         AddCheckCodewords(codewords, secondaryLength);
 
-        // Section 4.11.5: "1W on the left and right sides" and "1Y on the top and bottom", W being X and Y
-        // the row pitch, √3/2 X.
+        // Section 4.11.5: "1W on the left and right sides" and "1Y on the top and bottom", W being X and Y the row pitch, √3/2 X.
         Span<bool> modules = symbol.BeginHexagonal(Columns, Rows, 1F, (float)(Math.Sqrt(3) / 2), xDimension);
         ReadOnlySpan<short> map = ModuleMap;
         for (int i = 0; i < CodewordCount; i++)
@@ -275,17 +412,16 @@ internal static class MaxiCodeEncoder
     }
 
     /// <summary>
-    /// Reads the structured carrier message of a mode 2 or 3 symbol from the head of the text and writes the
-    /// primary data codewords. The text is the postal code, the 3-digit country code and the 3-digit class of
-    /// service, each followed by a group separator, then the secondary data. A head of "[)>", RS, "01", GS
-    /// and two digits stays at the front of the secondary data.
+    /// Reads the structured carrier message of a mode 2 or 3 symbol from the head of the text and writes the primary data codewords. The text is the postal
+    /// code, the 3-digit country code and the 3-digit class of service, each followed by a group separator, then the secondary data. A head of "[)>", RS, "01",
+    /// GS and two digits stays at the front of the secondary data.
     /// </summary>
     /// <param name="text">The text.</param>
-    /// <param name="mode">The mode, 2 or 3.</param>
+    /// <param name="mode">The mode, <see cref="MaxiCodeMode.StructuredCarrierNumeric"/> or <see cref="MaxiCodeMode.StructuredCarrierAlphanumeric"/>.</param>
     /// <param name="primary">The buffer the 10 primary data codewords are written to.</param>
     /// <param name="buffer">The buffer the secondary data is assembled in.</param>
     /// <returns>The length of the secondary data written to <paramref name="buffer"/>.</returns>
-    private static int ParseStructuredCarrier(ReadOnlySpan<char> text, int mode, Span<int> primary, Span<char> buffer)
+    private static int ParseStructuredCarrier(ReadOnlySpan<char> text, MaxiCodeMode mode, Span<int> primary, Span<char> buffer)
     {
         ReadOnlySpan<char> header = [];
         ReadOnlySpan<char> rest = text;
@@ -304,12 +440,13 @@ internal static class MaxiCodeEncoder
                 nameof(text));
         }
 
-        if (mode == 2 && (postalCode.Length is 0 or > 9 || postalCode.ContainsAnyExceptInRange('0', '9')))
+        bool numeric = mode == MaxiCodeMode.StructuredCarrierNumeric;
+        if (numeric && (postalCode.Length is 0 or > 9 || postalCode.ContainsAnyExceptInRange('0', '9')))
         {
             throw new ArgumentException("A mode 2 postal code is 1 to 9 digits.", nameof(text));
         }
 
-        if (mode == 3)
+        if (!numeric)
         {
             if (postalCode.Length is 0 or > 6)
             {
@@ -335,11 +472,10 @@ internal static class MaxiCodeEncoder
             throw new ArgumentException("The class of service is three digits.", nameof(text));
         }
 
-        // The postal code takes 36 bits. A numeric code is its length in 6 bits and its value in 30 bits, a
-        // 5-digit United States code padded with "0000" to 9 digits. An alphanumeric code is 6 characters of
-        // code set A, cut or padded with spaces.
+        // The postal code takes 36 bits. A numeric code is its length in 6 bits and its value in 30 bits, a 5-digit United States code padded with "0000" to 9
+        // digits. An alphanumeric code is 6 characters of code set A, cut or padded with spaces.
         long postal = 0;
-        if (mode == 2)
+        if (numeric)
         {
             InlineArray10<char> digitsStorage = default;
             Span<char> digits = ((Span<char>)digitsStorage)[..9];
@@ -352,9 +488,9 @@ internal static class MaxiCodeEncoder
             }
 
             long value = 0;
-            for (int i = 0; i < length; i++)
+            foreach (char digit in digits[..length])
             {
-                value = (value * 10) + (digits[i] - '0');
+                value = (value * 10) + (digit - '0');
             }
 
             postal = ((long)length << 30) | value;
@@ -364,39 +500,19 @@ internal static class MaxiCodeEncoder
             for (int i = 0; i < 6; i++)
             {
                 char c = i < postalCode.Length ? postalCode[i] : ' ';
-                postal = (postal << 6) | SetValues[(SetA << 8) | c];
+                postal = (postal << 6) | (uint)Value(CodeSet.A, c);
             }
         }
 
         int country = int.Parse(countryCode, System.Globalization.CultureInfo.InvariantCulture);
         int service = int.Parse(serviceClass, System.Globalization.CultureInfo.InvariantCulture);
 
-        // The 60 bits of the primary data: the mode in bits 2 to 5 of the first
-        // codeword, and the postal code, country code and class of service spread over the rest.
-        InlineArray64<byte> bitsStorage = default;
-        Span<byte> bits = ((Span<byte>)bitsStorage)[..60];
-        Place(bits, 2, mode, 4, 0, 4);
-        Place(bits, 38, postal, 36, 0, 4);
-        Place(bits, 30, postal, 36, 4, 6);
-        Place(bits, 24, postal, 36, 10, 6);
-        Place(bits, 18, postal, 36, 16, 6);
-        Place(bits, 12, postal, 36, 22, 6);
-        Place(bits, 6, postal, 36, 28, 6);
-        Place(bits, 0, postal, 36, 34, 2);
-        Place(bits, 52, country, 10, 0, 2);
-        Place(bits, 42, country, 10, 2, 6);
-        Place(bits, 36, country, 10, 8, 2);
-        Place(bits, 54, service, 10, 0, 6);
-        Place(bits, 48, service, 10, 6, 4);
-        for (int i = 0; i < 10; i++)
+        // The primary data is one 60-bit number, least significant bits first: the mode in bits 0 to 3, the postal code in bits 4 to 39, the country code in
+        // bits 40 to 49 and the class of service in bits 50 to 59. Primary codeword i carries bits 6i to 6i + 5.
+        long primaryBits = (long)mode | (postal << 4) | ((long)country << 40) | ((long)service << 50);
+        for (int i = 0; i < primary.Length; i++)
         {
-            int value = 0;
-            for (int b = 0; b < 6; b++)
-            {
-                value = (value << 1) | bits[(i * 6) + b];
-            }
-
-            primary[i] = value;
+            primary[i] = (int)((primaryBits >> (6 * i)) & 63);
         }
 
         header.CopyTo(buffer);
@@ -430,86 +546,60 @@ internal static class MaxiCodeEncoder
     }
 
     /// <summary>
-    /// Copies bits of a value into the bit buffer, the most significant bit first.
+    /// Finds the shortest codeword sequence for the data: for each character and each code set, the shortest length that ends in that code set, with the
+    /// operation and the earlier code set that reach it, then a walk back from the end.
     /// </summary>
-    /// <param name="bits">The buffer, one bit per byte.</param>
-    /// <param name="position">The position of the first bit written.</param>
-    /// <param name="value">The value.</param>
-    /// <param name="width">The width of the value in bits.</param>
-    /// <param name="start">The first bit of the value to copy, counted from the most significant.</param>
-    /// <param name="count">The number of bits.</param>
-    private static void Place(Span<byte> bits, int position, long value, int width, int start, int count)
-    {
-        for (int i = 0; i < count; i++)
-        {
-            bits[position + i] = (byte)((value >> (width - 1 - start - i)) & 1);
-        }
-    }
-
-    /// <summary>
-    /// Finds the shortest codeword sequence for the data: for each character and each code set,
-    /// the shortest length that ends in that code set, with the operation and the earlier code set that
-    /// reach it, then a walk back from the end.
-    /// </summary>
-    /// <param name="data">The data.</param>
+    /// <param name="data">The data, at most <see cref="MaximumDataLength"/> characters.</param>
     /// <param name="message">The buffer the codewords are written to. A message longer than the buffer is not written.</param>
     /// <param name="endCodeSet">The code set the message ends in.</param>
     /// <returns>The number of codewords.</returns>
-    private static int EncodeMessage(ReadOnlySpan<char> data, Span<int> message, out int endCodeSet)
+    private static int EncodeMessage(ReadOnlySpan<char> data, Span<int> message, out CodeSet endCodeSet)
     {
         // The code sets the data needs beyond A. FS, GS, RS and space are in every code set.
-        bool haveB = false;
-        bool haveC = false;
-        bool haveD = false;
-        bool haveE = false;
+        CodeSets needed = CodeSets.None;
         foreach (char c in data)
         {
             if (c is (< (char)28 or > (char)30) and not ' ')
             {
-                haveB |= Has(SetB, c);
-                haveC |= Has(SetC, c);
-                haveD |= Has(SetD, c);
-                haveE |= Has(SetE, c);
+                for (CodeSet set = CodeSet.B; set <= CodeSet.E; set++)
+                {
+                    if (Has(set, c))
+                    {
+                        needed |= (CodeSets)(1 << (int)set);
+                    }
+                }
             }
         }
 
         // Code sets with a pad codeword come first, so they win ties.
-        InlineArray5<int> priorityStorage = default;
-        Span<int> priority = priorityStorage;
+        InlineArray5<CodeSet> priorityStorage = default;
+        Span<CodeSet> priority = priorityStorage;
         int priorityCount = 0;
-        priority[priorityCount++] = SetA;
-        if (haveB)
+        priority[priorityCount++] = CodeSet.A;
+        ReadOnlySpan<CodeSet> order = [CodeSet.B, CodeSet.E, CodeSet.C, CodeSet.D];
+        foreach (CodeSet set in order)
         {
-            priority[priorityCount++] = SetB;
-        }
-
-        if (haveE)
-        {
-            priority[priorityCount++] = SetE;
-        }
-
-        if (haveC)
-        {
-            priority[priorityCount++] = SetC;
-        }
-
-        if (haveD)
-        {
-            priority[priorityCount++] = SetD;
+            if (needed.HasFlag((CodeSets)(1 << (int)set)))
+            {
+                priority[priorityCount++] = set;
+            }
         }
 
         priority = priority[..priorityCount];
 
-        // The lengths and best earlier code sets of the last 16 characters, in a ring, row 15 holding the
-        // start before the first character. The longest operation reads 9 characters back.
+        // The lengths and best earlier code sets of the last RingLength characters, row (n mod RingLength) for character n, so row RingLength - 1 holds the
+        // start before the first character, all zero. The longest operation reads 9 characters back, which the ring keeps.
         InlineArray128<int> bestLengthStorage = default;
-        Span<int> bestLength = ((Span<int>)bestLengthStorage)[..(16 * 5)];
-        InlineArray128<int> bestOriginStorage = default;
-        Span<int> bestOrigin = ((Span<int>)bestOriginStorage)[..(16 * 5)];
+        Span<int> bestLength = ((Span<int>)bestLengthStorage)[..(RingLength * CodeSetCount)];
+        InlineArray128<CodeSet> bestOriginStorage = default;
+        Span<CodeSet> bestOrigin = ((Span<CodeSet>)bestOriginStorage)[..(RingLength * CodeSetCount)];
         bestLength.Clear();
         bestOrigin.Clear();
-        Span<byte> pathOperation = stackalloc byte[data.Length * 5];
-        Span<byte> priorCodeSet = stackalloc byte[data.Length * 5];
+
+        // The operation and the earlier code set that reach each character in each code set, for the walk back. The data is at most MaximumDataLength
+        // characters.
+        InlineArray256<InlineArray5<Step>> pathStorage = default;
+        Span<InlineArray5<Step>> path = ((Span<InlineArray5<Step>>)pathStorage)[..data.Length];
 
         int digits = 0;
         int inA = 0;
@@ -517,61 +607,60 @@ internal static class MaxiCodeEncoder
         {
             int c = data[n];
             digits = c is >= '0' and <= '9' ? digits + 1 : 0;
-            inA = Has(SetA, c) ? inA + 1 : 0;
+            inA = Has(CodeSet.A, c) ? inA + 1 : 0;
 
-            Span<int> lengthRow = bestLength.Slice((n & 15) * 5, 5);
-            Span<int> originRow = bestOrigin.Slice((n & 15) * 5, 5);
-            foreach (int state in priority)
+            Span<int> lengthRow = bestLength.Slice((n & (RingLength - 1)) * CodeSetCount, CodeSetCount);
+            Span<CodeSet> originRow = bestOrigin.Slice((n & (RingLength - 1)) * CodeSetCount, CodeSetCount);
+            foreach (CodeSet state in priority)
             {
                 int best = Unreached;
                 for (Operation op = Operation.NumericShift; op <= Operation.ShiftE; op++)
                 {
-                    if (!Applies(op, state, haveB, haveC, haveD, haveE) || !Can(op, c, digits, inA))
+                    if (!Applies(op, state, needed) || !Can(op, c, digits, inA))
                     {
                         continue;
                     }
 
-                    int m = (n - Intake(op)) & 15;
-                    int origin = bestOrigin[(m * 5) + state];
-                    long length = (long)bestLength[(m * 5) + origin] + LatchLength(state, origin) + Output(op);
+                    int m = (n - Intake(op)) & (RingLength - 1);
+                    CodeSet origin = bestOrigin[(m * CodeSetCount) + (int)state];
+                    long length = (long)bestLength[(m * CodeSetCount) + (int)origin] + LatchLength(state, origin) + Output(op);
                     if (best > length)
                     {
                         best = (int)length;
-                        pathOperation[(n * 5) + state] = (byte)op;
-                        priorCodeSet[(n * 5) + state] = (byte)origin;
+                        path[n][(int)state] = new Step(op, origin);
                     }
                 }
 
-                lengthRow[state] = best;
+                lengthRow[(int)state] = best;
             }
 
-            foreach (int state in priority)
+            foreach (CodeSet state in priority)
             {
-                long originLength = (long)lengthRow[0] + LatchLength(state, 0);
-                int origin = 0;
-                for (int p = 1; p < priority.Length; p++)
+                long originLength = (long)lengthRow[(int)CodeSet.A] + LatchLength(state, CodeSet.A);
+                CodeSet origin = CodeSet.A;
+                foreach (CodeSet candidate in priority[1..])
                 {
-                    long length = (long)lengthRow[priority[p]] + LatchLength(state, priority[p]);
+                    long length = (long)lengthRow[(int)candidate] + LatchLength(state, candidate);
                     if (length < originLength)
                     {
                         originLength = length;
-                        origin = priority[p];
+                        origin = candidate;
                     }
                 }
 
-                originRow[state] = origin;
+                originRow[(int)state] = origin;
             }
         }
 
-        Span<int> last = bestLength.Slice(((data.Length - 1) & 15) * 5, 5);
-        int endState = 0;
+        Span<int> last = bestLength.Slice(((data.Length - 1) & (RingLength - 1)) * CodeSetCount, CodeSetCount);
+        CodeSet endState = CodeSet.A;
         int total = Unreached;
-        foreach (int p in priority)
+        foreach (CodeSet state in priority)
         {
-            if (last[p] < total)
+            if (last[(int)state] < total)
             {
-                total = last[p];
-                endState = p;
+                total = last[(int)state];
+                endState = state;
             }
         }
 
@@ -583,56 +672,52 @@ internal static class MaxiCodeEncoder
 
         // The walk back writes each operation and the latch before it from the end of the message.
         int position = total;
-        int state2 = endState;
+        CodeSet current = endState;
         int index = data.Length;
         InlineArray6<int> outputStorage = default;
         Span<int> output = outputStorage;
         while (index > 0)
         {
-            int prior = priorCodeSet[((index - 1) * 5) + state2];
-            Operation op = (Operation)pathOperation[((index - 1) * 5) + state2];
-            index -= Intake(op);
-            int count = Encode(op, data, index, output);
-            int latchCount = LatchLength(state2, prior);
+            Step step = path[index - 1][(int)current];
+            index -= Intake(step.Operation);
+            int count = Encode(step.Operation, data, index, output);
+            int latchCount = LatchLength(current, step.Prior);
             position -= latchCount + count;
-            for (int i = 0; i < latchCount; i++)
+            ReadOnlySpan<byte> latch = LatchCodes.Slice((((int)current * CodeSetCount) + (int)step.Prior) * 2, latchCount);
+            for (int i = 0; i < latch.Length; i++)
             {
-                message[position + i] = LatchCodes[(((state2 * 5) + prior) * 2) + i];
+                message[position + i] = latch[i];
             }
 
             output[..count].CopyTo(message[(position + latchCount)..]);
-            state2 = prior;
+            current = step.Prior;
         }
 
         return total;
     }
 
     /// <summary>
-    /// Gets a value indicating whether an operation is open in a code set: the characters of a code set in
-    /// it, the shifts into A in B, the shift into B in A, the shifts into C, D and E in every other code set,
-    /// and the numeric shift everywhere.
+    /// Gets a value indicating whether an operation is open in a code set: the characters of a code set in it, the shifts into A in B, the shift into B in A,
+    /// the shifts into C, D and E in every other code set, and the numeric shift everywhere.
     /// </summary>
     /// <param name="op">The operation.</param>
     /// <param name="state">The code set.</param>
-    /// <param name="haveB">Whether the data needs code set B.</param>
-    /// <param name="haveC">Whether the data needs code set C.</param>
-    /// <param name="haveD">Whether the data needs code set D.</param>
-    /// <param name="haveE">Whether the data needs code set E.</param>
+    /// <param name="needed">The code sets beyond A that the data needs.</param>
     /// <returns><see langword="true"/> when the operation is open.</returns>
-    private static bool Applies(Operation op, int state, bool haveB, bool haveC, bool haveD, bool haveE)
+    private static bool Applies(Operation op, CodeSet state, CodeSets needed)
         => op switch
         {
             Operation.NumericShift => true,
-            Operation.CharacterA => state == SetA,
-            Operation.CharacterB => haveB && state == SetB,
-            Operation.CharacterC => haveC && state == SetC,
-            Operation.CharacterD => haveD && state == SetD,
-            Operation.CharacterE => haveE && state == SetE,
-            Operation.ShiftA or Operation.ShiftA2 or Operation.ShiftA3 => state == SetB,
-            Operation.ShiftB => haveB && state == SetA,
-            Operation.ShiftC => haveC && state != SetC,
-            Operation.ShiftD => haveD && state != SetD,
-            _ => haveE && state != SetE,
+            Operation.CharacterA => state == CodeSet.A,
+            Operation.CharacterB => needed.HasFlag(CodeSets.B) && state == CodeSet.B,
+            Operation.CharacterC => needed.HasFlag(CodeSets.C) && state == CodeSet.C,
+            Operation.CharacterD => needed.HasFlag(CodeSets.D) && state == CodeSet.D,
+            Operation.CharacterE => needed.HasFlag(CodeSets.E) && state == CodeSet.E,
+            Operation.ShiftA or Operation.ShiftA2 or Operation.ShiftA3 => state == CodeSet.B,
+            Operation.ShiftB => needed.HasFlag(CodeSets.B) && state == CodeSet.A,
+            Operation.ShiftC => needed.HasFlag(CodeSets.C) && state != CodeSet.C,
+            Operation.ShiftD => needed.HasFlag(CodeSets.D) && state != CodeSet.D,
+            _ => needed.HasFlag(CodeSets.E) && state != CodeSet.E,
         };
 
     /// <summary>
@@ -647,11 +732,11 @@ internal static class MaxiCodeEncoder
         => op switch
         {
             Operation.NumericShift => digits >= 9,
-            Operation.CharacterA => Has(SetA, c),
-            Operation.CharacterB or Operation.ShiftB => Has(SetB, c),
-            Operation.CharacterC or Operation.ShiftC => Has(SetC, c),
-            Operation.CharacterD or Operation.ShiftD => Has(SetD, c),
-            Operation.CharacterE or Operation.ShiftE => Has(SetE, c),
+            Operation.CharacterA => Has(CodeSet.A, c),
+            Operation.CharacterB or Operation.ShiftB => Has(CodeSet.B, c),
+            Operation.CharacterC or Operation.ShiftC => Has(CodeSet.C, c),
+            Operation.CharacterD or Operation.ShiftD => Has(CodeSet.D, c),
+            Operation.CharacterE or Operation.ShiftE => Has(CodeSet.E, c),
             Operation.ShiftA => inA >= 1,
             Operation.ShiftA2 => inA >= 2,
             _ => inA >= 3,
@@ -702,12 +787,12 @@ internal static class MaxiCodeEncoder
             {
                 // NS: nine digits as a 30-bit number in five codewords.
                 int value = 0;
-                for (int i = 0; i < 9; i++)
+                foreach (char digit in data.Slice(n, 9))
                 {
-                    value = (value * 10) + (data[n + i] - '0');
+                    value = (value * 10) + (digit - '0');
                 }
 
-                output[0] = 31;
+                output[0] = NumericShiftCodeword;
                 for (int i = 0; i < 5; i++)
                 {
                     output[1 + i] = (value >> (24 - (6 * i))) & 63;
@@ -716,59 +801,47 @@ internal static class MaxiCodeEncoder
                 return 6;
             }
 
-            case Operation.CharacterA:
-                output[0] = Value(SetA, data[n]);
-                return 1;
-            case Operation.CharacterB:
-                output[0] = Value(SetB, data[n]);
-                return 1;
-            case Operation.CharacterC:
-                output[0] = Value(SetC, data[n]);
-                return 1;
-            case Operation.CharacterD:
-                output[0] = Value(SetD, data[n]);
-                return 1;
-            case Operation.CharacterE:
-                output[0] = Value(SetE, data[n]);
+            case >= Operation.CharacterA and <= Operation.CharacterE:
+                output[0] = Value((CodeSet)(op - Operation.CharacterA), data[n]);
                 return 1;
             case Operation.ShiftA:
-                output[0] = 59;
-                output[1] = Value(SetA, data[n]);
+                output[0] = ShiftCodeword;
+                output[1] = Value(CodeSet.A, data[n]);
                 return 2;
             case Operation.ShiftA2:
-                output[0] = 56;
-                output[1] = Value(SetA, data[n]);
-                output[2] = Value(SetA, data[n + 1]);
+                output[0] = TwoShiftACodeword;
+                output[1] = Value(CodeSet.A, data[n]);
+                output[2] = Value(CodeSet.A, data[n + 1]);
                 return 3;
             case Operation.ShiftA3:
-                output[0] = 57;
-                output[1] = Value(SetA, data[n]);
-                output[2] = Value(SetA, data[n + 1]);
-                output[3] = Value(SetA, data[n + 2]);
+                output[0] = ThreeShiftACodeword;
+                output[1] = Value(CodeSet.A, data[n]);
+                output[2] = Value(CodeSet.A, data[n + 1]);
+                output[3] = Value(CodeSet.A, data[n + 2]);
                 return 4;
             case Operation.ShiftB:
-                output[0] = 59;
-                output[1] = Value(SetB, data[n]);
+                output[0] = ShiftCodeword;
+                output[1] = Value(CodeSet.B, data[n]);
                 return 2;
             case Operation.ShiftC:
-                output[0] = 60;
-                output[1] = Value(SetC, data[n]);
+                output[0] = ShiftCCodeword;
+                output[1] = Value(CodeSet.C, data[n]);
                 return 2;
             case Operation.ShiftD:
-                output[0] = 61;
-                output[1] = Value(SetD, data[n]);
+                output[0] = ShiftDCodeword;
+                output[1] = Value(CodeSet.D, data[n]);
                 return 2;
             default:
-                output[0] = 62;
-                output[1] = Value(SetE, data[n]);
+                output[0] = ShiftECodeword;
+                output[1] = Value(CodeSet.E, data[n]);
                 return 2;
         }
     }
 
     /// <summary>
-    /// Adds the check codewords: 10 after the 10 primary data codewords, and for the secondary message one
-    /// block of its odd codewords and one of its even codewords, each with 20 check codewords in modes 2, 3,
-    /// 4 and 6 and 28 in mode 5, interleaved. Every block uses the generator with roots alpha^1 to alpha^k.
+    /// Adds the check codewords: 10 after the 10 primary data codewords, and for the secondary message one block of its odd codewords and one of its even
+    /// codewords, each with 20 check codewords in modes 2, 3, 4 and 6 and 28 in mode 5, interleaved. Every block uses the generator with roots alpha^1 to
+    /// alpha^k.
     /// </summary>
     /// <param name="codewords">The 144 codewords, primary data at 0 and secondary data at 20.</param>
     /// <param name="secondaryLength">The number of secondary data codewords, 84 or 68.</param>
@@ -781,8 +854,8 @@ internal static class MaxiCodeEncoder
         Field.Generator(1, generator[..10]);
         Field.Remainder(codewords, 1, 10, generator[..10], codewords.Slice(10, 10));
 
-        // The secondary message deals its codewords over two blocks, the odd and the even. The 84 codewords
-        // of standard error correction take 20 check codewords a block, and the 68 of mode 5 take 28.
+        // The secondary message deals its codewords over two blocks, the odd and the even. The 84 codewords of standard error correction take 20 check
+        // codewords a block, and the 68 of mode 5 take 28.
         int checkCount = secondaryLength == 84 ? 20 : 28;
         Field.Generator(1, generator[..checkCount]);
         Field.InterleavedRemainders(
@@ -799,7 +872,7 @@ internal static class MaxiCodeEncoder
     /// <param name="to">The code set latched into.</param>
     /// <param name="from">The code set latched from.</param>
     /// <returns>The number of codewords: 0 within a code set, 1 into A or B, 2 into C, D or E.</returns>
-    private static int LatchLength(int to, int from) => to == from ? 0 : to <= SetB ? 1 : 2;
+    private static int LatchLength(CodeSet to, CodeSet from) => to == from ? 0 : to <= CodeSet.B ? 1 : 2;
 
     /// <summary>
     /// Gets a value indicating whether a code set holds a byte.
@@ -807,7 +880,7 @@ internal static class MaxiCodeEncoder
     /// <param name="set">The code set.</param>
     /// <param name="c">The byte.</param>
     /// <returns><see langword="true"/> when the code set holds it.</returns>
-    private static bool Has(int set, int c) => SetValues[(set << 8) | c] != 0xFF;
+    private static bool Has(CodeSet set, int c) => SetValues[((int)set << 8) | c] != 0xFF;
 
     /// <summary>
     /// Returns the value of a byte in a code set.
@@ -815,65 +888,32 @@ internal static class MaxiCodeEncoder
     /// <param name="set">The code set.</param>
     /// <param name="c">The byte.</param>
     /// <returns>The value.</returns>
-    private static int Value(int set, int c) => SetValues[(set << 8) | c];
+    private static int Value(CodeSet set, int c) => SetValues[((int)set << 8) | c];
 
     /// <summary>
-    /// Builds the values of the five code sets from the byte each value stands for. A byte
-    /// that two values of one code set stand for takes the later value.
+    /// One step of the code set search: the operation that reaches a character in a code set, and the code set the operation starts from.
     /// </summary>
-    /// <returns>The values, set x 256 + byte, 0xFF where the code set has no such byte.</returns>
-    private static byte[] BuildSetValues()
+    private readonly struct Step
     {
-        // Each code set lists the byte of each of its 64 values, -1 where the value is a function character.
-        ReadOnlySpan<short> a =
-        [
-            13, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90,
-            -1, 28, 29, 30, -1, 32, -1, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
-            48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, -1, -1, -1, -1, -1,
-        ];
-        ReadOnlySpan<short> b =
-        [
-            96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118,
-            119, 120, 121, 122, -1, 28, 29, 30, -1, 123, -1, 125, 126, 127, 59, 60, 61, 62, 63, 91, 92, 93, 94, 95, 32,
-            44, 46, 47, 58, 64, 33, 124, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-        ];
-        ReadOnlySpan<short> c =
-        [
-            192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213,
-            214, 215, 216, 217, 218, -1, 28, 29, 30, -1, 219, 220, 221, 222, 223, 170, 172, 177, 178, 179, 181, 185, 186,
-            188, 189, 190, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, -1, 32, -1, -1, -1, -1,
-        ];
-        ReadOnlySpan<short> d =
-        [
-            224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245,
-            246, 247, 248, 249, 250, -1, 28, 29, 30, -1, 251, 252, 253, 254, 255, 161, 168, 171, 175, 176, 180, 183, 184,
-            187, 191, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, -1, 32, -1, -1, -1, -1,
-        ];
-        ReadOnlySpan<short> e =
-        [
-            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
-            -1, -1, -1, 27, -1, 28, 29, 30, 31, 159, 160, 162, 163, 164, 165, 166, 167, 169, 173, 174, 182,
-            149, 150, 151, 152, 153, 154, 155, 156, 157, 158, -1, 32, -1, -1, -1, -1,
-        ];
-
-        byte[] values = new byte[5 << 8];
-        values.AsSpan().Fill(0xFF);
-        Fill(values, SetA, a);
-        Fill(values, SetB, b);
-        Fill(values, SetC, c);
-        Fill(values, SetD, d);
-        Fill(values, SetE, e);
-        return values;
-
-        static void Fill(byte[] values, int set, ReadOnlySpan<short> bytes)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Step"/> struct.
+        /// </summary>
+        /// <param name="operation">The operation.</param>
+        /// <param name="prior">The code set before the operation.</param>
+        public Step(Operation operation, CodeSet prior)
         {
-            for (int value = 0; value < bytes.Length; value++)
-            {
-                if (bytes[value] >= 0)
-                {
-                    values[(set << 8) | (ushort)bytes[value]] = (byte)value;
-                }
-            }
+            this.Operation = operation;
+            this.Prior = prior;
         }
+
+        /// <summary>
+        /// Gets the operation.
+        /// </summary>
+        public Operation Operation { get; }
+
+        /// <summary>
+        /// Gets the code set before the operation, which a latch leaves when it differs from the code set of the step.
+        /// </summary>
+        public CodeSet Prior { get; }
     }
 }

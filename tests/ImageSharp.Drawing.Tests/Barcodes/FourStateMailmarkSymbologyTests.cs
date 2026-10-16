@@ -7,16 +7,14 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="FourStateMailmarkSymbology"/>. Every expected value is from the worked
-/// examples of section 2.3 of the Royal Mail Mailmark barcode C and barcode L encoding and decoding
-/// instructions, release 1b. The bar strings are their bar identifiers: A for an ascender, D for a
-/// descender, F for a full bar and T for a tracker.
+/// Encoder tests for <see cref="FourStateMailmarkSymbology"/>. Every expected value is from the worked examples of section 2.3 of the Royal Mail Mailmark
+/// barcode C and barcode L encoding and decoding instructions, release 1b. The bar strings are their bar identifiers: A for an ascender, D for a descender, F
+/// for a full bar and T for a tracker.
 /// </summary>
 public class FourStateMailmarkSymbologyTests
 {
     /// <summary>
-    /// The two examples of each document: barcode C of 66 bars from a 22-character application string
-    /// and barcode L of 78 bars from a 26-character one.
+    /// The two examples of each document: barcode C of 66 bars from a 22-character application string and barcode L of 78 bars from a 26-character one.
     /// </summary>
     /// <param name="text">The application string.</param>
     /// <param name="bars">The bar identifiers from the left.</param>
@@ -29,9 +27,8 @@ public class FourStateMailmarkSymbologyTests
         => Assert.Equal(bars, SymbolEncoder.Read(new FourStateMailmarkSymbology(), text, new BarcodeOptions(), States));
 
     /// <summary>
-    /// Section 2.2.2 of barcode C, Table 12: the destination "JW5O9QA6Y" has the internal user field
-    /// value 118,259,964,139, and Table 9 gives the international designation 0. Barcode L, Table 12:
-    /// "EF61AH8T " with one trailing space.
+    /// Section 2.2.2 of barcode C, Table 12: the destination "JW5O9QA6Y" has the internal user field value 118,259,964,139, and Table 9 gives the international
+    /// designation 0. Barcode L, Table 12: "EF61AH8T " with one trailing space.
     /// </summary>
     [Fact]
     public void ConvertsTheDestinationField()
@@ -43,9 +40,8 @@ public class FourStateMailmarkSymbologyTests
     }
 
     /// <summary>
-    /// Section 2.2.5 of barcode C, Table 10 of Example 1: the data numbers of the consolidated value 4
-    /// give the check numbers 14, 7, 23, 3, 23 and 15. Barcode L, Table 10 of Example 1: 20, 1, 20, 7,
-    /// 14, 11 and 18.
+    /// Section 2.2.5 of barcode C, Table 10 of Example 1: the data numbers of the consolidated value 4 give the check numbers 14, 7, 23, 3, 23 and 15. Barcode
+    /// L, Table 10 of Example 1: 20, 1, 20, 7, 14, 11 and 18.
     /// </summary>
     [Fact]
     public void GeneratesTheCheckNumbersOfExampleOne()
@@ -66,9 +62,8 @@ public class FourStateMailmarkSymbologyTests
     }
 
     /// <summary>
-    /// Section 2.2.4 of barcode C, Table 13 of Example 2: the consolidated data value
-    /// 354,779,892,418,644,019,776,828 gives the data numbers 15, 22, 3, 25, 23, 26, 7, 3, 20, 14, 1, 4,
-    /// 16, 3, 9 and 28.
+    /// Section 2.2.4 of barcode C, Table 13 of Example 2: the consolidated data value 354,779,892,418,644,019,776,828 gives the data numbers 15, 22, 3, 25, 23,
+    /// 26, 7, 3, 20, 14, 1, 4, 16, 3, 9 and 28.
     /// </summary>
     [Fact]
     public void ConvertsTheConsolidatedValueOfExampleTwoToDataNumbers()
@@ -115,8 +110,7 @@ public class FourStateMailmarkSymbologyTests
         => Assert.ThrowsAny<ArgumentException>(() => SymbolEncoder.Encode(new FourStateMailmarkSymbology(), text, new BarcodeOptions()));
 
     /// <summary>
-    /// Reads the bar states of a symbol from the bar tops and heights: F for a full bar, A for an
-    /// ascender, D for a descender and T for a tracker.
+    /// Reads the bar states of a symbol from the bar tops and heights: F for a full bar, A for an ascender, D for a descender and T for a tracker.
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
     /// <returns>The bar states.</returns>

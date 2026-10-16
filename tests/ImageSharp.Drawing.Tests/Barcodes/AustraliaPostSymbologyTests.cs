@@ -6,17 +6,15 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="AustraliaPostSymbology"/>. Every expected bar string is in the bar value
-/// notation of the Australia Post Customer Barcoding Technical Specifications, 0 for a full bar, 1 for an
-/// ascender, 2 for a descender and 3 for a tracker, and is a barcode the specification prints in one of
+/// Encoder tests for <see cref="AustraliaPostSymbology"/>. Every expected bar string is in the bar value notation of the Australia Post Customer Barcoding
+/// Technical Specifications, 0 for a full bar, 1 for an ascender, 2 for a descender and 3 for a tracker, and is a barcode the specification prints in one of
 /// its diagrams unless the test states another source.
 /// </summary>
 public class AustraliaPostSymbologyTests
 {
     /// <summary>
-    /// Diagram 6, the Standard Customer Barcode of sorting code 54516251; Diagram 7, Customer Barcode 2
-    /// with an empty customer information field and Customer Barcode 3 with "ABC123"; and Diagram 10, the
-    /// Standard Customer Barcode of sorting code 39549554 with its error correction bars.
+    /// Diagram 6, the Standard Customer Barcode of sorting code 54516251; Diagram 7, Customer Barcode 2 with an empty customer information field and Customer
+    /// Barcode 3 with "ABC123"; and Diagram 10, the Standard Customer Barcode of sorting code 39549554 with its error correction bars.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="bars">The bar values from the left.</param>
@@ -29,9 +27,8 @@ public class AustraliaPostSymbologyTests
         => Assert.Equal(bars, Encode(text, AustraliaPostEncodingTable.Character));
 
     /// <summary>
-    /// The N Encoding Table in the customer information field, and the C Encoding Table with small
-    /// letters, the space and the number sign. The expected bars are from the reference implementation's
-    /// raw encoding API.
+    /// The N Encoding Table in the customer information field, and the C Encoding Table with small letters, the space and the number sign. The expected bars
+    /// are from the reference implementation's raw encoding API.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="table">The encoding table of the customer information.</param>
@@ -56,8 +53,8 @@ public class AustraliaPostSymbologyTests
     }
 
     /// <summary>
-    /// The other 37-bar format control codes encode like the Standard Customer Barcode. The expected bars
-    /// are from the reference implementation's raw encoding API.
+    /// The other 37-bar format control codes encode like the Standard Customer Barcode. The expected bars are from the reference implementation's raw encoding
+    /// API.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="bars">The bar values from the left.</param>
@@ -69,8 +66,7 @@ public class AustraliaPostSymbologyTests
         => Assert.Equal(bars, Encode(text, AustraliaPostEncodingTable.Character));
 
     /// <summary>
-    /// Diagram 14: the text representation of the barcode of 1196184209 is "11 96184209 32 57 38 54",
-    /// above the bars and outside the 2 mm quiet zone.
+    /// Diagram 14: the text representation of the barcode of 1196184209 is "11 96184209 32 57 38 54", above the bars and outside the 2 mm quiet zone.
     /// </summary>
     [Fact]
     public void PrintsTheTextRepresentationOfDiagramFourteen()
@@ -89,8 +85,8 @@ public class AustraliaPostSymbologyTests
     }
 
     /// <summary>
-    /// The dimensions at the 0.5 mm module: bars of 50 run units of 0.01 mm, spaces of 58, a tracker of
-    /// 1.3 mm, extenders of 1.85 mm, a full bar of 5 mm and a quiet zone of 6 mm at each end.
+    /// The dimensions at the 0.5 mm module: bars of 50 run units of 0.01 mm, spaces of 58, a tracker of 1.3 mm, extenders of 1.85 mm, a full bar of 5 mm and a
+    /// quiet zone of 6 mm at each end.
     /// </summary>
     [Fact]
     public void DrawsTheDimensionsOfTheSpecification()
@@ -141,8 +137,7 @@ public class AustraliaPostSymbologyTests
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text, table));
 
     /// <summary>
-    /// A character outside the C Encoding Table is reported as the one character it is, also when it takes a
-    /// surrogate pair.
+    /// A character outside the C Encoding Table is reported as the one character it is, also when it takes a surrogate pair.
     /// </summary>
     [Fact]
     public void ReportsACharacterOutsideTheTableByItsCodePoint()
@@ -161,8 +156,7 @@ public class AustraliaPostSymbologyTests
         => SymbolEncoder.Read(new AustraliaPostSymbology(table), text, new BarcodeOptions(), Values);
 
     /// <summary>
-    /// Reads the bar values of a symbol from the bar tops and heights: 0 for a full bar, 1 for an
-    /// ascender, 2 for a descender and 3 for a tracker.
+    /// Reads the bar values of a symbol from the bar tops and heights: 0 for a full bar, 1 for an ascender, 2 for a descender and 3 for a tracker.
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
     /// <returns>The bar values.</returns>

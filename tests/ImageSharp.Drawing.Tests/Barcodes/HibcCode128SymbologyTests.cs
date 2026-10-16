@@ -6,10 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="HibcCode128Symbology"/>. Each expected run string is the alternating bar
-/// and space module widths, starting with a bar, taken from an independent reference implementation
-/// through its raw encoding API. A HIBC Code 128 is a Code 128 symbol carrying the HIBC flag character, the data and
-/// the modulo 43 check character.
+/// Encoder tests for <see cref="HibcCode128Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, taken
+/// from an independent reference implementation through its raw encoding API. A HIBC Code 128 is a Code 128 symbol carrying the HIBC flag character, the data
+/// and the modulo 43 check character.
 /// </summary>
 public class HibcCode128SymbologyTests
 {
@@ -25,17 +24,15 @@ public class HibcCode128SymbologyTests
         => Assert.Equal(expected, Encode(new HibcCode128Symbology(), text));
 
     /// <summary>
-    /// A caller who has already calculated the check character supplies it, and the symbol carries it
-    /// once, so the runs match those of the same data with the check character left off.
+    /// A caller who has already calculated the check character supplies it, and the symbol carries it once, so the runs match those of the same data with the
+    /// check character left off.
     /// </summary>
     [Fact]
     public void ValidatesASuppliedCheckCharacter()
     {
         HibcCode128Symbology symbology = new(true);
 
-        Assert.Equal(
-            Encode(new HibcCode128Symbology(), "A123BJC5D6E71"),
-            Encode(symbology, "A123BJC5D6E71G"));
+        Assert.Equal(Encode(new HibcCode128Symbology(), "A123BJC5D6E71"), Encode(symbology, "A123BJC5D6E71G"));
     }
 
     [Fact]
@@ -46,8 +43,7 @@ public class HibcCode128SymbologyTests
     }
 
     /// <summary>
-    /// HIBC carries the Code 39 character set, so anything outside it is rejected, as is empty data and
-    /// data beyond the length the symbology allows.
+    /// HIBC carries the Code 39 character set, so anything outside it is rejected, as is empty data and data beyond the length the symbology allows.
     /// </summary>
     [Theory]
     [InlineData("")]
@@ -62,8 +58,8 @@ public class HibcCode128SymbologyTests
         => Assert.ThrowsAny<ArgumentException>(() => Encode(new HibcCode128Symbology(), new string('A', 501)));
 
     /// <summary>
-    /// The human readable interpretation is the encoded data between delimiters, so it shows the flag
-    /// character and the check character the caller did not type.
+    /// The human readable interpretation is the encoded data between delimiters, so it shows the flag character and the check character the caller did not
+    /// type.
     /// </summary>
     [Fact]
     public void PrintsTheFlagAndCheckCharacters()

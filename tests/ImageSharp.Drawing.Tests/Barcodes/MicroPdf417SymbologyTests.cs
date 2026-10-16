@@ -6,11 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="MicroPdf417Symbology"/> and <see cref="HibcMicroPdf417Symbology"/>. Each
-/// expected row is the alternating bar and space module widths of one row, starting with a bar, taken from
-/// an independent reference implementation through its raw encoding API, so the compaction modes, the
-/// macro codewords, the symbol size, the error correction codewords and the row address patterns all show
-/// up here.
+/// Encoder tests for <see cref="MicroPdf417Symbology"/> and <see cref="HibcMicroPdf417Symbology"/>. Each expected row is the alternating bar and space module
+/// widths of one row, starting with a bar, taken from an independent reference implementation through its raw encoding API, so the compaction modes, the macro
+/// codewords, the symbol size, the error correction codewords and the row address patterns all show up here.
 /// </summary>
 public class MicroPdf417SymbologyTests
 {
@@ -511,10 +509,9 @@ public class MicroPdf417SymbologyTests
         => AssertRows(expected, new HibcMicroPdf417Symbology(4, false), text);
 
     /// <summary>
-    /// A row is the left row address pattern, the symbol characters, the right row address pattern and a
-    /// single module bar, with a centre row address pattern in a symbol of three or four columns: 38, 55,
-    /// 82 and 99 modules for one to four columns. The quiet zone is one module on all four sides and the
-    /// row height two modules.
+    /// A row is the left row address pattern, the symbol characters, the right row address pattern and a single module bar, with a centre row address pattern
+    /// in a symbol of three or four columns: 38, 55, 82 and 99 modules for one to four columns. The quiet zone is one module on all four sides and the row
+    /// height two modules.
     /// </summary>
     /// <param name="columns">The number of data columns.</param>
     /// <param name="width">The row width in modules.</param>
@@ -541,8 +538,7 @@ public class MicroPdf417SymbologyTests
         });
 
     /// <summary>
-    /// The largest symbol, four columns of 44 rows with 50 error correction codewords, holds 126 data
-    /// codewords, and one column of 28 rows holds 20.
+    /// The largest symbol, four columns of 44 rows with 50 error correction codewords, holds 126 data codewords, and one column of 28 rows holds 20.
     /// </summary>
     [Fact]
     public void MicroPdf417_RejectsDataThatNoSizeHolds()
@@ -571,8 +567,7 @@ public class MicroPdf417SymbologyTests
         => SymbolEncoder.Encode(symbology, text, new BarcodeOptions());
 
     /// <summary>
-    /// Encodes the text with the default options and compares the run widths of each row with the
-    /// reference rows.
+    /// Encodes the text with the default options and compares the run widths of each row with the reference rows.
     /// </summary>
     /// <param name="expected">The reference rows, each a string of run widths, separated by a vertical bar.</param>
     /// <param name="symbology">The symbology to encode with.</param>

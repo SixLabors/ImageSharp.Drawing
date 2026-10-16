@@ -1,19 +1,17 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The ISBN data layer over EAN-13. An International Standard Book Number (ISO 2108) draws as an EAN-13
-/// symbol in the GS1 978 or 979 prefix range. The ISBN itself prints above the bars.
+/// The ISBN data layer over EAN-13. An International Standard Book Number (ISO 2108) draws as an EAN-13 symbol in the GS1 978 or 979 prefix range. The ISBN
+/// itself prints above the bars.
 /// <para>
-/// The input is an ISBN-13, with or without hyphens, or an ISBN-10. This class compares the modulus 11
-/// check digit of an ISBN-10, where X stands for ten, and then converts the number to its 978 prefixed
-/// EAN-13 form. The check digit is optional in either form, and this class calculates it when the input
-/// carries none.
+/// The input is an ISBN-13, with or without hyphens, or an ISBN-10. This class compares the modulus 11 check digit of an ISBN-10, where X stands for ten, and
+/// then converts the number to its 978 prefixed EAN-13 form. The check digit is optional in either form, and this class calculates it when the input carries
+/// none.
 /// </para>
 /// </summary>
 public sealed class IsbnSymbology : BarcodeSymbology
@@ -30,35 +28,29 @@ public sealed class IsbnSymbology : BarcodeSymbology
     {
         Guard.NotNull(text, nameof(text));
 
-        // An ISBN is at most seventeen characters: thirteen digits and four hyphens. Longer text is
-        // rejected before any buffer, so the hyphenless form fits eighteen inline characters.
+        // An ISBN is at most seventeen characters: thirteen digits and four hyphens. Longer text is rejected before any buffer, so the hyphenless form fits
+        // eighteen inline characters.
         Guard.MustBeLessThanOrEqualTo(text.Length, 17, nameof(text));
         InlineArray18<char> compactStorage = default;
         Span<char> compactBuffer = compactStorage;
         int compactLength = 0;
-        for (int i = 0; i < text.Length; i++)
+        foreach (char character in text)
         {
-            if (text[i] != '-')
+            if (character != '-')
             {
-                compactBuffer[compactLength++] = text[i];
+                compactBuffer[compactLength++] = character;
             }
         }
 
+        // Every character is a digit, except that the last character of an ISBN-10 may be the check character X. The message decodes the code point at the
+        // first other character, so a surrogate pair reports as the one character it is.
         ReadOnlySpan<char> compact = compactBuffer[..compactLength];
-        int index = 0;
-        SpanCodePointEnumerator compactPoints = compact.EnumerateCodePoints();
-        while (compactPoints.MoveNext())
+        int invalid = compact.IndexOfAnyExceptInRange('0', '9');
+        if (invalid >= 0 && !(invalid == 9 && compact.Length == 10 && compact[9] == 'X'))
         {
-            CodePoint current = compactPoints.Current;
-            bool checkX = current.Value == 'X' && compact.Length == 10 && index == 9;
-            if (!current.IsAsciiDigit() && !checkX)
-            {
-                throw new ArgumentException(
-                    $"ISBN accepts only digits, hyphens and a trailing X check character; got {current.ToDisplayString()}.",
-                    nameof(text));
-            }
-
-            index++;
+            throw new ArgumentException(
+                $"ISBN accepts only digits, hyphens and a trailing X check character; got {compact.CodePointAt(invalid).ToDisplayString()}.",
+                nameof(text));
         }
 
         // The encoded form is thirteen digits: twelve data digits and the check digit the caption repeats.
@@ -84,8 +76,7 @@ public sealed class IsbnSymbology : BarcodeSymbology
         }
         else if (compact.Length is 9 or 10)
         {
-            // ISO 2108 ISBN-10 check: weights 10 down to 2 over the nine data digits, modulus 11,
-            // with X representing the value ten.
+            // ISO 2108 ISBN-10 check: weights 10 down to 2 over the nine data digits, modulus 11, with X representing the value ten.
             int sum = 0;
             for (int i = 0; i < 9; i++)
             {
@@ -112,8 +103,7 @@ public sealed class IsbnSymbology : BarcodeSymbology
             throw new ArgumentException($"ISBN requires 9, 10, 12 or 13 digits; got {compact.Length}.", nameof(text));
         }
 
-        // The caption always carries the EAN-13 check digit of the encoded form, so the printed number and
-        // the symbol agree even when an ISBN-10 was supplied.
+        // The caption always carries the EAN-13 check digit of the encoded form, so the printed number and the symbol agree even when an ISBN-10 was supplied.
         int eanCheck = Gs1Data.ComputeCheckDigit(digits[..12]);
         digits[12] = (char)('0' + eanCheck);
         if (options.Font is null)

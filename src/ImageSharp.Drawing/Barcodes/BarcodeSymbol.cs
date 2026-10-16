@@ -8,27 +8,22 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The device independent description of an encoded barcode, measured in modules. A module is the
-/// narrowest nominal element of a symbology, which ISO/IEC 15420 and related specifications call the
-/// X-dimension. A symbol carries no pixel sizes, brushes or fonts. The emitter adds those when it turns
-/// the symbol into canvas commands.
+/// The device independent description of an encoded barcode, measured in modules. A module is the narrowest nominal element of a symbology, which ISO/IEC 15420
+/// and related specifications call the X-dimension. A symbol carries no pixel sizes, brushes or fonts. The emitter adds those when it turns the symbol into
+/// canvas commands.
 /// </summary>
 /// <remarks>
-/// An encoder writes the symbol once: it begins a linear, stacked or matrix symbol with the sizes that its
-/// validated input gives, fills the spans that the begin methods return, adds the text and ends the symbol.
-/// The symbol keeps its values in two buffers rented from the shared <see cref="byte"/> pool: the layout
-/// buffer, which <see cref="BeginLinear"/>, <see cref="BeginStacked"/> or <see cref="BeginMatrix(int, int, int, double)"/> rents
-/// for the rows, runs and bars or for the modules, and the text buffer, which <see cref="ReserveText"/>
-/// rents for the text placements and their characters. Each rent happens once, before the encoder's loops,
-/// with the exact size its validated input gives, and <see cref="Dispose"/> returns both. A rented range is
-/// cleared, so every value the encoder does not write is zero. The caller declares the symbol as a local
-/// and passes it by reference.
+/// An encoder writes the symbol once: it begins a linear, stacked or matrix symbol with the sizes that its validated input gives, fills the spans that the
+/// begin methods return, adds the text and ends the symbol. The symbol keeps its values in two buffers rented from the shared <see cref="byte"/> pool: the
+/// layout buffer, which <see cref="BeginLinear"/>, <see cref="BeginStacked"/> or <see cref="BeginMatrix(int, int, int, double)"/> rents for the rows, runs and
+/// bars or for the modules, and the text buffer, which <see cref="ReserveText"/> rents for the text placements and their characters. Each rent happens once,
+/// before the encoder's loops, with the exact size its validated input gives, and <see cref="Dispose"/> returns both. A rented range is cleared, so every value
+/// the encoder does not write is zero. The caller declares the symbol as a local and passes it by reference.
 /// </remarks>
 internal struct BarcodeSymbol : IDisposable
 {
     /// <summary>
-    /// The layout buffer: the rows, then the runs, then the bar heights and the bar tops of a linear or
-    /// stacked symbol, or the modules of a matrix symbol.
+    /// The layout buffer: the rows, then the runs, then the bar heights and the bar tops of a linear or stacked symbol, or the modules of a matrix symbol.
     /// </summary>
     private PooledBuffer<byte> layoutBuffer;
 
@@ -113,9 +108,8 @@ internal struct BarcodeSymbol : IDisposable
     public float HeightInModules { get; private set; }
 
     /// <summary>
-    /// Gets the width in modules of the quiet zone that comes before the symbol. Each symbology sets its
-    /// own quiet zone width. For example, ISO/IEC 15420 requires 11 modules before an EAN-13 symbol, and
-    /// a postal symbology states its clear zone in inches, which is not a whole number of modules.
+    /// Gets the width in modules of the quiet zone that comes before the symbol. Each symbology sets its own quiet zone width. For example, ISO/IEC 15420
+    /// requires 11 modules before an EAN-13 symbol, and a postal symbology states its clear zone in inches, which is not a whole number of modules.
     /// </summary>
     public float LeadingQuietZone { get; private set; }
 
@@ -125,21 +119,18 @@ internal struct BarcodeSymbol : IDisposable
     public float TrailingQuietZone { get; private set; }
 
     /// <summary>
-    /// Gets the height of the quiet zone above the symbol, in modules. A symbology whose specification
-    /// gives no vertical quiet zone has none.
+    /// Gets the height of the quiet zone above the symbol, in modules. A symbology whose specification gives no vertical quiet zone has none.
     /// </summary>
     public float TopQuietZone { get; private set; }
 
     /// <summary>
-    /// Gets the height of the quiet zone below the symbol, in modules. A symbology whose specification
-    /// gives no vertical quiet zone has none.
+    /// Gets the height of the quiet zone below the symbol, in modules. A symbology whose specification gives no vertical quiet zone has none.
     /// </summary>
     public float BottomQuietZone { get; private set; }
 
     /// <summary>
-    /// Gets the thickness in modules of the bars that close the top and the bottom of a linear or stacked
-    /// symbol, or zero when there are none: the bearer bar of a linear symbol, which also closes the sides
-    /// when the quiet zones are drawn, or the edge bars of a stacked symbol.
+    /// Gets the thickness in modules of the bars that close the top and the bottom of a linear or stacked symbol, or zero when there are none: the bearer bar
+    /// of a linear symbol, which also closes the sides when the quiet zones are drawn, or the edge bars of a stacked symbol.
     /// </summary>
     public float FrameThickness { get; private set; }
 
@@ -149,8 +140,7 @@ internal struct BarcodeSymbol : IDisposable
     public float RunUnit { get; private set; }
 
     /// <summary>
-    /// Gets a value indicating whether every bar of the symbol is one width at one pitch, so each run draws
-    /// at a whole number of pixels of its own.
+    /// Gets a value indicating whether every bar of the symbol is one width at one pitch, so each run draws at a whole number of pixels of its own.
     /// </summary>
     public bool UniformBars { get; private set; }
 
@@ -165,16 +155,15 @@ internal struct BarcodeSymbol : IDisposable
     public int MatrixRows { get; private set; }
 
     /// <summary>
-    /// Gets the X dimension in millimetres, the width of one module: the X dimension of the options, else
-    /// the nominal X dimension the specification of the symbology gives for this symbol. The encoder
-    /// resolves it once, measures every height it states in millimetres with it, and the emitter draws the
-    /// modules at it.
+    /// Gets the X dimension in millimetres, the width of one module: the X dimension of the options, else the nominal X dimension the specification of the
+    /// symbology gives for this symbol. The encoder resolves it once, measures every height it states in millimetres with it, and the emitter draws the modules
+    /// at it.
     /// </summary>
     public double XDimension { get; private set; }
 
     /// <summary>
-    /// Gets the side in modules of the square graphic centred on a matrix symbol, or 0 when the symbol has
-    /// none. The graphic covers its square completely, so the modules under the square do not draw.
+    /// Gets the side in modules of the square graphic centred on a matrix symbol, or 0 when the symbol has none. The graphic covers its square completely, so
+    /// the modules under the square do not draw.
     /// </summary>
     public float OverlaySize { get; private set; }
 
@@ -184,16 +173,14 @@ internal struct BarcodeSymbol : IDisposable
     public float OverlayUnit { get; private set; }
 
     /// <summary>
-    /// Gets the dark rectangles of the overlay graphic, each as its left, top, right and bottom edge in the
-    /// units of <see cref="OverlayUnit"/> from the top left corner of its square, the y axis down. The rest of
-    /// the square is light.
+    /// Gets the dark rectangles of the overlay graphic, each as its left, top, right and bottom edge in the units of <see cref="OverlayUnit"/> from the top
+    /// left corner of its square, the y axis down. The rest of the square is light.
     /// </summary>
     public readonly ReadOnlySpan<float> OverlayEdges => Slice<float>(this.overlayBuffer, 0, this.overlayEdgeCount);
 
     /// <summary>
-    /// Gets the thickness in modules of the identification bars of a linear symbol, or 0 when the symbol
-    /// has none. One bar stands above the topmost text line and one below the lowest, each spanning the
-    /// symbol and its quiet zones.
+    /// Gets the thickness in modules of the identification bars of a linear symbol, or 0 when the symbol has none. One bar stands above the topmost text line
+    /// and one below the lowest, each spanning the symbol and its quiet zones.
     /// </summary>
     public float IdentificationBarThickness { get; private set; }
 
@@ -203,14 +190,12 @@ internal struct BarcodeSymbol : IDisposable
     public float IdentificationBarClearance { get; private set; }
 
     /// <summary>
-    /// Gets the smallest printed height of the characters of the text lines in modules, or 0 when the
-    /// symbology states none.
+    /// Gets the smallest printed height of the characters of the text lines in modules, or 0 when the symbology states none.
     /// </summary>
     public float TextHeightMinimum { get; private set; }
 
     /// <summary>
-    /// Gets the largest printed height of the characters of the text lines in modules, or 0 when the
-    /// symbology states none.
+    /// Gets the largest printed height of the characters of the text lines in modules, or 0 when the symbology states none.
     /// </summary>
     public float TextHeightMaximum { get; private set; }
 
@@ -220,8 +205,7 @@ internal struct BarcodeSymbol : IDisposable
     public readonly ReadOnlySpan<BarcodeRow> Rows => Slice<BarcodeRow>(this.layoutBuffer, 0, this.rowCount);
 
     /// <summary>
-    /// Gets the run widths of all rows in run units. The runs of a row alternate bar and space, starting
-    /// with a bar.
+    /// Gets the run widths of all rows in run units. The runs of a row alternate bar and space, starting with a bar.
     /// </summary>
     public readonly ReadOnlySpan<int> Runs => Slice<int>(this.layoutBuffer, this.runOffset, this.runCount);
 
@@ -305,8 +289,7 @@ internal struct BarcodeSymbol : IDisposable
     }
 
     /// <summary>
-    /// Returns the width of a row of runs in modules, for an encoder that places its text or sizes its bars
-    /// from the width before the symbol ends.
+    /// Returns the width of a row of runs in modules, for an encoder that places its text or sizes its bars from the width before the symbol ends.
     /// </summary>
     /// <param name="runs">The alternating bar and space run widths in modules.</param>
     /// <returns>The width in modules.</returns>
@@ -322,8 +305,8 @@ internal struct BarcodeSymbol : IDisposable
     }
 
     /// <summary>
-    /// Shortens the last row added to the given number of runs, for an encoder that reserves the most
-    /// runs its data can take and learns the exact count as it writes. The storage stays reserved.
+    /// Shortens the last row added to the given number of runs, for an encoder that reserves the most runs its data can take and learns the exact count as it
+    /// writes. The storage stays reserved.
     /// </summary>
     /// <param name="runCount">The number of runs the row keeps, at most the number it was added with.</param>
     public void TrimLastRow(int runCount)
@@ -424,14 +407,7 @@ internal struct BarcodeSymbol : IDisposable
     /// <param name="bottomQuietZone">The quiet zone below, in modules.</param>
     /// <param name="xDimension">The X dimension in millimetres, <see cref="XDimension"/>.</param>
     /// <returns>The modules to write, row-major, true for a dark module.</returns>
-    public Span<bool> BeginMatrix(
-        int columns,
-        int rows,
-        int leadingQuietZone,
-        int trailingQuietZone,
-        int topQuietZone,
-        int bottomQuietZone,
-        double xDimension)
+    public Span<bool> BeginMatrix(int columns, int rows, int leadingQuietZone, int trailingQuietZone, int topQuietZone, int bottomQuietZone, double xDimension)
     {
         this.Kind = BarcodeSymbolKind.Matrix;
         this.XDimension = xDimension;
@@ -451,8 +427,7 @@ internal struct BarcodeSymbol : IDisposable
     }
 
     /// <summary>
-    /// Begins a hexagonal symbol: rows of hexagonal modules X wide, every odd row half a module to the right,
-    /// the rows √3/2 X apart. The modules start light.
+    /// Begins a hexagonal symbol: rows of hexagonal modules X wide, every odd row half a module to the right, the rows √3/2 X apart. The modules start light.
     /// </summary>
     /// <param name="columns">The number of module columns.</param>
     /// <param name="rows">The number of module rows.</param>
@@ -465,8 +440,7 @@ internal struct BarcodeSymbol : IDisposable
         Span<bool> modules = this.BeginMatrix(columns, rows, 0, xDimension);
         this.Kind = BarcodeSymbolKind.Hexagonal;
 
-        // The pointed hexagons are 2/√3 X tall, and the rows stand √3/2 X apart, so the symbol is that tall
-        // over its last row.
+        // The pointed hexagons are 2/√3 X tall, and the rows stand √3/2 X apart, so the symbol is that tall over its last row.
         this.HeightInModules = (float)(((rows - 1) * Math.Sqrt(3) / 2) + (2 / Math.Sqrt(3)));
         this.LeadingQuietZone = sideQuietZone;
         this.TrailingQuietZone = sideQuietZone;
@@ -476,15 +450,29 @@ internal struct BarcodeSymbol : IDisposable
     }
 
     /// <summary>
-    /// Reserves the text placements and their characters. The encoder calls it once, before it adds any
-    /// text.
+    /// Begins a dotted symbol: a grid of cells X wide and X high, each dark module a round dot centred in its cell. The modules start light.
+    /// </summary>
+    /// <param name="columns">The number of module columns.</param>
+    /// <param name="rows">The number of module rows.</param>
+    /// <param name="quietZone">The quiet zone on each of the four sides, in modules.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="XDimension"/>.</param>
+    /// <returns>The modules to write, row-major, true for a dark module.</returns>
+    public Span<bool> BeginDotted(int columns, int rows, int quietZone, double xDimension)
+    {
+        Span<bool> modules = this.BeginMatrix(columns, rows, quietZone, xDimension);
+        this.Kind = BarcodeSymbolKind.Dotted;
+        return modules;
+    }
+
+    /// <summary>
+    /// Reserves the text placements and their characters. The encoder calls it once, before it adds any text.
     /// </summary>
     /// <param name="placementCount">The number of placements.</param>
     /// <param name="charCount">The number of characters of all placements.</param>
     public void ReserveText(int placementCount, int charCount)
     {
-        // A placement is a whole number of its widest field, four bytes, so the characters that follow the
-        // placements start on an even byte offset, which a char needs.
+        // A placement is a whole number of its widest field, four bytes, so the characters that follow the placements start on an even byte offset, which a
+        // char needs.
         this.charOffset = placementCount * Unsafe.SizeOf<BarcodeTextPlacement>();
         this.textBuffer = Rent(this.charOffset + (charCount * sizeof(char)));
     }
@@ -538,8 +526,7 @@ internal struct BarcodeSymbol : IDisposable
         => this.AddText(text, left, right, side, textEdge, fontScale, isCaption, BarcodeTextAlignment.Centered);
 
     /// <summary>
-    /// Adds a text placement. The characters copy into the character storage that
-    /// <see cref="ReserveText"/> reserved.
+    /// Adds a text placement. The characters copy into the character storage that <see cref="ReserveText"/> reserved.
     /// </summary>
     /// <param name="text">The characters to render.</param>
     /// <param name="left">The left edge of the horizontal span, in modules.</param>
@@ -567,8 +554,8 @@ internal struct BarcodeSymbol : IDisposable
     }
 
     /// <summary>
-    /// Adds a centred text placement at the full font size whose characters are three parts in turn, so a
-    /// caller that frames data with delimiters writes it with no buffer of its own.
+    /// Adds a centred text placement at the full font size whose characters are three parts in turn, so a caller that frames data with delimiters writes it
+    /// with no buffer of its own.
     /// </summary>
     /// <param name="prefix">The characters before the body.</param>
     /// <param name="body">The body characters.</param>
@@ -588,8 +575,7 @@ internal struct BarcodeSymbol : IDisposable
         => this.AddText(prefix, body, suffix, left, right, side, textEdge, 1F, false, BarcodeTextAlignment.Centered);
 
     /// <summary>
-    /// Adds a text placement whose characters are three parts in turn, so a caller that frames data with
-    /// delimiters writes it with no buffer of its own.
+    /// Adds a text placement whose characters are three parts in turn, so a caller that frames data with delimiters writes it with no buffer of its own.
     /// </summary>
     /// <param name="prefix">The characters before the body.</param>
     /// <param name="body">The body characters.</param>
@@ -626,12 +612,10 @@ internal struct BarcodeSymbol : IDisposable
     }
 
     /// <summary>
-    /// Reserves and adds the human readable interpretation of a matrix symbol, one placement below the
-    /// symbol across its width. The ink starts below the bottom quiet zone: rule 1a of section 4.14 of the
-    /// GS1 General Specifications keeps the interpretation clear of the quiet zones, and section 4.1 of
-    /// ANSI/HIBC 2.6 keeps all marking out of the symbol region, its quiet zones included. A symbol with a
-    /// quiet zone narrower than <see cref="BarcodeTextPlacement.Clearance"/>, such as Aztec Code, which needs
-    /// none, keeps that clear space instead.
+    /// Reserves and adds the human readable interpretation of a matrix symbol, one placement below the symbol across its width. The ink starts below the bottom
+    /// quiet zone: rule 1a of section 4.14 of the GS1 General Specifications keeps the interpretation clear of the quiet zones, and section 4.1 of ANSI/HIBC
+    /// 2.6 keeps all marking out of the symbol region, its quiet zones included. A symbol with a quiet zone narrower than
+    /// <see cref="BarcodeTextPlacement.Clearance"/>, such as Aztec Code, which needs none, keeps that clear space instead.
     /// </summary>
     /// <param name="text">The interpretation, its lines separated by <see cref="BarcodeTextPlacement.LineBreak"/>.</param>
     /// <param name="alignment">Where the lines stand on the width of the symbol.</param>
@@ -677,8 +661,7 @@ internal struct BarcodeSymbol : IDisposable
     }
 
     /// <summary>
-    /// Sets the range of the printed height of the characters of the text lines, which the emitter measures
-    /// as the height of the ink of each line.
+    /// Sets the range of the printed height of the characters of the text lines, which the emitter measures as the height of the ink of each line.
     /// </summary>
     /// <param name="minimum">The smallest height in modules.</param>
     /// <param name="maximum">The largest height in modules.</param>
@@ -699,8 +682,8 @@ internal struct BarcodeSymbol : IDisposable
     }
 
     /// <summary>
-    /// Returns a typed view of a range of a buffer. A buffer that was never rented gives an empty view when
-    /// the count is zero, so a symbol with no text reads no text.
+    /// Returns a typed view of a range of a buffer. A buffer that was never rented gives an empty view when the count is zero, so a symbol with no text reads
+    /// no text.
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
     /// <param name="buffer">The buffer.</param>
@@ -712,8 +695,8 @@ internal struct BarcodeSymbol : IDisposable
         => MemoryMarshal.Cast<byte, T>(buffer.Span.Slice(byteOffset, count * Unsafe.SizeOf<T>()));
 
     /// <summary>
-    /// Rents a buffer from the shared <see cref="byte"/> pool and clears it. The pool hands out used arrays
-    /// and allocates new ones without clearing, so the symbol clears them itself.
+    /// Rents a buffer from the shared <see cref="byte"/> pool and clears it. The pool hands out used arrays and allocates new ones without clearing, so the
+    /// symbol clears them itself.
     /// </summary>
     /// <param name="byteCount">The number of bytes the symbol uses.</param>
     /// <returns>The rented buffer.</returns>
@@ -732,8 +715,8 @@ internal struct BarcodeSymbol : IDisposable
     /// <param name="barCount">The number of bars of all rows.</param>
     private void Reserve(int rowCount, int runCount, int barCount)
     {
-        // The rows, the runs, the bar heights and the bar tops follow each other in one buffer. Each holds
-        // four byte fields, so every part starts on a four byte offset.
+        // The rows, the runs, the bar heights and the bar tops follow each other in one buffer. Each holds four byte fields, so every part starts on a four
+        // byte offset.
         this.runOffset = rowCount * Unsafe.SizeOf<BarcodeRow>();
         this.barOffset = this.runOffset + (runCount * sizeof(int));
         this.barCapacity = barCount;
@@ -752,8 +735,7 @@ internal struct BarcodeSymbol : IDisposable
         ReadOnlySpan<float> tops = this.BarTops;
         Span<BarcodeRow> rows = Slice<BarcodeRow>(this.layoutBuffer, 0, this.rowCount);
 
-        // A double holds each product of a whole run and the run unit exactly, so the width carries no
-        // rounding error from the runs it adds.
+        // A double holds each product of a whole run and the run unit exactly, so the width carries no rounding error from the runs it adds.
         BarcodeRow first = rows[0];
         double width = 0;
         for (int i = first.RunStart; i < first.RunStart + first.RunCount; i++)
@@ -763,8 +745,7 @@ internal struct BarcodeSymbol : IDisposable
 
         this.WidthInModules = (float)width;
 
-        // Each row is as tall as its lowest bar bottom. Each row top adds every row above it, so the sum is
-        // in double and each top converts to float once.
+        // Each row is as tall as its lowest bar bottom. Each row top adds every row above it, so the sum is in double and each top converts to float once.
         double top = firstTop;
         for (int r = 0; r < rows.Length; r++)
         {

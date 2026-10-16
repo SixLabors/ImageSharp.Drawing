@@ -4,9 +4,8 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// One entry of the GS1 Barcode Syntax Dictionary: an Application Identifier, or a range of them, with the
-/// format of its data, the rules that pair it with other Application Identifiers, and its role in a GS1
-/// Digital Link URI.
+/// One entry of the GS1 Barcode Syntax Dictionary: an Application Identifier, or a range of them, with the format of its data, the rules that pair it with
+/// other Application Identifiers, and its role in a GS1 Digital Link URI.
 /// </summary>
 internal sealed class Gs1ApplicationIdentifier
 {
@@ -40,8 +39,7 @@ internal sealed class Gs1ApplicationIdentifier
         this.Exclusions = exclusions;
         this.KeyQualifiers = keyQualifiers;
 
-        // An optional component adds nothing to the shortest data, and every component adds its maximum to
-        // the longest.
+        // An optional component adds nothing to the shortest data, and every component adds its maximum to the longest.
         foreach (Gs1Component component in components)
         {
             this.MinimumLength += component.Optional ? 0 : component.Minimum;
@@ -60,14 +58,12 @@ internal sealed class Gs1ApplicationIdentifier
     public string Last { get; }
 
     /// <summary>
-    /// Gets a value indicating whether the element string has a predefined length, so that it takes no
-    /// separator before the element string that follows it.
+    /// Gets a value indicating whether the element string has a predefined length, so that it takes no separator before the element string that follows it.
     /// </summary>
     public bool PredefinedLength { get; }
 
     /// <summary>
-    /// Gets a value indicating whether the Application Identifier may be a data attribute in the query
-    /// string of a GS1 Digital Link URI.
+    /// Gets a value indicating whether the Application Identifier may be a data attribute in the query string of a GS1 Digital Link URI.
     /// </summary>
     public bool DataAttribute { get; }
 
@@ -77,8 +73,8 @@ internal sealed class Gs1ApplicationIdentifier
     public Gs1Component[] Components { get; }
 
     /// <summary>
-    /// Gets the requisite rules. Each rule is a list of groups, and a rule holds when every pattern of at
-    /// least one group matches another element string of the data.
+    /// Gets the requisite rules. Each rule is a list of groups, and a rule holds when every pattern of at least one group matches another element string of the
+    /// data.
     /// </summary>
     public string[][][] Requisites { get; }
 
@@ -88,8 +84,8 @@ internal sealed class Gs1ApplicationIdentifier
     public string[] Exclusions { get; }
 
     /// <summary>
-    /// Gets the qualifier sequences of a GS1 Digital Link primary key, or <see langword="null"/> when the
-    /// Application Identifier is not a primary key. A key with no qualifiers has one empty sequence.
+    /// Gets the qualifier sequences of a GS1 Digital Link primary key, or <see langword="null"/> when the Application Identifier is not a primary key. A key
+    /// with no qualifiers has one empty sequence.
     /// </summary>
     public string[][]? KeyQualifiers { get; }
 
@@ -109,7 +105,5 @@ internal sealed class Gs1ApplicationIdentifier
     /// <param name="identifier">The Application Identifier.</param>
     /// <returns><see langword="true"/> when the identifier is in the range of the entry.</returns>
     public bool Holds(ReadOnlySpan<char> identifier)
-        => identifier.Length == this.First.Length
-        && identifier.SequenceCompareTo(this.First) >= 0
-        && identifier.SequenceCompareTo(this.Last) <= 0;
+        => identifier.Length == this.First.Length && identifier.SequenceCompareTo(this.First) >= 0 && identifier.SequenceCompareTo(this.Last) <= 0;
 }

@@ -7,11 +7,9 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The Telepen Numeric symbology, the double density numeric mode of Telepen. It packs "two digits into
-/// one character" and a single digit followed by X into one of the remaining characters, so a symbol
-/// carries an even number of characters in which X can stand only in the second position of a pair. The
-/// symbol is a Telepen symbol of the packed characters, and the check character covers the packed
-/// characters. The printed line shows the digits as given.
+/// The Telepen Numeric symbology, the double density numeric mode of Telepen. It packs "two digits into one character" and a single digit followed by X into
+/// one of the remaining characters, so a symbol carries an even number of characters in which X can stand only in the second position of a pair. The symbol is
+/// a Telepen symbol of the packed characters, and the check character covers the packed characters. The printed line shows the digits as given.
 /// </summary>
 public sealed class TelepenNumericSymbology : BarcodeSymbology
 {
@@ -27,8 +25,7 @@ public sealed class TelepenNumericSymbology : BarcodeSymbology
             throw new ArgumentException($"Telepen Numeric carries an even number of characters; got {text.Length}.", nameof(text));
         }
 
-        // One value for each pair of characters, so the buffer never grows: short text works inline and
-        // longer text rents once.
+        // One value for each pair of characters, so the buffer never grows: short text works inline and longer text rents once.
         InlineArray32<int> bufferStorage = default;
         int capacity = text.Length / 2;
         ValueListBuilder<int> buffer = capacity <= TelepenEncoder.InlineBufferLength / 2 ? new(bufferStorage) : new(capacity);
@@ -59,8 +56,7 @@ public sealed class TelepenNumericSymbology : BarcodeSymbology
                 else
                 {
                     throw new ArgumentException(
-                        $"Telepen Numeric carries only digits, and X in the second position of a pair; got {current.ToDisplayString()}.",
-                        nameof(text));
+                        $"Telepen Numeric carries only digits, and X in the second position of a pair; got {current.ToDisplayString()}.", nameof(text));
                 }
 
                 index += current.Utf16SequenceLength;

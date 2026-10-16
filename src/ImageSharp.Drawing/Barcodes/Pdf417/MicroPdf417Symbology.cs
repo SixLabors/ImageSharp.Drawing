@@ -4,15 +4,13 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The MicroPDF417 symbology: 1 to 4 data columns in one of 34 fixed sizes, each row between row address
-/// patterns. It carries the characters U+0000 to U+00FF with the symbol characters and the error
-/// correction of PDF417.
+/// The MicroPDF417 symbology: 1 to 4 data columns in one of 34 fixed sizes, each row between row address patterns. It carries the characters U+0000 to U+00FF
+/// with the symbol characters and the error correction of PDF417.
 /// </summary>
 public sealed class MicroPdf417Symbology : BarcodeSymbology
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="MicroPdf417Symbology"/> class. The symbol takes the
-    /// first size that holds the data.
+    /// Initializes a new instance of the <see cref="MicroPdf417Symbology"/> class. The symbol takes the first size that holds the data.
     /// </summary>
     public MicroPdf417Symbology()
     {

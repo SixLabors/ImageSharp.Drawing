@@ -4,10 +4,9 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The symbol character patterns of Code 49, Appendix F of AIM USS-49: for every symbol character value
-/// 0 to 2400, one pattern of even parity and one of odd parity. A pattern is 16 modules, four bars and
-/// four spaces of one to six modules starting with a bar, held as one bit per module from the most
-/// significant bit, a set bit for a bar. The parity is that of the sum of the bar modules.
+/// The symbol character patterns of Code 49, Appendix F of AIM USS-49: for every symbol character value 0 to 2400, one pattern of even parity and one of odd
+/// parity. A pattern is 16 modules, four bars and four spaces of one to six modules starting with a bar, held as one bit per module from the most significant
+/// bit, a set bit for a bar. The parity is that of the sum of the bar modules.
 /// </summary>
 internal static class Code49Patterns
 {

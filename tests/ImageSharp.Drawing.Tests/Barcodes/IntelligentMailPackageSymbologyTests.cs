@@ -9,17 +9,15 @@ using SixLabors.ImageSharp.Processing;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="IntelligentMailPackageSymbology"/>. Each expected run string is the
-/// alternating bar and space module widths, starting with a bar, taken from an independent reference
-/// implementation through its raw encoding API for the same element strings as GS1-128. The check digits
-/// follow USPS2000508 Appendix E. The C01 PIC is the worked example of Publication 199 section 4.6,
-/// whose check digit is 0.
+/// Encoder tests for <see cref="IntelligentMailPackageSymbology"/>. Each expected run string is the alternating bar and space module widths, starting with a
+/// bar, taken from an independent reference implementation through its raw encoding API for the same element strings as GS1-128. The check digits follow
+/// USPS2000508 Appendix E. The C01 PIC is the worked example of Publication 199 section 4.6, whose check digit is 0.
 /// </summary>
 public class IntelligentMailPackageSymbologyTests
 {
     /// <summary>
-    /// One input for each channel Application Identifier, with and without a routing code. Every symbol
-    /// starts with the Start C character and stays in code set C, as section 2.2.1 of USPS2000508 requires.
+    /// One input for each channel Application Identifier, with and without a routing code. Every symbol starts with the Start C character and stays in code set
+    /// C, as section 2.2.1 of USPS2000508 requires.
     /// </summary>
     /// <param name="text">The element strings.</param>
     /// <param name="expected">The reference runs.</param>
@@ -48,9 +46,8 @@ public class IntelligentMailPackageSymbologyTests
             SymbolEncoder.Read(new IntelligentMailPackageSymbology("USPS TRACKING #"), text, new BarcodeOptions(), SymbolEncoder.RunString));
 
     /// <summary>
-    /// Section 2.4.1 of USPS2000508 suppresses the (420) Application Identifier and the ZIP Code from the
-    /// human readable interpretation, and Appendix D prints the PIC in groups of four digits with the
-    /// remaining digits in a group at the end. Section 2.4.2 prints the service banner above the bars.
+    /// Section 2.4.1 of USPS2000508 suppresses the (420) Application Identifier and the ZIP Code from the human readable interpretation, and Appendix D prints
+    /// the PIC in groups of four digits with the remaining digits in a group at the end. Section 2.4.2 prints the service banner above the bars.
     /// </summary>
     /// <param name="text">The element strings.</param>
     /// <param name="expected">The printed PIC.</param>
@@ -99,19 +96,16 @@ public class IntelligentMailPackageSymbologyTests
         => Assert.ThrowsAny<ArgumentException>(() => Encode(string.Empty));
 
     /// <summary>
-    /// Section 2.5.1.7 of USPS2000508: "Every barcode construct shall utilize a 1-digit, Mod 10 Check Digit
-    /// as the final digit in the barcode data string."
+    /// Section 2.5.1.7 of USPS2000508: "Every barcode construct shall utilize a 1-digit, Mod 10 Check Digit as the final digit in the barcode data string."
     /// </summary>
     [Fact]
     public void RejectsWrongCheckDigit()
         => Assert.Throws<ArgumentException>(() => Encode("(420)123456789(92)12391234567812345671"));
 
     /// <summary>
-    /// Section 2.5.2 of USPS2000508: "Barcodes shall conform to one of the approved barcode constructs".
-    /// The constructs fix the channel, the length of the ZIP Code, the length of the mailer ID and the length
-    /// of the PIC, and section 1.4 of Publication 199 requires a six digit mailer ID to begin with 0 to 8
-    /// and a nine digit mailer ID with 9. Every PIC here carries a correct check digit, so only the
-    /// construct rule rejects it.
+    /// Section 2.5.2 of USPS2000508: "Barcodes shall conform to one of the approved barcode constructs". The constructs fix the channel, the length of the ZIP
+    /// Code, the length of the mailer ID and the length of the PIC, and section 1.4 of Publication 199 requires a six digit mailer ID to begin with 0 to 8 and
+    /// a nine digit mailer ID with 9. Every PIC here carries a correct check digit, so only the construct rule rejects it.
     /// </summary>
     /// <param name="text">The element strings.</param>
     [Theory]
@@ -129,9 +123,8 @@ public class IntelligentMailPackageSymbologyTests
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
     /// <summary>
-    /// Section 2.2.2 of USPS2000508 prefers an X dimension of 0.015 to 0.017 inch, section 2.2.4 sets a
-    /// bar height of at least 0.75 inch, and section 2.4.3 gives the identification bars a thickness of
-    /// 0.031 to 0.063 inch. Figure 1 keeps them at least 0.031 inch from the text.
+    /// Section 2.2.2 of USPS2000508 prefers an X dimension of 0.015 to 0.017 inch, section 2.2.4 sets a bar height of at least 0.75 inch, and section 2.4.3
+    /// gives the identification bars a thickness of 0.031 to 0.063 inch. Figure 1 keeps them at least 0.031 inch from the text.
     /// </summary>
     [Fact]
     public void NominalSymbolMeetsThePhysicalRequirements()
@@ -151,9 +144,8 @@ public class IntelligentMailPackageSymbologyTests
     }
 
     /// <summary>
-    /// Sections 2.4.1 and 2.4.2 of USPS2000508: "The printed height of the characters shall be between 0.090
-    /// to 0.125 inch", whatever font size the caller asks for. At 300 dots per inch that is 27 to 37.5
-    /// pixels, and a rasterized edge can add one pixel.
+    /// Sections 2.4.1 and 2.4.2 of USPS2000508: "The printed height of the characters shall be between 0.090 to 0.125 inch", whatever font size the caller asks
+    /// for. At 300 dots per inch that is 27 to 37.5 pixels, and a rasterized edge can add one pixel.
     /// </summary>
     /// <param name="points">The font size the caller asks for.</param>
     [Theory]
@@ -169,8 +161,8 @@ public class IntelligentMailPackageSymbologyTests
         using Image<L8> image = new((int)MathF.Ceiling(bounds.Right), (int)MathF.Ceiling(bounds.Bottom), new L8(255));
         image.Mutate(x => x.Paint(canvas => canvas.DrawBarcode(symbology, text, options, PointF.Empty)));
 
-        // A row is dark when any pixel in it is dark. The dark rows form bands from the top down: the upper
-        // identification bar, the banner, the bars, the PIC and the lower identification bar.
+        // A row is dark when any pixel in it is dark. The dark rows form bands from the top down: the upper identification bar, the banner, the bars, the PIC
+        // and the lower identification bar.
         List<(int Start, int End)> runs = [];
         int start = -1;
         for (int y = 0; y < image.Height; y++)

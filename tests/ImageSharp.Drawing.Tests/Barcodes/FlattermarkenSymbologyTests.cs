@@ -6,11 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="FlattermarkenSymbology"/>. Each reference string is the alternating bar
-/// and space module widths, starting with a bar, from the reference implementation's raw encoding API,
-/// joined with commas. The reference writes every window as a bar, a space, a bar and a space, some of
-/// zero width. The symbol keeps a zero width bar only at its ends, so the test merges the spaces around
-/// every other zero width bar before it compares.
+/// Encoder tests for <see cref="FlattermarkenSymbology"/>. Each reference string is the alternating bar and space module widths, starting with a bar, from the
+/// reference implementation's raw encoding API, joined with commas. The reference writes every window as a bar, a space, a bar and a space, some of zero width.
+/// The symbol keeps a zero width bar only at its ends, so the test merges the spaces around every other zero width bar before it compares.
 /// </summary>
 public class FlattermarkenSymbologyTests
 {
@@ -27,8 +25,7 @@ public class FlattermarkenSymbologyTests
             SymbolEncoder.Read(new FlattermarkenSymbology(), text, new BarcodeOptions(), static (ref symbol) => string.Join(",", symbol.Runs.ToArray())));
 
     /// <summary>
-    /// Every digit takes a window of nine modules, so the symbol is nine modules per digit wide whatever
-    /// the digits, with no quiet zone.
+    /// Every digit takes a window of nine modules, so the symbol is nine modules per digit wide whatever the digits, with no quiet zone.
     /// </summary>
     /// <param name="text">The digits to encode.</param>
     [Theory]
@@ -64,8 +61,8 @@ public class FlattermarkenSymbologyTests
     {
         int[] runs = Array.ConvertAll(reference.Split(','), int.Parse);
 
-        // A leading zero width bar with no space after it is nothing at all, and the symbol starts with
-        // the next bar. One followed by a space starts the symbol blank, which the zero width bar keeps.
+        // A leading zero width bar with no space after it is nothing at all, and the symbol starts with the next bar. One followed by a space starts the symbol
+        // blank, which the zero width bar keeps.
         List<int> merged = runs[0] == 0 && runs[1] == 0 ? [] : [runs[0], runs[1]];
         for (int i = 2; i < runs.Length; i += 2)
         {
@@ -81,8 +78,8 @@ public class FlattermarkenSymbologyTests
             merged.Add(space);
         }
 
-        // The reference ends every window with a space. A symbol ends on its last bar when that space
-        // is empty, and on a zero width bar after the space otherwise.
+        // The reference ends every window with a space. A symbol ends on its last bar when that space is empty, and on a zero width bar after the space
+        // otherwise.
         if (merged[^1] == 0)
         {
             merged.RemoveAt(merged.Count - 1);

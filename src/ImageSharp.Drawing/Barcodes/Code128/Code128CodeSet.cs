@@ -4,8 +4,8 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The three Code 128 code sets of section 5.4.3.3 of the GS1 General Specifications. The set in force
-/// decides which character each symbol character value stands for.
+/// The three Code 128 code sets of section 5.4.3.3 of the GS1 General Specifications. The set in force decides which character each symbol character value
+/// stands for.
 /// </summary>
 internal enum Code128CodeSet
 {

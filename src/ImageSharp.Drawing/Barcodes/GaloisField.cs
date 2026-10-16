@@ -4,22 +4,19 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// A binary extension field GF(2^m) and the Reed-Solomon error correction over it. Addition is exclusive
-/// or. Multiplication adds logarithms to the base alpha, where alpha is the element 2 and the primitive
-/// polynomial reduces each power of alpha into the field.
+/// A binary extension field GF(2^m) and the Reed-Solomon error correction over it. Addition is exclusive or. Multiplication adds logarithms to the base alpha,
+/// where alpha is the element 2 and the primitive polynomial reduces each power of alpha into the field.
 /// </summary>
 internal sealed class GaloisField
 {
     /// <summary>
-    /// The powers of alpha, alpha^i at index i, written twice: for i from 0 to size - 2 and again from
-    /// size - 1 to 2 x (size - 2). The sum of two logarithms is at most 2 x (size - 2), so a product reads its
-    /// power directly, with no reduction modulo size - 1.
+    /// The powers of alpha, alpha^i at index i, written twice: for i from 0 to size - 2 and again from size - 1 to 2 x (size - 2). The sum of two logarithms is
+    /// at most 2 x (size - 2), so a product reads its power directly, with no reduction modulo size - 1.
     /// </summary>
     private readonly int[] exp;
 
     /// <summary>
-    /// The logarithms to the base alpha, i at index alpha^i. Index 0 is not used, because zero has no
-    /// logarithm.
+    /// The logarithms to the base alpha, i at index alpha^i. Index 0 is not used, because zero has no logarithm.
     /// </summary>
     private readonly int[] log;
 
@@ -34,8 +31,8 @@ internal sealed class GaloisField
         this.exp = new int[2 * (size - 1)];
         this.log = new int[size];
 
-        // Each power of alpha is the power before it times x. A product that reaches the x^m term is
-        // reduced by the primitive polynomial, which clears that term.
+        // Each power of alpha is the power before it times x. A product that reaches the x^m term is reduced by the primitive polynomial, which clears that
+        // term.
         int value = 1;
         for (int i = 0; i < size - 1; i++)
         {
@@ -72,18 +69,16 @@ internal sealed class GaloisField
         => a == 0 || b == 0 ? 0 : this.exp[this.log[a] + this.log[b]];
 
     /// <summary>
-    /// Writes the generator polynomial (x + alpha^r)(x + alpha^(r+1)) ... (x + alpha^(r+k-1)) of a code
-    /// with k check symbols, where r is the first root. The polynomial is monic, so the coefficient of
-    /// x^k is 1 and is not written.
+    /// Writes the generator polynomial (x + alpha^r)(x + alpha^(r+1)) ... (x + alpha^(r+k-1)) of a code with k check symbols, where r is the first root. The
+    /// polynomial is monic, so the coefficient of x^k is 1 and is not written.
     /// </summary>
     /// <param name="firstRoot">The power of alpha of the first root.</param>
     /// <param name="generator">The buffer that receives the coefficients of x^0 to x^(k-1), the coefficient of x^j at index j.</param>
     public void Generator(int firstRoot, Span<int> generator)
     {
-        // The product grows one factor at a time. Multiplying by (x + a) moves every coefficient up one
-        // power and adds a times the coefficient itself, so the update runs from the top down in place.
-        // Before factor d the product has degree d - 1, and its leading coefficient, 1, is at index d - 1
-        // until the last factor, whose new leading 1 is the implied coefficient of x^k.
+        // The product grows one factor at a time. Multiplying by (x + a) moves every coefficient up one power and adds a times the coefficient itself, so the
+        // update runs from the top down in place. Before factor d the product has degree d - 1, and its leading coefficient, 1, is at index d - 1 until the
+        // last factor, whose new leading 1 is the implied coefficient of x^k.
         int count = generator.Length;
         generator.Clear();
         generator[0] = 1;
@@ -105,8 +100,8 @@ internal sealed class GaloisField
     }
 
     /// <summary>
-    /// Calculates the check symbols of a Reed-Solomon code: the remainder of the data polynomial, the
-    /// first symbol as its highest term, times x^k, divided by the generator polynomial.
+    /// Calculates the check symbols of a Reed-Solomon code: the remainder of the data polynomial, the first symbol as its highest term, times x^k, divided by
+    /// the generator polynomial.
     /// </summary>
     /// <param name="data">The data symbols. Symbol i of the block is at index i x <paramref name="step"/>.</param>
     /// <param name="step">The distance between two symbols of the block, 1 when the block is not interleaved.</param>
@@ -115,9 +110,8 @@ internal sealed class GaloisField
     /// <param name="check">The buffer that receives the k check symbols, the highest term first.</param>
     public void Remainder(ReadOnlySpan<int> data, int step, int count, ReadOnlySpan<int> generator, Span<int> check)
     {
-        // A linear feedback shift register divides as the symbols arrive. The register holds the running
-        // remainder with its highest term at index 0. Each symbol adds to that term, and the sum times the
-        // generator is subtracted, which in a binary field is the same exclusive or.
+        // A linear feedback shift register divides as the symbols arrive. The register holds the running remainder with its highest term at index 0. Each
+        // symbol adds to that term, and the sum times the generator is subtracted, which in a binary field is the same exclusive or.
         int[] exp = this.exp;
         int[] log = this.log;
         int k = check.Length;
@@ -133,8 +127,8 @@ internal sealed class GaloisField
                 continue;
             }
 
-            // The logarithm of the feedback is the same for every coefficient, so it is read once, and each
-            // product is one table read from the sum of two logarithms.
+            // The logarithm of the feedback is the same for every coefficient, so it is read once, and each product is one table read from the sum of two
+            // logarithms.
             int feedbackLog = log[feedback];
             for (int j = 0; j < k - 1; j++)
             {
@@ -147,9 +141,8 @@ internal sealed class GaloisField
     }
 
     /// <summary>
-    /// Calculates the check symbols of interleaved blocks. The data symbols are dealt over the blocks in turn,
-    /// symbol i to block i mod b, each block takes its own check symbols, and the check symbols follow the
-    /// data, dealt over the blocks the same way.
+    /// Calculates the check symbols of interleaved blocks. The data symbols are dealt over the blocks in turn, symbol i to block i mod b, each block takes its
+    /// own check symbols, and the check symbols follow the data, dealt over the blocks the same way.
     /// </summary>
     /// <param name="symbols">The data symbols followed by room for the check symbols of every block.</param>
     /// <param name="dataCount">The number of data symbols, a multiple of the block count.</param>
@@ -158,8 +151,8 @@ internal sealed class GaloisField
     /// <param name="check">The scratch for the check symbols of one block, as long as the generator.</param>
     public void InterleavedRemainders(Span<int> symbols, int dataCount, int blocks, ReadOnlySpan<int> generator, Span<int> check)
     {
-        // A block reads its data symbols in place with a step of the block count. The check symbols go after
-        // the data, so the next block still reads only data symbols.
+        // A block reads its data symbols in place with a step of the block count. The check symbols go after the data, so the next block still reads only data
+        // symbols.
         int perBlock = generator.Length;
         Span<int> target = symbols.Slice(dataCount, perBlock * blocks);
         for (int block = 0; block < blocks; block++)

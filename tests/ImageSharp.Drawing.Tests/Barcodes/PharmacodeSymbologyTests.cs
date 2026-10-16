@@ -7,11 +7,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="PharmacodeSymbology"/> and <see cref="TwoTrackPharmacodeSymbology"/>.
-/// Each expected one-track run string is the alternating bar and space module widths, starting with a
-/// bar, from the reference implementation's raw encoding API, joined with commas. The reference emits a
-/// gap after the last bar, so the test drops it before it compares. The two-track bar kinds come from the
-/// same API's bar heights and offsets.
+/// Encoder tests for <see cref="PharmacodeSymbology"/> and <see cref="TwoTrackPharmacodeSymbology"/>. Each expected one-track run string is the alternating bar
+/// and space module widths, starting with a bar, from the reference implementation's raw encoding API, joined with commas. The reference emits a gap after the
+/// last bar, so the test drops it before it compares. The two-track bar kinds come from the same API's bar heights and offsets.
 /// </summary>
 public class PharmacodeSymbologyTests
 {
@@ -23,9 +21,8 @@ public class PharmacodeSymbologyTests
         => Assert.Equal(reference[..^2], string.Join(",", Encode(text)));
 
     /// <summary>
-    /// Section 4.3 of the guide values a thin bar in position n at 2 to the power n - 1 and a thick bar at
-    /// twice that, from the right. So 3 is two thin bars, 4 is a thin bar and a thick bar, 5 is a thick
-    /// bar and a thin bar, and 6 is two thick bars, and every symbol's bars add back to its value.
+    /// Section 4.3 of the guide values a thin bar in position n at 2 to the power n - 1 and a thick bar at twice that, from the right. So 3 is two thin bars, 4
+    /// is a thin bar and a thick bar, 5 is a thick bar and a thin bar, and 6 is two thick bars, and every symbol's bars add back to its value.
     /// </summary>
     /// <param name="text">The number to encode.</param>
     /// <param name="bars">The bars from the left, T for thick and t for thin.</param>
@@ -54,8 +51,7 @@ public class PharmacodeSymbologyTests
     }
 
     /// <summary>
-    /// The one-track dimensions of section 1.2 at the 0.5 mm module: bars of 1 and 3 modules, gaps of 2,
-    /// a height of 16 and quiet zones of 12.
+    /// The one-track dimensions of section 1.2 at the 0.5 mm module: bars of 1 and 3 modules, gaps of 2, a height of 16 and quiet zones of 12.
     /// </summary>
     [Fact]
     public void DrawsTheOneTrackDimensionsOfSectionOneTwo()
@@ -68,10 +64,9 @@ public class PharmacodeSymbologyTests
         });
 
     /// <summary>
-    /// Section 4.5 of the guide values a lower bar in position n at 3 to the power n - 1, an upper bar at
-    /// twice that and a full bar at three times that. Its worked example reads 81 + 18 + 3 + 3 = 105 from
-    /// a full bar, an upper bar, a lower bar and a full bar. The expected bars for 117480, the smallest
-    /// value 4 and the largest value 64570080 are the reference implementation's.
+    /// Section 4.5 of the guide values a lower bar in position n at 3 to the power n - 1, an upper bar at twice that and a full bar at three times that. Its
+    /// worked example reads 81 + 18 + 3 + 3 = 105 from a full bar, an upper bar, a lower bar and a full bar. The expected bars for 117480, the smallest value 4
+    /// and the largest value 64570080 are the reference implementation's.
     /// </summary>
     /// <param name="text">The number to encode.</param>
     /// <param name="bars">The bars from the left, L for lower, U for upper and F for full.</param>
@@ -102,8 +97,7 @@ public class PharmacodeSymbologyTests
         });
 
     /// <summary>
-    /// The half bars are half of the height the caller sets, and the lower bar starts halfway down. At the
-    /// 1 mm X dimension a 30 mm bar height is 30 modules.
+    /// The half bars are half of the height the caller sets, and the lower bar starts halfway down. At the 1 mm X dimension a 30 mm bar height is 30 modules.
     /// </summary>
     [Fact]
     public void ScalesTheHalfBarsWithTheBarHeight()

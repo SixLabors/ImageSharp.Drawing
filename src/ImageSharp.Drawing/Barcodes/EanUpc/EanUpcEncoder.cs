@@ -6,29 +6,25 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Shared encodation for the EAN/UPC symbology family as specified in ISO/IEC 15420 and the GS1 General
-/// Specifications. Symbol characters are seven modules wide, and each carries one digit through number
-/// set A, B or C. The choice of number set carries the implied extra digit of EAN-13 and the check digit
-/// of UPC-E.
+/// Shared encodation for the EAN/UPC symbology family as specified in ISO/IEC 15420 and the GS1 General Specifications. Symbol characters are seven modules
+/// wide, and each carries one digit through number set A, B or C. The choice of number set carries the implied extra digit of EAN-13 and the check digit of
+/// UPC-E.
 /// </summary>
 internal static class EanUpcEncoder
 {
     /// <summary>
-    /// The number of modules a guard pattern extends below the digit bars when the human readable
-    /// interpretation is printed. ISO/IEC 15420 extends the guard bars five modules into the text area at
-    /// nominal size. The extension flanks the text row, so a symbol without text has uniform bars.
+    /// The number of modules a guard pattern extends below the digit bars when the human readable interpretation is printed. ISO/IEC 15420 extends the guard
+    /// bars five modules into the text area at nominal size. The extension flanks the text row, so a symbol without text has uniform bars.
     /// </summary>
     public const float GuardExtension = 5F;
 
     /// <summary>
-    /// The nominal X dimension in millimetres. Section 5.2.6.6 of the GS1 General Specifications:
-    /// "X-dimension = 0.330 mm".
+    /// The nominal X dimension in millimetres. Section 5.2.6.6 of the GS1 General Specifications: "X-dimension = 0.330 mm".
     /// </summary>
     public const double NominalXDimension = 0.33;
 
     /// <summary>
-    /// The nominal EAN-13, UPC-A and UPC-E bar height in modules: 22.85mm bars at the nominal 0.33mm
-    /// X-dimension of ISO/IEC 15420.
+    /// The nominal EAN-13, UPC-A and UPC-E bar height in modules: 22.85mm bars at the nominal 0.33mm X-dimension of ISO/IEC 15420.
     /// </summary>
     public const float NominalBarHeight = 69.24F;
 
@@ -38,14 +34,12 @@ internal static class EanUpcEncoder
     public const float NominalEan8BarHeight = 55.24F;
 
     /// <summary>
-    /// The nominal add-on bar height in modules: 21.90mm bars at the nominal 0.33mm X-dimension per the
-    /// GS1 General Specifications.
+    /// The nominal add-on bar height in modules: 21.90mm bars at the nominal 0.33mm X-dimension per the GS1 General Specifications.
     /// </summary>
     public const float NominalAddOnBarHeight = 66.36F;
 
     /// <summary>
-    /// The font scale for the UPC number system and check digits, which print in smaller type in the quiet
-    /// zones at 10/12 of the digit size.
+    /// The font scale for the UPC number system and check digits, which print in smaller type in the quiet zones at 10/12 of the digit size.
     /// </summary>
     public const float QuietZoneDigitScale = 10F / 12F;
 
@@ -55,13 +49,47 @@ internal static class EanUpcEncoder
     public const int Ean8Width = 67;
 
     /// <summary>
-    /// The width of an EAN-13 symbol in modules.
+    /// The width of an EAN-13 symbol in modules, which a UPC-A symbol shares.
     /// </summary>
-    private const int Ean13Width = 95;
+    public const int Ean13Width = 95;
 
     /// <summary>
-    /// Gets the indexes of the extended bars of an EAN-13 symbol: the two bars of each of the left,
-    /// centre and right guard patterns.
+    /// The width of a symbol character in modules.
+    /// </summary>
+    public const int CharacterWidth = 7;
+
+    /// <summary>
+    /// The normal guard pattern that opens and closes a symbol: bar, space, bar.
+    /// </summary>
+    public const int NormalGuard = 0b101;
+
+    /// <summary>
+    /// The width of <see cref="NormalGuard"/> in modules.
+    /// </summary>
+    public const int NormalGuardWidth = 3;
+
+    /// <summary>
+    /// The centre guard pattern between the two halves of a symbol: space, bar, space, bar, space.
+    /// </summary>
+    private const int CentreGuard = 0b01010;
+
+    /// <summary>
+    /// The width of <see cref="CentreGuard"/> in modules.
+    /// </summary>
+    private const int CentreGuardWidth = 5;
+
+    /// <summary>
+    /// The quiet zone before an EAN-13 symbol in modules, which holds the leading digit.
+    /// </summary>
+    private const int Ean13LeadingQuietZone = 11;
+
+    /// <summary>
+    /// The quiet zone after an EAN-13 symbol, and on both sides of an EAN-8 symbol, in modules.
+    /// </summary>
+    private const int QuietZone = 7;
+
+    /// <summary>
+    /// Gets the indexes of the extended bars of an EAN-13 symbol: the two bars of each of the left, centre and right guard patterns.
     /// </summary>
     private static ReadOnlySpan<int> Ean13GuardBars => [0, 1, 14, 15, 28, 29];
 
@@ -71,9 +99,8 @@ internal static class EanUpcEncoder
     private static ReadOnlySpan<int> Ean8GuardBars => [0, 1, 10, 11, 20, 21];
 
     /// <summary>
-    /// Gets the number set A symbol characters indexed by digit, seven modules per character with the most significant
-    /// bit first and 1 meaning a dark module. ISO/IEC 15420 gives number set A odd parity. Every
-    /// character starts with a space module and ends with a bar module.
+    /// Gets the number set A symbol characters indexed by digit, seven modules per character with the most significant bit first and 1 meaning a dark module.
+    /// ISO/IEC 15420 gives number set A odd parity. Every character starts with a space module and ends with a bar module.
     /// </summary>
     public static ReadOnlySpan<byte> NumberSetA =>
     [
@@ -82,8 +109,8 @@ internal static class EanUpcEncoder
     ];
 
     /// <summary>
-    /// Gets the number set B symbol characters indexed by digit. ISO/IEC 15420 gives number set B even
-    /// parity. Each character is number set C for the same digit, read in reverse module order.
+    /// Gets the number set B symbol characters indexed by digit. ISO/IEC 15420 gives number set B even parity. Each character is number set C for the same
+    /// digit, read in reverse module order.
     /// </summary>
     public static ReadOnlySpan<byte> NumberSetB =>
     [
@@ -92,8 +119,8 @@ internal static class EanUpcEncoder
     ];
 
     /// <summary>
-    /// Gets the number set C symbol characters indexed by digit. ISO/IEC 15420 defines number set C as the module-wise
-    /// inverse of number set A. Every character starts with a bar module and ends with a space module.
+    /// Gets the number set C symbol characters indexed by digit. ISO/IEC 15420 defines number set C as the module-wise inverse of number set A. Every character
+    /// starts with a bar module and ends with a space module.
     /// </summary>
     public static ReadOnlySpan<byte> NumberSetC =>
     [
@@ -102,10 +129,9 @@ internal static class EanUpcEncoder
     ];
 
     /// <summary>
-    /// Gets the number set sequence for the six left-half characters of an EAN-13 symbol, indexed by the leading
-    /// digit. A set bit selects number set B, a clear bit number set A, most significant bit first.
-    /// ISO/IEC 15420 carries the thirteenth digit through this variable parity. The leading digit has no
-    /// symbol character of its own.
+    /// Gets the number set sequence for the six left-half characters of an EAN-13 symbol, indexed by the leading digit. A set bit selects number set B, a clear
+    /// bit number set A, most significant bit first. ISO/IEC 15420 carries the thirteenth digit through this variable parity. The leading digit has no symbol
+    /// character of its own.
     /// </summary>
     public static ReadOnlySpan<byte> Ean13LeftParity =>
     [
@@ -114,10 +140,9 @@ internal static class EanUpcEncoder
     ];
 
     /// <summary>
-    /// Gets the number set sequence for the six characters of a UPC-E symbol with number system 0, indexed by the
-    /// check digit. A set bit selects number set B, most significant bit first. Number system 1 uses the
-    /// bitwise complement. ISO/IEC 15420 encodes both the number system and the check digit of UPC-E through
-    /// this parity because neither has a symbol character of its own.
+    /// Gets the number set sequence for the six characters of a UPC-E symbol with number system 0, indexed by the check digit. A set bit selects number set B,
+    /// most significant bit first. Number system 1 uses the bitwise complement. ISO/IEC 15420 encodes both the number system and the check digit of UPC-E
+    /// through this parity because neither has a symbol character of its own.
     /// </summary>
     public static ReadOnlySpan<byte> UpcEParity =>
     [
@@ -126,9 +151,8 @@ internal static class EanUpcEncoder
     ];
 
     /// <summary>
-    /// Gets the number set sequence for a five-digit add-on, indexed by the add-on checksum. A set bit selects
-    /// number set B, most significant bit first. The GS1 General Specifications derive the checksum from the
-    /// add-on digits and convey it only through this parity.
+    /// Gets the number set sequence for a five-digit add-on, indexed by the add-on checksum. A set bit selects number set B, most significant bit first. The
+    /// GS1 General Specifications derive the checksum from the add-on digits and convey it only through this parity.
     /// </summary>
     public static ReadOnlySpan<byte> AddOnFiveParity =>
     [
@@ -137,10 +161,9 @@ internal static class EanUpcEncoder
     ];
 
     /// <summary>
-    /// Validates that the text holds only the decimal digits 0 to 9, and that its length is the data
-    /// length or the data length plus a check digit. When the check digit is present, this method compares
-    /// it with the calculated one. When it is absent, this method calculates it. The digits written always
-    /// carry the check digit.
+    /// Validates that the text holds only the decimal digits 0 to 9, and that its length is the data length or the data length plus a check digit. When the
+    /// check digit is present, this method compares it with the calculated one. When it is absent, this method calculates it. The digits written always carry
+    /// the check digit.
     /// </summary>
     /// <param name="text">The input text.</param>
     /// <param name="dataLength">The number of data digits, excluding the check digit.</param>
@@ -179,8 +202,18 @@ internal static class EanUpcEncoder
     }
 
     /// <summary>
-    /// Begins a linear symbol from a module stream and writes its alternating bar and space run widths. The
-    /// stream must start and end with a dark module so that even run indexes are bars.
+    /// Appends the symbol character of one digit to the module stream.
+    /// </summary>
+    /// <param name="modules">The module stream, where 1 is a dark module.</param>
+    /// <param name="position">The write position, advanced by <see cref="CharacterWidth"/>.</param>
+    /// <param name="numberSet">The number set the digit is encoded in: <see cref="NumberSetA"/>, <see cref="NumberSetB"/> or <see cref="NumberSetC"/>.</param>
+    /// <param name="digit">The digit, already validated.</param>
+    public static void AppendCharacter(Span<byte> modules, ref int position, ReadOnlySpan<byte> numberSet, char digit)
+        => AppendPattern(modules, ref position, numberSet[digit - '0'], CharacterWidth);
+
+    /// <summary>
+    /// Begins a linear symbol from a module stream and writes its alternating bar and space run widths. The stream must start and end with a dark module so
+    /// that even run indexes are bars.
     /// </summary>
     /// <param name="modules">The module stream, where 1 is a dark module.</param>
     /// <param name="xDimension">The X dimension in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
@@ -217,9 +250,8 @@ internal static class EanUpcEncoder
     }
 
     /// <summary>
-    /// Writes the bar heights of a symbol whose bars are top aligned. When the options carry a font the
-    /// listed guard bars extend downwards by <see cref="GuardExtension"/> to flank the text row. Without
-    /// text, all bars are uniform.
+    /// Writes the bar heights of a symbol whose bars are top aligned. When the options carry a font the listed guard bars extend downwards by
+    /// <see cref="GuardExtension"/> to flank the text row. Without text, all bars are uniform.
     /// </summary>
     /// <param name="heights">The per-bar heights in modules to write.</param>
     /// <param name="barHeight">The digit bar height in modules.</param>
@@ -240,9 +272,8 @@ internal static class EanUpcEncoder
     }
 
     /// <summary>
-    /// Adds one text placement per digit, each centered in its own character cell. ISO/IEC 15420 prints
-    /// every digit of the interpretation below (or above, for add-ons) its own symbol character rather than
-    /// centering digit groups, so placement is per digit.
+    /// Adds one text placement per digit, each centered in its own character cell. ISO/IEC 15420 prints every digit of the interpretation below (or above, for
+    /// add-ons) its own symbol character rather than centering digit groups, so placement is per digit.
     /// </summary>
     /// <param name="digits">The digits to place.</param>
     /// <param name="firstCellLeft">The left edge of the first character cell, in modules.</param>
@@ -266,9 +297,8 @@ internal static class EanUpcEncoder
     }
 
     /// <summary>
-    /// Returns the prefix of a hyphenated number that contains the given count of digits, preserving the
-    /// caller's hyphenation and trimming a trailing hyphen. The ISBN, ISMN and ISSN captions reproduce the
-    /// number as the caller wrote it, without its check character.
+    /// Returns the prefix of a hyphenated number that contains the given count of digits, preserving the caller's hyphenation and trimming a trailing hyphen.
+    /// The ISBN, ISMN and ISSN captions reproduce the number as the caller wrote it, without its check character.
     /// </summary>
     /// <param name="text">The hyphenated input.</param>
     /// <param name="digitCount">The number of digits the prefix must contain.</param>
@@ -300,9 +330,8 @@ internal static class EanUpcEncoder
         => BuildEan13(digits, options, false, [], [], [], ref symbol);
 
     /// <summary>
-    /// Encodes thirteen validated digits into an EAN-13 symbol with a caption above the bars. The ISBN, ISMN
-    /// and ISSN symbologies print their own number above their EAN-13 symbol. The caption stands one module
-    /// above the bar tops, and the room it needs belongs to the renderer, which is what knows the font.
+    /// Encodes thirteen validated digits into an EAN-13 symbol with a caption above the bars. The ISBN, ISMN and ISSN symbologies print their own number above
+    /// their EAN-13 symbol. The caption stands one module above the bar tops, and the room it needs belongs to the renderer, which is what knows the font.
     /// </summary>
     /// <param name="digits">The thirteen digits, with the check digit already validated.</param>
     /// <param name="options">The options that control layout choices.</param>
@@ -335,8 +364,8 @@ internal static class EanUpcEncoder
         float barHeight = options.ResolveBarHeight(symbol.XDimension, NominalEan8BarHeight);
         FillGuardedHeights(heights, barHeight, Ean8GuardBars, options);
 
-        // ISO/IEC 15420 prints every digit below its own symbol character. Digits hang one module below the digit
-        // bars and flow past the extended guard bars, as in the nominal symbol drawing.
+        // ISO/IEC 15420 prints every digit below its own symbol character. Digits hang one module below the digit bars and flow past the extended guard bars,
+        // as in the nominal symbol drawing.
         if (options.Font is not null)
         {
             symbol.ReserveText(8, 8);
@@ -345,31 +374,56 @@ internal static class EanUpcEncoder
             AddDigits(digits[4..], 36F, 7F, BarcodeTextSide.BelowBars, textEdge, ref symbol);
         }
 
-        symbol.EndLinear(7, 7);
+        symbol.EndLinear(QuietZone, QuietZone);
     }
 
     /// <summary>
-    /// Writes the modules of an EAN-8 symbol: the guard patterns, four digits of number set A and four of
-    /// number set C.
+    /// Writes the modules of an EAN-8 symbol: the guard patterns, four digits of number set A and four of number set C.
     /// </summary>
     /// <param name="digits">The eight digits, with the check digit already validated.</param>
     /// <param name="modules">The <see cref="Ean8Width"/> modules to write, 1 for dark.</param>
     public static void WriteEan8Modules(ReadOnlySpan<char> digits, Span<byte> modules)
     {
         int position = 0;
-        AppendPattern(modules, ref position, 0b101, 3);
-        for (int i = 0; i < 4; i++)
+        AppendPattern(modules, ref position, NormalGuard, NormalGuardWidth);
+        foreach (char digit in digits[..4])
         {
-            AppendPattern(modules, ref position, NumberSetA[digits[i] - '0'], 7);
+            AppendCharacter(modules, ref position, NumberSetA, digit);
         }
 
-        AppendPattern(modules, ref position, 0b01010, 5);
-        for (int i = 4; i < 8; i++)
+        AppendPattern(modules, ref position, CentreGuard, CentreGuardWidth);
+        foreach (char digit in digits[4..8])
         {
-            AppendPattern(modules, ref position, NumberSetC[digits[i] - '0'], 7);
+            AppendCharacter(modules, ref position, NumberSetC, digit);
         }
 
-        AppendPattern(modules, ref position, 0b101, 3);
+        AppendPattern(modules, ref position, NormalGuard, NormalGuardWidth);
+    }
+
+    /// <summary>
+    /// Writes the modules of an EAN-13 symbol: the guard patterns, six left half digits of number sets A and B and six right half digits of number set C. The
+    /// leading digit of an EAN-13 number has no symbol character, and the number set sequence of the left half carries it.
+    /// </summary>
+    /// <param name="leftParity">The left half number set sequence from <see cref="Ean13LeftParity"/>, the first digit in the highest of six bits.</param>
+    /// <param name="digits">The twelve digits that take symbol characters.</param>
+    /// <param name="modules">The <see cref="Ean13Width"/> modules to write, 1 for dark.</param>
+    public static void WriteEan13Modules(int leftParity, ReadOnlySpan<char> digits, Span<byte> modules)
+    {
+        int position = 0;
+        AppendPattern(modules, ref position, NormalGuard, NormalGuardWidth);
+        for (int i = 0; i < 6; i++)
+        {
+            ReadOnlySpan<byte> numberSet = ((leftParity >> (5 - i)) & 1) == 0 ? NumberSetA : NumberSetB;
+            AppendCharacter(modules, ref position, numberSet, digits[i]);
+        }
+
+        AppendPattern(modules, ref position, CentreGuard, CentreGuardWidth);
+        foreach (char digit in digits[6..12])
+        {
+            AppendCharacter(modules, ref position, NumberSetC, digit);
+        }
+
+        AppendPattern(modules, ref position, NormalGuard, NormalGuardWidth);
     }
 
     /// <summary>
@@ -393,31 +447,14 @@ internal static class EanUpcEncoder
     {
         InlineArray128<byte> moduleStorage = default;
         Span<byte> modules = ((Span<byte>)moduleStorage)[..Ean13Width];
-        int position = 0;
-        AppendPattern(modules, ref position, 0b101, 3);
-
-        int parity = Ean13LeftParity[digits[0] - '0'];
-        for (int i = 1; i <= 6; i++)
-        {
-            ReadOnlySpan<byte> numberSet = ((parity >> (6 - i)) & 1) == 0 ? NumberSetA : NumberSetB;
-            AppendPattern(modules, ref position, numberSet[digits[i] - '0'], 7);
-        }
-
-        AppendPattern(modules, ref position, 0b01010, 5);
-        for (int i = 7; i <= 12; i++)
-        {
-            AppendPattern(modules, ref position, NumberSetC[digits[i] - '0'], 7);
-        }
-
-        AppendPattern(modules, ref position, 0b101, 3);
+        WriteEan13Modules(Ean13LeftParity[digits[0] - '0'], digits[1..], modules);
 
         BeginRuns(modules, options.XDimension ?? NominalXDimension, ref symbol, out Span<float> heights);
         float barHeight = options.ResolveBarHeight(symbol.XDimension, NominalBarHeight);
         FillGuardedHeights(heights, barHeight, Ean13GuardBars, options);
 
-        // ISO/IEC 15420 prints the leading digit in the leading quiet zone and every other digit below its
-        // own symbol character. Digits hang one module below the digit bars and flow past the extended
-        // guard bars, as in the nominal symbol drawing. A caption stands one module above the bar tops.
+        // ISO/IEC 15420 prints the leading digit in the leading quiet zone and every other digit below its own symbol character. Digits hang one module below
+        // the digit bars and flow past the extended guard bars, as in the nominal symbol drawing. A caption stands one module above the bar tops.
         if (options.Font is not null)
         {
             int captionLength = captionPrefix.Length + captionBody.Length + captionSuffix.Length;
@@ -442,6 +479,6 @@ internal static class EanUpcEncoder
             }
         }
 
-        symbol.EndLinear(11, 7);
+        symbol.EndLinear(Ean13LeadingQuietZone, QuietZone);
     }
 }

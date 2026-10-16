@@ -4,16 +4,15 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The Rectangular Micro QR Code symbology (rMQR), ISO/IEC 23941: a rectangular matrix of 7 to 17 module
-/// rows and 27 to 139 module columns, versions R7x43 to R17x139, with a finder pattern at the left end and a
-/// finder sub-pattern at the right end. It carries the characters U+0000 to U+00FF in Numeric, Alphanumeric
-/// and Byte mode segments with Reed-Solomon error correction at level M or H.
+/// The Rectangular Micro QR Code symbology (rMQR), ISO/IEC 23941: a rectangular matrix of 7 to 17 module rows and 27 to 139 module columns, versions R7x43 to
+/// R17x139, with a finder pattern at the left end and a finder sub-pattern at the right end. It carries the characters U+0000 to U+00FF in Numeric,
+/// Alphanumeric and Byte mode segments with Reed-Solomon error correction at level M or H.
 /// </summary>
 public sealed class RectangularMicroQrCodeSymbology : BarcodeSymbology
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="RectangularMicroQrCodeSymbology"/> class at error
-    /// correction level M. The symbol takes the version of the smallest area that holds the data.
+    /// Initializes a new instance of the <see cref="RectangularMicroQrCodeSymbology"/> class at error correction level M. The symbol takes the version of the
+    /// smallest area that holds the data.
     /// </summary>
     public RectangularMicroQrCodeSymbology()
         : this(QrErrorCorrectionLevel.M)
@@ -21,8 +20,8 @@ public sealed class RectangularMicroQrCodeSymbology : BarcodeSymbology
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="RectangularMicroQrCodeSymbology"/> class. The symbol takes
-    /// the version of the smallest area that holds the data at the level.
+    /// Initializes a new instance of the <see cref="RectangularMicroQrCodeSymbology"/> class. The symbol takes the version of the smallest area that holds the
+    /// data at the level.
     /// </summary>
     /// <param name="errorCorrectionLevel">The error correction level, M or H.</param>
     /// <exception cref="ArgumentException">The error correction level is L or Q.</exception>
@@ -40,8 +39,7 @@ public sealed class RectangularMicroQrCodeSymbology : BarcodeSymbology
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="RectangularMicroQrCodeSymbology"/> class with a fixed
-    /// version.
+    /// Initializes a new instance of the <see cref="RectangularMicroQrCodeSymbology"/> class with a fixed version.
     /// </summary>
     /// <param name="errorCorrectionLevel">The error correction level, M or H.</param>
     /// <param name="version">The version.</param>

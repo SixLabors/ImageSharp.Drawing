@@ -3,14 +3,14 @@
 
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The content checks of the components of GS1 Application Identifiers: the character sets of section 7.11
-/// of the GS1 General Specifications, the check digit and check character pair of sections 7.9.1 and 7.9.5,
-/// the dates of section 7.12, and the code lists and formats the GS1 Barcode Syntax Dictionary names.
+/// The content checks of the components of GS1 Application Identifiers: the character sets of section 7.11 of the GS1 General Specifications, the check digit
+/// and check character pair of sections 7.9.1 and 7.9.5, the dates of section 7.12, and the code lists and formats the GS1 Barcode Syntax Dictionary names.
 /// </summary>
 internal static class Gs1Linters
 {
@@ -30,14 +30,17 @@ internal static class Gs1Linters
     private const int MinimumIban = 11;
 
     /// <summary>
-    /// The characters of the check character pair, section 7.9.5: the digits and capital letters without
-    /// 0, 1, I and O, in the order of their values 0 to 31.
+    /// The length the coupon funder ID and serial number length indicators of a positive offer file coupon code add to.
+    /// </summary>
+    private const int LengthIndicatorOffset = 6;
+
+    /// <summary>
+    /// The characters of the check character pair, section 7.9.5: the digits and capital letters without 0, 1, I and O, in the order of their values 0 to 31.
     /// </summary>
     private const string CheckPairCharacters = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
     /// <summary>
-    /// GS1 AI encodable character set 82, Table 7-20. A <see cref="SearchValues{T}"/> instance checks a whole
-    /// component with one vectorized search.
+    /// GS1 AI encodable character set 82, Table 7-20. A <see cref="SearchValues{T}"/> instance checks a whole component with one vectorized search.
     /// </summary>
     private static readonly SearchValues<char> CharacterSet82 =
         SearchValues.Create("!\"%&'()*+,-./0123456789:;<=>?ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz");
@@ -48,20 +51,18 @@ internal static class Gs1Linters
     private static readonly SearchValues<char> CharacterSet39 = SearchValues.Create("#-/0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
 
     /// <summary>
-    /// The characters of an International Bank Account Number in electronic form, ISO 13616: digits and
-    /// capital letters.
+    /// The characters of an International Bank Account Number in electronic form, ISO 13616: digits and capital letters.
     /// </summary>
     private static readonly SearchValues<char> Iban = SearchValues.Create("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
 
     /// <summary>
     /// GS1 AI encodable character set 64, Table 7-22, without its pad character.
     /// </summary>
-    private static readonly SearchValues<char> CharacterSet64 =
-        SearchValues.Create("-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz");
+    private static readonly SearchValues<char> CharacterSet64 = SearchValues.Create("-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz");
 
     /// <summary>
-    /// Gets the ISO 4217 numeric currency codes 000 to 999 as a bit field, code n at bit 7 - (n mod 8) of
-    /// byte n div 8. The constant bytes compile into the assembly data, so reading them allocates nothing.
+    /// Gets the ISO 4217 numeric currency codes 000 to 999 as a bit field, code n at bit 7 - (n mod 8) of byte n div 8. The constant bytes compile into the
+    /// assembly data, so reading them allocates nothing.
     /// </summary>
     private static ReadOnlySpan<byte> Iso4217Numeric =>
     [
@@ -76,8 +77,8 @@ internal static class Gs1Linters
     ];
 
     /// <summary>
-    /// Gets the reference values of Table 7-18 by character code, 0 to 81 for the characters of character
-    /// set 82 in code order, and 255 for the other codes below 128.
+    /// Gets the reference values of Table 7-18 by character code, 0 to 81 for the characters of character set 82 in code order, and 255 for the other codes
+    /// below 128.
     /// </summary>
     private static ReadOnlySpan<byte> ReferenceValues =>
     [
@@ -92,9 +93,8 @@ internal static class Gs1Linters
     ];
 
     /// <summary>
-    /// Gets the first 97 primes, the weights of section 7.9.5 step 2 from the rightmost data character. A
-    /// component of character set 82 is at most 90 characters, so the data before a check pair takes fewer
-    /// weights than these.
+    /// Gets the first 97 primes, the weights of section 7.9.5 step 2 from the rightmost data character. A component of character set 82 is at most 90
+    /// characters, so the data before a check pair takes fewer weights than these.
     /// </summary>
     private static ReadOnlySpan<ushort> Primes =>
     [
@@ -108,11 +108,10 @@ internal static class Gs1Linters
     ];
 
     /// <summary>
-    /// Gets the 431 package type codes of Application Identifier (7041), each packed into one number and
-    /// sorted for a binary search. A code is one to three characters from 0 to 9 and A to Z, so it packs as
-    /// three base 37 digits, the first character the most significant: 0 for no character, 1 to 10 for the
-    /// digits and 11 to 36 for the letters. "1A" is 2 x 1369 + 11 x 37 + 0 = 3145, and the largest key,
-    /// 36 x 1369 + 36 x 37 + 36 = 50652, fits a <see cref="ushort"/>.
+    /// Gets the 431 package type codes of Application Identifier (7041), each packed into one number and sorted for a binary search. A code is one to three
+    /// characters from 0 to 9 and A to Z, so it packs as three base 37 digits, the first character the most significant: 0 for no character, 1 to 10 for the
+    /// digits and 11 to 36 for the letters. "1A" is 2 x 1369 + 11 x 37 + 0 = 3145, and the largest key, 36 x 1369 + 36 x 37 + 36 = 50652, fits a
+    /// <see cref="ushort"/>.
     /// </summary>
     private static ReadOnlySpan<ushort> PackageTypes =>
     [
@@ -150,8 +149,8 @@ internal static class Gs1Linters
     ];
 
     /// <summary>
-    /// Checks the characters of a component against its character set: N the digits, X GS1 AI encodable
-    /// character set 82 of Table 7-20, Y character set 39 of Table 7-21 and Z character set 64 of Table 7-22.
+    /// Checks the characters of a component against its character set: N the digits, X GS1 AI encodable character set 82 of Table 7-20, Y character set 39 of
+    /// Table 7-21 and Z character set 64 of Table 7-22.
     /// </summary>
     /// <param name="characterSet">The character set, 'N', 'X', 'Y' or 'Z'.</param>
     /// <param name="identifier">The Application Identifier, for the error message.</param>
@@ -159,8 +158,7 @@ internal static class Gs1Linters
     /// <exception cref="ArgumentException">A character is not in the set.</exception>
     public static void CheckCharacterSet(char characterSet, ReadOnlySpan<char> identifier, ReadOnlySpan<char> data)
     {
-        // Character set 64 is base64 with the pad character, which may only end the data, padding it to a
-        // multiple of three characters with one or two pads.
+        // Character set 64 is base64 with the pad character, which may only end the data, padding it to a multiple of three characters with one or two pads.
         if (characterSet == 'Z')
         {
             int pads = data.Length - data.TrimEnd('=').Length;
@@ -207,8 +205,8 @@ internal static class Gs1Linters
         switch (linter)
         {
             case Gs1Linter.Csum:
-                // Section 7.9.1: the digits weigh 3 and 1 alternately from the digit before the check digit,
-                // and the check digit lifts the sum to a multiple of 10.
+                // Section 7.9.1: the digits weigh 3 and 1 alternately from the digit before the check digit, and the check digit lifts the sum to a multiple of
+                // 10.
                 if (data.Length == 0 || data[^1] - '0' != Gs1Data.ComputeCheckDigit(data[..^1]))
                 {
                     ThrowInvalidData(identifier, "has an incorrect check digit", nameof(data));
@@ -221,8 +219,7 @@ internal static class Gs1Linters
                 break;
 
             case Gs1Linter.GcpPos1:
-                // A GS1 Company Prefix is at least four digits. Which prefixes are allocated is not known
-                // here, so only the digits are checked.
+                // A GS1 Company Prefix is at least four digits. Which prefixes are allocated is not known here, so only the digits are checked.
                 if (data.Length < MinimumCompanyPrefix || data[..MinimumCompanyPrefix].ContainsAnyExceptInRange('0', '9'))
                 {
                     ThrowInvalidData(identifier, "does not start with a GS1 Company Prefix of at least four digits", nameof(data));
@@ -315,8 +312,7 @@ internal static class Gs1Linters
                 break;
 
             case Gs1Linter.PercentEncoded:
-                // Section 7.11: the AIs 4300 to 4320 may percent-encode characters as RFC 3986 defines, so
-                // every percent sign starts two hexadecimal digits.
+                // Section 7.11: the AIs 4300 to 4320 may percent-encode characters as RFC 3986 defines, so every percent sign starts two hexadecimal digits.
                 for (int i = 0; i < data.Length; i++)
                 {
                     if (data[i] == '%')
@@ -350,7 +346,7 @@ internal static class Gs1Linters
 
             case Gs1Linter.Latitude:
                 // Section 7.13: X = 10 000 000 x (latitude + 90), so it is at most 1 800 000 000.
-                if (data.Length != 10 || long.Parse(data, System.Globalization.CultureInfo.InvariantCulture) > 1_800_000_000)
+                if (data.Length != 10 || long.Parse(data, CultureInfo.InvariantCulture) > 1_800_000_000)
                 {
                     ThrowInvalidData(identifier, "does not carry a latitude of ten digits up to 1800000000", nameof(data));
                 }
@@ -359,7 +355,7 @@ internal static class Gs1Linters
 
             case Gs1Linter.Longitude:
                 // Section 7.13: Y = 10 000 000 x ((longitude + 360) mod 360), so it is at most 3 600 000 000.
-                if (data.Length != 10 || long.Parse(data, System.Globalization.CultureInfo.InvariantCulture) > 3_600_000_000)
+                if (data.Length != 10 || long.Parse(data, CultureInfo.InvariantCulture) > 3_600_000_000)
                 {
                     ThrowInvalidData(identifier, "does not carry a longitude of ten digits up to 3600000000", nameof(data));
                 }
@@ -472,8 +468,8 @@ internal static class Gs1Linters
     }
 
     /// <summary>
-    /// Throws the exception for data that fails a check. The message names the Application Identifier, so
-    /// the caller states the problem as the end of a sentence about its data.
+    /// Throws the exception for data that fails a check. The message names the Application Identifier, so the caller states the problem as the end of a
+    /// sentence about its data.
     /// </summary>
     /// <param name="identifier">The Application Identifier.</param>
     /// <param name="problem">The problem, as the end of a sentence about the data.</param>
@@ -485,8 +481,8 @@ internal static class Gs1Linters
         => throw new ArgumentException($"The data of Application Identifier ({identifier}) {problem}.", paramName);
 
     /// <summary>
-    /// Returns whether a bit is set in a bit field whose bytes hold their bits from the most significant. A
-    /// bit past the end of the field is clear, so trailing zero bytes are left out of the fields.
+    /// Returns whether a bit is set in a bit field whose bytes hold their bits from the most significant. A bit past the end of the field is clear, so trailing
+    /// zero bytes are left out of the fields.
     /// </summary>
     /// <param name="field">The bit field.</param>
     /// <param name="bit">The bit index.</param>
@@ -511,8 +507,8 @@ internal static class Gs1Linters
     }
 
     /// <summary>
-    /// Checks a date YYMMDD. Section 7.12, Figure 7-17: the two digit year is the year within 49 years
-    /// before and 50 years after the current year, which decides whether February has 29 days.
+    /// Checks a date YYMMDD. Section 7.12, Figure 7-17: the two digit year is the year within 49 years before and 50 years after the current year, which
+    /// decides whether February has 29 days.
     /// </summary>
     /// <param name="identifier">The Application Identifier.</param>
     /// <param name="data">The six digits.</param>
@@ -524,9 +520,8 @@ internal static class Gs1Linters
             ThrowInvalidData(identifier, "does not carry a date of six digits YYMMDD", nameof(data));
         }
 
-        // The current century holds the years from 49 years back to 50 years ahead. A two digit year more
-        // than 50 years ahead in the current century belongs to the century before, and one more than 49
-        // years back belongs to the century after.
+        // The current century holds the years from 49 years back to 50 years ahead. A two digit year more than 50 years ahead in the current century belongs to
+        // the century before, and one more than 49 years back belongs to the century after.
         int currentYear = DateTime.UtcNow.Year;
         int century = currentYear / 100 * 100;
         int year = century + Number(data[..2]);
@@ -564,9 +559,8 @@ internal static class Gs1Linters
             ThrowInvalidData(identifier, $"carries the month {month:D2}, which is not 01 to 12", nameof(data));
         }
 
-        // The runtime gives the days of the month in the Gregorian calendar, leap years included, for the
-        // years 1 to 9999. The calendar repeats every 400 years, so the year 0000 of a YYYYMMDD date has
-        // the month lengths of the year 400.
+        // The runtime gives the days of the month in the Gregorian calendar, leap years included, for the years 1 to 9999. The calendar repeats every 400
+        // years, so the year 0000 of a YYYYMMDD date has the month lengths of the year 400.
         int lastDay = DateTime.DaysInMonth(year == 0 ? 400 : year, month);
         if (day > lastDay || (day == 0 && !dayZero))
         {
@@ -575,9 +569,8 @@ internal static class Gs1Linters
     }
 
     /// <summary>
-    /// Checks the check character pair of section 7.9.5: the reference values of Table 7-18 weighted by the
-    /// primes 2, 3, 5 and on from the rightmost data character, summed modulo 1021, give two values of five
-    /// bits each, which the last two characters stand for.
+    /// Checks the check character pair of section 7.9.5: the reference values of Table 7-18 weighted by the primes 2, 3, 5 and on from the rightmost data
+    /// character, summed modulo 1021, give two values of five bits each, which the last two characters stand for.
     /// </summary>
     /// <param name="identifier">The Application Identifier.</param>
     /// <param name="data">The data, ending with the check character pair.</param>
@@ -672,8 +665,7 @@ internal static class Gs1Linters
     }
 
     /// <summary>
-    /// Checks a piece number and a total count: the data splits into two halves of equal length, neither
-    /// is zero, and the piece is not after the total.
+    /// Checks a piece number and a total count: the data splits into two halves of equal length, neither is zero, and the piece is not after the total.
     /// </summary>
     /// <param name="identifier">The Application Identifier.</param>
     /// <param name="data">The data.</param>
@@ -699,9 +691,8 @@ internal static class Gs1Linters
     }
 
     /// <summary>
-    /// Checks an International Bank Account Number, ISO 13616: an ISO 3166-1 alpha-2 country code, then
-    /// characters whose value, read with the first four characters moved to the end and each letter as two
-    /// digits from 10 to 35, leaves 1 modulo 97.
+    /// Checks an International Bank Account Number, ISO 13616: an ISO 3166-1 alpha-2 country code, then characters whose value, read with the first four
+    /// characters moved to the end and each letter as two digits from 10 to 35, leaves 1 modulo 97.
     /// </summary>
     /// <param name="identifier">The Application Identifier.</param>
     /// <param name="data">The data.</param>
@@ -728,9 +719,8 @@ internal static class Gs1Linters
     }
 
     /// <summary>
-    /// Checks the positive offer file coupon code of Application Identifier (8112): the format code 0 or 1,
-    /// the coupon funder ID with its length indicator, the six digit offer code and the serial number with
-    /// its length indicator, and nothing after them.
+    /// Checks the positive offer file coupon code of Application Identifier (8112): the format code 0 or 1, the coupon funder ID with its length indicator, the
+    /// six digit offer code and the serial number with its length indicator, and nothing after them.
     /// </summary>
     /// <param name="identifier">The Application Identifier.</param>
     /// <param name="data">The data.</param>
@@ -746,22 +736,21 @@ internal static class Gs1Linters
             ThrowInvalidData(identifier, "does not start with the format code 0 or 1", nameof(data));
         }
 
-        // The funder ID and the serial number are each 6 digits longer than their length indicator; the
-        // funder indicator is 0 to 6.
+        // The funder ID and the serial number are each LengthIndicatorOffset digits longer than their length indicator; the funder indicator is 0 to 6.
         int position = 1;
         if (position >= data.Length || data[position] > '6')
         {
             ThrowInvalidData(identifier, "does not carry a coupon funder ID length indicator of 0 to 6", nameof(data));
         }
 
-        position += 1 + (data[position] - '0') + 6;
-        position += 6;
+        position += 1 + (data[position] - '0') + LengthIndicatorOffset;
+        position += NorthAmericanCouponCode.OfferCodeLength;
         if (position >= data.Length)
         {
             ThrowInvalidData(identifier, "is too short for its coupon funder ID, offer code and serial number length indicator", nameof(data));
         }
 
-        position += 1 + (data[position] - '0') + 6;
+        position += 1 + (data[position] - '0') + LengthIndicatorOffset;
         if (position != data.Length)
         {
             ThrowInvalidData(identifier, position > data.Length ? "is too short for its serial number" : "carries data after the serial number", nameof(data));

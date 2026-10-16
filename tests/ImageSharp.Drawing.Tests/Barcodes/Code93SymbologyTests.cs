@@ -6,10 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Code93Symbology"/>. Each expected run string is the alternating bar and
-/// space module widths, starting with a bar, taken from an independent reference implementation through
-/// its raw encoding API with the check characters turned on. The patterns are Table 2 of ANSI/AIM
-/// BC5-1995, and the two reference implementations consulted agree on them element for element.
+/// Encoder tests for <see cref="Code93Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, taken from an
+/// independent reference implementation through its raw encoding API with the check characters turned on. The patterns are Table 2 of ANSI/AIM BC5-1995, and
+/// the two reference implementations consulted agree on them element for element.
 /// </summary>
 public class Code93SymbologyTests
 {
@@ -21,10 +20,9 @@ public class Code93SymbologyTests
         => Assert.Equal(expected, string.Concat(Encode(text)));
 
     /// <summary>
-    /// ANSI/AIM BC5-1995 fixes both check characters, so every symbol carries them. Decoding the
-    /// reference vectors gives CODE93PV, ABC-123LN and TEST93+6, which names the two characters that
-    /// follow the data. Their expected patterns come from encoding those characters as data, because
-    /// Table 2 gives a symbol character one pattern for every position.
+    /// ANSI/AIM BC5-1995 fixes both check characters, so every symbol carries them. Decoding the reference vectors gives CODE93PV, ABC-123LN and TEST93+6,
+    /// which names the two characters that follow the data. Their expected patterns come from encoding those characters as data, because Table 2 gives a symbol
+    /// character one pattern for every position.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="checks">The two check characters the symbol carries.</param>
@@ -46,9 +44,8 @@ public class Code93SymbologyTests
     }
 
     /// <summary>
-    /// Section 2.6 measures a symbol as <c>(9 * (C + 4) + 1) * X</c> before its quiet zones, where C is
-    /// the data character count. The four are the two check characters, the start character and the stop
-    /// character, and the one is the bar that terminates the stop character.
+    /// Section 2.6 measures a symbol as <c>(9 * (C + 4) + 1) * X</c> before its quiet zones, where C is the data character count. The four are the two check
+    /// characters, the start character and the stop character, and the one is the bar that terminates the stop character.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]
@@ -67,8 +64,8 @@ public class Code93SymbologyTests
     }
 
     /// <summary>
-    /// The data set is the 43 characters of Code 39. The four shift characters carry no data of their
-    /// own, so the lowercase letters this library writes them as are not input.
+    /// The data set is the 43 characters of Code 39. The four shift characters carry no data of their own, so the lowercase letters this library writes them as
+    /// are not input.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]

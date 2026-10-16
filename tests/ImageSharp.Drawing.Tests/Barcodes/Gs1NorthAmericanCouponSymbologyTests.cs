@@ -6,11 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Gs1NorthAmericanCouponSymbology"/>. Each expected value is the module rows of
-/// the symbol from the top down, separator rows included, 1 for dark, taken from an independent reference
-/// implementation through its raw encoding API and confirmed by a second one. Two of the inputs are Examples 1
-/// and 2 of Appendix C of the North American Coupon Application Guideline, with the data the guideline gives
-/// as encoded.
+/// Encoder tests for <see cref="Gs1NorthAmericanCouponSymbology"/>. Each expected value is the module rows of the symbol from the top down, separator rows
+/// included, 1 for dark, taken from an independent reference implementation through its raw encoding API and confirmed by a second one. Two of the inputs are
+/// Examples 1 and 2 of Appendix C of the North American Coupon Application Guideline, with the data the guideline gives as encoded.
 /// </summary>
 public class Gs1NorthAmericanCouponSymbologyTests
 {
@@ -96,9 +94,8 @@ public class Gs1NorthAmericanCouponSymbologyTests
             SymbolEncoder.Read(new Gs1NorthAmericanCouponSymbology(segments), text, new BarcodeOptions(), SymbolEncoder.RowModuleStrings));
 
     /// <summary>
-    /// Section 5.5 of the guideline: "The only human readable digits shown from the GS1 DataBar barcode will
-    /// be the GS1 Company Prefix and Offer Code separated by a dash." Figure 1 prints them above the symbol,
-    /// centred, as 0614141-654321. Example 2 gives the offer code 1234 as the six digits 001234.
+    /// Section 5.5 of the guideline: "The only human readable digits shown from the GS1 DataBar barcode will be the GS1 Company Prefix and Offer Code separated
+    /// by a dash." Figure 1 prints them above the symbol, centred, as 0614141-654321. Example 2 gives the offer code 1234 as the six digits 001234.
     /// </summary>
     [Theory]
     [InlineData("(8110)1061414165432131501101201211014092110256100126663101231", "0614141-654321")]
@@ -118,9 +115,8 @@ public class Gs1NorthAmericanCouponSymbologyTests
     }
 
     /// <summary>
-    /// Section 5.4 of the guideline: "Each row shall be 34X high, and the separator pattern shall be 3X
-    /// (minimum) high", with a nominal X dimension of 0.33 millimetre. Figure 1 has eight segments in a row,
-    /// 200 modules, which is the default.
+    /// Section 5.4 of the guideline: "Each row shall be 34X high, and the separator pattern shall be 3X (minimum) high", with a nominal X dimension of 0.33
+    /// millimetre. Figure 1 has eight segments in a row, 200 modules, which is the default.
     /// </summary>
     [Fact]
     public void Gs1NorthAmericanCoupon_HasEightSegmentRowsOfThirtyFourModules()
@@ -137,8 +133,8 @@ public class Gs1NorthAmericanCouponSymbologyTests
     }
 
     /// <summary>
-    /// Table C of the guideline: a leap year allows 29 February, the start date of data field 4 may equal the
-    /// expiration date of data field 3, and data field 9 carries its four miscellaneous elements.
+    /// Table C of the guideline: a leap year allows 29 February, the start date of data field 4 may equal the expiration date of data field 3, and data field 9
+    /// carries its four miscellaneous elements.
     /// </summary>
     [Theory]
     [InlineData("(8110)106141410012342501106503120229")]
@@ -147,10 +143,9 @@ public class Gs1NorthAmericanCouponSymbologyTests
         => Assert.Null(Record.Exception(() => SymbolEncoder.Encode(new Gs1NorthAmericanCouponSymbology(), text, new BarcodeOptions())));
 
     /// <summary>
-    /// The symbol carries one element string, Application Identifier (8110), whose coupon code follows Table C
-    /// of the guideline: digits only, at most 70 of them, every required element present, every indicator and
-    /// code in its range, valid dates with the start date not after the expiration date, and the optional data
-    /// fields 1, 2, 3, 4, 5, 6 and 9 in increasing order.
+    /// The symbol carries one element string, Application Identifier (8110), whose coupon code follows Table C of the guideline: digits only, at most 70 of
+    /// them, every required element present, every indicator and code in its range, valid dates with the start date not after the expiration date, and the
+    /// optional data fields 1, 2, 3, 4, 5, 6 and 9 in increasing order.
     /// </summary>
     [Theory]
     [InlineData("(01)09521234543213")]
@@ -170,8 +165,8 @@ public class Gs1NorthAmericanCouponSymbologyTests
         => Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new Gs1NorthAmericanCouponSymbology(), text, new BarcodeOptions()));
 
     /// <summary>
-    /// The guideline allows "a minimum of 2 segments per row", and a row holds whole segment pairs up to the
-    /// 20 segments of section 5.5.2.3.2 of the GS1 General Specifications.
+    /// The guideline allows "a minimum of 2 segments per row", and a row holds whole segment pairs up to the 20 segments of section 5.5.2.3.2 of the GS1
+    /// General Specifications.
     /// </summary>
     [Theory]
     [InlineData(0)]

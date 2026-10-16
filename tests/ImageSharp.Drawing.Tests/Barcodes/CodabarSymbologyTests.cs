@@ -6,10 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="CodabarSymbology"/>. Each expected run string is the alternating bar and
-/// space module widths, starting with a bar, from the reference implementation's raw encoding API. The
-/// reference draws a wide element three modules wide and emits a narrow gap after the stop character, so
-/// the test drops that trailing gap before it compares.
+/// Encoder tests for <see cref="CodabarSymbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, from the
+/// reference implementation's raw encoding API. The reference draws a wide element three modules wide and emits a narrow gap after the stop character, so the
+/// test drops that trailing gap before it compares.
 /// </summary>
 public class CodabarSymbologyTests
 {
@@ -30,10 +29,9 @@ public class CodabarSymbologyTests
         => Assert.Equal(reference[..^1], Encode(text));
 
     /// <summary>
-    /// The check character lifts the sum of the values of the start character, the data and the stop
-    /// character to the next multiple of sixteen. For A40156B the values are 16, 4, 0, 1, 5, 6 and 17,
-    /// which sum to 49, so the check character has value 15, which is +. It sits before the stop
-    /// character. The expected runs are the reference implementation's with its check character on.
+    /// The check character lifts the sum of the values of the start character, the data and the stop character to the next multiple of sixteen. For A40156B the
+    /// values are 16, 4, 0, 1, 5, 6 and 17, which sum to 49, so the check character has value 15, which is +. It sits before the stop character. The expected
+    /// runs are the reference implementation's with its check character on.
     /// </summary>
     [Fact]
     public void CalculatesTheModuloSixteenCheckCharacter()
@@ -43,8 +41,8 @@ public class CodabarSymbologyTests
     }
 
     /// <summary>
-    /// A supplied check character sits before the stop character. It is validated against the rest of the
-    /// symbol and carried once, so the symbol is the one the calculated check character produces.
+    /// A supplied check character sits before the stop character. It is validated against the rest of the symbol and carried once, so the symbol is the one the
+    /// calculated check character produces.
     /// </summary>
     [Fact]
     public void ValidatesASuppliedCheckCharacter()
@@ -57,8 +55,8 @@ public class CodabarSymbologyTests
     }
 
     /// <summary>
-    /// The printed line shows the input as given, the start and stop characters included. A check
-    /// character prints before the stop character by default, and a caller can keep it off the line.
+    /// The printed line shows the input as given, the start and stop characters included. A check character prints before the stop character by default, and a
+    /// caller can keep it off the line.
     /// </summary>
     /// <param name="checkCharacter">Whether the symbol carries the check character, and whether the encoder calculates it or validates it.</param>
     /// <param name="printCheckCharacter">Whether the check character is part of the printed line.</param>
@@ -80,10 +78,9 @@ public class CodabarSymbologyTests
     }
 
     /// <summary>
-    /// Every character is seven elements of which two are wide, or three for the start and stop
-    /// characters and the symbols : / . +, and a narrow gap separates the characters. With a wide element
-    /// of three modules a symbol of C characters, D of them with three wide elements among the data,
-    /// spans 12C + 2D + 3 modules before its quiet zones.
+    /// Every character is seven elements of which two are wide, or three for the start and stop characters and the symbols : / . +, and a narrow gap separates
+    /// the characters. With a wide element of three modules a symbol of C characters, D of them with three wide elements among the data, spans 12C + 2D + 3
+    /// modules before its quiet zones.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="wideDataCharacters">The number of data characters with three wide elements.</param>

@@ -1,29 +1,25 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Encodation for Code 16K, AIM USS-16K. Section 2.1: a symbol is 2 to 16 rows, and each row is a start
-/// character, a one module guard bar, five symbol characters and a stop character, 70 modules in all.
-/// The symbol characters are ordered from the first row down. The first is the starting symbol character
-/// and the last two are the check characters. Section 2.2: a symbol character is the eleven module
-/// Code 128 pattern of Table 2, three spaces alternating with three bars, starting with a space.
+/// Encodation for Code 16K, AIM USS-16K. Section 2.1: a symbol is 2 to 16 rows, and each row is a start character, a one module guard bar, five symbol
+/// characters and a stop character, 70 modules in all. The symbol characters are ordered from the first row down. The first is the starting symbol character
+/// and the last two are the check characters. Section 2.2: a symbol character is the eleven module Code 128 pattern of Table 2, three spaces alternating with
+/// three bars, starting with a space.
 /// </summary>
 internal static class Code16KEncoder
 {
     /// <summary>
-    /// The quiet zone in modules before the start character: the "ten modules adjacent to the start
-    /// pattern" of section 3.4.
+    /// The quiet zone in modules before the start character: the "ten modules adjacent to the start pattern" of section 3.4.
     /// </summary>
     public const int LeadingQuietZone = 10;
 
     /// <summary>
-    /// The quiet zone in modules after the stop character: the "one module adjacent to the stop pattern"
-    /// of section 3.4.
+    /// The quiet zone in modules after the stop character: the "one module adjacent to the stop pattern" of section 3.4.
     /// </summary>
     public const int TrailingQuietZone = 1;
 
@@ -63,14 +59,13 @@ internal static class Code16KEncoder
     public const int Modulus = 107;
 
     /// <summary>
-    /// The pad character, section 2.3.5: "When it appears at the end of the symbol characters, just
-    /// before the check characters, it represents no data."
+    /// The pad character, section 2.3.5: "When it appears at the end of the symbol characters, just before the check characters, it represents no data."
     /// </summary>
     public const int Pad = 103;
 
     /// <summary>
-    /// The double shift of code sets A and B, Double Shift B in code set A and Double Shift A in code set B,
-    /// Table 2. Code sets A and B take the values 98 to 101 of Code 128: Shift, Code C, Code B and Code A.
+    /// The double shift of code sets A and B, Double Shift B in code set A and Double Shift A in code set B, Table 2. Code sets A and B take the values 98 to
+    /// 101 of Code 128: Shift, Code C, Code B and Code A.
     /// </summary>
     private const int DoubleShift = 104;
 
@@ -100,20 +95,17 @@ internal static class Code16KEncoder
     private const int CodeSetCTripleShiftB = 106;
 
     /// <summary>
-    /// The pattern of the value 106, the one symbol character Table 2 defines beyond the Code 128 set,
-    /// packed as <see cref="Patterns"/> packs its patterns.
+    /// The pattern of the value 106, the one symbol character Table 2 defines beyond the Code 128 set, packed as <see cref="Patterns"/> packs its patterns.
     /// </summary>
     private const uint TripleShiftPattern = 0x211133;
 
     /// <summary>
-    /// The symbol characters a symbol carries beyond its data: the starting symbol character and the two
-    /// check characters.
+    /// The symbol characters a symbol carries beyond its data: the starting symbol character and the two check characters.
     /// </summary>
     private const int Overhead = 3;
 
     /// <summary>
-    /// The longest text a symbol carries: two digits per symbol character in code set C over the data
-    /// symbol characters of sixteen rows.
+    /// The longest text a symbol carries: two digits per symbol character in code set C over the data symbol characters of sixteen rows.
     /// </summary>
     private const int MaximumText = ((MaximumRows * CharactersPerRow) - Overhead) * 2;
 
@@ -159,9 +151,60 @@ internal static class Code16KEncoder
     }
 
     /// <summary>
-    /// Gets the element widths of the symbol characters 0 to 105, the Code 128 patterns of Table 2, packed four
-    /// bits per element, the first element in the highest bits: six elements each, three spaces and three
-    /// bars of one to four modules.
+    /// The starting modes of Table 3 that the encoder uses, with their mode values.
+    /// </summary>
+    private enum StartingMode
+    {
+        /// <summary>
+        /// The symbol starts in code set A.
+        /// </summary>
+        CodeSetA = 0,
+
+        /// <summary>
+        /// The symbol starts in code set B.
+        /// </summary>
+        CodeSetB = 1,
+
+        /// <summary>
+        /// The symbol starts in code set C.
+        /// </summary>
+        CodeSetC = 2,
+
+        /// <summary>
+        /// The symbol starts in code set C with an implied Shift B, so the first character is in code set B.
+        /// </summary>
+        CodeSetCShiftB = 5,
+
+        /// <summary>
+        /// The symbol starts in code set C with an implied Double Shift B, so the first two characters are in code set B.
+        /// </summary>
+        CodeSetCDoubleShiftB = 6,
+    }
+
+    /// <summary>
+    /// The code set that carries the first character, at a position or after it, that only one of code sets A and B carries.
+    /// </summary>
+    private enum FirstExclusive : byte
+    {
+        /// <summary>
+        /// No character from the position on is carried by only one of code sets A and B.
+        /// </summary>
+        None,
+
+        /// <summary>
+        /// A control character, which only code set A carries, comes first.
+        /// </summary>
+        SetA,
+
+        /// <summary>
+        /// A lower case character, which only code set B carries, comes first.
+        /// </summary>
+        SetB,
+    }
+
+    /// <summary>
+    /// Gets the element widths of the symbol characters 0 to 105, the Code 128 patterns of Table 2, packed four bits per element, the first element in the
+    /// highest bits: six elements each, three spaces and three bars of one to four modules.
     /// </summary>
     private static ReadOnlySpan<uint> Patterns =>
     [
@@ -182,8 +225,8 @@ internal static class Code16KEncoder
     ];
 
     /// <summary>
-    /// Gets the eight start patterns of Table 4, bar, space, bar and space, one nibble each. Table 5 gives
-    /// the stop patterns the same widths with the bars and spaces exchanged.
+    /// Gets the eight start patterns of Table 4, bar, space, bar and space, one nibble each. Table 5 gives the stop patterns the same widths with the bars and
+    /// spaces exchanged.
     /// </summary>
     private static ReadOnlySpan<ushort> StartPatterns => [0x3211, 0x2221, 0x2122, 0x1411, 0x1132, 0x1231, 0x1114, 0x3112];
 
@@ -209,122 +252,101 @@ internal static class Code16KEncoder
                 nameof(text));
         }
 
-        // The lookahead tables hold three bytes for every position and one past the end. A data character
-        // costs at most two symbol characters, and the symbol adds three, so the values take twice the
-        // text and three more, and at least the sixteen rows of the largest symbol. The text is bounded
-        // above, so a short text works inline and a longer one rents each buffer once.
-        int tableLength = (text.Length + 1) * 3;
+        int invalid = text.IndexOfAnyExceptInRange('\0', '\u007F');
+        if (invalid >= 0)
+        {
+            throw new ArgumentException($"Code 16K encodes ASCII 0 to 127; {text.CodePointAt(invalid).ToDisplayString()} is outside that range.", nameof(text));
+        }
+
+        // The lookahead takes one entry for every position and one past the end, which the text bound keeps inline. A data character costs at most two symbol
+        // characters, and the symbol adds three, so the values take twice the text and three more, and at least the sixteen rows of the largest symbol. A short
+        // text keeps the values inline and a longer one rents them once.
+        InlineArray256<Lookahead> lookaheadStorage = default;
+        Span<Lookahead> lookahead = ((Span<Lookahead>)lookaheadStorage)[..(text.Length + 1)];
         int valueLength = Math.Max((text.Length * 2) + Overhead, MaximumRows * CharactersPerRow);
-        InlineArray256<byte> tableStorage = default;
         InlineArray128<int> valueStorage = default;
-        ValueListBuilder<byte> tables = tableLength <= 256 ? new(tableStorage) : new(tableLength);
-        ValueListBuilder<int> values = valueLength <= 128 ? new(valueStorage) : new(valueLength);
+        PooledBuffer<int> rented = default;
+        Span<int> values = valueLength <= 128
+            ? ((Span<int>)valueStorage)[..valueLength]
+            : (rented = new PooledBuffer<int>(valueLength)).Span;
+
         try
         {
-            int total = Encode(text, tables.AppendSpan(tableLength), values.AppendSpan(valueLength));
-            WriteRows(values.AsSpan()[..total], readable, options, ref symbol);
+            int total = Encode(text, lookahead, values);
+            WriteRows(values[..total], readable, options, ref symbol);
         }
         finally
         {
-            values.Dispose();
-            tables.Dispose();
+            rented.Dispose();
         }
     }
 
     /// <summary>
-    /// Encodes text into the symbol character values of the whole symbol: the starting symbol character,
-    /// the data with its code and shift characters, the pad characters and the two check characters, five
-    /// per row. Appendix G chooses the starting mode and the code and shift characters.
+    /// Encodes text into the symbol character values of the whole symbol: the starting symbol character, the data with its code and shift characters, the pad
+    /// characters and the two check characters, five per row. Appendix G chooses the starting mode and the code and shift characters.
     /// </summary>
-    /// <param name="text">The text to encode, at most <see cref="MaximumText"/> characters.</param>
-    /// <param name="tables">The scratch for the lookahead tables, three bytes for every position and one past the end.</param>
+    /// <param name="text">The text to encode, ASCII 0 to 127 and at most <see cref="MaximumText"/> characters.</param>
+    /// <param name="lookahead">The scratch for the lookahead, one entry for every position and one past the end.</param>
     /// <param name="values">The buffer that receives the symbol character values.</param>
     /// <returns>The number of symbol character values, five per row.</returns>
-    /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode, or more data than sixteen rows hold.</exception>
-    private static int Encode(ReadOnlySpan<char> text, Span<byte> tables, Span<int> values)
+    /// <exception cref="ArgumentException">The text holds more data than sixteen rows hold.</exception>
+    private static int Encode(ReadOnlySpan<char> text, Span<Lookahead> lookahead, Span<int> values)
     {
-        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
-        while (codePoints.MoveNext())
-        {
-            CodePoint current = codePoints.Current;
-            if (!current.IsAscii)
-            {
-                throw new ArgumentException(
-                    $"Code 16K encodes ASCII 0 to 127; {current.ToDisplayString()} is outside that range.",
-                    nameof(text));
-            }
-        }
-
         int capacity = (MaximumRows * CharactersPerRow) - Overhead;
         int n = text.Length;
 
-        // The rules of Appendix G depend on the digit run from a position and on which of a control
-        // character or a lower case character comes first. Each table holds that for every position, with
-        // one entry past the end, and every entry fits a byte with the text bounded above.
-        int lookahead = n + 1;
-        Span<byte> digits = tables[..lookahead];
-        Span<byte> nextControl = tables.Slice(lookahead, lookahead);
-        Span<byte> nextLower = tables.Slice(lookahead * 2, lookahead);
-        digits[n] = 0;
-        nextControl[n] = byte.MaxValue;
-        nextLower[n] = byte.MaxValue;
+        // The rules of Appendix G depend on the digit run from a position and on which of a control character or a lower case character comes first. The
+        // lookahead holds both for every position, read from the end so every entry builds on the one after it. A digit run fits a byte with the text bounded
+        // above.
+        lookahead[n] = default;
         for (int p = n - 1; p >= 0; p--)
         {
             char c = text[p];
-            digits[p] = (byte)(char.IsAsciiDigit(c) ? digits[p + 1] + 1 : 0);
-            nextControl[p] = OnlyInSetA(c) ? (byte)0 : Saturate(nextControl[p + 1]);
-            nextLower[p] = OnlyInSetB(c) ? (byte)0 : Saturate(nextLower[p + 1]);
+            Lookahead next = lookahead[p + 1];
+            lookahead[p] = new Lookahead
+            {
+                DigitRun = (byte)(char.IsAsciiDigit(c) ? next.DigitRun + 1 : 0),
+                First = OnlyIn(CodeSet.A, c) ? FirstExclusive.SetA : OnlyIn(CodeSet.B, c) ? FirstExclusive.SetB : next.First,
+            };
         }
 
-        // A data character costs at most two symbol characters, a shift and itself, and the symbol adds
-        // the starting symbol character and the two check characters; the pad fills the rest of the rows.
+        // A data character costs at most two symbol characters, a shift and itself, and the symbol adds the starting symbol character and the two check
+        // characters; the pad fills the rest of the rows.
         int count = 1;
         int i = 0;
         CodeSet set;
-        int mode;
+        StartingMode mode;
 
-        // Appendix G rule 1: the starting mode, Table 3. Modes 5 and 6 imply a Shift B or a Double Shift B
-        // ahead of code set C, which carries the first one or two characters in code set B without
-        // spending a symbol character on the shift.
-        if (digits[0] >= 2 && (digits[0] & 1) == 0)
+        // Appendix G rule 1: the starting mode, Table 3. The modes with an implied Shift B or Double Shift B start in code set C, which carries the first one
+        // or two characters in code set B without spending a symbol character on the shift.
+        int firstRun = lookahead[0].DigitRun;
+        if (IsEvenRun(firstRun))
         {
-            mode = 2;
+            mode = StartingMode.CodeSetC;
             set = CodeSet.C;
         }
-        else if (digits[0] >= 3)
+        else if (firstRun >= 3 || (n >= 1 && In(CodeSet.B, text[0]) && IsEvenRun(lookahead[1].DigitRun)))
         {
-            mode = 5;
-            set = CodeSet.C;
-            values[count++] = ValueIn(CodeSet.B, text[i++]);
-        }
-        else if (n >= 1 && InSetB(text[0]) && digits[1] >= 2 && (digits[1] & 1) == 0)
-        {
-            mode = 5;
+            mode = StartingMode.CodeSetCShiftB;
             set = CodeSet.C;
             values[count++] = ValueIn(CodeSet.B, text[i++]);
         }
-        else if (n >= 1 && InSetB(text[0]) && digits[1] >= 3)
+        else if ((n >= 1 && In(CodeSet.B, text[0]) && lookahead[1].DigitRun >= 3)
+            || (n >= 2 && In(CodeSet.B, text[0]) && In(CodeSet.B, text[1]) && IsEvenRun(lookahead[2].DigitRun)))
         {
-            mode = 6;
+            mode = StartingMode.CodeSetCDoubleShiftB;
             set = CodeSet.C;
             values[count++] = ValueIn(CodeSet.B, text[i++]);
             values[count++] = ValueIn(CodeSet.B, text[i++]);
         }
-        else if (n >= 2 && InSetB(text[0]) && InSetB(text[1]) && digits[2] >= 2 && (digits[2] & 1) == 0)
+        else if (lookahead[0].First == FirstExclusive.SetA)
         {
-            mode = 6;
-            set = CodeSet.C;
-            values[count++] = ValueIn(CodeSet.B, text[i++]);
-            values[count++] = ValueIn(CodeSet.B, text[i++]);
-        }
-        else if (nextControl[0] < nextLower[0])
-        {
-            mode = 0;
+            mode = StartingMode.CodeSetA;
             set = CodeSet.A;
         }
         else
         {
-            mode = 1;
+            mode = StartingMode.CodeSetB;
             set = CodeSet.B;
         }
 
@@ -332,134 +354,32 @@ internal static class Code16KEncoder
         while (i < n)
         {
             char c = text[i];
-            int run = digits[i];
-            if (set == CodeSet.A)
-            {
-                if (OnlyInSetB(c) && nextControl[i + 1] < nextLower[i + 1])
-                {
-                    values[count++] = Shift;
-                    values[count++] = ValueIn(CodeSet.B, c);
-                    i++;
-                }
-                else if (i + 1 < n && OnlyInSetB(c) && OnlyInSetB(text[i + 1]) && nextControl[i + 2] < nextLower[i + 2])
-                {
-                    values[count++] = DoubleShift;
-                    values[count++] = ValueIn(CodeSet.B, c);
-                    values[count++] = ValueIn(CodeSet.B, text[i + 1]);
-                    i += 2;
-                }
-                else if (OnlyInSetB(c))
-                {
-                    values[count++] = LatchB;
-                    set = CodeSet.B;
-                }
-                else if (run == 4 && i + 4 < n && InSetA(text[i + 4]))
-                {
-                    values[count++] = DoubleShiftC;
-                    count = WritePairs(text, i, 2, values, count);
-                    i += 4;
-                }
-                else if (run == 6 && i + 6 < n && InSetA(text[i + 6]))
-                {
-                    values[count++] = TripleShiftC;
-                    count = WritePairs(text, i, 3, values, count);
-                    i += 6;
-                }
-                else if (run >= 4 && (run & 1) == 0)
-                {
-                    values[count++] = LatchC;
-                    set = CodeSet.C;
-                }
-                else
-                {
-                    values[count++] = ValueIn(CodeSet.A, c);
-                    i++;
-                }
-            }
-            else if (set == CodeSet.B)
-            {
-                if (OnlyInSetA(c) && nextLower[i + 1] < nextControl[i + 1])
-                {
-                    values[count++] = Shift;
-                    values[count++] = ValueIn(CodeSet.A, c);
-                    i++;
-                }
-                else if (i + 1 < n && OnlyInSetA(c) && OnlyInSetA(text[i + 1]) && nextLower[i + 2] < nextControl[i + 2])
-                {
-                    values[count++] = DoubleShift;
-                    values[count++] = ValueIn(CodeSet.A, c);
-                    values[count++] = ValueIn(CodeSet.A, text[i + 1]);
-                    i += 2;
-                }
-                else if (OnlyInSetA(c))
-                {
-                    values[count++] = LatchA;
-                    set = CodeSet.A;
-                }
-                else if (run == 4 && i + 4 < n && InSetB(text[i + 4]))
-                {
-                    values[count++] = DoubleShiftC;
-                    count = WritePairs(text, i, 2, values, count);
-                    i += 4;
-                }
-                else if (run == 6 && i + 6 < n && InSetB(text[i + 6]))
-                {
-                    values[count++] = TripleShiftC;
-                    count = WritePairs(text, i, 3, values, count);
-                    i += 6;
-                }
-                else if (run >= 4 && (run & 1) == 0)
-                {
-                    values[count++] = LatchC;
-                    set = CodeSet.C;
-                }
-                else
-                {
-                    values[count++] = ValueIn(CodeSet.B, c);
-                    i++;
-                }
-            }
-            else
+            int run = lookahead[i].DigitRun;
+            if (set == CodeSet.C)
             {
                 if (run >= 2)
                 {
                     count = WritePairs(text, i, 1, values, count);
                     i += 2;
                 }
-                else if (i + 1 < n && InSetB(c) && digits[i + 1] >= 2 && (digits[i + 1] & 1) == 0)
+                else if (i + 1 < n && In(CodeSet.B, c) && IsEvenRun(lookahead[i + 1].DigitRun))
                 {
                     values[count++] = CodeSetCShiftB;
                     values[count++] = ValueIn(CodeSet.B, c);
                     i++;
                 }
-                else if (i + 1 < n && InSetB(c) && digits[i + 1] >= 3)
+                else if ((i + 1 < n && In(CodeSet.B, c) && lookahead[i + 1].DigitRun >= 3)
+                    || (i + 2 < n && In(CodeSet.B, c) && In(CodeSet.B, text[i + 1]) && IsEvenRun(lookahead[i + 2].DigitRun)))
                 {
                     values[count++] = CodeSetCDoubleShiftB;
                     values[count++] = ValueIn(CodeSet.B, c);
                     values[count++] = ValueIn(CodeSet.B, text[i + 1]);
                     i += 2;
-                }
-                else if (i + 2 < n && InSetB(c) && InSetB(text[i + 1]) && digits[i + 2] >= 2 && (digits[i + 2] & 1) == 0)
-                {
-                    values[count++] = CodeSetCDoubleShiftB;
-                    values[count++] = ValueIn(CodeSet.B, c);
-                    values[count++] = ValueIn(CodeSet.B, text[i + 1]);
-                    i += 2;
-                }
-                else if (i + 3 < n && InSetB(c) && InSetB(text[i + 1]) && digits[i + 2] >= 3)
-                {
-                    values[count++] = CodeSetCTripleShiftB;
-                    values[count++] = ValueIn(CodeSet.B, c);
-                    values[count++] = ValueIn(CodeSet.B, text[i + 1]);
-                    values[count++] = ValueIn(CodeSet.B, text[i + 2]);
-                    i += 3;
                 }
                 else if (i + 3 < n
-                    && InSetB(c)
-                    && InSetB(text[i + 1])
-                    && InSetB(text[i + 2])
-                    && digits[i + 3] >= 2
-                    && (digits[i + 3] & 1) == 0)
+                    && In(CodeSet.B, c)
+                    && In(CodeSet.B, text[i + 1])
+                    && (lookahead[i + 2].DigitRun >= 3 || (In(CodeSet.B, text[i + 2]) && IsEvenRun(lookahead[i + 3].DigitRun))))
                 {
                     values[count++] = CodeSetCTripleShiftB;
                     values[count++] = ValueIn(CodeSet.B, c);
@@ -467,7 +387,7 @@ internal static class Code16KEncoder
                     values[count++] = ValueIn(CodeSet.B, text[i + 2]);
                     i += 3;
                 }
-                else if (nextControl[i] < nextLower[i])
+                else if (lookahead[i].First == FirstExclusive.SetA)
                 {
                     values[count++] = LatchA;
                     set = CodeSet.A;
@@ -477,6 +397,53 @@ internal static class Code16KEncoder
                     values[count++] = LatchB;
                     set = CodeSet.B;
                 }
+
+                continue;
+            }
+
+            // Code sets A and B mirror each other: each shifts or latches to the other for the characters only the other carries. A shift pays off when the
+            // characters after it return to a character only the current set carries first.
+            CodeSet other = set == CodeSet.A ? CodeSet.B : CodeSet.A;
+            FirstExclusive ownFirst = set == CodeSet.A ? FirstExclusive.SetA : FirstExclusive.SetB;
+            if (OnlyIn(other, c) && lookahead[i + 1].First == ownFirst)
+            {
+                values[count++] = Shift;
+                values[count++] = ValueIn(other, c);
+                i++;
+            }
+            else if (i + 1 < n && OnlyIn(other, c) && OnlyIn(other, text[i + 1]) && lookahead[i + 2].First == ownFirst)
+            {
+                values[count++] = DoubleShift;
+                values[count++] = ValueIn(other, c);
+                values[count++] = ValueIn(other, text[i + 1]);
+                i += 2;
+            }
+            else if (OnlyIn(other, c))
+            {
+                values[count++] = other == CodeSet.A ? LatchA : LatchB;
+                set = other;
+            }
+            else if (run == 4 && i + 4 < n && In(set, text[i + 4]))
+            {
+                values[count++] = DoubleShiftC;
+                count = WritePairs(text, i, 2, values, count);
+                i += 4;
+            }
+            else if (run == 6 && i + 6 < n && In(set, text[i + 6]))
+            {
+                values[count++] = TripleShiftC;
+                count = WritePairs(text, i, 3, values, count);
+                i += 6;
+            }
+            else if (run >= 4 && (run & 1) == 0)
+            {
+                values[count++] = LatchC;
+                set = CodeSet.C;
+            }
+            else
+            {
+                values[count++] = ValueIn(set, c);
+                i++;
             }
         }
 
@@ -494,16 +461,12 @@ internal static class Code16KEncoder
         }
 
         int total = rows * CharactersPerRow;
-        for (int j = count; j < total - 2; j++)
-        {
-            values[j] = Pad;
-        }
+        values[count..(total - 2)].Fill(Pad);
 
         // Section 2.3.1: s = 7(r - 2) + m.
-        values[0] = (7 * (rows - MinimumRows)) + mode;
+        values[0] = (7 * (rows - MinimumRows)) + (int)mode;
 
-        // Section 2.6: C1 weights the symbol characters from two upward, C2 from one upward and takes
-        // C1 as its last term.
+        // Section 2.6: C1 weights the symbol characters from two upward, C2 from one upward and takes C1 as its last term.
         int c1 = 0;
         int c2 = 0;
         for (int j = 0; j < total - 2; j++)
@@ -520,8 +483,8 @@ internal static class Code16KEncoder
     }
 
     /// <summary>
-    /// Writes the symbol from its symbol character values: one row of bars per five values, one module
-    /// separator bars between the rows, and the top and bottom separator bars of section 2.1.
+    /// Writes the symbol from its symbol character values: one row of bars per five values, one module separator bars between the rows, and the top and bottom
+    /// separator bars of section 2.1.
     /// </summary>
     /// <param name="values">The symbol character values, five per row.</param>
     /// <param name="readable">The human readable interpretation.</param>
@@ -533,8 +496,8 @@ internal static class Code16KEncoder
         double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
         float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
 
-        // Section 2.1: start, guard bar, five characters and stop, 4 + 1 + 30 + 4 elements, on a bar at both
-        // ends. A separator between two rows is one bar across the row width.
+        // Section 2.1: start, guard bar, five characters and stop, 4 + 1 + 30 + 4 elements, on a bar at both ends. A separator between two rows is one bar
+        // across the row width.
         const int rowRuns = 4 + 1 + (CharactersPerRow * 6) + 4;
         int separators = rowCount - 1;
         symbol.BeginStacked(rowCount + separators, (rowCount * rowRuns) + separators, (rowCount * ((rowRuns + 1) >> 1)) + separators, xDimension);
@@ -548,9 +511,8 @@ internal static class Code16KEncoder
             int index = 0;
             AppendPattern(StartPatterns[row & 7], 4, runs, ref index);
             runs[index++] = 1;
-            for (int k = 0; k < CharactersPerRow; k++)
+            foreach (int value in values.Slice(row * CharactersPerRow, CharactersPerRow))
             {
-                int value = values[(row * CharactersPerRow) + k];
                 uint pattern = value == TripleShiftC ? TripleShiftPattern : Patterns[value];
                 AppendPattern(pattern, 6, runs, ref index);
             }
@@ -565,8 +527,7 @@ internal static class Code16KEncoder
             }
         }
 
-        // Appendix D: the human readable interpretation "may accompany the symbol. It should not
-        // interfere with the symbol itself nor the quiet zones."
+        // Appendix D: the human readable interpretation "may accompany the symbol. It should not interfere with the symbol itself nor the quiet zones."
         float heightInModules = (rowCount * barHeight) + ((rowCount + 1) * SeparatorHeight);
         if (options.Font is not null && readable.Length > 0)
         {
@@ -578,30 +539,14 @@ internal static class Code16KEncoder
     }
 
     /// <summary>
-    /// Returns the symbol character value of a character in code set A or B: code set A runs from the space
-    /// at value 0 through to the control characters, and code set B from the space through to the delete
-    /// character.
+    /// Returns the symbol character value of a character in code set A or B: code set A runs from the space at value 0 through to the control characters, and
+    /// code set B from the space through to the delete character.
     /// </summary>
     /// <param name="set">The code set, A or B.</param>
     /// <param name="character">The character.</param>
     /// <returns>The symbol character value.</returns>
     private static int ValueIn(CodeSet set, char character)
         => set == CodeSet.A && character < 32 ? character + 64 : character - 32;
-
-    /// <summary>
-    /// Returns whether only code set A carries a character: the control characters 0 to 31.
-    /// </summary>
-    /// <param name="character">The character.</param>
-    /// <returns><see langword="true"/> when only code set A carries it.</returns>
-    private static bool OnlyInSetA(char character) => character < 32;
-
-    /// <summary>
-    /// Returns whether only code set B carries a character: the lower case letters and the characters above
-    /// them, 96 to 127.
-    /// </summary>
-    /// <param name="character">The character.</param>
-    /// <returns><see langword="true"/> when only code set B carries it.</returns>
-    private static bool OnlyInSetB(char character) => character >= 96;
 
     /// <summary>
     /// Writes digit pairs as code set C values, each pair the value 0 to 99 it reads as.
@@ -639,24 +584,42 @@ internal static class Code16KEncoder
     }
 
     /// <summary>
-    /// Returns whether code set A carries a character: ASCII 0 to 95.
+    /// Returns whether only one code set of A and B carries a character: the control characters 0 to 31 for code set A, and the lower case letters and the
+    /// characters above them, 96 to 127, for code set B.
     /// </summary>
+    /// <param name="set">The code set, A or B.</param>
     /// <param name="character">The character.</param>
-    /// <returns><see langword="true"/> when code set A carries it.</returns>
-    private static bool InSetA(char character) => !OnlyInSetB(character);
+    /// <returns><see langword="true"/> when only that code set carries it.</returns>
+    private static bool OnlyIn(CodeSet set, char character) => set == CodeSet.A ? character < 32 : character >= 96;
 
     /// <summary>
-    /// Returns whether code set B carries a character: ASCII 32 to 127.
+    /// Returns whether a code set of A and B carries a character: ASCII 0 to 95 for code set A, and ASCII 32 to 127 for code set B.
     /// </summary>
+    /// <param name="set">The code set, A or B.</param>
     /// <param name="character">The character.</param>
-    /// <returns><see langword="true"/> when code set B carries it.</returns>
-    private static bool InSetB(char character) => !OnlyInSetA(character);
+    /// <returns><see langword="true"/> when the code set carries it.</returns>
+    private static bool In(CodeSet set, char character) => set == CodeSet.A ? character < 96 : character >= 32;
 
     /// <summary>
-    /// Returns the distance from the position before: one more than the given distance, held at the
-    /// maximum, so a run longer than a byte still compares as further away.
+    /// Returns whether a digit run is an even run of at least two digits, which code set C carries as whole pairs.
     /// </summary>
-    /// <param name="distance">The distance from the next position.</param>
-    /// <returns>The distance from this position.</returns>
-    private static byte Saturate(byte distance) => distance == byte.MaxValue ? distance : (byte)(distance + 1);
+    /// <param name="run">The length of the digit run.</param>
+    /// <returns><see langword="true"/> when the run is even and at least two long.</returns>
+    private static bool IsEvenRun(int run) => run >= 2 && (run & 1) == 0;
+
+    /// <summary>
+    /// What the encodation rules read ahead from one position of the text.
+    /// </summary>
+    private struct Lookahead
+    {
+        /// <summary>
+        /// The length of the run of digits that starts at the position.
+        /// </summary>
+        public byte DigitRun;
+
+        /// <summary>
+        /// The code set of the first character, at the position or after it, that only one of code sets A and B carries.
+        /// </summary>
+        public FirstExclusive First;
+    }
 }

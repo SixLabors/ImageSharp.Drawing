@@ -6,18 +6,15 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="RectangularMicroQrCodeSymbology"/>. Each expected grid is the module grid of
-/// an independent reference implementation, taken through its raw encoding API with the error correction
-/// level fixed and Kanji mode off, so the mode segments, the error correction, the module placement, the
-/// function patterns and the format information all show up here. A grid row is the modules from the left
-/// as hexadecimal digits, the leftmost module the most significant bit, padded with light modules to whole
-/// digits.
+/// Encoder tests for <see cref="RectangularMicroQrCodeSymbology"/>. Each expected grid is the module grid of an independent reference implementation, taken
+/// through its raw encoding API with the error correction level fixed and Kanji mode off, so the mode segments, the error correction, the module placement, the
+/// function patterns and the format information all show up here. A grid row is the modules from the left as hexadecimal digits, the leftmost module the most
+/// significant bit, padded with light modules to whole digits.
 /// </summary>
 public class RectangularMicroQrCodeSymbologyTests
 {
     /// <summary>
-    /// Gets the cases of <see cref="MatchesReferenceGrid"/>: for every version at
-    /// levels M and H, the longest start of <see cref="Pattern"/> the version holds.
+    /// Gets the cases of <see cref="MatchesReferenceGrid"/>: for every version at levels M and H, the longest start of <see cref="Pattern"/> the version holds.
     /// </summary>
     public static TheoryData<string, QrErrorCorrectionLevel, RectangularMicroQrCodeVersion, int, int, string> MatchesReferenceGridData { get; } = new()
     {
@@ -1240,8 +1237,7 @@ public class RectangularMicroQrCodeSymbologyTests
     };
 
     /// <summary>
-    /// Gets the cases of <see cref="ChoosesTheSmallestArea"/>: digits at levels M and
-    /// H, with the version the reference implementation chooses.
+    /// Gets the cases of <see cref="ChoosesTheSmallestArea"/>: digits at levels M and H, with the version the reference implementation chooses.
     /// </summary>
     public static TheoryData<string, QrErrorCorrectionLevel, int, int, string> ChoosesTheSmallestAreaData { get; } = new()
     {
@@ -1711,13 +1707,7 @@ public class RectangularMicroQrCodeSymbologyTests
 
     [Theory]
     [MemberData(nameof(MatchesReferenceGridData))]
-    public void MatchesReferenceGrid(
-        string text,
-        QrErrorCorrectionLevel level,
-        RectangularMicroQrCodeVersion version,
-        int rows,
-        int columns,
-        string expected)
+    public void MatchesReferenceGrid(string text, QrErrorCorrectionLevel level, RectangularMicroQrCodeVersion version, int rows, int columns, string expected)
         => SymbolEncoder.Encode(new RectangularMicroQrCodeSymbology(level, version), text, new BarcodeOptions(), (ref symbol) =>
         {
             Assert.Equal((rows, columns), (symbol.MatrixRows, symbol.Columns));
@@ -1758,8 +1748,7 @@ public class RectangularMicroQrCodeSymbologyTests
     /// R17x139 at level M, the largest version, holds 361 digits and no more.
     /// </summary>
     [Fact]
-    public void RejectsDataLargerThanTheLargestVersion()
-        => Assert.Throws<ArgumentException>(() => Encode(new RectangularMicroQrCodeSymbology(), Digits(362)));
+    public void RejectsDataLargerThanTheLargestVersion() => Assert.Throws<ArgumentException>(() => Encode(new RectangularMicroQrCodeSymbology(), Digits(362)));
 
     [Fact]
     public void RejectsDataLargerThanTheFixedVersion()
@@ -1769,16 +1758,14 @@ public class RectangularMicroQrCodeSymbologyTests
     }
 
     [Fact]
-    public void RejectsCharactersAboveTheByteRange()
-        => Assert.Throws<ArgumentException>(() => Encode(new RectangularMicroQrCodeSymbology(), "Ā"));
+    public void RejectsCharactersAboveTheByteRange() => Assert.Throws<ArgumentException>(() => Encode(new RectangularMicroQrCodeSymbology(), "Ā"));
 
     /// <summary>
     /// Encodes the text with the default options.
     /// </summary>
     /// <param name="symbology">The symbology to encode with.</param>
     /// <param name="text">The text to encode.</param>
-    private static void Encode(BarcodeSymbology symbology, string text)
-        => SymbolEncoder.Encode(symbology, text, new BarcodeOptions());
+    private static void Encode(BarcodeSymbology symbology, string text) => SymbolEncoder.Encode(symbology, text, new BarcodeOptions());
 
     /// <summary>
     /// Returns the digits 0 to 9 repeated to a length.
@@ -1794,8 +1781,7 @@ public class RectangularMicroQrCodeSymbologyTests
     });
 
     /// <summary>
-    /// Returns "HELLO 0123456789 rmqr " repeated to a length: runs of Alphanumeric, Numeric and Byte mode
-    /// characters, so the data changes mode.
+    /// Returns "HELLO 0123456789 rmqr " repeated to a length: runs of Alphanumeric, Numeric and Byte mode characters, so the data changes mode.
     /// </summary>
     /// <param name="length">The length.</param>
     /// <returns>The text.</returns>

@@ -4,25 +4,22 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The PDF417 symbology, ISO/IEC 15438. A symbol is 3 to 90 rows of 1 to 30 data columns, each row
-/// between a start character, a left and a right row indicator and a stop character. It carries the
-/// characters U+0000 to U+00FF with 2 to 512 error correction codewords.
+/// The PDF417 symbology, ISO/IEC 15438. A symbol is 3 to 90 rows of 1 to 30 data columns, each row between a start character, a left and a right row indicator
+/// and a stop character. It carries the characters U+0000 to U+00FF with 2 to 512 error correction codewords.
 /// </summary>
 public sealed class Pdf417Symbology : BarcodeSymbology
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="Pdf417Symbology"/> class. The number of data columns
-    /// follows from the data. The error correction level is the recommended minimum of Annex E of
-    /// ISO/IEC 15438 for the data, raised to the highest level the rows leave room for.
+    /// Initializes a new instance of the <see cref="Pdf417Symbology"/> class. The number of data columns follows from the data. The error correction level is
+    /// the recommended minimum of Annex E of ISO/IEC 15438 for the data, raised to the highest level the rows leave room for.
     /// </summary>
     public Pdf417Symbology()
     {
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="Pdf417Symbology"/> class. The error correction level is
-    /// the recommended minimum of Annex E of ISO/IEC 15438 for the data, raised to the highest level the
-    /// rows leave room for.
+    /// Initializes a new instance of the <see cref="Pdf417Symbology"/> class. The error correction level is the recommended minimum of Annex E of ISO/IEC 15438
+    /// for the data, raised to the highest level the rows leave room for.
     /// </summary>
     /// <param name="columns">The number of data columns in a row, 1 to 30. The row count follows from the data.</param>
     public Pdf417Symbology(int columns)

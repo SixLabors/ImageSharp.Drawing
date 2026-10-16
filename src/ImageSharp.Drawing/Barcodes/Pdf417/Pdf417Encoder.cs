@@ -7,8 +7,8 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Builds PDF417 and Compact PDF417 symbols, ISO/IEC 15438: the symbol matrix of section 5.9, the row
-/// indicators of section 5.11.3 and the rows of section 5.2.2.
+/// Builds PDF417 and Compact PDF417 symbols, ISO/IEC 15438: the symbol matrix of section 5.9, the row indicators of section 5.11.3 and the rows of section
+/// 5.2.2.
 /// </summary>
 internal static class Pdf417Encoder
 {
@@ -90,10 +90,9 @@ internal static class Pdf417Encoder
         BarcodeOptions options,
         ref BarcodeSymbol symbol)
     {
-        // A character takes at most two data codewords: a numeric or text run costs less than two for each
-        // character with its latch, a single byte shifted out of Text Compaction mode costs two, and a byte
-        // run costs one latch and at most one codeword for each byte. The text is bounded, so the builder
-        // never grows: short data works inline and longer data rents once.
+        // A character takes at most two data codewords: a numeric or text run costs less than two for each character with its latch, a single byte shifted out
+        // of Text Compaction mode costs two, and a byte run costs one latch and at most one codeword for each byte. The text is bounded, so the builder never
+        // grows: short data works inline and longer data rents once.
         Guard.MustBeLessThanOrEqualTo(text.Length, Pdf417Codewords.MaximumLength, nameof(text));
         InlineArray64<int> dataStorage = default;
         int capacity = (2 * text.Length) + 1;
@@ -127,17 +126,15 @@ internal static class Pdf417Encoder
         BarcodeOptions options,
         ref BarcodeSymbol symbol)
     {
-        // The data codewords, the Symbol Length Descriptor and at least the two error correction
-        // codewords of level 0 must fit in the largest matrix.
+        // The data codewords, the Symbol Length Descriptor and at least the two error correction codewords of level 0 must fit in the largest matrix.
         int m = data.Length;
         if (m + 1 + 2 > MaximumCodewords)
         {
             throw new ArgumentException($"The data takes {m} codewords; a PDF417 symbol holds at most {MaximumCodewords - 3}.");
         }
 
-        // Without a chosen level the symbol takes the recommended minimum of Table E.1, lowered where the
-        // data leaves too little room for its error correction codewords: 2^(s + 1) codewords fit when
-        // s + 1 <= log2(927 - m).
+        // Without a chosen level the symbol takes the recommended minimum of Table E.1, lowered where the data leaves too little room for its error correction
+        // codewords: 2^(s + 1) codewords fit when s + 1 <= log2(927 - m).
         int level;
         if (errorCorrectionLevel.HasValue)
         {
@@ -149,8 +146,8 @@ internal static class Pdf417Encoder
             level = Math.Min(level, BitOperations.Log2((uint)(MaximumCodewords - 1 - m)) - 1);
         }
 
-        // Without chosen columns the matrix is close to three rows per column, the nearest whole number of
-        // columns to the square root of a third of the codewords.
+        // Without chosen columns the matrix is close to three rows per column, the nearest whole number of columns to the square root of a third of the
+        // codewords.
         int k = 2 << level;
         int c = columns ?? (int)Math.Floor(Math.Sqrt((m + k) / 3D) + 0.5D);
         int r = Math.Max(MinimumRows, (m + 1 + k + c - 1) / c);
@@ -159,8 +156,7 @@ internal static class Pdf417Encoder
             throw new ArgumentException($"The data takes {m} codewords and does not fit in a PDF417 symbol of {c} columns.");
         }
 
-        // Without a chosen level the error correction grows into the room the rows leave, up to level 8,
-        // rather than filling it with pad codewords.
+        // Without a chosen level the error correction grows into the room the rows leave, up to level 8, rather than filling it with pad codewords.
         if (!errorCorrectionLevel.HasValue)
         {
             int roomLevel = Math.Min(BitOperations.Log2((uint)((c * r) - 1 - m)) - 1, MaximumErrorCorrectionLevel);
@@ -171,9 +167,8 @@ internal static class Pdf417Encoder
             }
         }
 
-        // Section 5.9.2: the Symbol Length Descriptor n = c x r - k counts itself, the data and the pad
-        // codewords, which fill the rest of the data region with 900.
-        // One rental holds the codewords and the generator coefficients of the error correction.
+        // Section 5.9.2: the Symbol Length Descriptor n = c x r - k counts itself, the data and the pad codewords, which fill the rest of the data region with
+        // 900. One rental holds the codewords and the generator coefficients of the error correction.
         int total = c * r;
         int n = total - k;
         PooledBuffer<int> rented = new(total + k + 1);
@@ -194,9 +189,8 @@ internal static class Pdf417Encoder
     }
 
     /// <summary>
-    /// Builds the rows of the symbol: the start character, the left row indicator, the codewords of the
-    /// row, the right row indicator and the stop character. Compact PDF417, Annex G, drops the right row
-    /// indicator and ends the row with a single module bar.
+    /// Builds the rows of the symbol: the start character, the left row indicator, the codewords of the row, the right row indicator and the stop character.
+    /// Compact PDF417, Annex G, drops the right row indicator and ends the row with a single module bar.
     /// </summary>
     /// <param name="codewords">The codewords in row order, error correction codewords included.</param>
     /// <param name="c">The number of data columns.</param>
@@ -207,8 +201,8 @@ internal static class Pdf417Encoder
     /// <param name="symbol">The symbol to write.</param>
     private static void BuildRows(ReadOnlySpan<int> codewords, int c, int r, int level, bool compact, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        // A row of a full symbol is the start character, c + 2 symbol characters and the stop character;
-        // a compact row is the start character, c + 1 symbol characters and one bar.
+        // A row of a full symbol is the start character, c + 2 symbol characters and the stop character; a compact row is the start character, c + 1 symbol
+        // characters and one bar.
         int runCount = compact
             ? Start.Length + ((c + 1) * Pdf417Patterns.ElementCount) + 1
             : Start.Length + ((c + 2) * Pdf417Patterns.ElementCount) + Stop.Length;
@@ -220,14 +214,13 @@ internal static class Pdf417Encoder
         symbol.BeginStacked(r, r * runCount, r * ((runCount + 1) >> 1), xDimension);
         for (int row = 0; row < r; row++)
         {
-            // Section 5.11.1: row 1 uses cluster 0, row 2 cluster 3 and row 3 cluster 6, repeating. The
-            // cluster index here is 0, 1 or 2, and the pattern table holds the clusters in that order.
+            // Section 5.11.1: row 1 uses cluster 0, row 2 cluster 3 and row 3 cluster 6, repeating. The cluster index here is 0, 1 or 2, and the pattern table
+            // holds the clusters in that order.
             int cluster = row % IndicatorCycle;
             ReadOnlySpan<int> clusterPatterns = patterns.Slice(cluster * Pdf417Patterns.CodewordCount, Pdf417Patterns.CodewordCount);
 
-            // Section 5.11.3: each indicator carries the row number F = row + 1 as 30 x ((F - 1) div 3),
-            // and one of three values in turn: (r - 1) div 3, the error correction level and (r - 1) mod 3
-            // as s x 3 + (r - 1) mod 3, and c - 1.
+            // Section 5.11.3: each indicator carries the row number F = row + 1 as 30 x ((F - 1) div 3), and one of three values in turn: (r - 1) div 3, the
+            // error correction level and (r - 1) mod 3 as s x 3 + (r - 1) mod 3, and c - 1.
             int cycle = IndicatorStep * (row / IndicatorCycle);
             int rowValue = cycle + ((r - 1) / IndicatorCycle);
             int levelValue = cycle + (level * 3) + ((r - 1) % IndicatorCycle);

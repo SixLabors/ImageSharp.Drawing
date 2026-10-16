@@ -125,6 +125,9 @@ The standards each symbology is built to. Files marked *held* are in this folder
 - MaxiCode: ISO/IEC 16023:2000 (sold)
 - Code One: AIM USS Code One, 1994 (sold), <https://web.aimglobal.org/atlas/ecommerce/item/255>
 - Han Xin Code: ISO/IEC 20830:2021 (sold), <https://www.iso.org/standard/69321.html>
+- DotCode: AIM ISS DotCode Symbology Specification 4.0 (sold),
+  <https://web.aimglobal.org/external/wcpages/wcecommerce/eComItemDetailsPage.aspx?ItemID=651>
+- GS1 DotCode: GS1 General Specifications section 5.8
 
 ## Postal
 

@@ -6,13 +6,12 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The ISMN data layer over EAN-13. An International Standard Music Number (ISO 10957) draws as an EAN-13
-/// symbol in the GS1 979-0 range. The ISMN itself prints above the bars.
+/// The ISMN data layer over EAN-13. An International Standard Music Number (ISO 10957) draws as an EAN-13 symbol in the GS1 979-0 range. The ISMN itself prints
+/// above the bars.
 /// <para>
-/// The input is a thirteen digit ISMN that starts 9790, with or without hyphens. The older ten character
-/// form that starts with M is also accepted, and 9790 replaces that M. ISO 10957:2009 makes the check digit
-/// of both forms the EAN-13 check digit of the thirteen digit number. The check digit is optional, and this
-/// class calculates it when the input carries none.
+/// The input is a thirteen digit ISMN that starts 9790, with or without hyphens. The older ten character form that starts with M is also accepted, and 9790
+/// replaces that M. ISO 10957:2009 makes the check digit of both forms the EAN-13 check digit of the thirteen digit number. The check digit is optional, and
+/// this class calculates it when the input carries none.
 /// </para>
 /// </summary>
 public sealed class IsmnSymbology : BarcodeSymbology
@@ -29,17 +28,17 @@ public sealed class IsmnSymbology : BarcodeSymbology
     {
         Guard.NotNull(text, nameof(text));
 
-        // An ISMN is at most seventeen characters: thirteen digits and four hyphens. Longer text is
-        // rejected before any buffer, so the hyphenless form fits eighteen inline characters.
+        // An ISMN is at most seventeen characters: thirteen digits and four hyphens. Longer text is rejected before any buffer, so the hyphenless form fits
+        // eighteen inline characters.
         Guard.MustBeLessThanOrEqualTo(text.Length, 17, nameof(text));
         InlineArray18<char> compactStorage = default;
         Span<char> compactBuffer = compactStorage;
         int compactLength = 0;
-        for (int i = 0; i < text.Length; i++)
+        foreach (char character in text)
         {
-            if (text[i] != '-')
+            if (character != '-')
             {
-                compactBuffer[compactLength++] = text[i];
+                compactBuffer[compactLength++] = character;
             }
         }
 
@@ -55,8 +54,7 @@ public sealed class IsmnSymbology : BarcodeSymbology
         ReadOnlySpan<char> captionBody;
         if (mForm && body.Length is 8 or 9)
         {
-            // ISO 10957:2009 displays an ISMN only in its 979-0 form, so the caption converts the older
-            // M prefix rather than echoing it.
+            // ISO 10957:2009 displays an ISMN only in its 979-0 form, so the caption converts the older M prefix rather than echoing it.
             "9790".CopyTo(digits);
             body[..8].CopyTo(digits[4..]);
             captionPrefix = "ISMN 979-0-";
@@ -77,7 +75,7 @@ public sealed class IsmnSymbology : BarcodeSymbology
 
         int check = Gs1Data.ComputeCheckDigit(digits[..12]);
         bool hasCheck = (mForm && body.Length == 9) || (!mForm && body.Length == 13);
-        if (hasCheck && body[body.Length - 1] - '0' != check)
+        if (hasCheck && body[^1] - '0' != check)
         {
             throw new ArgumentException("Incorrect ISMN check digit.", nameof(text));
         }

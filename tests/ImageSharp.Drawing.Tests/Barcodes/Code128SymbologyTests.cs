@@ -6,11 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Code128Symbology"/>. Each expected run string is the alternating bar and
-/// space module widths, starting with a bar, taken from an independent reference implementation through
-/// its raw encoding API. The runs carry the start character,
-/// the code set switches the encoder chose, the check character and the stop character, so a difference in
-/// any of those shows up here.
+/// Encoder tests for <see cref="Code128Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, taken from
+/// an independent reference implementation through its raw encoding API. The runs carry the start character, the code set switches the encoder chose, the check
+/// character and the stop character, so a difference in any of those shows up here.
 /// </summary>
 public class Code128SymbologyTests
 {
@@ -49,8 +47,8 @@ public class Code128SymbologyTests
         => Encode(text, (ref symbol) => Assert.Equal(expected, SymbolEncoder.RunString(ref symbol)));
 
     /// <summary>
-    /// Every symbol starts and ends on a bar, so the run count is odd, and the stop character contributes
-    /// the final four bars and three spaces of section 5.4.1.
+    /// Every symbol starts and ends on a bar, so the run count is odd, and the stop character contributes the final four bars and three spaces of section
+    /// 5.4.1.
     /// </summary>
     [Fact]
     public void Code128_StartsAndEndsOnABar()

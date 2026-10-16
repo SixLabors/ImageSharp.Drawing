@@ -24,9 +24,8 @@ internal static class Pdf417Patterns
     public const int ElementCount = 8;
 
     /// <summary>
-    /// Gets the symbol characters of the three clusters. The entry at index <c>(cluster * 929) + codeword</c>
-    /// holds the 17 modules of that codeword in cluster 0, 3 or 6, where <c>cluster</c> is 0, 1 or 2. The
-    /// first module is bit 16 and the last module is bit 0, and a set bit is a dark module. A symbol
+    /// Gets the symbol characters of the three clusters. The entry at index <c>(cluster * 929) + codeword</c> holds the 17 modules of that codeword in cluster
+    /// 0, 3 or 6, where <c>cluster</c> is 0, 1 or 2. The first module is bit 16 and the last module is bit 0, and a set bit is a dark module. A symbol
     /// character is four bars and four spaces of one to six modules, which starts with a bar.
     /// </summary>
     public static ReadOnlySpan<int> Modules =>
@@ -218,8 +217,8 @@ internal static class Pdf417Patterns
         => AppendElements(runs, ref index, modules, ModuleCount, ElementCount);
 
     /// <summary>
-    /// Writes the element widths of a pattern that starts with a bar, whose modules are held as bits with
-    /// the first module in the highest bit and a set bit for a dark module.
+    /// Writes the element widths of a pattern that starts with a bar, whose modules are held as bits with the first module in the highest bit and a set bit for
+    /// a dark module.
     /// </summary>
     /// <param name="runs">The element widths of the row.</param>
     /// <param name="index">The index of the next element, advanced past the pattern.</param>

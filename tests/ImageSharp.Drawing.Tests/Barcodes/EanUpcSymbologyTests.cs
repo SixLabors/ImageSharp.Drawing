@@ -6,10 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for the EAN/UPC symbology family. Module sequences are asserted against reference vectors
-/// generated with an independent reference implementation, so a matching error in the expected values
-/// cannot conceal an error in our encodation tables. Structural assertions (symbol width, bar counts,
-/// guard bar extension, quiet zones, text layout) follow ISO/IEC 15420 directly.
+/// Encoder tests for the EAN/UPC symbology family. Module sequences are asserted against reference vectors generated with an independent reference
+/// implementation, so a matching error in the expected values cannot conceal an error in our encodation tables. Structural assertions (symbol width, bar
+/// counts, guard bar extension, quiet zones, text layout) follow ISO/IEC 15420 directly.
 /// </summary>
 public class EanUpcSymbologyTests
 {
@@ -22,9 +21,7 @@ public class EanUpcSymbologyTests
 
     [Fact]
     public void Ean13_ComputesMissingCheckDigit()
-        => Assert.Equal(
-            Runs(new Ean13Symbology(), "5901234123457"),
-            Runs(new Ean13Symbology(), "590123412345"));
+        => Assert.Equal(Runs(new Ean13Symbology(), "5901234123457"), Runs(new Ean13Symbology(), "590123412345"));
 
     [Fact]
     public void Ean13_Structure()
@@ -47,9 +44,8 @@ public class EanUpcSymbologyTests
         BarcodeOptions options = CreateTextOptions();
         SymbolEncoder.Encode(new Ean13Symbology(), "5901234123457", options, static (ref symbol) =>
         {
-            // ISO/IEC 15420: the leading digit prints in the leading quiet zone and every other digit prints
-            // below its own symbol character, so the placement is per digit. Digits hang one module below the
-            // digit bars; the renderer grows the drawn area to hold them.
+            // ISO/IEC 15420: the leading digit prints in the leading quiet zone and every other digit prints below its own symbol character, so the placement
+            // is per digit. Digits hang one module below the digit bars; the renderer grows the drawn area to hold them.
             float textEdge = symbol.BarHeights.ToArray().Min() + BarcodeTextPlacement.Clearance;
             Assert.Equal(13, symbol.Text.Length);
             Assert.Equal("5901234123457", string.Concat(SymbolEncoder.Texts(ref symbol)));
@@ -82,9 +78,7 @@ public class EanUpcSymbologyTests
 
     [Fact]
     public void Ean8_EncodesExpectedModuleSequence()
-        => Assert.Equal(
-            "1,1,1,3,1,1,2,1,1,1,4,1,4,1,1,1,2,1,3,1,1,1,1,1,1,2,3,1,3,2,1,1,1,3,1,2,1,1,3,2,1,1,1",
-            Runs(new Ean8Symbology(), "96385074"));
+        => Assert.Equal("1,1,1,3,1,1,2,1,1,1,4,1,4,1,1,1,2,1,3,1,1,1,1,1,1,2,3,1,3,2,1,1,1,3,1,2,1,1,3,2,1,1,1", Runs(new Ean8Symbology(), "96385074"));
 
     [Fact]
     public void Ean8_Structure()
@@ -92,8 +86,8 @@ public class EanUpcSymbologyTests
         string expected = Runs(new Ean8Symbology(), "96385074");
         SymbolEncoder.Encode(new Ean8Symbology(), "9638507", new BarcodeOptions(), (ref symbol) =>
         {
-            // ISO/IEC 15420: 67 modules, 22 bars, 7 module quiet zones on both sides. The 7 digit input
-            // verifies check digit computation: 96385074 carries check digit 4.
+            // ISO/IEC 15420: 67 modules, 22 bars, 7 module quiet zones on both sides. The 7 digit input verifies check digit computation: 96385074 carries
+            // check digit 4.
             Assert.Equal(67, symbol.WidthInModules);
             Assert.Equal(22, symbol.BarHeights.Length);
             Assert.Equal(7, symbol.LeadingQuietZone);
@@ -124,9 +118,9 @@ public class EanUpcSymbologyTests
         string expected = Runs(new UpcASymbology(), "036000291452");
         SymbolEncoder.Encode(new UpcASymbology(), "03600029145", new BarcodeOptions(), (ref symbol) =>
         {
-            // ISO/IEC 15420: the UPC-A symbol shares the 95 module EAN-13 structure with 9 module quiet zones.
-            // The bars of the first and last symbol characters are extended because their digits print in the
-            // quiet zones. The 11 digit input verifies check digit computation: 036000291452 carries check digit 2.
+            // ISO/IEC 15420: the UPC-A symbol shares the 95 module EAN-13 structure with 9 module quiet zones. The bars of the first and last symbol characters
+            // are extended because their digits print in the quiet zones. The 11 digit input verifies check digit computation: 036000291452 carries check digit
+            // 2.
             Assert.Equal(95, symbol.WidthInModules);
             Assert.Equal(9, symbol.LeadingQuietZone);
             Assert.Equal(9, symbol.TrailingQuietZone);
@@ -142,9 +136,8 @@ public class EanUpcSymbologyTests
         BarcodeOptions options = CreateTextOptions();
         SymbolEncoder.Encode(new UpcASymbology(), "036000291452", options, static (ref symbol) =>
         {
-            // ISO/IEC 15420: the number system digit prints in the leading quiet zone, the check digit in the
-            // trailing quiet zone, and every other digit below its own symbol character. The quiet zone digits
-            // print in smaller type: 10/12 of the digit size, matching the reference implementation.
+            // ISO/IEC 15420: the number system digit prints in the leading quiet zone, the check digit in the trailing quiet zone, and every other digit below
+            // its own symbol character. The quiet zone digits print in smaller type: 10/12 of the digit size, matching the reference implementation.
             Assert.Equal(12, symbol.Text.Length);
             Assert.Equal("036000291452", string.Concat(SymbolEncoder.Texts(ref symbol)));
             Assert.True(symbol.Text[0].Left < 0);
@@ -156,9 +149,8 @@ public class EanUpcSymbologyTests
     }
 
     /// <summary>
-    /// One vector per zero suppression pattern of ISO/IEC 15420: the last compressed digit selects how the
-    /// UPC-E digits expand to a UPC-A number, and the check digit is computed over the expanded number.
-    /// The final case covers number system 1, which inverts the parity pattern.
+    /// One vector per zero suppression pattern of ISO/IEC 15420: the last compressed digit selects how the UPC-E digits expand to a UPC-A number, and the check
+    /// digit is computed over the expanded number. The final case covers number system 1, which inverts the parity pattern.
     /// </summary>
     [Theory]
     [InlineData("01234565", "1,1,1,1,2,2,2,2,1,2,2,1,4,1,1,2,3,1,1,1,3,2,1,1,1,1,4,1,1,1,1,1,1")]
@@ -175,8 +167,8 @@ public class EanUpcSymbologyTests
         string expected = Runs(new UpcESymbology(), "01234565");
         SymbolEncoder.Encode(new UpcESymbology(), "0123456", new BarcodeOptions(), (ref symbol) =>
         {
-            // ISO/IEC 15420: 51 modules, 17 bars, a 9 module leading and 7 module trailing quiet zone. All five
-            // guard bars are extended: two in the left guard pattern and three in the special right guard pattern.
+            // ISO/IEC 15420: 51 modules, 17 bars, a 9 module leading and 7 module trailing quiet zone. All five guard bars are extended: two in the left guard
+            // pattern and three in the special right guard pattern.
             Assert.Equal(51, symbol.WidthInModules);
             Assert.Equal(17, symbol.BarHeights.Length);
             Assert.Equal(9, symbol.LeadingQuietZone);
@@ -206,8 +198,8 @@ public class EanUpcSymbologyTests
     public void Ean5_Structure()
         => SymbolEncoder.Encode(new Ean5Symbology(), "90200", new BarcodeOptions(), static (ref symbol) =>
         {
-            // GS1 General Specifications: 47 modules once the leading space module of the add-on guard pattern
-            // is folded into the quiet zone; all add-on bars are uniform in height.
+            // GS1 General Specifications: 47 modules once the leading space module of the add-on guard pattern is folded into the quiet zone; all add-on bars
+            // are uniform in height.
             float first = symbol.BarHeights[0];
             Assert.Equal(47, symbol.WidthInModules);
             Assert.Equal(16, symbol.BarHeights.Length);
@@ -221,9 +213,8 @@ public class EanUpcSymbologyTests
         BarcodeOptions options = CreateTextOptions();
         SymbolEncoder.Encode(new Ean5Symbology(), "90200", options, static (ref symbol) =>
         {
-            // GS1 General Specifications: the add-on interpretation prints above the bars, one digit above its
-            // own symbol character. The room it needs belongs to the renderer, which is what knows the font,
-            // so the symbol itself leaves every bar top aligned.
+            // GS1 General Specifications: the add-on interpretation prints above the bars, one digit above its own symbol character. The room it needs belongs
+            // to the renderer, which is what knows the font, so the symbol itself leaves every bar top aligned.
             Assert.Equal(5, symbol.Text.Length);
             Assert.Equal("90200", string.Concat(SymbolEncoder.Texts(ref symbol)));
             Assert.All(symbol.Text.ToArray(), placement => Assert.Equal(BarcodeTextSide.AboveBars, placement.Side));
@@ -249,9 +240,8 @@ public class EanUpcSymbologyTests
     public void Ean2_Structure()
         => SymbolEncoder.Encode(new Ean2Symbology(), "05", new BarcodeOptions(), static (ref symbol) =>
         {
-            // GS1 General Specifications: 20 modules once the leading space module of the add-on guard pattern
-            // is folded into the quiet zone. The structure is fixed: 3 guard runs, 4 runs per digit character
-            // and 2 delineator runs, so 13 runs and therefore 7 bars.
+            // GS1 General Specifications: 20 modules once the leading space module of the add-on guard pattern is folded into the quiet zone. The structure is
+            // fixed: 3 guard runs, 4 runs per digit character and 2 delineator runs, so 13 runs and therefore 7 bars.
             Assert.Equal(20, symbol.WidthInModules);
             Assert.Equal(7, symbol.BarHeights.Length);
         });
@@ -272,8 +262,8 @@ public class EanUpcSymbologyTests
 
         SymbolEncoder.Encode(new Ean13Symbology(), "5901234123457", options, (ref symbol) =>
         {
-            // 16.5 mm at the 0.33 mm X dimension is 50 modules for the digit bars; with text enabled the guard
-            // bars gain the 5 module extension of ISO/IEC 15420 on top of that.
+            // 16.5 mm at the 0.33 mm X dimension is 50 modules for the digit bars; with text enabled the guard bars gain the 5 module extension of ISO/IEC
+            // 15420 on top of that.
             Assert.Equal(50F, symbol.BarHeights[2], comparer);
             Assert.Equal(55F, symbol.BarHeights[0], comparer);
             Assert.Equal(55F, symbol.HeightInModules, comparer);
@@ -319,9 +309,8 @@ public class EanUpcSymbologyTests
     /// <param name="guardBars">The indexes of the bars that extend below the digit bars when the symbol carries text.</param>
     private static void AssertGuardExtension(BarcodeSymbology symbology, string text, int[] guardBars)
     {
-        // The guard extension flanks the text row, so it applies only when text is enabled: without a font
-        // every bar is uniform (matching the reference implementation); with a font the listed bars descend exactly 5 modules below
-        // the digit bars. Every bar is top aligned in both modes.
+        // The guard extension flanks the text row, so it applies only when text is enabled: without a font every bar is uniform (matching the reference
+        // implementation); with a font the listed bars descend exactly 5 modules below the digit bars. Every bar is top aligned in both modes.
         SymbolEncoder.Encode(symbology, text, new BarcodeOptions(), static (ref plain) =>
         {
             float first = plain.BarHeights[0];

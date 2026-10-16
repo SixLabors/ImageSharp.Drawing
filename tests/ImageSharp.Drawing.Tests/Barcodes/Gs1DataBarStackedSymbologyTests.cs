@@ -6,10 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Gs1DataBarStackedSymbology"/>. Each expected row is the 50 modules of the
-/// upper row, the separator and the lower row, 1 for dark, taken from an independent reference
-/// implementation through its raw encoding API and confirmed by a second one. The separator follows the
-/// rows above and below it, so it shows up here too.
+/// Encoder tests for <see cref="Gs1DataBarStackedSymbology"/>. Each expected row is the 50 modules of the upper row, the separator and the lower row, 1 for
+/// dark, taken from an independent reference implementation through its raw encoding API and confirmed by a second one. The separator follows the rows above
+/// and below it, so it shows up here too.
 /// </summary>
 public class Gs1DataBarStackedSymbologyTests
 {
@@ -62,9 +61,8 @@ public class Gs1DataBarStackedSymbologyTests
         => Assert.Equal(expected, SymbolEncoder.Read(new Gs1DataBarStackedSymbology(), text, new BarcodeOptions(), SymbolEncoder.RowModuleStrings));
 
     /// <summary>
-    /// Section 5.5.2.1.3 of the GS1 General Specifications: "Its dimensions are 50X wide by 13X high" with
-    /// "a 1X high separator pattern between the two rows", an upper row of 5X and a lower row of 7X. No
-    /// quiet zone is required.
+    /// Section 5.5.2.1.3 of the GS1 General Specifications: "Its dimensions are 50X wide by 13X high" with "a 1X high separator pattern between the two rows",
+    /// an upper row of 5X and a lower row of 7X. No quiet zone is required.
     /// </summary>
     [Fact]
     public void Gs1DataBarStacked_IsFiftyModulesWideAndThirteenHigh()

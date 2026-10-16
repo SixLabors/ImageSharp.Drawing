@@ -7,9 +7,8 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encodes text into a <see cref="BarcodeSymbol"/> the way the drawing and measuring paths do. The symbol
-/// is a local, the symbology encodes into it, the test reads it, and the symbol then returns any array it
-/// rented.
+/// Encodes text into a <see cref="BarcodeSymbol"/> the way the drawing and measuring paths do. The symbol is a local, the symbology encodes into it, the test
+/// reads it, and the symbol then returns any array it rented.
 /// </summary>
 internal static class SymbolEncoder
 {
@@ -97,8 +96,7 @@ internal static class SymbolEncoder
         => string.Concat(symbol.Runs.Slice(row.RunStart, row.RunCount).ToArray());
 
     /// <summary>
-    /// Returns the run widths of every row of a symbol, from the top, the widths of a row separated by
-    /// commas and the rows separated by a vertical bar.
+    /// Returns the run widths of every row of a symbol, from the top, the widths of a row separated by commas and the rows separated by a vertical bar.
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
     /// <returns>The run widths of the rows.</returns>
@@ -150,14 +148,13 @@ internal static class SymbolEncoder
     }
 
     /// <summary>
-    /// Returns the modules of a run sequence as a string of 1 for a dark module and 0 for a light module.
-    /// The runs start with a bar.
+    /// Returns the modules of a run sequence as a string of 1 for a dark module and 0 for a light module. The runs start with a bar.
     /// </summary>
     /// <param name="runs">The run widths.</param>
     /// <returns>The modules.</returns>
     public static string ModuleString(ReadOnlySpan<int> runs)
     {
-        System.Text.StringBuilder modules = new();
+        StringBuilder modules = new();
         for (int i = 0; i < runs.Length; i++)
         {
             modules.Append((i & 1) == 0 ? '1' : '0', runs[i]);
@@ -167,8 +164,7 @@ internal static class SymbolEncoder
     }
 
     /// <summary>
-    /// Returns the modules of every row of a symbol, from the top, each row as <see cref="ModuleString"/>
-    /// writes it and the rows separated by a vertical bar.
+    /// Returns the modules of every row of a symbol, from the top, each row as <see cref="ModuleString"/> writes it and the rows separated by a vertical bar.
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
     /// <returns>The modules of the rows.</returns>
@@ -185,8 +181,7 @@ internal static class SymbolEncoder
     }
 
     /// <summary>
-    /// Returns the sum of the run widths of a symbol, which is its width in modules before the quiet zones
-    /// when the run unit is one module.
+    /// Returns the sum of the run widths of a symbol, which is its width in modules before the quiet zones when the run unit is one module.
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
     /// <returns>The sum of the run widths.</returns>
@@ -219,8 +214,7 @@ internal static class SymbolEncoder
     }
 
     /// <summary>
-    /// Writes the modules of a matrix symbol as rows of hexadecimal digits separated by a vertical bar, the
-    /// form the reference grids take.
+    /// Writes the modules of a matrix symbol as rows of hexadecimal digits separated by a vertical bar, the form the reference grids take.
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
     /// <returns>The grid.</returns>
@@ -234,8 +228,8 @@ internal static class SymbolEncoder
                 builder.Append('|');
             }
 
-            // Four modules make one hexadecimal digit, the leftmost module the most significant bit. A
-            // row whose width is not a multiple of four pads its last digit with light modules.
+            // Four modules make one hexadecimal digit, the leftmost module the most significant bit. A row whose width is not a multiple of four pads its last
+            // digit with light modules.
             for (int c = 0; c < symbol.Columns; c += 4)
             {
                 int digit = 0;

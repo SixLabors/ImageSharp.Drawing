@@ -7,11 +7,9 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The PosiCode symbology, which AIM ITS/02-001 defines. The data lies in the positions of bars of one
-/// width. Versions A and B carry all 256 values of ISO/IEC 8859-1, and the Limited versions carry the
-/// digits, the capital letters, the hyphen and the full stop. Every symbol carries a cyclic redundancy
-/// check character, which the printed line does not show, between a start character and a stop
-/// character. The printed line shows the text as given.
+/// The PosiCode symbology, which AIM ITS/02-001 defines. The data lies in the positions of bars of one width. Versions A and B carry all 256 values of ISO/IEC
+/// 8859-1, and the Limited versions carry the digits, the capital letters, the hyphen and the full stop. Every symbol carries a cyclic redundancy check
+/// character, which the printed line does not show, between a start character and a stop character. The printed line shows the text as given.
 /// </summary>
 public sealed class PosiCodeSymbology : BarcodeSymbology
 {
@@ -44,8 +42,7 @@ public sealed class PosiCodeSymbology : BarcodeSymbology
 
         bool limited = PosiCodeEncoder.IsLimited(this.Version);
 
-        // One value for each character, so the builder never grows: short text works inline and longer
-        // text rents once.
+        // One value for each character, so the builder never grows: short text works inline and longer text rents once.
         InlineArray64<int> valueStorage = default;
         ValueListBuilder<int> values = text.Length <= PosiCodeEncoder.InlineBufferLength ? new(valueStorage) : new(text.Length);
         PooledBuffer<int> rentedCodewords = default;

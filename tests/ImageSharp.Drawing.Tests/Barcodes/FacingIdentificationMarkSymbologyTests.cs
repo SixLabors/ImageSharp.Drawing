@@ -6,11 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="FacingIdentificationMarkSymbology"/>. Each expected run string is the
-/// alternating bar and space widths in modules of 1/32 inch, starting with a bar. The values for A, C,
-/// D and E are the reference implementation's raw encoding API output divided by its 2.25 point module.
-/// Its pattern B has one space of 6.25 points where the nine bit pattern 101101101 and the 17/32 inch
-/// width give 6.75, so the value for B comes from the pattern.
+/// Encoder tests for <see cref="FacingIdentificationMarkSymbology"/>. Each expected run string is the alternating bar and space widths in modules of 1/32 inch,
+/// starting with a bar. The values for A, C, D and E are the reference implementation's raw encoding API output divided by its 2.25 point module. Its pattern B
+/// has one space of 6.25 points where the nine bit pattern 101101101 and the 17/32 inch width give 6.75, so the value for B comes from the pattern.
 /// </summary>
 public class FacingIdentificationMarkSymbologyTests
 {
@@ -24,8 +22,7 @@ public class FacingIdentificationMarkSymbologyTests
         => Assert.Equal(reference, Encode(text));
 
     /// <summary>
-    /// Every pattern is 17/32 inch wide, 17 modules, and its bars 5/8 inch high, 20 modules, with no
-    /// quiet zone and no printed line.
+    /// Every pattern is 17/32 inch wide, 17 modules, and its bars 5/8 inch high, 20 modules, with no quiet zone and no printed line.
     /// </summary>
     /// <param name="text">The pattern letter.</param>
     [Theory]
@@ -63,8 +60,5 @@ public class FacingIdentificationMarkSymbologyTests
     /// <returns>The run widths of the symbol, separated by commas.</returns>
     private static string Encode(string text)
         => SymbolEncoder.Read(
-            new FacingIdentificationMarkSymbology(),
-            text,
-            new BarcodeOptions(),
-            static (ref symbol) => string.Join(",", symbol.Runs.ToArray()));
+            new FacingIdentificationMarkSymbology(), text, new BarcodeOptions(), static (ref symbol) => string.Join(",", symbol.Runs.ToArray()));
 }

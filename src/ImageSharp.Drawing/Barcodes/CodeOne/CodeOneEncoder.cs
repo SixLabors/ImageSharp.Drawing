@@ -1,22 +1,21 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Encodes Code One symbols. Versions A to H and T carry 8-bit codewords in the ASCII, C40, Text, X12, Decimal
-/// and Byte modes, chosen by a look-ahead over the data, with Reed-Solomon error correction over GF(256).
-/// Versions S carry a number as 5-bit codewords with error correction over GF(32). The codewords fill the data
-/// columns in 2-row bricks around the centre pattern, the risers and the black dots.
+/// Encodes Code One symbols. Versions A to H and T carry 8-bit codewords in the ASCII, C40, Text, X12, Decimal and Byte modes, chosen by a look-ahead over the
+/// data, with Reed-Solomon error correction over GF(256). Versions S carry a number as 5-bit codewords with error correction over GF(32). The codewords fill
+/// the data columns in 2-row bricks around the centre pattern, the risers and the black dots.
 /// </summary>
 internal static class CodeOneEncoder
 {
     /// <summary>
-    /// The longest input: version H holds 1480 data codewords, and Decimal mode, the densest, writes three
-    /// digits in 10 bits, so at most 3550 characters fit.
+    /// The longest input: version H holds 1480 data codewords, and Decimal mode, the densest, writes three digits in 10 bits, so at most 3550 characters fit.
     /// </summary>
     public const int MaximumLength = 3550;
 
@@ -76,16 +75,10 @@ internal static class CodeOneEncoder
     private const int ShiftedUpperShift = 30;
 
     /// <summary>
-    /// The scale of the look-ahead counts. The counts step in halves and thirds, so twelve units to the
-    /// codeword keep every count a whole number and every comparison exact.
+    /// The scale of the look-ahead counts. The counts step in halves and thirds, so twelve units to the codeword keep every count a whole number and every
+    /// comparison exact.
     /// </summary>
     private const int Unit = 12;
-
-    /// <summary>
-    /// The number of rows of the tables that <see cref="PrepareLookAhead"/> fills: three runs and the running
-    /// sums of the ASCII, C40, Text, X12 and Byte modes.
-    /// </summary>
-    private const int LookAheadRows = 8;
 
     /// <summary>
     /// The data codewords of version H, the most any version holds.
@@ -103,9 +96,9 @@ internal static class CodeOneEncoder
     private const int MaximumCells = 148 * 134;
 
     /// <summary>
-    /// The number of values one run of C40, Text or X12 mode can gather: three values pack into two codewords,
-    /// so a run of more than three halves of <see cref="MaximumCodewords"/> cannot fit. A character takes at
-    /// most four values, and the twelve places beyond hold the values of the last three characters.
+    /// The number of values one run of C40, Text or X12 mode can gather: three values pack into two codewords, so a run of more than three halves of
+    /// <see cref="MaximumCodewords"/> cannot fit. A character takes at most four values, and the twelve places beyond hold the values of the last three
+    /// characters.
     /// </summary>
     private const int MaximumValues = (MaximumCodewords * 3 / 2) + 12;
 
@@ -130,41 +123,22 @@ internal static class CodeOneEncoder
     private const int MinimumLookAhead = 4;
 
     /// <summary>
-    /// The field of the 8-bit codewords of versions A to H and T: GF(256) with the polynomial
-    /// x^8 + x^5 + x^3 + x^2 + 1, 301 decimal.
+    /// The number of entries a version takes in <see cref="VersionTable"/>.
+    /// </summary>
+    private const int VersionStride = 13;
+
+    /// <summary>
+    /// The field of the 8-bit codewords of versions A to H and T: GF(256) with the polynomial x^8 + x^5 + x^3 + x^2 + 1, 301 decimal.
     /// </summary>
     private static readonly GaloisField Field8 = new(256, 301);
 
     /// <summary>
-    /// The field of the 5-bit codewords of the S versions: GF(32) with the polynomial x^5 + x^2 + 1, 37
-    /// decimal.
+    /// The field of the 5-bit codewords of the S versions: GF(32) with the polynomial x^5 + x^2 + 1, 37 decimal.
     /// </summary>
     private static readonly GaloisField Field5 = new(32, 37);
 
     /// <summary>
-    /// The dimensions and fixed patterns of each version, in the order of <see cref="CodeOneVersion"/>.
-    /// </summary>
-    private static readonly VersionInfo[] Versions =
-    [
-        new(16, 18, 16, 10, 10, 1, 4, 18, 6, "121343", [(12, 5)]),
-        new(22, 22, 20, 19, 16, 1, 4, 22, 8, "12134343", [(16, 7)]),
-        new(28, 32, 28, 44, 26, 1, 4, 22, 11, "12121343", [(26, 12)]),
-        new(40, 42, 36, 91, 44, 1, 4, 16, 16, "1213434343", []),
-        new(52, 54, 48, 182, 70, 1, 4, 22, 22, "1212134343", [(26, 23)]),
-        new(70, 76, 68, 370, 140, 2, 4, 22, 31, "1212121343", [(26, 32), (70, 32), (26, 34), (70, 34)]),
-        new(104, 98, 88, 732, 280, 4, 6, 21, 47, "121213434343", [(27, 48), (69, 48)]),
-        new(148, 134, 120, 1480, 560, 8, 6, 20, 69, "121212134343", [(26, 70), (66, 70), (106, 70), (26, 72), (66, 72), (106, 72)]),
-        new(8, 11, 10, 4, 4, 1, 0, 0, 0, "56661278", []),
-        new(8, 21, 20, 8, 8, 1, 0, 0, 0, "56661278", [(10, 4)]),
-        new(8, 31, 30, 12, 12, 1, 0, 0, 0, "56661278", [(15, 4), (15, 6)]),
-        new(16, 17, 16, 10, 10, 1, 0, 0, 0, "5666666666127878", [(8, 10)]),
-        new(16, 33, 32, 24, 16, 1, 0, 0, 0, "5666666666127878", [(16, 10), (16, 12)]),
-        new(16, 49, 48, 38, 22, 1, 0, 0, 0, "5666666666127878", [(24, 10), (24, 12), (24, 14)]),
-    ];
-
-    /// <summary>
-    /// The modes of versions A to H and T. The modes the look-ahead counts, ASCII to Byte, number the rows of
-    /// their running sums.
+    /// The modes of versions A to H and T.
     /// </summary>
     private enum Mode
     {
@@ -175,6 +149,113 @@ internal static class CodeOneEncoder
         Byte,
         Decimal,
     }
+
+    /// <summary>
+    /// The kinds of the rows of the centre pattern.
+    /// </summary>
+    private enum CentreRow : byte
+    {
+        /// <summary>
+        /// Every module light.
+        /// </summary>
+        Light = 1,
+
+        /// <summary>
+        /// Every module dark.
+        /// </summary>
+        Dark = 2,
+
+        /// <summary>
+        /// Light ends around a dark run.
+        /// </summary>
+        DarkWithLightEnds = 3,
+
+        /// <summary>
+        /// Light, with a dark module one in from each end.
+        /// </summary>
+        LightWithDarkInner = 4,
+
+        /// <summary>
+        /// A single dark module in the middle. The other cells take data.
+        /// </summary>
+        DarkCentre = 5,
+
+        /// <summary>
+        /// A single light module in the middle. The other cells take data.
+        /// </summary>
+        LightCentre = 6,
+
+        /// <summary>
+        /// Dark ends around a light run.
+        /// </summary>
+        LightWithDarkEnds = 7,
+
+        /// <summary>
+        /// Dark, with a light module one in from each end.
+        /// </summary>
+        DarkWithLightInner = 8,
+    }
+
+    /// <summary>
+    /// Gets the dimensions and fixed patterns of each version in the order of <see cref="CodeOneVersion"/>, <see cref="VersionStride"/> entries a version: the
+    /// rows, the columns, the columns the codeword bricks fill, the data codewords, the check codewords, the Reed-Solomon blocks, the column of the first
+    /// riser, the columns from one riser to the next, the rows of a riser, the start and the length of the centre pattern in <see cref="CentreRows"/>, and the
+    /// start and the count of the black dots in <see cref="BlackDots"/>.
+    /// </summary>
+    private static ReadOnlySpan<short> VersionTable =>
+    [
+        16, 18, 16, 10, 10, 1, 4, 18, 6, 0, 6, 0, 1,
+        22, 22, 20, 19, 16, 1, 4, 22, 8, 6, 8, 1, 1,
+        28, 32, 28, 44, 26, 1, 4, 22, 11, 14, 8, 2, 1,
+        40, 42, 36, 91, 44, 1, 4, 16, 16, 22, 10, 3, 0,
+        52, 54, 48, 182, 70, 1, 4, 22, 22, 32, 10, 3, 1,
+        70, 76, 68, 370, 140, 2, 4, 22, 31, 42, 10, 4, 4,
+        104, 98, 88, 732, 280, 4, 6, 21, 47, 52, 12, 8, 2,
+        148, 134, 120, 1480, 560, 8, 6, 20, 69, 64, 12, 10, 6,
+        8, 11, 10, 4, 4, 1, 0, 0, 0, 76, 8, 16, 0,
+        8, 21, 20, 8, 8, 1, 0, 0, 0, 76, 8, 16, 1,
+        8, 31, 30, 12, 12, 1, 0, 0, 0, 76, 8, 17, 2,
+        16, 17, 16, 10, 10, 1, 0, 0, 0, 84, 16, 19, 1,
+        16, 33, 32, 24, 16, 1, 0, 0, 0, 84, 16, 20, 2,
+        16, 49, 48, 38, 22, 1, 0, 0, 0, 84, 16, 22, 3,
+    ];
+
+    /// <summary>
+    /// Gets the centre patterns of the versions as <see cref="CentreRow"/> kinds, top row first: versions A to H in turn, then the pattern the S versions share
+    /// and the pattern the T versions share.
+    /// </summary>
+    private static ReadOnlySpan<byte> CentreRows =>
+    [
+        1, 2, 1, 3, 4, 3,
+        1, 2, 1, 3, 4, 3, 4, 3,
+        1, 2, 1, 2, 1, 3, 4, 3,
+        1, 2, 1, 3, 4, 3, 4, 3, 4, 3,
+        1, 2, 1, 2, 1, 3, 4, 3, 4, 3,
+        1, 2, 1, 2, 1, 2, 1, 3, 4, 3,
+        1, 2, 1, 2, 1, 3, 4, 3, 4, 3, 4, 3,
+        1, 2, 1, 2, 1, 2, 1, 3, 4, 3, 4, 3,
+        5, 6, 6, 6, 1, 2, 7, 8,
+        5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 1, 2, 7, 8, 7, 8,
+    ];
+
+    /// <summary>
+    /// Gets the black dots of the versions as column and row pairs, the versions in the order of <see cref="CodeOneVersion"/>.
+    /// </summary>
+    private static ReadOnlySpan<byte> BlackDots =>
+    [
+        12, 5,
+        16, 7,
+        26, 12,
+        26, 23,
+        26, 32, 70, 32, 26, 34, 70, 34,
+        27, 48, 69, 48,
+        26, 70, 66, 70, 106, 70, 26, 72, 66, 72, 106, 72,
+        10, 4,
+        15, 4, 15, 6,
+        8, 10,
+        16, 10, 16, 12,
+        24, 10, 24, 12, 24, 14,
+    ];
 
     /// <summary>
     /// Builds a Code One symbol.
@@ -202,9 +283,8 @@ internal static class CodeOneEncoder
             }
         }
 
-        // One rented block holds the codewords and the cells of the largest version, and, for the data of
-        // versions A to H and T, the scratch of the encodation. The text is at most MaximumLength characters,
-        // so the block is bounded.
+        // One rented block holds the codewords and the cells of the largest version, and, for the data of versions A to H and T, the scratch of the encodation.
+        // The text is at most MaximumLength characters, so the block is bounded.
         const int codewordLength = MaximumCodewords + MaximumCheckCodewords;
         const int cellLength = MaximumCells / sizeof(int);
         int scratchLength = number ? 0 : ScratchLength(text.Length);
@@ -215,7 +295,7 @@ internal static class CodeOneEncoder
         if (number)
         {
             chosen = version!.Value;
-            EncodeNumber(text, Versions[(int)chosen].DataCodewords, codewords);
+            EncodeNumber(text, new VersionInfo(chosen).DataCodewords, codewords);
         }
         else
         {
@@ -225,15 +305,14 @@ internal static class CodeOneEncoder
                 throw new ArgumentException("The text does not fit in a Code One symbol of the requested version.", nameof(text));
             }
 
-            codewords[count..Versions[(int)chosen].DataCodewords].Fill(Pad);
+            codewords[count..new VersionInfo(chosen).DataCodewords].Fill(Pad);
         }
 
-        VersionInfo info = Versions[(int)chosen];
+        VersionInfo info = new(chosen);
         Span<int> all = codewords[..(info.DataCodewords + info.CheckCodewords)];
         AddCheckCodewords(all, info.DataCodewords, info.CheckBlocks, info.IsNumeric);
 
-        // Versions A to H need no quiet zone. Versions S and T have one module of quiet zone on the left, the
-        // right and the bottom.
+        // Versions A to H need no quiet zone. Versions S and T have one module of quiet zone on the left, the right and the bottom.
         Span<bool> modules = chosen >= CodeOneVersion.S10
             ? symbol.BeginMatrix(info.Columns, info.Rows, 1, 1, 0, 1, xDimension)
             : symbol.BeginMatrix(info.Columns, info.Rows, 0, xDimension);
@@ -242,13 +321,13 @@ internal static class CodeOneEncoder
     }
 
     /// <summary>
-    /// Returns the length of the scratch <see cref="EncodeData"/> takes: the message values, the look-ahead
-    /// tables of <see cref="PrepareLookAhead"/> and the values of a C40, Text or X12 run.
+    /// Returns the length in ints of the scratch <see cref="EncodeData"/> takes: one <see cref="LookAheadEntry"/> for each position of the text and one past
+    /// its end, then the values of a C40, Text or X12 run.
     /// </summary>
     /// <param name="length">The length of the text.</param>
     /// <returns>The scratch length.</returns>
     private static int ScratchLength(int length)
-        => length + (LookAheadRows * (length + 1)) + MaximumValues;
+        => (LookAheadEntry.IntCount * (length + 1)) + MaximumValues;
 
     /// <summary>
     /// Finds the smallest permitted version that holds the codewords.
@@ -261,7 +340,7 @@ internal static class CodeOneEncoder
     {
         for (CodeOneVersion v = CodeOneVersion.A; v <= CodeOneVersion.T48; v++)
         {
-            if (IsPermitted(version, v) && count <= Versions[(int)v].DataCodewords)
+            if (IsPermitted(version, v) && count <= new VersionInfo(v).DataCodewords)
             {
                 chosen = v;
                 return true;
@@ -273,18 +352,18 @@ internal static class CodeOneEncoder
     }
 
     /// <summary>
-    /// Gets a value indicating whether a version is open to data of the requested version: versions A to H
-    /// when none is requested, or the requested version itself. The S versions carry numbers only.
+    /// Gets a value indicating whether a version is open to data of the requested version: versions A to H when none is requested, or the requested version
+    /// itself. The S versions carry numbers only.
     /// </summary>
     /// <param name="requested">The requested version, or <see langword="null"/>.</param>
     /// <param name="candidate">The candidate version.</param>
     /// <returns><see langword="true"/> when the candidate is open.</returns>
     private static bool IsPermitted(CodeOneVersion? requested, CodeOneVersion candidate)
-        => !Versions[(int)candidate].IsNumeric && (requested is null ? candidate <= CodeOneVersion.H : candidate == requested.Value);
+        => !new VersionInfo(candidate).IsNumeric && (requested is null ? candidate <= CodeOneVersion.H : candidate == requested.Value);
 
     /// <summary>
-    /// Encodes the digits of an S version as one number plus one in 5-bit codewords, the most significant
-    /// first, padded at the front with zero codewords to the data codeword count.
+    /// Encodes the digits of an S version as one number plus one in 5-bit codewords, the most significant first, padded at the front with zero codewords to the
+    /// data codeword count.
     /// </summary>
     /// <param name="text">The digits.</param>
     /// <param name="dataCount">The data codeword count of the version.</param>
@@ -319,75 +398,57 @@ internal static class CodeOneEncoder
     /// <returns>The number of codewords, or -1 when no permitted version holds them.</returns>
     private static int EncodeData(ReadOnlySpan<char> text, CodeOneVersion? version, Span<int> codewords, Span<int> scratch)
     {
-        int length = text.Length;
-        int tableLength = LookAheadRows * (length + 1);
-        Span<int> message = scratch[..length];
-        for (int i = 0; i < length; i++)
-        {
-            message[i] = text[i];
-        }
-
-        Span<int> tables = scratch.Slice(length, tableLength);
-        PrepareLookAhead(message, tables);
-        Encoder encoder = new(message, version, codewords, tables, scratch.Slice(length + tableLength, MaximumValues));
+        // The entries are plain ints, so the int scratch holds them in place.
+        int tableLength = LookAheadEntry.IntCount * (text.Length + 1);
+        Span<LookAheadEntry> table = MemoryMarshal.Cast<int, LookAheadEntry>(scratch[..tableLength]);
+        PrepareLookAhead(text, table);
+        Encoder encoder = new(text, version, codewords, table, scratch.Slice(tableLength, MaximumValues));
         return encoder.Run();
     }
 
     /// <summary>
-    /// Fills the tables the look-ahead reads, <see cref="LookAheadRows"/> rows of message length plus one
-    /// entries each. Rows 0 to 2 hold three runs from each position: the digits that start there, the distance
-    /// to the next X12 terminator, carriage return, asterisk or greater than, and the distance to the next
-    /// character X12 cannot carry. The entry past the end stops each run, and a distance with no end stands
-    /// past the end. Rows 3 to 7 hold the running sums of the costs of the ASCII, C40, Text, X12 and Byte modes,
-    /// row 3 plus the mode, the sum before position i at entry i.
+    /// Fills the entries the look-ahead reads, one for each position of the message and one past its end. Each entry holds three runs from its position: the
+    /// digits that start there, the distance to the next X12 terminator, carriage return, asterisk or greater than, and the distance to the next character X12
+    /// cannot carry. The entry past the end stops each run, and a distance with no end stands past the end. Each entry also holds the running sums of the costs
+    /// of the ASCII, C40, Text, X12 and Byte modes before its position.
     /// <para>
-    /// A digit costs half a codeword in ASCII mode and a character above 127 two whole codewords; any other
-    /// character rounds the count up first, because it cannot share a codeword with a digit before it. A basic
-    /// set character costs two thirds of a codeword in C40, Text and X12 mode, one of three values in two
-    /// codewords. A shifted character costs two values and an Upper Shift two more. X12 costs a character it
-    /// cannot carry 10/3 codewords, or 13/3 above 127. Byte mode costs one codeword a byte.
+    /// A digit costs half a codeword in ASCII mode and a character above 127 two whole codewords; any other character rounds the count up first, because it
+    /// cannot share a codeword with a digit before it. A basic set character costs two thirds of a codeword in C40, Text and X12 mode, one of three values in
+    /// two codewords. A shifted character costs two values and an Upper Shift two more. X12 costs a character it cannot carry 10/3 codewords, or 13/3 above
+    /// 127. Byte mode costs one codeword a byte.
     /// </para>
     /// </summary>
-    /// <param name="message">The message values.</param>
-    /// <param name="tables">The tables, <see cref="LookAheadRows"/> times the message length plus one long.</param>
-    private static void PrepareLookAhead(ReadOnlySpan<int> message, Span<int> tables)
+    /// <param name="message">The message, characters U+0000 to U+00FF.</param>
+    /// <param name="table">The entries, the message length plus one.</param>
+    private static void PrepareLookAhead(ReadOnlySpan<char> message, Span<LookAheadEntry> table)
     {
         int length = message.Length;
-        int stride = length + 1;
-        Span<int> digits = tables[..stride];
-        Span<int> terminator = tables.Slice(stride, stride);
-        Span<int> nonX12 = tables.Slice(2 * stride, stride);
-        digits[length] = 0;
-        terminator[length] = length + 1;
-        nonX12[length] = length + 1;
+        ref LookAheadEntry end = ref table[length];
+        end.Digits = 0;
+        end.Terminator = length + 1;
+        end.NonX12 = length + 1;
         for (int i = length - 1; i >= 0; i--)
         {
-            int value = message[i];
-            digits[i] = IsDigit(value) ? digits[i + 1] + 1 : 0;
-            terminator[i] = value is '\r' or '*' or '>' ? 0 : terminator[i + 1] + 1;
-            nonX12[i] = IsX12(value) ? nonX12[i + 1] + 1 : 0;
+            char value = message[i];
+            ref LookAheadEntry entry = ref table[i];
+            ref readonly LookAheadEntry next = ref table[i + 1];
+            entry.Digits = IsDigit(value) ? next.Digits + 1 : 0;
+            entry.Terminator = value is '\r' or '*' or '>' ? 0 : next.Terminator + 1;
+            entry.NonX12 = IsX12(value) ? next.NonX12 + 1 : 0;
         }
 
-        Span<int> sums = tables.Slice(3 * stride, 5 * stride);
-        Span<int> asciiSums = sums.Slice((int)Mode.Ascii * stride, stride);
-        Span<int> c40Sums = sums.Slice((int)Mode.C40 * stride, stride);
-        Span<int> textSums = sums.Slice((int)Mode.Text * stride, stride);
-        Span<int> x12Sums = sums.Slice((int)Mode.X12 * stride, stride);
-        Span<int> byteSums = sums.Slice((int)Mode.Byte * stride, stride);
-        asciiSums[0] = 0;
-        c40Sums[0] = 0;
-        textSums[0] = 0;
-        x12Sums[0] = 0;
-        byteSums[0] = 0;
+        table[0].Sums = default;
         for (int i = 0; i < length; i++)
         {
-            int value = message[i];
+            char value = message[i];
             bool extended = value > 127;
-            asciiSums[i + 1] = AddAsciiCost(asciiSums[i], value);
-            c40Sums[i + 1] = c40Sums[i] + (IsC40Basic(value) ? 2 * Unit / 3 : extended ? 8 * Unit / 3 : 4 * Unit / 3);
-            textSums[i + 1] = textSums[i] + (IsTextBasic(value) ? 2 * Unit / 3 : extended ? 8 * Unit / 3 : 4 * Unit / 3);
-            x12Sums[i + 1] = x12Sums[i] + (IsX12(value) ? 2 * Unit / 3 : extended ? 13 * Unit / 3 : 10 * Unit / 3);
-            byteSums[i + 1] = byteSums[i] + Unit;
+            ref readonly ModeCounts sum = ref table[i].Sums;
+            ref ModeCounts next = ref table[i + 1].Sums;
+            next.Ascii = AddAsciiCost(sum.Ascii, value);
+            next.C40 = sum.C40 + (IsC40Basic(value) ? 2 * Unit / 3 : extended ? 8 * Unit / 3 : 4 * Unit / 3);
+            next.Text = sum.Text + (IsTextBasic(value) ? 2 * Unit / 3 : extended ? 8 * Unit / 3 : 4 * Unit / 3);
+            next.X12 = sum.X12 + (IsX12(value) ? 2 * Unit / 3 : extended ? 13 * Unit / 3 : 10 * Unit / 3);
+            next.Byte = sum.Byte + Unit;
         }
     }
 
@@ -399,24 +460,21 @@ internal static class CodeOneEncoder
     private static bool IsDigit(int value) => value is >= '0' and <= '9';
 
     /// <summary>
-    /// Returns whether the message value is in the basic set of C40 mode: space, the digits and the capital
-    /// letters.
+    /// Returns whether the message value is in the basic set of C40 mode: space, the digits and the capital letters.
     /// </summary>
     /// <param name="value">The message value.</param>
     /// <returns><see langword="true"/> for a basic set character.</returns>
     private static bool IsC40Basic(int value) => value is ' ' or (>= '0' and <= '9') or (>= 'A' and <= 'Z');
 
     /// <summary>
-    /// Returns whether the message value is in the basic set of Text mode: space, the digits and the small
-    /// letters.
+    /// Returns whether the message value is in the basic set of Text mode: space, the digits and the small letters.
     /// </summary>
     /// <param name="value">The message value.</param>
     /// <returns><see langword="true"/> for a basic set character.</returns>
     private static bool IsTextBasic(int value) => value is ' ' or (>= '0' and <= '9') or (>= 'a' and <= 'z');
 
     /// <summary>
-    /// Returns whether X12 mode carries the message value: carriage return, asterisk, greater than, space, the
-    /// digits and the capital letters.
+    /// Returns whether X12 mode carries the message value: carriage return, asterisk, greater than, space, the digits and the capital letters.
     /// </summary>
     /// <param name="value">The message value.</param>
     /// <returns><see langword="true"/> for an X12 character.</returns>
@@ -447,8 +505,8 @@ internal static class CodeOneEncoder
     /// <returns>The number of values written, or 0 when X12 mode cannot carry the message value.</returns>
     private static int TripletValues(Mode mode, int value, Span<int> values)
     {
-        // X12 has one set of 40 values and no shifts: carriage return 0, asterisk 1, greater than 2, space 3,
-        // the digits 4 to 13 and the capital letters 14 to 39. Any other character ends X12.
+        // X12 has one set of 40 values and no shifts: carriage return 0, asterisk 1, greater than 2, space 3, the digits 4 to 13 and the capital letters 14 to
+        // 39. Any other character ends X12.
         if (mode == Mode.X12)
         {
             int x12 = value switch
@@ -471,8 +529,7 @@ internal static class CodeOneEncoder
             return 1;
         }
 
-        // A character above 127 takes the Upper Shift in the Shift 2 set, then the values of the character
-        // 128 below it.
+        // A character above 127 takes the Upper Shift in the Shift 2 set, then the values of the character 128 below it.
         int count = 0;
         if (value > 127)
         {
@@ -482,8 +539,7 @@ internal static class CodeOneEncoder
             value -= 128;
         }
 
-        // The basic set: space is 3 and the digits 0 to 9 are 4 to 13, so a digit is its character code less
-        // 44.
+        // The basic set: space is 3 and the digits 0 to 9 are 4 to 13, so a digit is its character code less 44.
         Span<int> rest = values[count..];
         if (value == ' ')
         {
@@ -497,10 +553,9 @@ internal static class CodeOneEncoder
             return count + 1;
         }
 
-        // The basic set holds the capital letters in C40 mode and the small letters in Text mode, as the
-        // values 14 to 39, so A is 65 - 51 and a is 97 - 83. The other case moves to the Shift 3 set, where
-        // C40 puts the small letters at 1 to 26 after the grave accent at 0, and Text puts the capital
-        // letters there.
+        // The basic set holds the capital letters in C40 mode and the small letters in Text mode, as the values 14 to 39, so A is 65 - 51 and a is 97 - 83. The
+        // other case moves to the Shift 3 set, where C40 puts the small letters at 1 to 26 after the grave accent at 0, and Text puts the capital letters
+        // there.
         if (value is >= 'A' and <= 'Z')
         {
             if (mode == Mode.C40)
@@ -527,9 +582,8 @@ internal static class CodeOneEncoder
             return count + 2;
         }
 
-        // The rest of the characters to 127 take a shift and a value in that set. The control characters 0 to
-        // 31 are the Shift 1 set in order. The Shift 2 set holds the punctuation in three runs: 33 to 47 as 0
-        // to 14, 58 to 64 as 15 to 21 and 91 to 95 as 22 to 26. The Shift 3 set holds 96 to 127 as 0 to 31;
+        // The rest of the characters to 127 take a shift and a value in that set. The control characters 0 to 31 are the Shift 1 set in order. The Shift 2 set
+        // holds the punctuation in three runs: 33 to 47 as 0 to 14, 58 to 64 as 15 to 21 and 91 to 95 as 22 to 26. The Shift 3 set holds 96 to 127 as 0 to 31;
         // the letters of that range were handled above.
         (int shift, int shifted) = value switch
         {
@@ -546,9 +600,8 @@ internal static class CodeOneEncoder
     }
 
     /// <summary>
-    /// Adds the check codewords after the data codewords. The data codewords are spread over the blocks in
-    /// turn, and the check codewords of the blocks are interleaved the same way. Each block uses the generator
-    /// with roots alpha^0 to alpha^(k-1).
+    /// Adds the check codewords after the data codewords. The data codewords are spread over the blocks in turn, and the check codewords of the blocks are
+    /// interleaved the same way. Each block uses the generator with roots alpha^0 to alpha^(k-1).
     /// </summary>
     /// <param name="codewords">The data codewords followed by room for the check codewords.</param>
     /// <param name="dataCount">The number of data codewords.</param>
@@ -556,8 +609,7 @@ internal static class CodeOneEncoder
     /// <param name="numeric">Whether the codewords are the 5-bit codewords of an S version.</param>
     private static void AddCheckCodewords(Span<int> codewords, int dataCount, int blocks, bool numeric)
     {
-        // A block takes at most 70 check codewords: version E in one block, and versions F, G and H in 2, 4
-        // and 8.
+        // A block takes at most 70 check codewords: version E in one block, and versions F, G and H in 2, 4 and 8.
         GaloisField field = numeric ? Field5 : Field8;
         int perBlock = (codewords.Length - dataCount) / blocks;
         InlineArray128<int> generatorStorage = default;
@@ -568,14 +620,13 @@ internal static class CodeOneEncoder
     }
 
     /// <summary>
-    /// Places the modules: the centre pattern rows, the risers and the black dots first, then the codeword
-    /// bricks in the cells that remain, in reading order.
+    /// Places the modules: the centre pattern rows, the risers and the black dots first, then the codeword bricks in the cells that remain, in reading order.
     /// </summary>
     /// <param name="info">The version.</param>
     /// <param name="codewords">The data and check codewords.</param>
     /// <param name="cells">The scratch of the cells, one a module.</param>
     /// <param name="modules">The modules to write.</param>
-    private static void Layout(in VersionInfo info, ReadOnlySpan<int> codewords, Span<sbyte> cells, Span<bool> modules)
+    private static void Layout(VersionInfo info, ReadOnlySpan<int> codewords, Span<sbyte> cells, Span<bool> modules)
     {
         int rows = info.Rows;
         int columns = info.Columns;
@@ -583,15 +634,14 @@ internal static class CodeOneEncoder
         // Each cell is unset, -1, until a pattern takes it; the cells left unset take the data.
         cells.Fill(-1);
 
-        string pattern = info.CentrePattern;
+        ReadOnlySpan<byte> pattern = info.CentrePattern;
         int patternTop = (rows - pattern.Length) / 2;
         for (int p = 0; p < pattern.Length; p++)
         {
-            WriteCentreRow(pattern[p], cells.Slice((patternTop + p) * columns, columns));
+            WriteCentreRow((CentreRow)pattern[p], cells.Slice((patternTop + p) * columns, columns));
         }
 
-        // A riser is a dark module and, every 12 rows, a second dark module beside it, on the top rows, with
-        // its mirror on the bottom rows.
+        // A riser is a dark module and, every 12 rows, a second dark module beside it, on the top rows, with its mirror on the bottom rows.
         for (int i = 0; i < info.RiserLength; i++)
         {
             sbyte second = (sbyte)(i % 12 == 0 ? 1 : 0);
@@ -608,14 +658,14 @@ internal static class CodeOneEncoder
             }
         }
 
-        foreach ((int x, int y) in info.BlackDots)
+        ReadOnlySpan<byte> dots = info.BlackDots;
+        for (int d = 0; d < dots.Length; d += 2)
         {
-            cells[(y * columns) + x] = 1;
+            cells[(dots[d + 1] * columns) + dots[d]] = 1;
         }
 
-        // The data cells, in reading order, are the data grid of the version row by row. A brick is two rows
-        // high: an 8-bit codeword is 4 modules wide, its first four bits on top, and two 5-bit codewords make a
-        // brick 5 modules wide, the first three bits of each on top.
+        // The data cells, in reading order, are the data grid of the version row by row. A brick is two rows high: an 8-bit codeword is 4 modules wide, its
+        // first four bits on top, and two 5-bit codewords make a brick 5 modules wide, the first three bits of each on top.
         int dataColumns = info.DataColumns;
         bool numeric = info.IsNumeric;
         int brickWidth = numeric ? 5 : 4;
@@ -654,41 +704,39 @@ internal static class CodeOneEncoder
     }
 
     /// <summary>
-    /// Writes one row of the centre pattern: 1 light, 2 dark, 3 light ends around a dark run, 4 a dark module
-    /// one in from each end, 5 a single dark module in the middle, 6 a single light module in the middle, 7
-    /// dark ends around a light run, and 8 light modules one in from each dark end. Rows 5 and 6 leave the
-    /// other cells to the data.
+    /// Writes one row of the centre pattern. The <see cref="CentreRow.DarkCentre"/> and <see cref="CentreRow.LightCentre"/> rows set the middle cell alone and
+    /// leave the other cells to the data.
     /// </summary>
-    /// <param name="kind">The row kind, '1' to '8'.</param>
+    /// <param name="kind">The row kind.</param>
     /// <param name="row">The row of cells.</param>
-    private static void WriteCentreRow(char kind, Span<sbyte> row)
+    private static void WriteCentreRow(CentreRow kind, Span<sbyte> row)
     {
         int last = row.Length - 1;
         switch (kind)
         {
-            case '1':
+            case CentreRow.Light:
                 row.Clear();
                 break;
-            case '2':
+            case CentreRow.Dark:
                 row.Fill(1);
                 break;
-            case '3':
+            case CentreRow.DarkWithLightEnds:
                 row.Fill(1);
                 row[0] = 0;
                 row[last] = 0;
                 break;
-            case '4':
+            case CentreRow.LightWithDarkInner:
                 row.Clear();
                 row[1] = 1;
                 row[last - 1] = 1;
                 break;
-            case '5':
+            case CentreRow.DarkCentre:
                 row[last / 2] = 1;
                 break;
-            case '6':
+            case CentreRow.LightCentre:
                 row[last / 2] = 0;
                 break;
-            case '7':
+            case CentreRow.LightWithDarkEnds:
                 row.Clear();
                 row[0] = 1;
                 row[last] = 1;
@@ -702,110 +750,175 @@ internal static class CodeOneEncoder
     }
 
     /// <summary>
-    /// The dimensions and fixed patterns of one version.
+    /// The dimensions and fixed patterns of one version, read from <see cref="VersionTable"/>.
     /// </summary>
     private readonly struct VersionInfo
     {
         /// <summary>
+        /// The index of the first entry of the version in <see cref="VersionTable"/>.
+        /// </summary>
+        private readonly int offset;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="VersionInfo"/> struct.
         /// </summary>
-        /// <param name="rows">The rows.</param>
-        /// <param name="columns">The columns.</param>
-        /// <param name="dataColumns">The columns the codeword bricks fill.</param>
-        /// <param name="dataCodewords">The data codewords.</param>
-        /// <param name="checkCodewords">The check codewords.</param>
-        /// <param name="checkBlocks">The Reed-Solomon blocks.</param>
-        /// <param name="riserOffset">The column of the first riser.</param>
-        /// <param name="riserInterval">The columns from one riser to the next; the column count where one riser stands alone.</param>
-        /// <param name="riserLength">The rows of a riser, 0 for none.</param>
-        /// <param name="centrePattern">The row kinds of the centre pattern.</param>
-        /// <param name="blackDots">The black dots as column and row.</param>
-        public VersionInfo(
-            int rows,
-            int columns,
-            int dataColumns,
-            int dataCodewords,
-            int checkCodewords,
-            int checkBlocks,
-            int riserOffset,
-            int riserInterval,
-            int riserLength,
-            string centrePattern,
-            (int X, int Y)[] blackDots)
-        {
-            this.Rows = rows;
-            this.Columns = columns;
-            this.DataColumns = dataColumns;
-            this.DataCodewords = dataCodewords;
-            this.CheckCodewords = checkCodewords;
-            this.CheckBlocks = checkBlocks;
-            this.RiserOffset = riserOffset;
-            this.RiserInterval = riserInterval;
-            this.RiserLength = riserLength;
-            this.CentrePattern = centrePattern;
-            this.BlackDots = blackDots;
-        }
+        /// <param name="version">The version.</param>
+        public VersionInfo(CodeOneVersion version) => this.offset = (int)version * VersionStride;
 
         /// <summary>
         /// Gets the rows.
         /// </summary>
-        public int Rows { get; }
+        public int Rows => VersionTable[this.offset];
 
         /// <summary>
         /// Gets the columns.
         /// </summary>
-        public int Columns { get; }
+        public int Columns => VersionTable[this.offset + 1];
 
         /// <summary>
         /// Gets the columns the codeword bricks fill.
         /// </summary>
-        public int DataColumns { get; }
+        public int DataColumns => VersionTable[this.offset + 2];
 
         /// <summary>
         /// Gets the data codewords.
         /// </summary>
-        public int DataCodewords { get; }
+        public int DataCodewords => VersionTable[this.offset + 3];
 
         /// <summary>
         /// Gets the check codewords.
         /// </summary>
-        public int CheckCodewords { get; }
+        public int CheckCodewords => VersionTable[this.offset + 4];
 
         /// <summary>
         /// Gets the Reed-Solomon blocks.
         /// </summary>
-        public int CheckBlocks { get; }
+        public int CheckBlocks => VersionTable[this.offset + 5];
 
         /// <summary>
         /// Gets the column of the first riser.
         /// </summary>
-        public int RiserOffset { get; }
+        public int RiserOffset => VersionTable[this.offset + 6];
 
         /// <summary>
-        /// Gets the columns from one riser to the next.
+        /// Gets the columns from one riser to the next; the column count where one riser stands alone.
         /// </summary>
-        public int RiserInterval { get; }
+        public int RiserInterval => VersionTable[this.offset + 7];
 
         /// <summary>
         /// Gets the rows of a riser, 0 for none.
         /// </summary>
-        public int RiserLength { get; }
+        public int RiserLength => VersionTable[this.offset + 8];
 
         /// <summary>
-        /// Gets the row kinds of the centre pattern.
+        /// Gets the row kinds of the centre pattern, top row first, as <see cref="CentreRow"/> values.
         /// </summary>
-        public string CentrePattern { get; }
+        public ReadOnlySpan<byte> CentrePattern => CentreRows.Slice(VersionTable[this.offset + 9], VersionTable[this.offset + 10]);
 
         /// <summary>
-        /// Gets the black dots as column and row.
+        /// Gets the black dots as column and row pairs.
         /// </summary>
-        public (int X, int Y)[] BlackDots { get; }
+        public ReadOnlySpan<byte> BlackDots => CodeOneEncoder.BlackDots.Slice(VersionTable[this.offset + 11] * 2, VersionTable[this.offset + 12] * 2);
 
         /// <summary>
-        /// Gets a value indicating whether the version carries a number in 5-bit codewords, the S versions,
-        /// which alone are 8 rows high.
+        /// Gets a value indicating whether the version carries a number in 5-bit codewords, the S versions, which alone are 8 rows high.
         /// </summary>
         public bool IsNumeric => this.Rows == 8;
+    }
+
+    /// <summary>
+    /// The counts of the modes the look-ahead compares, in the units of <see cref="Unit"/>.
+    /// </summary>
+    private struct ModeCounts
+    {
+        /// <summary>
+        /// The ASCII count.
+        /// </summary>
+        public int Ascii;
+
+        /// <summary>
+        /// The C40 count.
+        /// </summary>
+        public int C40;
+
+        /// <summary>
+        /// The Text count.
+        /// </summary>
+        public int Text;
+
+        /// <summary>
+        /// The X12 count.
+        /// </summary>
+        public int X12;
+
+        /// <summary>
+        /// The Byte count.
+        /// </summary>
+        public int Byte;
+
+        /// <summary>
+        /// Adds the counts of each mode.
+        /// </summary>
+        /// <param name="left">The first counts.</param>
+        /// <param name="right">The second counts.</param>
+        /// <returns>The sums.</returns>
+        public static ModeCounts operator +(ModeCounts left, ModeCounts right)
+            => new()
+            {
+                Ascii = left.Ascii + right.Ascii,
+                C40 = left.C40 + right.C40,
+                Text = left.Text + right.Text,
+                X12 = left.X12 + right.X12,
+                Byte = left.Byte + right.Byte,
+            };
+
+        /// <summary>
+        /// Subtracts the counts of each mode.
+        /// </summary>
+        /// <param name="left">The counts.</param>
+        /// <param name="right">The counts to subtract.</param>
+        /// <returns>The differences.</returns>
+        public static ModeCounts operator -(ModeCounts left, ModeCounts right)
+            => new()
+            {
+                Ascii = left.Ascii - right.Ascii,
+                C40 = left.C40 - right.C40,
+                Text = left.Text - right.Text,
+                X12 = left.X12 - right.X12,
+                Byte = left.Byte - right.Byte,
+            };
+    }
+
+    /// <summary>
+    /// The look-ahead data of one position of the message, which <see cref="PrepareLookAhead"/> fills. The fields are ints only, so an int scratch buffer holds
+    /// the entries in place.
+    /// </summary>
+    private struct LookAheadEntry
+    {
+        /// <summary>
+        /// The digits that start at the position.
+        /// </summary>
+        public int Digits;
+
+        /// <summary>
+        /// The distance from the position to the next X12 terminator.
+        /// </summary>
+        public int Terminator;
+
+        /// <summary>
+        /// The distance from the position to the next character X12 cannot carry.
+        /// </summary>
+        public int NonX12;
+
+        /// <summary>
+        /// The running sums of the mode costs of the characters before the position.
+        /// </summary>
+        public ModeCounts Sums;
+
+        /// <summary>
+        /// Gets the size of an entry in ints.
+        /// </summary>
+        public static int IntCount => Unsafe.SizeOf<LookAheadEntry>() / sizeof(int);
     }
 
     /// <summary>
@@ -814,9 +927,9 @@ internal static class CodeOneEncoder
     private ref struct Encoder
     {
         /// <summary>
-        /// The message values, one per character.
+        /// The message, characters U+0000 to U+00FF.
         /// </summary>
-        private readonly ReadOnlySpan<int> message;
+        private readonly ReadOnlySpan<char> message;
 
         /// <summary>
         /// The requested version, or <see langword="null"/> for versions A to H.
@@ -829,24 +942,9 @@ internal static class CodeOneEncoder
         private readonly Span<int> codewords;
 
         /// <summary>
-        /// The digits that start at each position.
+        /// The look-ahead entries, one for each position of the message and one past its end.
         /// </summary>
-        private readonly ReadOnlySpan<int> digits;
-
-        /// <summary>
-        /// The distance from each position to the next X12 terminator.
-        /// </summary>
-        private readonly ReadOnlySpan<int> terminator;
-
-        /// <summary>
-        /// The distance from each position to the next character X12 cannot carry.
-        /// </summary>
-        private readonly ReadOnlySpan<int> nonX12;
-
-        /// <summary>
-        /// The running look-ahead costs, one row per counted mode in the order of <see cref="Mode"/>.
-        /// </summary>
-        private readonly ReadOnlySpan<int> sums;
+        private readonly ReadOnlySpan<LookAheadEntry> table;
 
         /// <summary>
         /// The values a C40, Text or X12 run gathers.
@@ -886,21 +984,17 @@ internal static class CodeOneEncoder
         /// <summary>
         /// Initializes a new instance of the <see cref="Encoder"/> struct.
         /// </summary>
-        /// <param name="message">The message values.</param>
+        /// <param name="message">The message, characters U+0000 to U+00FF.</param>
         /// <param name="version">The version, or <see langword="null"/> for versions A to H.</param>
         /// <param name="codewords">The buffer the codewords are written to.</param>
-        /// <param name="tables">The tables of <see cref="PrepareLookAhead"/>.</param>
+        /// <param name="table">The look-ahead entries of <see cref="PrepareLookAhead"/>.</param>
         /// <param name="values">The buffer of the values of a C40, Text or X12 run.</param>
-        public Encoder(ReadOnlySpan<int> message, CodeOneVersion? version, Span<int> codewords, ReadOnlySpan<int> tables, Span<int> values)
+        public Encoder(ReadOnlySpan<char> message, CodeOneVersion? version, Span<int> codewords, ReadOnlySpan<LookAheadEntry> table, Span<int> values)
         {
-            int stride = message.Length + 1;
             this.message = message;
             this.version = version;
             this.codewords = codewords;
-            this.digits = tables[..stride];
-            this.terminator = tables.Slice(stride, stride);
-            this.nonX12 = tables.Slice(2 * stride, stride);
-            this.sums = tables[(3 * stride)..];
+            this.table = table;
             this.values = values;
             this.mode = Mode.Ascii;
         }
@@ -934,12 +1028,12 @@ internal static class CodeOneEncoder
         }
 
         /// <summary>
-        /// One step of ASCII mode: a latch into Decimal mode before a long digit run, a digit pair, a latch into
-        /// the mode the look-ahead chooses, or one character.
+        /// One step of ASCII mode: a latch into Decimal mode before a long digit run, a digit pair, a latch into the mode the look-ahead chooses, or one
+        /// character.
         /// </summary>
         private void EncodeAscii()
         {
-            int run = this.digits[this.position];
+            int run = this.table[this.position].Digits;
             if (run >= 21 || (run >= 13 && this.position + run == this.message.Length))
             {
                 this.pendingBits = DecimalLatch;
@@ -973,8 +1067,7 @@ internal static class CodeOneEncoder
         }
 
         /// <summary>
-        /// Encodes in C40, Text or X12 mode, three values to two codewords, until the look-ahead or the end of the
-        /// data returns to ASCII mode.
+        /// Encodes in C40, Text or X12 mode, three values to two codewords, until the look-ahead or the end of the data returns to ASCII mode.
         /// </summary>
         private void EncodeTriplets()
         {
@@ -984,8 +1077,7 @@ internal static class CodeOneEncoder
             int p = 0;
             while (this.position != this.message.Length)
             {
-                // Values past three halves of the largest version cannot fit, and the place for the last
-                // three characters stays free.
+                // Values past three halves of the largest version cannot fit, and the place for the last three characters stays free.
                 if (p > values.Length - 12)
                 {
                     this.overflow = true;
@@ -994,7 +1086,7 @@ internal static class CodeOneEncoder
 
                 if (p % 3 == 0)
                 {
-                    int run = this.digits[this.position];
+                    int run = this.table[this.position].Digits;
                     if (run >= 12 || (run >= 8 && this.position + run == this.message.Length))
                     {
                         this.UnlatchAfter(values[..p]);
@@ -1048,7 +1140,7 @@ internal static class CodeOneEncoder
             if (this.position != this.message.Length)
             {
                 // A character written in ASCII mode keeps the next step from latching straight back.
-                if (this.digits[this.position] >= 2)
+                if (this.table[this.position].Digits >= 2)
                 {
                     this.AddDigitPair();
                 }
@@ -1060,8 +1152,8 @@ internal static class CodeOneEncoder
         }
 
         /// <summary>
-        /// Ends C40, Text or X12 mode at the last three or fewer characters when they fill the last codewords: a
-        /// whole triplet, or two values and a pad Shift 1, with no unlatch, or one character in ASCII mode.
+        /// Ends C40, Text or X12 mode at the last three or fewer characters when they fill the last codewords: a whole triplet, or two values and a pad Shift
+        /// 1, with no unlatch, or one character in ASCII mode.
         /// </summary>
         /// <param name="values">The values, the first <paramref name="p"/> already gathered.</param>
         /// <param name="p">The number of values gathered, a multiple of three.</param>
@@ -1115,13 +1207,13 @@ internal static class CodeOneEncoder
         }
 
         /// <summary>
-        /// Encodes in Decimal mode: three digits as the 10-bit value plus one, then the end of the run, which
-        /// fills or unlatches the last codeword. Each whole codeword is written as its eighth bit arrives.
+        /// Encodes in Decimal mode: three digits as the 10-bit value plus one, then the end of the run, which fills or unlatches the last codeword. Each whole
+        /// codeword is written as its eighth bit arrives.
         /// </summary>
         private void EncodeDecimal()
         {
-            ReadOnlySpan<int> message = this.message;
-            while (this.digits[this.position] >= 3)
+            ReadOnlySpan<char> message = this.message;
+            while (this.table[this.position].Digits >= 3)
             {
                 int value = ((message[this.position] - '0') * 100) + ((message[this.position + 1] - '0') * 10) + (message[this.position + 2] - '0');
                 this.AddBits(value + 1, 10);
@@ -1130,10 +1222,9 @@ internal static class CodeOneEncoder
 
             int free = (8 - this.pendingCount) % 8;
             int remaining = this.Remaining(this.written);
-            bool lastDigit = this.position == message.Length - 1 && this.digits[this.position] == 1;
-            bool lastPair = this.position == message.Length - 2 && this.digits[this.position] == 2;
-            if (this.position == message.Length
-                && ((this.Remaining(this.written - 1) == 1 && free == 0) || (remaining == 1 && free != 0)))
+            bool lastDigit = this.position == message.Length - 1 && this.table[this.position].Digits == 1;
+            bool lastPair = this.position == message.Length - 2 && this.table[this.position].Digits == 2;
+            if (this.position == message.Length && ((this.Remaining(this.written - 1) == 1 && free == 0) || (remaining == 1 && free != 0)))
             {
                 // The data ends in the last codeword: fill its free bits.
                 if (free is 4 or 6)
@@ -1148,8 +1239,8 @@ internal static class CodeOneEncoder
             }
             else if (!((lastDigit || lastPair) && remaining == 1 && free == 0))
             {
-                // Unlatch to ASCII unless the last digit fits the 4 or 6 bits left in the last codeword. A final
-                // digit or digit pair that fills the last codeword goes in it as ASCII instead.
+                // Unlatch to ASCII unless the last digit fits the 4 or 6 bits left in the last codeword. A final digit or digit pair that fills the last
+                // codeword goes in it as ASCII instead.
                 if (!(lastDigit && remaining == 1 && free is 4 or 6))
                 {
                     this.AddBits(DecimalUnlatch, 6);
@@ -1158,7 +1249,7 @@ internal static class CodeOneEncoder
 
                 if (free is 4 or 6)
                 {
-                    this.AddBits(this.digits[this.position] >= 1 ? message[this.position++] - '0' + 1 : 0b1111, 4);
+                    this.AddBits(this.table[this.position].Digits >= 1 ? message[this.position++] - '0' + 1 : 0b1111, 4);
                     free -= 4;
                 }
 
@@ -1172,8 +1263,8 @@ internal static class CodeOneEncoder
         }
 
         /// <summary>
-        /// Encodes in Byte mode while the look-ahead keeps it: a length of one codeword below 250 or two above,
-        /// or 0 when the bytes fill the symbol, then the bytes.
+        /// Encodes in Byte mode while the look-ahead keeps it: a length of one codeword below 250 or two above, or 0 when the bytes fill the symbol, then the
+        /// bytes.
         /// </summary>
         private void EncodeByte()
         {
@@ -1198,7 +1289,7 @@ internal static class CodeOneEncoder
                 this.Add(count % 250);
             }
 
-            foreach (int value in this.message.Slice(start, count))
+            foreach (char value in this.message.Slice(start, count))
             {
                 this.Add(value);
             }
@@ -1207,61 +1298,45 @@ internal static class CodeOneEncoder
         }
 
         /// <summary>
-        /// The mode look-ahead. Each mode keeps a count of the codewords it needs for the data read so far, in
-        /// the units of <see cref="Unit"/>, starting with the cost of the latch to it. The
-        /// count of each mode but ASCII is an offset plus its running sum, so each step reads the sums; the ASCII
-        /// count follows its sum once it stands at the same part of a codeword. From the fourth character one
-        /// mode can win early, and at the end of the data the rounded counts decide.
+        /// The mode look-ahead. Each mode keeps a count of the codewords it needs for the data read so far, in the units of <see cref="Unit"/>, starting with
+        /// the cost of the latch to it. The count of each mode but ASCII is an offset plus its running sum, so each step reads the sums; the ASCII count
+        /// follows its sum once it stands at the same part of a codeword. From the fourth character one mode can win early, and at the end of the data the
+        /// rounded counts decide.
         /// </summary>
         /// <returns>The mode to continue in.</returns>
         private readonly Mode LookAhead()
         {
+            // Each count starts at the cost of the latch from the current mode: from ASCII mode one codeword into C40, Text or X12 mode and two into Byte mode,
+            // and from any other mode one codeword more for the unlatch. The current mode costs nothing.
             const int unit = Unit;
-            int ascii = unit;
-            int c40 = 2 * unit;
-            int text = 2 * unit;
-            int x12 = 2 * unit;
-            int bytes = 3 * unit;
-            if (this.mode == Mode.Ascii)
-            {
-                ascii = 0;
-                c40 = unit;
-                text = unit;
-                x12 = unit;
-                bytes = 2 * unit;
-            }
+            ModeCounts initial = this.mode == Mode.Ascii
+                ? new ModeCounts { Ascii = 0, C40 = unit, Text = unit, X12 = unit, Byte = 2 * unit }
+                : new ModeCounts { Ascii = unit, C40 = 2 * unit, Text = 2 * unit, X12 = 2 * unit, Byte = 3 * unit };
 
             switch (this.mode)
             {
                 case Mode.C40:
-                    c40 = 0;
+                    initial.C40 = 0;
                     break;
                 case Mode.Text:
-                    text = 0;
+                    initial.Text = 0;
                     break;
                 case Mode.X12:
-                    x12 = 0;
+                    initial.X12 = 0;
                     break;
                 case Mode.Byte:
-                    bytes = 0;
+                    initial.Byte = 0;
                     break;
             }
 
+            // The count of a mode at a position is its offset plus the running sum there. Stage 1 counts ASCII by hand, so its offset is set when stage 1 ends.
+            ReadOnlySpan<LookAheadEntry> table = this.table;
             int length = this.message.Length;
-            int stride = length + 1;
-            ReadOnlySpan<int> asciiSums = this.sums.Slice((int)Mode.Ascii * stride, stride);
-            ReadOnlySpan<int> c40Sums = this.sums.Slice((int)Mode.C40 * stride, stride);
-            ReadOnlySpan<int> textSums = this.sums.Slice((int)Mode.Text * stride, stride);
-            ReadOnlySpan<int> x12Sums = this.sums.Slice((int)Mode.X12 * stride, stride);
-            ReadOnlySpan<int> byteSums = this.sums.Slice((int)Mode.Byte * stride, stride);
             int start = this.position;
-            int c40Offset = c40 - c40Sums[start];
-            int textOffset = text - textSums[start];
-            int x12Offset = x12 - x12Sums[start];
-            int byteOffset = bytes - byteSums[start];
+            ModeCounts offset = initial - table[start].Sums;
 
-            // Stage 1 reads one character at a time, until the early test may run and the ASCII count stands at
-            // the same part of a codeword as its running sum.
+            // Stage 1 reads one character at a time, until the early test may run and the ASCII count stands at the same part of a codeword as its running sum.
+            int ascii = initial.Ascii;
             int index = start;
             while (index < length)
             {
@@ -1269,20 +1344,14 @@ internal static class CodeOneEncoder
                 index++;
                 if (index - start >= MinimumLookAhead)
                 {
-                    Mode? choice = this.EarlyChoice(
-                        ascii,
-                        c40Offset + c40Sums[index],
-                        textOffset + textSums[index],
-                        x12Offset + x12Sums[index],
-                        byteOffset + byteSums[index],
-                        index);
-
-                    if (choice is Mode early)
+                    ModeCounts counts = offset + table[index].Sums;
+                    counts.Ascii = ascii;
+                    if (this.EarlyChoice(counts, index) is Mode early)
                     {
                         return early;
                     }
 
-                    if ((ascii - asciiSums[index]) % unit == 0)
+                    if ((ascii - table[index].Sums.Ascii) % unit == 0)
                     {
                         break;
                     }
@@ -1290,39 +1359,27 @@ internal static class CodeOneEncoder
             }
 
             // Stage 2 reads the rest of the data from the running sums alone.
-            int asciiOffset = ascii - asciiSums[index];
+            offset.Ascii = ascii - table[index].Sums.Ascii;
             while (index < length)
             {
                 index++;
-                Mode? choice = this.EarlyChoice(
-                    asciiOffset + asciiSums[index],
-                    c40Offset + c40Sums[index],
-                    textOffset + textSums[index],
-                    x12Offset + x12Sums[index],
-                    byteOffset + byteSums[index],
-                    index);
-
-                if (choice is Mode early)
+                if (this.EarlyChoice(offset + table[index].Sums, index) is Mode early)
                 {
                     return early;
                 }
             }
 
-            ascii = asciiOffset + asciiSums[length];
-            c40 = c40Offset + c40Sums[length];
-            text = textOffset + textSums[length];
-            x12 = x12Offset + x12Sums[length];
-            bytes = byteOffset + byteSums[length];
-            int a = Ceiling(ascii);
-            int c = Ceiling(c40);
-            int t = Ceiling(text);
-            int x = Ceiling(x12);
-            if (bytes <= a && bytes <= c && bytes <= t && bytes <= x)
+            ModeCounts final = offset + table[length].Sums;
+            int a = Ceiling(final.Ascii);
+            int c = Ceiling(final.C40);
+            int t = Ceiling(final.Text);
+            int x = Ceiling(final.X12);
+            if (final.Byte <= a && final.Byte <= c && final.Byte <= t && final.Byte <= x)
             {
                 return Mode.Byte;
             }
 
-            if (ascii <= c && ascii <= t && ascii <= x && ascii <= Ceiling(bytes))
+            if (final.Ascii <= c && final.Ascii <= t && final.Ascii <= x && final.Ascii <= Ceiling(final.Byte))
             {
                 return Mode.Ascii;
             }
@@ -1336,25 +1393,22 @@ internal static class CodeOneEncoder
         }
 
         /// <summary>
-        /// The early test of the look-ahead: a mode wins when it is a whole codeword cheaper than every other
-        /// mode, each other count rounded up. ASCII and Byte compare their own count as it stands, and C40, Text
-        /// and X12 their rounded count. Equal C40 and X12 counts go to X12 when an X12 terminator comes before a
-        /// character X12 cannot carry.
+        /// The early test of the look-ahead: a mode wins when it is a whole codeword cheaper than every other mode, each other count rounded up. ASCII and Byte
+        /// compare their own count as it stands, and C40, Text and X12 their rounded count. Equal C40 and X12 counts go to X12 when an X12 terminator comes
+        /// before a character X12 cannot carry.
         /// </summary>
-        /// <param name="ascii">The ASCII count.</param>
-        /// <param name="c40">The C40 count.</param>
-        /// <param name="text">The Text count.</param>
-        /// <param name="x12">The X12 count.</param>
-        /// <param name="bytes">The Byte count.</param>
+        /// <param name="counts">The counts of the modes.</param>
         /// <param name="read">The position after the characters read.</param>
         /// <returns>The winning mode, or <see langword="null"/> when no mode wins yet.</returns>
-        private readonly Mode? EarlyChoice(int ascii, int c40, int text, int x12, int bytes, int read)
+        private readonly Mode? EarlyChoice(ModeCounts counts, int read)
         {
             const int unit = Unit;
+            int ascii = counts.Ascii;
+            int bytes = counts.Byte;
             int a = Ceiling(ascii);
-            int c = Ceiling(c40);
-            int t = Ceiling(text);
-            int x = Ceiling(x12);
+            int c = Ceiling(counts.C40);
+            int t = Ceiling(counts.Text);
+            int x = Ceiling(counts.X12);
             int b = Ceiling(bytes);
             if (bytes + unit <= a && bytes + unit <= c && bytes + unit <= t && bytes + unit <= x)
             {
@@ -1378,9 +1432,9 @@ internal static class CodeOneEncoder
                     return Mode.C40;
                 }
 
-                if (c40 == x12)
+                if (counts.C40 == counts.X12)
                 {
-                    return this.terminator[read] < this.nonX12[read] ? Mode.X12 : Mode.C40;
+                    return this.table[read].Terminator < this.table[read].NonX12 ? Mode.X12 : Mode.C40;
                 }
             }
 
@@ -1393,9 +1447,8 @@ internal static class CodeOneEncoder
         }
 
         /// <summary>
-        /// Returns the codewords left before the end of the smallest permitted version that holds more than the
-        /// given number of codewords, or <see cref="int.MaxValue"/> when none does. Every caller compares the
-        /// result with 1 or 2 only, so a full largest version reads as no end in reach.
+        /// Returns the codewords left before the end of the smallest permitted version that holds more than the given number of codewords, or
+        /// <see cref="int.MaxValue"/> when none does. Every caller compares the result with 1 or 2 only, so a full largest version reads as no end in reach.
         /// </summary>
         /// <param name="used">The codewords used.</param>
         /// <returns>The codewords left.</returns>
@@ -1403,7 +1456,7 @@ internal static class CodeOneEncoder
         {
             for (CodeOneVersion v = CodeOneVersion.A; v <= CodeOneVersion.T48; v++)
             {
-                int capacity = Versions[(int)v].DataCodewords;
+                int capacity = new VersionInfo(v).DataCodewords;
                 if (IsPermitted(this.version, v) && capacity > used)
                 {
                     return capacity - used;

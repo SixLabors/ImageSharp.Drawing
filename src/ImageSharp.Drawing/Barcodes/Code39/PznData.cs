@@ -6,9 +6,9 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The data layer the Pharmazentralnummer symbologies share. IFA gives the data structure as a minus sign
-/// followed by the number: "The minus sign is internationally standardized as an identifier for the PZN in
-/// ISO/IEC 15418 and serves to identify the PZN", and "the last digit of the PZN is the check digit".
+/// The data layer the Pharmazentralnummer symbologies share. IFA gives the data structure as a minus sign followed by the number: "The minus sign is
+/// internationally standardized as an identifier for the PZN in ISO/IEC 15418 and serves to identify the PZN", and "the last digit of the PZN is the check
+/// digit".
 /// </summary>
 internal static class PznData
 {
@@ -18,23 +18,19 @@ internal static class PznData
     private const char Identifier = '-';
 
     /// <summary>
-    /// The term the printed line opens with, with the identifier and the spaces IFA adds for readability.
-    /// Neither the term nor the spaces are encoded.
+    /// The term the printed line opens with, with the identifier and the spaces IFA adds for readability. Neither the term nor the spaces are encoded.
     /// </summary>
     private const string ReadablePrefix = "PZN - ";
 
     /// <summary>
-    /// The bar height in modules a symbol takes when the caller sets none. IFA gives a nominal code
-    /// height of 10 mm at the nominal module width of 0.25 mm, and says "the code height of nominally
-    /// 10 mm changes proportionately to the nominal module width". IFA also gives a nominal wide to
-    /// narrow ratio of 1:2.5 and permits 1:2 to 1:3. A run width is a whole number of modules, so the
-    /// symbol draws the permitted 3.
+    /// The bar height in modules a symbol takes when the caller sets none. IFA gives a nominal code height of 10 mm at the nominal module width of 0.25 mm, and
+    /// says "the code height of nominally 10 mm changes proportionately to the nominal module width". IFA also gives a nominal wide to narrow ratio of 1:2.5
+    /// and permits 1:2 to 1:3. A run width is a whole number of modules, so the symbol draws the permitted 3.
     /// </summary>
     private const float NominalBarHeight = 40F;
 
     /// <summary>
-    /// The X dimension in millimetres a symbol takes when the caller sets none: the nominal module width
-    /// of 0.25 mm that IFA gives.
+    /// The X dimension in millimetres a symbol takes when the caller sets none: the nominal module width of 0.25 mm that IFA gives.
     /// </summary>
     private const double NominalXDimension = 0.25;
 
@@ -44,18 +40,16 @@ internal static class PznData
     private const int CheckModulus = 11;
 
     /// <summary>
-    /// The weight the final data digit takes, whatever the length. IFA weights the seven digits of a
-    /// PZN8 from one, so the seventh takes seven, and a PZN7 carries one digit fewer and starts at two.
+    /// The weight the final data digit takes, whatever the length. IFA weights the seven digits of a PZN8 from one, so the seventh takes seven, and a PZN7
+    /// carries one digit fewer and starts at two.
     /// </summary>
     private const int FinalWeight = 7;
 
     /// <summary>
     /// Encodes a Pharmazentralnummer of the given length into a Code 39 symbol.
     /// </summary>
-    /// <param name="text">
-    /// The data digits on their own, in which case the check digit is calculated, or the data digits and
-    /// the check digit, in which case the last is checked against the rest.
-    /// </param>
+    /// <param name="text"> The data digits on their own, in which case the check digit is calculated, or the data digits and the check digit, in which case the
+    /// last is checked against the rest. </param>
     /// <param name="digits">The number of data digits the length carries, excluding the check digit.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
@@ -67,8 +61,7 @@ internal static class PznData
 
         BarcodeSymbology.ValidateDigits(text);
 
-        // IFA: "The sum is formed across the products and divided by 11. The whole number remainder is the
-        // check digit."
+        // IFA: "The sum is formed across the products and divided by 11. The whole number remainder is the check digit."
         int sum = 0;
         int weight = FinalWeight - digits + 1;
         for (int i = 0; i < digits; i++)

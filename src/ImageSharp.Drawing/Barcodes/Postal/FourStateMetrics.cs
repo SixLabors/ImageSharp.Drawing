@@ -4,8 +4,8 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The dimensions of a height modulated postal symbology, in modules of its bar width and in run units
-/// for the pitch, which is not a whole number of bar widths in any of them.
+/// The dimensions of a height modulated postal symbology, in modules of its bar width and in run units for the pitch, which is not a whole number of bar widths
+/// in any of them.
 /// </summary>
 internal readonly struct FourStateMetrics
 {

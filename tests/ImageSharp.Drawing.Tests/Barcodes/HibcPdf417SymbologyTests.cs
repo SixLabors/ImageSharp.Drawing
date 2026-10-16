@@ -6,9 +6,8 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="HibcPdf417Symbology"/>. Each expected row is the alternating bar and space
-/// module widths of one row, starting with a bar, taken from an independent reference implementation
-/// through its raw encoding API. The symbol carries the flag character, the data and the modulo 43 check
+/// Encoder tests for <see cref="HibcPdf417Symbology"/>. Each expected row is the alternating bar and space module widths of one row, starting with a bar, taken
+/// from an independent reference implementation through its raw encoding API. The symbol carries the flag character, the data and the modulo 43 check
 /// character.
 /// </summary>
 public class HibcPdf417SymbologyTests
@@ -135,9 +134,8 @@ public class HibcPdf417SymbologyTests
         => AssertRows(expected, new HibcPdf417Symbology(4, false), text);
 
     /// <summary>
-    /// The check character of A123BJC5D6E71 is G: the flag character and the data sum to 145, and 145 mod 43
-    /// is 16, the value of G. With the check character given and validated, the symbol is the one the
-    /// encoder builds when it appends that character itself.
+    /// The check character of A123BJC5D6E71 is G: the flag character and the data sum to 145, and 145 mod 43 is 16, the value of G. With the check character
+    /// given and validated, the symbol is the one the encoder builds when it appends that character itself.
     /// </summary>
     [Fact]
     public void HibcPdf417_ValidatesAGivenCheckCharacter()
@@ -161,8 +159,7 @@ public class HibcPdf417SymbologyTests
         => SymbolEncoder.Read(symbology, text, new BarcodeOptions(), SymbolEncoder.RowRunLists);
 
     /// <summary>
-    /// Encodes the text with the default options and compares the run widths of each row with the
-    /// reference rows.
+    /// Encodes the text with the default options and compares the run widths of each row with the reference rows.
     /// </summary>
     /// <param name="expected">The reference rows, each a string of run widths, separated by a vertical bar.</param>
     /// <param name="symbology">The symbology to encode with.</param>

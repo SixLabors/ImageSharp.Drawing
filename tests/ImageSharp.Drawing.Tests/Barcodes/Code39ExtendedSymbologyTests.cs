@@ -6,9 +6,8 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Code39ExtendedSymbology"/>. The expected run strings come from an independent
-/// reference implementation through its raw encoding API, less the gap the reference emits after the stop
-/// character. The substitution itself is Table A.2 of ISO/IEC 16388.
+/// Encoder tests for <see cref="Code39ExtendedSymbology"/>. The expected run strings come from an independent reference implementation through its raw encoding
+/// API, less the gap the reference emits after the stop character. The substitution itself is Table A.2 of ISO/IEC 16388.
 /// </summary>
 public class Code39ExtendedSymbologyTests
 {
@@ -34,9 +33,8 @@ public class Code39ExtendedSymbologyTests
         => Assert.Equal(expected, Encode(new Code39ExtendedSymbology(), text));
 
     /// <summary>
-    /// Table A.2 maps every one of the 128 ASCII values, so encoding the whole set and reading it back
-    /// through an independent decoder in full ASCII mode returns what went in. That checks the table
-    /// against something other than the implementation it was transcribed for.
+    /// Table A.2 maps every one of the 128 ASCII values, so encoding the whole set and reading it back through an independent decoder in full ASCII mode
+    /// returns what went in. That checks the table against something other than the implementation it was transcribed for.
     /// </summary>
     [Fact]
     public void SubstitutesEveryAsciiValue()
@@ -48,9 +46,8 @@ public class Code39ExtendedSymbologyTests
     }
 
     /// <summary>
-    /// Annex A.2 prints an interpretation "of the data characters", which here are the ASCII characters
-    /// the caller gave rather than the symbol characters they were substituted into, so a character that
-    /// took a pair still prints once and one with no printed form prints as a space.
+    /// Annex A.2 prints an interpretation "of the data characters", which here are the ASCII characters the caller gave rather than the symbol characters they
+    /// were substituted into, so a character that took a pair still prints once and one with no printed form prints as a space.
     /// </summary>
     [Theory]
     [InlineData("abc", "*abc*")]
@@ -65,8 +62,7 @@ public class Code39ExtendedSymbologyTests
     }
 
     /// <summary>
-    /// A.3.1 covers ISO 646 IRV, so anything above ASCII 127 has no encodation, and empty data carries
-    /// nothing.
+    /// A.3.1 covers ISO 646 IRV, so anything above ASCII 127 has no encodation, and empty data carries nothing.
     /// </summary>
     [Theory]
     [InlineData("café")]
@@ -76,8 +72,7 @@ public class Code39ExtendedSymbologyTests
         => Assert.ThrowsAny<ArgumentException>(() => Encode(new Code39ExtendedSymbology(), text));
 
     /// <summary>
-    /// The check character covers the substituted symbol characters, which a caller working in ASCII does
-    /// not have, so it cannot validate one it supplied.
+    /// The check character covers the substituted symbol characters, which a caller working in ASCII does not have, so it cannot validate one it supplied.
     /// </summary>
     [Fact]
     public void RejectsCheckCharacterValidation()

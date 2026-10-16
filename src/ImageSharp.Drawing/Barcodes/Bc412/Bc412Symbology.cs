@@ -7,10 +7,9 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The BC412 symbology of SEMI T1-95. It carries 7 to 18 characters from the digits and the capital
-/// letters without O, for which the digit 0 stands. Every symbol carries the modulo 35 check character
-/// after its first data character, and the printed line shows the data with the check character in that
-/// place. The start and stop characters are not shown.
+/// The BC412 symbology of SEMI T1-95. It carries 7 to 18 characters from the digits and the capital letters without O, for which the digit 0 stands. Every
+/// symbol carries the modulo 35 check character after its first data character, and the printed line shows the data with the check character in that place. The
+/// start and stop characters are not shown.
 /// </summary>
 public sealed class Bc412Symbology : BarcodeSymbology
 {
@@ -25,16 +24,14 @@ public sealed class Bc412Symbology : BarcodeSymbology
     /// <summary>
     /// Initializes a new instance of the <see cref="Bc412Symbology"/> class.
     /// </summary>
-    /// <param name="validateCheckCharacter">
-    /// Whether the second character of the input is the check character, which the encoder validates,
-    /// rather than data, for which the encoder calculates it.
-    /// </param>
+    /// <param name="validateCheckCharacter"> Whether the second character of the input is the check character, which the encoder validates, rather than data,
+    /// for which the encoder calculates it. </param>
     public Bc412Symbology(bool validateCheckCharacter)
         => this.ValidateCheckCharacter = validateCheckCharacter;
 
     /// <summary>
-    /// Gets a value indicating whether the second character of the input is the check character, which
-    /// the encoder validates, rather than data, for which the encoder calculates it.
+    /// Gets a value indicating whether the second character of the input is the check character, which the encoder validates, rather than data, for which the
+    /// encoder calculates it.
     /// </summary>
     public bool ValidateCheckCharacter { get; }
 
@@ -62,9 +59,8 @@ public sealed class Bc412Symbology : BarcodeSymbology
             }
         }
 
-        // The data without the check character, then the characters the symbol carries: the first
-        // data character, the check character and the remaining data. A symbol carries at most 18 data
-        // characters.
+        // The data without the check character, then the characters the symbol carries: the first data character, the check character and the remaining data. A
+        // symbol carries at most 18 data characters.
         InlineArray18<char> dataStorage = default;
         Span<char> data = dataStorage;
         data[0] = text[0];

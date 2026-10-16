@@ -7,17 +7,16 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Encodes Han Xin Code symbols: versions 1 to 84, squares of 23 to 189 modules with finder patterns at the four
-/// corners and a grid of alignment patterns from version 4. The data is Numeric and Byte mode segments, its
-/// codewords take Reed-Solomon error correction over GF(256) in up to three groups of blocks at one of four
-/// levels, and one of four masks makes the modules evenly dark. The function information beside the finder
-/// patterns carries the version, the level and the mask with error correction over GF(16).
+/// Encodes Han Xin Code symbols: versions 1 to 84, squares of 23 to 189 modules with finder patterns at the four corners and a grid of alignment patterns from
+/// version 4. The data is Numeric and Byte mode segments, its codewords take Reed-Solomon error correction over GF(256) in up to three groups of blocks at one
+/// of four levels, and one of four masks makes the modules evenly dark. The function information beside the finder patterns carries the version, the level and
+/// the mask with error correction over GF(16).
 /// </summary>
 internal static class HanXinEncoder
 {
     /// <summary>
-    /// The longest input: version 84 at level L1 holds 3264 data codewords, 26112 bits, and Numeric mode, the
-    /// densest, takes 10 bits for three digits, so no more than 7827 characters fit.
+    /// The longest input: version 84 at level L1 holds 3264 data codewords, 26112 bits, and Numeric mode, the densest, takes 10 bits for three digits, so no
+    /// more than 7827 characters fit.
     /// </summary>
     public const int MaximumLength = 7827;
 
@@ -37,8 +36,8 @@ internal static class HanXinEncoder
     private const int MaximumDataCodewords = 3264;
 
     /// <summary>
-    /// The codewords of version 84, the most any symbol holds, data and error correction: its 31091 data modules,
-    /// the last entry of <see cref="DataModules"/>, as whole codewords.
+    /// The codewords of version 84, the most any symbol holds, data and error correction: its 31091 data modules, the last entry of <see cref="DataModules"/>,
+    /// as whole codewords.
     /// </summary>
     private const int MaximumCodewords = 31091 / 8;
 
@@ -48,8 +47,7 @@ internal static class HanXinEncoder
     private const int MaximumSide = 21 + (2 * VersionCount);
 
     /// <summary>
-    /// The shortest digit run that starts a Numeric segment, or <see cref="ShortestFinalNumericRun"/> when the run
-    /// ends the data.
+    /// The shortest digit run that starts a Numeric segment, or <see cref="ShortestFinalNumericRun"/> when the run ends the data.
     /// </summary>
     private const int ShortestNumericRun = 8;
 
@@ -59,24 +57,12 @@ internal static class HanXinEncoder
     private const int ShortestFinalNumericRun = 5;
 
     /// <summary>
-    /// The mode indicator of a Numeric segment.
-    /// </summary>
-    private const int NumericMode = 0b0001;
-
-    /// <summary>
-    /// The mode indicator of a Byte segment.
-    /// </summary>
-    private const int ByteMode = 0b0011;
-
-    /// <summary>
-    /// The number of bits of the byte count of a Byte segment. A segment is at most <see cref="MaximumLength"/>
-    /// bytes, which the 13 bits hold.
+    /// The number of bits of the byte count of a Byte segment. A segment is at most <see cref="MaximumLength"/> bytes, which the 13 bits hold.
     /// </summary>
     private const int ByteCountBits = 13;
 
     /// <summary>
-    /// The terminator of a Numeric segment whose last group holds one digit. The terminators for two and three
-    /// digits follow it.
+    /// The terminator of a Numeric segment whose last group holds one digit. The terminators for two and three digits follow it.
     /// </summary>
     private const int NumericTerminator = 0b1111111101;
 
@@ -86,8 +72,7 @@ internal static class HanXinEncoder
     private const int FinderSize = 8;
 
     /// <summary>
-    /// The number of bits of the function information: three 4-bit data words, four 4-bit check words and six
-    /// fixed bits.
+    /// The number of bits of the function information: three 4-bit data words, four 4-bit check words and six fixed bits.
     /// </summary>
     private const int FunctionBits = 34;
 
@@ -107,9 +92,17 @@ internal static class HanXinEncoder
     private static readonly GaloisField FunctionField = new(16, 19);
 
     /// <summary>
-    /// Gets the alignment pattern spacing of each version, two bytes a version: the regular distance k between
-    /// the alignment lines and the number n of regular intervals across the side, both 0 for versions 1 to 3,
-    /// which have none.
+    /// The modes of the data segments, each value the 4-bit mode indicator that starts its segment.
+    /// </summary>
+    private enum SegmentMode
+    {
+        Numeric = 0b0001,
+        Byte = 0b0011,
+    }
+
+    /// <summary>
+    /// Gets the alignment pattern spacing of each version, two bytes a version: the regular distance k between the alignment lines and the number n of regular
+    /// intervals across the side, both 0 for versions 1 to 3, which have none.
     /// </summary>
     private static ReadOnlySpan<byte> Alignment =>
     [
@@ -127,8 +120,8 @@ internal static class HanXinEncoder
     ];
 
     /// <summary>
-    /// Gets the number of modules that carry codewords in each version, the side squared less the finder
-    /// patterns, the alignment patterns and the function information.
+    /// Gets the number of modules that carry codewords in each version, the side squared less the finder patterns, the alignment patterns and the function
+    /// information.
     /// </summary>
     private static ReadOnlySpan<ushort> DataModules =>
     [
@@ -142,9 +135,8 @@ internal static class HanXinEncoder
     ];
 
     /// <summary>
-    /// Gets the error correction blocks of each version and level, nine bytes a version and level from version 1
-    /// at level L1: three groups, each the number of blocks, the data codewords of a block and the check
-    /// codewords of a block. A group of no blocks is three zeros.
+    /// Gets the error correction blocks of each version and level, nine bytes a version and level from version 1 at level L1: three groups, each the number of
+    /// blocks, the data codewords of a block and the check codewords of a block. A group of no blocks is three zeros.
     /// </summary>
     private static ReadOnlySpan<byte> Blocks =>
     [
@@ -235,8 +227,8 @@ internal static class HanXinEncoder
     ];
 
     /// <summary>
-    /// Gets the finder pattern at the top left, top right and bottom right corners, row by row from the corner
-    /// outward, its light separator included. The top right and bottom right patterns mirror it.
+    /// Gets the finder pattern at the top left, top right and bottom right corners, row by row from the corner outward, its light separator included. The top
+    /// right and bottom right patterns mirror it.
     /// </summary>
     private static ReadOnlySpan<byte> FinderPattern =>
     [
@@ -251,8 +243,7 @@ internal static class HanXinEncoder
     ];
 
     /// <summary>
-    /// Gets the finder pattern at the bottom left corner, row by row from the bottom edge upward, its light
-    /// separator included.
+    /// Gets the finder pattern at the bottom left corner, row by row from the bottom edge upward, its light separator included.
     /// </summary>
     private static ReadOnlySpan<byte> CornerFinderPattern =>
     [
@@ -302,10 +293,9 @@ internal static class HanXinEncoder
             throw new ArgumentException("The text does not fit in a Han Xin Code symbol of the requested version and level.", nameof(text));
         }
 
-        // One rented block holds the data codewords, the codewords in block order, the codewords in placement
-        // order and the cells of the largest symbol. The codeword spans hold one more than the most codewords for
-        // the zero codeword that can follow them. The cells are bytes, so their part of the block is the side
-        // squared in bytes, rounded up to whole ints and read as bytes.
+        // One rented block holds the data codewords, the codewords in block order, the codewords in placement order and the cells of the largest symbol. The
+        // codeword spans hold one more than the most codewords for the zero codeword that can follow them. The cells are bytes, so their part of the block is
+        // the side squared in bytes, rounded up to whole ints and read as bytes.
         int size = 21 + (2 * chosen);
         const int codewordLength = MaximumCodewords + 1;
         const int cellLength = ((MaximumSide * MaximumSide) + sizeof(int) - 1) / sizeof(int);
@@ -324,8 +314,7 @@ internal static class HanXinEncoder
         int codewordCount = AddErrorCorrection(data, chosen, levelIndex, blocks);
         Interleave(blocks[..codewordCount], placed);
 
-        // A symbol whose modules are not a whole number of codewords takes one more zero codeword, whose bits fill
-        // the modules left.
+        // A symbol whose modules are not a whole number of codewords takes one more zero codeword, whose bits fill the modules left.
         int moduleCount = DataModules[chosen - 1];
         int placedCount = codewordCount + ((moduleCount & 7) == 0 ? 0 : 1);
         placed[codewordCount] = 0;
@@ -343,8 +332,7 @@ internal static class HanXinEncoder
     }
 
     /// <summary>
-    /// Returns the data codewords of a version at a level: the codewords of the version less the check codewords
-    /// of its blocks.
+    /// Returns the data codewords of a version at a level: the codewords of the version less the check codewords of its blocks.
     /// </summary>
     /// <param name="version">The version, 1 to 84.</param>
     /// <param name="level">The level, 0 for L1 to 3 for L4.</param>
@@ -365,20 +353,17 @@ internal static class HanXinEncoder
         => Blocks.Slice((((version - 1) * 4) + level) * 9, 9);
 
     /// <summary>
-    /// Writes the data as segments: a run of digits as a Numeric segment when it is long enough to pay for its
-    /// mode indicator and terminator, and the other characters as Byte segments. With an empty buffer the method
-    /// only counts the bits.
+    /// Writes the data as segments: a run of digits as a Numeric segment when it is long enough to pay for its mode indicator and terminator, and the other
+    /// characters as Byte segments. With an empty buffer the method only counts the bits.
     /// </summary>
     /// <param name="text">The data.</param>
     /// <param name="codewords">The data codewords to write the bits to, most significant bit first, or empty.</param>
     /// <returns>The number of bits.</returns>
     private static int WriteBits(ReadOnlySpan<char> text, Span<int> codewords)
     {
-        // A Numeric segment of D digits costs a 4-bit mode indicator, 10 bits for each group of three digits and
-        // a 10-bit terminator. The same digits in a Byte segment cost 8 bits each. A Numeric segment inside Byte
-        // data also starts a new Byte segment after it, a 4-bit mode indicator and a 13-bit count. So 8 digits,
-        // 61 bits against 64, is the shortest run that saves bits, and 5 digits, 34 bits against 40, when no Byte
-        // segment follows.
+        // A Numeric segment of D digits costs a 4-bit mode indicator, 10 bits for each group of three digits and a 10-bit terminator. The same digits in a Byte
+        // segment cost 8 bits each. A Numeric segment inside Byte data also starts a new Byte segment after it, a 4-bit mode indicator and a 13-bit count. So 8
+        // digits, 61 bits against 64, is the shortest run that saves bits, and 5 digits, 34 bits against 40, when no Byte segment follows.
         BitWriter writer = new(codewords);
 
         // The start of the pending Byte segment, or -1 when there is none.
@@ -409,8 +394,8 @@ internal static class HanXinEncoder
                 digits = text.Length - i;
             }
 
-            // A run too short for a Numeric segment joins the Byte segment whole. Each later start in the run
-            // gives a shorter run with the same end, so none of them is long enough either.
+            // A run too short for a Numeric segment joins the Byte segment whole. Each later start in the run gives a shorter run with the same end, so none of
+            // them is long enough either.
             if (digits >= (i + digits == text.Length ? ShortestFinalNumericRun : ShortestNumericRun))
             {
                 if (byteStart >= 0)
@@ -438,9 +423,8 @@ internal static class HanXinEncoder
     }
 
     /// <summary>
-    /// Divides the data codewords into the blocks of the version and level, the groups in order, and writes each
-    /// block followed by its check codewords. The check codewords of a block are the remainder of its data over
-    /// the generator with the roots alpha^1 to alpha^k.
+    /// Divides the data codewords into the blocks of the version and level, the groups in order, and writes each block followed by its check codewords. The
+    /// check codewords of a block are the remainder of its data over the generator with the roots alpha^1 to alpha^k.
     /// </summary>
     /// <param name="data">The data codewords.</param>
     /// <param name="version">The version.</param>
@@ -454,8 +438,8 @@ internal static class HanXinEncoder
         // A block takes at most 32 check codewords.
         InlineArray32<int> generatorStorage = default;
 
-        // The data codewords run on through the blocks of every group: input is the first data codeword of the
-        // next block, and output the start of that block, its check codewords after its data.
+        // The data codewords run on through the blocks of every group: input is the first data codeword of the next block, and output the start of that block,
+        // its check codewords after its data.
         int input = 0;
         int output = 0;
         for (int g = 0; g < 9; g += 3)
@@ -468,8 +452,8 @@ internal static class HanXinEncoder
                 continue;
             }
 
-            // The blocks of a group share one check length, so one generator serves the group. Section 5.5.2
-            // gives its roots as alpha^1 to alpha^2t, 2t the check codewords of a block.
+            // The blocks of a group share one check length, so one generator serves the group. Section 5.5.2 gives its roots as alpha^1 to alpha^2t, 2t the
+            // check codewords of a block.
             Span<int> generator = ((Span<int>)generatorStorage)[..checkLength];
             Field.Generator(1, generator);
             for (int b = 0; b < count; b++)
@@ -486,8 +470,8 @@ internal static class HanXinEncoder
     }
 
     /// <summary>
-    /// Reorders the codewords for placement: codewords 0, 13, 26 and so on, then 1, 14, 27 and so on, to 12, 25,
-    /// 38 and so on, so neighbouring codewords of a block lie apart in the symbol.
+    /// Reorders the codewords for placement: codewords 0, 13, 26 and so on, then 1, 14, 27 and so on, to 12, 25, 38 and so on, so neighbouring codewords of a
+    /// block lie apart in the symbol.
     /// </summary>
     /// <param name="codewords">The codewords in block order.</param>
     /// <param name="placed">The buffer the codewords are written to in placement order.</param>
@@ -504,9 +488,8 @@ internal static class HanXinEncoder
     }
 
     /// <summary>
-    /// Builds the mask layers of a symbol: the alignment patterns, the finder patterns and the function
-    /// information modules, which hold light until the mask is chosen, then the codeword bits in the cells left,
-    /// row by row from the top left. Bit m of a cell is its module value under mask m, so a function cell is
+    /// Builds the mask layers of a symbol: the alignment patterns, the finder patterns and the function information modules, which hold light until the mask is
+    /// chosen, then the codeword bits in the cells left, row by row from the top left. Bit m of a cell is its module value under mask m, so a function cell is
     /// 0x0F or 0 and a data cell is its bit repeated, flipped by <see cref="MaskLayer"/>.
     /// </summary>
     /// <param name="version">The version.</param>
@@ -514,8 +497,7 @@ internal static class HanXinEncoder
     /// <param name="cells">The cells, side squared, to write.</param>
     private static void Layout(int version, ReadOnlySpan<int> codewords, Span<byte> cells)
     {
-        // A cell is unset until a pattern or a data bit claims it. Section 5.8.2 places the fixed patterns first,
-        // so the data takes only the cells they leave.
+        // A cell is unset until a pattern or a data bit claims it. Section 5.8.2 places the fixed patterns first, so the data takes only the cells they leave.
         const byte unset = 0xFF;
         int size = 21 + (2 * version);
         cells.Fill(unset);
@@ -527,9 +509,8 @@ internal static class HanXinEncoder
             AddAlignment(cells, size, spacing, intervals);
         }
 
-        // The tables run from the corner inward, so (x, y) of a table maps to the top left cell (x, y), the top
-        // right cell (side - 1 - x, y), the bottom right cell (side - 1 - x, side - 1 - y) and the bottom left
-        // cell (x, side - 1 - y). The finder patterns overwrite any alignment cells under them.
+        // The tables run from the corner inward, so (x, y) of a table maps to the top left cell (x, y), the top right cell (side - 1 - x, y), the bottom right
+        // cell (side - 1 - x, side - 1 - y) and the bottom left cell (x, side - 1 - y). The finder patterns overwrite any alignment cells under them.
         ReadOnlySpan<byte> finder = FinderPattern;
         ReadOnlySpan<byte> corner = CornerFinderPattern;
         for (int y = 0; y < FinderSize; y++)
@@ -544,8 +525,8 @@ internal static class HanXinEncoder
             }
         }
 
-        // The function information carries the mask, so its cells are reserved light here and written after the
-        // mask is chosen. As function cells, they also stay out of the masking.
+        // The function information carries the mask, so its cells are reserved light here and written after the mask is chosen. As function cells, they also
+        // stay out of the masking.
         for (int i = 0; i < FunctionBits; i++)
         {
             FunctionPositions(i, size, out int x1, out int y1, out int x2, out int y2);
@@ -553,9 +534,8 @@ internal static class HanXinEncoder
             cells[(y2 * size) + x2] = 0;
         }
 
-        // The bits fill the unset cells in row order, the most significant bit of each codeword first. The count
-        // of unset cells is DataModules of the version, and the codewords hold at least that many bits. The
-        // patterns above write 0 or 1, which become 0 or 0x0F, the same value under every mask.
+        // The bits fill the unset cells in row order, the most significant bit of each codeword first. The count of unset cells is DataModules of the version,
+        // and the codewords hold at least that many bits. The patterns above write 0 or 1, which become 0 or 0x0F, the same value under every mask.
         int bit = 0;
         int c = 0;
         for (int y = 0; y < size; y++)
@@ -577,8 +557,8 @@ internal static class HanXinEncoder
     }
 
     /// <summary>
-    /// Draws the alignment patterns: dark lines on a staggered grid of the regular spacing, each with a light line
-    /// beside it, and the light breaks where the lines meet the edges.
+    /// Draws the alignment patterns: dark lines on a staggered grid of the regular spacing, each with a light line beside it, and the light breaks where the
+    /// lines meet the edges.
     /// </summary>
     /// <param name="cells">The cells.</param>
     /// <param name="size">The side in modules.</param>
@@ -586,31 +566,30 @@ internal static class HanXinEncoder
     /// <param name="intervals">The number of regular intervals across the side.</param>
     private static void AddAlignment(Span<byte> cells, int size, int spacing, int intervals)
     {
-        // The coordinates run from the top right corner: a is the distance from the right edge and b the row.
-        // SetMirrored draws each point at (a, b) and at (b, a), so each pass draws a row and its matching
-        // column together.
+        // The coordinates run from the top right corner: a is the distance from the right edge and b the row. SetMirrored draws each point at (a, b) and at (b,
+        // a), so each pass draws a row and its matching column together.
         //
-        // The lines lie at 0, spacing, 2 x spacing and so on to intervals x spacing, and the last at side - 1.
-        // The last interval takes the side the regular intervals leave.
+        // The lines lie at 0, spacing, 2 x spacing and so on to intervals x spacing, and the last at side - 1. The last interval takes the side the regular
+        // intervals leave.
         int remainder = size - (spacing * intervals);
 
-        // Each line is dark in alternate stretches of one spacing, and the next line starts with the other
-        // phase. The alternation gives the stepped lines of the symbol.
+        // Each line is dark in alternate stretches of one spacing, and the next line starts with the other phase. The alternation gives the stepped lines of
+        // the symbol.
         int stagger = 0;
         int i = 0;
         while (i < size)
         {
             for (int j = 0; j < size; j++)
             {
-                // In the regular part, a module is dark in a dark stretch or where the line crosses another line,
-                // at a multiple of the spacing. The first stretch of the top line stays clear for the finder
-                // pattern at the top right. The last stretch, of the remainder length, continues the alternation.
+                // In the regular part, a module is dark in a dark stretch or where the line crosses another line, at a multiple of the spacing. The first
+                // stretch of the top line stays clear for the finder pattern at the top right. The last stretch, of the remainder length, continues the
+                // alternation.
                 bool dark = j + remainder < size
                     ? (((j / spacing) + stagger) % 2 == 0 && !(i == 0 && j < spacing)) || j % spacing == 0
                     : (intervals + stagger) % 2 == 0;
 
-                // Each dark module has a light module one step down and one step left of it. Together these make
-                // the light line beside the dark line, so a pattern is 2 modules wide, as section 6.1 requires.
+                // Each dark module has a light module one step down and one step left of it. Together these make the light line beside the dark line, so a
+                // pattern is 2 modules wide, as section 6.1 requires.
                 if (dark)
                 {
                     SetMirrored(cells, size, j, i, 1);
@@ -625,11 +604,9 @@ internal static class HanXinEncoder
             stagger = 1 - stagger;
         }
 
-        // The assistant alignment patterns sit on the edges where a line meets them. Each is 3 modules along the
-        // edge and 2 deep, as section 6.1 requires. The line end stays dark, and the five modules around it turn
-        // light. On the top and right edges, a pattern goes at every odd line. The phase of the bottom and left
-        // edges depends on the number of lines, and there a pattern goes where the edge module before the line
-        // end is not dark.
+        // The assistant alignment patterns sit on the edges where a line meets them. Each is 3 modules along the edge and 2 deep, as section 6.1 requires. The
+        // line end stays dark, and the five modules around it turn light. On the top and right edges, a pattern goes at every odd line. The phase of the bottom
+        // and left edges depends on the number of lines, and there a pattern goes where the edge module before the line end is not dark.
         for (i = spacing; i <= size - 2; i += spacing)
         {
             if ((i / spacing) % 2 != 0)
@@ -674,8 +651,8 @@ internal static class HanXinEncoder
         => cells[(b * size) + size - 1 - a] = value;
 
     /// <summary>
-    /// Sets the two cells of an alignment pattern point, which mirror each other about the diagonal from the top
-    /// right corner: x = side - 1 - b with y = a, and x = side - 1 - a with y = b.
+    /// Sets the two cells of an alignment pattern point, which mirror each other about the diagonal from the top right corner: x = side - 1 - b with y = a, and
+    /// x = side - 1 - a with y = b.
     /// </summary>
     /// <param name="cells">The cells.</param>
     /// <param name="size">The side in modules.</param>
@@ -689,8 +666,8 @@ internal static class HanXinEncoder
     }
 
     /// <summary>
-    /// Returns the two positions of bit i of the function information: one beside the finder pattern at the top
-    /// left or the bottom right, and one beside the finder pattern at the top right or the bottom left.
+    /// Returns the two positions of bit i of the function information: one beside the finder pattern at the top left or the bottom right, and one beside the
+    /// finder pattern at the top right or the bottom left.
     /// </summary>
     /// <param name="i">The bit, 0 to 33.</param>
     /// <param name="size">The side in modules.</param>
@@ -700,9 +677,8 @@ internal static class HanXinEncoder
     /// <param name="y2">The row of the second position.</param>
     private static void FunctionPositions(int i, int size, out int x1, out int y1, out int x2, out int y2)
     {
-        // Bits 0 to 8 run along row 8 from the left edge, bits 9 to 16 up column 8, bits 17 to 25 down from the
-        // top along column side - 9, and bits 26 to 33 along row 8 to the right edge, each with its partner by
-        // the opposite finder pattern.
+        // Bits 0 to 8 run along row 8 from the left edge, bits 9 to 16 up column 8, bits 17 to 25 down from the top along column side - 9, and bits 26 to 33
+        // along row 8 to the right edge, each with its partner by the opposite finder pattern.
         if (i < 9)
         {
             (x1, y1, x2, y2) = (i, 8, size - 1 - i, size - 9);
@@ -725,10 +701,9 @@ internal static class HanXinEncoder
     }
 
     /// <summary>
-    /// Returns the mask layer of a data module at one-based column a and row b: bit m is set where mask m flips
-    /// the module. Mask 0 flips none, mask 1 where (a + b) mod 2 = 0, mask 2 where
-    /// ((a + b) mod 3 + a mod 3) mod 2 = 0, and mask 3 where (a mod b + b mod a + a mod 3 + b mod 3) mod 2 = 0.
-    /// The coordinates are one-based, so a mod b and b mod a never divide by zero.
+    /// Returns the mask layer of a data module at one-based column a and row b: bit m is set where mask m flips the module. Mask 0 flips none, mask 1 where (a
+    /// + b) mod 2 = 0, mask 2 where ((a + b) mod 3 + a mod 3) mod 2 = 0, and mask 3 where (a mod b + b mod a + a mod 3 + b mod 3) mod 2 = 0. The coordinates
+    /// are one-based, so a mod b and b mod a never divide by zero.
     /// </summary>
     /// <param name="a">The one-based column.</param>
     /// <param name="b">The one-based row.</param>
@@ -743,8 +718,7 @@ internal static class HanXinEncoder
     }
 
     /// <summary>
-    /// Chooses the mask whose symbol scores the lowest penalty over its rows and columns. Equal scores keep the
-    /// first mask.
+    /// Chooses the mask whose symbol scores the lowest penalty over its rows and columns. Equal scores keep the first mask.
     /// </summary>
     /// <param name="layers">The mask layers of the modules.</param>
     /// <param name="size">The side in modules.</param>
@@ -777,8 +751,7 @@ internal static class HanXinEncoder
     }
 
     /// <summary>
-    /// Writes the runs of a row or a column under a mask, alternately light and dark from a light run, which is
-    /// empty when the line starts dark.
+    /// Writes the runs of a row or a column under a mask, alternately light and dark from a light run, which is empty when the line starts dark.
     /// </summary>
     /// <param name="layers">The mask layers of the modules.</param>
     /// <param name="start">The index of the first module.</param>
@@ -789,8 +762,7 @@ internal static class HanXinEncoder
     /// <returns>The number of runs.</returns>
     private static int RunLengths(ReadOnlySpan<byte> layers, int start, int step, int size, int mask, Span<int> runs)
     {
-        // The first run is light, even when empty, so the even runs are light and the odd runs dark. Penalty
-        // depends on this order.
+        // The first run is light, even when empty, so the even runs are light and the odd runs dark. Penalty depends on this order.
         int count = 1;
         runs[0] = 0;
         int colour = 0;
@@ -812,8 +784,8 @@ internal static class HanXinEncoder
     }
 
     /// <summary>
-    /// Scores the runs of one line: 4 points for each module of a run of three or more, and 50 for each 1:1:1:1:3
-    /// or 3:1:1:1:1 ratio of runs that ends a line or meets a run of three or more modules beyond it.
+    /// Scores the runs of one line: 4 points for each module of a run of three or more, and 50 for each 1:1:1:1:3 or 3:1:1:1:1 ratio of runs that ends a line
+    /// or meets a run of three or more modules beyond it.
     /// </summary>
     /// <param name="runs">The runs, alternately light and dark from a light run.</param>
     /// <returns>The penalty.</returns>
@@ -829,13 +801,11 @@ internal static class HanXinEncoder
             }
         }
 
-        // A 1:1:1:1:3 or 3:1:1:1:1 ratio is the scan ratio of a Position Detection Pattern in section 4.2.3, so
-        // data that shows it can look like a finder pattern. The ratio counts only when it is at the start or the
-        // end of the line, or when a light run of three or more modules is next to it.
+        // A 1:1:1:1:3 or 3:1:1:1:1 ratio is the scan ratio of a Position Detection Pattern in section 4.2.3, so data that shows it can look like a finder
+        // pattern. The ratio counts only when it is at the start or the end of the line, or when a light run of three or more modules is next to it.
         //
-        // The odd runs are dark, so j steps over the dark runs only. Here dark run j is the 3 unit run, and runs
-        // j - 4 to j - 1 are the four 1 unit runs. j = 5 puts the ratio after the first light run alone, at the
-        // start of the line, and j + 2 >= count leaves at most the last light run after it, at the end.
+        // The odd runs are dark, so j steps over the dark runs only. Here dark run j is the 3 unit run, and runs j - 4 to j - 1 are the four 1 unit runs. j = 5
+        // puts the ratio after the first light run alone, at the start of the line, and j + 2 >= count leaves at most the last light run after it, at the end.
         for (int j = 5; j <= count - 1; j += 2)
         {
             if (runs[j] % 3 == 0)
@@ -849,8 +819,8 @@ internal static class HanXinEncoder
             }
         }
 
-        // Here dark run j is the 3 unit run, and runs j + 1 to j + 4 are the four 1 unit runs. j = 1 puts the
-        // ratio at the start of the line, and j + 6 >= count leaves at most the last light run after it.
+        // Here dark run j is the 3 unit run, and runs j + 1 to j + 4 are the four 1 unit runs. j = 1 puts the ratio at the start of the line, and j + 6 >=
+        // count leaves at most the last light run after it.
         for (int j = 1; j <= count - 5; j += 2)
         {
             if (runs[j] % 3 == 0)
@@ -868,9 +838,8 @@ internal static class HanXinEncoder
     }
 
     /// <summary>
-    /// Writes the function information: the version plus 20, the level and the mask as three 4-bit words, four
-    /// 4-bit check words over GF(16) with the roots alpha^1 to alpha^4, and the bits 010101, each bit at its two
-    /// positions.
+    /// Writes the function information: the version plus 20, the level and the mask as three 4-bit words, four 4-bit check words over GF(16) with the roots
+    /// alpha^1 to alpha^4, and the bits 010101, each bit at its two positions.
     /// </summary>
     /// <param name="version">The version.</param>
     /// <param name="level">The level, 0 for L1 to 3 for L4.</param>
@@ -879,8 +848,8 @@ internal static class HanXinEncoder
     /// <param name="modules">The modules to write.</param>
     private static void WriteFunctionInformation(int version, int level, int mask, int size, Span<bool> modules)
     {
-        // The 12 bits are the version plus 20 (8 bits, 21 to 104), the level (2 bits, the encodings of Table 13)
-        // and the mask (2 bits). They split into three 4-bit words, the first word holding the high bits.
+        // The 12 bits are the version plus 20 (8 bits, 21 to 104), the level (2 bits, the encodings of Table 13) and the mask (2 bits). They split into three
+        // 4-bit words, the first word holding the high bits.
         int value = ((version + 20) * 16) + (level * 4) + mask;
         InlineArray3<int> wordStorage = default;
         InlineArray4<int> generatorStorage = default;
@@ -894,9 +863,8 @@ internal static class HanXinEncoder
         FunctionField.Generator(1, generator);
         FunctionField.Remainder(words, 1, 3, generator, check);
 
-        // Bits 0 to 11 are the three data words and bits 12 to 27 the four check words, each word most
-        // significant bit first: i >> 2 selects the word and 3 - (i & 3) the bit in it. Bits 28 to 33 alternate
-        // 0 and 1.
+        // Bits 0 to 11 are the three data words and bits 12 to 27 the four check words, each word most significant bit first: i >> 2 selects the word and 3 -
+        // (i & 3) the bit in it. Bits 28 to 33 alternate 0 and 1.
         for (int i = 0; i < FunctionBits; i++)
         {
             int bit = i < 12
@@ -912,8 +880,7 @@ internal static class HanXinEncoder
     }
 
     /// <summary>
-    /// Writes the bits of the segments to the data codewords, most significant bit first, or only counts them
-    /// when the buffer is empty.
+    /// Writes the bits of the segments to the data codewords, most significant bit first, or only counts them when the buffer is empty.
     /// </summary>
     private ref struct BitWriter
     {
@@ -938,13 +905,13 @@ internal static class HanXinEncoder
         public int Position { get; private set; }
 
         /// <summary>
-        /// Writes a Numeric segment: the mode indicator, the digits three to 10 bits as their value, and the
-        /// terminator that gives the number of digits in the last group.
+        /// Writes a Numeric segment: the mode indicator, the digits three to 10 bits as their value, and the terminator that gives the number of digits in the
+        /// last group.
         /// </summary>
         /// <param name="digits">The digits.</param>
         public void WriteDigits(ReadOnlySpan<char> digits)
         {
-            this.Write(NumericMode, 4);
+            this.Write((int)SegmentMode.Numeric, 4);
             for (int start = 0; start < digits.Length; start += 3)
             {
                 int value = 0;
@@ -957,8 +924,8 @@ internal static class HanXinEncoder
                 this.Write(value, 10);
             }
 
-            // Table 2 gives the terminators 1111111101, 1111111110 and 1111111111 for a last group of one, two and
-            // three digits, which (length - 1) mod 3 selects.
+            // Table 2 gives the terminators 1111111101, 1111111110 and 1111111111 for a last group of one, two and three digits, which (length - 1) mod 3
+            // selects.
             this.Write(NumericTerminator + ((digits.Length - 1) % 3), 10);
         }
 
@@ -968,11 +935,11 @@ internal static class HanXinEncoder
         /// <param name="bytes">The characters U+0000 to U+00FF as bytes.</param>
         public void WriteBytes(ReadOnlySpan<char> bytes)
         {
-            this.Write(ByteMode, 4);
+            this.Write((int)SegmentMode.Byte, 4);
             this.Write(bytes.Length, ByteCountBits);
-            for (int i = 0; i < bytes.Length; i++)
+            foreach (char b in bytes)
             {
-                this.Write(bytes[i], 8);
+                this.Write(b, 8);
             }
         }
 
@@ -985,9 +952,8 @@ internal static class HanXinEncoder
         {
             if (!this.codewords.IsEmpty)
             {
-                // Bit b of the value goes to stream bit position. position >> 3 is its codeword, and
-                // 7 - (position & 7) is its bit in that codeword, the first stream bit being the most significant.
-                // The codewords start cleared, so OR sets the dark bits alone.
+                // Bit b of the value goes to stream bit position. position >> 3 is its codeword, and 7 - (position & 7) is its bit in that codeword, the first
+                // stream bit being the most significant. The codewords start cleared, so OR sets the dark bits alone.
                 for (int b = count - 1; b >= 0; b--)
                 {
                     int position = this.Position + (count - 1 - b);

@@ -4,8 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The versions of Rectangular Micro QR Code, ISO/IEC 23941. A version name gives the number of module rows
-/// and the number of module columns.
+/// The versions of Rectangular Micro QR Code, ISO/IEC 23941. A version name gives the number of module rows and the number of module columns.
 /// </summary>
 public enum RectangularMicroQrCodeVersion
 {

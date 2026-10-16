@@ -6,15 +6,14 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="ChannelCodeSymbology"/>. Each expected run string is the alternating bar
-/// and space module widths, starting with a bar, from the reference implementation's raw encoding API,
-/// joined with commas. The reference ends on the bar of the last channel, so the strings compare directly.
+/// Encoder tests for <see cref="ChannelCodeSymbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, from the
+/// reference implementation's raw encoding API, joined with commas. The reference ends on the bar of the last channel, so the strings compare directly.
 /// </summary>
 public class ChannelCodeSymbologyTests
 {
     /// <summary>
-    /// One vector per channel count at the largest value it carries, the smallest values, and a value
-    /// with a leading zero, which selects one more channel than the value alone would.
+    /// One vector per channel count at the largest value it carries, the smallest values, and a value with a leading zero, which selects one more channel than
+    /// the value alone would.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="reference">The reference run widths, comma separated.</param>
@@ -38,9 +37,8 @@ public class ChannelCodeSymbologyTests
         => Assert.Equal("1,1,1,1,1,5,4,1,1,1,2,1,1,1,1", Encode("3493", true));
 
     /// <summary>
-    /// The finder pattern is nine modules and every channel adds a space and a bar whose widths sum to a
-    /// constant, so a symbol of C channels, one more than its digits, spans 4C + 7 modules whatever its
-    /// value. The quiet zones are 1X before the symbol and 2X after it.
+    /// The finder pattern is nine modules and every channel adds a space and a bar whose widths sum to a constant, so a symbol of C channels, one more than its
+    /// digits, spans 4C + 7 modules whatever its value. The quiet zones are 1X before the symbol and 2X after it.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]
@@ -67,8 +65,8 @@ public class ChannelCodeSymbologyTests
     }
 
     /// <summary>
-    /// A value beyond the range of its channel count is rejected rather than moved to a wider symbol,
-    /// because the digit count is the caller's choice of symbol size.
+    /// A value beyond the range of its channel count is rejected rather than moved to a wider symbol, because the digit count is the caller's choice of symbol
+    /// size.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]
@@ -94,8 +92,5 @@ public class ChannelCodeSymbologyTests
     /// <returns>The run widths of the symbol, separated by commas.</returns>
     private static string Encode(string text, bool shortFinder)
         => SymbolEncoder.Read(
-            new ChannelCodeSymbology(shortFinder),
-            text,
-            new BarcodeOptions(),
-            static (ref symbol) => string.Join(",", symbol.Runs.ToArray()));
+            new ChannelCodeSymbology(shortFinder), text, new BarcodeOptions(), static (ref symbol) => string.Join(",", symbol.Runs.ToArray()));
 }

@@ -7,11 +7,9 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Pdf417Symbology"/> and <see cref="CompactPdf417Symbology"/>. The codeword
-/// tests carry the worked examples of ISO/IEC 15438. Each expected row is the alternating bar and space
-/// module widths of one row, starting with a bar, taken from an independent reference implementation
-/// through its raw encoding API, so the compaction modes, the error correction codewords, the matrix size
-/// and the row indicators all show up here.
+/// Encoder tests for <see cref="Pdf417Symbology"/> and <see cref="CompactPdf417Symbology"/>. The codeword tests carry the worked examples of ISO/IEC 15438.
+/// Each expected row is the alternating bar and space module widths of one row, starting with a bar, taken from an independent reference implementation through
+/// its raw encoding API, so the compaction modes, the error correction codewords, the matrix size and the row indicators all show up here.
 /// </summary>
 public class Pdf417SymbologyTests
 {
@@ -23,33 +21,29 @@ public class Pdf417SymbologyTests
         => Assert.Equal([453, 178, 121, 239], Codewords("PDF417"));
 
     /// <summary>
-    /// Annex C: the bytes 231, 101, 11, 97, 205 and 2 are the codewords 387, 700, 208, 213 and 302. Six bytes
-    /// take mode latch 924, section 5.4.3.1.
+    /// Annex C: the bytes 231, 101, 11, 97, 205 and 2 are the codewords 387, 700, 208, 213 and 302. Six bytes take mode latch 924, section 5.4.3.1.
     /// </summary>
     [Fact]
     public void Pdf417_ByteCompactionMatchesAnnexC()
         => Assert.Equal([924, 387, 700, 208, 213, 302], Codewords("çe\u000BaÍ\u0002"));
 
     /// <summary>
-    /// Annex D: the digits 000213298174000 are the codewords 1, 624, 434, 632, 282 and 200, after mode latch
-    /// 902.
+    /// Annex D: the digits 000213298174000 are the codewords 1, 624, 434, 632, 282 and 200, after mode latch 902.
     /// </summary>
     [Fact]
     public void Pdf417_NumericCompactionMatchesAnnexD()
         => Assert.Equal([902, 1, 624, 434, 632, 282, 200], Codewords("000213298174000"));
 
     /// <summary>
-    /// Section 5.4.4.2: a group of shorter than 44 digits takes INT(digits / 3) + 1 codewords, 10 for 28
-    /// digits.
+    /// Section 5.4.4.2: a group of shorter than 44 digits takes INT(digits / 3) + 1 codewords, 10 for 28 digits.
     /// </summary>
     [Fact]
     public void Pdf417_NumericGroupTakesTheCodewordsOfSectionFiveFourFourTwo()
         => Assert.Equal(1 + 10, Codewords("1234567890123456789012345678").Length);
 
     /// <summary>
-    /// Annex Q: the codewords 5, 453, 178, 121 and 239 at error correction level 1 take the error correction
-    /// codewords 452, 327, 657 and 619. The level 1 coefficients of Annex P, 522, 568, 723 and 809, are
-    /// the ones the example divides by.
+    /// Annex Q: the codewords 5, 453, 178, 121 and 239 at error correction level 1 take the error correction codewords 452, 327, 657 and 619. The level 1
+    /// coefficients of Annex P, 522, 568, 723 and 809, are the ones the example divides by.
     /// </summary>
     [Fact]
     public void Pdf417_ErrorCorrectionMatchesAnnexQ()
@@ -60,8 +54,7 @@ public class Pdf417SymbologyTests
     }
 
     /// <summary>
-    /// Annex A: the bar-space sequences of codewords 0 to 51 in the three clusters, as the first page of the
-    /// table prints them.
+    /// Annex A: the bar-space sequences of codewords 0 to 51 in the three clusters, as the first page of the table prints them.
     /// </summary>
     /// <param name="codeword">The codeword.</param>
     /// <param name="cluster0">The sequence in cluster 0.</param>
@@ -128,8 +121,8 @@ public class Pdf417SymbologyTests
     }
 
     /// <summary>
-    /// Section 5.3.1: every symbol character is four bars and four spaces of one to six modules, 17 modules
-    /// in all, and its cluster number K = (b1 - b2 + b3 - b4 + 9) mod 9 is 0, 3 or 6 for the three clusters.
+    /// Section 5.3.1: every symbol character is four bars and four spaces of one to six modules, 17 modules in all, and its cluster number K = (b1 - b2 + b3 -
+    /// b4 + 9) mod 9 is 0, 3 or 6 for the three clusters.
     /// </summary>
     [Fact]
     public void Pdf417_EveryPatternFollowsSectionFiveThreeOne()
@@ -643,9 +636,8 @@ public class Pdf417SymbologyTests
         => AssertRows(expected, Create(columns, errorCorrectionLevel, true), text);
 
     /// <summary>
-    /// Section 5.2.2 and Table 1: a row is the start character, the left row indicator, the data columns,
-    /// the right row indicator and the stop character, 17c + 69 modules. Section 5.8.3 gives a quiet zone of
-    /// 2X on all four sides, and section 5.8.2 a row height of at least 3X.
+    /// Section 5.2.2 and Table 1: a row is the start character, the left row indicator, the data columns, the right row indicator and the stop character, 17c +
+    /// 69 modules. Section 5.8.3 gives a quiet zone of 2X on all four sides, and section 5.8.2 a row height of at least 3X.
     /// </summary>
     [Fact]
     public void Pdf417_RowsFollowSectionFiveTwoTwo()
@@ -667,8 +659,7 @@ public class Pdf417SymbologyTests
         });
 
     /// <summary>
-    /// Annex G: a Compact PDF417 row drops the right row indicator and ends with a single module bar, 17c
-    /// + 35 modules.
+    /// Annex G: a Compact PDF417 row drops the right row indicator and ends with a single module bar, 17c + 35 modules.
     /// </summary>
     [Fact]
     public void CompactPdf417_RowsFollowAnnexG()
@@ -789,8 +780,7 @@ public class Pdf417SymbologyTests
         => SymbolEncoder.Encode(symbology, text, new BarcodeOptions());
 
     /// <summary>
-    /// Encodes the text with the default options and compares the run widths of each row with the
-    /// reference rows.
+    /// Encodes the text with the default options and compares the run widths of each row with the reference rows.
     /// </summary>
     /// <param name="expected">The reference rows, each a string of run widths, separated by a vertical bar.</param>
     /// <param name="symbology">The symbology to encode with.</param>

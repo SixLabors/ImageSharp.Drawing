@@ -6,15 +6,13 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="JapanPostSymbology"/>. Each expected bar string is the sequence of bar
-/// states, A for an ascender, D for a descender, F for a full bar and T for a tracker. The expected
-/// strings are from the reference implementation's raw encoding API unless the test states otherwise.
+/// Encoder tests for <see cref="JapanPostSymbology"/>. Each expected bar string is the sequence of bar states, A for an ascender, D for a descender, F for a
+/// full bar and T for a tracker. The expected strings are from the reference implementation's raw encoding API unless the test states otherwise.
 /// </summary>
 public class JapanPostSymbologyTests
 {
     /// <summary>
-    /// A symbol is the start code F D, twenty codes of three bars with CC4, T D A, as the filler, the
-    /// check code and the stop code D F.
+    /// A symbol is the start code F D, twenty codes of three bars with CC4, T D A, as the filler, the check code and the stop code D F.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="bars">The bar states from the left.</param>
@@ -25,9 +23,8 @@ public class JapanPostSymbologyTests
         => Assert.Equal(bars, Encode(text));
 
     /// <summary>
-    /// A letter is CC1, CC2 or CC3 followed by a digit: A is CC1 and 0, K is CC2 and 0, Z is CC3 and 5.
-    /// The sum of the codes of 1234567890-ABC and the fillers is 133, a multiple of 19, so the check code
-    /// is 0, the pattern F T T.
+    /// A letter is CC1, CC2 or CC3 followed by a digit: A is CC1 and 0, K is CC2 and 0, Z is CC3 and 5. The sum of the codes of 1234567890-ABC and the fillers
+    /// is 133, a multiple of 19, so the check code is 0, the pattern F T T.
     /// </summary>
     [Fact]
     public void EncodesLettersAndAZeroCheckCode()
@@ -42,8 +39,8 @@ public class JapanPostSymbologyTests
     }
 
     /// <summary>
-    /// The dimensions of page 12 of the manual at the 0.6 mm module: bars and spaces of one module, a
-    /// timing bar of 1.2 mm, extenders of 1.2 mm, a long bar of 3.6 mm and a clear space of 2 mm.
+    /// The dimensions of page 12 of the manual at the 0.6 mm module: bars and spaces of one module, a timing bar of 1.2 mm, extenders of 1.2 mm, a long bar of
+    /// 3.6 mm and a clear space of 2 mm.
     /// </summary>
     [Fact]
     public void DrawsTheDimensionsOfTheManual()
@@ -104,8 +101,7 @@ public class JapanPostSymbologyTests
         => SymbolEncoder.Read(new JapanPostSymbology(), text, new BarcodeOptions(), States);
 
     /// <summary>
-    /// Reads the bar states of a symbol from the bar tops and heights: F for a full bar, A for an
-    /// ascender, D for a descender and T for a tracker.
+    /// Reads the bar states of a symbol from the bar tops and heights: F for a full bar, A for an ascender, D for a descender and T for a tracker.
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
     /// <returns>The bar states.</returns>

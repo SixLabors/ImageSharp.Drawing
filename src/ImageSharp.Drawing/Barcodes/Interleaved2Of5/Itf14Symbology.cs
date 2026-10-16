@@ -7,26 +7,21 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The ITF-14 symbology, which section 5.3 of the GS1 General Specifications defines as an Interleaved 2
-/// of 5 symbol inside a bearer bar. Section 5.3.1 fixes the data at 14 digits, and section 5.3.2.1.3
-/// requires the check digit of section 7.9. The input is 13 digits, and the encoder calculates the check
-/// digit, or 14 digits, and the encoder validates it. Section 4.14 rule 2.a permits spaces in the human
-/// readable interpretation and forbids them in the symbol, so the input can carry spaces, which the
-/// printed line keeps and the symbol drops.
+/// The ITF-14 symbology, which section 5.3 of the GS1 General Specifications defines as an Interleaved 2 of 5 symbol inside a bearer bar. Section 5.3.1 fixes
+/// the data at 14 digits, and section 5.3.2.1.3 requires the check digit of section 7.9. The input is 13 digits, and the encoder calculates the check digit, or
+/// 14 digits, and the encoder validates it. Section 4.14 rule 2.a permits spaces in the human readable interpretation and forbids them in the symbol, so the
+/// input can carry spaces, which the printed line keeps and the symbol drops.
 /// <para>
-/// Section 5.3.2.4 requires the bearer bar, which for plate printing "has a constant thickness of 4.83
-/// millimetres (0.190 inch) and must completely surround the symbol, including its Quiet Zones and butt
-/// directly against the top and bottom of the bars". Section 5.3.2.2 gives the target X of 1.016
-/// millimetres and the 10X quiet zones, and the symbol height table of section 5.12.3.2 gives a minimum
-/// height of 31.75 millimetres. A calculated check digit prints after the data, and after a space when
-/// the input carries spaces, as Figure 5-32 shows.
+/// Section 5.3.2.4 requires the bearer bar, which for plate printing "has a constant thickness of 4.83 millimetres (0.190 inch) and must completely surround
+/// the symbol, including its Quiet Zones and butt directly against the top and bottom of the bars". Section 5.3.2.2 gives the target X of 1.016 millimetres and
+/// the 10X quiet zones, and the symbol height table of section 5.12.3.2 gives a minimum height of 31.75 millimetres. A calculated check digit prints after the
+/// data, and after a space when the input carries spaces, as Figure 5-32 shows.
 /// </para>
 /// </summary>
 public sealed class Itf14Symbology : BarcodeSymbology
 {
     /// <summary>
-    /// The number of digits the symbol carries, the check digit included. Section 5.3.1: "Data string
-    /// length encodable: fixed length at 14 digits."
+    /// The number of digits the symbol carries, the check digit included. Section 5.3.1: "Data string length encodable: fixed length at 14 digits."
     /// </summary>
     private const int Digits = 14;
 
@@ -36,8 +31,8 @@ public sealed class Itf14Symbology : BarcodeSymbology
     private const double XDimension = 1.016;
 
     /// <summary>
-    /// The bar height in modules when the caller sets none: the 31.75 millimetre minimum of the symbol
-    /// height table in section 5.12.3.2, footnote (****), at the target X.
+    /// The bar height in modules when the caller sets none: the 31.75 millimetre minimum of the symbol height table in section 5.12.3.2, footnote (****), at
+    /// the target X.
     /// </summary>
     private const float NominalBarHeight = (float)(31.75 / XDimension);
 
@@ -52,8 +47,7 @@ public sealed class Itf14Symbology : BarcodeSymbology
         Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
 
-        // The interpretation repeats the input, which may group the digits with spaces, so the input is
-        // bounded at one grouping space after each digit.
+        // The interpretation repeats the input, which may group the digits with spaces, so the input is bounded at one grouping space after each digit.
         Guard.MustBeLessThanOrEqualTo(text.Length, Digits * 2, nameof(text));
         InlineArray14<char> digitStorage = default;
         Span<char> digits = digitStorage;
@@ -95,8 +89,8 @@ public sealed class Itf14Symbology : BarcodeSymbology
 
         digits[Digits - 1] = (char)('0' + check);
 
-        // The interpretation is the input as given, with the check digit after it when the input left it
-        // out, set off by a space when the input groups its digits with spaces.
+        // The interpretation is the input as given, with the check digit after it when the input left it out, set off by a space when the input groups its
+        // digits with spaces.
         int readableLength = text.Length + (count == Digits ? 0 : hasSpaces ? 2 : 1);
         InlineArray32<char> readableStorage = default;
         Span<char> readable = ((Span<char>)readableStorage)[..readableLength];

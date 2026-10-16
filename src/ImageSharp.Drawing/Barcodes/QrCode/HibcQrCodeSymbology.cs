@@ -6,20 +6,17 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// HIBC QR Code, a Health Industry Bar Code carried by a QR Code symbol. The symbol carries the flag
-/// character, the data and the modulo 43 check character.
+/// HIBC QR Code, a Health Industry Bar Code carried by a QR Code symbol. The symbol carries the flag character, the data and the modulo 43 check character.
 /// <para>
-/// When a font is set, that same string prints below the symbol between delimiters, and a check character
-/// that is a space prints as an underscore. Primary and secondary data that the symbol joins with "/" print
-/// on two lines, broken after the "/".
+/// When a font is set, that same string prints below the symbol between delimiters, and a check character that is a space prints as an underscore. Primary and
+/// secondary data that the symbol joins with "/" print on two lines, broken after the "/".
 /// </para>
 /// </summary>
 public sealed class HibcQrCodeSymbology : BarcodeSymbology
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="HibcQrCodeSymbology"/> class at error correction level M,
-    /// calculating the check character from the data. The symbol takes the smallest version that holds the
-    /// data.
+    /// Initializes a new instance of the <see cref="HibcQrCodeSymbology"/> class at error correction level M, calculating the check character from the data.
+    /// The symbol takes the smallest version that holds the data.
     /// </summary>
     public HibcQrCodeSymbology()
         : this(QrErrorCorrectionLevel.M, false)
@@ -27,27 +24,22 @@ public sealed class HibcQrCodeSymbology : BarcodeSymbology
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="HibcQrCodeSymbology"/> class at error correction level M.
-    /// The symbol takes the smallest version that holds the data.
+    /// Initializes a new instance of the <see cref="HibcQrCodeSymbology"/> class at error correction level M. The symbol takes the smallest version that holds
+    /// the data.
     /// </summary>
-    /// <param name="validateCheckCharacter">
-    /// Whether the last character of the input is the check character, which the encoder validates
-    /// against the data, rather than data the encoder appends a check character to.
-    /// </param>
+    /// <param name="validateCheckCharacter"> Whether the last character of the input is the check character, which the encoder validates against the data,
+    /// rather than data the encoder appends a check character to. </param>
     public HibcQrCodeSymbology(bool validateCheckCharacter)
         : this(QrErrorCorrectionLevel.M, validateCheckCharacter)
     {
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="HibcQrCodeSymbology"/> class. The symbol takes the
-    /// smallest version that holds the data.
+    /// Initializes a new instance of the <see cref="HibcQrCodeSymbology"/> class. The symbol takes the smallest version that holds the data.
     /// </summary>
     /// <param name="errorCorrectionLevel">The error correction level.</param>
-    /// <param name="validateCheckCharacter">
-    /// Whether the last character of the input is the check character, which the encoder validates
-    /// against the data, rather than data the encoder appends a check character to.
-    /// </param>
+    /// <param name="validateCheckCharacter"> Whether the last character of the input is the check character, which the encoder validates against the data,
+    /// rather than data the encoder appends a check character to. </param>
     public HibcQrCodeSymbology(QrErrorCorrectionLevel errorCorrectionLevel, bool validateCheckCharacter)
     {
         Guard.MustBeBetweenOrEqualTo((int)errorCorrectionLevel, (int)QrErrorCorrectionLevel.L, (int)QrErrorCorrectionLevel.H, nameof(errorCorrectionLevel));
@@ -60,10 +52,8 @@ public sealed class HibcQrCodeSymbology : BarcodeSymbology
     /// </summary>
     /// <param name="errorCorrectionLevel">The error correction level.</param>
     /// <param name="version">The version, 1 to 40.</param>
-    /// <param name="validateCheckCharacter">
-    /// Whether the last character of the input is the check character, which the encoder validates
-    /// against the data, rather than data the encoder appends a check character to.
-    /// </param>
+    /// <param name="validateCheckCharacter"> Whether the last character of the input is the check character, which the encoder validates against the data,
+    /// rather than data the encoder appends a check character to. </param>
     public HibcQrCodeSymbology(QrErrorCorrectionLevel errorCorrectionLevel, int version, bool validateCheckCharacter)
         : this(errorCorrectionLevel, validateCheckCharacter)
     {

@@ -4,12 +4,10 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Shared encodation for the United States Postal Service height modulated symbologies, POSTNET and
-/// PLANET. Section 708.4.2.5 of the Domestic Mail Manual gives the bar dimensions: "All bars must be
-/// 0.020 ±0.005 inch wide", "horizontal spacing of the bars must be 22 ±2 bars per inch", "A full bar
-/// must be 0.125 ±0.010 inch high" and "A half bar must be 0.050 ±0.010 inch high". The module is the
-/// 0.020 inch bar width. A pitch of 1/22 inch is 25/11 modules, so a run unit is 1/11 module, a bar is 11
-/// units and a space is 14 units.
+/// Shared encodation for the United States Postal Service height modulated symbologies, POSTNET and PLANET. Section 708.4.2.5 of the Domestic Mail Manual gives
+/// the bar dimensions: "All bars must be 0.020 ±0.005 inch wide", "horizontal spacing of the bars must be 22 ±2 bars per inch", "A full bar must be 0.125
+/// ±0.010 inch high" and "A half bar must be 0.050 ±0.010 inch high". The module is the 0.020 inch bar width. A pitch of 1/22 inch is 25/11 modules, so a run
+/// unit is 1/11 module, a bar is 11 units and a space is 14 units.
 /// </summary>
 internal static class UspsPostalEncoder
 {
@@ -44,9 +42,8 @@ internal static class UspsPostalEncoder
     public const float HalfBar = 2.5F;
 
     /// <summary>
-    /// The clear zone in modules on each end: the "0.125 inch on each end of the barcode" of section
-    /// 2.3.2 of USPS-B-3200, whose bars have the same width and pitch. Section 708.4.2 of the Domestic
-    /// Mail Manual gives none.
+    /// The clear zone in modules on each end: the "0.125 inch on each end of the barcode" of section 2.3.2 of USPS-B-3200, whose bars have the same width and
+    /// pitch. Section 708.4.2 of the Domestic Mail Manual gives none.
     /// </summary>
     public const float ClearZone = 6.25F;
 
@@ -56,55 +53,46 @@ internal static class UspsPostalEncoder
     public const int BarsPerDigit = 5;
 
     /// <summary>
-    /// The clear space in modules between the bars and the human readable interpretation: the 1/25 inch
-    /// of section 202.5.7 c of the Domestic Mail Manual, "The minimum clearance between the barcode and
-    /// any information line above or below it within the address block must be at least 1/25 inch", at
-    /// the 0.020 inch module.
+    /// The clear space in modules between the bars and the human readable interpretation: the 1/25 inch of section 202.5.7 c of the Domestic Mail Manual, "The
+    /// minimum clearance between the barcode and any information line above or below it within the address block must be at least 1/25 inch", at the 0.020 inch
+    /// module.
     /// </summary>
     public const float TextClearance = 2F;
 
     /// <summary>
-    /// Gets the bars of every digit, one bit per bar, most significant bar first: a set bit is a full bar
-    /// in POSTNET and a half bar in PLANET. Section 708.4.2.1 of the Domestic Mail Manual: "A tall bar
-    /// represents 1, and a short bar represents 0", and the five bars weigh 7, 4, 2, 1 and 0, with the
-    /// digit 0 as the exception 11000.
+    /// Gets the bars of every digit, one bit per bar, most significant bar first: a set bit is a full bar in POSTNET and a half bar in PLANET. Section
+    /// 708.4.2.1 of the Domestic Mail Manual: "A tall bar represents 1, and a short bar represents 0", and the five bars weigh 7, 4, 2, 1 and 0, with the digit
+    /// 0 as the exception 11000.
     /// </summary>
     private static ReadOnlySpan<byte> Digits => [0b11000, 0b00011, 0b00101, 0b00110, 0b01001, 0b01010, 0b01100, 0b10001, 0b10010, 0b10100];
 
     /// <summary>
-    /// Calculates the correction digit. Section 708.4.2.1: it is "derived from adding the numbers in the
-    /// ZIP Code (or ZIP+4 or delivery point code) and determining which single-digit number must be added
-    /// to that sum to make the total a multiple of 10".
+    /// Calculates the correction digit. Section 708.4.2.1: it is "derived from adding the numbers in the ZIP Code (or ZIP+4 or delivery point code) and
+    /// determining which single-digit number must be added to that sum to make the total a multiple of 10".
     /// </summary>
     /// <param name="digits">The digits the symbol carries.</param>
     /// <returns>The correction digit.</returns>
     public static int CorrectionDigit(ReadOnlySpan<char> digits)
     {
         int sum = 0;
-        for (int i = 0; i < digits.Length; i++)
+        foreach (char digit in digits)
         {
-            sum += digits[i] - '0';
+            sum += digit - '0';
         }
 
         return (10 - (sum % 10)) % 10;
     }
 
     /// <summary>
-    /// Builds the symbol: a frame bar, five bars per digit, five for the correction digit and a frame bar,
-    /// with full bars where a set bit stands in POSTNET and half bars in PLANET. Section 708.4.2.1: "The
-    /// first and last bars of the barcode are frame bars and must always be full bars."
+    /// Builds the symbol: a frame bar, five bars per digit, five for the correction digit and a frame bar, with full bars where a set bit stands in POSTNET and
+    /// half bars in PLANET. Section 708.4.2.1: "The first and last bars of the barcode are frame bars and must always be full bars."
     /// </summary>
     /// <param name="digits">The digits the symbol carries, the correction digit included.</param>
     /// <param name="readable">The human readable interpretation.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="setBitIsFull">Whether a set bit is a full bar, as in POSTNET, rather than a half bar.</param>
     /// <param name="symbol">The symbol to write.</param>
-    public static void BuildSymbol(
-        ReadOnlySpan<char> digits,
-        ReadOnlySpan<char> readable,
-        BarcodeOptions options,
-        bool setBitIsFull,
-        ref BarcodeSymbol symbol)
+    public static void BuildSymbol(ReadOnlySpan<char> digits, ReadOnlySpan<char> readable, BarcodeOptions options, bool setBitIsFull, ref BarcodeSymbol symbol)
     {
         int barCount = (digits.Length * BarsPerDigit) + 2;
         double xDimension = options.XDimension ?? NominalXDimension;

@@ -4,15 +4,14 @@
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// The Code 128 symbol characters of Table 5-25 of the GS1 General Specifications, for the tests that read
-/// symbol character values back from the runs of a symbol.
+/// The Code 128 symbol characters of Table 5-25 of the GS1 General Specifications, for the tests that read symbol character values back from the runs of a
+/// symbol.
 /// </summary>
 internal static class Code128Patterns
 {
     /// <summary>
-    /// Gets the element widths of every symbol character, packed four bits per element, the first element in
-    /// the highest bits: six elements each, three bars and three spaces of one to four modules, except the
-    /// stop character, value 106, which takes seven.
+    /// Gets the element widths of every symbol character, packed four bits per element, the first element in the highest bits: six elements each, three bars
+    /// and three spaces of one to four modules, except the stop character, value 106, which takes seven.
     /// </summary>
     public static ReadOnlySpan<uint> Patterns =>
     [

@@ -4,8 +4,8 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Specifies whether a symbol carries a check character that its symbology makes optional. The encoder
-/// either calculates the character or validates the one that the input carries.
+/// Specifies whether a symbol carries a check character that its symbology makes optional. The encoder either calculates the character or validates the one
+/// that the input carries.
 /// </summary>
 public enum CheckCharacterMode
 {
@@ -20,8 +20,7 @@ public enum CheckCharacterMode
     Compute,
 
     /// <summary>
-    /// The last character of the input is the check character. The encoder validates it against the data
-    /// and carries it once.
+    /// The last character of the input is the check character. The encoder validates it against the data and carries it once.
     /// </summary>
     Validate,
 }

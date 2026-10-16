@@ -10,22 +10,20 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
 /// Layout contract tests for the barcode rendering layer. A caller sizes an image from the rectangle
-/// <see cref="DrawingCanvas.MeasureBarcode(BarcodeSymbology, string, BarcodeOptions, PointF)"/> returns,
-/// so everything the matching draw call renders must land inside that rectangle.
+/// <see cref="DrawingCanvas.MeasureBarcode(BarcodeSymbology, string, BarcodeOptions, PointF)"/> returns, so everything the matching draw call renders must land
+/// inside that rectangle.
 /// <para>
-/// Bar edges and text baselines round onto the device pixel grid. A fractional origin or a fractional
-/// module width therefore moves ink away from the unrounded layout position, by up to half a pixel in
-/// either direction. The golden tests all draw from a whole pixel origin, where rounding is the identity,
-/// so they cannot see this.
+/// Bar edges and text baselines round onto the device pixel grid. A fractional origin or a fractional module width therefore moves ink away from the unrounded
+/// layout position, by up to half a pixel in either direction. The golden tests all draw from a whole pixel origin, where rounding is the identity, so they
+/// cannot see this.
 /// </para>
 /// </summary>
 [GroupOutput("Barcodes")]
 public class BarcodeLayoutTests
 {
     /// <summary>
-    /// The clear space around the measured area, in pixels. Content that escapes the measured rectangle
-    /// lands in this margin, where the assertion sees it, rather than off the image where it is clipped
-    /// away.
+    /// The clear space around the measured area, in pixels. Content that escapes the measured rectangle lands in this margin, where the assertion sees it,
+    /// rather than off the image where it is clipped away.
     /// </summary>
     private const int Margin = 20;
 
@@ -66,8 +64,8 @@ public class BarcodeLayoutTests
         => AssertEverythingDrawnStaysInsideBounds(provider, new Ean13Symbology(), "5901234123457", CreateTextOptions(moduleWidth), fraction, moduleWidth);
 
     /// <summary>
-    /// An add-on symbol, whose digits print above the bars. Those digits set the top band, so the ink of
-    /// the topmost line sits on the measured top edge rather than the bars.
+    /// An add-on symbol, whose digits print above the bars. Those digits set the top band, so the ink of the topmost line sits on the measured top edge rather
+    /// than the bars.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The image provider.</param>
@@ -85,9 +83,8 @@ public class BarcodeLayoutTests
         => AssertEverythingDrawnStaysInsideBounds(provider, new Ean5Symbology(), "52495", CreateTextOptions(moduleWidth), fraction, moduleWidth);
 
     /// <summary>
-    /// A caption scaled to the symbol width, which <see cref="BarcodeOptions.FitCaptionToSymbolWidth"/>
-    /// does by default. The scale comes from the measured caption width, so the fitted caption ends level
-    /// with the bars.
+    /// A caption scaled to the symbol width, which <see cref="BarcodeOptions.FitCaptionToSymbolWidth"/> does by default. The scale comes from the measured
+    /// caption width, so the fitted caption ends level with the bars.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The image provider.</param>
@@ -105,8 +102,8 @@ public class BarcodeLayoutTests
         => AssertEverythingDrawnStaysInsideBounds(provider, new IsbnSymbology(), "978-0-306-40615-7", CreateTextOptions(moduleWidth), fraction, moduleWidth);
 
     /// <summary>
-    /// A caption with the fit to the symbol width suppressed, so it keeps the size the caller gave it and
-    /// overhangs the bars. The overhanging caption sets the measured width in place of the symbol.
+    /// A caption with the fit to the symbol width suppressed, so it keeps the size the caller gave it and overhangs the bars. The overhanging caption sets the
+    /// measured width in place of the symbol.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The image provider.</param>
@@ -128,10 +125,9 @@ public class BarcodeLayoutTests
     }
 
     /// <summary>
-    /// A symbol inside a bearer bar. The frame widens the measured area by its thickness on both sides
-    /// of the quiet zones and grows it above the bars and below them, and the printed line hangs from the
-    /// lower bearer bar. The frame is the outermost ink on the left, the right and the top, so it fills the
-    /// measured area to those edges and leaves no background showing past it.
+    /// A symbol inside a bearer bar. The frame widens the measured area by its thickness on both sides of the quiet zones and grows it above the bars and below
+    /// them, and the printed line hangs from the lower bearer bar. The frame is the outermost ink on the left, the right and the top, so it fills the measured
+    /// area to those edges and leaves no background showing past it.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The image provider.</param>
@@ -158,8 +154,8 @@ public class BarcodeLayoutTests
     }
 
     /// <summary>
-    /// Measures the symbol, draws it at that same origin onto a larger image, and asserts that every
-    /// pixel the draw call touched lies inside the measured rectangle.
+    /// Measures the symbol, draws it at that same origin onto a larger image, and asserts that every pixel the draw call touched lies inside the measured
+    /// rectangle.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The image provider.</param>
@@ -182,8 +178,8 @@ public class BarcodeLayoutTests
         RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, text, options, origin);
         using Image<TPixel> image = provider.GetImage();
 
-        // The image stays transparent so that every pixel the draw call touches is rendered content: the
-        // background fill, the bars and the human readable interpretation alike.
+        // The image stays transparent so that every pixel the draw call touches is rendered content: the background fill, the bars and the human readable
+        // interpretation alike.
         image.Mutate(x =>
         {
             x.Resize(new Size((int)MathF.Ceiling(bounds.Right) + Margin, (int)MathF.Ceiling(bounds.Bottom) + Margin));
@@ -221,9 +217,8 @@ public class BarcodeLayoutTests
             }
         });
 
-        // The pixels wholly inside the measured rectangle. A pixel at index i covers the half open span
-        // from i to i + 1, so the first one inside starts at the near edge and the last one ends on the
-        // far edge.
+        // The pixels wholly inside the measured rectangle. A pixel at index i covers the half open span from i to i + 1, so the first one inside starts at the
+        // near edge and the last one ends on the far edge.
         int left = (int)MathF.Ceiling(bounds.Left);
         int top = (int)MathF.Ceiling(bounds.Top);
         int right = (int)MathF.Floor(bounds.Right) - 1;
@@ -238,8 +233,8 @@ public class BarcodeLayoutTests
     }
 
     /// <summary>
-    /// Draws at a one point X dimension and 72 dots per inch for each pixel of module width, so one module
-    /// is <paramref name="moduleWidth"/> pixels, with a 50 point bar height.
+    /// Draws at a one point X dimension and 72 dots per inch for each pixel of module width, so one module is <paramref name="moduleWidth"/> pixels, with a 50
+    /// point bar height.
     /// </summary>
     /// <param name="moduleWidth">The width of one module, in pixels.</param>
     /// <returns>The options.</returns>

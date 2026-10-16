@@ -1,32 +1,30 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Code 39 Extended, the full ASCII transmission mode of Annex A.3.1 of ISO/IEC 16388. The 128 character
-/// set of ISO 646 IRV "may be encoded using either one or combinations of two symbol characters, made up
-/// of one of the four characters ($ + % /) followed by one of the 26 alphabetic characters", and Table A.2
-/// gives the combinations.
+/// Code 39 Extended, the full ASCII transmission mode of Annex A.3.1 of ISO/IEC 16388. The 128 character set of ISO 646 IRV "may be encoded using either one or
+/// combinations of two symbol characters, made up of one of the four characters ($ + % /) followed by one of the 26 alphabetic characters", and Table A.2 gives
+/// the combinations.
 /// <para>
-/// A.3 warns that the mode needs a decoder that is programmed for it. The symbol itself is an ordinary
-/// Code 39 symbol, so only a decoder in full ASCII mode reads back what went in. Annex A.2 prints an
-/// interpretation "of the data characters". Here those are the ASCII characters the caller gave, not the
-/// symbol characters that stand for them. The interpretation therefore shows the text as given, and
-/// prints a space where a character has no printed form.
+/// A.3 warns that the mode needs a decoder that is programmed for it. The symbol itself is an ordinary Code 39 symbol, so only a decoder in full ASCII mode
+/// reads back what went in. Annex A.2 prints an interpretation "of the data characters". Here those are the ASCII characters the caller gave, not the symbol
+/// characters that stand for them. The interpretation therefore shows the text as given, and prints a space where a character has no printed form.
 /// </para>
 /// </summary>
 public sealed class Code39ExtendedSymbology : BarcodeSymbology
 {
+    /// <summary>
+    /// The character the human readable interpretation prints for the start and stop character, the asterisk section 4.3.3 of ISO/IEC 16388 shows.
+    /// </summary>
     private const char ReadableDelimiter = '*';
 
     /// <summary>
-    /// Table A.2, two characters for every ASCII value in order. A value encoded by a single symbol
-    /// character has a space in front of it, which is never a prefix, so the first character of a pair
-    /// says which of the two forms it is.
+    /// Table A.2, two characters for every ASCII value in order. A value encoded by a single symbol character has a space in front of it, which is never a
+    /// prefix, so the first character of a pair says which of the two forms it is.
     /// </summary>
     private const string Substitutions =
         "%U$A$B$C$D$E$F$G" +
@@ -57,9 +55,7 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
     /// <summary>
     /// Initializes a new instance of the <see cref="Code39ExtendedSymbology"/> class.
     /// </summary>
-    /// <param name="checkCharacter">
-    /// Whether the symbol carries the modulo 43 check character, and whether the encoder calculates it.
-    /// </param>
+    /// <param name="checkCharacter"> Whether the symbol carries the modulo 43 check character, and whether the encoder calculates it. </param>
     public Code39ExtendedSymbology(CheckCharacterMode checkCharacter)
         : this(checkCharacter, true)
     {
@@ -68,14 +64,10 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
     /// <summary>
     /// Initializes a new instance of the <see cref="Code39ExtendedSymbology"/> class.
     /// </summary>
-    /// <param name="checkCharacter">
-    /// Whether the symbol carries the modulo 43 check character, and whether the encoder calculates it.
-    /// <see cref="CheckCharacterMode.Validate"/> is rejected: the check character covers the substituted
-    /// symbol characters, which a caller working in ASCII does not have.
-    /// </param>
-    /// <param name="printCheckCharacter">
-    /// Whether a check character the symbol carries is part of the human readable interpretation.
-    /// </param>
+    /// <param name="checkCharacter"> Whether the symbol carries the modulo 43 check character, and whether the encoder calculates it.
+    /// <see cref="CheckCharacterMode.Validate"/> is rejected: the check character covers the substituted symbol characters, which a caller working in ASCII
+    /// does not have. </param>
+    /// <param name="printCheckCharacter"> Whether a check character the symbol carries is part of the human readable interpretation. </param>
     public Code39ExtendedSymbology(CheckCharacterMode checkCharacter, bool printCheckCharacter)
     {
         Guard.IsFalse(
@@ -88,14 +80,13 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
     }
 
     /// <summary>
-    /// Gets a value that specifies whether the symbol carries the modulo 43 check character, and whether
-    /// the encoder calculates it.
+    /// Gets a value that specifies whether the symbol carries the modulo 43 check character, and whether the encoder calculates it.
     /// </summary>
     public CheckCharacterMode CheckCharacter { get; }
 
     /// <summary>
-    /// Gets a value indicating whether a check character the symbol carries is part of the human readable
-    /// interpretation. A symbol that carries none prints none either way.
+    /// Gets a value indicating whether a check character the symbol carries is part of the human readable interpretation. A symbol that carries none prints
+    /// none either way.
     /// </summary>
     public bool PrintCheckCharacter { get; }
 
@@ -105,11 +96,20 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
         Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
 
-        // Each character substitutes to one or two symbol characters, and the symbol carries at most
-        // Code39Encoder.MaximumLength of them, so longer text cannot fit. A pair per character bounds the
-        // substitution, and the readable interpretation matches the text character for character, so
-        // neither builder grows: short text stays inline and longer text rents once.
+        // Each character substitutes to one or two symbol characters, and the symbol carries at most Code39Encoder.MaximumLength of them, so longer text cannot
+        // fit. A pair per character bounds the substitution, and the readable interpretation matches the text character for character, so neither builder
+        // grows: short text stays inline and longer text rents once.
         Guard.MustBeLessThanOrEqualTo(text.Length, Code39Encoder.MaximumLength, nameof(text));
+
+        // The message decodes the code point at the first unit outside ASCII, so a surrogate pair reports as the one character it is.
+        int invalid = text.AsSpan().IndexOfAnyExceptInRange('\0', '\u007F');
+        if (invalid >= 0)
+        {
+            throw new ArgumentException(
+                $"Code 39 Extended encodes ASCII 0 to 127; {text.AsSpan().CodePointAt(invalid).ToDisplayString()} is outside that range.",
+                nameof(text));
+        }
+
         InlineArray64<char> encodedStorage = default;
         InlineArray64<char> readableStorage = default;
         int encodedCapacity = text.Length * 2;
@@ -117,32 +117,21 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
         ValueStringBuilder readable = text.Length <= Code39Encoder.InlineBufferLength ? new(readableStorage) : new(text.Length);
         try
         {
-            // Walking code points rather than UTF-16 units reports a surrogate pair as the one character
-            // it is, instead of showing half of it back to the caller.
-            SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
-            while (codePoints.MoveNext())
+            foreach (char character in text)
             {
-                CodePoint current = codePoints.Current;
-                if (!current.IsAscii)
-                {
-                    throw new ArgumentException(
-                        $"Code 39 Extended encodes ASCII 0 to 127; {current.ToDisplayString()} is outside that range.",
-                        nameof(text));
-                }
-
-                ReadOnlySpan<char> pair = Substitutions.AsSpan((int)current.Value * 2, 2);
+                ReadOnlySpan<char> pair = Substitutions.AsSpan(character * 2, 2);
                 encoded.Append(pair[0] == ' ' ? pair[1..] : pair);
 
                 // A control character has no printed form, so the interpretation shows a space instead.
-                readable.Append(CodePoint.IsControl(current) ? ' ' : (char)current.Value);
+                readable.Append(char.IsControl(character) ? ' ' : character);
             }
 
             // The substitutions are Code 39 characters, so only the length of the result needs a check.
             Guard.MustBeLessThanOrEqualTo(encoded.Length, Code39Encoder.MaximumLength, nameof(text));
             char? check = this.CheckCharacter == CheckCharacterMode.None ? null : Code39Encoder.CheckCharacter(encoded.AsSpan());
 
-            // The human readable interpretation is the text as given, then the check character the symbol
-            // carries when it prints, between the delimiters that stand for the start and stop character.
+            // The human readable interpretation is the text as given, then the check character the symbol carries when it prints, between the delimiters that
+            // stand for the start and stop character.
             ReadOnlySpan<char> opening = [ReadableDelimiter];
             ReadOnlySpan<char> closing = check is not null && this.PrintCheckCharacter ? [check.Value, ReadableDelimiter] : [ReadableDelimiter];
             Code39Encoder.BuildSymbol(encoded.AsSpan(), check, opening, readable.AsSpan(), closing, options, options.XDimension ?? PointXDimension, ref symbol);

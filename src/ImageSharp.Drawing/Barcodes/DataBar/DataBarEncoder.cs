@@ -4,43 +4,37 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Encodation for the first group of GS1 DataBar symbols: GS1 DataBar Omnidirectional, Truncated, Stacked
-/// and Stacked Omnidirectional. A symbol carries the item identification of GS1 Application Identifier (01)
-/// as four symbol characters and two finder patterns, between a guard pattern of a narrow space and a
-/// narrow bar at each end. The finder patterns encode a modulo 79 check value. The four variations encode
-/// the data in the same way and differ in height and in how the two halves of the symbol stack.
+/// Encodation for the first group of GS1 DataBar symbols: GS1 DataBar Omnidirectional, Truncated, Stacked and Stacked Omnidirectional. A symbol carries the
+/// item identification of GS1 Application Identifier (01) as four symbol characters and two finder patterns, between a guard pattern of a narrow space and a
+/// narrow bar at each end. The finder patterns encode a modulo 79 check value. The four variations encode the data in the same way and differ in height and in
+/// how the two halves of the symbol stack.
 /// <para>
-/// The 13 digits before the check digit form a number below 10^13. It splits into a left and a right pair
-/// value modulo 4537077, and each pair splits into an outside and an inside symbol character modulo 1597.
-/// A symbol character is 8 elements, an odd set of 4 and an even set of 4 interleaved. Its group gives the
-/// module count and the widest element of each set, and its value within the group gives the width of
-/// every element.
+/// The 13 digits before the check digit form a number below 10^13. It splits into a left and a right pair value modulo 4537077, and each pair splits into an
+/// outside and an inside symbol character modulo 1597. A symbol character is 8 elements, an odd set of 4 and an even set of 4 interleaved. Its group gives the
+/// module count and the widest element of each set, and its value within the group gives the width of every element.
 /// </para>
 /// </summary>
 internal static class DataBarEncoder
 {
     /// <summary>
-    /// The nominal X dimension in millimetres, the target X dimension of Table 5-44 of the GS1 General
-    /// Specifications.
+    /// The nominal X dimension in millimetres, the target X dimension of Table 5-44 of the GS1 General Specifications.
     /// </summary>
     public const double NominalXDimension = 0.33;
 
     /// <summary>
-    /// The nominal height of GS1 DataBar Omnidirectional in modules. Table 5-44 gives 15.19 millimetres at
-    /// the target X dimension, and its note (****) requires an over square symbol of 46X in an
-    /// omnidirectional scanning environment.
+    /// The nominal height of GS1 DataBar Omnidirectional in modules. Table 5-44 gives 15.19 millimetres at the target X dimension, and its note (****) requires
+    /// an over square symbol of 46X in an omnidirectional scanning environment.
     /// </summary>
     public const float OmnidirectionalHeight = 46F;
 
     /// <summary>
-    /// The height of GS1 DataBar Truncated in modules. Section 5.5.2.1.2 of the GS1 General Specifications
-    /// gives "96X wide by 13X high".
+    /// The height of GS1 DataBar Truncated in modules. Section 5.5.2.1.2 of the GS1 General Specifications gives "96X wide by 13X high".
     /// </summary>
     public const float TruncatedHeight = 13F;
 
     /// <summary>
-    /// The height of the upper row of GS1 DataBar Stacked in modules. With the lower row and the separator
-    /// it makes the "50X wide by 13X high" of section 5.5.2.1.3.
+    /// The height of the upper row of GS1 DataBar Stacked in modules. With the lower row and the separator it makes the "50X wide by 13X high" of section
+    /// 5.5.2.1.3.
     /// </summary>
     public const float StackedUpperRowHeight = 5F;
 
@@ -50,9 +44,8 @@ internal static class DataBarEncoder
     public const float StackedLowerRowHeight = 7F;
 
     /// <summary>
-    /// The nominal height of each row of GS1 DataBar Stacked Omnidirectional in modules. Table 5-44 gives
-    /// 31.37 millimetres, 95X, at the target X dimension, and section 5.5.2.1.4 places a 3X separator
-    /// between the two rows.
+    /// The nominal height of each row of GS1 DataBar Stacked Omnidirectional in modules. Table 5-44 gives 31.37 millimetres, 95X, at the target X dimension,
+    /// and section 5.5.2.1.4 places a 3X separator between the two rows.
     /// </summary>
     public const float StackedOmnidirectionalRowHeight = 46F;
 
@@ -67,8 +60,7 @@ internal static class DataBarEncoder
     public const int StackedWidth = 50;
 
     /// <summary>
-    /// The number of elements in a symbol: a guard pair at each end, four symbol characters of 8 elements
-    /// and two finder patterns of 5, starting with a space.
+    /// The number of elements in a symbol: a guard pair at each end, four symbol characters of 8 elements and two finder patterns of 5, starting with a space.
     /// </summary>
     private const int ElementCount = 46;
 
@@ -88,32 +80,30 @@ internal static class DataBarEncoder
     private const int CheckModulus = 79;
 
     /// <summary>
-    /// Gets the first symbol character value of each group: groups 0 to 4 are the outside characters and
-    /// groups 5 to 8 the inside characters.
+    /// Gets the first symbol character value of each group: groups 0 to 4 are the outside characters and groups 5 to 8 the inside characters.
     /// </summary>
     private static ReadOnlySpan<int> GroupSum => [0, 161, 961, 2015, 2715, 0, 336, 1036, 1516];
 
     /// <summary>
-    /// Gets the number of even set combinations of an outside group, and of odd set combinations of an
-    /// inside group. A value within a group splits into the two set values by this number.
+    /// Gets the number of even set combinations of an outside group, and of odd set combinations of an inside group. A value within a group splits into the two
+    /// set values by this number.
     /// </summary>
     private static ReadOnlySpan<int> Combinations => [1, 10, 34, 70, 126, 4, 20, 48, 81];
 
     /// <summary>
-    /// Gets the module count of the odd set of each group. The even set takes the rest of the 16 modules of
-    /// an outside character or the 15 modules of an inside character.
+    /// Gets the module count of the odd set of each group. The even set takes the rest of the 16 modules of an outside character or the 15 modules of an inside
+    /// character.
     /// </summary>
     private static ReadOnlySpan<int> OddModules => [12, 10, 8, 6, 4, 5, 7, 9, 11];
 
     /// <summary>
-    /// Gets the widest element of the odd set of each group. The widest element of the even set is nine
-    /// less this.
+    /// Gets the widest element of the odd set of each group. The widest element of the even set is nine less this.
     /// </summary>
     private static ReadOnlySpan<int> OddWidest => [8, 6, 4, 3, 1, 2, 4, 6, 8];
 
     /// <summary>
-    /// Gets the element widths of the nine finder patterns, five elements each, as the left finder reads
-    /// them. The right finder reads the same widths in reverse.
+    /// Gets the element widths of the nine finder patterns, five elements each, as the left finder reads them. The right finder reads the same widths in
+    /// reverse.
     /// </summary>
     private static ReadOnlySpan<byte> FinderPatterns =>
     [
@@ -148,8 +138,7 @@ internal static class DataBarEncoder
     /// <param name="symbol">The symbol to write.</param>
     public static void BuildLinear(ReadOnlySpan<char> gtin, float nominalHeight, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        // The element widths start with the guard space, so a zero width bar leads the runs and the widths
-        // follow it.
+        // The element widths start with the guard space, so a zero width bar leads the runs and the widths follow it.
         double xDimension = options.XDimension ?? NominalXDimension;
         Span<int> runs = symbol.BeginLinear(ElementCount + 1, xDimension, out Span<float> heights, out _);
         _ = EncodeWidths(gtin, runs[1..]);
@@ -161,9 +150,8 @@ internal static class DataBarEncoder
     }
 
     /// <summary>
-    /// Builds GS1 DataBar Stacked: the left half of the symbol over the right half, with a one module
-    /// separator between them. The bar height of the options sets the lower row, and the upper row keeps
-    /// its ratio of five to seven.
+    /// Builds GS1 DataBar Stacked: the left half of the symbol over the right half, with a one module separator between them. The bar height of the options
+    /// sets the lower row, and the upper row keeps its ratio of five to seven.
     /// </summary>
     /// <param name="gtin">The 14 digit GTIN.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
@@ -174,8 +162,7 @@ internal static class DataBarEncoder
         Span<int> widths = ((Span<int>)widthStorage)[..ElementCount];
         _ = EncodeWidths(gtin, widths);
 
-        // The three rows share one buffer, which starts zeroed. The separator loop leaves its first module
-        // and the last four at zero, light.
+        // The three rows share one buffer, which starts zeroed. The separator loop leaves its first module and the last four at zero, light.
         InlineArray256<byte> moduleStorage = default;
         Span<byte> modules = ((Span<byte>)moduleStorage)[..(StackedWidth * 3)];
         Span<byte> upper = modules[..StackedWidth];
@@ -183,9 +170,8 @@ internal static class DataBarEncoder
         Span<byte> lower = modules.Slice(StackedWidth * 2, StackedWidth);
         Halves(widths, upper, lower);
 
-        // Each separator module is light where the rows above and below are dark. Where they differ, it
-        // takes the opposite of the module to its left, so a light run under or over an edge breaks into
-        // narrow elements. The four modules at each end stay light.
+        // Each separator module is light where the rows above and below are dark. Where they differ, it takes the opposite of the module to its left, so a
+        // light run under or over an edge breaks into narrow elements. The four modules at each end stay light.
         for (int i = 1; i < StackedWidth - 4; i++)
         {
             separator[i] = upper[i] == lower[i]
@@ -201,11 +187,7 @@ internal static class DataBarEncoder
         int upperRuns = DataBarRows.RunCount(upper);
         int separatorRuns = DataBarRows.RunCount(separator);
         int lowerRuns = DataBarRows.RunCount(lower);
-        symbol.BeginStacked(
-            3,
-            upperRuns + separatorRuns + lowerRuns,
-            ((upperRuns + 1) >> 1) + ((separatorRuns + 1) >> 1) + ((lowerRuns + 1) >> 1),
-            xDimension);
+        symbol.BeginStacked(3, upperRuns + separatorRuns + lowerRuns, ((upperRuns + 1) >> 1) + ((separatorRuns + 1) >> 1) + ((lowerRuns + 1) >> 1), xDimension);
         DataBarRows.AddRow(upper, upperHeight, ref symbol);
         DataBarRows.AddRow(separator, 1F, ref symbol);
         DataBarRows.AddRow(lower, lowerHeight, ref symbol);
@@ -215,8 +197,8 @@ internal static class DataBarEncoder
     }
 
     /// <summary>
-    /// Builds GS1 DataBar Stacked Omnidirectional: the left half of the symbol over the right half, with a
-    /// separator of three one module rows between them. The bar height of the options sets each row.
+    /// Builds GS1 DataBar Stacked Omnidirectional: the left half of the symbol over the right half, with a separator of three one module rows between them. The
+    /// bar height of the options sets each row.
     /// </summary>
     /// <param name="gtin">The 14 digit GTIN.</param>
     /// <param name="options">The options that control the bar height and the text.</param>
@@ -227,8 +209,7 @@ internal static class DataBarEncoder
         Span<int> widths = ((Span<int>)widthStorage)[..ElementCount];
         int rightFinder = EncodeWidths(gtin, widths);
 
-        // The five rows share one buffer, which starts zeroed. The separator rows write only some of their
-        // modules, and the rest stay light.
+        // The five rows share one buffer, which starts zeroed. The separator rows write only some of their modules, and the rest stay light.
         InlineArray256<byte> moduleStorage = default;
         Span<byte> modules = ((Span<byte>)moduleStorage)[..(StackedWidth * 5)];
         Span<byte> upper = modules[..StackedWidth];
@@ -238,17 +219,15 @@ internal static class DataBarEncoder
         Span<byte> lower = modules.Slice(StackedWidth * 4, StackedWidth);
         Halves(widths, upper, lower);
 
-        // The first and last separator rows are the inverse of the row they touch, inside four light
-        // modules at each end. Over a finder pattern the light modules break into alternating narrow
-        // elements instead, so the separator does not read as part of the finder.
+        // The first and last separator rows are the inverse of the row they touch, inside four light modules at each end. Over a finder pattern the light
+        // modules break into alternating narrow elements instead, so the separator does not read as part of the finder.
         Invert(upper, upperSeparator);
         Invert(lower, lowerSeparator);
         AlternateOverFinder(upper, upperSeparator, 18);
 
-        // The upper finder starts at module 18, after the guard pair and the 16 modules of the first
-        // character. The lower finder starts at module 17, and its two narrow leading elements stay
-        // inverted. Over finder value 3 the lower separator carries a single dark module over the start
-        // of the three module finder bar.
+        // The upper finder starts at module 18, after the guard pair and the 16 modules of the first character. The lower finder starts at module 17, and its
+        // two narrow leading elements stay inverted. Over finder value 3 the lower separator carries a single dark module over the start of the three module
+        // finder bar.
         if (rightFinder == 3)
         {
             lowerSeparator.Slice(19, 13).Clear();
@@ -259,8 +238,7 @@ internal static class DataBarEncoder
             AlternateOverFinder(lower, lowerSeparator, 19);
         }
 
-        // The middle separator row alternates narrow dark and light modules between the four light
-        // modules at each end.
+        // The middle separator row alternates narrow dark and light modules between the four light modules at each end.
         for (int i = 5; i < StackedWidth - 4; i += 2)
         {
             middleSeparator[i] = 1;
@@ -289,9 +267,8 @@ internal static class DataBarEncoder
     }
 
     /// <summary>
-    /// Calculates the 46 element widths of the symbol, starting with the left guard space: the guard pair,
-    /// the first character, the left finder, the second character reversed, the fourth character, the right
-    /// finder reversed, the third character reversed and the guard pair.
+    /// Calculates the 46 element widths of the symbol, starting with the left guard space: the guard pair, the first character, the left finder, the second
+    /// character reversed, the fourth character, the right finder reversed, the third character reversed and the guard pair.
     /// </summary>
     /// <param name="gtin">The 14 digit GTIN.</param>
     /// <param name="widths">The buffer of 46 element widths.</param>
@@ -308,11 +285,9 @@ internal static class DataBarEncoder
         int leftPair = (int)(value / PairModulus);
         int rightPair = (int)(value % PairModulus);
 
-        // The first and third characters are outside characters and the second and fourth inside ones. An
-        // outside value splits into its odd value by the even combinations and an inside value into its
-        // even value by the odd combinations, so the quotient and the remainder swap roles.
-        // The buffer holds the 32 widths of the four characters, then the odd and the even set of the
-        // character being calculated.
+        // The first and third characters are outside characters and the second and fourth inside ones. An outside value splits into its odd value by the even
+        // combinations and an inside value into its even value by the odd combinations, so the quotient and the remainder swap roles. The buffer holds the 32
+        // widths of the four characters, then the odd and the even set of the character being calculated.
         InlineArray64<int> bufferStorage = default;
         Span<int> buffer = ((Span<int>)bufferStorage)[..40];
         Span<int> characterWidths = buffer[..32];
@@ -323,8 +298,7 @@ internal static class DataBarEncoder
         {
             bool outside = (c & 1) == 0;
 
-            // The first two characters are the outside and inside characters of the left pair, and the last
-            // two those of the right pair.
+            // The first two characters are the outside and inside characters of the left pair, and the last two those of the right pair.
             int pair = c < 2 ? leftPair : rightPair;
             int character = outside ? pair / CharacterModulus : pair % CharacterModulus;
             int group = outside ? 0 : 5;
@@ -339,10 +313,9 @@ internal static class DataBarEncoder
             int remainder = withinGroup % Combinations[group];
             int totalModules = outside ? 16 : 15;
 
-            // An outside character excludes odd sets without a narrow element in its even set, and an
-            // inside character in its odd set.
-            DataBarWidths.Calculate(odd, outside ? quotient : remainder, OddModules[group], 4, OddWidest[group], !outside);
-            DataBarWidths.Calculate(even, outside ? remainder : quotient, totalModules - OddModules[group], 4, 9 - OddWidest[group], outside);
+            // An outside character excludes odd sets without a narrow element in its even set, and an inside character in its odd set.
+            DataBarWidths.Calculate(odd, outside ? quotient : remainder, OddModules[group], OddWidest[group], !outside);
+            DataBarWidths.Calculate(even, outside ? remainder : quotient, totalModules - OddModules[group], 9 - OddWidest[group], outside);
 
             Span<int> elements = characterWidths.Slice(c * 8, 8);
             for (int k = 0; k < 4; k++)
@@ -396,9 +369,8 @@ internal static class DataBarEncoder
     }
 
     /// <summary>
-    /// Expands the 46 element widths into the two 50 module rows of a stacked symbol. The upper row is the
-    /// first 23 elements and a closing narrow bar and space. The lower row is an opening narrow bar and
-    /// space and the last 23 elements.
+    /// Expands the 46 element widths into the two 50 module rows of a stacked symbol. The upper row is the first 23 elements and a closing narrow bar and
+    /// space. The lower row is an opening narrow bar and space and the last 23 elements.
     /// </summary>
     /// <param name="widths">The 46 element widths, starting with a space.</param>
     /// <param name="upper">The 50 modules of the upper row.</param>
@@ -435,8 +407,8 @@ internal static class DataBarEncoder
     }
 
     /// <summary>
-    /// Writes the inverse of a row into a separator row, inside the four modules at each end. The caller
-    /// passes a zeroed separator row, so those modules stay light.
+    /// Writes the inverse of a row into a separator row, inside the four modules at each end. The caller passes a zeroed separator row, so those modules stay
+    /// light.
     /// </summary>
     /// <param name="row">The row the separator touches.</param>
     /// <param name="separator">The separator row.</param>
@@ -449,8 +421,8 @@ internal static class DataBarEncoder
     }
 
     /// <summary>
-    /// Rewrites the 13 separator modules over a finder pattern. Under a dark module the separator is light.
-    /// Under a light run it alternates dark and light, starting dark, so it breaks into narrow elements.
+    /// Rewrites the 13 separator modules over a finder pattern. Under a dark module the separator is light. Under a light run it alternates dark and light,
+    /// starting dark, so it breaks into narrow elements.
     /// </summary>
     /// <param name="row">The row the separator touches.</param>
     /// <param name="separator">The separator row.</param>
@@ -474,9 +446,8 @@ internal static class DataBarEncoder
     }
 
     /// <summary>
-    /// Adds the human readable interpretation below the symbol: the application identifier in
-    /// parentheses and the 14 digits, as section 4.14 of the GS1 General Specifications prints an element
-    /// string. A symbol without a font carries no text.
+    /// Adds the human readable interpretation below the symbol: the application identifier in parentheses and the 14 digits, as section 4.14 of the GS1 General
+    /// Specifications prints an element string. A symbol without a font carries no text.
     /// </summary>
     /// <param name="gtin">The 14 digit GTIN.</param>
     /// <param name="width">The symbol width in modules.</param>

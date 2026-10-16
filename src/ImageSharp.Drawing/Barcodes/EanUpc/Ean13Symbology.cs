@@ -4,9 +4,8 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The EAN-13 symbology, which ISO/IEC 15420 specifies. An EAN-13 symbol is 95 modules wide: a normal
-/// guard pattern, six symbol characters, a centre guard pattern, six more symbol characters and a closing
-/// normal guard pattern. The leading digit has no symbol character. The number set parity of the six left
+/// The EAN-13 symbology, which ISO/IEC 15420 specifies. An EAN-13 symbol is 95 modules wide: a normal guard pattern, six symbol characters, a centre guard
+/// pattern, six more symbol characters and a closing normal guard pattern. The leading digit has no symbol character. The number set parity of the six left
 /// half characters carries it.
 /// </summary>
 public sealed class Ean13Symbology : BarcodeSymbology

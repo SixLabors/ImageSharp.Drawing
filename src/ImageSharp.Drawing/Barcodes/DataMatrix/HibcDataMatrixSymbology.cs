@@ -6,19 +6,17 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// HIBC Data Matrix, a Health Industry Bar Code carried by a Data Matrix symbol in a square size. The
-/// symbol carries the flag character, the data and the modulo 43 check character.
+/// HIBC Data Matrix, a Health Industry Bar Code carried by a Data Matrix symbol in a square size. The symbol carries the flag character, the data and the
+/// modulo 43 check character.
 /// <para>
-/// When a font is set, that same string prints below the symbol between delimiters, and a check character
-/// that is a space prints as an underscore. Primary and secondary data that the symbol joins with "/" print
-/// on two lines, broken after the "/".
+/// When a font is set, that same string prints below the symbol between delimiters, and a check character that is a space prints as an underscore. Primary and
+/// secondary data that the symbol joins with "/" print on two lines, broken after the "/".
 /// </para>
 /// </summary>
 public sealed class HibcDataMatrixSymbology : BarcodeSymbology
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="HibcDataMatrixSymbology"/> class, calculating the check
-    /// character from the data.
+    /// Initializes a new instance of the <see cref="HibcDataMatrixSymbology"/> class, calculating the check character from the data.
     /// </summary>
     public HibcDataMatrixSymbology()
         : this(false)
@@ -28,10 +26,8 @@ public sealed class HibcDataMatrixSymbology : BarcodeSymbology
     /// <summary>
     /// Initializes a new instance of the <see cref="HibcDataMatrixSymbology"/> class.
     /// </summary>
-    /// <param name="validateCheckCharacter">
-    /// Whether the last character of the input is the check character, which the encoder validates
-    /// against the data, rather than data the encoder appends a check character to.
-    /// </param>
+    /// <param name="validateCheckCharacter"> Whether the last character of the input is the check character, which the encoder validates against the data,
+    /// rather than data the encoder appends a check character to. </param>
     public HibcDataMatrixSymbology(bool validateCheckCharacter)
         => this.ValidateCheckCharacter = validateCheckCharacter;
 

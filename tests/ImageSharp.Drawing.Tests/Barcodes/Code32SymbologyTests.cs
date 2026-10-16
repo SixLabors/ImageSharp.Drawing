@@ -6,10 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Code32Symbology"/>. Each expected run string is the alternating bar and
-/// space module widths, starting with a bar, taken from an independent reference implementation through
-/// its raw encoding API, less the gap it emits after the stop character. The check digit, the base 32
-/// alphabet and the printed line come from Allegato A of the Italian decree of 18 July 2014.
+/// Encoder tests for <see cref="Code32Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, taken from an
+/// independent reference implementation through its raw encoding API, less the gap it emits after the stop character. The check digit, the base 32 alphabet and
+/// the printed line come from Allegato A of the Italian decree of 18 July 2014.
 /// </summary>
 public class Code32SymbologyTests
 {
@@ -22,10 +21,9 @@ public class Code32SymbologyTests
         => Assert.Equal(expected, Encode(text));
 
     /// <summary>
-    /// Section 3 doubles the second, fourth, sixth and eighth digits and sums the quotient and remainder
-    /// of each product divided by ten. For 01234567 those products are 2, 6, 10 and 14, which give 2, 6, 1
-    /// and 5. The first, third, fifth and seventh digits sum to 12, so the total is 26 and the check digit
-    /// is 6.
+    /// Section 3 doubles the second, fourth, sixth and eighth digits and sums the quotient and remainder of each product divided by ten. For 01234567 those
+    /// products are 2, 6, 10 and 14, which give 2, 6, 1 and 5. The first, third, fifth and seventh digits sum to 12, so the total is 26 and the check digit is
+    /// 6.
     /// </summary>
     [Fact]
     public void CalculatesTheCheckDigitOfSectionThree()
@@ -41,8 +39,7 @@ public class Code32SymbologyTests
         => Assert.Throws<ArgumentException>(() => Encode("012345675"));
 
     /// <summary>
-    /// The AIC code is eight digits and an optional check digit, so anything else is rejected, as is a
-    /// non-digit.
+    /// The AIC code is eight digits and an optional check digit, so anything else is rejected, as is a non-digit.
     /// </summary>
     [Theory]
     [InlineData("0123456")]
@@ -52,9 +49,8 @@ public class Code32SymbologyTests
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
     /// <summary>
-    /// Table 1 gives the base 32 alphabet as the digits and the English letters without A, E, I and O. The
-    /// symbol carries six of those characters. The lowest AIC code carries six zeros. The highest is
-    /// 099999993, whose base 32 places are 2, 31, 11, 24, 7 and 25.
+    /// Table 1 gives the base 32 alphabet as the digits and the English letters without A, E, I and O. The symbol carries six of those characters. The lowest
+    /// AIC code carries six zeros. The highest is 099999993, whose base 32 places are 2, 31, 11, 24, 7 and 25.
     /// </summary>
     [Theory]
     [InlineData("00000000", "000000")]
@@ -63,8 +59,8 @@ public class Code32SymbologyTests
         => Assert.Equal(SymbolEncoder.Read(new Code39Symbology(), expected, new BarcodeOptions(), SymbolEncoder.RunString), Encode(text));
 
     /// <summary>
-    /// Area 3 prints the letter A and then the nine digits. That letter is the field identifier for
-    /// automatic reading equipment. The symbol carries the six base 32 characters only.
+    /// Area 3 prints the letter A and then the nine digits. That letter is the field identifier for automatic reading equipment. The symbol carries the six
+    /// base 32 characters only.
     /// </summary>
     [Fact]
     public void PrintsTheFieldIdentifierAndTheNineDigits()
@@ -76,16 +72,15 @@ public class Code32SymbologyTests
     }
 
     /// <summary>
-    /// The symbol carries six characters between the start and stop characters, and Code 39 adds no check
-    /// character of its own.
+    /// The symbol carries six characters between the start and stop characters, and Code 39 adds no check character of its own.
     /// </summary>
     [Fact]
     public void AddsNoCode39CheckCharacter()
         => Assert.Equal(((6 + 2) * 16) - 1, SymbolEncoder.Read(new Code32Symbology(), "012345676", new BarcodeOptions(), SymbolEncoder.RunSum));
 
     /// <summary>
-    /// Allegato A: "lo spessore nominale delle barre e degli spazi stretti è di mm 0,250", so a symbol
-    /// without an X dimension of the caller draws its modules at 0.25 mm.
+    /// Allegato A: "lo spessore nominale delle barre e degli spazi stretti è di mm 0,250", so a symbol without an X dimension of the caller draws its modules
+    /// at 0.25 mm.
     /// </summary>
     [Fact]
     public void DefaultsTheModuleWidthToTheNominalWidth()

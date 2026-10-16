@@ -4,12 +4,11 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// PZN7, the seven digit Pharmazentralnummer. A Code 39 symbol carries it. The symbol contains the minus
-/// sign identifier of ISO/IEC 15418, six data digits and the check digit.
+/// PZN7, the seven digit Pharmazentralnummer. A Code 39 symbol carries it. The symbol contains the minus sign identifier of ISO/IEC 15418, six data digits and
+/// the check digit.
 /// <para>
-/// IFA withdrew this length, so a new symbol uses <see cref="Pzn8Symbology"/>. The input is the six data
-/// digits, or those digits and the check digit. This class always calculates the check digit. When the
-/// input carries one, this class compares the two.
+/// IFA withdrew this length, so a new symbol uses <see cref="Pzn8Symbology"/>. The input is the six data digits, or those digits and the check digit. This
+/// class always calculates the check digit. When the input carries one, this class compares the two.
 /// </para>
 /// </summary>
 public sealed class Pzn7Symbology : BarcodeSymbology
@@ -27,6 +26,5 @@ public sealed class Pzn7Symbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
-        => PznData.BuildSymbol(text, Digits, options, ref symbol);
+    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol) => PznData.BuildSymbol(text, Digits, options, ref symbol);
 }

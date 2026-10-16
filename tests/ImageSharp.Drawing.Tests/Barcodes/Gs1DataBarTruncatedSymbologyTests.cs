@@ -6,9 +6,8 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Gs1DataBarTruncatedSymbology"/>. The expected sequences come from an
-/// independent reference implementation through its raw encoding API, and are the same as those of GS1
-/// DataBar Omnidirectional, because the two differ in height alone.
+/// Encoder tests for <see cref="Gs1DataBarTruncatedSymbology"/>. The expected sequences come from an independent reference implementation through its raw
+/// encoding API, and are the same as those of GS1 DataBar Omnidirectional, because the two differ in height alone.
 /// </summary>
 public class Gs1DataBarTruncatedSymbologyTests
 {

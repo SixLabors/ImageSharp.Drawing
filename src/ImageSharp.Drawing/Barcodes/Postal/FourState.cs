@@ -4,9 +4,10 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The four states of a height modulated postal bar. Every bar has the tracker in the middle. An ascender adds the part above it, a descender the part
-/// below it, and a full bar both.
+/// The four states of a height modulated postal bar. Every bar has the tracker in the middle. An ascender adds the part above it, a descender the part below
+/// it, and a full bar both, so a state is the combination of its <see cref="Ascender"/> and <see cref="Descender"/> flags.
 /// </summary>
+[Flags]
 internal enum FourState : byte
 {
     /// <summary>
@@ -27,5 +28,5 @@ internal enum FourState : byte
     /// <summary>
     /// The ascender, the tracker and the descender.
     /// </summary>
-    Full = 3,
+    Full = Ascender | Descender,
 }

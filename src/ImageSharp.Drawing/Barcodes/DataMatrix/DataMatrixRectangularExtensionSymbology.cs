@@ -4,22 +4,21 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The Data Matrix ECC 200 symbology with the rectangular extension, ISO/IEC 21471. A symbol is one of the
-/// six rectangular sizes of ISO/IEC 16022 or one of the 18 rectangular extension sizes, 8 x 18 to 26 x 64.
+/// The Data Matrix ECC 200 symbology with the rectangular extension, ISO/IEC 21471. A symbol is one of the six rectangular sizes of ISO/IEC 16022 or one of the
+/// 18 rectangular extension sizes, 8 x 18 to 26 x 64.
 /// </summary>
 public sealed class DataMatrixRectangularExtensionSymbology : BarcodeSymbology
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="DataMatrixRectangularExtensionSymbology"/> class. The
-    /// symbol takes the smallest rectangular size that holds the data.
+    /// Initializes a new instance of the <see cref="DataMatrixRectangularExtensionSymbology"/> class. The symbol takes the smallest rectangular size that holds
+    /// the data.
     /// </summary>
     public DataMatrixRectangularExtensionSymbology()
     {
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="DataMatrixRectangularExtensionSymbology"/> class with a
-    /// fixed symbol size.
+    /// Initializes a new instance of the <see cref="DataMatrixRectangularExtensionSymbology"/> class with a fixed symbol size.
     /// </summary>
     /// <param name="rows">The number of rows, finder pattern included.</param>
     /// <param name="columns">The number of columns, finder pattern included.</param>

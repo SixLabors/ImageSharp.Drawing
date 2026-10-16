@@ -1,21 +1,19 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
+using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The high level encodation and the error correction codewords of ISO/IEC 15438, sections 5.4 and 5.10,
-/// which PDF417 and MicroPDF417 share. The data is a sequence of byte values: the characters U+0000 to
-/// U+00FF are the byte values of the default character set of Annex B.
+/// The high level encodation and the error correction codewords of ISO/IEC 15438, sections 5.4 and 5.10, which PDF417 and MicroPDF417 share. The data is a
+/// sequence of byte values: the characters U+0000 to U+00FF are the byte values of the default character set of Annex B.
 /// </summary>
 internal static class Pdf417Codewords
 {
     /// <summary>
-    /// The largest number of characters a symbol carries: 2 710 digits in Numeric Compaction mode at error
-    /// correction level 0, section 5.1.1 c).
+    /// The largest number of characters a symbol carries: 2 710 digits in Numeric Compaction mode at error correction level 0, section 5.1.1 c).
     /// </summary>
     public const int MaximumLength = 2710;
 
@@ -25,8 +23,8 @@ internal static class Pdf417Codewords
     public const int MicroMaximumLength = 366;
 
     /// <summary>
-    /// The number of codewords a caller holds inline for <see cref="Encode"/> to build in. Data this long
-    /// covers short labels, and longer data rents its buffer once.
+    /// The number of codewords a caller holds inline for <see cref="Encode"/> to build in. Data this long covers short labels, and longer data rents its buffer
+    /// once.
     /// </summary>
     public const int InlineBufferLength = 64;
 
@@ -71,14 +69,14 @@ internal static class Pdf417Codewords
     private const int ByteLatchSix = 924;
 
     /// <summary>
-    /// The MicroPDF417 codeword that stands for the header [)&gt;RS05GS and the trailer RS EOT of a
-    /// message in format 05, and that puts the encoder in Numeric Compaction mode.
+    /// The MicroPDF417 codeword that stands for the header [)&gt;RS05GS and the trailer RS EOT of a message in format 05, and that puts the encoder in Numeric
+    /// Compaction mode.
     /// </summary>
     private const int Macro05 = 916;
 
     /// <summary>
-    /// The MicroPDF417 codeword that stands for the header [)&gt;RS06GS and the trailer RS EOT of a
-    /// message in format 06, and that puts the encoder in Text Compaction mode, Mixed sub-mode.
+    /// The MicroPDF417 codeword that stands for the header [)&gt;RS06GS and the trailer RS EOT of a message in format 06, and that puts the encoder in Text
+    /// Compaction mode, Mixed sub-mode.
     /// </summary>
     private const int Macro06 = 917;
 
@@ -103,8 +101,7 @@ internal static class Pdf417Codewords
     private const int WholeNumericRun = 8;
 
     /// <summary>
-    /// The number of characters from which a run of text characters encodes in Text Compaction mode, Annex N
-    /// step 11.
+    /// The number of characters from which a run of text characters encodes in Text Compaction mode, Annex N step 11.
     /// </summary>
     private const int TextRun = 5;
 
@@ -134,103 +131,122 @@ internal static class Pdf417Codewords
     private const int CodewordBase = 900;
 
     /// <summary>
-    /// The Text Compaction mode state of the encoder.
-    /// </summary>
-    private const int TextState = 0;
-
-    /// <summary>
-    /// The Numeric Compaction mode state of the encoder.
-    /// </summary>
-    private const int NumericState = 1;
-
-    /// <summary>
-    /// The Byte Compaction mode state of the encoder.
-    /// </summary>
-    private const int ByteState = 2;
-
-    /// <summary>
-    /// The Alpha sub-mode of Text Compaction mode, Table 5.
-    /// </summary>
-    private const int Alpha = 0;
-
-    /// <summary>
-    /// The Lower sub-mode of Text Compaction mode, Table 5.
-    /// </summary>
-    private const int Lower = 1;
-
-    /// <summary>
-    /// The Mixed sub-mode of Text Compaction mode, Table 5.
-    /// </summary>
-    private const int Mixed = 2;
-
-    /// <summary>
-    /// The Punctuation sub-mode of Text Compaction mode, Table 5.
-    /// </summary>
-    private const int Punctuation = 3;
-
-    /// <summary>
     /// The number of Text Compaction sub-modes.
     /// </summary>
     private const int SubModes = 4;
 
     /// <summary>
-    /// The text token for the latch to the Alpha sub-mode. Characters are tokens 0 to 255, and the latches
-    /// and shifts are negative tokens.
+    /// The number of characters each sub-mode has an entry for in <see cref="TextValues"/>.
     /// </summary>
-    private const int LatchAlpha = -1;
+    private const int TextTableWidth = 128;
 
     /// <summary>
-    /// The text token for the latch to the Lower sub-mode.
+    /// The base 30 value that pads an odd count of values, section 5.4.2.4: the latch to Alpha in the Punctuation sub-mode, which takes effect, and the shift
+    /// to Punctuation in the other sub-modes, which has no character after it. Table 5 gives both the value 29.
     /// </summary>
-    private const int LatchLower = -2;
+    private const int PadValue = 29;
 
     /// <summary>
-    /// The text token for the latch to the Mixed sub-mode.
-    /// </summary>
-    private const int LatchMixed = -3;
-
-    /// <summary>
-    /// The text token for the latch to the Punctuation sub-mode.
-    /// </summary>
-    private const int LatchPunctuation = -4;
-
-    /// <summary>
-    /// The text token for the shift to the Alpha sub-mode.
-    /// </summary>
-    private const int ShiftAlpha = -5;
-
-    /// <summary>
-    /// The text token for the shift to the Punctuation sub-mode.
-    /// </summary>
-    private const int ShiftPunctuation = -6;
-
-    /// <summary>
-    /// The cost of a sub-mode that the encoder cannot reach. It leaves room to add a latch or a shift
-    /// without overflow.
+    /// The cost of a sub-mode that the encoder cannot reach. It leaves room to add a latch or a shift without overflow.
     /// </summary>
     private const int Unreachable = int.MaxValue / 2;
 
     /// <summary>
-    /// The characters of the Mixed sub-mode with the values 0 to 24, Table 5. The space is value 26.
+    /// The compaction modes of section 5.4.
     /// </summary>
-    private const string MixedCharacters = "0123456789&\r\t,:#-.$/+%*=^";
+    private enum CompactionMode
+    {
+        /// <summary>
+        /// Text Compaction mode, section 5.4.2.
+        /// </summary>
+        Text,
+
+        /// <summary>
+        /// Numeric Compaction mode, section 5.4.4.
+        /// </summary>
+        Numeric,
+
+        /// <summary>
+        /// Byte Compaction mode, section 5.4.3.
+        /// </summary>
+        Byte,
+    }
 
     /// <summary>
-    /// The characters of the Punctuation sub-mode with the values 0 to 28, Table 5.
+    /// The sub-modes of Text Compaction mode, Table 5. The values index the sub-mode tables.
     /// </summary>
-    private const string PunctuationCharacters = ";<>@[\\]_`~!\r\t,:\n-.$/\"|*()?{}'";
+    private enum SubMode
+    {
+        /// <summary>
+        /// No sub-mode, in the search tables where a sub-mode took no latch or no shift.
+        /// </summary>
+        None = -1,
+
+        /// <summary>
+        /// The Alpha sub-mode: the capital letters and the space.
+        /// </summary>
+        Alpha,
+
+        /// <summary>
+        /// The Lower sub-mode: the small letters and the space.
+        /// </summary>
+        Lower,
+
+        /// <summary>
+        /// The Mixed sub-mode: the digits, the space and some punctuation.
+        /// </summary>
+        Mixed,
+
+        /// <summary>
+        /// The Punctuation sub-mode.
+        /// </summary>
+        Punctuation,
+    }
 
     /// <summary>
-    /// The Text Compaction values of the characters 0 to 127 in each sub-mode, at index
-    /// <c>(subMode * 128) + character</c>, or -1 where the sub-mode has no such character.
+    /// Gets the Text Compaction values of Table 5 of the characters 0 to 127 in each sub-mode, at index <c>(subMode * 128) + character</c>, or -1 where the
+    /// sub-mode has no such character. The four blocks of 128 entries are the Alpha, Lower, Mixed and Punctuation sub-modes in turn.
     /// </summary>
-    private static readonly sbyte[] TextValues = CreateTextValues();
+    private static ReadOnlySpan<sbyte> TextValues =>
+    [
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        26, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+        15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        26, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+        15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, 12, -1, -1, -1, 11, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        26, -1, -1, 15, 18, 21, 10, -1, -1, -1, 22, 20, 13, 16, 17, 19,
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 14, -1, -1, 23, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 24, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, 12, 15, -1, -1, 11, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, 10, 20, -1, 18, -1, -1, 28, 23, 24, 22, -1, 13, 16, 17, 19,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 14, 0, 1, -1, 2, 25,
+        3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 4, 5, 6, -1, 7,
+        8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 26, 21, 27, 9, -1,
+    ];
 
     /// <summary>
-    /// Encodes the data into data codewords, without the Symbol Length Descriptor. Digit runs encode in
-    /// Numeric Compaction mode, text runs in Text Compaction mode and the rest in Byte Compaction mode,
-    /// following the run lengths of Annex N. A text run takes the fewest Text Compaction values its
-    /// sub-mode latches and shifts allow.
+    /// Encodes the data into data codewords, without the Symbol Length Descriptor. Digit runs encode in Numeric Compaction mode, text runs in Text Compaction
+    /// mode and the rest in Byte Compaction mode, following the run lengths of Annex N. A text run takes the fewest Text Compaction values its sub-mode latches
+    /// and shifts allow.
     /// </summary>
     /// <param name="text">The data, the characters U+0000 to U+00FF.</param>
     /// <param name="codewords">The builder the data codewords are written to.</param>
@@ -241,15 +257,13 @@ internal static class Pdf417Codewords
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
 
         // Section 5.4.2.1: every symbol starts in Text Compaction mode, Alpha sub-mode.
-        EncodeFrom(text, TextState, 0, ref codewords);
+        EncodeFrom(text, CompactionMode.Text, 0, ref codewords);
     }
 
     /// <summary>
-    /// Encodes the data into MicroPDF417 data codewords. The encodation is the one of <see cref="Encode"/>,
-    /// except that a symbol starts in Byte Compaction mode, so the first run always takes its latch. A
-    /// message in format 05 or 06, between the header [)&gt;RS05GS or [)&gt;RS06GS and the trailer RS EOT,
-    /// takes one codeword for the header and the trailer, which also stands for the latch to the mode
-    /// the format starts in.
+    /// Encodes the data into MicroPDF417 data codewords. The encodation is the one of <see cref="Encode"/>, except that a symbol starts in Byte Compaction
+    /// mode, so the first run always takes its latch. A message in format 05 or 06, between the header [)&gt;RS05GS or [)&gt;RS06GS and the trailer RS EOT,
+    /// takes one codeword for the header and the trailer, which also stands for the latch to the mode the format starts in.
     /// </summary>
     /// <param name="text">The data, the characters U+0000 to U+00FF.</param>
     /// <param name="codewords">The builder the data codewords are written to.</param>
@@ -262,7 +276,7 @@ internal static class Pdf417Codewords
         int macro = 0;
         if (text.Length >= MacroHeaderLength + MacroTrailerLength
             && text.StartsWith("[)>\u001E0")
-            && (text[5] == '5' || text[5] == '6')
+            && text[5] is '5' or '6'
             && text[6] == '\u001D'
             && text.EndsWith("\u001E\u0004"))
         {
@@ -271,150 +285,19 @@ internal static class Pdf417Codewords
             text = text[MacroHeaderLength..^MacroTrailerLength];
         }
 
-        EncodeFrom(text, ByteState, macro, ref codewords);
+        EncodeFrom(text, CompactionMode.Byte, macro, ref codewords);
     }
 
     /// <summary>
-    /// Encodes the data into data codewords from the given compaction mode.
-    /// </summary>
-    /// <param name="text">The data, the characters U+0000 to U+00FF.</param>
-    /// <param name="state">The compaction mode the symbol starts in.</param>
-    /// <param name="macro">The MicroPDF417 macro codeword already written in front of the data, or 0.</param>
-    /// <param name="codewords">The builder the data codewords are written to.</param>
-    /// <exception cref="ArgumentException">The data carries a character above U+00FF.</exception>
-    private static void EncodeFrom(ReadOnlySpan<char> text, int state, int macro, ref ValueListBuilder<int> codewords)
-    {
-        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
-        while (codePoints.MoveNext())
-        {
-            CodePoint current = codePoints.Current;
-            if (current.Value > byte.MaxValue)
-            {
-                throw new ArgumentException(
-                    $"PDF417 carries only the characters U+0000 to U+00FF; got {current.ToDisplayString()}.",
-                    nameof(text));
-            }
-        }
-
-        // The run tables take length + 1 entries each, the last one the zero that ends every run. The
-        // text tables take four sub-mode entries per character for the latch sources and the shift
-        // targets of the search, and three tokens per character, the most a character can need: a latch
-        // of two values and the character itself. The tables of a short text stay inline, and a longer
-        // text rents them once; the text is bounded by the maximum length of the symbology.
-        int length = text.Length;
-        int runLength = length + 1;
-        int size = (3 * runLength) + (2 * SubModes * length) + (3 * length) + 1;
-        InlineArray256<int> tableStorage = default;
-        PooledBuffer<int> rented = default;
-        Span<int> tables = size <= 256
-            ? ((Span<int>)tableStorage)[..size]
-            : (rented = new PooledBuffer<int>(size)).Span;
-
-        try
-        {
-            Span<int> digits = tables[..runLength];
-            Span<int> texts = tables.Slice(runLength, runLength);
-            Span<int> bytes = tables.Slice(runLength * 2, runLength);
-            Span<int> search = tables.Slice(runLength * 3, 2 * SubModes * length);
-            Span<int> tokens = tables.Slice((runLength * 3) + (2 * SubModes * length), (3 * length) + 1);
-
-            // Each table holds the length of the run that starts at a character, counted from the end so
-            // every entry reads the one after it. A text run stops where a run of digits long enough for
-            // Numeric Compaction mode starts, and a byte run stops where either of the other runs does.
-            digits[length] = 0;
-            texts[length] = 0;
-            bytes[length] = 0;
-            for (int i = length - 1; i >= 0; i--)
-            {
-                int c = text[i];
-                digits[i] = char.IsAsciiDigit((char)c) ? digits[i + 1] + 1 : 0;
-                texts[i] = IsText(c) && digits[i] < NumericRun ? texts[i + 1] + 1 : 0;
-                bytes[i] = texts[i] < TextRun && digits[i] < NumericRun ? bytes[i + 1] + 1 : 0;
-            }
-
-            // Data that is all digits encodes in Numeric Compaction mode from eight digits. After a macro
-            // codeword the message is more than its digits, so the rule does not apply.
-            int wholeLength = macro == 0 ? length : -1;
-
-            // A latch to Text Compaction mode returns to the Alpha sub-mode, section 5.4.2.1.
-            int subMode = Alpha;
-            int position = 0;
-            while (position < length)
-            {
-                int digitRun = digits[position];
-                if (digitRun >= NumericRun || (digitRun == wholeLength && digitRun >= WholeNumericRun))
-                {
-                    // The format 05 macro codeword stands for the latch of a first numeric run.
-                    if (macro != Macro05 || position != 0)
-                    {
-                        codewords.Append(NumericLatch);
-                    }
-
-                    EncodeNumeric(text.Slice(position, digitRun), ref codewords);
-                    state = NumericState;
-                    position += digitRun;
-                    continue;
-                }
-
-                int textRun = texts[position];
-                if (textRun >= TextRun)
-                {
-                    if (state != TextState)
-                    {
-                        // The format 06 macro codeword stands for the latch of a first text run, and
-                        // leaves the encoder in the Mixed sub-mode.
-                        if (macro == Macro06 && position == 0)
-                        {
-                            subMode = Mixed;
-                        }
-                        else
-                        {
-                            codewords.Append(TextLatch);
-                            subMode = Alpha;
-                        }
-                    }
-
-                    EncodeText(text.Slice(position, textRun), ref subMode, search, tokens, ref codewords);
-                    state = TextState;
-                    position += textRun;
-                    continue;
-                }
-
-                // Section 5.4.3.1: the mode shift takes a single byte out of Text Compaction mode, and the
-                // two latches take a byte count that is or is not a multiple of six.
-                int byteRun = bytes[position];
-                if (byteRun == 1 && state == TextState)
-                {
-                    codewords.Append(ByteShift);
-                    codewords.Append(text[position]);
-                    position++;
-                    continue;
-                }
-
-                codewords.Append(byteRun % ByteGroup == 0 ? ByteLatchSix : ByteLatch);
-                EncodeBytes(text.Slice(position, byteRun), ref codewords);
-                state = ByteState;
-                position += byteRun;
-            }
-        }
-        finally
-        {
-            rented.Dispose();
-        }
-    }
-
-    /// <summary>
-    /// Calculates the error correction codewords of section 5.10 over the data codewords and writes them
-    /// after the data, the most significant first.
+    /// Calculates the error correction codewords of section 5.10 over the data codewords and writes them after the data, the most significant first.
     /// </summary>
     /// <param name="codewords">The data codewords followed by room for the error correction codewords.</param>
     /// <param name="count">The number of error correction codewords, 2 to 512.</param>
     /// <param name="alpha">The scratch for the generator coefficients, at least <paramref name="count"/> plus one long.</param>
     public static void AppendErrorCorrection(Span<int> codewords, int count, Span<int> alpha)
     {
-        // The generator polynomial g(x) = (x - 3)(x - 3^2) ... (x - 3^k) of section 5.10, expanded one factor
-        // at a time. Multiplying by (x - r) gives each coefficient as the coefficient below it less r times
-        // itself, so the update runs from the top down in place. The coefficient of x^k is 1. Each factor
+        // The generator polynomial g(x) = (x - 3)(x - 3^2) ... (x - 3^k) of section 5.10, expanded one factor at a time. Multiplying by (x - r) gives each
+        // coefficient as the coefficient below it less r times itself, so the update runs from the top down in place. The coefficient of x^k is 1. Each factor
         // reads the coefficient above the product before it writes it, so the coefficients start zero.
         alpha = alpha[..(count + 1)];
         alpha.Clear();
@@ -432,9 +315,8 @@ internal static class Pdf417Codewords
             alpha[0] = (negated * alpha[0]) % Modulus;
         }
 
-        // The division of d(x) x^k by g(x) of section 5.10, step 3, with the error correction codewords
-        // E(k-1) to E(0) as the register. The register lives in place of the error correction codewords,
-        // E(j) at index dataCount + k - 1 - j, so the codewords come out most significant first.
+        // The division of d(x) x^k by g(x) of section 5.10, step 3, with the error correction codewords E(k-1) to E(0) as the register. The register lives in
+        // place of the error correction codewords, E(j) at index dataCount + k - 1 - j, so the codewords come out most significant first.
         int dataCount = codewords.Length - count;
         Span<int> register = codewords[dataCount..];
         register.Clear();
@@ -451,18 +333,141 @@ internal static class Pdf417Codewords
         }
 
         // Step 4: each codeword is the complement of its register value.
-        for (int j = 0; j < count; j++)
+        foreach (ref int value in register)
         {
-            if (register[j] != 0)
+            if (value != 0)
             {
-                register[j] = Modulus - register[j];
+                value = Modulus - value;
             }
         }
     }
 
     /// <summary>
-    /// Encodes a run of digits in Numeric Compaction mode, section 5.4.4.2: each group of up to 44 digits
-    /// takes a leading 1 and converts from base 10 to base 900 as Annex D gives.
+    /// Encodes the data into data codewords from the given compaction mode.
+    /// </summary>
+    /// <param name="text">The data, the characters U+0000 to U+00FF.</param>
+    /// <param name="mode">The compaction mode the symbol starts in.</param>
+    /// <param name="macro">The MicroPDF417 macro codeword already written in front of the data, or 0.</param>
+    /// <param name="codewords">The builder the data codewords are written to.</param>
+    /// <exception cref="ArgumentException">The data carries a character above U+00FF.</exception>
+    private static void EncodeFrom(ReadOnlySpan<char> text, CompactionMode mode, int macro, ref ValueListBuilder<int> codewords)
+    {
+        int invalid = text.IndexOfAnyExceptInRange('\0', 'ÿ');
+        if (invalid >= 0)
+        {
+            throw new ArgumentException(
+                $"PDF417 carries only the characters U+0000 to U+00FF; got {text.CodePointAt(invalid).ToDisplayString()}.",
+                nameof(text));
+        }
+
+        // The run tables take length + 1 entries each, the last one the zero that ends every run. The text search takes one step per sub-mode and character,
+        // two integers each. The text values take three per character: the cheapest path costs no more than a latch of two values and the character itself for
+        // every character. The tables of a short text stay inline, and a longer text rents them once; the text is bounded by the maximum length of the
+        // symbology.
+        int length = text.Length;
+        int runLength = length + 1;
+        int searchLength = 2 * SubModes * length;
+        int size = (3 * runLength) + searchLength + (3 * length) + 1;
+        InlineArray256<int> tableStorage = default;
+        PooledBuffer<int> rented = default;
+        Span<int> tables = size <= 256
+            ? ((Span<int>)tableStorage)[..size]
+            : (rented = new PooledBuffer<int>(size)).Span;
+
+        try
+        {
+            Span<int> digits = tables[..runLength];
+            Span<int> texts = tables.Slice(runLength, runLength);
+            Span<int> bytes = tables.Slice(runLength * 2, runLength);
+            Span<SearchStep> search = MemoryMarshal.Cast<int, SearchStep>(tables.Slice(runLength * 3, searchLength));
+            Span<int> path = tables.Slice((runLength * 3) + searchLength, (3 * length) + 1);
+
+            // Each table holds the length of the run that starts at a character, counted from the end so every entry reads the one after it. A text run stops
+            // where a run of digits long enough for Numeric Compaction mode starts, and a byte run stops where either of the other runs does.
+            digits[length] = 0;
+            texts[length] = 0;
+            bytes[length] = 0;
+            for (int i = length - 1; i >= 0; i--)
+            {
+                int c = text[i];
+                digits[i] = char.IsAsciiDigit((char)c) ? digits[i + 1] + 1 : 0;
+                texts[i] = IsText(c) && digits[i] < NumericRun ? texts[i + 1] + 1 : 0;
+                bytes[i] = texts[i] < TextRun && digits[i] < NumericRun ? bytes[i + 1] + 1 : 0;
+            }
+
+            // Data that is all digits encodes in Numeric Compaction mode from eight digits. After a macro codeword the message is more than its digits, so the
+            // rule does not apply.
+            int wholeLength = macro == 0 ? length : -1;
+
+            // A latch to Text Compaction mode returns to the Alpha sub-mode, section 5.4.2.1.
+            SubMode subMode = SubMode.Alpha;
+            int position = 0;
+            while (position < length)
+            {
+                int digitRun = digits[position];
+                if (digitRun >= NumericRun || (digitRun == wholeLength && digitRun >= WholeNumericRun))
+                {
+                    // The format 05 macro codeword stands for the latch of a first numeric run.
+                    if (macro != Macro05 || position != 0)
+                    {
+                        codewords.Append(NumericLatch);
+                    }
+
+                    EncodeNumeric(text.Slice(position, digitRun), ref codewords);
+                    mode = CompactionMode.Numeric;
+                    position += digitRun;
+                    continue;
+                }
+
+                int textRun = texts[position];
+                if (textRun >= TextRun)
+                {
+                    if (mode != CompactionMode.Text)
+                    {
+                        // The format 06 macro codeword stands for the latch of a first text run, and leaves the encoder in the Mixed sub-mode.
+                        if (macro == Macro06 && position == 0)
+                        {
+                            subMode = SubMode.Mixed;
+                        }
+                        else
+                        {
+                            codewords.Append(TextLatch);
+                            subMode = SubMode.Alpha;
+                        }
+                    }
+
+                    EncodeText(text.Slice(position, textRun), ref subMode, search, path, ref codewords);
+                    mode = CompactionMode.Text;
+                    position += textRun;
+                    continue;
+                }
+
+                // Section 5.4.3.1: the mode shift takes a single byte out of Text Compaction mode, and the two latches take a byte count that is or is not a
+                // multiple of six.
+                int byteRun = bytes[position];
+                if (byteRun == 1 && mode == CompactionMode.Text)
+                {
+                    codewords.Append(ByteShift);
+                    codewords.Append(text[position]);
+                    position++;
+                    continue;
+                }
+
+                codewords.Append(byteRun % ByteGroup == 0 ? ByteLatchSix : ByteLatch);
+                EncodeBytes(text.Slice(position, byteRun), ref codewords);
+                mode = CompactionMode.Byte;
+                position += byteRun;
+            }
+        }
+        finally
+        {
+            rented.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Encodes a run of digits in Numeric Compaction mode, section 5.4.4.2: each group of up to 44 digits takes a leading 1 and converts from base 10 to base
+    /// 900 as Annex D gives.
     /// </summary>
     /// <param name="digits">The digits.</param>
     /// <param name="codewords">The builder the codewords are written to.</param>
@@ -481,9 +486,8 @@ internal static class Pdf417Codewords
                 number[i + 1] = (byte)(digits[start + i] - '0');
             }
 
-            // Annex D: the codewords are the remainders of repeated division by 900, the least
-            // significant first. Each pass divides the decimal digits in place by long division, which
-            // keeps a quotient digit of at most 9 in each place, and drops the leading zeros it leaves.
+            // Annex D: the codewords are the remainders of repeated division by 900, the least significant first. Each pass divides the decimal digits in place
+            // by long division, which keeps a quotient digit of at most 9 in each place, and drops the leading zeros it leaves.
             int count = length + 1;
             int first = 0;
             int produced = 0;
@@ -512,9 +516,8 @@ internal static class Pdf417Codewords
     }
 
     /// <summary>
-    /// Encodes a run of bytes in Byte Compaction mode, section 5.4.3.3: each group of six bytes converts
-    /// from base 256 to five base 900 codewords as Annex C gives, and the bytes after the last full group
-    /// take one codeword each.
+    /// Encodes a run of bytes in Byte Compaction mode, section 5.4.3.3: each group of six bytes converts from base 256 to five base 900 codewords as Annex C
+    /// gives, and the bytes after the last full group take one codeword each.
     /// </summary>
     /// <param name="bytes">The bytes, each a character U+0000 to U+00FF.</param>
     /// <param name="codewords">The builder the codewords are written to.</param>
@@ -523,12 +526,12 @@ internal static class Pdf417Codewords
         int position = 0;
         for (; position + ByteGroup <= bytes.Length; position += ByteGroup)
         {
-            // Six bytes are at most 2^48 - 1, which a long holds. The five codewords come out of the
-            // division the least significant first and are written the most significant first.
+            // Six bytes are at most 2^48 - 1, which a long holds. The five codewords come out of the division the least significant first and are written the
+            // most significant first.
             long value = 0;
-            for (int i = 0; i < ByteGroup; i++)
+            foreach (char b in bytes.Slice(position, ByteGroup))
             {
-                value = (value << 8) | bytes[position + i];
+                value = (value << 8) | b;
             }
 
             Span<int> group = codewords.AppendSpan(ByteGroupCodewords);
@@ -539,67 +542,59 @@ internal static class Pdf417Codewords
             }
         }
 
-        for (; position < bytes.Length; position++)
+        foreach (char b in bytes[position..])
         {
-            codewords.Append(bytes[position]);
+            codewords.Append(b);
         }
     }
 
     /// <summary>
-    /// Encodes a run of text characters in Text Compaction mode, section 5.4.2. The search keeps, for
-    /// each sub-mode, the fewest base 30 values that encode the characters so far and end in that
-    /// sub-mode. Before each character every sub-mode may latch to another; the character then extends a
-    /// sub-mode that holds it, or a sub-mode that shifts to one that does. The run takes the cheapest
-    /// end, and an odd count of values takes the pad of section 5.4.2.4.
+    /// Encodes a run of text characters in Text Compaction mode, section 5.4.2. The search keeps, for each sub-mode, the fewest base 30 values that encode the
+    /// characters so far and end in that sub-mode. Before each character every sub-mode may latch to another; the character then extends a sub-mode that holds
+    /// it, or a sub-mode that shifts to one that does. The run takes the cheapest end, and an odd count of values takes the pad of section 5.4.2.4.
     /// </summary>
     /// <param name="text">The characters, each one that Table 5 holds.</param>
     /// <param name="subMode">The sub-mode in effect, updated to the sub-mode the run ends in.</param>
-    /// <param name="search">The scratch table of the search, eight entries per character.</param>
-    /// <param name="tokens">The scratch table of the chosen tokens, three per character and one more.</param>
+    /// <param name="search">The scratch table of the search, one step per sub-mode and character.</param>
+    /// <param name="path">The scratch table of the chosen base 30 values, three per character and one more.</param>
     /// <param name="codewords">The builder the codewords are written to.</param>
     private static void EncodeText(
         ReadOnlySpan<char> text,
-        ref int subMode,
-        scoped Span<int> search,
-        scoped Span<int> tokens,
+        ref SubMode subMode,
+        scoped Span<SearchStep> search,
+        scoped Span<int> path,
         ref ValueListBuilder<int> codewords)
     {
         int length = text.Length;
-
-        // For character i, latches[(i * 4) + s] is the sub-mode that sub-mode s latched from before the
-        // character, or -1, and shifts[(i * 4) + s] is the sub-mode that s shifted to for the character, or
-        // -1 when s holds the character itself. A latch or a shift never changes the sub-mode the
-        // character leaves the encoder in, so these two tables are the whole path.
-        Span<int> latches = search[..(SubModes * length)];
-        Span<int> shifts = search.Slice(SubModes * length, SubModes * length);
         InlineArray4<int> costStorage = default;
         InlineArray4<int> nextStorage = default;
         Span<int> cost = costStorage;
         Span<int> next = nextStorage;
         cost.Fill(Unreachable);
-        cost[subMode] = 0;
+        cost[(int)subMode] = 0;
 
+        // A latch or a shift never changes the sub-mode the character leaves the encoder in, so the latch sources and the shift targets of each character are
+        // the whole path.
         for (int i = 0; i < length; i++)
         {
-            Span<int> latchFrom = latches.Slice(i * SubModes, SubModes);
-            Span<int> shiftTo = shifts.Slice(i * SubModes, SubModes);
-            latchFrom.Fill(-1);
+            Span<SearchStep> steps = search.Slice(i * SubModes, SubModes);
+            steps.Fill(new SearchStep { LatchFrom = SubMode.None, ShiftTo = SubMode.None });
 
-            // A latch can lead to a sub-mode that latches again, so the relaxation repeats until no
-            // sub-mode gets cheaper. Each update lowers a cost, so it ends.
+            // A latch can lead to a sub-mode that latches again, so the relaxation repeats until no sub-mode gets cheaper. Each update lowers a cost, so it
+            // ends.
             bool improved = true;
             while (improved)
             {
                 improved = false;
-                for (int from = 0; from < SubModes; from++)
+                for (SubMode from = SubMode.Alpha; from <= SubMode.Punctuation; from++)
                 {
-                    for (int to = 0; to < SubModes; to++)
+                    for (SubMode to = SubMode.Alpha; to <= SubMode.Punctuation; to++)
                     {
-                        int latched = cost[from] + LatchLength(from, to);
-                        if (latched < cost[to])
+                        int latched = cost[(int)from] + LatchLength(from, to);
+                        if (latched < cost[(int)to])
                         {
-                            cost[to] = latched;
-                            latchFrom[to] = from;
+                            cost[(int)to] = latched;
+                            steps[(int)to].LatchFrom = from;
                             improved = true;
                         }
                     }
@@ -608,32 +603,32 @@ internal static class Pdf417Codewords
 
             int c = text[i];
             next.Fill(Unreachable);
-            for (int holder = 0; holder < SubModes; holder++)
+            for (SubMode holder = SubMode.Alpha; holder <= SubMode.Punctuation; holder++)
             {
                 if (TextValue(holder, c) < 0)
                 {
                     continue;
                 }
 
-                int direct = cost[holder] + 1;
-                if (direct < next[holder])
+                int direct = cost[(int)holder] + 1;
+                if (direct < next[(int)holder])
                 {
-                    next[holder] = direct;
-                    shiftTo[holder] = -1;
+                    next[(int)holder] = direct;
+                    steps[(int)holder].ShiftTo = SubMode.None;
                 }
 
-                for (int from = 0; from < SubModes; from++)
+                for (SubMode from = SubMode.Alpha; from <= SubMode.Punctuation; from++)
                 {
                     if (from == holder || !CanShift(from, holder))
                     {
                         continue;
                     }
 
-                    int shifted = cost[from] + 2;
-                    if (shifted < next[from])
+                    int shifted = cost[(int)from] + 2;
+                    if (shifted < next[(int)from])
                     {
-                        next[from] = shifted;
-                        shiftTo[from] = holder;
+                        next[(int)from] = shifted;
+                        steps[(int)from].ShiftTo = holder;
                     }
                 }
             }
@@ -641,181 +636,112 @@ internal static class Pdf417Codewords
             next.CopyTo(cost);
         }
 
-        int best = 0;
-        for (int s = 1; s < SubModes; s++)
+        SubMode best = SubMode.Alpha;
+        for (SubMode s = SubMode.Lower; s <= SubMode.Punctuation; s++)
         {
-            if (cost[s] < cost[best])
+            if (cost[(int)s] < cost[(int)best])
             {
                 best = s;
             }
         }
 
-        // Walk the path back from the cheapest end, writing the tokens from the end of the table: each
-        // character, the shift before it if any, and then the latches taken before it.
+        // Walk the path back from the cheapest end, writing its base 30 values from the end of the table: each character, the shift before it if any, and then
+        // the latches taken before it. Table 7 latches directly between most sub-modes. The rest pass through a sub-mode that latches onward: Punctuation
+        // through Alpha, and the others through Mixed.
         int count = 0;
-        int state = best;
+        SubMode state = best;
         for (int i = length - 1; i >= 0; i--)
         {
-            tokens[tokens.Length - 1 - count++] = text[i];
-            int target = shifts[(i * SubModes) + state];
-            if (target >= 0)
+            int c = text[i];
+            SearchStep step = search[(i * SubModes) + (int)state];
+            if (step.ShiftTo == SubMode.None)
             {
-                tokens[tokens.Length - 1 - count++] = target == Alpha ? ShiftAlpha : ShiftPunctuation;
+                path[path.Length - 1 - count++] = TextValue(state, c);
+            }
+            else
+            {
+                path[path.Length - 1 - count++] = TextValue(step.ShiftTo, c);
+                path[path.Length - 1 - count++] = ShiftValue(step.ShiftTo);
             }
 
-            int from = latches[(i * SubModes) + state];
-            while (from >= 0)
+            SubMode from = step.LatchFrom;
+            while (from != SubMode.None)
             {
-                count = PrependLatch(tokens, count, from, state);
+                if (LatchLength(from, state) == 2)
+                {
+                    SubMode via = from == SubMode.Punctuation ? SubMode.Alpha : SubMode.Mixed;
+                    path[path.Length - 1 - count++] = LatchValue(via, state);
+                    path[path.Length - 1 - count++] = LatchValue(from, via);
+                }
+                else
+                {
+                    path[path.Length - 1 - count++] = LatchValue(from, state);
+                }
+
                 state = from;
-                from = latches[(i * SubModes) + state];
+                from = search[(i * SubModes) + (int)state].LatchFrom;
             }
         }
 
-        // Pair the values into codewords, h x 30 + l, section 5.4.2.2.
-        int high = -1;
-        int current = subMode;
-        ReadOnlySpan<int> path = tokens[^count..];
-        for (int i = 0; i < path.Length; i++)
+        // Pair the values into codewords, h x 30 + l, section 5.4.2.2. An odd count of values takes the pad, which in the Punctuation sub-mode is the latch to
+        // Alpha and takes effect.
+        ReadOnlySpan<int> values = path[^count..];
+        for (int i = 0; i < count; i += 2)
         {
-            int token = path[i];
-            if (token == ShiftAlpha || token == ShiftPunctuation)
-            {
-                AppendValue(TokenValue(current, token), ref high, ref codewords);
-                AppendValue(TextValue(token == ShiftAlpha ? Alpha : Punctuation, path[++i]), ref high, ref codewords);
-            }
-            else if (token >= 0)
-            {
-                AppendValue(TextValue(current, token), ref high, ref codewords);
-            }
-            else
-            {
-                AppendValue(TokenValue(current, token), ref high, ref codewords);
-                current = LatchTarget(token);
-            }
+            int low = i + 1 < count ? values[i + 1] : PadValue;
+            codewords.Append((values[i] * TextBase) + low);
         }
 
-        // Section 5.4.2.4: an odd count of values takes a pad. The Punctuation sub-mode has only the
-        // latch to Alpha, which takes effect; every other sub-mode pads with the shift to Punctuation,
-        // which has no character after it.
-        if (high >= 0)
-        {
-            if (current == Punctuation)
-            {
-                AppendValue(TokenValue(current, LatchAlpha), ref high, ref codewords);
-                current = Alpha;
-            }
-            else
-            {
-                AppendValue(TokenValue(current, ShiftPunctuation), ref high, ref codewords);
-            }
-        }
-
-        subMode = current;
+        subMode = (count & 1) != 0 && best == SubMode.Punctuation ? SubMode.Alpha : best;
     }
 
     /// <summary>
-    /// Adds one base 30 value, completing a codeword when it is the second of a pair.
-    /// </summary>
-    /// <param name="value">The value, 0 to 29.</param>
-    /// <param name="high">The first value of the open pair, or -1 when no pair is open.</param>
-    /// <param name="codewords">The builder the codewords are written to.</param>
-    private static void AppendValue(int value, ref int high, ref ValueListBuilder<int> codewords)
-    {
-        if (high < 0)
-        {
-            high = value;
-            return;
-        }
-
-        codewords.Append((high * TextBase) + value);
-        high = -1;
-    }
-
-    /// <summary>
-    /// Writes the latch tokens from one sub-mode to another in front of the tokens written so far.
-    /// </summary>
-    /// <param name="tokens">The token table, filled from the end.</param>
-    /// <param name="count">The number of tokens written so far.</param>
-    /// <param name="from">The sub-mode the latch starts in.</param>
-    /// <param name="to">The sub-mode the latch ends in.</param>
-    /// <returns>The number of tokens written.</returns>
-    private static int PrependLatch(Span<int> tokens, int count, int from, int to)
-    {
-        // Table 7 latches directly between most sub-modes. The rest pass through a sub-mode that latches
-        // onward: Lower reaches Alpha and Punctuation through Mixed, Alpha reaches Punctuation through
-        // Mixed, and Punctuation reaches Lower and Mixed through Alpha.
-        int second = to switch
-        {
-            Alpha => LatchAlpha,
-            Lower => LatchLower,
-            Mixed => LatchMixed,
-            _ => LatchPunctuation,
-        };
-
-        tokens[tokens.Length - 1 - count++] = second;
-        if (LatchLength(from, to) == 2)
-        {
-            tokens[tokens.Length - 1 - count++] = from == Punctuation ? LatchAlpha : LatchMixed;
-        }
-
-        return count;
-    }
-
-    /// <summary>
-    /// Returns the number of base 30 values the latch from one sub-mode to another takes, Table 7, and
-    /// zero for a sub-mode to itself.
+    /// Returns the number of base 30 values the latch from one sub-mode to another takes, Table 7, and zero for a sub-mode to itself.
     /// </summary>
     /// <param name="from">The sub-mode the latch starts in.</param>
     /// <param name="to">The sub-mode the latch ends in.</param>
     /// <returns>The number of values.</returns>
-    private static int LatchLength(int from, int to)
+    private static int LatchLength(SubMode from, SubMode to)
         => (from, to) switch
         {
             _ when from == to => 0,
-            (Lower, Alpha) or (Lower, Punctuation) or (Alpha, Punctuation) => 2,
-            (Punctuation, Lower) or (Punctuation, Mixed) => 2,
+            (SubMode.Lower, SubMode.Alpha) or (SubMode.Lower, SubMode.Punctuation) or (SubMode.Alpha, SubMode.Punctuation) => 2,
+            (SubMode.Punctuation, SubMode.Lower) or (SubMode.Punctuation, SubMode.Mixed) => 2,
             _ => 1,
         };
 
     /// <summary>
-    /// Returns whether a sub-mode shifts to another for one character, Table 7: Lower shifts to Alpha,
-    /// and every sub-mode but Punctuation shifts to Punctuation.
+    /// Returns whether a sub-mode shifts to another for one character, Table 7: Lower shifts to Alpha, and every sub-mode but Punctuation shifts to
+    /// Punctuation.
     /// </summary>
     /// <param name="from">The sub-mode the shift starts in.</param>
     /// <param name="to">The sub-mode the character is encoded in.</param>
     /// <returns><see langword="true"/> when the shift exists.</returns>
-    private static bool CanShift(int from, int to)
-        => (to == Punctuation && from != Punctuation) || (to == Alpha && from == Lower);
+    private static bool CanShift(SubMode from, SubMode to)
+        => (to == SubMode.Punctuation && from != SubMode.Punctuation) || (to == SubMode.Alpha && from == SubMode.Lower);
 
     /// <summary>
-    /// Returns the sub-mode a latch token ends in.
+    /// Returns the base 30 value of a direct latch from one sub-mode to another, Table 5. Only the latches of length one in <see cref="LatchLength"/> are
+    /// direct.
     /// </summary>
-    /// <param name="token">The latch token.</param>
-    /// <returns>The sub-mode.</returns>
-    private static int LatchTarget(int token)
-        => token switch
-        {
-            LatchAlpha => Alpha,
-            LatchLower => Lower,
-            LatchMixed => Mixed,
-            _ => Punctuation,
-        };
-
-    /// <summary>
-    /// Returns the base 30 value of a latch or shift token in a sub-mode, Table 5.
-    /// </summary>
-    /// <param name="subMode">The sub-mode the token is encoded in.</param>
-    /// <param name="token">The latch or shift token.</param>
+    /// <param name="from">The sub-mode the latch is encoded in.</param>
+    /// <param name="to">The sub-mode the latch ends in.</param>
     /// <returns>The value.</returns>
-    private static int TokenValue(int subMode, int token)
-        => (subMode, token) switch
+    private static int LatchValue(SubMode from, SubMode to)
+        => (from, to) switch
         {
-            (Mixed, LatchPunctuation) => 25,
-            (Alpha, LatchLower) or (Lower, ShiftAlpha) or (Mixed, LatchLower) => 27,
-            (Alpha, LatchMixed) or (Lower, LatchMixed) or (Mixed, LatchAlpha) => 28,
+            (SubMode.Mixed, SubMode.Punctuation) => 25,
+            (SubMode.Alpha, SubMode.Lower) or (SubMode.Mixed, SubMode.Lower) => 27,
+            (SubMode.Alpha, SubMode.Mixed) or (SubMode.Lower, SubMode.Mixed) or (SubMode.Mixed, SubMode.Alpha) => 28,
             _ => 29,
         };
+
+    /// <summary>
+    /// Returns the base 30 value of a shift, Table 5: the shift to Alpha, which only the Lower sub-mode has, is 27, and the shift to Punctuation is 29.
+    /// </summary>
+    /// <param name="to">The sub-mode the shifted character is encoded in.</param>
+    /// <returns>The value.</returns>
+    private static int ShiftValue(SubMode to) => to == SubMode.Alpha ? 27 : 29;
 
     /// <summary>
     /// Returns the base 30 value of a character in a sub-mode, Table 5.
@@ -823,8 +749,8 @@ internal static class Pdf417Codewords
     /// <param name="subMode">The sub-mode.</param>
     /// <param name="c">The character, U+0000 to U+00FF.</param>
     /// <returns>The value, or -1 when the sub-mode does not hold the character.</returns>
-    private static int TextValue(int subMode, int c)
-        => c < 128 ? TextValues[(subMode << 7) + c] : -1;
+    private static int TextValue(SubMode subMode, int c)
+        => c < TextTableWidth ? TextValues[((int)subMode * TextTableWidth) + c] : -1;
 
     /// <summary>
     /// Returns whether Text Compaction mode holds a character in any of its sub-modes.
@@ -832,35 +758,22 @@ internal static class Pdf417Codewords
     /// <param name="c">The character, U+0000 to U+00FF.</param>
     /// <returns><see langword="true"/> when a sub-mode holds the character.</returns>
     private static bool IsText(int c)
-        => TextValue(Alpha, c) >= 0 || TextValue(Lower, c) >= 0 || TextValue(Mixed, c) >= 0 || TextValue(Punctuation, c) >= 0;
+        => TextValue(SubMode.Alpha, c) >= 0 || TextValue(SubMode.Lower, c) >= 0 || TextValue(SubMode.Mixed, c) >= 0 || TextValue(SubMode.Punctuation, c) >= 0;
 
     /// <summary>
-    /// Builds the table of Text Compaction values from Table 5.
+    /// One step of the Text Compaction search: how a sub-mode reached a character. The step is two integers, so the search shares the integer tables of the run
+    /// lengths.
     /// </summary>
-    /// <returns>The table.</returns>
-    private static sbyte[] CreateTextValues()
+    private struct SearchStep
     {
-        sbyte[] values = new sbyte[SubModes * 128];
-        values.AsSpan().Fill(-1);
-        for (int i = 0; i < 26; i++)
-        {
-            values[(Alpha << 7) + 'A' + i] = (sbyte)i;
-            values[(Lower << 7) + 'a' + i] = (sbyte)i;
-        }
+        /// <summary>
+        /// The sub-mode this sub-mode latched from before the character, or <see cref="SubMode.None"/>.
+        /// </summary>
+        public SubMode LatchFrom;
 
-        values[(Alpha << 7) + ' '] = 26;
-        values[(Lower << 7) + ' '] = 26;
-        values[(Mixed << 7) + ' '] = 26;
-        for (int i = 0; i < MixedCharacters.Length; i++)
-        {
-            values[(Mixed << 7) + MixedCharacters[i]] = (sbyte)i;
-        }
-
-        for (int i = 0; i < PunctuationCharacters.Length; i++)
-        {
-            values[(Punctuation << 7) + PunctuationCharacters[i]] = (sbyte)i;
-        }
-
-        return values;
+        /// <summary>
+        /// The sub-mode this sub-mode shifted to for the character, or <see cref="SubMode.None"/> when it holds the character itself.
+        /// </summary>
+        public SubMode ShiftTo;
     }
 }

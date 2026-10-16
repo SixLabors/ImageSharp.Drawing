@@ -6,19 +6,16 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="CodeOneSymbology"/>. Each expected grid is the module grid of an independent
-/// reference implementation, one row of hexadecimal digits per line, four modules per digit and the last digit
-/// padded with light modules. The grids come from bwip-js, except version G, which comes from Zint: bwip-js adds
-/// the 2/3 steps of the mode look-ahead in floating point, and on that text one sum rounds up where exact
-/// arithmetic does not, so it latches into Text mode later. Zint counts the steps exactly, and the two agree on
-/// the other cases of versions A to H.
+/// Encoder tests for <see cref="CodeOneSymbology"/>. Each expected grid is the module grid of an independent reference implementation, one row of hexadecimal
+/// digits per line, four modules per digit and the last digit padded with light modules. The grids come from bwip-js, except version G, which comes from Zint:
+/// bwip-js adds the 2/3 steps of the mode look-ahead in floating point, and on that text one sum rounds up where exact arithmetic does not, so it latches into
+/// Text mode later. Zint counts the steps exactly, and the two agree on the other cases of versions A to H.
 /// </summary>
 public class CodeOneSymbologyTests
 {
     /// <summary>
-    /// Gets the cases of <see cref="MatchesReferenceGrid"/>: the version (empty for the smallest of A to H), the
-    /// text, the rows, the columns and the grid. The cases cover the ASCII, C40, Text, X12, Decimal and Byte
-    /// modes, the multi-block versions F and G, and the T and S versions.
+    /// Gets the cases of <see cref="MatchesReferenceGrid"/>: the version (empty for the smallest of A to H), the text, the rows, the columns and the grid. The
+    /// cases cover the ASCII, C40, Text, X12, Decimal and Byte modes, the multi-block versions F and G, and the T and S versions.
     /// </summary>
     public static TheoryData<string, string, int, int, string> MatchesReferenceGridData { get; } = new()
     {
@@ -711,8 +708,8 @@ public class CodeOneSymbologyTests
         => Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new CodeOneSymbology(version), text, new BarcodeOptions()));
 
     /// <summary>
-    /// Data that fills the 1480 data codewords of version H fits it. Two ASCII codewords and a Decimal run of
-    /// 3546 digits, 4 + 1182 x 10 bits, fill the version exactly. Zint encodes the same text as version H.
+    /// Data that fills the 1480 data codewords of version H fits it. Two ASCII codewords and a Decimal run of 3546 digits, 4 + 1182 x 10 bits, fill the version
+    /// exactly. Zint encodes the same text as version H.
     /// </summary>
     [Fact]
     public void FillsVersionHExactly()

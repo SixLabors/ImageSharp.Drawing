@@ -6,11 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Code16KSymbology"/>. Each expected row is the alternating bar and space
-/// module widths of one row, starting with a bar, taken from an independent reference implementation
-/// through its raw encoding API. A row carries its start character, the guard bar, five symbol characters
-/// and its stop character, so the mode, the code and shift characters, the pad and the check characters
-/// all show up here.
+/// Encoder tests for <see cref="Code16KSymbology"/>. Each expected row is the alternating bar and space module widths of one row, starting with a bar, taken
+/// from an independent reference implementation through its raw encoding API. A row carries its start character, the guard bar, five symbol characters and its
+/// stop character, so the mode, the code and shift characters, the pad and the check characters all show up here.
 /// </summary>
 public class Code16KSymbologyTests
 {
@@ -76,8 +74,7 @@ public class Code16KSymbologyTests
         // A lower case letter, four digits and a control character: mode 5, then code set A at the end.
         { "x1234", "321111312224212111122321311233111413211|222111211242114122114121311412221222221" },
 
-        // Seventy seven upper case letters, the most a sixteen row symbol carries, so rows 9 to 16 use the
-        // second half of Table 6.
+        // Seventy seven upper case letters, the most a sixteen row symbol carries, so rows 9 to 16 use the second half of Table 6.
         {
             "ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXY",
             "321111131411113231311231313211123133211|" +
@@ -113,8 +110,8 @@ public class Code16KSymbologyTests
         });
 
     /// <summary>
-    /// Section 2.1: every row is 70 modules, and a one module separator bar stands between rows. Section
-    /// 3.4 gives ten modules of quiet zone before the start pattern and one after the stop pattern.
+    /// Section 2.1: every row is 70 modules, and a one module separator bar stands between rows. Section 3.4 gives ten modules of quiet zone before the start
+    /// pattern and one after the stop pattern.
     /// </summary>
     [Fact]
     public void Code16K_RowsAreSeventyModulesWithSeparators()
@@ -137,8 +134,8 @@ public class Code16KSymbologyTests
         });
 
     /// <summary>
-    /// Section 3.6.2: H = ((h + g) r + g) X, with h the bar height and g the separator height. The bars
-    /// are 8X, the recommended minimum of section 3.3, when no height is set.
+    /// Section 3.6.2: H = ((h + g) r + g) X, with h the bar height and g the separator height. The bars are 8X, the recommended minimum of section 3.3, when no
+    /// height is set.
     /// </summary>
     [Theory]
     [InlineData("A", 2)]
@@ -168,8 +165,8 @@ public class Code16KSymbologyTests
     }
 
     /// <summary>
-    /// Section 2.3.1: the starting symbol character is s = 7(r - 2) + m, and Table 3 gives the mode.
-    /// Appendix G rule 1 picks the mode from the first characters.
+    /// Section 2.3.1: the starting symbol character is s = 7(r - 2) + m, and Table 3 gives the mode. Appendix G rule 1 picks the mode from the first
+    /// characters.
     /// </summary>
     [Theory]
     [InlineData("ab", 0)]
@@ -186,8 +183,8 @@ public class Code16KSymbologyTests
     }
 
     /// <summary>
-    /// Section 2.6: C1 is the modulo 107 sum of the symbol characters weighted from two upward, and C2 is
-    /// the modulo 107 sum weighted from one upward with C1 as its last term.
+    /// Section 2.6: C1 is the modulo 107 sum of the symbol characters weighted from two upward, and C2 is the modulo 107 sum weighted from one upward with C1
+    /// as its last term.
     /// </summary>
     [Theory]
     [InlineData("Abcd-1234567890-wxyZ")]
@@ -211,8 +208,7 @@ public class Code16KSymbologyTests
     }
 
     /// <summary>
-    /// Appendix D: the human readable interpretation prints below the symbol, clear of the bottom
-    /// separator bar. Without a font there is no text.
+    /// Appendix D: the human readable interpretation prints below the symbol, clear of the bottom separator bar. Without a font there is no text.
     /// </summary>
     [Fact]
     public void Code16K_TextPrintsBelowTheBottomSeparator()
@@ -232,8 +228,8 @@ public class Code16KSymbologyTests
     }
 
     /// <summary>
-    /// Section 2.2 gives the code sets ASCII 0 to 127 between them, and section 2.1 caps a symbol at
-    /// sixteen rows of five symbol characters, three of them overhead.
+    /// Section 2.2 gives the code sets ASCII 0 to 127 between them, and section 2.1 caps a symbol at sixteen rows of five symbol characters, three of them
+    /// overhead.
     /// </summary>
     [Fact]
     public void Code16K_RejectsInvalidInput()
@@ -252,10 +248,9 @@ public class Code16KSymbologyTests
         => SymbolEncoder.Encode(new Code16KSymbology(), text, new BarcodeOptions(), check);
 
     /// <summary>
-    /// Reads the symbol character values of every data row of a symbol, from the top. Section 2.1 lays a
-    /// row out as a start pattern of four elements, a guard bar, five symbol characters of six elements
-    /// and a stop pattern of four elements. Table 2 gives the characters the Code 128 patterns, and gives
-    /// the value 106 the pattern 2 1 1 1 3 3.
+    /// Reads the symbol character values of every data row of a symbol, from the top. Section 2.1 lays a row out as a start pattern of four elements, a guard
+    /// bar, five symbol characters of six elements and a stop pattern of four elements. Table 2 gives the characters the Code 128 patterns, and gives the value
+    /// 106 the pattern 2 1 1 1 3 3.
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
     /// <returns>The symbol character values, one data row after another.</returns>

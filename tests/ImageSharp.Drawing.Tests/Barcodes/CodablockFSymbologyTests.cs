@@ -6,11 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="CodablockFSymbology"/>. Each expected row is the alternating bar and
-/// space module widths of one row, starting with a bar, taken from an independent reference
-/// implementation through its raw encoding API. A row carries its start character, code set selector,
-/// row indicator, data columns, row check character and stop character, so the encodation, the pad and
-/// the check characters all show up here.
+/// Encoder tests for <see cref="CodablockFSymbology"/>. Each expected row is the alternating bar and space module widths of one row, starting with a bar, taken
+/// from an independent reference implementation through its raw encoding API. A row carries its start character, code set selector, row indicator, data
+/// columns, row check character and stop character, so the encodation, the pad and the check characters all show up here.
 /// </summary>
 public class CodablockFSymbologyTests
 {
@@ -124,9 +122,8 @@ public class CodablockFSymbologyTests
         });
 
     /// <summary>
-    /// A row is eleven modules per character and thirteen for the stop character. A separator row keeps
-    /// the start and stop patterns of the rows above and below it and fills the columns between them,
-    /// and a solid bar closes the symbol at the top and at the bottom. The quiet zones are ten modules.
+    /// A row is eleven modules per character and thirteen for the stop character. A separator row keeps the start and stop patterns of the rows above and below
+    /// it and fills the columns between them, and a solid bar closes the symbol at the top and at the bottom. The quiet zones are ten modules.
     /// </summary>
     [Theory]
     [InlineData(4, 101, 79)]
@@ -147,8 +144,8 @@ public class CodablockFSymbologyTests
         });
 
     /// <summary>
-    /// The nominal row height is ten modules, or 0.55 modules per data column plus three when that is
-    /// more, and a bar height in millimetres sets every data row.
+    /// The nominal row height is ten modules, or 0.55 modules per data column plus three when that is more, and a bar height in millimetres sets every data
+    /// row.
     /// </summary>
     [Fact]
     public void CodablockF_RowHeightFollowsTheColumnCount()
@@ -166,9 +163,8 @@ public class CodablockFSymbologyTests
     }
 
     /// <summary>
-    /// K1 and K2 are the modulo 86 sums of the message characters weighted from one and from zero, and
-    /// take the fourth and third places from the end of the last row. Every row ends in the modulo 103
-    /// check character of its own characters.
+    /// K1 and K2 are the modulo 86 sums of the message characters weighted from one and from zero, and take the fourth and third places from the end of the
+    /// last row. Every row ends in the modulo 103 check character of its own characters.
     /// </summary>
     [Theory]
     [InlineData("CODABLOCK F 34567890123456789010040digit")]
@@ -186,8 +182,7 @@ public class CodablockFSymbologyTests
             k2 = (k2 + (i * text[i])) % 86;
         }
 
-        // The pair maps through the code set the last row ends in. Either mapping of the pair is
-        // accepted, and a mix of the two is not.
+        // The pair maps through the code set the last row ends in. Either mapping of the pair is accepted, and a mix of the two is not.
         int[] last = values[^rowSize..];
         bool alphabetic = last[^4] == Map(k1, true) && last[^3] == Map(k2, true);
         bool numeric = last[^4] == k1 && last[^3] == k2;
@@ -209,8 +204,7 @@ public class CodablockFSymbologyTests
     }
 
     /// <summary>
-    /// The data prints below the bottom bar, clear of it, when a font is set. Without a font there is no
-    /// text.
+    /// The data prints below the bottom bar, clear of it, when a font is set. Without a font there is no text.
     /// </summary>
     [Fact]
     public void CodablockF_TextPrintsBelowTheBottomBar()
@@ -228,8 +222,7 @@ public class CodablockFSymbologyTests
     }
 
     /// <summary>
-    /// The column count is 4 to 62, the characters are ASCII 0 to 127, and 44 rows are the most a symbol
-    /// holds.
+    /// The column count is 4 to 62, the characters are ASCII 0 to 127, and 44 rows are the most a symbol holds.
     /// </summary>
     [Fact]
     public void CodablockF_RejectsInvalidInput()
@@ -251,8 +244,8 @@ public class CodablockFSymbologyTests
         => SymbolEncoder.Encode(new CodablockFSymbology(columns), text, new BarcodeOptions(), check);
 
     /// <summary>
-    /// Reads the Code 128 character values of every data row of a symbol, from the top. Every symbol
-    /// character but the stop character is six runs; the stop character closes each row with seven.
+    /// Reads the Code 128 character values of every data row of a symbol, from the top. Every symbol character but the stop character is six runs; the stop
+    /// character closes each row with seven.
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
     /// <returns>The character values, one data row after another.</returns>

@@ -6,10 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="HibcCodablockFSymbology"/>. Each expected row is the alternating bar and
-/// space module widths of one row, starting with a bar, taken from an independent reference
-/// implementation through its raw encoding API. The rows carry the flag character, the data and the
-/// modulo 43 check character the symbology adds.
+/// Encoder tests for <see cref="HibcCodablockFSymbology"/>. Each expected row is the alternating bar and space module widths of one row, starting with a bar,
+/// taken from an independent reference implementation through its raw encoding API. The rows carry the flag character, the data and the modulo 43 check
+/// character the symbology adds.
 /// </summary>
 public class HibcCodablockFSymbologyTests
 {
@@ -56,8 +55,8 @@ public class HibcCodablockFSymbologyTests
         });
 
     /// <summary>
-    /// The symbol is the Codablock F symbol of the flag character, the data and the check character, so
-    /// an input that already carries its check character encodes the same way.
+    /// The symbol is the Codablock F symbol of the flag character, the data and the check character, so an input that already carries its check character
+    /// encodes the same way.
     /// </summary>
     [Fact]
     public void HibcCodablockF_ValidatesAGivenCheckCharacter()

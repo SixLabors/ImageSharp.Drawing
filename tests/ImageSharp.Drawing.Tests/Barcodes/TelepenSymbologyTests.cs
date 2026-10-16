@@ -6,17 +6,15 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="TelepenSymbology"/> and <see cref="TelepenNumericSymbology"/>. Each
-/// expected run string is the alternating bar and space module widths, starting with a bar, from the
-/// reference implementation's raw encoding API. The reference emits the narrow space that ends the stop
-/// code, so the test drops that trailing space before it compares.
+/// Encoder tests for <see cref="TelepenSymbology"/> and <see cref="TelepenNumericSymbology"/>. Each expected run string is the alternating bar and space module
+/// widths, starting with a bar, from the reference implementation's raw encoding API. The reference emits the narrow space that ends the stop code, so the test
+/// drops that trailing space before it compares.
 /// </summary>
 public class TelepenSymbologyTests
 {
     /// <summary>
-    /// The bars and spaces of every ASCII character, indexed by value, from the reference
-    /// implementation's table. The encoder derives them from the bit rules, so every entry is a check of
-    /// those rules.
+    /// The bars and spaces of every ASCII character, indexed by value, from the reference implementation's table. The encoder derives them from the bit rules,
+    /// so every entry is a check of those rules.
     /// </summary>
     private static readonly string[] Patterns =
     [
@@ -46,10 +44,9 @@ public class TelepenSymbologyTests
         => Assert.Equal(reference[..^1], Encode(text));
 
     /// <summary>
-    /// Every ASCII character encodes to the bars and spaces of the table. A symbol of one character is
-    /// the start code, the character, its check character and the stop code. For a value from 1 to 126
-    /// the check character has the value 127 minus it, for 127 it is 0, and for NUL alone it is
-    /// "exceptionally ASCII 127".
+    /// Every ASCII character encodes to the bars and spaces of the table. A symbol of one character is the start code, the character, its check character and
+    /// the stop code. For a value from 1 to 126 the check character has the value 127 minus it, for 127 it is 0, and for NUL alone it is "exceptionally ASCII
+    /// 127".
     /// </summary>
     [Fact]
     public void EncodesEveryAsciiCharacter()
@@ -63,9 +60,8 @@ public class TelepenSymbologyTests
     }
 
     /// <summary>
-    /// The worked example of "Telepen - Barcode Symbology Information and History": the values of
-    /// Telepen add to 717, which leaves 82 after division by 127, and 127 minus 82 is 45, the minus sign.
-    /// A sum that divides exactly gives 0, and NUL characters alone give 127.
+    /// The worked example of "Telepen - Barcode Symbology Information and History": the values of Telepen add to 717, which leaves 82 after division by 127,
+    /// and 127 minus 82 is 45, the minus sign. A sum that divides exactly gives 0, and NUL characters alone give 127.
     /// </summary>
     /// <param name="values">The character values.</param>
     /// <param name="expected">The value of the check character.</param>
@@ -77,9 +73,8 @@ public class TelepenSymbologyTests
         => Assert.Equal(expected, TelepenEncoder.CheckCharacter(values));
 
     /// <summary>
-    /// Numeric mode packs a pair of digits into the character 27 plus the pair as a number, and a digit
-    /// before X into the character 17 plus the digit. The expected runs are the reference implementation's
-    /// for the same input in numeric mode.
+    /// Numeric mode packs a pair of digits into the character 27 plus the pair as a number, and a digit before X into the character 17 plus the digit. The
+    /// expected runs are the reference implementation's for the same input in numeric mode.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="reference">The reference run string.</param>
@@ -92,8 +87,7 @@ public class TelepenSymbologyTests
         => Assert.Equal(reference[..^1], EncodeNumeric(text));
 
     /// <summary>
-    /// The printed line shows the text as given. It never shows the start code, the check character or
-    /// the stop code.
+    /// The printed line shows the text as given. It never shows the start code, the check character or the stop code.
     /// </summary>
     [Fact]
     public void PrintsTheTextAsGiven()
@@ -108,8 +102,8 @@ public class TelepenSymbologyTests
     }
 
     /// <summary>
-    /// Every character is sixteen modules, the start code, the check character and the stop code are
-    /// three more, and the runs end on the last bar of the stop code, one module before its end.
+    /// Every character is sixteen modules, the start code, the check character and the stop code are three more, and the runs end on the last bar of the stop
+    /// code, one module before its end.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]

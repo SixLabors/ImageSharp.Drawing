@@ -10,10 +10,9 @@ using ZXing;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Round-trip tests: every rendered barcode must decode back to its input through ZXing.Net, an independent
-/// decoder. This proves the images are valid scannable symbols without a human point of reference, which the
-/// module-sequence and golden image tests cannot do on their own. The standalone add-on symbologies have no
-/// decode tests because ZXing reads add-ons only as extensions of a main EAN/UPC symbol.
+/// Round-trip tests: every rendered barcode must decode back to its input through ZXing.Net, an independent decoder. This proves the images are valid scannable
+/// symbols without a human point of reference, which the module-sequence and golden image tests cannot do on their own. The standalone add-on symbologies have
+/// no decode tests because ZXing reads add-ons only as extensions of a main EAN/UPC symbol.
 /// </summary>
 public class BarcodeDecodeTests
 {
@@ -62,9 +61,8 @@ public class BarcodeDecodeTests
         => AssertDecodes(new Code128Symbology(), text, BarcodeFormat.CODE_128, text);
 
     /// <summary>
-    /// A GS1-128 symbol decodes to its element strings without the parentheses, which section 4.14
-    /// rule 2c keeps to the human readable interpretation, and without the Function 1 characters, which
-    /// are symbol overhead rather than data.
+    /// A GS1-128 symbol decodes to its element strings without the parentheses, which section 4.14 rule 2c keeps to the human readable interpretation, and
+    /// without the Function 1 characters, which are symbol overhead rather than data.
     /// </summary>
     [Theory]
     [InlineData("(01)09521234543213", "0109521234543213")]
@@ -80,18 +78,16 @@ public class BarcodeDecodeTests
         => AssertDecodes(new Ean14Symbology(), "(01)09521234543213", BarcodeFormat.CODE_128, "0109521234543213");
 
     /// <summary>
-    /// An SSCC-18 decodes to its Application Identifier and the eighteen digit Serial Shipping Container
-    /// Code.
+    /// An SSCC-18 decodes to its Application Identifier and the eighteen digit Serial Shipping Container Code.
     /// </summary>
     [Fact]
     public void Sscc18_RoundTrips()
         => AssertDecodes(new Sscc18Symbology(), "(00)106141411234567897", BarcodeFormat.CODE_128, "00106141411234567897");
 
     /// <summary>
-    /// An Intelligent Mail package barcode decodes to the routing code, the Function 1 character that
-    /// section 2.2.1 of USPS2000508 places after the ZIP Code, and the PIC. The decoder reports Function 1
-    /// characters only when it reads the symbol as GS1: the first as the symbology identifier ]C1 and the
-    /// second as the group separator.
+    /// An Intelligent Mail package barcode decodes to the routing code, the Function 1 character that section 2.2.1 of USPS2000508 places after the ZIP Code,
+    /// and the PIC. The decoder reports Function 1 characters only when it reads the symbol as GS1: the first as the symbology identifier ]C1 and the second as
+    /// the group separator.
     /// </summary>
     [Fact]
     public void IntelligentMailPackage_RoundTrips()
@@ -104,17 +100,16 @@ public class BarcodeDecodeTests
             static reader => reader.Options.AssumeGS1 = true);
 
     /// <summary>
-    /// A HIBC Code 128 decodes to the flag character, the data and the check character, which is what the
-    /// symbol carries; the delimiters belong to the human readable interpretation alone.
+    /// A HIBC Code 128 decodes to the flag character, the data and the check character, which is what the symbol carries; the delimiters belong to the human
+    /// readable interpretation alone.
     /// </summary>
     [Fact]
     public void HibcCode128_RoundTrips()
         => AssertDecodes(new HibcCode128Symbology(), "A123BJC5D6E71", BarcodeFormat.CODE_128, "+A123BJC5D6E71G");
 
     /// <summary>
-    /// A Code 39 symbol decodes to its data. The start and stop character are symbol overhead, and the
-    /// asterisks that stand for them belong to the human readable interpretation alone. The decoder is
-    /// taken out of full ASCII mode, which A.3 calls a non-standard transmission mode, so a pair such as
+    /// A Code 39 symbol decodes to its data. The start and stop character are symbol overhead, and the asterisks that stand for them belong to the human
+    /// readable interpretation alone. The decoder is taken out of full ASCII mode, which A.3 calls a non-standard transmission mode, so a pair such as
     /// <c>+A</c> reads back as the two characters the symbol carries rather than as one lowercase letter.
     /// </summary>
     [Theory]
@@ -130,8 +125,7 @@ public class BarcodeDecodeTests
             reader => reader.Options.UseCode39ExtendedMode = false);
 
     /// <summary>
-    /// A Code 93 symbol decodes to its data. The two check characters are symbol overhead, so the
-    /// decoder validates them and removes them from the result.
+    /// A Code 93 symbol decodes to its data. The two check characters are symbol overhead, so the decoder validates them and removes them from the result.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]
@@ -141,8 +135,8 @@ public class BarcodeDecodeTests
         => AssertDecodes(new Code93Symbology(), text, BarcodeFormat.CODE_93, text);
 
     /// <summary>
-    /// A Code 93 Extended symbol is an ordinary Code 93 symbol, and the decoder reverses the Table 3
-    /// substitution on its own, so the ASCII characters come back as they went in.
+    /// A Code 93 Extended symbol is an ordinary Code 93 symbol, and the decoder reverses the Table 3 substitution on its own, so the ASCII characters come back
+    /// as they went in.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]
@@ -154,14 +148,11 @@ public class BarcodeDecodeTests
         => AssertDecodes(new Code93ExtendedSymbology(), text, BarcodeFormat.CODE_93, text);
 
     /// <summary>
-    /// An Interleaved 2 of 5 symbol decodes to the digits it carries: the leading zero that makes an odd
-    /// count a pair, the data and the check digit when the symbol carries one. The decoder does not
-    /// validate a check digit, because the symbology does not require one. It does apply a length list,
-    /// which defaults to 6, 8, 10, 12 and 14 digits, so the four digit symbols name their length.
+    /// An Interleaved 2 of 5 symbol decodes to the digits it carries: the leading zero that makes an odd count a pair, the data and the check digit when the
+    /// symbol carries one. The decoder does not validate a check digit, because the symbology does not require one. It does apply a length list, which defaults
+    /// to 6, 8, 10, 12 and 14 digits, so the four digit symbols name their length.
     /// </summary>
-    /// <param name="checkDigit">
-    /// Whether the symbol carries the check digit, and whether the encoder calculates it or validates it.
-    /// </param>
+    /// <param name="checkDigit"> Whether the symbol carries the check digit, and whether the encoder calculates it or validates it. </param>
     /// <param name="text">The text to encode.</param>
     /// <param name="expected">The digits the symbol carries.</param>
     [Theory]
@@ -179,26 +170,24 @@ public class BarcodeDecodeTests
             reader => reader.Options.AllowedLengths = [4, 6]);
 
     /// <summary>
-    /// A Leitcode decodes to the fourteen digits the symbol carries, which is the data and the check
-    /// digit. The full stops and the space belong to the printed line alone.
+    /// A Leitcode decodes to the fourteen digits the symbol carries, which is the data and the check digit. The full stops and the space belong to the printed
+    /// line alone.
     /// </summary>
     [Fact]
     public void Leitcode_RoundTrips()
         => AssertDecodes(new LeitcodeSymbology(), "2134807501640", BarcodeFormat.ITF, "21348075016401");
 
     /// <summary>
-    /// An ITF-14 symbol decodes to the fourteen digits it carries. The bearer bar lies outside the quiet
-    /// zones, so the decoder finds the clear space it needs on both sides of the bars.
+    /// An ITF-14 symbol decodes to the fourteen digits it carries. The bearer bar lies outside the quiet zones, so the decoder finds the clear space it needs
+    /// on both sides of the bars.
     /// </summary>
     [Fact]
     public void Itf14_RoundTrips()
         => AssertDecodes(new Itf14Symbology(), "1540014128876", BarcodeFormat.ITF, "15400141288763");
 
     /// <summary>
-    /// A Codabar symbol decodes to its start character, its data, the check character when the symbol
-    /// carries one, and its stop character. The decoder strips the start and stop characters unless it
-    /// is asked to return them, and it does not validate a check character, because the symbology does
-    /// not define one.
+    /// A Codabar symbol decodes to its start character, its data, the check character when the symbol carries one, and its stop character. The decoder strips
+    /// the start and stop characters unless it is asked to return them, and it does not validate a check character, because the symbology does not define one.
     /// </summary>
     /// <param name="checkCharacter">Whether the symbol carries the check character, and whether the encoder calculates it or validates it.</param>
     /// <param name="text">The text to encode.</param>
@@ -216,8 +205,8 @@ public class BarcodeDecodeTests
             reader => reader.Options.ReturnCodabarStartEnd = true);
 
     /// <summary>
-    /// An MSI symbol decodes to the digits it carries, the check digits included. The decoder validates
-    /// a modulo 10 check digit only when it is asked to assume one, so it returns every digit here.
+    /// An MSI symbol decodes to the digits it carries, the check digits included. The decoder validates a modulo 10 check digit only when it is asked to assume
+    /// one, so it returns every digit here.
     /// </summary>
     /// <param name="checkDigit">The check digits the symbol carries.</param>
     /// <param name="expected">The digits the symbol carries.</param>
@@ -236,16 +225,16 @@ public class BarcodeDecodeTests
         => AssertDecodes(new PharmacodeSymbology(), "117480", BarcodeFormat.PHARMA_CODE, "117480");
 
     /// <summary>
-    /// An Identcode decodes to the twelve digits the symbol carries, which is the data and the check
-    /// digit. The full stops and the spaces belong to the printed line alone.
+    /// An Identcode decodes to the twelve digits the symbol carries, which is the data and the check digit. The full stops and the spaces belong to the printed
+    /// line alone.
     /// </summary>
     [Fact]
     public void Identcode_RoundTrips()
         => AssertDecodes(new IdentcodeSymbology(), "56310243031", BarcodeFormat.ITF, "563102430313");
 
     /// <summary>
-    /// A PZN decodes to the identifier ISO/IEC 15418 gives it, the digits and the check digit, which is
-    /// what the symbol carries; the term PZN and the spaces around the identifier are printed only.
+    /// A PZN decodes to the identifier ISO/IEC 15418 gives it, the digits and the check digit, which is what the symbol carries; the term PZN and the spaces
+    /// around the identifier are printed only.
     /// </summary>
     [Fact]
     public void Pzn8_RoundTrips()
@@ -258,8 +247,8 @@ public class BarcodeDecodeTests
             reader => reader.Options.UseCode39ExtendedMode = false);
 
     /// <summary>
-    /// A Code 32 symbol decodes to the six base 32 characters that carry the nine digit AIC code. The
-    /// letter A and the digits themselves belong to the printed line alone.
+    /// A Code 32 symbol decodes to the six base 32 characters that carry the nine digit AIC code. The letter A and the digits themselves belong to the printed
+    /// line alone.
     /// </summary>
     [Fact]
     public void Code32_RoundTrips()
@@ -285,8 +274,8 @@ public class BarcodeDecodeTests
             reader => reader.Options.UseCode39ExtendedMode = false);
 
     /// <summary>
-    /// A HIBC Code 39 decodes to the flag character, the data and the check character, which is what the
-    /// symbol carries; the delimiters belong to the human readable interpretation alone.
+    /// A HIBC Code 39 decodes to the flag character, the data and the check character, which is what the symbol carries; the delimiters belong to the human
+    /// readable interpretation alone.
     /// </summary>
     [Fact]
     public void HibcCode39_RoundTrips()
@@ -299,8 +288,8 @@ public class BarcodeDecodeTests
             reader => reader.Options.UseCode39ExtendedMode = false);
 
     /// <summary>
-    /// A Code 39 Extended symbol is an ordinary Code 39 symbol, so A.3.1 needs the decoder put into full
-    /// ASCII mode before the substituted pairs read back as the characters they stand for.
+    /// A Code 39 Extended symbol is an ordinary Code 39 symbol, so A.3.1 needs the decoder put into full ASCII mode before the substituted pairs read back as
+    /// the characters they stand for.
     /// </summary>
     [Theory]
     [InlineData("Code39")]
@@ -320,8 +309,7 @@ public class BarcodeDecodeTests
     }
 
     /// <summary>
-    /// The decoder must also read the symbol with the human readable interpretation present, proving the
-    /// text does not intrude into the bars or quiet zones.
+    /// The decoder must also read the symbol with the human readable interpretation present, proving the text does not intrude into the bars or quiet zones.
     /// </summary>
     [Fact]
     public void Ean13_RoundTrips_WithText()
@@ -332,9 +320,8 @@ public class BarcodeDecodeTests
     }
 
     /// <summary>
-    /// A Data Matrix symbol decodes to the characters it carries, whichever encodation schemes hold them:
-    /// ASCII digit pairs, C40, Text, X12, EDIFACT and Base 256. A message in format 05 or 06 decodes to
-    /// its header and trailer, which the 05 or 06 Macro stands for.
+    /// A Data Matrix symbol decodes to the characters it carries, whichever encodation schemes hold them: ASCII digit pairs, C40, Text, X12, EDIFACT and Base
+    /// 256. A message in format 05 or 06 decodes to its header and trailer, which the 05 or 06 Macro stands for.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]
@@ -364,10 +351,9 @@ public class BarcodeDecodeTests
     }
 
     /// <summary>
-    /// Section 5.6.2 of the GS1 General Specifications: the Function 1 Symbol Character at the start marks
-    /// GS1 data, and a separator after a variable length element string is transmitted as &lt;GS&gt;.
-    /// This decoder returns every Function 1 Symbol Character as &lt;GS&gt;, the leading one included,
-    /// rather than the symbology identifier ]d2 of section 5.6.3.3.
+    /// Section 5.6.2 of the GS1 General Specifications: the Function 1 Symbol Character at the start marks GS1 data, and a separator after a variable length
+    /// element string is transmitted as &lt;GS&gt;. This decoder returns every Function 1 Symbol Character as &lt;GS&gt;, the leading one included, rather than
+    /// the symbology identifier ]d2 of section 5.6.3.3.
     /// </summary>
     [Fact]
     public void Gs1DataMatrix_RoundTrips()
@@ -382,8 +368,8 @@ public class BarcodeDecodeTests
         => AssertDecodes(new HibcDataMatrixSymbology(), "A123BJC5D6E71", BarcodeFormat.DATA_MATRIX, "+A123BJC5D6E71G");
 
     /// <summary>
-    /// Section 5.9 of the GS1 General Specifications: the Data Matrix symbol carries the GS1 Digital Link URI
-    /// as plain data, so it decodes to the URI as written.
+    /// Section 5.9 of the GS1 General Specifications: the Data Matrix symbol carries the GS1 Digital Link URI as plain data, so it decodes to the URI as
+    /// written.
     /// </summary>
     [Fact]
     public void Gs1DigitalLinkDataMatrix_RoundTrips()
@@ -408,8 +394,7 @@ public class BarcodeDecodeTests
         => AssertDecodes(new QrCodeSymbology(level), text, BarcodeFormat.QR_CODE, text);
 
     /// <summary>
-    /// Section 6.3.4: Byte mode carries ISO/IEC 8859-1. The decoder guesses the character set of Byte mode
-    /// data, so the test names it.
+    /// Section 6.3.4: Byte mode carries ISO/IEC 8859-1. The decoder guesses the character set of Byte mode data, so the test names it.
     /// </summary>
     [Fact]
     public void QrCode_Iso88591RoundTrips()
@@ -432,10 +417,9 @@ public class BarcodeDecodeTests
     }
 
     /// <summary>
-    /// Sections 6.4.8.1 and 13.4 of ISO/IEC 18004: in FNC1 first position mode, a separator is "%" in
-    /// Alphanumeric mode or &lt;GS&gt; in Byte mode, both transmitted as &lt;GS&gt;, and "%%" is a "%" in the
-    /// data. The decoder returns the data without the symbology identifier ]Q3 of section 5.7.4.3 of the GS1
-    /// General Specifications.
+    /// Sections 6.4.8.1 and 13.4 of ISO/IEC 18004: in FNC1 first position mode, a separator is "%" in Alphanumeric mode or &lt;GS&gt; in Byte mode, both
+    /// transmitted as &lt;GS&gt;, and "%%" is a "%" in the data. The decoder returns the data without the symbology identifier ]Q3 of section 5.7.4.3 of the
+    /// GS1 General Specifications.
     /// </summary>
     /// <param name="text">The element strings to encode.</param>
     /// <param name="expected">The transmitted data.</param>
@@ -447,9 +431,8 @@ public class BarcodeDecodeTests
         => AssertDecodes(new Gs1QrCodeSymbology(), text, BarcodeFormat.QR_CODE, expected);
 
     /// <summary>
-    /// Section 4.1.1 of the Swiss Implementation Guidelines for the QR-bill: the data is UTF-8. The symbol
-    /// draws 46 mm wide with the Swiss cross over its centre, and the error correction recovers the modules
-    /// the cross covers. The decoder guesses the character set of Byte mode data, so the test names it.
+    /// Section 4.1.1 of the Swiss Implementation Guidelines for the QR-bill: the data is UTF-8. The symbol draws 46 mm wide with the Swiss cross over its
+    /// centre, and the error correction recovers the modules the cross covers. The decoder guesses the character set of Byte mode data, so the test names it.
     /// </summary>
     [Fact]
     public void SwissQrCode_RoundTrips()
@@ -467,8 +450,7 @@ public class BarcodeDecodeTests
     }
 
     /// <summary>
-    /// The D3 component stands outside the host QR Code symbol, so the host decodes as a QR Code symbol at
-    /// every host ratio.
+    /// The D3 component stands outside the host QR Code symbol, so the host decodes as a QR Code symbol at every host ratio.
     /// </summary>
     /// <param name="hostRatio">The width of a D3 module in host modules.</param>
     [Theory]
@@ -487,8 +469,7 @@ public class BarcodeDecodeTests
         => AssertDecodes(new HibcQrCodeSymbology(), "A123BJC5D6E71", BarcodeFormat.QR_CODE, "+A123BJC5D6E71G");
 
     /// <summary>
-    /// Aztec Code symbols decode to their text at each format: compact, full-range and HIBC with its flag and
-    /// check characters.
+    /// Aztec Code symbols decode to their text at each format: compact, full-range and HIBC with its flag and check characters.
     /// </summary>
     /// <param name="kind">The symbology.</param>
     /// <param name="text">The text.</param>
@@ -526,8 +507,7 @@ public class BarcodeDecodeTests
             static reader => reader.Options.PureBarcode = true);
 
     /// <summary>
-    /// Section 5.9 of the GS1 General Specifications: the QR Code symbol carries the GS1 Digital Link URI as
-    /// plain data, so it decodes to the URI as written.
+    /// Section 5.9 of the GS1 General Specifications: the QR Code symbol carries the GS1 Digital Link URI as plain data, so it decodes to the URI as written.
     /// </summary>
     [Fact]
     public void Gs1DigitalLinkQrCode_RoundTrips()
@@ -551,8 +531,8 @@ public class BarcodeDecodeTests
         BarcodeOptions options,
         Action<BarcodeReaderGeneric> configureReader)
     {
-        // The image holds the symbol and a margin on every side, measured rather than assumed, so a
-        // symbology whose symbol is wider than the next is not silently clipped.
+        // The image holds the symbol and a margin on every side, measured rather than assumed, so a symbology whose symbol is wider than the next is not
+        // silently clipped.
         PointF origin = new(20, 20);
         RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, text, options, origin);
 
@@ -579,8 +559,7 @@ public class BarcodeDecodeTests
     }
 
     /// <summary>
-    /// Draws at a one point X dimension and 216 dots per inch, 3 px per module, with a 40 point bar
-    /// height, 120 px.
+    /// Draws at a one point X dimension and 216 dots per inch, 3 px per module, with a 40 point bar height, 120 px.
     /// </summary>
     /// <returns>The options.</returns>
     private static BarcodeOptions CreateOptions()

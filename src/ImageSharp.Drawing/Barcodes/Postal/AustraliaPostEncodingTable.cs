@@ -4,15 +4,13 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Specifies the encoding table of the customer information field of an Australia Post 4-state barcode.
-/// The Customer Barcoding Technical Specifications state that the field can be coded by either of the
-/// two tables.
+/// Specifies the encoding table of the customer information field of an Australia Post 4-state barcode. The Customer Barcoding Technical Specifications state
+/// that the field can be coded by either of the two tables.
 /// </summary>
 public enum AustraliaPostEncodingTable
 {
     /// <summary>
-    /// The C Encoding Table: three bars per character, for capital letters, small letters, digits, the
-    /// space and the number sign.
+    /// The C Encoding Table: three bars per character, for capital letters, small letters, digits, the space and the number sign.
     /// </summary>
     Character,
 

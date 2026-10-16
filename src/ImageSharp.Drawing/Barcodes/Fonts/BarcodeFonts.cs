@@ -6,9 +6,8 @@ using SixLabors.Fonts;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The house fonts for barcode text. They are built clean-room from the dimensioned character drawings of
-/// the OCR standards. No symbology selects them. To use one, set it on
-/// <see cref="BarcodeOptions.Font"/> or <see cref="BarcodeOptions.CaptionFont"/> at the size you need.
+/// The house fonts for barcode text. They are built clean-room from the dimensioned character drawings of the OCR standards. No symbology selects them. To use
+/// one, set it on <see cref="BarcodeOptions.Font"/> or <see cref="BarcodeOptions.CaptionFont"/> at the size you need.
 /// </summary>
 public static class BarcodeFonts
 {
@@ -22,8 +21,8 @@ public static class BarcodeFonts
     public static FontFamily OcrA => OcrAFamily.Value;
 
     /// <summary>
-    /// Gets the SixLabors OCR-B font family. It holds the barcode repertoire of the constant strokewidth
-    /// OCR-B design: the digits, the capitals, the Code 39 symbols and the EAN quiet zone indicators.
+    /// Gets the SixLabors OCR-B font family. It holds the barcode repertoire of the constant strokewidth OCR-B design: the digits, the capitals, the Code 39
+    /// symbols and the EAN quiet zone indicators.
     /// </summary>
     public static FontFamily OcrB => OcrBFamily.Value;
 

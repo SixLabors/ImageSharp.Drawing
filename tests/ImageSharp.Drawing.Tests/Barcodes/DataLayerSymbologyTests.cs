@@ -6,17 +6,15 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for the data layers over EAN-13 and EAN-8: ISBN (ISO 2108), ISMN (ISO 10957),
-/// ISSN (ISO 3297) and the Marks &amp; Spencer in-house symbology. Module sequences are asserted against
-/// reference vectors generated with an independent reference implementation; caption and layout assertions
-/// follow the standards and, for M&amp;S which has no public specification, that implementation itself.
+/// Encoder tests for the data layers over EAN-13 and EAN-8: ISBN (ISO 2108), ISMN (ISO 10957), ISSN (ISO 3297) and the Marks &amp; Spencer in-house symbology.
+/// Module sequences are asserted against reference vectors generated with an independent reference implementation; caption and layout assertions follow the
+/// standards and, for M&amp;S which has no public specification, that implementation itself.
 /// </summary>
 public class DataLayerSymbologyTests
 {
     /// <summary>
-    /// All accepted ISBN input forms encode the same EAN-13: full ISBN-13, ISBN-13 without its check digit,
-    /// ISBN-10 with its modulus 11 check digit, and ISBN-10 without it (the second pair converts through the
-    /// 978 prefix; the last case computes an X check internally, proving X handling).
+    /// All accepted ISBN input forms encode the same EAN-13: full ISBN-13, ISBN-13 without its check digit, ISBN-10 with its modulus 11 check digit, and
+    /// ISBN-10 without it (the second pair converts through the 978 prefix; the last case computes an X check internally, proving X handling).
     /// </summary>
     [Theory]
     [InlineData("978-0-306-40615-7", "1,1,1,1,3,1,2,3,1,2,1,1,1,2,3,1,4,1,1,1,1,2,3,1,1,1,4,1,1,1,1,1,1,1,3,2,3,2,1,1,1,1,1,4,2,2,2,1,1,2,3,1,1,3,1,2,1,1,1")]
@@ -32,9 +30,8 @@ public class DataLayerSymbologyTests
         BarcodeOptions options = CreateTextOptions();
         SymbolEncoder.Encode(new IsbnSymbology(), "978-0-306-40615", options, (ref symbol) =>
         {
-            // The caption prints the hyphenated ISBN with the EAN-13 check digit above the bars, spanning the
-            // main body of the symbol, and the bars shift down to clear it. The emitter derives the caption
-            // size from that span, so the placement scale is neutral.
+            // The caption prints the hyphenated ISBN with the EAN-13 check digit above the bars, spanning the main body of the symbol, and the bars shift down
+            // to clear it. The emitter derives the caption size from that span, so the placement scale is neutral.
             BarcodeTextPlacement caption = symbol.Text[^1];
             Assert.Equal("ISBN 978-0-306-40615-7", symbol.TextOf(caption).ToString());
             Assert.Equal(BarcodeTextSide.AboveBars, caption.Side);
@@ -45,8 +42,8 @@ public class DataLayerSymbologyTests
             Assert.True(caption.IsCaption);
             Assert.Equal(14, symbol.Text.Length);
 
-            // The room a caption needs above the bars belongs to the renderer, which is what knows the font,
-            // so the symbol itself leaves every bar top aligned whether or not it carries a caption.
+            // The room a caption needs above the bars belongs to the renderer, which is what knows the font, so the symbol itself leaves every bar top aligned
+            // whether or not it carries a caption.
             Assert.All(symbol.BarTops.ToArray(), top => Assert.Equal(0, top));
         });
 
@@ -71,8 +68,8 @@ public class DataLayerSymbologyTests
         => Assert.Throws<ArgumentException>(() => Encode(new IsbnSymbology(), text));
 
     /// <summary>
-    /// Both ISMN input forms: the thirteen digit 9790 form with its check digit, and the older M form
-    /// without one. ISO 10957:2009 defines the check digit of both forms as the EAN-13 check digit.
+    /// Both ISMN input forms: the thirteen digit 9790 form with its check digit, and the older M form without one. ISO 10957:2009 defines the check digit of
+    /// both forms as the EAN-13 check digit.
     /// </summary>
     [Theory]
     [InlineData("979-0-2600-0043-8", "1,1,1,1,3,1,2,2,1,1,3,1,1,2,3,2,1,2,2,4,1,1,1,3,2,1,1,1,1,1,1,1,3,2,1,1,3,2,1,1,3,2,1,1,1,1,3,2,1,4,1,1,1,2,1,3,1,1,1")]
@@ -103,8 +100,7 @@ public class DataLayerSymbologyTests
         => Assert.Throws<ArgumentException>(() => Encode(new IsmnSymbology(), text));
 
     /// <summary>
-    /// The ISSN encodes 977, the seven data digits and the sequence variant; the second case supplies an
-    /// X check character and an explicit 05 variant.
+    /// The ISSN encodes 977, the seven data digits and the sequence variant; the second case supplies an X check character and an explicit 05 variant.
     /// </summary>
     [Theory]
     [InlineData("0317-8471", "1,1,1,1,3,1,2,2,1,3,1,1,1,2,3,1,4,1,1,1,2,2,2,1,3,1,2,1,1,1,1,1,1,2,1,3,1,1,3,2,1,3,1,2,3,2,1,1,3,2,1,1,2,2,2,1,1,1,1")]
@@ -131,8 +127,7 @@ public class DataLayerSymbologyTests
         => Assert.Throws<ArgumentException>(() => Encode(new IssnSymbology(), text));
 
     /// <summary>
-    /// A seven character M&amp;S number zero pads to the same eight digit EAN-8 as its full form, so both
-    /// inputs produce identical bars.
+    /// A seven character M&amp;S number zero pads to the same eight digit EAN-8 as its full form, so both inputs produce identical bars.
     /// </summary>
     [Theory]
     [InlineData("0642118")]
@@ -148,8 +143,8 @@ public class DataLayerSymbologyTests
         BarcodeOptions options = CreateTextOptions();
         SymbolEncoder.Encode(new MandsSymbology(), "0642118", options, (ref symbol) =>
         {
-            // Per the reference implementation: the centre guard bars stay at digit height while the outer guards extend, the padded
-            // leading zero and the final cell are hidden, and M and S print in the quiet zones.
+            // Per the reference implementation: the centre guard bars stay at digit height while the outer guards extend, the padded leading zero and the final
+            // cell are hidden, and M and S print in the quiet zones.
             float digitHeight = symbol.BarHeights.ToArray().Min();
             Assert.Equal(digitHeight, symbol.BarHeights[10]);
             Assert.Equal(digitHeight, symbol.BarHeights[11]);

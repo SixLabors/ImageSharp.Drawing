@@ -7,10 +7,9 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Encodation for the Japan Post customer barcode. A symbol is a start code of two bars, twenty codes of
-/// three bars, a check code of three bars and a stop code of two bars. The codes are the digits, the
-/// hyphen and the control codes CC1 to CC8; a letter is CC1, CC2 or CC3 followed by a digit, and CC4 fills
-/// the positions the data leaves empty.
+/// Encodation for the Japan Post customer barcode. A symbol is a start code of two bars, twenty codes of three bars, a check code of three bars and a stop code
+/// of two bars. The codes are the digits, the hyphen and the control codes CC1 to CC8; a letter is CC1, CC2 or CC3 followed by a digit, and CC4 fills the
+/// positions the data leaves empty.
 /// </summary>
 internal static class JapanPostEncoder
 {
@@ -50,11 +49,9 @@ internal static class JapanPostEncoder
     public const int Modulus = 19;
 
     /// <summary>
-    /// The dimensions of page 12 of the Japan Post zip code and barcode manual at the 10 point size: a bar
-    /// width of 0.6 mm, a bar pitch of 1.2 mm, so a space of 0.6 mm, a timing bar of 1.2 mm and a long bar
-    /// of 3.6 mm, so an extender of 1.2 mm above or below the timing bar. Page 13: "2mm以上の空白", a clear
-    /// space of at least 2 mm above, below, left and right of the barcode, which also stands between the
-    /// bars and the human readable interpretation.
+    /// The dimensions of page 12 of the Japan Post zip code and barcode manual at the 10 point size: a bar width of 0.6 mm, a bar pitch of 1.2 mm, so a space
+    /// of 0.6 mm, a timing bar of 1.2 mm and a long bar of 3.6 mm, so an extender of 1.2 mm above or below the timing bar. Page 13: "2mm以上の空白", a clear space
+    /// of at least 2 mm above, below, left and right of the barcode, which also stands between the bars and the human readable interpretation.
     /// </summary>
     public static readonly FourStateMetrics Metrics = new(
         0.6,
@@ -69,8 +66,7 @@ internal static class JapanPostEncoder
         (float)(2 / 0.6));
 
     /// <summary>
-    /// Gets the bar states of every code value, three per code, as <see cref="FourState"/> values: the
-    /// digits 0 to 9, the hyphen and CC1 to CC8.
+    /// Gets the bar states of every code value, three per code, as <see cref="FourState"/> values: the digits 0 to 9, the hyphen and CC1 to CC8.
     /// </summary>
     private static ReadOnlySpan<byte> Patterns =>
     [
@@ -128,9 +124,9 @@ internal static class JapanPostEncoder
     public static int CheckCode(ReadOnlySpan<byte> codes)
     {
         int sum = 0;
-        for (int i = 0; i < codes.Length; i++)
+        foreach (byte code in codes)
         {
-            sum += codes[i];
+            sum += code;
         }
 
         return (Modulus - (sum % Modulus)) % Modulus;
@@ -146,9 +142,9 @@ internal static class JapanPostEncoder
         states[0] = FourState.Full;
         states[1] = FourState.Descender;
         int bar = 2;
-        for (int i = 0; i < codes.Length; i++)
+        foreach (byte code in codes)
         {
-            bar = Append(codes[i], states, bar);
+            bar = Append(code, states, bar);
         }
 
         bar = Append(CheckCode(codes), states, bar);
@@ -156,6 +152,13 @@ internal static class JapanPostEncoder
         states[bar + 1] = FourState.Full;
     }
 
+    /// <summary>
+    /// Writes the three bar states of a code.
+    /// </summary>
+    /// <param name="code">The code value.</param>
+    /// <param name="states">The bar states.</param>
+    /// <param name="bar">The index of the first of the three bars.</param>
+    /// <returns>The index after the three bars.</returns>
     private static int Append(int code, Span<FourState> states, int bar)
     {
         for (int i = 0; i < BarsPerCode; i++)
