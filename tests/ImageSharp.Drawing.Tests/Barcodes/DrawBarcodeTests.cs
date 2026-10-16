@@ -935,6 +935,12 @@ public class DrawBarcodeTests
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void HanXin<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new HanXinSymbology(), "Han Xin Code", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void D3Aqr<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new D3AqrSymbology(2842), "HTTPS://ID.GS1.ORG/01/09521234543213/22/ABC%2D123?99=XYZ-987", CreateMatrixOptions());
