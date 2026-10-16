@@ -20,8 +20,7 @@ public sealed class RawLinearSymbology : BarcodeSymbology
     public const int MaximumLength = 2500;
 
     /// <summary>
-    /// The bar height as a fraction of the symbol width when the caller sets no height: the 15 per cent
-    /// of Code 39 and Codabar.
+    /// The bar height as a fraction of the symbol width when the caller sets no height: 15 per cent.
     /// </summary>
     private const float NominalBarHeightFraction = 0.15F;
 

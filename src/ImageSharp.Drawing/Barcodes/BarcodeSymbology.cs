@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Helpers;
+
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -32,4 +34,19 @@ public abstract class BarcodeSymbology
     /// <param name="symbol">The symbol to write. It is empty on entry.</param>
     /// <exception cref="ArgumentException">The text is not valid for the symbology.</exception>
     internal abstract void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol);
+
+    /// <summary>
+    /// Validates that the text is the ASCII digits 0 to 9 alone. The vectorized search finds the first other
+    /// character, and only then is the code point there decoded for the message.
+    /// </summary>
+    /// <param name="text">The text.</param>
+    /// <exception cref="ArgumentException">The text has a character that is not a digit.</exception>
+    internal static void ValidateDigits(ReadOnlySpan<char> text)
+    {
+        int index = text.IndexOfAnyExceptInRange('0', '9');
+        if (index >= 0)
+        {
+            throw new ArgumentException($"Only the digits 0 to 9 are accepted; got {text.CodePointAt(index).ToDisplayString()}.", nameof(text));
+        }
+    }
 }

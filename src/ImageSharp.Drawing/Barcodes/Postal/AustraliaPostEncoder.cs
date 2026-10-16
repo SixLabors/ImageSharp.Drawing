@@ -44,11 +44,6 @@ internal static class AustraliaPostEncoder
     private const int TrailingBars = 14;
 
     /// <summary>
-    /// The primitive polynomial of the field, which the specification gives as 1 + x + x^6.
-    /// </summary>
-    private const int PrimitivePolynomial = 0b1000011;
-
-    /// <summary>
     /// The dimensions the specification gives as ranges, taken at the middle of each range: a bar width of
     /// 0.5 mm from "0.4" to "0.6", a tracker of 1.3 mm from "1.0" to "1.6", an ascender or descender bar of
     /// 3.15 mm from "2.6" to "3.7", so an extender of 1.85 mm, and a bar density of 23.5 bars per 25.4 mm
@@ -69,11 +64,10 @@ internal static class AustraliaPostEncoder
         BarcodeTextSide.AboveBars,
         (float)(2 / 0.5));
 
-    private static readonly byte[] Exp = BuildExp();
-
-    private static readonly byte[] Log = BuildLog();
-
-    private static readonly byte[] Generator = BuildGenerator();
+    /// <summary>
+    /// The field of the parity symbols: GF(64) with the primitive polynomial 1 + x + x^6.
+    /// </summary>
+    private static readonly GaloisField Field = new(64, 67);
 
     /// <summary>
     /// Gets the N Encoding Table: the two bar values of every digit.
@@ -131,7 +125,7 @@ internal static class AustraliaPostEncoder
         }
 
         ReadOnlySpan<char> sortingCode = text.AsSpan(2, 8);
-        ValidateDigits(sortingCode, nameof(text));
+        BarcodeSymbology.ValidateDigits(sortingCode);
         if (formatControlCode is "00" && sortingCode is not "00000000")
         {
             throw new ArgumentException($"The Null Customer Barcode is only valid with the sorting code 00000000; got {text.Substring(2, 8)}.", nameof(text));
@@ -160,7 +154,7 @@ internal static class AustraliaPostEncoder
 
         if (table == AustraliaPostEncodingTable.Numeric)
         {
-            ValidateDigits(customer, nameof(text));
+            BarcodeSymbology.ValidateDigits(customer);
             for (int i = 0; i < customer.Length; i++)
             {
                 bar = AppendNumeric(customer[i], values, bar);
@@ -168,12 +162,15 @@ internal static class AustraliaPostEncoder
         }
         else
         {
-            for (int i = 0; i < customer.Length; i++)
+            // Walking code points reports a surrogate pair, or a lone surrogate, as the one character it is.
+            SpanCodePointEnumerator codePoints = customer.EnumerateCodePoints();
+            while (codePoints.MoveNext())
             {
-                int index = CharacterSet.IndexOf(customer[i]);
+                CodePoint current = codePoints.Current;
+                int index = current.IsAscii ? CharacterSet.IndexOf((char)current.Value) : -1;
                 if (index < 0)
                 {
-                    throw new ArgumentException($"The C Encoding Table has no character {new CodePoint(customer[i]).ToDisplayString()}.", nameof(text));
+                    throw new ArgumentException($"The C Encoding Table has no character {current.ToDisplayString()}.", nameof(text));
                 }
 
                 CharacterTable.Slice(index * 3, 3).CopyTo(values[bar..]);
@@ -185,15 +182,15 @@ internal static class AustraliaPostEncoder
         values[bar..parityStart].Fill(3);
 
         int dataSymbols = (parityStart - 2) / 3;
-        InlineArray24<byte> symbolStorage = default;
-        Span<byte> symbols = ((Span<byte>)symbolStorage)[..dataSymbols];
+        InlineArray24<int> symbolStorage = default;
+        Span<int> symbols = ((Span<int>)symbolStorage)[..dataSymbols];
         for (int i = 0; i < dataSymbols; i++)
         {
             symbols[i] = SymbolValue(values, 2 + (i * 3));
         }
 
-        InlineArray4<byte> parityStorage = default;
-        Span<byte> parity = parityStorage;
+        InlineArray4<int> parityStorage = default;
+        Span<int> parity = parityStorage;
         Parity(symbols, parity);
         for (int i = 0; i < ParitySymbols; i++)
         {
@@ -230,31 +227,18 @@ internal static class AustraliaPostEncoder
     /// <summary>
     /// Calculates the four parity symbols of the Reed Solomon code: the remainder of the data polynomial,
     /// with the first symbol as its highest term, multiplied by x^4 and divided by the generator
-    /// polynomial "(x-α)(x-α²)(x-α³)(x-α⁴)".
+    /// polynomial "(x-α)(x-α²)(x-α³)(x-α⁴)". The field is GF(64) with the primitive polynomial 1 + x + x^6
+    /// and the generating element α = 000010.
     /// </summary>
     /// <param name="data">The data symbols, each a value of 0 to 63, the first symbol first.</param>
     /// <param name="parity">The buffer that receives the parity symbols C3, C2, C1 and C0.</param>
-    public static void Parity(ReadOnlySpan<byte> data, Span<byte> parity)
+    public static void Parity(ReadOnlySpan<int> data, Span<int> parity)
     {
-        // At most 21 data symbols and the four parity symbols.
-        InlineArray32<byte> bufferStorage = default;
-        Span<byte> buffer = ((Span<byte>)bufferStorage)[..(data.Length + ParitySymbols)];
-        data.CopyTo(buffer);
-        for (int i = 0; i < data.Length; i++)
-        {
-            byte coefficient = buffer[i];
-            if (coefficient == 0)
-            {
-                continue;
-            }
-
-            for (int j = 0; j <= ParitySymbols; j++)
-            {
-                buffer[i + j] ^= Multiply(Generator[ParitySymbols - j], coefficient);
-            }
-        }
-
-        buffer[data.Length..].CopyTo(parity);
+        // The roots start at the first power of α.
+        InlineArray4<int> generatorStorage = default;
+        Span<int> generator = generatorStorage;
+        Field.Generator(1, generator);
+        Field.Remainder(data, 1, data.Length, generator, parity);
     }
 
     /// <summary>
@@ -264,8 +248,8 @@ internal static class AustraliaPostEncoder
     /// <param name="values">The bar values.</param>
     /// <param name="start">The index of the first of the three bars.</param>
     /// <returns>The decimal value.</returns>
-    public static byte SymbolValue(ReadOnlySpan<byte> values, int start)
-        => (byte)((values[start] * 16) + (values[start + 1] * 4) + values[start + 2]);
+    public static int SymbolValue(ReadOnlySpan<byte> values, int start)
+        => (values[start] * 16) + (values[start + 1] * 4) + values[start + 2];
 
     /// <summary>
     /// Builds the text representation, which Diagram 14 shows as the format control code, the sorting
@@ -277,7 +261,7 @@ internal static class AustraliaPostEncoder
     /// <param name="parity">The parity symbols.</param>
     /// <param name="line">The buffer that receives the text representation.</param>
     /// <returns>The length of the text representation.</returns>
-    private static int TextRepresentation(string text, ReadOnlySpan<byte> parity, Span<char> line)
+    private static int TextRepresentation(string text, ReadOnlySpan<int> parity, Span<char> line)
     {
         ValueStringBuilder builder = new(line);
         builder.Append(text.AsSpan(0, 2));
@@ -304,79 +288,16 @@ internal static class AustraliaPostEncoder
         return builder.Length;
     }
 
+    /// <summary>
+    /// Writes the two bar values of a digit by the N Encoding Table.
+    /// </summary>
+    /// <param name="digit">The digit.</param>
+    /// <param name="values">The bar values.</param>
+    /// <param name="bar">The index of the first of the two bars.</param>
+    /// <returns>The index after the two bars.</returns>
     private static int AppendNumeric(char digit, Span<byte> values, int bar)
     {
         NumericTable.Slice((digit - '0') * 2, 2).CopyTo(values[bar..]);
         return bar + 2;
-    }
-
-    private static void ValidateDigits(ReadOnlySpan<char> text, string paramName)
-    {
-        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
-        while (codePoints.MoveNext())
-        {
-            CodePoint current = codePoints.Current;
-            if (!current.IsAsciiDigit())
-            {
-                throw new ArgumentException($"The field carries only digits; got {current.ToDisplayString()}.", paramName);
-            }
-        }
-    }
-
-    private static byte Multiply(byte a, byte b)
-        => a == 0 || b == 0 ? (byte)0 : Exp[(Log[a] + Log[b]) % 63];
-
-    /// <summary>
-    /// Builds the powers of the generating element, which the specification gives as α = 000010.
-    /// </summary>
-    /// <returns>The 63 powers.</returns>
-    private static byte[] BuildExp()
-    {
-        byte[] exp = new byte[63];
-        int value = 1;
-        for (int i = 0; i < exp.Length; i++)
-        {
-            exp[i] = (byte)value;
-            value <<= 1;
-            if ((value & 64) != 0)
-            {
-                value ^= PrimitivePolynomial;
-            }
-        }
-
-        return exp;
-    }
-
-    private static byte[] BuildLog()
-    {
-        byte[] log = new byte[64];
-        for (int i = 0; i < Exp.Length; i++)
-        {
-            log[Exp[i]] = (byte)i;
-        }
-
-        return log;
-    }
-
-    /// <summary>
-    /// Multiplies out the generator polynomial, whose coefficients stand by power of x.
-    /// </summary>
-    /// <returns>The five coefficients.</returns>
-    private static byte[] BuildGenerator()
-    {
-        byte[] generator = [1];
-        for (int root = 1; root <= ParitySymbols; root++)
-        {
-            byte[] next = new byte[generator.Length + 1];
-            for (int i = 0; i < generator.Length; i++)
-            {
-                next[i + 1] ^= generator[i];
-                next[i] ^= Multiply(generator[i], Exp[root]);
-            }
-
-            generator = next;
-        }
-
-        return generator;
     }
 }

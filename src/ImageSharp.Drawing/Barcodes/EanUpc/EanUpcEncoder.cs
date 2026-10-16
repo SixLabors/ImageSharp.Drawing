@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts;
-using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
@@ -50,13 +48,6 @@ internal static class EanUpcEncoder
     /// zones at 10/12 of the digit size.
     /// </summary>
     public const float QuietZoneDigitScale = 10F / 12F;
-
-    /// <summary>
-    /// The smallest size in points that any text prints at. Section 8.1 of the ISBN Users' Manual: "The
-    /// ISBN should always be printed in type large enough to be easily legible (i.e., 9-point or
-    /// larger)." Section 7 of the ISMN Users' Manual gives the same floor.
-    /// </summary>
-    public const float MinimumTextPoints = 9F;
 
     /// <summary>
     /// The width of an EAN-8 symbol in modules.
@@ -159,7 +150,7 @@ internal static class EanUpcEncoder
     public static ReadOnlySpan<char> ValidateAndApplyCheckDigit(ReadOnlySpan<char> text, int dataLength, Span<char> destination)
     {
         Guard.MustBeBetweenOrEqualTo(text.Length, dataLength, dataLength + 1, nameof(text));
-        ValidateDigits(text);
+        BarcodeSymbology.ValidateDigits(text);
 
         int check = Gs1Data.ComputeCheckDigit(text[..dataLength]);
         if (text.Length > dataLength && text[dataLength] - '0' != check)
@@ -170,28 +161,6 @@ internal static class EanUpcEncoder
         text[..dataLength].CopyTo(destination);
         destination[dataLength] = (char)('0' + check);
         return destination[..(dataLength + 1)];
-    }
-
-    /// <summary>
-    /// Validates that every character of the text is a decimal digit 0-9.
-    /// </summary>
-    /// <param name="text">The input text.</param>
-    /// <exception cref="ArgumentException">The text contains a non-digit character.</exception>
-    public static void ValidateDigits(ReadOnlySpan<char> text)
-    {
-        // Walking code points rather than UTF-16 units reports a surrogate pair as the one character it
-        // is, instead of showing half of it back to the caller.
-        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
-        while (codePoints.MoveNext())
-        {
-            CodePoint current = codePoints.Current;
-            if (!current.IsAsciiDigit())
-            {
-                throw new ArgumentException(
-                    $"Only the digits 0-9 are accepted; got {current.ToDisplayString()}.",
-                    nameof(text));
-            }
-        }
     }
 
     /// <summary>
@@ -268,31 +237,6 @@ internal static class EanUpcEncoder
         {
             heights[guard] = barHeight + GuardExtension;
         }
-    }
-
-    /// <summary>
-    /// Resolves the font an ISBN, ISMN or ISSN caption prints in. Under
-    /// <see cref="BarcodeOptions.FitCaptionToSymbolWidth"/> the size is the one that spans the bars.
-    /// Otherwise the font keeps its own size. The 9 point floor wins over both, because it is the one
-    /// size rule the standards state, and a caption that cannot fit at 9 point widens the drawing.
-    /// </summary>
-    /// <param name="caption">The caption text.</param>
-    /// <param name="spanModules">The width the caption prints across, in modules.</param>
-    /// <param name="moduleWidth">The width of one module in pixels.</param>
-    /// <param name="options">The options that carry the fonts and the resolution.</param>
-    /// <returns>The font to print the caption with.</returns>
-    public static Font ResolveCaptionFont(ReadOnlySpan<char> caption, float spanModules, float moduleWidth, BarcodeOptions options)
-    {
-        Font font = options.CaptionFont ?? options.Font!;
-        float size = font.Size;
-        if (options.FitCaptionToSymbolWidth)
-        {
-            float width = TextMeasurer.Measure(caption, BarcodeTextOptionsFactory.Create(font, options.Dpi)).RenderableBounds.Width;
-            size = font.Size * spanModules * moduleWidth / width;
-        }
-
-        size = MathF.Max(size, MinimumTextPoints);
-        return size == font.Size ? font : new Font(font, size);
     }
 
     /// <summary>
@@ -396,8 +340,9 @@ internal static class EanUpcEncoder
         if (options.Font is not null)
         {
             symbol.ReserveText(8, 8);
-            AddDigits(digits[..4], 3F, 7F, BarcodeTextSide.BelowBars, barHeight, ref symbol);
-            AddDigits(digits[4..], 36F, 7F, BarcodeTextSide.BelowBars, barHeight, ref symbol);
+            float textEdge = barHeight + BarcodeTextPlacement.Clearance;
+            AddDigits(digits[..4], 3F, 7F, BarcodeTextSide.BelowBars, textEdge, ref symbol);
+            AddDigits(digits[4..], 36F, 7F, BarcodeTextSide.BelowBars, textEdge, ref symbol);
         }
 
         symbol.EndLinear(7, 7);

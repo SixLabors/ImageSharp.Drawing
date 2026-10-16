@@ -12,9 +12,12 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// elements wide, three bars and three spaces of one to four modules, and carries eleven modules. The
 /// stop character is the one exception: seven elements over thirteen modules.
 /// <para>
-/// Code set selection follows Table 5-25 of the GS1 General Specifications: start in the set that reaches
-/// the furthest before it must change, switch to code set C for any run of four or more digits, and shift
-/// for a single character rather than latch when the following character returns to the current set.
+/// A GS1 symbol starts with Start C and a Function 1 character, step 1 of section 5.4.7.6 of the GS1 General
+/// Specifications. Other text starts in code set C before four or more digits or before two digits that are
+/// the whole text, and otherwise in the one of code sets A and B that carries the first character only one
+/// of them carries. A run of four or more digits changes to code set C, after its first digit when the run
+/// is odd, as step 3 does. A character that only the other of code sets A and B carries takes a Shift when
+/// the next such character is in the current code set, and a code set change otherwise.
 /// </para>
 /// </summary>
 internal static class Code128Encoder
@@ -36,55 +39,91 @@ internal static class Code128Encoder
     public const int MaximumLength = 500;
 
     /// <summary>
-    /// The nominal X dimension in millimetres: the 0.495 mm of the general distribution environment,
-    /// section 5.4.7.1 of the GS1 General Specifications.
+    /// The nominal X dimension in millimetres: the 0.495 mm of logistic units scanned in general
+    /// distribution, Table 5-51 of the GS1 General Specifications.
     /// </summary>
     public const double NominalXDimension = 0.495;
 
-    private const int StartA = 103;
-    private const int StartB = 104;
-    private const int StartC = 105;
-    private const int Stop = 106;
-    private const int LatchA = 101;
-    private const int LatchB = 100;
-    private const int LatchC = 99;
+    /// <summary>
+    /// The symbol character value of Shift, which changes code set A to B, or B to A, for one character.
+    /// </summary>
     private const int Shift = 98;
 
     /// <summary>
-    /// The longest input that encodes in the inline buffers: 128 values, two for each character, and 256
-    /// distance bytes, four for each character. Section 5.4.1 caps a GS1-128 symbol at 48 data characters,
+    /// The symbol character value of Code C, which changes code set A or B to code set C.
+    /// </summary>
+    private const int LatchC = 99;
+
+    /// <summary>
+    /// The symbol character value of Code B, which changes code set A or C to code set B.
+    /// </summary>
+    private const int LatchB = 100;
+
+    /// <summary>
+    /// The symbol character value of Code A, which changes code set B or C to code set A.
+    /// </summary>
+    private const int LatchA = 101;
+
+    /// <summary>
+    /// The symbol character value of Start A.
+    /// </summary>
+    private const int StartA = 103;
+
+    /// <summary>
+    /// The symbol character value of Start B.
+    /// </summary>
+    private const int StartB = 104;
+
+    /// <summary>
+    /// The symbol character value of Start C.
+    /// </summary>
+    private const int StartC = 105;
+
+    /// <summary>
+    /// The symbol character value of the stop character, the one character of seven elements.
+    /// </summary>
+    private const int Stop = 106;
+
+    /// <summary>
+    /// The modulus of the symbol check character, section 5.4.3.6.
+    /// </summary>
+    private const int CheckModulus = 103;
+
+    /// <summary>
+    /// The longest input that encodes in the inline buffers: 128 values, two for each character, and 192
+    /// distance bytes, three for each character. Section 5.4.1 caps a GS1-128 symbol at 48 data characters,
     /// so every conforming GS1-128 symbol encodes inline.
     /// </summary>
     private const int InlineLength = 64;
 
     /// <summary>
-    /// The nominal bar height in modules. Section 5.4.7.1 sets the symbol height at 32 millimetres for the
-    /// 0.495 millimetre X-dimension of the general distribution environment, which is 64.6 modules.
+    /// The nominal bar height in modules: the minimum symbol height of 31.75 mm at the X dimension of
+    /// 0.495 mm, Table 5-51 of the GS1 General Specifications.
     /// </summary>
-    private const float NominalBarHeight = 64.6F;
+    private const float NominalBarHeight = (float)(31.75 / NominalXDimension);
 
     /// <summary>
-    /// Gets the element widths of every symbol character, packed four bits per element, most significant
-    /// element first. Table 5-25 of the GS1 General Specifications lists them: six elements each, three
-    /// bars and three spaces of one to four modules, except the stop character which takes seven. The
-    /// leading nibble records the element count and is never read as an element.
+    /// Gets the element widths of every symbol character, packed four bits per element, the first element
+    /// in the highest bits. Table 5-25 of the GS1 General Specifications lists them: six elements each, three
+    /// bars and three spaces of one to four modules, except the stop character, <see cref="Stop"/>, which
+    /// takes seven.
     /// </summary>
-    public static ReadOnlySpan<uint> Patterns =>
+    private static ReadOnlySpan<uint> Patterns =>
     [
-        0x6212222, 0x6222122, 0x6222221, 0x6121223, 0x6121322, 0x6131222, 0x6122213, 0x6122312,
-        0x6132212, 0x6221213, 0x6221312, 0x6231212, 0x6112232, 0x6122132, 0x6122231, 0x6113222,
-        0x6123122, 0x6123221, 0x6223211, 0x6221132, 0x6221231, 0x6213212, 0x6223112, 0x6312131,
-        0x6311222, 0x6321122, 0x6321221, 0x6312212, 0x6322112, 0x6322211, 0x6212123, 0x6212321,
-        0x6232121, 0x6111323, 0x6131123, 0x6131321, 0x6112313, 0x6132113, 0x6132311, 0x6211313,
-        0x6231113, 0x6231311, 0x6112133, 0x6112331, 0x6132131, 0x6113123, 0x6113321, 0x6133121,
-        0x6313121, 0x6211331, 0x6231131, 0x6213113, 0x6213311, 0x6213131, 0x6311123, 0x6311321,
-        0x6331121, 0x6312113, 0x6312311, 0x6332111, 0x6314111, 0x6221411, 0x6431111, 0x6111224,
-        0x6111422, 0x6121124, 0x6121421, 0x6141122, 0x6141221, 0x6112214, 0x6112412, 0x6122114,
-        0x6122411, 0x6142112, 0x6142211, 0x6241211, 0x6221114, 0x6413111, 0x6241112, 0x6134111,
-        0x6111242, 0x6121142, 0x6121241, 0x6114212, 0x6124112, 0x6124211, 0x6411212, 0x6421112,
-        0x6421211, 0x6212141, 0x6214121, 0x6412121, 0x6111143, 0x6111341, 0x6131141, 0x6114113,
-        0x6114311, 0x6411113, 0x6411311, 0x6113141, 0x6114131, 0x6311141, 0x6411131, 0x6211412,
-        0x6211214, 0x6211232, 0x72331112,
+        0x212222, 0x222122, 0x222221, 0x121223, 0x121322, 0x131222, 0x122213, 0x122312,
+        0x132212, 0x221213, 0x221312, 0x231212, 0x112232, 0x122132, 0x122231, 0x113222,
+        0x123122, 0x123221, 0x223211, 0x221132, 0x221231, 0x213212, 0x223112, 0x312131,
+        0x311222, 0x321122, 0x321221, 0x312212, 0x322112, 0x322211, 0x212123, 0x212321,
+        0x232121, 0x111323, 0x131123, 0x131321, 0x112313, 0x132113, 0x132311, 0x211313,
+        0x231113, 0x231311, 0x112133, 0x112331, 0x132131, 0x113123, 0x113321, 0x133121,
+        0x313121, 0x211331, 0x231131, 0x213113, 0x213311, 0x213131, 0x311123, 0x311321,
+        0x331121, 0x312113, 0x312311, 0x332111, 0x314111, 0x221411, 0x431111, 0x111224,
+        0x111422, 0x121124, 0x121421, 0x141122, 0x141221, 0x112214, 0x112412, 0x122114,
+        0x122411, 0x142112, 0x142211, 0x241211, 0x221114, 0x413111, 0x241112, 0x134111,
+        0x111242, 0x121142, 0x121241, 0x114212, 0x124112, 0x124211, 0x411212, 0x421112,
+        0x421211, 0x212141, 0x214121, 0x412121, 0x111143, 0x111341, 0x131141, 0x114113,
+        0x114311, 0x411113, 0x411311, 0x113141, 0x114131, 0x311141, 0x411131, 0x211412,
+        0x211214, 0x211232, 0x2331112,
     ];
 
     /// <summary>
@@ -190,26 +229,22 @@ internal static class Code128Encoder
             : (rentedValues = new PooledBuffer<int>(capacity)).Span;
         Span<byte> distances = lookahead <= InlineLength
             ? distanceStorage
-            : (rentedDistances = new PooledBuffer<byte>(lookahead * 4)).Span;
+            : (rentedDistances = new PooledBuffer<byte>(lookahead * 3)).Span;
 
         try
         {
             Span<byte> nextOnlyInA = distances[..lookahead];
             Span<byte> nextOnlyInB = distances.Slice(lookahead, lookahead);
             Span<byte> digitsFromEven = distances.Slice(lookahead * 2, lookahead);
-            Span<byte> digitsFromOdd = distances.Slice(lookahead * 3, lookahead);
-            int count = Encode(text, gs1, values, nextOnlyInA, nextOnlyInB, digitsFromEven, digitsFromOdd);
+            int count = Encode(text, gs1, values, nextOnlyInA, nextOnlyInB, digitsFromEven);
 
             // Section 5.4.1 gives every symbol character six elements. Only the stop character differs,
             // with the four bars and three spaces that close the symbol.
             Span<int> runs = symbol.BeginLinear(((count - 1) * 6) + 7, xDimension, out Span<float> heights, out _);
             WriteRuns(values[..count], runs);
 
-            int widthInModules = 0;
-            for (int i = 0; i < runs.Length; i++)
-            {
-                widthInModules += runs[i];
-            }
+            // Section 5.4.7.2: a symbol character is 11 modules and the stop character 13.
+            int widthInModules = (11 * (count - 1)) + 13;
 
             float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);
             heights.Fill(barHeight);
@@ -253,7 +288,6 @@ internal static class Code128Encoder
     /// <param name="nextOnlyInA">Scratch for the distance to the next character only code set A carries.</param>
     /// <param name="nextOnlyInB">Scratch for the distance to the next character only code set B carries.</param>
     /// <param name="digitsFromEven">Scratch for the digits a code set C run carries from each position.</param>
-    /// <param name="digitsFromOdd">Scratch for the same count one character out of step.</param>
     /// <returns>The number of symbol character values written.</returns>
     private static int Encode(
         ReadOnlySpan<char> text,
@@ -261,8 +295,7 @@ internal static class Code128Encoder
         Span<int> values,
         Span<byte> nextOnlyInA,
         Span<byte> nextOnlyInB,
-        Span<byte> digitsFromEven,
-        Span<byte> digitsFromOdd)
+        Span<byte> digitsFromEven)
     {
         // The distance to the next character that only one of code sets A and B can carry. Whichever comes
         // first decides which set to start in and which to latch back to. The walk runs backwards, so the
@@ -271,7 +304,10 @@ internal static class Code128Encoder
         nextOnlyInA[text.Length] = byte.MaxValue;
         nextOnlyInB[text.Length] = byte.MaxValue;
         digitsFromEven[text.Length] = 0;
-        digitsFromOdd[text.Length] = 0;
+
+        // The same digit count one character out of step is read only at the position after, so the walk
+        // carries it.
+        byte digitsFromOdd = 0;
         for (int i = text.Length - 1; i >= 0; i--)
         {
             // A separator encodes as a Function 1 character, which every code set carries, so it never
@@ -286,17 +322,17 @@ internal static class Code128Encoder
             if (separator)
             {
                 digitsFromEven[i] = SaturatingAdd(digitsFromEven[i + 1], 2);
-                digitsFromOdd[i] = 0;
+                digitsFromOdd = 0;
             }
             else if (char.IsAsciiDigit(text[i]))
             {
-                digitsFromEven[i] = SaturatingAdd(digitsFromOdd[i + 1], 1);
-                digitsFromOdd[i] = SaturatingAdd(digitsFromEven[i + 1], 1);
+                digitsFromEven[i] = SaturatingAdd(digitsFromOdd, 1);
+                digitsFromOdd = SaturatingAdd(digitsFromEven[i + 1], 1);
             }
             else
             {
                 digitsFromEven[i] = 0;
-                digitsFromOdd[i] = 0;
+                digitsFromOdd = 0;
             }
         }
 
@@ -318,7 +354,7 @@ internal static class Code128Encoder
             }
 
             int digits = digitsFromEven[position];
-            if (set != Code128CodeSet.C && digits >= 4 && !(gs1 && text[position] == Gs1Data.Separator))
+            if (set != Code128CodeSet.C && digits >= 4)
             {
                 if ((digits & 1) == 0)
                 {
@@ -496,7 +532,7 @@ internal static class Code128Encoder
             sum += (long)values[i] * i;
         }
 
-        return (int)(sum % 103);
+        return (int)(sum % CheckModulus);
     }
 
     /// <summary>

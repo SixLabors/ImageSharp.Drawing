@@ -37,4 +37,12 @@ internal static class AlphanumericCharacterSet
         '%' => 42,
         _ => -1,
     };
+
+    /// <summary>
+    /// Returns the check character of a sum of character values: the character whose value is the sum
+    /// modulo the set size.
+    /// </summary>
+    /// <param name="sum">The sum of the values of the characters the check character covers.</param>
+    /// <returns>The check character.</returns>
+    public static char CheckCharacter(int sum) => Characters[sum % Characters.Length];
 }

@@ -68,6 +68,9 @@ public class Code2Of5SymbologyTests
 
         Assert.Equal(computed, validated);
         Assert.Throws<ArgumentException>(() => Encode(symbologyType, CheckCharacterMode.Validate, true, "12347"));
+
+        // A check digit alone has no data to check.
+        Assert.Throws<ArgumentException>(() => Encode(symbologyType, CheckCharacterMode.Validate, true, "0"));
     }
 
     /// <summary>

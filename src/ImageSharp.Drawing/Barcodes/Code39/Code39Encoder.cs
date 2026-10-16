@@ -16,7 +16,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class Code39Encoder
 {
     /// <summary>
-    /// The largest number of characters this library encodes in one symbol. Section 4.1 e) makes the
+    /// The largest number of characters a symbol carries. Section 4.1 e) makes the
     /// data string length variable, so the symbology sets no maximum of its own.
     /// </summary>
     public const int MaximumLength = 500;
@@ -47,7 +47,7 @@ internal static class Code39Encoder
     /// to 3,0 : 1", and this is the widest of that range, so a symbol character and its gap take the
     /// sixteen modules at the top of the range section 4.1 h) gives. An application standard may name a
     /// nominal ratio inside that range which is not a whole number, as IFA does for the PZN at 1:2.5, and
-    /// a run width is a whole number of modules, so this library draws the permitted 3.
+    /// a run width is a whole number of modules, so a wide element is the permitted 3.
     /// </summary>
     private const int WideElement = 3;
 
@@ -96,7 +96,7 @@ internal static class Code39Encoder
             sum += AlphanumericCharacterSet.Value(data[i]);
         }
 
-        return AlphanumericCharacterSet.Characters[sum % AlphanumericCharacterSet.Characters.Length];
+        return AlphanumericCharacterSet.CheckCharacter(sum);
     }
 
     /// <summary>
@@ -147,8 +147,9 @@ internal static class Code39Encoder
         ref BarcodeSymbol symbol)
     {
         BeginRuns(data, check, xDimension, ref symbol, out Span<float> heights);
-        float nominalBarHeight = MathF.Max(WidthInModules(symbol.Runs) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
-        EndSymbol(heights, readablePrefix, readableBody, readableSuffix, options, nominalBarHeight, ref symbol);
+        int widthInModules = BarcodeSymbol.RunWidth(symbol.Runs);
+        float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
+        EndSymbol(heights, readablePrefix, readableBody, readableSuffix, options, nominalBarHeight, widthInModules, ref symbol);
     }
 
     /// <summary>
@@ -176,7 +177,7 @@ internal static class Code39Encoder
         ref BarcodeSymbol symbol)
     {
         BeginRuns(data, check, xDimension, ref symbol, out Span<float> heights);
-        EndSymbol(heights, readablePrefix, readableBody, readableSuffix, options, nominalBarHeight, ref symbol);
+        EndSymbol(heights, readablePrefix, readableBody, readableSuffix, options, nominalBarHeight, BarcodeSymbol.RunWidth(symbol.Runs), ref symbol);
     }
 
     /// <summary>
@@ -222,6 +223,7 @@ internal static class Code39Encoder
     /// <param name="readableSuffix">The characters of the human readable interpretation after its body.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="nominalBarHeight">The bar height in modules a symbol takes when the caller sets none.</param>
+    /// <param name="widthInModules">The width of the runs in modules.</param>
     /// <param name="symbol">The symbol to write.</param>
     private static void EndSymbol(
         Span<float> heights,
@@ -230,6 +232,7 @@ internal static class Code39Encoder
         ReadOnlySpan<char> readableSuffix,
         BarcodeOptions options,
         float nominalBarHeight,
+        int widthInModules,
         ref BarcodeSymbol symbol)
     {
         float barHeight = options.ResolveBarHeight(symbol.XDimension, nominalBarHeight);
@@ -243,28 +246,12 @@ internal static class Code39Encoder
                 readableBody,
                 readableSuffix,
                 0F,
-                WidthInModules(symbol.Runs),
+                widthInModules,
                 BarcodeTextSide.BelowBars,
                 barHeight + BarcodeTextPlacement.Clearance);
         }
 
         symbol.EndLinear(QuietZone, QuietZone);
-    }
-
-    /// <summary>
-    /// Adds up the run widths to give the width of the symbol, its quiet zones excluded.
-    /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <returns>The width in modules.</returns>
-    private static int WidthInModules(ReadOnlySpan<int> runs)
-    {
-        int width = 0;
-        for (int i = 0; i < runs.Length; i++)
-        {
-            width += runs[i];
-        }
-
-        return width;
     }
 
     /// <summary>

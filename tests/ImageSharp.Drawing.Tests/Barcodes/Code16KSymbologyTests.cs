@@ -261,8 +261,8 @@ public class Code16KSymbologyTests
     /// <returns>The symbol character values, one data row after another.</returns>
     private static int[] DataRowValues(ref BarcodeSymbol symbol)
     {
-        const uint tripleShiftPattern = 0x6211133;
-        ReadOnlySpan<uint> patterns = Code128Encoder.Patterns;
+        const uint tripleShiftPattern = 0x211133;
+        ReadOnlySpan<uint> patterns = Code128Patterns.Patterns;
         List<int> values = [];
 
         // The data rows stand at the even row indexes, with a separator row between two of them.
@@ -272,8 +272,8 @@ public class Code16KSymbologyTests
             ReadOnlySpan<int> runs = symbol.Runs.Slice(row.RunStart, row.RunCount);
             for (int k = 0; k < 5; k++)
             {
-                // A pattern packs its element count in the leading nibble, then the six elements.
-                uint pattern = 6;
+                // A pattern packs its six elements four bits each, the first in the highest bits.
+                uint pattern = 0;
                 for (int e = 0; e < 6; e++)
                 {
                     pattern = (pattern << 4) | (uint)runs[5 + (k * 6) + e];

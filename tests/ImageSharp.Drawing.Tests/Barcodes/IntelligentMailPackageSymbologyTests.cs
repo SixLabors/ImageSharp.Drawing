@@ -43,7 +43,9 @@ public class IntelligentMailPackageSymbologyTests
         "(420)123456789(95)12311234561234123453",
         "2112324111311121332221223121311131231411222121414111311141131122322123211122321311233311211122321311231122321311232131311112242331112")]
     public void MatchesReferenceRuns(string text, string expected)
-        => Assert.Equal(expected, SymbolEncoder.Read(new IntelligentMailPackageSymbology("USPS TRACKING #"), text, new BarcodeOptions(), SymbolEncoder.RunString));
+        => Assert.Equal(
+            expected,
+            SymbolEncoder.Read(new IntelligentMailPackageSymbology("USPS TRACKING #"), text, new BarcodeOptions(), SymbolEncoder.RunString));
 
     /// <summary>
     /// Section 2.4.1 of USPS2000508 suppresses the (420) Application Identifier and the ZIP Code from the

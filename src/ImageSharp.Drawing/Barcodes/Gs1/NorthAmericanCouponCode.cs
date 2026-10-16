@@ -1,9 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
-using SixLabors.ImageSharp.Drawing.Helpers;
-
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -39,15 +36,7 @@ internal static class NorthAmericanCouponCode
     /// <exception cref="ArgumentException">The coupon code is not numeric, an element is missing or out of range, or an optional field is unknown or out of order.</exception>
     public static int Validate(ReadOnlySpan<char> data)
     {
-        SpanCodePointEnumerator codePoints = data.EnumerateCodePoints();
-        while (codePoints.MoveNext())
-        {
-            CodePoint current = codePoints.Current;
-            if (!current.IsAsciiDigit())
-            {
-                throw new ArgumentException($"The coupon code carries only digits; got {current.ToDisplayString()}.", nameof(data));
-            }
-        }
+        BarcodeSymbology.ValidateDigits(data);
 
         int position = 0;
 

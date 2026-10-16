@@ -62,6 +62,14 @@ public class Code39SymbologyTests
             () => Encode(new Code39Symbology(CheckCharacterMode.Validate), "CODE39X"));
 
     /// <summary>
+    /// A check character alone has no data to check.
+    /// </summary>
+    [Fact]
+    public void RejectsACheckCharacterWithNoData()
+        => Assert.Throws<ArgumentException>(
+            () => Encode(new Code39Symbology(CheckCharacterMode.Validate), "0"));
+
+    /// <summary>
     /// The symbology carries digits, capital letters, spaces and the symbols -.$/+% and nothing else.
     /// </summary>
     [Theory]

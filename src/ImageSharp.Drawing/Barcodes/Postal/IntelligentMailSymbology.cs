@@ -27,7 +27,7 @@ public sealed class IntelligentMailSymbology : BarcodeSymbology
                 nameof(text));
         }
 
-        UspsPostalEncoder.ValidateDigits(text);
+        BarcodeSymbology.ValidateDigits(text);
         if (text[1] > '4')
         {
             throw new ArgumentException($"The second digit of the barcode identifier is 0 to 4; got {text[1]}.", nameof(text));

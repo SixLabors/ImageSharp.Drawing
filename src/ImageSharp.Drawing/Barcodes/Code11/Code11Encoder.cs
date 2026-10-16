@@ -22,8 +22,7 @@ internal static class Code11Encoder
     public const int MaximumLength = 500;
 
     /// <summary>
-    /// The quiet zone in modules on each side: the 10X of Code 39 and Codabar, since no document gives
-    /// one for Code 11.
+    /// The quiet zone in modules on each side. There is no public specification of Code 11.
     /// </summary>
     public const int QuietZone = 10;
 
@@ -51,7 +50,7 @@ internal static class Code11Encoder
 
     /// <summary>
     /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no
-    /// height: the 15 per cent of Code 39 and Codabar, since no document gives one for Code 11.
+    /// height. There is no public specification of Code 11.
     /// </summary>
     private const float NominalBarHeightFraction = 0.15F;
 
@@ -157,11 +156,7 @@ internal static class Code11Encoder
 
         Append(runs, ref written, StartStop, false);
 
-        int widthInModules = 0;
-        for (int i = 0; i < runs.Length; i++)
-        {
-            widthInModules += runs[i];
-        }
+        int widthInModules = BarcodeSymbol.RunWidth(runs);
 
         float barHeight = options.ResolveBarHeight(xDimension, widthInModules * NominalBarHeightFraction);
         heights.Fill(barHeight);

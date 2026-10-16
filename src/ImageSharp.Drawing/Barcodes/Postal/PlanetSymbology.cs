@@ -21,7 +21,7 @@ public sealed class PlanetSymbology : BarcodeSymbology
             throw new ArgumentException($"PLANET carries 11 or 13 digits; got {text.Length} characters.", nameof(text));
         }
 
-        UspsPostalEncoder.ValidateDigits(text);
+        BarcodeSymbology.ValidateDigits(text);
 
         // At most thirteen digits and the correction digit.
         InlineArray14<char> digitStorage = default;

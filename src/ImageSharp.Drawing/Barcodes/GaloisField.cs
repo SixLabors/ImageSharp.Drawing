@@ -11,18 +11,6 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal sealed class GaloisField
 {
     /// <summary>
-    /// The field of Data Matrix ECC 200: GF(2^8) with the primitive polynomial x^8 + x^5 + x^3 + x^2 + 1,
-    /// 301 decimal.
-    /// </summary>
-    public static readonly GaloisField DataMatrix = new(256, 301);
-
-    /// <summary>
-    /// The field of QR Code, section 6.5.2 of ISO/IEC 18004: GF(2^8) with the primitive polynomial
-    /// x^8 + x^4 + x^3 + x^2 + 1, 285 decimal.
-    /// </summary>
-    public static readonly GaloisField QrCode = new(256, 285);
-
-    /// <summary>
     /// The powers of alpha, alpha^i at index i, written twice: for i from 0 to size - 2 and again from
     /// size - 1 to 2 x (size - 2). The sum of two logarithms is at most 2 x (size - 2), so a product reads its
     /// power directly, with no reduction modulo size - 1.
@@ -155,6 +143,32 @@ internal sealed class GaloisField
             }
 
             check[k - 1] = generator[0] == 0 ? 0 : exp[log[generator[0]] + feedbackLog];
+        }
+    }
+
+    /// <summary>
+    /// Calculates the check symbols of interleaved blocks. The data symbols are dealt over the blocks in turn,
+    /// symbol i to block i mod b, each block takes its own check symbols, and the check symbols follow the
+    /// data, dealt over the blocks the same way.
+    /// </summary>
+    /// <param name="symbols">The data symbols followed by room for the check symbols of every block.</param>
+    /// <param name="dataCount">The number of data symbols, a multiple of the block count.</param>
+    /// <param name="blocks">The number of blocks.</param>
+    /// <param name="generator">The generator coefficients of one block, from <see cref="Generator"/>.</param>
+    /// <param name="check">The scratch for the check symbols of one block, as long as the generator.</param>
+    public void InterleavedRemainders(Span<int> symbols, int dataCount, int blocks, ReadOnlySpan<int> generator, Span<int> check)
+    {
+        // A block reads its data symbols in place with a step of the block count. The check symbols go after
+        // the data, so the next block still reads only data symbols.
+        int perBlock = generator.Length;
+        Span<int> target = symbols.Slice(dataCount, perBlock * blocks);
+        for (int block = 0; block < blocks; block++)
+        {
+            this.Remainder(symbols[block..], blocks, dataCount / blocks, generator, check);
+            for (int i = 0; i < perBlock; i++)
+            {
+                target[(i * blocks) + block] = check[i];
+            }
         }
     }
 }

@@ -143,11 +143,7 @@ internal static class CodabarEncoder
 
         Append(runs, ref written, Value(stop), false);
 
-        int widthInModules = 0;
-        for (int i = 0; i < runs.Length; i++)
-        {
-            widthInModules += runs[i];
-        }
+        int widthInModules = BarcodeSymbol.RunWidth(runs);
 
         float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
         float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);

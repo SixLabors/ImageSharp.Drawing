@@ -63,12 +63,39 @@ internal static class CodablockFEncoder
     /// </summary>
     public const int CheckModulus = 86;
 
-    private const int StartA = 103;
+    /// <summary>
+    /// The symbol character value of Shift, which changes code set A to B, or B to A, for one character.
+    /// </summary>
     private const int Shift = 98;
+
+    /// <summary>
+    /// The symbol character value of Code C, which changes code set A or B to code set C.
+    /// </summary>
     private const int LatchC = 99;
+
+    /// <summary>
+    /// The symbol character value of Code B, which changes code set A or C to code set B.
+    /// </summary>
     private const int LatchB = 100;
+
+    /// <summary>
+    /// The symbol character value of Code A, which changes code set B or C to code set A.
+    /// </summary>
     private const int LatchA = 101;
+
+    /// <summary>
+    /// The symbol character value of Start A, which starts every row.
+    /// </summary>
+    private const int StartA = 103;
+
+    /// <summary>
+    /// The symbol character value of the stop character, the one character of seven elements.
+    /// </summary>
     private const int Stop = 106;
+
+    /// <summary>
+    /// The modulus of the Code 128 check character that ends every row.
+    /// </summary>
     private const int RowModulus = 103;
 
     /// <summary>
@@ -80,6 +107,50 @@ internal static class CodablockFEncoder
     /// The longest text a symbol carries: two digits per character over 44 rows of 62 columns.
     /// </summary>
     private const int MaximumText = MaximumRows * MaximumColumns * 2;
+
+    /// <summary>
+    /// The code sets of the Code 128 symbol characters.
+    /// </summary>
+    private enum CodeSet
+    {
+        /// <summary>
+        /// Code set A: ASCII 32 to 95 as 0 to 63 and the control characters 0 to 31 as 64 to 95.
+        /// </summary>
+        A,
+
+        /// <summary>
+        /// Code set B: ASCII 32 to 127 as 0 to 95.
+        /// </summary>
+        B,
+
+        /// <summary>
+        /// Code set C: the digit pairs 00 to 99 as 0 to 99.
+        /// </summary>
+        C,
+    }
+
+    /// <summary>
+    /// Gets the element widths of the Code 128 symbol characters the rows carry, packed four bits per
+    /// element, the first element in the highest bits: six elements each, three bars and three spaces of one
+    /// to four modules, except the stop character, <see cref="Stop"/>, which takes seven.
+    /// </summary>
+    private static ReadOnlySpan<uint> Patterns =>
+    [
+        0x212222, 0x222122, 0x222221, 0x121223, 0x121322, 0x131222, 0x122213, 0x122312,
+        0x132212, 0x221213, 0x221312, 0x231212, 0x112232, 0x122132, 0x122231, 0x113222,
+        0x123122, 0x123221, 0x223211, 0x221132, 0x221231, 0x213212, 0x223112, 0x312131,
+        0x311222, 0x321122, 0x321221, 0x312212, 0x322112, 0x322211, 0x212123, 0x212321,
+        0x232121, 0x111323, 0x131123, 0x131321, 0x112313, 0x132113, 0x132311, 0x211313,
+        0x231113, 0x231311, 0x112133, 0x112331, 0x132131, 0x113123, 0x113321, 0x133121,
+        0x313121, 0x211331, 0x231131, 0x213113, 0x213311, 0x213131, 0x311123, 0x311321,
+        0x331121, 0x312113, 0x312311, 0x332111, 0x314111, 0x221411, 0x431111, 0x111224,
+        0x111422, 0x121124, 0x121421, 0x141122, 0x141221, 0x112214, 0x112412, 0x122114,
+        0x122411, 0x142112, 0x142211, 0x241211, 0x221114, 0x413111, 0x241112, 0x134111,
+        0x111242, 0x121142, 0x121241, 0x114212, 0x124112, 0x124211, 0x411212, 0x421112,
+        0x421211, 0x212141, 0x214121, 0x412121, 0x111143, 0x111341, 0x131141, 0x114113,
+        0x114311, 0x411113, 0x411311, 0x113141, 0x114131, 0x311141, 0x411131, 0x211412,
+        0x211214, 0x211232, 0x2331112,
+    ];
 
     /// <summary>
     /// Returns the nominal row height in modules for a column count: ten, or 0.55 modules per data
@@ -110,7 +181,6 @@ internal static class CodablockFEncoder
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The text carries a character the symbology cannot encode, or more data than 44 rows hold.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">The column count is outside 4 to 62.</exception>
     public static void BuildSymbol(
         ReadOnlySpan<char> text,
         int columns,
@@ -120,7 +190,11 @@ internal static class CodablockFEncoder
         BarcodeOptions options,
         ref BarcodeSymbol symbol)
     {
-        Guard.MustBeBetweenOrEqualTo(columns, MinimumColumns, MaximumColumns, nameof(columns));
+        int n = text.Length;
+        if (n > MaximumText)
+        {
+            throw new ArgumentException($"Codablock F carries at most {MaximumText} characters in 44 rows of 62 columns; the text is longer.", nameof(text));
+        }
 
         SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
         while (codePoints.MoveNext())
@@ -132,12 +206,6 @@ internal static class CodablockFEncoder
                     $"Codablock F encodes ASCII 0 to 127; {current.ToDisplayString()} is outside that range.",
                     nameof(text));
             }
-        }
-
-        int n = text.Length;
-        if (n > MaximumText)
-        {
-            throw new ArgumentException($"Codablock F carries at most {MaximumText} characters in 44 rows of 62 columns; the text is longer.", nameof(text));
         }
 
         // The row break rules read the digit run from a position and which of a control character or a
@@ -191,15 +259,15 @@ internal static class CodablockFEncoder
         {
             char c = text[p];
             digits[p] = char.IsAsciiDigit(c) ? digits[p + 1] + 1 : 0;
-            nextControl[p] = c < 32 ? 0 : Saturate(nextControl[p + 1]);
-            nextLower[p] = c >= 96 ? 0 : Saturate(nextLower[p + 1]);
+            nextControl[p] = OnlyInSetA(c) ? 0 : Saturate(nextControl[p + 1]);
+            nextLower[p] = OnlyInSetB(c) ? 0 : Saturate(nextLower[p + 1]);
         }
 
         int rowSize = columns + Overhead;
         int count = 0;
         int i = 0;
         int rows = 1;
-        int set = 'B';
+        CodeSet set = CodeSet.B;
         bool lastRow = false;
         while (!lastRow)
         {
@@ -214,22 +282,22 @@ internal static class CodablockFEncoder
             if (n == 0)
             {
                 values[count++] = LatchB;
-                set = 'B';
+                set = CodeSet.B;
             }
             else if (i < n && digits[i] >= 2)
             {
                 values[count++] = LatchC;
-                set = 'C';
+                set = CodeSet.C;
             }
             else if (i < n && nextControl[i] < nextLower[i])
             {
                 values[count++] = Shift;
-                set = 'A';
+                set = CodeSet.A;
             }
             else
             {
                 values[count++] = LatchB;
-                set = 'B';
+                set = CodeSet.B;
             }
 
             // The row indicator takes its value once the row count is known.
@@ -247,12 +315,12 @@ internal static class CodablockFEncoder
 
                 char c = text[i];
                 int run = Math.Min(digits[i], 2 * remaining);
-                if (set != 'C' && run >= 4)
+                if (set != CodeSet.C && run >= 4)
                 {
                     if ((run & 1) == 0 && remaining >= 3)
                     {
                         values[count++] = LatchC;
-                        set = 'C';
+                        set = CodeSet.C;
                         count = WritePairs(text, i, 2, values, count);
                         i += 4;
                         continue;
@@ -260,17 +328,17 @@ internal static class CodablockFEncoder
 
                     if ((run & 1) == 1 && remaining >= 4)
                     {
-                        values[count++] = set == 'A' ? ValueA(c) : ValueB(c);
+                        values[count++] = ValueIn(set, c);
                         i++;
                         values[count++] = LatchC;
-                        set = 'C';
+                        set = CodeSet.C;
                         count = WritePairs(text, i, 2, values, count);
                         i += 4;
                         continue;
                     }
                 }
 
-                if (set == 'B' && c < 32 && remaining >= 2)
+                if (set == CodeSet.B && OnlyInSetA(c) && remaining >= 2)
                 {
                     if (i < n - 1 && nextLower[i + 1] < nextControl[i + 1])
                     {
@@ -279,15 +347,15 @@ internal static class CodablockFEncoder
                     else
                     {
                         values[count++] = LatchA;
-                        set = 'A';
+                        set = CodeSet.A;
                     }
 
-                    values[count++] = ValueA(c);
+                    values[count++] = ValueIn(CodeSet.A, c);
                     i++;
                     continue;
                 }
 
-                if (set == 'A' && c >= 96 && remaining >= 2)
+                if (set == CodeSet.A && OnlyInSetB(c) && remaining >= 2)
                 {
                     if (i < n - 1 && nextControl[i + 1] < nextLower[i + 1])
                     {
@@ -296,48 +364,40 @@ internal static class CodablockFEncoder
                     else
                     {
                         values[count++] = LatchB;
-                        set = 'B';
+                        set = CodeSet.B;
                     }
 
-                    values[count++] = ValueB(c);
+                    values[count++] = ValueIn(CodeSet.B, c);
                     i++;
                     continue;
                 }
 
-                if (set == 'C' && run < 2 && remaining >= 2)
+                if (set == CodeSet.C && run < 2 && remaining >= 2)
                 {
-                    if (nextControl[i] < nextLower[i])
-                    {
-                        values[count++] = LatchA;
-                        set = 'A';
-                        values[count++] = ValueA(c);
-                    }
-                    else
-                    {
-                        values[count++] = LatchB;
-                        set = 'B';
-                        values[count++] = ValueB(c);
-                    }
-
+                    set = nextControl[i] < nextLower[i] ? CodeSet.A : CodeSet.B;
+                    values[count++] = set == CodeSet.A ? LatchA : LatchB;
+                    values[count++] = ValueIn(set, c);
                     i++;
                     continue;
                 }
 
-                if (set == 'A' && c <= 95 && remaining >= 1)
+                // Code set A carries every character below the lower case letters, and code set B every
+                // character from the space up.
+                bool inSet = set switch
                 {
-                    values[count++] = ValueA(c);
-                    i++;
-                    continue;
-                }
+                    CodeSet.A => !OnlyInSetB(c),
+                    CodeSet.B => !OnlyInSetA(c),
+                    _ => false,
+                };
 
-                if (set == 'B' && c >= 32 && remaining >= 1)
+                if (inSet && remaining >= 1)
                 {
-                    values[count++] = ValueB(c);
+                    values[count++] = ValueIn(set, c);
                     i++;
                     continue;
                 }
 
-                if (set == 'C' && run >= 2 && remaining >= 1)
+                if (set == CodeSet.C && run >= 2 && remaining >= 1)
                 {
                     count = WritePairs(text, i, 1, values, count);
                     i += 2;
@@ -378,8 +438,8 @@ internal static class CodablockFEncoder
             k2 = (k2 + (p * text[p])) % CheckModulus;
         }
 
-        values[count - 4] = Map(k1, set != 'C');
-        values[count - 3] = Map(k2, set != 'C');
+        values[count - 4] = Map(k1, set != CodeSet.C);
+        values[count - 3] = Map(k2, set != CodeSet.C);
 
         // The row indicators: the row count in the first row, the row index from 43 in the rest, each in
         // the code set its row starts in.
@@ -394,13 +454,7 @@ internal static class CodablockFEncoder
         for (int row = 0; row < rows; row++)
         {
             int at = row * rowSize;
-            int sum = values[at];
-            for (int k = 1; k <= columns + 2; k++)
-            {
-                sum += values[at + k] * k;
-            }
-
-            values[at + columns + 3] = sum % RowModulus;
+            values[at + columns + 3] = RowCheckCharacter(values.Slice(at, columns + 3));
         }
 
         return count;
@@ -433,7 +487,6 @@ internal static class CodablockFEncoder
         int width = RowWidth(columns);
         double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
         float barHeight = options.ResolveBarHeight(xDimension, NominalRowHeight(columns));
-        ReadOnlySpan<uint> patterns = Code128Encoder.Patterns;
 
         // The rows from the top: a solid edge bar, each data row with a separator below it but the last,
         // and a solid edge bar. A separator keeps the start and stop patterns, thirteen runs and seven
@@ -447,27 +500,26 @@ internal static class CodablockFEncoder
             2 + (rowCount * ((dataRuns + 1) >> 1)) + (separators * ((separatorRuns + 1) >> 1)),
             xDimension);
 
+        // The separator is the Start A pattern and the stop pattern with one bar between them across the
+        // columns, which also takes the first bar of the stop pattern: the row width less the 11 modules of
+        // Start A and the 11 modules of the stop pattern after its first bar.
+        InlineArray16<int> separatorStorage = default;
+        Span<int> separatorPattern = ((Span<int>)separatorStorage)[..separatorRuns];
+        int separatorIndex = 0;
+        AppendPattern(Patterns[StartA], 6, separatorPattern, ref separatorIndex);
+        int middle = separatorIndex;
+        AppendPattern(Patterns[Stop], 7, separatorPattern, ref separatorIndex);
+        separatorPattern[middle] = width - 22;
+
         AddEdge(width, ref symbol);
         for (int row = 0; row < rowCount; row++)
         {
             Span<int> runs = symbol.AddRow(dataRuns, out Span<float> heights, out _);
             heights.Fill(barHeight);
-            int index = 0;
-            for (int k = 0; k < rowSize; k++)
-            {
-                int value = values[(row * rowSize) + k];
-                uint pattern = patterns[value];
-                int elements = value == Stop ? 7 : 6;
-                for (int shift = (elements - 1) * 4; shift >= 0; shift -= 4)
-                {
-                    runs[index++] = (int)((pattern >> shift) & 0xF);
-                }
-            }
-
+            WriteRuns(values.Slice(row * rowSize, rowSize), runs);
             if (row < rowCount - 1)
             {
                 Span<int> separator = symbol.AddRow(separatorRuns, out Span<float> separatorHeights, out _);
-                ReadOnlySpan<int> separatorPattern = [2, 1, 1, 4, 1, 2, width - 22, 3, 3, 1, 1, 1, 2];
                 separatorPattern.CopyTo(separator);
                 separatorHeights.Fill(SeparatorHeight);
             }
@@ -514,19 +566,19 @@ internal static class CodablockFEncoder
     /// <param name="pads">The number of pad characters.</param>
     /// <param name="set">The code set in effect, updated as the pads change it.</param>
     /// <returns>The number of character values written after the pad.</returns>
-    private static int Pad(Span<int> values, int count, int pads, ref int set)
+    private static int Pad(Span<int> values, int count, int pads, ref CodeSet set)
     {
         for (int k = 0; k < pads; k++)
         {
-            if (set == 'C')
+            if (set == CodeSet.C)
             {
                 values[count++] = LatchB;
-                set = 'B';
+                set = CodeSet.B;
             }
             else
             {
                 values[count++] = LatchC;
-                set = 'C';
+                set = CodeSet.C;
             }
         }
 
@@ -556,14 +608,49 @@ internal static class CodablockFEncoder
     }
 
     /// <summary>
-    /// Writes digit pairs as code set C values.
+    /// Returns the distance from the position before: one more than the given distance, or none when
+    /// the given distance is none.
+    /// </summary>
+    /// <param name="distance">The distance from the next position.</param>
+    /// <returns>The distance from this position.</returns>
+    private static int Saturate(int distance)
+        => distance == int.MaxValue ? int.MaxValue : distance + 1;
+
+    /// <summary>
+    /// Returns the symbol character value of a character in code set A or B: code set A runs from the space
+    /// at value 0 through to the control characters, and code set B from the space through to the delete
+    /// character.
+    /// </summary>
+    /// <param name="set">The code set, A or B.</param>
+    /// <param name="character">The character.</param>
+    /// <returns>The symbol character value.</returns>
+    private static int ValueIn(CodeSet set, char character)
+        => set == CodeSet.A && character < 32 ? character + 64 : character - 32;
+
+    /// <summary>
+    /// Returns whether only code set A carries a character: the control characters 0 to 31.
+    /// </summary>
+    /// <param name="character">The character.</param>
+    /// <returns><see langword="true"/> when only code set A carries it.</returns>
+    private static bool OnlyInSetA(char character) => character < 32;
+
+    /// <summary>
+    /// Returns whether only code set B carries a character: the lower case letters and the characters above
+    /// them, 96 to 127.
+    /// </summary>
+    /// <param name="character">The character.</param>
+    /// <returns><see langword="true"/> when only code set B carries it.</returns>
+    private static bool OnlyInSetB(char character) => character >= 96;
+
+    /// <summary>
+    /// Writes digit pairs as code set C values, each pair the value 0 to 99 it reads as.
     /// </summary>
     /// <param name="text">The text being encoded.</param>
     /// <param name="start">The index of the first digit.</param>
     /// <param name="pairs">The number of pairs to write.</param>
-    /// <param name="values">The buffer the character values are written to.</param>
-    /// <param name="count">The number of character values written so far.</param>
-    /// <returns>The number of character values written after the pairs.</returns>
+    /// <param name="values">The buffer the symbol character values are written to.</param>
+    /// <param name="count">The number of values written so far.</param>
+    /// <returns>The number of values written after the pairs.</returns>
     private static int WritePairs(ReadOnlySpan<char> text, int start, int pairs, Span<int> values, int count)
     {
         for (int p = 0; p < pairs; p++)
@@ -576,28 +663,48 @@ internal static class CodablockFEncoder
     }
 
     /// <summary>
-    /// Returns the code set A value of a character: ASCII 32 to 95 as 0 to 63 and ASCII 0 to 31 as 64 to
-    /// 95.
+    /// Writes the element widths of a pattern packed as <see cref="Patterns"/> packs them.
     /// </summary>
-    /// <param name="c">The character.</param>
-    /// <returns>The value.</returns>
-    private static int ValueA(char c)
-        => c < 32 ? c + 64 : c - 32;
+    /// <param name="pattern">The pattern, four bits per element, the first element in the highest bits.</param>
+    /// <param name="elements">The number of elements.</param>
+    /// <param name="runs">The run widths in modules to write.</param>
+    /// <param name="index">The position in <paramref name="runs"/>, advanced past the elements.</param>
+    private static void AppendPattern(uint pattern, int elements, Span<int> runs, ref int index)
+    {
+        for (int shift = (elements - 1) * 4; shift >= 0; shift -= 4)
+        {
+            runs[index++] = (int)((pattern >> shift) & 0xF);
+        }
+    }
 
     /// <summary>
-    /// Returns the code set B value of a character: ASCII 32 to 127 as 0 to 95.
+    /// Writes the run lengths of the symbol character values of one row, starting with a bar.
     /// </summary>
-    /// <param name="c">The character.</param>
-    /// <returns>The value.</returns>
-    private static int ValueB(char c)
-        => c - 32;
+    /// <param name="values">The symbol character values of the row, the start and stop characters included.</param>
+    /// <param name="runs">The alternating bar and space run widths in modules to write.</param>
+    private static void WriteRuns(ReadOnlySpan<int> values, Span<int> runs)
+    {
+        int index = 0;
+        for (int i = 0; i < values.Length; i++)
+        {
+            AppendPattern(Patterns[values[i]], values[i] == Stop ? 7 : 6, runs, ref index);
+        }
+    }
 
     /// <summary>
-    /// Returns the distance from the position before: one more than the given distance, or none when
-    /// the given distance is none.
+    /// Returns the Code 128 check character of a row: the start character weighted by one and each
+    /// following character by its position, the sum modulo 103.
     /// </summary>
-    /// <param name="distance">The distance from the next position.</param>
-    /// <returns>The distance from this position.</returns>
-    private static int Saturate(int distance)
-        => distance == int.MaxValue ? int.MaxValue : distance + 1;
+    /// <param name="values">The symbol character values of the row, from the start character.</param>
+    /// <returns>The check character value.</returns>
+    private static int RowCheckCharacter(ReadOnlySpan<int> values)
+    {
+        int sum = values[0];
+        for (int i = 1; i < values.Length; i++)
+        {
+            sum += values[i] * i;
+        }
+
+        return sum % RowModulus;
+    }
 }

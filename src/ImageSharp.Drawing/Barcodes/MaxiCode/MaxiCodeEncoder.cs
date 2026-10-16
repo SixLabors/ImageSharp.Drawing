@@ -1,20 +1,22 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Helpers;
+
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
 /// Encodes MaxiCode symbols: 144 six-bit codewords in 33 rows of 30 hexagonal modules around a circular finder.
 /// The primary message of 10 data and 10 check codewords carries the mode and, in modes 2 and 3, the
 /// structured carrier message of postal code, country code and class of service. The secondary message
-/// carries the data in two interleaved Reed-Solomon blocks. The code set search and the module map follow
-/// the reference encoder BWIPP, which finds the shortest sequence of code set latches, shifts and characters.
+/// carries the data in two interleaved Reed-Solomon blocks. The code set search finds the shortest sequence of
+/// code set latches, shifts and characters.
 /// </summary>
 internal static class MaxiCodeEncoder
 {
     /// <summary>
     /// The longest data the secondary message can hold: 93 codewords of digits in numeric shift, 9 digits
-    /// in 6 codewords. BWIPP rejects longer data with the same bound.
+    /// in 6 codewords.
     /// </summary>
     public const int MaximumDataLength = 138;
 
@@ -30,15 +32,35 @@ internal static class MaxiCodeEncoder
     private const int SetE = 4;
 
     /// <summary>
-    /// The field of the Reed-Solomon codes: GF(64) with the polynomial x^6 + x + 1.
+    /// The codeword that latches from code set C, D or E to code set A.
     /// </summary>
-    private static readonly GaloisField Field = new(64, 67);
+    private const int LatchA = 58;
+
+    /// <summary>
+    /// The data codewords of the secondary message of modes 2 and 3.
+    /// </summary>
+    private const int CarrierCapacity = 84;
+
+    /// <summary>
+    /// The data codewords of mode 5 after the mode codeword.
+    /// </summary>
+    private const int EnhancedCapacity = 77;
+
+    /// <summary>
+    /// The data codewords of modes 4 and 6 after the mode codeword.
+    /// </summary>
+    private const int StandardCapacity = 93;
 
     /// <summary>
     /// The value of each byte in each code set, set x 256 + byte, or 0xFF where the code set has no such
     /// character.
     /// </summary>
     private static readonly byte[] SetValues = BuildSetValues();
+
+    /// <summary>
+    /// The field of the Reed-Solomon codes: GF(64) with the polynomial x^6 + x + 1, 67 decimal.
+    /// </summary>
+    private static readonly GaloisField Field = new(64, 67);
 
     /// <summary>
     /// The operations of the code set search, in the order the search tries them. Equal lengths keep the
@@ -153,17 +175,17 @@ internal static class MaxiCodeEncoder
             throw new ArgumentException("MaxiCode needs at least one character.", nameof(text));
         }
 
-        for (int i = 0; i < text.Length; i++)
+        int invalid = text.IndexOfAnyExceptInRange('\0', '\u00FF');
+        if (invalid >= 0)
         {
-            if (text[i] > 0xFF)
-            {
-                throw new ArgumentException($"MaxiCode encodes U+0000 to U+00FF; got U+{(int)text[i]:X4}.", nameof(text));
-            }
+            throw new ArgumentException($"MaxiCode encodes U+0000 to U+00FF; got {text.CodePointAt(invalid).ToDisplayString()}.", nameof(text));
         }
 
-        Span<int> primary = stackalloc int[10];
+        InlineArray10<int> primaryStorage = default;
+        Span<int> primary = primaryStorage;
         scoped ReadOnlySpan<char> data = text;
-        Span<char> carrierData = stackalloc char[MaximumDataLength];
+        InlineArray256<char> carrierDataStorage = default;
+        Span<char> carrierData = ((Span<char>)carrierDataStorage)[..MaximumDataLength];
         if (mode is 2 or 3)
         {
             data = carrierData[..ParseStructuredCarrier(text, mode, primary, carrierData)];
@@ -174,49 +196,59 @@ internal static class MaxiCodeEncoder
             throw new ArgumentException($"MaxiCode holds at most {MaximumDataLength} characters of data; got {data.Length}.", nameof(text));
         }
 
-        // The longest message the search can produce: each character takes at most a shift and itself, and
-        // each code set change at most two codewords before it.
-        Span<int> message = stackalloc int[(MaximumDataLength * 4) + 1];
-        int maxLength = mode == 5 ? 77 : mode <= 3 ? 84 : 93;
-        int messageLength = EncodeMessage(data, maxLength, message, out int pad);
+        // No mode holds more than StandardCapacity codewords, and the closing latch takes one more. The search
+        // writes no longer message, and the capacity check below rejects it.
+        InlineArray128<int> messageStorage = default;
+        Span<int> message = ((Span<int>)messageStorage)[..(StandardCapacity + 1)];
+        int messageLength = EncodeMessage(data, message, out int endCodeSet);
+        if (mode == 0)
+        {
+            mode = messageLength <= EnhancedCapacity ? 5 : 4;
+        }
 
-        Span<int> codewords = stackalloc int[CodewordCount];
+        int capacity = mode switch
+        {
+            2 or 3 => CarrierCapacity,
+            5 => EnhancedCapacity,
+            _ => StandardCapacity,
+        };
+
+        if (messageLength > capacity)
+        {
+            throw new ArgumentException($"A mode {mode} MaxiCode holds at most {capacity} codewords of data.", nameof(text));
+        }
+
+        // A message that ends in a code set without a pad codeword latches back to code set A when the
+        // capacity of the chosen mode leaves room to pad.
+        int pad = PadCodes[endCodeSet];
+        if (pad == 0 && messageLength < capacity)
+        {
+            message[messageLength++] = LatchA;
+            pad = PadCodes[SetA];
+        }
+
+        InlineArray256<int> codewordsStorage = default;
+        Span<int> codewords = ((Span<int>)codewordsStorage)[..CodewordCount];
         int secondaryLength;
         if (mode is 2 or 3)
         {
-            if (messageLength > 84)
-            {
-                throw new ArgumentException("The secondary message of a mode 2 or 3 MaxiCode holds at most 84 codewords.", nameof(text));
-            }
-
             primary.CopyTo(codewords);
-            secondaryLength = 84;
+            secondaryLength = CarrierCapacity;
             Span<int> secondary = codewords.Slice(20, secondaryLength);
             secondary.Fill(pad);
             message[..messageLength].CopyTo(secondary);
         }
         else
         {
-            if (mode == 0)
-            {
-                mode = messageLength <= 77 ? 5 : 4;
-            }
-
-            // The mode is the first codeword and the message follows it, through the primary message and on
-            // into the secondary message.
-            int dataCount = mode == 5 ? 78 : 94;
-            if (messageLength > dataCount - 1)
-            {
-                throw new ArgumentException($"A mode {mode} MaxiCode holds at most {dataCount - 1} codewords of data.", nameof(text));
-            }
-
-            secondaryLength = dataCount - 10;
-            Span<int> all = stackalloc int[dataCount];
-            all.Fill(pad);
-            all[0] = mode;
-            message[..messageLength].CopyTo(all[1..]);
-            all[..10].CopyTo(codewords);
-            all[10..].CopyTo(codewords[20..]);
+            // The mode is the first codeword and the message follows it, through the 9 remaining data
+            // codewords of the primary message and on into the secondary message.
+            secondaryLength = capacity + 1 - 10;
+            codewords[..10].Fill(pad);
+            codewords.Slice(20, secondaryLength).Fill(pad);
+            codewords[0] = mode;
+            int head = Math.Min(messageLength, 9);
+            message[..head].CopyTo(codewords[1..]);
+            message[head..messageLength].CopyTo(codewords[20..]);
         }
 
         AddCheckCodewords(codewords, secondaryLength);
@@ -304,12 +336,13 @@ internal static class MaxiCodeEncoder
         }
 
         // The postal code takes 36 bits. A numeric code is its length in 6 bits and its value in 30 bits, a
-        // 5-digit United States code padded with "0000" (ISO/IEC 16023 Annex B.1.4 a, as BWIPP cites it). An
-        // alphanumeric code is 6 characters of code set A, cut or padded with spaces.
+        // 5-digit United States code padded with "0000" to 9 digits. An alphanumeric code is 6 characters of
+        // code set A, cut or padded with spaces.
         long postal = 0;
         if (mode == 2)
         {
-            Span<char> digits = stackalloc char[9];
+            InlineArray10<char> digitsStorage = default;
+            Span<char> digits = ((Span<char>)digitsStorage)[..9];
             int length = postalCode.Length;
             postalCode.CopyTo(digits);
             if (countryCode.SequenceEqual("840") && length == 5)
@@ -338,9 +371,10 @@ internal static class MaxiCodeEncoder
         int country = int.Parse(countryCode, System.Globalization.CultureInfo.InvariantCulture);
         int service = int.Parse(serviceClass, System.Globalization.CultureInfo.InvariantCulture);
 
-        // The 60 bits of the primary data in the order BWIPP lays them: the mode in bits 2 to 5 of the first
+        // The 60 bits of the primary data: the mode in bits 2 to 5 of the first
         // codeword, and the postal code, country code and class of service spread over the rest.
-        Span<byte> bits = stackalloc byte[60];
+        InlineArray64<byte> bitsStorage = default;
+        Span<byte> bits = ((Span<byte>)bitsStorage)[..60];
         Place(bits, 2, mode, 4, 0, 4);
         Place(bits, 38, postal, 36, 0, 4);
         Place(bits, 30, postal, 36, 4, 6);
@@ -413,16 +447,15 @@ internal static class MaxiCodeEncoder
     }
 
     /// <summary>
-    /// Finds the shortest codeword sequence for the data, as BWIPP does: for each character and each code set,
+    /// Finds the shortest codeword sequence for the data: for each character and each code set,
     /// the shortest length that ends in that code set, with the operation and the earlier code set that
     /// reach it, then a walk back from the end.
     /// </summary>
     /// <param name="data">The data.</param>
-    /// <param name="maxLength">The message capacity that decides whether a closing latch fits.</param>
-    /// <param name="message">The buffer the codewords are written to.</param>
-    /// <param name="pad">The pad codeword of the code set the message ends in.</param>
+    /// <param name="message">The buffer the codewords are written to. A message longer than the buffer is not written.</param>
+    /// <param name="endCodeSet">The code set the message ends in.</param>
     /// <returns>The number of codewords.</returns>
-    private static int EncodeMessage(ReadOnlySpan<char> data, int maxLength, Span<int> message, out int pad)
+    private static int EncodeMessage(ReadOnlySpan<char> data, Span<int> message, out int endCodeSet)
     {
         // The code sets the data needs beyond A. FS, GS, RS and space are in every code set.
         bool haveB = false;
@@ -441,7 +474,8 @@ internal static class MaxiCodeEncoder
         }
 
         // Code sets with a pad codeword come first, so they win ties.
-        Span<int> priority = stackalloc int[5];
+        InlineArray5<int> priorityStorage = default;
+        Span<int> priority = priorityStorage;
         int priorityCount = 0;
         priority[priorityCount++] = SetA;
         if (haveB)
@@ -468,8 +502,10 @@ internal static class MaxiCodeEncoder
 
         // The lengths and best earlier code sets of the last 16 characters, in a ring, row 15 holding the
         // start before the first character. The longest operation reads 9 characters back.
-        Span<int> bestLength = stackalloc int[16 * 5];
-        Span<int> bestOrigin = stackalloc int[16 * 5];
+        InlineArray128<int> bestLengthStorage = default;
+        Span<int> bestLength = ((Span<int>)bestLengthStorage)[..(16 * 5)];
+        InlineArray128<int> bestOriginStorage = default;
+        Span<int> bestOrigin = ((Span<int>)bestOriginStorage)[..(16 * 5)];
         bestLength.Clear();
         bestOrigin.Clear();
         Span<byte> pathOperation = stackalloc byte[data.Length * 5];
@@ -539,22 +575,18 @@ internal static class MaxiCodeEncoder
             }
         }
 
-        // A message that ends in a code set without a pad codeword latches back to A when there is room to pad.
-        int finalCodeSet = PadCodes[endState] == 0 ? SetA : endState;
-        int messageLength = total;
-        if (PadCodes[endState] == 0 && total < maxLength)
+        endCodeSet = endState;
+        if (total > message.Length)
         {
-            message[total] = 58;
-            messageLength = total + 1;
+            return total;
         }
-
-        pad = PadCodes[finalCodeSet];
 
         // The walk back writes each operation and the latch before it from the end of the message.
         int position = total;
         int state2 = endState;
         int index = data.Length;
-        Span<int> output = stackalloc int[6];
+        InlineArray6<int> outputStorage = default;
+        Span<int> output = outputStorage;
         while (index > 0)
         {
             int prior = priorCodeSet[((index - 1) * 5) + state2];
@@ -572,7 +604,7 @@ internal static class MaxiCodeEncoder
             state2 = prior;
         }
 
-        return messageLength;
+        return total;
     }
 
     /// <summary>
@@ -742,24 +774,23 @@ internal static class MaxiCodeEncoder
     /// <param name="secondaryLength">The number of secondary data codewords, 84 or 68.</param>
     private static void AddCheckCodewords(Span<int> codewords, int secondaryLength)
     {
-        Span<int> generator = stackalloc int[28];
+        // A secondary block takes 20 or 28 check codewords, the most any code here takes.
+        InlineArray32<int> generatorStorage = default;
+        InlineArray32<int> checkStorage = default;
+        Span<int> generator = generatorStorage;
         Field.Generator(1, generator[..10]);
         Field.Remainder(codewords, 1, 10, generator[..10], codewords.Slice(10, 10));
 
+        // The secondary message deals its codewords over two blocks, the odd and the even. The 84 codewords
+        // of standard error correction take 20 check codewords a block, and the 68 of mode 5 take 28.
         int checkCount = secondaryLength == 84 ? 20 : 28;
-        Span<int> secondary = codewords.Slice(20, secondaryLength);
-        Span<int> check = stackalloc int[28];
-        Span<int> blockGenerator = generator[..checkCount];
-        Field.Generator(1, blockGenerator);
-        Span<int> interleaved = codewords.Slice(20 + secondaryLength, checkCount * 2);
-        for (int block = 0; block < 2; block++)
-        {
-            Field.Remainder(secondary[block..], 2, secondaryLength / 2, blockGenerator, check[..checkCount]);
-            for (int i = 0; i < checkCount; i++)
-            {
-                interleaved[(i * 2) + block] = check[i];
-            }
-        }
+        Field.Generator(1, generator[..checkCount]);
+        Field.InterleavedRemainders(
+            codewords.Slice(20, secondaryLength + (checkCount * 2)),
+            secondaryLength,
+            2,
+            generator[..checkCount],
+            ((Span<int>)checkStorage)[..checkCount]);
     }
 
     /// <summary>
@@ -787,8 +818,8 @@ internal static class MaxiCodeEncoder
     private static int Value(int set, int c) => SetValues[(set << 8) | c];
 
     /// <summary>
-    /// Builds the values of the five code sets from the byte each value stands for, as BWIPP lists them. A
-    /// byte that two values of one code set stand for takes the later value.
+    /// Builds the values of the five code sets from the byte each value stands for. A byte
+    /// that two values of one code set stand for takes the later value.
     /// </summary>
     /// <returns>The values, set x 256 + byte, 0xFF where the code set has no such byte.</returns>
     private static byte[] BuildSetValues()

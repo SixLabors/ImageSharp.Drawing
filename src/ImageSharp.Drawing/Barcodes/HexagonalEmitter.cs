@@ -70,8 +70,6 @@ internal static class HexagonalEmitter
     /// <returns>The area the symbol and its quiet zones cover.</returns>
     private static RectangleF Layout(DrawingCanvas? canvas, ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
     {
-        Guard.MustBeGreaterThan(options.Dpi, 0, nameof(options.Dpi));
-        Guard.MustBeGreaterThan(symbol.XDimension, 0, nameof(options.XDimension));
         double pixelsPerMillimetre = options.Dpi / 25.4;
         double x = symbol.XDimension * pixelsPerMillimetre;
 

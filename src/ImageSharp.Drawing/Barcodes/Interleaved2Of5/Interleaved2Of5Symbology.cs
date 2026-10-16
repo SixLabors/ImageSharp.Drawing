@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
@@ -77,18 +76,16 @@ public sealed class Interleaved2Of5Symbology : BarcodeSymbology
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, Interleaved2Of5Encoder.MaximumLength, nameof(text));
 
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
-        while (codePoints.MoveNext())
+        // Validate mode reads the last digit as the check digit, so at least one data digit comes before it.
+        if (this.CheckDigit == CheckCharacterMode.Validate && text.Length < 2)
         {
-            CodePoint current = codePoints.Current;
-            if (!current.IsAsciiDigit())
-            {
-                throw new ArgumentException($"Interleaved 2 of 5 carries only digits; got {current.ToDisplayString()}.", nameof(text));
-            }
+            throw new ArgumentException("A supplied check digit follows at least one data digit.", nameof(text));
         }
 
+        BarcodeSymbology.ValidateDigits(text);
+
         ReadOnlySpan<char> data = this.CheckDigit == CheckCharacterMode.Validate ? text.AsSpan(0, text.Length - 1) : text;
-        int? check = this.CheckDigit == CheckCharacterMode.None ? null : Gs1Data.ComputeCheckDigit(data);
+        int? check = this.CheckDigit == CheckCharacterMode.None ? null : Interleaved2Of5Encoder.CheckDigit(data);
         if (this.CheckDigit == CheckCharacterMode.Validate && text[^1] - '0' != check)
         {
             throw new ArgumentException($"Incorrect check digit: expected {check}, got {text[^1]}.", nameof(text));

@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// An encoder writes the symbol once: it begins a linear, stacked or matrix symbol with the sizes that its
 /// validated input gives, fills the spans that the begin methods return, adds the text and ends the symbol.
 /// The symbol keeps its values in two buffers rented from the shared <see cref="byte"/> pool: the layout
-/// buffer, which <see cref="BeginLinear"/>, <see cref="BeginStacked"/> or <see cref="BeginMatrix"/> rents
+/// buffer, which <see cref="BeginLinear"/>, <see cref="BeginStacked"/> or <see cref="BeginMatrix(int, int, int, double)"/> rents
 /// for the rows, runs and bars or for the modules, and the text buffer, which <see cref="ReserveText"/>
 /// rents for the text placements and their characters. Each rent happens once, before the encoder's loops,
 /// with the exact size its validated input gives, and <see cref="Dispose"/> returns both. A rented range is
@@ -36,6 +36,16 @@ internal struct BarcodeSymbol : IDisposable
     /// The text buffer: the text placements, then their characters.
     /// </summary>
     private PooledBuffer<byte> textBuffer;
+
+    /// <summary>
+    /// The overlay buffer: the edges of the dark rectangles of the graphic centred on a matrix symbol.
+    /// </summary>
+    private PooledBuffer<byte> overlayBuffer;
+
+    /// <summary>
+    /// The number of edges in <see cref="overlayBuffer"/>, four for each rectangle.
+    /// </summary>
+    private int overlayEdgeCount;
 
     /// <summary>
     /// The byte offset of the runs in the layout buffer.
@@ -163,10 +173,22 @@ internal struct BarcodeSymbol : IDisposable
     public double XDimension { get; private set; }
 
     /// <summary>
-    /// Gets the side in modules of the Swiss cross centred on a matrix symbol, or 0 when the symbol has
-    /// none. The cross covers its square completely, so the modules under the square do not draw.
+    /// Gets the side in modules of the square graphic centred on a matrix symbol, or 0 when the symbol has
+    /// none. The graphic covers its square completely, so the modules under the square do not draw.
     /// </summary>
-    public float SwissCrossSize { get; private set; }
+    public float OverlaySize { get; private set; }
+
+    /// <summary>
+    /// Gets the side of the overlay graphic in the units of <see cref="OverlayEdges"/>.
+    /// </summary>
+    public float OverlayUnit { get; private set; }
+
+    /// <summary>
+    /// Gets the dark rectangles of the overlay graphic, each as its left, top, right and bottom edge in the
+    /// units of <see cref="OverlayUnit"/> from the top left corner of its square, the y axis down. The rest of
+    /// the square is light.
+    /// </summary>
+    public readonly ReadOnlySpan<float> OverlayEdges => Slice<float>(this.overlayBuffer, 0, this.overlayEdgeCount);
 
     /// <summary>
     /// Gets the thickness in modules of the identification bars of a linear symbol, or 0 when the symbol
@@ -283,6 +305,23 @@ internal struct BarcodeSymbol : IDisposable
     }
 
     /// <summary>
+    /// Returns the width of a row of runs in modules, for an encoder that places its text or sizes its bars
+    /// from the width before the symbol ends.
+    /// </summary>
+    /// <param name="runs">The alternating bar and space run widths in modules.</param>
+    /// <returns>The width in modules.</returns>
+    public static int RunWidth(ReadOnlySpan<int> runs)
+    {
+        int width = 0;
+        for (int i = 0; i < runs.Length; i++)
+        {
+            width += runs[i];
+        }
+
+        return width;
+    }
+
+    /// <summary>
     /// Shortens the last row added to the given number of runs, for an encoder that reserves the most
     /// runs its data can take and learns the exact count as it writes. The storage stays reserved.
     /// </summary>
@@ -372,6 +411,27 @@ internal struct BarcodeSymbol : IDisposable
     /// <param name="xDimension">The X dimension in millimetres, <see cref="XDimension"/>.</param>
     /// <returns>The modules to write, row-major, true for a dark module.</returns>
     public Span<bool> BeginMatrix(int columns, int rows, int quietZone, double xDimension)
+        => this.BeginMatrix(columns, rows, quietZone, quietZone, quietZone, quietZone, xDimension);
+
+    /// <summary>
+    /// Begins a matrix symbol with a quiet zone of its own on each side. The modules start light.
+    /// </summary>
+    /// <param name="columns">The number of module columns.</param>
+    /// <param name="rows">The number of module rows.</param>
+    /// <param name="leadingQuietZone">The quiet zone on the left, in modules.</param>
+    /// <param name="trailingQuietZone">The quiet zone on the right, in modules.</param>
+    /// <param name="topQuietZone">The quiet zone above, in modules.</param>
+    /// <param name="bottomQuietZone">The quiet zone below, in modules.</param>
+    /// <param name="xDimension">The X dimension in millimetres, <see cref="XDimension"/>.</param>
+    /// <returns>The modules to write, row-major, true for a dark module.</returns>
+    public Span<bool> BeginMatrix(
+        int columns,
+        int rows,
+        int leadingQuietZone,
+        int trailingQuietZone,
+        int topQuietZone,
+        int bottomQuietZone,
+        double xDimension)
     {
         this.Kind = BarcodeSymbolKind.Matrix;
         this.XDimension = xDimension;
@@ -379,10 +439,10 @@ internal struct BarcodeSymbol : IDisposable
         this.MatrixRows = rows;
         this.WidthInModules = columns;
         this.HeightInModules = rows;
-        this.LeadingQuietZone = quietZone;
-        this.TrailingQuietZone = quietZone;
-        this.TopQuietZone = quietZone;
-        this.BottomQuietZone = quietZone;
+        this.LeadingQuietZone = leadingQuietZone;
+        this.TrailingQuietZone = trailingQuietZone;
+        this.TopQuietZone = topQuietZone;
+        this.BottomQuietZone = bottomQuietZone;
         this.RunUnit = 1F;
 
         this.moduleCount = columns * rows;
@@ -591,10 +651,19 @@ internal struct BarcodeSymbol : IDisposable
     }
 
     /// <summary>
-    /// Adds a Swiss cross to the centre of a built matrix symbol.
+    /// Adds a square graphic to the centre of a built matrix symbol.
     /// </summary>
-    /// <param name="size">The side of the cross in modules.</param>
-    public void AddSwissCross(float size) => this.SwissCrossSize = size;
+    /// <param name="size">The side of the graphic in modules.</param>
+    /// <param name="unit">The side of the graphic in the units of <paramref name="darkEdges"/>.</param>
+    /// <param name="darkEdges">The dark rectangles of the graphic, as <see cref="OverlayEdges"/> holds them.</param>
+    public void AddOverlay(float size, float unit, ReadOnlySpan<float> darkEdges)
+    {
+        this.OverlaySize = size;
+        this.OverlayUnit = unit;
+        this.overlayBuffer = Rent(darkEdges.Length * sizeof(float));
+        this.overlayEdgeCount = darkEdges.Length;
+        darkEdges.CopyTo(Slice<float>(this.overlayBuffer, 0, darkEdges.Length));
+    }
 
     /// <summary>
     /// Adds identification bars to a built linear symbol that carries a text line above and below its bars.
@@ -626,6 +695,7 @@ internal struct BarcodeSymbol : IDisposable
     {
         this.layoutBuffer.Dispose();
         this.textBuffer.Dispose();
+        this.overlayBuffer.Dispose();
     }
 
     /// <summary>

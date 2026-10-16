@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Aztec Runes, Annex A of ISO/IEC 24778: 256 small marks of 11 x 11 modules, the Core Symbol of a compact
+/// Aztec Runes of ISO/IEC 24778: 256 small marks of 11 x 11 modules, the Core Symbol of a compact
 /// Aztec Code symbol whose mode message carries one value. The text is the value, 0 to 255, in decimal digits.
 /// </summary>
 public sealed class AztecRuneSymbology : BarcodeSymbology

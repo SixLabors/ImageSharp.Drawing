@@ -16,9 +16,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <para>
 /// The printed line separates the fields with full stops and spaces and sets the check digit off with a
 /// space. Deutsche Post assigns customer numbers of one to five digits and gives no rule for where the
-/// customer number ends, so this class prints the twelve digits in the groups of two, three, three and
-/// three that the reference implementations agree on. The symbol carries neither the full stops nor the
-/// spaces.
+/// customer number ends, so this class prints the twelve digits in groups of two, three, three and three.
+/// The symbol carries neither the full stops nor the spaces.
 /// </para>
 /// </summary>
 public sealed class IdentcodeSymbology : BarcodeSymbology

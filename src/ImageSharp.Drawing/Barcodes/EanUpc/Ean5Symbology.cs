@@ -34,7 +34,7 @@ public sealed class Ean5Symbology : BarcodeSymbology
             throw new ArgumentException($"EAN-5 requires exactly 5 digits; got {text.Length} characters.", nameof(text));
         }
 
-        EanUpcEncoder.ValidateDigits(text);
+        BarcodeSymbology.ValidateDigits(text);
 
         // GS1 General Specifications: V = (3 x (d1 + d3 + d5) + 9 x (d2 + d4)) mod 10 selects the parity pattern.
         int checksum = ((3 * ((text[0] - '0') + (text[2] - '0') + (text[4] - '0')))

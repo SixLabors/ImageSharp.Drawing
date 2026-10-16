@@ -173,16 +173,17 @@ internal static class Pdf417Encoder
 
         // Section 5.9.2: the Symbol Length Descriptor n = c x r - k counts itself, the data and the pad
         // codewords, which fill the rest of the data region with 900.
+        // One rental holds the codewords and the generator coefficients of the error correction.
         int total = c * r;
         int n = total - k;
-        PooledBuffer<int> rented = new(total);
+        PooledBuffer<int> rented = new(total + k + 1);
         try
         {
-            Span<int> codewords = rented.Span;
+            Span<int> codewords = rented.Span[..total];
             codewords[0] = n;
             data.CopyTo(codewords[1..]);
             codewords[(m + 1)..n].Fill(Pdf417Codewords.Pad);
-            Pdf417Codewords.AppendErrorCorrection(codewords, k);
+            Pdf417Codewords.AppendErrorCorrection(codewords, k, rented.Span[total..]);
 
             BuildRows(codewords, c, r, level, compact, options, ref symbol);
         }

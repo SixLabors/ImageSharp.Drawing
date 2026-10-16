@@ -917,6 +917,24 @@ public class DrawBarcodeTests
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void CodeOne<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new CodeOneSymbology(), "Code One", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void CodeOne_VersionS<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new CodeOneSymbology(CodeOneVersion.S20), "123456789012", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void CodeOne_VersionT<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new CodeOneSymbology(CodeOneVersion.T16), "T16", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void D3Aqr<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new D3AqrSymbology(2842), "HTTPS://ID.GS1.ORG/01/09521234543213/22/ABC%2D123?99=XYZ-987", CreateMatrixOptions());

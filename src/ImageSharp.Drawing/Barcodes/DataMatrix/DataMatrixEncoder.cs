@@ -36,6 +36,23 @@ internal static class DataMatrixEncoder
     private const int MacroTrailerLength = 2;
 
     /// <summary>
+    /// The most modules a mapping matrix holds: the 132 x 132 of the 144 x 144 symbol.
+    /// </summary>
+    private const int MaximumMappingModules = 132 * 132;
+
+    /// <summary>
+    /// The most codewords a symbol holds, data and error correction: one for every eight modules of the
+    /// largest mapping matrix.
+    /// </summary>
+    private const int MaximumTotalCodewords = MaximumMappingModules / 8;
+
+    /// <summary>
+    /// The field of the error correction: GF(2^8) with the primitive polynomial x^8 + x^5 + x^3 + x^2 + 1,
+    /// 301 decimal.
+    /// </summary>
+    private static readonly GaloisField Field = new(256, 301);
+
+    /// <summary>
     /// The symbol sizes. The square sizes and the first six rectangular sizes are ISO/IEC 16022 Table 7,
     /// which Tables 5-32 and 5-33 of the GS1 General Specifications repeat. The other rectangular sizes are
     /// the rectangular extension, which only <see cref="DataMatrixFormat.RectangularExtension"/> takes. A
@@ -183,26 +200,32 @@ internal static class DataMatrixEncoder
         }
 
         // The message is the data as int values, so the function characters can take negative values that
-        // no byte has. It holds every character and at most one function character in front, so its full
-        // length is known here: a short message stays inline, and a longer one rents once. The codewords
-        // go to one rented buffer of the largest symbol's capacity, which the encodation never passes.
-        InlineArray64<int> messageStorage = default;
+        // no byte has. It holds every character and at most one function character in front. One rented
+        // block holds the message, the codewords of the largest symbol, the scratch of the encodation and
+        // the mapping matrix of the largest symbol, so the symbol rents once. The text is at most
+        // MaximumLength characters, so the block is bounded.
         int messageCapacity = text.Length + 1;
-        ValueListBuilder<int> message = messageCapacity <= 64 ? new(messageStorage) : new(messageCapacity);
-        PooledBuffer<int> codewords = new(DataMatrixCodewords.MaximumCodewords);
+        int scratchLength = DataMatrixCodewords.ScratchLength(messageCapacity);
+        int mappingLength = MaximumMappingModules / sizeof(int);
+        PooledBuffer<int> block = new(messageCapacity + MaximumTotalCodewords + scratchLength + mappingLength);
         try
         {
+            Span<int> messageBuffer = block.Span[..messageCapacity];
+            Span<int> codewords = block.Span.Slice(messageCapacity, MaximumTotalCodewords);
+            Span<int> scratch = block.Span.Slice(messageCapacity + MaximumTotalCodewords, scratchLength);
+            Span<sbyte> mapping = MemoryMarshal.Cast<int, sbyte>(block.Span.Slice(messageCapacity + MaximumTotalCodewords + scratchLength, mappingLength));
+
             // GS1 data starts with the Function 1 Symbol Character, and each separator is one too.
             // Section 5.6.2 of the GS1 General Specifications transmits either as <GS>. The element strings
             // carry no <GS> of their own, so every <GS> in the prepared data is a separator.
+            int messageLength = 0;
             if (gs1)
             {
-                message.Append(DataMatrixCodewords.Fnc1);
-                Span<int> values = message.AppendSpan(text.Length);
+                messageBuffer[messageLength++] = DataMatrixCodewords.Fnc1;
                 for (int i = 0; i < text.Length; i++)
                 {
                     char c = text[i];
-                    values[i] = c == Gs1Data.Separator ? DataMatrixCodewords.Fnc1 : c;
+                    messageBuffer[messageLength++] = c == Gs1Data.Separator ? DataMatrixCodewords.Fnc1 : c;
                 }
             }
             else
@@ -215,14 +238,13 @@ internal static class DataMatrixEncoder
                     && text[6] == '\u001D'
                     && text.EndsWith("\u001E\u0004"))
                 {
-                    message.Append(text[5] == '5' ? DataMatrixCodewords.Macro05 : DataMatrixCodewords.Macro06);
+                    messageBuffer[messageLength++] = text[5] == '5' ? DataMatrixCodewords.Macro05 : DataMatrixCodewords.Macro06;
                     text = text[MacroHeaderLength..^MacroTrailerLength];
                 }
 
-                Span<int> values = message.AppendSpan(text.Length);
                 for (int i = 0; i < text.Length; i++)
                 {
-                    values[i] = text[i];
+                    messageBuffer[messageLength++] = text[i];
                 }
             }
 
@@ -246,10 +268,11 @@ internal static class DataMatrixEncoder
             }
 
             int written = DataMatrixCodewords.Encode(
-                message.AsSpan(),
+                messageBuffer[..messageLength],
                 capacities[..allowedCount],
                 c40Prefix,
-                codewords.Span);
+                codewords[..DataMatrixCodewords.MaximumCodewords],
+                scratch);
 
             // The symbol is the smallest that holds the data codewords. Of two sizes with the same
             // capacity, the one listed first wins.
@@ -267,12 +290,11 @@ internal static class DataMatrixEncoder
                 throw new ArgumentException($"The data takes {written} data codewords, more than the Data Matrix symbol holds.", nameof(text));
             }
 
-            BuildMatrix(Sizes[chosen], codewords.Span[..written], quietZone, xDimension, ref symbol);
+            BuildMatrix(Sizes[chosen], codewords, written, mapping, quietZone, xDimension, ref symbol);
         }
         finally
         {
-            codewords.Dispose();
-            message.Dispose();
+            block.Dispose();
         }
     }
 
@@ -280,55 +302,51 @@ internal static class DataMatrixEncoder
     /// Builds the module grid of a symbol from its data codewords and writes it to the symbol.
     /// </summary>
     /// <param name="size">The symbol size.</param>
-    /// <param name="data">The data codewords, without pad codewords.</param>
+    /// <param name="codewords">The data codewords, without pad codewords, followed by room for the pad and the error correction codewords.</param>
+    /// <param name="dataLength">The number of data codewords.</param>
+    /// <param name="mapping">The scratch of the mapping matrix, at least the mapping matrix of the size long.</param>
     /// <param name="quietZone">The quiet zone on each of the four sides, in modules.</param>
     /// <param name="xDimension">The X dimension in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
     /// <param name="symbol">The symbol to write.</param>
-    private static void BuildMatrix(DataMatrixSize size, ReadOnlySpan<int> data, int quietZone, double xDimension, ref BarcodeSymbol symbol)
+    private static void BuildMatrix(
+        DataMatrixSize size,
+        Span<int> codewords,
+        int dataLength,
+        Span<sbyte> mapping,
+        int quietZone,
+        double xDimension,
+        ref BarcodeSymbol symbol)
     {
         int dataCount = size.DataCodewords;
-        int total = dataCount + size.ErrorCodewords;
+        codewords = codewords[..(dataCount + size.ErrorCodewords)];
 
-        // One rent holds the codewords and then the mapping matrix, whose sbyte values need no alignment.
-        int mappingLength = size.MappingRows * size.MappingColumns;
-        PooledBuffer<byte> buffer = new((total * sizeof(int)) + mappingLength);
-        try
+        // The pad characters fill the data codewords the data leaves empty. The first pad character is 129.
+        // The others take the 253-state randomising, which adds ((149 x position) mod 253) + 1 for the
+        // position of the codeword counted from 1, and wraps above 254, so a run of pads does not repeat one
+        // module pattern.
+        for (int i = dataLength; i < dataCount; i++)
         {
-            Span<int> codewords = MemoryMarshal.Cast<byte, int>(buffer.Span[..(total * sizeof(int))]);
-            data.CopyTo(codewords);
-
-            // The pad characters fill the data codewords the data leaves empty. The first pad character is
-            // 129. The others take the 253-state randomising, which adds ((149 x position) mod 253) + 1 for
-            // the position of the codeword counted from 1, and wraps above 254, so a run of pads does not
-            // repeat one module pattern.
-            for (int i = data.Length; i < dataCount; i++)
+            int pad = DataMatrixCodewords.Pad;
+            if (i > dataLength)
             {
-                int pad = DataMatrixCodewords.Pad;
-                if (i > data.Length)
+                pad += ((149 * (i + 1)) % 253) + 1;
+                if (pad > 254)
                 {
-                    pad += ((149 * (i + 1)) % 253) + 1;
-                    if (pad > 254)
-                    {
-                        pad -= 254;
-                    }
+                    pad -= 254;
                 }
-
-                codewords[i] = pad;
             }
 
-            AppendErrorCorrection(size, codewords);
+            codewords[i] = pad;
+        }
 
-            // The codewords fill the mapping matrix, the data regions without their finder and alignment
-            // patterns, and the frame then puts the patterns around each region. The mapping matrix holds
-            // -1 for an empty module, then 0 or 1.
-            Span<sbyte> matrix = MemoryMarshal.Cast<byte, sbyte>(buffer.Span.Slice(total * sizeof(int), mappingLength));
-            Place(matrix, size.MappingRows, size.MappingColumns, codewords);
-            Frame(size, matrix, symbol.BeginMatrix(size.Columns, size.Rows, quietZone, xDimension));
-        }
-        finally
-        {
-            buffer.Dispose();
-        }
+        AppendErrorCorrection(size, codewords);
+
+        // The codewords fill the mapping matrix, the data regions without their finder and alignment
+        // patterns, and the frame then puts the patterns around each region. The mapping matrix holds -1 for
+        // an empty module, then 0 or 1.
+        Span<sbyte> matrix = mapping[..(size.MappingRows * size.MappingColumns)];
+        Place(matrix, size.MappingRows, size.MappingColumns, codewords);
+        Frame(size, matrix, symbol.BeginMatrix(size.Columns, size.Rows, quietZone, xDimension));
     }
 
     /// <summary>
@@ -347,7 +365,7 @@ internal static class DataMatrixEncoder
         int perBlock = size.ErrorCodewords / blocks;
         InlineArray68<int> generatorStorage = default;
         Span<int> generator = ((Span<int>)generatorStorage)[..perBlock];
-        GaloisField field = GaloisField.DataMatrix;
+        GaloisField field = Field;
         field.Generator(1, generator);
 
         // The check codewords of one block are calculated into an inline buffer, then written to their

@@ -36,10 +36,10 @@ public class FourStateMailmarkSymbologyTests
     [Fact]
     public void ConvertsTheDestinationField()
     {
-        Assert.Equal(0UL, FourStateMailmarkEncoder.DestinationValue("XY11     "));
-        Assert.Equal(118_259_964_139UL, FourStateMailmarkEncoder.DestinationValue("JW5O9QA6Y"));
-        Assert.Equal(1UL, FourStateMailmarkEncoder.DestinationValue("A0A0AA0A "));
-        Assert.True(FourStateMailmarkEncoder.DestinationValue("EF61AH8T ") > 5_408_000_000UL);
+        Assert.Equal(0UL, FourStateMailmarkEncoder.DestinationValue("XY11     ", 0));
+        Assert.Equal(118_259_964_139UL, FourStateMailmarkEncoder.DestinationValue("JW5O9QA6Y", 0));
+        Assert.Equal(1UL, FourStateMailmarkEncoder.DestinationValue("A0A0AA0A ", 0));
+        Assert.True(FourStateMailmarkEncoder.DestinationValue("EF61AH8T ", 0) > 5_408_000_000UL);
     }
 
     /// <summary>
@@ -50,17 +50,17 @@ public class FourStateMailmarkSymbologyTests
     [Fact]
     public void GeneratesTheCheckNumbersOfExampleOne()
     {
-        byte[] numbers = new byte[16];
+        int[] numbers = new int[16];
         FourStateMailmarkEncoder.DataNumbers(4, numbers, 9);
         Assert.Equal(4, numbers[15]);
-        byte[] check = new byte[6];
+        int[] check = new int[6];
         FourStateMailmarkEncoder.CheckNumbers(numbers, [1, 17, 26, 30, 27, 30, 24], check);
         Assert.Equal([14, 7, 23, 3, 23, 15], check);
 
-        byte[] numbersL = new byte[19];
+        int[] numbersL = new int[19];
         FourStateMailmarkEncoder.DataNumbers(4, numbersL, 11);
         Assert.Equal(4, numbersL[18]);
-        byte[] checkL = new byte[7];
+        int[] checkL = new int[7];
         FourStateMailmarkEncoder.CheckNumbers(numbersL, [1, 5, 9, 5, 26, 17, 25, 22], checkL);
         Assert.Equal([20, 1, 20, 7, 14, 11, 18], checkL);
     }
@@ -74,7 +74,7 @@ public class FourStateMailmarkSymbologyTests
     public void ConvertsTheConsolidatedValueOfExampleTwoToDataNumbers()
     {
         UInt128 consolidated = UInt128.Parse("354779892418644019776828", CultureInfo.InvariantCulture);
-        byte[] numbers = new byte[16];
+        int[] numbers = new int[16];
         FourStateMailmarkEncoder.DataNumbers(consolidated, numbers, 9);
         Assert.Equal([15, 22, 3, 25, 23, 26, 7, 3, 20, 14, 1, 4, 16, 3, 9, 28], numbers);
     }

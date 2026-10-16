@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
@@ -47,15 +46,7 @@ public sealed class IsmnSymbology : BarcodeSymbology
         ReadOnlySpan<char> compact = compactBuffer[..compactLength];
         bool mForm = compact.Length > 0 && compact[0] == 'M';
         ReadOnlySpan<char> body = mForm ? compact[1..] : compact;
-        SpanCodePointEnumerator codePoints = body.EnumerateCodePoints();
-        while (codePoints.MoveNext())
-        {
-            CodePoint current = codePoints.Current;
-            if (!current.IsAsciiDigit())
-            {
-                throw new ArgumentException($"ISMN accepts only digits, hyphens and a leading M; got {current.ToDisplayString()}.", nameof(text));
-            }
-        }
+        BarcodeSymbology.ValidateDigits(body);
 
         // The encoded form is thirteen digits: twelve data digits and the check digit the caption repeats.
         InlineArray14<char> digitStorage = default;
@@ -69,7 +60,9 @@ public sealed class IsmnSymbology : BarcodeSymbology
             "9790".CopyTo(digits);
             body[..8].CopyTo(digits[4..]);
             captionPrefix = "ISMN 979-0-";
-            captionBody = EanUpcEncoder.TakeHyphenatedPrefix(text.AsSpan(text[1] == '-' ? 2 : 1), 8);
+
+            // Hyphens can stand before and after the M, so the digits start after the M and its hyphens.
+            captionBody = EanUpcEncoder.TakeHyphenatedPrefix(text.AsSpan(text.IndexOf('M') + 1).TrimStart('-'), 8);
         }
         else if (!mForm && body.Length is 12 or 13 && body.StartsWith("9790", StringComparison.Ordinal))
         {

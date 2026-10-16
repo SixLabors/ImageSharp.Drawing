@@ -47,8 +47,8 @@ public sealed class HibcCode39Symbology : BarcodeSymbology
         ValueStringBuilder encoded = capacity <= HibcData.InlineBufferLength ? new(bufferStorage) : new(capacity);
         try
         {
+            // The prepared data is in the Code 39 character set and at most Code39Encoder.MaximumLength long.
             HibcData.Prepare(text, this.ValidateCheckCharacter, ref encoded);
-            Code39Encoder.Validate(encoded.AsSpan());
 
             ReadOnlySpan<char> data = encoded.AsSpan();
             Code39Encoder.BuildSymbol(

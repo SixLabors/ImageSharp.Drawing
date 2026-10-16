@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class Interleaved2Of5Encoder
 {
     /// <summary>
-    /// The largest number of digits this library encodes in one symbol. Note 1 to Table 1 of AIM USS-I
+    /// The largest number of digits a symbol carries. Note 1 to Table 1 of AIM USS-I
     /// 2/5 "permits encodation of any length numeric field having an even number of digits", so the
     /// symbology sets no maximum of its own.
     /// </summary>
@@ -53,7 +53,7 @@ internal static class Interleaved2Of5Encoder
     /// The width of a wide element in modules. Section 3.2 of AIM USS-I 2/5: "Wide element widths must
     /// be in the range 2.0X to 3.0X", narrowing to "2.2X to 3.0X" below an X dimension of 0.020 inches,
     /// and section 5.3.2.2 of the GS1 General Specifications gives ITF-14 the range 2.25:1 to 3.0:1. A run
-    /// width is a whole number of modules, so this library draws the 3 that lies inside every range.
+    /// width is a whole number of modules, so a wide element is the 3 that lies inside every range.
     /// </summary>
     private const int WideElement = 3;
 
@@ -113,10 +113,7 @@ internal static class Interleaved2Of5Encoder
         double xDimension,
         float nominalBarHeight,
         ref BarcodeSymbol symbol)
-    {
-        BeginRuns(digits, xDimension, ref symbol, out Span<float> heights, out Span<float> tops);
-        EndSymbol(heights, tops, readable, options, nominalBarHeight, 0F, ref symbol);
-    }
+        => BuildSymbol(digits, readable, options, xDimension, nominalBarHeight, 0F, ref symbol);
 
     /// <summary>
     /// Encodes digits and builds the symbol at a bar height an application standard fixes and inside a
@@ -139,7 +136,27 @@ internal static class Interleaved2Of5Encoder
         ref BarcodeSymbol symbol)
     {
         BeginRuns(digits, xDimension, ref symbol, out Span<float> heights, out Span<float> tops);
-        EndSymbol(heights, tops, readable, options, nominalBarHeight, bearerBarThickness, ref symbol);
+        EndSymbol(heights, tops, readable, options, nominalBarHeight, bearerBarThickness, BarcodeSymbol.RunWidth(symbol.Runs), ref symbol);
+    }
+
+    /// <summary>
+    /// Calculates the optional check digit of section 2.5 of AIM USS-I 2/5 by the modulo 10 calculation of
+    /// Appendix C: the digits are weighted 3 and 1 alternately from the rightmost digit, which takes 3, and
+    /// the check digit lifts the sum to the next multiple of ten.
+    /// </summary>
+    /// <param name="digits">The data digits.</param>
+    /// <returns>The check digit value.</returns>
+    public static int CheckDigit(ReadOnlySpan<char> digits)
+    {
+        int sum = 0;
+        int weight = 3;
+        for (int i = digits.Length - 1; i >= 0; i--)
+        {
+            sum += (digits[i] - '0') * weight;
+            weight = 4 - weight;
+        }
+
+        return (10 - (sum % 10)) % 10;
     }
 
     /// <summary>
@@ -191,15 +208,16 @@ internal static class Interleaved2Of5Encoder
     /// <param name="readable">The human readable interpretation.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
-    public static void EndSymbol(
+    private static void EndSymbol(
         Span<float> heights,
         Span<float> tops,
         ReadOnlySpan<char> readable,
         BarcodeOptions options,
         ref BarcodeSymbol symbol)
     {
-        float nominalBarHeight = MathF.Max(WidthInModules(symbol.Runs) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / symbol.XDimension));
-        EndSymbol(heights, tops, readable, options, nominalBarHeight, 0F, ref symbol);
+        int widthInModules = BarcodeSymbol.RunWidth(symbol.Runs);
+        float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / symbol.XDimension));
+        EndSymbol(heights, tops, readable, options, nominalBarHeight, 0F, widthInModules, ref symbol);
     }
 
     /// <summary>
@@ -214,6 +232,7 @@ internal static class Interleaved2Of5Encoder
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="nominalBarHeight">The bar height in modules a symbol takes when the caller sets none.</param>
     /// <param name="bearerBarThickness">The thickness of the bearer bar in modules, or zero for none.</param>
+    /// <param name="widthInModules">The width of the runs in modules.</param>
     /// <param name="symbol">The symbol to write.</param>
     private static void EndSymbol(
         Span<float> heights,
@@ -222,9 +241,9 @@ internal static class Interleaved2Of5Encoder
         BarcodeOptions options,
         float nominalBarHeight,
         float bearerBarThickness,
+        int widthInModules,
         ref BarcodeSymbol symbol)
     {
-        int widthInModules = WidthInModules(symbol.Runs);
         float barHeight = options.ResolveBarHeight(symbol.XDimension, nominalBarHeight);
         heights.Fill(barHeight);
         tops.Fill(bearerBarThickness);
@@ -241,21 +260,5 @@ internal static class Interleaved2Of5Encoder
         }
 
         symbol.EndLinear(QuietZone, QuietZone, bearerBarThickness);
-    }
-
-    /// <summary>
-    /// Returns the width of the runs in modules.
-    /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <returns>The width in modules.</returns>
-    private static int WidthInModules(ReadOnlySpan<int> runs)
-    {
-        int width = 0;
-        for (int i = 0; i < runs.Length; i++)
-        {
-            width += runs[i];
-        }
-
-        return width;
     }
 }

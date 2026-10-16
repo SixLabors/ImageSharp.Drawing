@@ -55,7 +55,7 @@ public class Pdf417SymbologyTests
     public void Pdf417_ErrorCorrectionMatchesAnnexQ()
     {
         int[] codewords = [5, 453, 178, 121, 239, 0, 0, 0, 0];
-        Pdf417Codewords.AppendErrorCorrection(codewords, 4);
+        Pdf417Codewords.AppendErrorCorrection(codewords, 4, new int[5]);
         Assert.Equal([5, 453, 178, 121, 239, 452, 327, 657, 619], codewords);
     }
 

@@ -60,23 +60,8 @@ internal static class Gs1Linters
         SearchValues.Create("-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz");
 
     /// <summary>
-    /// Gets the ISO 3166-1 numeric country codes 000 to 999 as a bit field, code n at bit 7 - (n mod 8) of
+    /// Gets the ISO 4217 numeric currency codes 000 to 999 as a bit field, code n at bit 7 - (n mod 8) of
     /// byte n div 8. The constant bytes compile into the assembly data, so reading them allocates nothing.
-    /// </summary>
-    private static ReadOnlySpan<byte> Iso3166Numeric =>
-    [
-        0x08, 0xa8, 0x88, 0x89, 0x88, 0x88, 0xb8, 0x88, 0x8a, 0xa8, 0x0a, 0x28, 0x88, 0x88, 0x88, 0x88,
-        0x08, 0x88, 0x88, 0x8a, 0x22, 0x23, 0x28, 0x89, 0x88, 0x18, 0x8a, 0x22, 0x21, 0xe3, 0x22, 0xa2,
-        0x2a, 0x2a, 0x18, 0x00, 0x88, 0x88, 0x88, 0x88, 0x88, 0x8a, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88,
-        0x88, 0x82, 0x88, 0xa2, 0x62, 0x2a, 0x22, 0xa2, 0x22, 0x22, 0x22, 0x22, 0x88, 0x08, 0xb8, 0x88,
-        0x88, 0x88, 0x97, 0x08, 0x08, 0x22, 0x22, 0x22, 0x2d, 0xe1, 0x02, 0x88, 0x88, 0x88, 0xa2, 0x22,
-        0x32, 0x0a, 0x1b, 0x22, 0x22, 0x22, 0xa2, 0x03, 0xe2, 0x08, 0x08, 0xc8, 0x08, 0x88, 0x88, 0xa8,
-        0x88, 0x88, 0x88, 0x9a, 0x89, 0x00, 0x20, 0x21, 0xe0, 0x80, 0x22, 0x2a, 0x00, 0x08, 0x21, 0x02,
-    ];
-
-    /// <summary>
-    /// Gets the ISO 4217 numeric currency codes 000 to 999 as a bit field, laid out as
-    /// <see cref="Iso3166Numeric"/>.
     /// </summary>
     private static ReadOnlySpan<byte> Iso4217Numeric =>
     [
@@ -296,7 +281,7 @@ internal static class Gs1Linters
                 break;
 
             case Gs1Linter.Iso3166:
-                if (data.Length != 3 || !IsSet(Iso3166Numeric, Number(data)))
+                if (data.Length != 3 || !Iso3166.IsNumericCode(Number(data)))
                 {
                     ThrowInvalidData(identifier, $"carries '{data}', which is not an ISO 3166-1 numeric country code", nameof(data));
                 }
@@ -305,7 +290,7 @@ internal static class Gs1Linters
 
             case Gs1Linter.Iso3166999:
                 // The value 999 stands for a country that is not known.
-                if (data.Length != 3 || (!data.SequenceEqual("999") && !IsSet(Iso3166Numeric, Number(data))))
+                if (data.Length != 3 || (!data.SequenceEqual("999") && !Iso3166.IsNumericCode(Number(data))))
                 {
                     ThrowInvalidData(identifier, $"carries '{data}', which is not an ISO 3166-1 numeric country code or 999", nameof(data));
                 }

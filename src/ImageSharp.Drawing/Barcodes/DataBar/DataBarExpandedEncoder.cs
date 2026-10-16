@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
@@ -609,15 +608,7 @@ internal static class DataBarExpandedEncoder
         if (method != 2)
         {
             ReadOnlySpan<char> gtin = text.Slice(2, 14);
-            SpanCodePointEnumerator codePoints = gtin.EnumerateCodePoints();
-            while (codePoints.MoveNext())
-            {
-                CodePoint current = codePoints.Current;
-                if (!current.IsAsciiDigit())
-                {
-                    throw new ArgumentException($"The GTIN of Application Identifier (01) carries only digits; got {current.ToDisplayString()}.", nameof(text));
-                }
-            }
+            BarcodeSymbology.ValidateDigits(gtin);
 
             int expected = Gs1Data.ComputeCheckDigit(gtin[..13]);
             if (gtin[13] - '0' != expected)
@@ -740,42 +731,42 @@ internal static class DataBarExpandedEncoder
     }
 
     /// <summary>
-    /// Encodes the general purpose field. Numeric mode carries two digits or a digit and a separator per
+    /// Encodes the general purpose text. Numeric mode carries two digits or a digit and a separator per
     /// seven bits, alphanumeric mode a character per five or six bits, and ISO/IEC 646 mode a character per
     /// five, seven or eight bits. Each mode latches to another when the characters ahead favour it.
     /// </summary>
-    /// <param name="field">The characters of the field.</param>
+    /// <param name="text">The characters of the general purpose text, the end of the prepared text.</param>
     /// <param name="bits">The buffer of bits.</param>
     /// <param name="position">The bit position.</param>
     /// <param name="lastDigit">A single digit left at the end in numeric mode, or zero.</param>
-    /// <returns>The mode at the end of the field.</returns>
-    private static int EncodeGeneralField(ReadOnlySpan<char> field, Span<byte> bits, ref int position, out char lastDigit)
+    /// <returns>The mode at the end of the text.</returns>
+    private static int EncodeGeneralField(ReadOnlySpan<char> text, Span<byte> bits, ref int position, out char lastDigit)
     {
         lastDigit = '\0';
         int mode = NumericMode;
         int i = 0;
-        while (i < field.Length)
+        while (i < text.Length)
         {
-            char c = field[i];
+            char c = text[i];
             int type = TypeOf(c);
             if (type == 0)
             {
-                throw new ArgumentException($"GS1 DataBar Expanded cannot carry the character U+{(int)c:X4}.", nameof(field));
+                throw new ArgumentException($"GS1 DataBar Expanded cannot carry the character U+{(int)c:X4}.", nameof(text));
             }
 
             switch (mode)
             {
                 case NumericMode:
-                    if (i < field.Length - 1)
+                    if (i < text.Length - 1)
                     {
-                        if (type != NumericMode || TypeOf(field[i + 1]) != NumericMode)
+                        if (type != NumericMode || TypeOf(text[i + 1]) != NumericMode)
                         {
                             Append(bits, ref position, 0b0000, 4);
                             mode = AlphanumericMode;
                         }
                         else
                         {
-                            Append(bits, ref position, (11 * NumericValue(c)) + NumericValue(field[i + 1]) + 8, 7);
+                            Append(bits, ref position, (11 * NumericValue(c)) + NumericValue(text[i + 1]) + 8, 7);
                             i += 2;
                         }
                     }
@@ -804,9 +795,9 @@ internal static class DataBarExpandedEncoder
                         Append(bits, ref position, 0b00100, 5);
                         mode = Iso646Mode;
                     }
-                    else if (Next(field, i, 6, NumericMode, 0) || EndsNumeric(field, i))
+                    else if (Next(text, i, 6, NumericMode, 0) || EndsNumeric(text, i))
                     {
-                        // Six numeric characters ahead, or four or five that end the field.
+                        // Six numeric characters ahead, or four or five that end the text.
                         Append(bits, ref position, 0b000, 3);
                         mode = NumericMode;
                     }
@@ -838,13 +829,13 @@ internal static class DataBarExpandedEncoder
                     }
 
                     // A latch out of ISO/IEC 646 mode needs no ISO/IEC 646 only character in the next ten.
-                    bool noIso646Ahead = NoneAhead(field, i, 10, Iso646Mode);
-                    if (noIso646Ahead && Next(field, i, 4, NumericMode, 0))
+                    bool noIso646Ahead = NoneAhead(text, i, 10, Iso646Mode);
+                    if (noIso646Ahead && Next(text, i, 4, NumericMode, 0))
                     {
                         Append(bits, ref position, 0b000, 3);
                         mode = NumericMode;
                     }
-                    else if (noIso646Ahead && Next(field, i, 5, AlphanumericMode, NumericMode))
+                    else if (noIso646Ahead && Next(text, i, 5, AlphanumericMode, NumericMode))
                     {
                         Append(bits, ref position, 0b00100, 5);
                         mode = AlphanumericMode;
@@ -918,18 +909,20 @@ internal static class DataBarExpandedEncoder
     /// <param name="position">The bit position.</param>
     /// <param name="value">The value.</param>
     /// <param name="count">The number of bits.</param>
-    /// <exception cref="ArgumentException">The bits exceed the 21 data characters of the largest symbol.</exception>
     private static void Append(Span<byte> bits, ref int position, int value, int count)
     {
-        if (position + count > bits.Length)
+        // Bits past the buffer cannot fit the largest symbol. The position still counts them, so the symbol
+        // character count after the general purpose field rejects the data.
+        int end = position + count;
+        if (end <= bits.Length)
         {
-            throw new ArgumentException($"GS1 DataBar Expanded carries at most {MaximumSymbolCharacters - 1} data characters; the data needs more.");
+            for (int bit = count - 1; bit >= 0; bit--)
+            {
+                bits[position++] = (byte)((value >> bit) & 1);
+            }
         }
 
-        for (int bit = count - 1; bit >= 0; bit--)
-        {
-            bits[position++] = (byte)((value >> bit) & 1);
-        }
+        position = end;
     }
 
     /// <summary>

@@ -66,6 +66,9 @@ public class Interleaved2Of5SymbologyTests
 
         Assert.Equal(computed, validated);
         Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new Interleaved2Of5Symbology(CheckCharacterMode.Validate), "123456", new BarcodeOptions()));
+
+        // A check digit alone has no data to check.
+        Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new Interleaved2Of5Symbology(CheckCharacterMode.Validate), "0", new BarcodeOptions()));
     }
 
     /// <summary>
