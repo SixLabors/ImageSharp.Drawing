@@ -22,7 +22,7 @@ internal static class Code93Encoder
     public const int DataCharacters = 43;
 
     /// <summary>
-    /// The largest number of characters this library encodes in one symbol. ANSI/AIM BC5-1995 makes the
+    /// The largest number of characters a symbol carries. ANSI/AIM BC5-1995 makes the
     /// data string length variable, so the symbology sets no maximum of its own.
     /// </summary>
     public const int MaximumLength = 500;
@@ -191,7 +191,7 @@ internal static class Code93Encoder
             runs[written++] = StartStopPattern[i];
         }
 
-        int widthInModules = WidthInModules(runs);
+        int widthInModules = BarcodeSymbol.RunWidth(runs);
         float nominalBarHeight = MathF.Max((widthInModules + (QuietZone * 2)) * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
         float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);
         heights.Fill(barHeight);
@@ -250,22 +250,6 @@ internal static class Code93Encoder
         }
 
         return sum % CheckModulus;
-    }
-
-    /// <summary>
-    /// Returns the width of the runs in modules.
-    /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <returns>The width in modules.</returns>
-    private static int WidthInModules(ReadOnlySpan<int> runs)
-    {
-        int width = 0;
-        for (int i = 0; i < runs.Length; i++)
-        {
-            width += runs[i];
-        }
-
-        return width;
     }
 
     /// <summary>

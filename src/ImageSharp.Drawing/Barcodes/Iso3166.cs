@@ -25,6 +25,21 @@ internal static class Iso3166
     ];
 
     /// <summary>
+    /// Gets the ISO 3166-1 numeric country codes 000 to 999 as a bit field, code n at bit 7 - (n mod 8) of
+    /// byte n div 8. The constant bytes compile into the assembly data, so reading them allocates nothing.
+    /// </summary>
+    private static ReadOnlySpan<byte> NumericCodes =>
+    [
+        0x08, 0xa8, 0x88, 0x89, 0x88, 0x88, 0xb8, 0x88, 0x8a, 0xa8, 0x0a, 0x28, 0x88, 0x88, 0x88, 0x88,
+        0x08, 0x88, 0x88, 0x8a, 0x22, 0x23, 0x28, 0x89, 0x88, 0x18, 0x8a, 0x22, 0x21, 0xe3, 0x22, 0xa2,
+        0x2a, 0x2a, 0x18, 0x00, 0x88, 0x88, 0x88, 0x88, 0x88, 0x8a, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88,
+        0x88, 0x82, 0x88, 0xa2, 0x62, 0x2a, 0x22, 0xa2, 0x22, 0x22, 0x22, 0x22, 0x88, 0x08, 0xb8, 0x88,
+        0x88, 0x88, 0x97, 0x08, 0x08, 0x22, 0x22, 0x22, 0x2d, 0xe1, 0x02, 0x88, 0x88, 0x88, 0xa2, 0x22,
+        0x32, 0x0a, 0x1b, 0x22, 0x22, 0x22, 0xa2, 0x03, 0xe2, 0x08, 0x08, 0xc8, 0x08, 0x88, 0x88, 0xa8,
+        0x88, 0x88, 0x88, 0x9a, 0x89, 0x00, 0x20, 0x21, 0xe0, 0x80, 0x22, 0x2a, 0x00, 0x08, 0x21, 0x02,
+    ];
+
+    /// <summary>
     /// Returns whether the characters are an ISO 3166-1 alpha-2 country code: two capital letters that name
     /// an assigned code.
     /// </summary>
@@ -37,8 +52,23 @@ internal static class Iso3166
             return false;
         }
 
-        int bit = (26 * (code[0] - 'A')) + (code[1] - 'A');
-        ReadOnlySpan<byte> field = Alpha2Codes;
-        return (uint)(bit >> 3) < (uint)field.Length && (field[bit >> 3] & (0x80 >> (bit & 7))) != 0;
+        return IsSet(Alpha2Codes, (26 * (code[0] - 'A')) + (code[1] - 'A'));
     }
+
+    /// <summary>
+    /// Returns whether a number is an ISO 3166-1 numeric country code.
+    /// </summary>
+    /// <param name="code">The number, 0 to 999.</param>
+    /// <returns><see langword="true"/> when it is a country code.</returns>
+    public static bool IsNumericCode(int code) => IsSet(NumericCodes, code);
+
+    /// <summary>
+    /// Returns whether a bit is set in a bit field whose bytes hold their bits from the most significant. A
+    /// bit past the end of the field is clear, so trailing zero bytes are left out of the fields.
+    /// </summary>
+    /// <param name="field">The bit field.</param>
+    /// <param name="bit">The bit index.</param>
+    /// <returns><see langword="true"/> when the bit is set.</returns>
+    private static bool IsSet(ReadOnlySpan<byte> field, int bit)
+        => (uint)(bit >> 3) < (uint)field.Length && (field[bit >> 3] & (0x80 >> (bit & 7))) != 0;
 }

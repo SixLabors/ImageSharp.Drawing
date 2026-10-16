@@ -1,8 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
-using SixLabors.ImageSharp.Drawing.Helpers;
+using System.Globalization;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
@@ -50,18 +49,8 @@ public sealed class ChannelCodeSymbology : BarcodeSymbology
                 nameof(text));
         }
 
-        int value = 0;
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
-        while (codePoints.MoveNext())
-        {
-            CodePoint current = codePoints.Current;
-            if (!current.IsAsciiDigit())
-            {
-                throw new ArgumentException($"Channel Code carries only digits; got {current.ToDisplayString()}.", nameof(text));
-            }
-
-            value = (value * 10) + (current.Value - '0');
-        }
+        ValidateDigits(text);
+        int value = int.Parse(text, NumberStyles.None, CultureInfo.InvariantCulture);
 
         int maximum = ChannelCodeEncoder.MaximumValue(text.Length);
         if (value > maximum)

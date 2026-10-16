@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
@@ -67,17 +66,7 @@ public sealed class Ean14Symbology : BarcodeSymbology
         }
 
         ReadOnlySpan<char> supplied = compact[4..length];
-        SpanCodePointEnumerator suppliedPoints = supplied.EnumerateCodePoints();
-        while (suppliedPoints.MoveNext())
-        {
-            CodePoint current = suppliedPoints.Current;
-            if (!current.IsAsciiDigit())
-            {
-                throw new ArgumentException(
-                    $"EAN-14 carries only digits after its application identifier; got {current.ToDisplayString()}.",
-                    nameof(text));
-            }
-        }
+        BarcodeSymbology.ValidateDigits(supplied);
 
         int check = Gs1Data.ComputeCheckDigit(supplied[..13]);
         if (supplied.Length == 14 && supplied[13] - '0' != check)

@@ -392,15 +392,7 @@ internal static class Gs1Data
                 throw new ArgumentException($"An Application Identifier is two to four digits; got '{identifier}'.", nameof(text));
             }
 
-            SpanCodePointEnumerator codePoints = identifier.EnumerateCodePoints();
-            while (codePoints.MoveNext())
-            {
-                CodePoint current = codePoints.Current;
-                if (!current.IsAsciiDigit())
-                {
-                    throw new ArgumentException($"An Application Identifier is all digits; got {current.ToDisplayString()}.", nameof(text));
-                }
-            }
+            BarcodeSymbology.ValidateDigits(identifier);
 
             int dataStart = close + 1;
             int dataEnd = text[dataStart..].IndexOf('(');
@@ -474,17 +466,7 @@ internal static class Gs1Data
         }
 
         ReadOnlySpan<char> digits = text.AsSpan(4);
-        SpanCodePointEnumerator codePoints = digits.EnumerateCodePoints();
-        while (codePoints.MoveNext())
-        {
-            CodePoint current = codePoints.Current;
-            if (!current.IsAsciiDigit())
-            {
-                throw new ArgumentException(
-                    $"The GTIN carries only digits; got {current.ToDisplayString()}.",
-                    nameof(text));
-            }
-        }
+        BarcodeSymbology.ValidateDigits(digits);
 
         int check = ComputeCheckDigit(digits[..13]);
         if (digits.Length == 14 && digits[13] - '0' != check)

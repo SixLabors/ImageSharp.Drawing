@@ -88,6 +88,9 @@ public class DataLayerSymbologyTests
         // ISO 10957:2009 displays an ISMN only in its 979-0 form, so an M form input converts for the caption.
         Assert.Equal("ISMN 979-0-2306-7118-7", SymbolEncoder.Read(new IsmnSymbology(), "M-2306-7118", options, SymbolEncoder.Texts)[^1]);
 
+        // Hyphens are not data, so a hyphen in front of the M leaves the caption the same.
+        Assert.Equal("ISMN 979-0-2306-7118-7", SymbolEncoder.Read(new IsmnSymbology(), "-M-2306-7118", options, SymbolEncoder.Texts)[^1]);
+
         Assert.Equal("ISMN 979-0-2600-0043-8", SymbolEncoder.Read(new IsmnSymbology(), "979-0-2600-0043-8", options, SymbolEncoder.Texts)[^1]);
     }
 

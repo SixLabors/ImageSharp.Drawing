@@ -47,11 +47,6 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
         "+X+Y+Z%P%Q%R%S%T";
 
     /// <summary>
-    /// The characters Table A.2 puts in front of an alphabetic character to make a pair.
-    /// </summary>
-    private const string Prefixes = "$%/+";
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="Code39ExtendedSymbology"/> class.
     /// </summary>
     public Code39ExtendedSymbology()
@@ -136,13 +131,14 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
                 }
 
                 ReadOnlySpan<char> pair = Substitutions.AsSpan((int)current.Value * 2, 2);
-                encoded.Append(Prefixes.Contains(pair[0], StringComparison.Ordinal) ? pair : pair[1..]);
+                encoded.Append(pair[0] == ' ' ? pair[1..] : pair);
 
                 // A control character has no printed form, so the interpretation shows a space instead.
                 readable.Append(CodePoint.IsControl(current) ? ' ' : (char)current.Value);
             }
 
-            Code39Encoder.Validate(encoded.AsSpan());
+            // The substitutions are Code 39 characters, so only the length of the result needs a check.
+            Guard.MustBeLessThanOrEqualTo(encoded.Length, Code39Encoder.MaximumLength, nameof(text));
             char? check = this.CheckCharacter == CheckCharacterMode.None ? null : Code39Encoder.CheckCharacter(encoded.AsSpan());
 
             // The human readable interpretation is the text as given, then the check character the symbol

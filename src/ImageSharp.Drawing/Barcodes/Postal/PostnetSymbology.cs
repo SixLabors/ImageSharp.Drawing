@@ -21,7 +21,7 @@ public sealed class PostnetSymbology : BarcodeSymbology
             throw new ArgumentException($"POSTNET carries 5, 9 or 11 digits; got {text.Length} characters.", nameof(text));
         }
 
-        UspsPostalEncoder.ValidateDigits(text);
+        BarcodeSymbology.ValidateDigits(text);
 
         // At most eleven digits and the correction digit.
         InlineArray12<char> digitStorage = default;

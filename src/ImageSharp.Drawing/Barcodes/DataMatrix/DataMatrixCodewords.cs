@@ -144,6 +144,11 @@ internal static class DataMatrixCodewords
     private const int Unit = 12;
 
     /// <summary>
+    /// The number of rows of the tables that <see cref="PrepareLookAhead"/> fills.
+    /// </summary>
+    private const int LookAheadRows = 9;
+
+    /// <summary>
     /// The number of codewords left when no allowed symbol holds one more codeword.
     /// </summary>
     private const int NoSymbol = int.MaxValue;
@@ -195,120 +200,145 @@ internal static class DataMatrixCodewords
     /// <param name="capacities">The data codeword capacities of the symbols the data may take.</param>
     /// <param name="c40Prefix">The number of message values at the start of the message that encode in C40 encodation, or 0.</param>
     /// <param name="codewords">The buffer the data codewords are written to, <see cref="MaximumCodewords"/> long.</param>
+    /// <param name="scratch">The scratch of the look-ahead tables and the values of a run, <see cref="ScratchLength"/> long.</param>
     /// <returns>The number of data codewords written.</returns>
     /// <exception cref="ArgumentException">The data needs more codewords than the largest symbol holds.</exception>
-    public static int Encode(ReadOnlySpan<int> message, ReadOnlySpan<int> capacities, int c40Prefix, Span<int> codewords)
+    public static int Encode(ReadOnlySpan<int> message, ReadOnlySpan<int> capacities, int c40Prefix, Span<int> codewords, Span<int> scratch)
     {
-        // The look-ahead test reads three runs from each position: the digits that start there, the
-        // distance to the next X12 terminator, carriage return, asterisk or greater than, and the distance
-        // to the next character X12 cannot encode. The entry past the end stops each run. A distance with
-        // no end stands past the end of the data, so where neither character follows, the two distances
-        // are equal. The same rented block also holds the six rows of look-ahead sums and the values that
-        // a run of C40, Text, X12 or EDIFACT encodation collects, so the encoder rents once. The message
-        // length is at most DataMatrixEncoder.MaximumLength values, so the block size is bounded.
+        // The look-ahead tables and the values that a run of C40, Text, X12 or EDIFACT encodation collects
+        // share the scratch the caller rents with its other buffers.
         int length = message.Length;
         int stride = length + 1;
-        PooledBuffer<int> runs = new((9 * stride) + MaximumValues);
-        try
+        PrepareLookAhead(message, scratch[..(LookAheadRows * stride)]);
+        Span<int> digits = scratch[..stride];
+        Span<int> terminator = scratch.Slice(stride, stride);
+        Span<int> nonX12 = scratch.Slice(2 * stride, stride);
+        Span<int> sums = scratch.Slice(3 * stride, 6 * stride);
+
+        // The C40 prefix cannot run past the data.
+        Span<int> values = scratch.Slice(LookAheadRows * stride, MaximumValues);
+        Encoder encoder = new(message, capacities, digits, terminator, nonX12, sums, codewords, values, Math.Min(c40Prefix, length));
+
+        // A Function 1 Symbol Character in the first position always encodes in ASCII encodation,
+        // because a reader identifies GS1 data by codeword 232 at the start of the symbol. A Macro
+        // character stands for the message header, and Table 2 gives it only as an ASCII codeword, so it
+        // also starts the symbol. The C40 prefix counts message values, so it moves one place to stay
+        // over the same characters.
+        int first = message[0];
+        if (first is Fnc1 or Macro05 or Macro06)
         {
-            Span<int> digits = runs.Span[..stride];
-            Span<int> terminator = runs.Span.Slice(stride, stride);
-            Span<int> nonX12 = runs.Span.Slice(2 * stride, stride);
-            digits[length] = 0;
-            terminator[length] = length + 1;
-            nonX12[length] = length + 1;
-            for (int i = length - 1; i >= 0; i--)
+            encoder.AppendCodeword(first switch
             {
-                int value = message[i];
-                digits[i] = IsDigit(value) ? digits[i + 1] + 1 : 0;
-                terminator[i] = value is '\r' or '*' or '>' ? 0 : terminator[i + 1] + 1;
-                nonX12[i] = IsX12(value) ? nonX12[i + 1] + 1 : 0;
-            }
+                Fnc1 => Fnc1Codeword,
+                Macro05 => Macro05Codeword,
+                _ => Macro06Codeword,
+            });
 
-            // The look-ahead test also reads the cost of each scheme as a running sum, in units, of the
-            // characters before each position. Each scheme has one row of sums, at its scheme number. The cost
-            // of a scheme for a run of characters is then the difference of two sums, so the test can read the
-            // counts at many positions at once.
-            //
-            // A digit costs half a codeword in ASCII encodation and a character above 127 two whole codewords;
-            // any other character rounds the count up first, because it cannot share a codeword with a digit
-            // before it. A basic set character costs two thirds of a codeword in C40, Text and X12 encodation,
-            // one of three values in two codewords, and three quarters in EDIFACT encodation, one of four
-            // values in three codewords. A shifted character costs two values and an Upper Shift two more. X12
-            // costs a character it cannot hold 10/3 codewords, or 13/3 above 127, and EDIFACT 13/4 or 17/4.
-            // Base 256 encodation pays one codeword a byte and four for a function character it cannot hold.
-            Span<int> sums = runs.Span.Slice(3 * stride, 6 * stride);
-            Span<int> asciiSums = sums.Slice(Ascii * stride, stride);
-            Span<int> c40Sums = sums.Slice(C40 * stride, stride);
-            Span<int> textSums = sums.Slice(Text * stride, stride);
-            Span<int> x12Sums = sums.Slice(X12 * stride, stride);
-            Span<int> edifactSums = sums.Slice(Edifact * stride, stride);
-            Span<int> base256Sums = sums.Slice(Base256 * stride, stride);
-            asciiSums[0] = 0;
-            c40Sums[0] = 0;
-            textSums[0] = 0;
-            x12Sums[0] = 0;
-            edifactSums[0] = 0;
-            base256Sums[0] = 0;
-            for (int i = 0; i < length; i++)
+            encoder.Position = 1;
+            if (encoder.C40Prefix > 0)
             {
-                int value = message[i];
-                bool extended = value > 127;
-                asciiSums[i + 1] = AddAscii(asciiSums[i], value);
-                c40Sums[i + 1] = c40Sums[i] + (IsC40Basic(value) ? 2 * Unit / 3 : extended ? 8 * Unit / 3 : 4 * Unit / 3);
-                textSums[i + 1] = textSums[i] + (IsTextBasic(value) ? 2 * Unit / 3 : extended ? 8 * Unit / 3 : 4 * Unit / 3);
-                x12Sums[i + 1] = x12Sums[i] + (IsX12(value) ? 2 * Unit / 3 : extended ? 13 * Unit / 3 : 10 * Unit / 3);
-                edifactSums[i + 1] = edifactSums[i] + (IsEdifact(value) ? 3 * Unit / 4 : extended ? 17 * Unit / 4 : 13 * Unit / 4);
-                base256Sums[i + 1] = base256Sums[i] + (value < 0 ? 4 * Unit : Unit);
+                encoder.C40Prefix++;
             }
-
-            // The C40 prefix cannot run past the data.
-            Span<int> values = runs.Span.Slice(9 * stride, MaximumValues);
-            Encoder encoder = new(message, capacities, digits, terminator, nonX12, sums, codewords, values, Math.Min(c40Prefix, length));
-
-            // A Function 1 Symbol Character in the first position always encodes in ASCII encodation,
-            // because a reader identifies GS1 data by codeword 232 at the start of the symbol. The C40
-            // prefix counts message values, so it moves one place to stay over the same characters.
-            if (message[0] == Fnc1)
-            {
-                encoder.AppendCodeword(Fnc1Codeword);
-                encoder.Position = 1;
-                if (encoder.C40Prefix > 0)
-                {
-                    encoder.C40Prefix++;
-                }
-            }
-
-            // Each step encodes in the current scheme until that scheme ends, either by a latch to another
-            // scheme or by the end of the data. C40, Text and X12 share one method, because they share the
-            // packing of three values into two codewords.
-            while (encoder.Position < length)
-            {
-                switch (encoder.Mode)
-                {
-                    case Ascii:
-                        encoder.EncodeAscii();
-                        break;
-
-                    case Edifact:
-                        encoder.EncodeEdifact();
-                        break;
-
-                    case Base256:
-                        encoder.EncodeBase256();
-                        break;
-
-                    default:
-                        encoder.EncodeTriplets();
-                        break;
-                }
-            }
-
-            return encoder.Written;
         }
-        finally
+
+        // Each step encodes in the current scheme until that scheme ends, either by a latch to another
+        // scheme or by the end of the data. C40, Text and X12 share one method, because they share the
+        // packing of three values into two codewords.
+        while (encoder.Position < length)
         {
-            runs.Dispose();
+            switch (encoder.Mode)
+            {
+                case Ascii:
+                    encoder.EncodeAscii();
+                    break;
+
+                case Edifact:
+                    encoder.EncodeEdifact();
+                    break;
+
+                case Base256:
+                    encoder.EncodeBase256();
+                    break;
+
+                default:
+                    encoder.EncodeTriplets();
+                    break;
+            }
+        }
+
+        return encoder.Written;
+    }
+
+    /// <summary>
+    /// Returns the length of the scratch <see cref="Encode"/> takes for a message: the look-ahead tables and
+    /// the values of one run of C40, Text, X12 or EDIFACT encodation.
+    /// </summary>
+    /// <param name="messageLength">The number of message values.</param>
+    /// <returns>The scratch length.</returns>
+    public static int ScratchLength(int messageLength) => (LookAheadRows * (messageLength + 1)) + MaximumValues;
+
+    /// <summary>
+    /// Fills the tables the look-ahead test reads, <see cref="LookAheadRows"/> rows of message length plus one
+    /// entries each. Rows 0 to 2 hold three runs from each position: the digits that start there, the distance
+    /// to the next X12 terminator, carriage return, asterisk or greater than, and the distance to the next
+    /// character X12 cannot encode. The entry past the end stops each run. A distance with no end stands past
+    /// the end of the data, so where neither character follows, the two distances are equal. Rows 3 to 8 hold
+    /// the cost of each scheme as a running sum, in units, of the characters before each position, the row of a
+    /// scheme at 3 plus its scheme number. The cost of a scheme for a run of characters is then the difference
+    /// of two sums.
+    /// <para>
+    /// A digit costs half a codeword in ASCII encodation and a character above 127 two whole codewords; any
+    /// other character rounds the count up first, because it cannot share a codeword with a digit before it. A
+    /// basic set character costs two thirds of a codeword in C40, Text and X12 encodation, one of three values
+    /// in two codewords, and three quarters in EDIFACT encodation, one of four values in three codewords. A
+    /// shifted character costs two values and an Upper Shift two more. X12 costs a character it cannot hold
+    /// 10/3 codewords, or 13/3 above 127, and EDIFACT 13/4 or 17/4. Base 256 encodation pays one codeword a
+    /// byte and four for a function character it cannot hold.
+    /// </para>
+    /// </summary>
+    /// <param name="message">The message values.</param>
+    /// <param name="tables">The tables, <see cref="LookAheadRows"/> times the message length plus one long.</param>
+    private static void PrepareLookAhead(ReadOnlySpan<int> message, Span<int> tables)
+    {
+        int length = message.Length;
+        int stride = length + 1;
+        Span<int> digits = tables[..stride];
+        Span<int> terminator = tables.Slice(stride, stride);
+        Span<int> nonX12 = tables.Slice(2 * stride, stride);
+        digits[length] = 0;
+        terminator[length] = length + 1;
+        nonX12[length] = length + 1;
+        for (int i = length - 1; i >= 0; i--)
+        {
+            int value = message[i];
+            digits[i] = IsDigit(value) ? digits[i + 1] + 1 : 0;
+            terminator[i] = value is '\r' or '*' or '>' ? 0 : terminator[i + 1] + 1;
+            nonX12[i] = IsX12(value) ? nonX12[i + 1] + 1 : 0;
+        }
+
+        Span<int> sums = tables.Slice(3 * stride, 6 * stride);
+        Span<int> asciiSums = sums.Slice(Ascii * stride, stride);
+        Span<int> c40Sums = sums.Slice(C40 * stride, stride);
+        Span<int> textSums = sums.Slice(Text * stride, stride);
+        Span<int> x12Sums = sums.Slice(X12 * stride, stride);
+        Span<int> edifactSums = sums.Slice(Edifact * stride, stride);
+        Span<int> base256Sums = sums.Slice(Base256 * stride, stride);
+        asciiSums[0] = 0;
+        c40Sums[0] = 0;
+        textSums[0] = 0;
+        x12Sums[0] = 0;
+        edifactSums[0] = 0;
+        base256Sums[0] = 0;
+        for (int i = 0; i < length; i++)
+        {
+            int value = message[i];
+            bool extended = value > 127;
+            asciiSums[i + 1] = AddAscii(asciiSums[i], value);
+            c40Sums[i + 1] = c40Sums[i] + (IsC40Basic(value) ? 2 * Unit / 3 : extended ? 8 * Unit / 3 : 4 * Unit / 3);
+            textSums[i + 1] = textSums[i] + (IsTextBasic(value) ? 2 * Unit / 3 : extended ? 8 * Unit / 3 : 4 * Unit / 3);
+            x12Sums[i + 1] = x12Sums[i] + (IsX12(value) ? 2 * Unit / 3 : extended ? 13 * Unit / 3 : 10 * Unit / 3);
+            edifactSums[i + 1] = edifactSums[i] + (IsEdifact(value) ? 3 * Unit / 4 : extended ? 17 * Unit / 4 : 13 * Unit / 4);
+            base256Sums[i + 1] = base256Sums[i] + (value < 0 ? 4 * Unit : Unit);
         }
     }
 

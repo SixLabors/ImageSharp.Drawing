@@ -39,11 +39,6 @@ public sealed class PharmacodeSymbology : BarcodeSymbology
     private const int QuietZone = 12;
 
     /// <summary>
-    /// The largest number of bars a symbol carries.
-    /// </summary>
-    private const int MaximumBars = 16;
-
-    /// <summary>
     /// The width of a thin bar in modules, 0.5 mm.
     /// </summary>
     private const int ThinBar = 1;

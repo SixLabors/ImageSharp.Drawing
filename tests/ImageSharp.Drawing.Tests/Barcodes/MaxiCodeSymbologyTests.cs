@@ -399,6 +399,25 @@ public class MaxiCodeSymbologyTests
             () => SymbolEncoder.Encode(new MaxiCodeSymbology((MaxiCodeMode)mode), text, new BarcodeOptions()));
 
     /// <summary>
+    /// Without a mode the symbol takes mode 5 when the data fits and mode 4 otherwise, so it matches the symbol
+    /// of that mode. The data ends in code set C, which has no pad codeword: 71 or 80 characters of code set
+    /// A, the lock into code set C and four characters of code set C need 77 or 86 codewords. 77 fill mode 5
+    /// with no latch back to code set A, and 86 take mode 4, whose pads follow a latch back to code set A.
+    /// </summary>
+    /// <param name="capitals">The number of capital letters before the four accented letters.</param>
+    /// <param name="mode">The mode the data takes.</param>
+    [Theory]
+    [InlineData(71, MaxiCodeMode.FullErrorCorrection)]
+    [InlineData(80, MaxiCodeMode.Standard)]
+    public void AutomaticModeMatchesTheModeItTakes(int capitals, MaxiCodeMode mode)
+    {
+        string text = new string('A', capitals) + "ÀÀÀÀ";
+        string expected = null;
+        SymbolEncoder.Encode(new MaxiCodeSymbology(mode), text, new BarcodeOptions(), (ref symbol) => expected = SymbolEncoder.ModuleGrid(ref symbol));
+        SymbolEncoder.Encode(new MaxiCodeSymbology(), text, new BarcodeOptions(), (ref symbol) => Assert.Equal(expected, SymbolEncoder.ModuleGrid(ref symbol)));
+    }
+
+    /// <summary>
     /// A mode 5 symbol holds 77 codewords of data, so data that needs more does not fit it.
     /// </summary>
     [Fact]

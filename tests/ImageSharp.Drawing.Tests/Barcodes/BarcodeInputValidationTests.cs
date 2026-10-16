@@ -81,6 +81,7 @@ public class BarcodeInputValidationTests
     [InlineData(typeof(AztecRuneSymbology))]
     [InlineData(typeof(HibcAztecCodeSymbology))]
     [InlineData(typeof(MaxiCodeSymbology))]
+    [InlineData(typeof(CodeOneSymbology))]
     public void RejectsNullText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;
@@ -154,6 +155,7 @@ public class BarcodeInputValidationTests
     [InlineData(typeof(AztecRuneSymbology))]
     [InlineData(typeof(HibcAztecCodeSymbology))]
     [InlineData(typeof(MaxiCodeSymbology))]
+    [InlineData(typeof(CodeOneSymbology))]
     public void RejectsEmptyText(Type symbologyType)
     {
         BarcodeSymbology symbology = (BarcodeSymbology)Activator.CreateInstance(symbologyType)!;
@@ -168,4 +170,19 @@ public class BarcodeInputValidationTests
     public void Code128_RejectsDataBeyondTheMaximumLength()
         => Assert.ThrowsAny<ArgumentException>(
             () => SymbolEncoder.Encode(new Code128Symbology(), new string('A', 501), new BarcodeOptions()));
+
+    /// <summary>
+    /// A resolution, an X dimension or a bar height of zero or less has no physical size.
+    /// </summary>
+    /// <param name="value">The rejected value.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Options_RejectSizesNotGreaterThanZero(float value)
+    {
+        BarcodeOptions options = new();
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.Dpi = value);
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.XDimension = value);
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.BarHeight = value);
+    }
 }

@@ -101,7 +101,7 @@ internal static class Code49Encoder
     private const int NumericBlock = 5;
 
     /// <summary>
-    /// The number a four digit remainder is added to, section 2.2.2: "482C1 + 48C2 + C3 = 100,000 plus
+    /// The number a four digit remainder is added to, section 2.2.2: "48²C1 + 48C2 + C3 = 100,000 plus
     /// the four digits to be represented".
     /// </summary>
     private const int FourDigitOffset = 100000;

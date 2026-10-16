@@ -67,14 +67,12 @@ internal static class TelepenEncoder
 
     /// <summary>
     /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no
-    /// height. Section 3.2 of the AIM Europe Telepen specification gives a minimum of 6.35 mm or 15 per
-    /// cent of the symbol length, whichever is greater.
+    /// height: 15 per cent, and at least <see cref="MinimumBarHeightMillimetres"/>.
     /// </summary>
     private const float NominalBarHeightFraction = 0.15F;
 
     /// <summary>
-    /// The smallest bar height in millimetres when the caller sets none, section 3.2 of the AIM Europe
-    /// Telepen specification.
+    /// The smallest bar height in millimetres when the caller sets none.
     /// </summary>
     private const float MinimumBarHeightMillimetres = 6.35F;
 
@@ -131,11 +129,7 @@ internal static class TelepenEncoder
         symbol.TrimLastRow(written - 1);
         runs = runs[..(written - 1)];
 
-        int widthInModules = 0;
-        for (int i = 0; i < runs.Length; i++)
-        {
-            widthInModules += runs[i];
-        }
+        int widthInModules = BarcodeSymbol.RunWidth(runs);
 
         float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
         float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);

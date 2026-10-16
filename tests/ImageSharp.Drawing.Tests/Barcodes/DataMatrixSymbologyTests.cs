@@ -52,6 +52,25 @@ public class DataMatrixSymbologyTests
         => Assert.Equal([232, 130 + 1], Codewords([-1, '0', '1'], [3], 0));
 
     /// <summary>
+    /// ISO/IEC 16022 Table 2 gives the 05 Macro and 06 Macro only as the ASCII codewords 236 and 237. A Macro
+    /// stands for the message header, so it is the first codeword even when the data after it suits Base 256
+    /// or C40 encodation.
+    /// </summary>
+    /// <param name="macro">The Macro message value.</param>
+    /// <param name="codeword">The codeword of the Macro.</param>
+    /// <param name="data">The data after the Macro.</param>
+    [Theory]
+    [InlineData(-3, 236, "ÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ")]
+    [InlineData(-4, 237, "ABCDEFGHIJKLMNO")]
+    public void DataMatrix_MacroIsTheFirstCodeword(int macro, int codeword, string data)
+    {
+        int[] message = [macro, .. data];
+        int[] codewords = Codewords(message, [62], 0);
+        Assert.Equal(codeword, codewords[0]);
+        Assert.DoesNotContain(codewords, c => c < 0);
+    }
+
+    /// <summary>
     /// Section 5.6.2 of the GS1 General Specifications: the finder pattern is a solid L one module wide on
     /// the left and bottom edges, and the opposite edges alternate, with the upper right corner module
     /// light. Section 5.6.3.2: a symbol of 32 x 32 or more is divided into data regions by alignment
@@ -1770,7 +1789,7 @@ public class DataMatrixSymbologyTests
     private static int[] Codewords(int[] message, int[] capacities, int c40Prefix)
     {
         int[] codewords = new int[DataMatrixCodewords.MaximumCodewords];
-        int count = DataMatrixCodewords.Encode(message, capacities, c40Prefix, codewords);
+        int count = DataMatrixCodewords.Encode(message, capacities, c40Prefix, codewords, new int[DataMatrixCodewords.ScratchLength(message.Length)]);
         return codewords[..count];
     }
 

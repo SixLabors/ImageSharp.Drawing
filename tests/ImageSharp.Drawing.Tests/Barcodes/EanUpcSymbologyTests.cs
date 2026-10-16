@@ -61,6 +61,17 @@ public class EanUpcSymbologyTests
         SymbolEncoder.Encode(new Ean13Symbology(), "5901234123457", new BarcodeOptions(), static (ref symbol) => Assert.True(symbol.Text.IsEmpty));
     }
 
+    [Fact]
+    public void Ean8_TextPlacements()
+        => SymbolEncoder.Encode(new Ean8Symbology(), "96385074", CreateTextOptions(), static (ref symbol) =>
+        {
+            // ISO/IEC 15420: every digit prints below its own symbol character, one module below the digit bars.
+            float textEdge = symbol.BarHeights.ToArray().Min() + BarcodeTextPlacement.Clearance;
+            Assert.Equal("96385074", string.Concat(SymbolEncoder.Texts(ref symbol)));
+            Assert.All(symbol.Text.ToArray(), placement => Assert.Equal(BarcodeTextSide.BelowBars, placement.Side));
+            Assert.All(symbol.Text.ToArray(), placement => Assert.Equal(textEdge, placement.TextEdge));
+        });
+
     [Theory]
     [InlineData("12345678901")]
     [InlineData("12345678901234")]

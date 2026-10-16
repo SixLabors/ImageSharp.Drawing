@@ -10,8 +10,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// Encodes Aztec Code symbols, ISO/IEC 24778. The text becomes a bit stream in the five code sets and the
 /// byte shift of Table 2, the bit stream becomes B-bit codewords with no codeword of all zeros or all ones,
 /// Reed-Solomon check codewords fill the symbol, and the codewords spiral outward from the Core Symbol in
-/// reverse order. The mode search follows the reference encoder BWIPP, which finds the shortest sequence of
-/// latches, shifts and characters for the whole message.
+/// reverse order. The mode search finds the shortest sequence of latches, shifts
+/// and characters for the whole message.
 /// </summary>
 internal static class AztecEncoder
 {
@@ -31,6 +31,12 @@ internal static class AztecEncoder
     /// additional checkwords".
     /// </summary>
     private const int ExtraCheckCodewords = 3;
+
+    /// <summary>
+    /// The most bytes one B/S carries, section 7.3.2.2: 31 with a 5-bit length, or 31 more than the 11-bit
+    /// length, at most 2047.
+    /// </summary>
+    private const int MaximumByteRun = 31 + 2047;
 
     private const int Upper = 0;
     private const int Lower = 1;
@@ -65,11 +71,23 @@ internal static class AztecEncoder
     private static readonly GaloisField ModeField = new(16, 19);
 
     /// <summary>
-    /// The fields of the data codewords of 6, 10 and 12 bits, Table 3. The 8-bit field, x^8 + x^5 + x^3 +
-    /// x^2 + 1, is the field of Data Matrix.
+    /// The field of the 6-bit data codewords, Table 3: GF(64) with the polynomial 67.
     /// </summary>
     private static readonly GaloisField Field6 = new(64, 67);
+
+    /// <summary>
+    /// The field of the 8-bit data codewords, Table 3: GF(256) with the polynomial 301.
+    /// </summary>
+    private static readonly GaloisField Field8 = new(256, 301);
+
+    /// <summary>
+    /// The field of the 10-bit data codewords, Table 3: GF(1024) with the polynomial 1033.
+    /// </summary>
     private static readonly GaloisField Field10 = new(1024, 1033);
+
+    /// <summary>
+    /// The field of the 12-bit data codewords, Table 3.
+    /// </summary>
     private static readonly GaloisField Field12 = new(4096, 4201);
 
     /// <summary>
@@ -172,12 +190,10 @@ internal static class AztecEncoder
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
 
         // Section 4.1 a): "All 8-bit values can be encoded", with values 128 to 255 read as ISO/IEC 8859-1.
-        for (int i = 0; i < text.Length; i++)
+        int invalid = text.IndexOfAnyExceptInRange('\0', '\u00FF');
+        if (invalid >= 0)
         {
-            if (text[i] > 0xFF)
-            {
-                throw new ArgumentException($"Aztec Code encodes U+0000 to U+00FF; got U+{(int)text[i]:X4}.", nameof(text));
-            }
+            throw new ArgumentException($"Aztec Code encodes U+0000 to U+00FF; got {text.CodePointAt(invalid).ToDisplayString()}.", nameof(text));
         }
 
         PooledBuffer<byte> bits = default;
@@ -189,7 +205,8 @@ internal static class AztecEncoder
 
             // The codeword count after stuffing depends only on the codeword size, so each size is laid out
             // once, and every symbol of that size reads the count.
-            Span<int> dataCounts = stackalloc int[13];
+            InlineArray14<int> dataCountsStorage = default;
+            Span<int> dataCounts = ((Span<int>)dataCountsStorage)[..13];
             dataCounts.Fill(-1);
 
             int chosen = -1;
@@ -242,7 +259,8 @@ internal static class AztecEncoder
             int dataCount = Stuff(stream, codewordBits, all);
             AddCheckCodewords(all, dataCount, codewordBits);
 
-            Span<byte> mode = stackalloc byte[40];
+            InlineArray64<byte> modeStorage = default;
+            Span<byte> mode = ((Span<byte>)modeStorage)[..40];
             int modeLength = WriteModeMessage(isCompact, layerCount, dataCount, false, mode);
             Layout(isCompact, layerCount, all, codewordBits, mode[..modeLength], xDimension, ref symbol);
         }
@@ -254,7 +272,7 @@ internal static class AztecEncoder
     }
 
     /// <summary>
-    /// Builds an Aztec Rune, Annex A: the Core Symbol of a compact symbol whose mode message carries one
+    /// Builds an Aztec Rune: the Core Symbol of a compact symbol whose mode message carries one
     /// value of 0 to 255.
     /// </summary>
     /// <param name="value">The value, 0 to 255.</param>
@@ -262,14 +280,15 @@ internal static class AztecEncoder
     /// <param name="symbol">The symbol to write.</param>
     public static void BuildRune(int value, double xDimension, ref BarcodeSymbol symbol)
     {
-        Span<byte> mode = stackalloc byte[28];
+        InlineArray32<byte> modeStorage = default;
+        Span<byte> mode = ((Span<byte>)modeStorage)[..28];
         WriteModeMessage(true, 0, value, true, mode);
         Layout(true, 0, [], 0, mode, xDimension, ref symbol);
     }
 
     /// <summary>
     /// Translates the text into the bit stream of section 7.3.2.2. The search keeps, for each code set, the
-    /// cheapest sequence of characters, latches and shifts that ends in it, as BWIPP does. The sequences
+    /// cheapest sequence of characters, latches and shifts that ends in it. The sequences
     /// share their common start: each is a node that points back to the element before it, so a copy is one
     /// index and an extension is one new node.
     /// </summary>
@@ -281,11 +300,16 @@ internal static class AztecEncoder
         NodeArena arena = new(text.Length * 8);
         try
         {
-            Span<int> currentCost = stackalloc int[StateCount];
-            Span<int> nextCost = stackalloc int[StateCount];
-            Span<int> currentHead = stackalloc int[StateCount];
-            Span<int> nextHead = stackalloc int[StateCount];
-            Span<int> after = stackalloc int[16];
+            InlineArray6<int> currentCostStorage = default;
+            Span<int> currentCost = ((Span<int>)currentCostStorage)[..StateCount];
+            InlineArray6<int> nextCostStorage = default;
+            Span<int> nextCost = ((Span<int>)nextCostStorage)[..StateCount];
+            InlineArray6<int> currentHeadStorage = default;
+            Span<int> currentHead = ((Span<int>)currentHeadStorage)[..StateCount];
+            InlineArray6<int> nextHeadStorage = default;
+            Span<int> nextHead = ((Span<int>)nextHeadStorage)[..StateCount];
+            InlineArray16<int> afterStorage = default;
+            Span<int> after = afterStorage;
             currentCost.Fill(Unreached);
             currentCost[Upper] = 0;
             currentHead.Fill(-1);
@@ -349,10 +373,19 @@ internal static class AztecEncoder
                     }
 
                     int cost = currentCost[x] + CharacterBits[x];
+                    int head = currentHead[x];
+                    if (x == Binary && head >= 0 && arena[head].Run == MaximumByteRun)
+                    {
+                        // A full byte run returns to the code set it shifted from and shifts again: the
+                        // return marker, then a new B/S and its 5-bit length.
+                        cost += LatchBits[(backTo * StateCount) + Binary];
+                        head = arena.Append(arena.Append(head, LatchCodes[((Binary * StateCount) + backTo) * 3]), ShiftBinary);
+                    }
+
                     if (cost < nextCost[x])
                     {
                         nextCost[x] = cost;
-                        nextHead[x] = arena.Append(currentHead[x], character);
+                        nextHead[x] = arena.Append(head, character);
                     }
 
                     if (x == Binary)
@@ -391,48 +424,36 @@ internal static class AztecEncoder
                             continue;
                         }
 
-                        // The scan walks back to the previous character, then on to the latch that set the
-                        // code set it was written in. A byte shift on the way means it was a byte.
+                        // The scan walks back over the latches this step added to the previous character.
+                        // The marker before it is the latch that set the code set it was written in, and a
+                        // byte shift there means it was a byte.
                         bool latchDigit = false;
-                        bool shifted = false;
-                        int found = -1;
-                        int node = currentHead[i];
-                        while (node >= 0)
+                        int found = currentHead[i];
+                        while (found >= 0 && arena[found].Value != lastCharacter)
                         {
-                            int value = arena[node].Value;
-                            if (found < 0)
+                            found = arena[found].Previous;
+                        }
+
+                        if (found >= 0)
+                        {
+                            int previous = arena[found].Previous;
+                            bool shifted = previous >= 0 && arena[previous].Value == ShiftPunct;
+                            int marker = previous >= 0 ? arena[previous].Marker : 0;
+                            if (marker == ShiftBinary)
                             {
-                                if (value == lastCharacter)
+                                found = -1;
+                            }
+                            else if (marker != 0)
+                            {
+                                if (i == Punct)
                                 {
-                                    found = node;
-                                    int previous = arena[node].Previous;
-                                    shifted = previous >= 0 && arena[previous].Value == ShiftPunct;
+                                    latchDigit = marker == LatchDigit;
+                                }
+                                else if (marker != LatchPunct)
+                                {
+                                    inPunct = shifted;
                                 }
                             }
-                            else
-                            {
-                                if (value == ShiftBinary)
-                                {
-                                    found = -1;
-                                    break;
-                                }
-
-                                if (value is >= LatchDigit and <= LatchUpper)
-                                {
-                                    if (i == Punct)
-                                    {
-                                        latchDigit = value == LatchDigit;
-                                    }
-                                    else if (value != LatchPunct)
-                                    {
-                                        inPunct = shifted;
-                                    }
-
-                                    break;
-                                }
-                            }
-
-                            node = arena[node].Previous;
                         }
 
                         if (!inPunct || found < 0)
@@ -559,7 +580,7 @@ internal static class AztecEncoder
             // Section 7.3.2.2: the B/S is followed by the byte count, 1 to 31 in 5 bits, or 0 and the count
             // less 31 in 11 bits.
             int byteCount = 0;
-            while (i + byteCount < sequence.Length && sequence[i + byteCount] >= 0 && byteCount < 2078)
+            while (i + byteCount < sequence.Length && sequence[i + byteCount] >= 0)
             {
                 byteCount++;
             }
@@ -684,7 +705,7 @@ internal static class AztecEncoder
         GaloisField field = size switch
         {
             6 => Field6,
-            8 => GaloisField.DataMatrix,
+            8 => Field8,
             10 => Field10,
             _ => Field12,
         };
@@ -699,7 +720,7 @@ internal static class AztecEncoder
     /// <summary>
     /// Writes the mode message bits of section 7.2: the layer count less one and the data codeword count less
     /// one, as 4-bit datawords, followed by the GF(16) check words of section 7.2.4. A rune carries its value
-    /// in place of the two counts, and Annex A inverts alternate bits of every 4-bit word.
+    /// in place of the two counts, with alternate bits of every 4-bit word inverted.
     /// </summary>
     /// <param name="compact">Whether the symbol is compact.</param>
     /// <param name="layers">The number of data layers.</param>
@@ -713,13 +734,15 @@ internal static class AztecEncoder
         int checkWords = compact ? 5 : 6;
         int value = rune ? dataCount : compact ? ((layers - 1) << 6) | (dataCount - 1) : ((layers - 1) << 11) | (dataCount - 1);
 
-        Span<int> words = stackalloc int[10];
+        InlineArray10<int> wordsStorage = default;
+        Span<int> words = wordsStorage;
         for (int i = 0; i < dataWords; i++)
         {
             words[i] = (value >> ((dataWords - 1 - i) * 4)) & 0xF;
         }
 
-        Span<int> generator = stackalloc int[checkWords];
+        InlineArray6<int> generatorStorage = default;
+        Span<int> generator = ((Span<int>)generatorStorage)[..checkWords];
         ModeField.Generator(1, generator);
         ModeField.Remainder(words, 1, dataWords, generator, words.Slice(dataWords, checkWords));
 
@@ -807,7 +830,9 @@ internal static class AztecEncoder
             // Section 7.1.4: the grid occupies "every location where x is a multiple of 16 or y is a multiple
             // of 16", each module (x + y + 1) mod 2. The grid lines a layer crosses add to the side: one line
             // for each 16 modules out from the centre, on both sides.
-            side = coreWidth + 1 + (layers * 4) + 2 + (2 * (int)(((layers + 10.5) / 7.5) - 1));
+            // The line count is (layers + 10.5) / 7.5 - 1 rounded down, which integers give exactly as
+            // (2 x layers + 21) / 15 - 1.
+            side = coreWidth + 1 + (layers * 4) + 2 + (2 * ((((2 * layers) + 21) / 15) - 1));
             modules = symbol.BeginMatrix(side, side, 0, xDimension);
             int half = side / 2;
             int next = 0;
@@ -1022,14 +1047,31 @@ internal static class AztecEncoder
     }
 
     /// <summary>
-    /// One element of a search sequence: the element, the node before it, and the number of elements since
-    /// the last B/S, which is the length of the byte run when the sequence is in the byte state.
+    /// One element of a search sequence.
     /// </summary>
     private struct Node
     {
+        /// <summary>
+        /// The element: a character, a pair, or a latch or shift code.
+        /// </summary>
         public int Value;
+
+        /// <summary>
+        /// The node before it, or -1 at the start of the sequence.
+        /// </summary>
         public int Previous;
+
+        /// <summary>
+        /// The number of elements since the last B/S, which is the length of the byte run when the sequence
+        /// is in the byte state.
+        /// </summary>
         public int Run;
+
+        /// <summary>
+        /// The latch code or B/S nearest before or at this node, or 0 when the sequence has none, so the code
+        /// set an element was written in reads without a walk back.
+        /// </summary>
+        public int Marker;
     }
 
     /// <summary>
@@ -1076,7 +1118,8 @@ internal static class AztecEncoder
             }
 
             int run = value == ShiftBinary ? 0 : previous < 0 ? 1 : nodes[previous].Run + 1;
-            nodes[this.count] = new Node { Value = value, Previous = previous, Run = run };
+            int marker = value is (>= LatchDigit and <= LatchUpper) or ShiftBinary ? value : previous < 0 ? 0 : nodes[previous].Marker;
+            nodes[this.count] = new Node { Value = value, Previous = previous, Run = run, Marker = marker };
             return this.count++;
         }
 

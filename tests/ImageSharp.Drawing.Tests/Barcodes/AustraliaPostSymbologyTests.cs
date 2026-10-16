@@ -50,7 +50,7 @@ public class AustraliaPostSymbologyTests
     [Fact]
     public void CalculatesTheParitySymbolsOfDiagramTen()
     {
-        byte[] parity = new byte[4];
+        int[] parity = new int[4];
         AustraliaPostEncoder.Parity([4, 20, 49, 37, 49, 38, 23], parity);
         Assert.Equal([54, 17, 53, 58], parity);
     }
@@ -139,6 +139,17 @@ public class AustraliaPostSymbologyTests
     [InlineData("62545162511234567890123456", AustraliaPostEncodingTable.Numeric)]
     public void RejectsMalformedInput(string text, AustraliaPostEncodingTable table)
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text, table));
+
+    /// <summary>
+    /// A character outside the C Encoding Table is reported as the one character it is, also when it takes a
+    /// surrogate pair.
+    /// </summary>
+    [Fact]
+    public void ReportsACharacterOutsideTheTableByItsCodePoint()
+    {
+        ArgumentException exception = Assert.Throws<ArgumentException>(() => Encode("5954516251A😀", AustraliaPostEncodingTable.Character));
+        Assert.Contains("U+1F600", exception.Message, StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// Encodes the text with the default options.

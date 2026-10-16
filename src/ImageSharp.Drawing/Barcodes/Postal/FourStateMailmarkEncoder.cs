@@ -65,19 +65,15 @@ internal static class FourStateMailmarkEncoder
     public const string International = "XY11     ";
 
     /// <summary>
-    /// The primitive polynomial of the Galois field, section 2.2.5: x^5 + x^2 + 1.
-    /// </summary>
-    private const int PrimitivePolynomial = 0b100101;
-
-    private static readonly byte[] Exp = BuildExp();
-
-    private static readonly byte[] Log = BuildLog();
-
-    /// <summary>
     /// Table 5, the symbols of the numbers with 32 values and of the check numbers: the six-bit values
     /// with an odd number of binary 1s, in ascending order.
     /// </summary>
     private static readonly byte[] OddSymbols = BuildSymbols(true);
+
+    /// <summary>
+    /// The Galois field of 32 values, section 2.2.5: the primitive polynomial x^5 + x^2 + 1.
+    /// </summary>
+    private static readonly GaloisField Field = new(32, 37);
 
     /// <summary>
     /// Table 5, the symbols of the numbers with 30 values: the six-bit values with a non-zero, even
@@ -171,7 +167,7 @@ internal static class FourStateMailmarkEncoder
         int mailClass = FieldValue(text, 2, 1, ClassCharacters, "Class");
         int supplyChain = FieldValue(text, 3, supplyChainLength, "0123456789", "Supply Chain ID");
         int itemId = FieldValue(text, 3 + supplyChainLength, itemIdLength, "0123456789", "Item ID");
-        ulong destination = DestinationValue(text.AsSpan(3 + supplyChainLength + itemIdLength, 9));
+        ulong destination = DestinationValue(text, 3 + supplyChainLength + itemIdLength);
 
         UInt128 consolidated = destination;
         consolidated = (consolidated * 100_000_000U) + (uint)itemId;
@@ -185,8 +181,8 @@ internal static class FourStateMailmarkEncoder
         int thirtyValued = isL ? 11 : 9;
 
         // Barcode L carries 19 data numbers and 7 check numbers.
-        InlineArray26<byte> numberStorage = default;
-        Span<byte> numbers = ((Span<byte>)numberStorage)[..(dataCount + checkCount)];
+        InlineArray26<int> numberStorage = default;
+        Span<int> numbers = ((Span<int>)numberStorage)[..(dataCount + checkCount)];
         DataNumbers(consolidated, numbers[..dataCount], thirtyValued);
         CheckNumbers(numbers[..dataCount], isL ? GeneratorL : GeneratorC, numbers[dataCount..]);
 
@@ -206,10 +202,13 @@ internal static class FourStateMailmarkEncoder
     /// The international designation is 0, and a domestic sorting code is the offset of its character
     /// pattern plus the mixed radix value of its non-space characters.
     /// </summary>
-    /// <param name="field">The nine characters of the field.</param>
+    /// <param name="text">The application string.</param>
+    /// <param name="start">The index of the nine characters of the field in <paramref name="text"/>.</param>
     /// <returns>The internal user field value.</returns>
-    public static ulong DestinationValue(ReadOnlySpan<char> field)
+    /// <exception cref="ArgumentException">The field is neither the international designation nor a domestic sorting code.</exception>
+    public static ulong DestinationValue(string text, int start)
     {
+        ReadOnlySpan<char> field = text.AsSpan(start, 9);
         if (field.SequenceEqual(International))
         {
             return 0;
@@ -252,7 +251,7 @@ internal static class FourStateMailmarkEncoder
 
         throw new ArgumentException(
             $"The Destination Post Code plus DPS field is XY11 with five spaces or one of the six domestic patterns; got {field.ToString()}.",
-            nameof(field));
+            nameof(text));
     }
 
     /// <summary>
@@ -263,17 +262,17 @@ internal static class FourStateMailmarkEncoder
     /// <param name="consolidated">The consolidated data value.</param>
     /// <param name="numbers">The buffer that receives the data numbers, D0 first.</param>
     /// <param name="thirtyValued">The number of leading data numbers with 30 values.</param>
-    public static void DataNumbers(UInt128 consolidated, Span<byte> numbers, int thirtyValued)
+    public static void DataNumbers(UInt128 consolidated, Span<int> numbers, int thirtyValued)
     {
         UInt128 x = consolidated;
         for (int i = numbers.Length - 1; i > 0; i--)
         {
             uint radix = i < thirtyValued ? 30U : 32U;
-            numbers[i] = (byte)(x % radix);
+            numbers[i] = (int)(x % radix);
             x /= radix;
         }
 
-        numbers[0] = (byte)x;
+        numbers[0] = (int)x;
     }
 
     /// <summary>
@@ -282,31 +281,21 @@ internal static class FourStateMailmarkEncoder
     /// polynomial over the Galois field of 32 values.
     /// </summary>
     /// <param name="data">The data numbers.</param>
-    /// <param name="generator">The generator polynomial coefficients, highest term first.</param>
+    /// <param name="generator">The generator polynomial coefficients as section 2.2.5 prints them, highest term first.</param>
     /// <param name="check">The buffer that receives the check numbers, C0 first.</param>
-    public static void CheckNumbers(ReadOnlySpan<byte> data, ReadOnlySpan<byte> generator, Span<byte> check)
+    public static void CheckNumbers(ReadOnlySpan<int> data, ReadOnlySpan<byte> generator, Span<int> check)
     {
+        // The field takes the coefficients from the x^0 term up, with the leading 1 implied, so the printed
+        // order reverses. Barcode L has the most check numbers, 7.
         int checkCount = generator.Length - 1;
-
-        // At most 19 data numbers and 7 check numbers, barcode L.
-        InlineArray26<byte> bufferStorage = default;
-        Span<byte> buffer = ((Span<byte>)bufferStorage)[..(data.Length + checkCount)];
-        data.CopyTo(buffer);
-        for (int i = 0; i < data.Length; i++)
+        InlineArray8<int> coefficientStorage = default;
+        Span<int> coefficients = ((Span<int>)coefficientStorage)[..checkCount];
+        for (int j = 0; j < checkCount; j++)
         {
-            byte coefficient = buffer[i];
-            if (coefficient == 0)
-            {
-                continue;
-            }
-
-            for (int j = 0; j <= checkCount; j++)
-            {
-                buffer[i + j] ^= Multiply(generator[j], coefficient);
-            }
+            coefficients[j] = generator[checkCount - j];
         }
 
-        buffer[data.Length..].CopyTo(check);
+        Field.Remainder(data, 1, data.Length, coefficients, check);
     }
 
     /// <summary>
@@ -344,6 +333,13 @@ internal static class FourStateMailmarkEncoder
     /// Section 2.2.2: converts a field to its internal user field value, in which each allowed character
     /// has its index in the array of allowed characters as its value.
     /// </summary>
+    /// <param name="text">The application string.</param>
+    /// <param name="start">The index of the field in <paramref name="text"/>.</param>
+    /// <param name="length">The length of the field.</param>
+    /// <param name="allowed">The allowed characters, in value order.</param>
+    /// <param name="fieldName">The name of the field in the error message.</param>
+    /// <returns>The internal user field value.</returns>
+    /// <exception cref="ArgumentException">The field has a character that is not allowed.</exception>
     private static int FieldValue(string text, int start, int length, string allowed, string fieldName)
     {
         int value = 0;
@@ -361,37 +357,12 @@ internal static class FourStateMailmarkEncoder
         return value;
     }
 
-    private static byte Multiply(byte a, byte b)
-        => a == 0 || b == 0 ? (byte)0 : Exp[(Log[a] + Log[b]) % 31];
-
-    private static byte[] BuildExp()
-    {
-        byte[] exp = new byte[31];
-        int value = 1;
-        for (int i = 0; i < exp.Length; i++)
-        {
-            exp[i] = (byte)value;
-            value <<= 1;
-            if ((value & 32) != 0)
-            {
-                value ^= PrimitivePolynomial;
-            }
-        }
-
-        return exp;
-    }
-
-    private static byte[] BuildLog()
-    {
-        byte[] log = new byte[32];
-        for (int i = 0; i < Exp.Length; i++)
-        {
-            log[Exp[i]] = (byte)i;
-        }
-
-        return log;
-    }
-
+    /// <summary>
+    /// Builds Table 5: the six-bit values with an odd, or a non-zero even, number of binary 1s, in ascending
+    /// order.
+    /// </summary>
+    /// <param name="odd">Whether the values have an odd number of binary 1s.</param>
+    /// <returns>The 32 odd or the 30 even values.</returns>
     private static byte[] BuildSymbols(bool odd)
     {
         byte[] symbols = new byte[odd ? 32 : 30];

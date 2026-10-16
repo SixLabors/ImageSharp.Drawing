@@ -28,6 +28,12 @@ internal static class PosiCodeEncoder
     public const int InlineBufferLength = 64;
 
     /// <summary>
+    /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no
+    /// height: 15 per cent.
+    /// </summary>
+    private const float NominalBarHeightFraction = 0.15F;
+
+    /// <summary>
     /// The number of data codewords in the standard character sets.
     /// </summary>
     private const int Codewords = 46;
@@ -349,14 +355,8 @@ internal static class PosiCodeEncoder
             runs[written++] = stop[i] - '0';
         }
 
-        int widthInModules = 0;
-        for (int i = 0; i < runs.Length; i++)
-        {
-            widthInModules += runs[i];
-        }
-
-        // The 15 per cent of Code 39 and Codabar; no document gives a height for PosiCode.
-        float barHeight = options.ResolveBarHeight(xDimension, widthInModules * 0.15F);
+        int widthInModules = BarcodeSymbol.RunWidth(runs);
+        float barHeight = options.ResolveBarHeight(xDimension, widthInModules * NominalBarHeightFraction);
         heights.Fill(barHeight);
 
         if (options.Font is not null && readable.Length > 0)

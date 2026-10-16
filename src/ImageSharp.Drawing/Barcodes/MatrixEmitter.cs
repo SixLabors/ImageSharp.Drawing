@@ -4,6 +4,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using SixLabors.Fonts;
+using SixLabors.ImageSharp.Drawing.Helpers;
 using SixLabors.ImageSharp.Drawing.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
@@ -47,12 +48,15 @@ internal static class MatrixEmitter
     /// <returns>The area the symbol covers.</returns>
     private static RectangleF Layout(DrawingCanvas? canvas, ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
     {
-        Guard.MustBeGreaterThan(options.Dpi, 0, nameof(options.Dpi));
-        Guard.MustBeGreaterThan(symbol.XDimension, 0, nameof(options.XDimension));
         float moduleWidth = (float)(symbol.XDimension / 25.4 * options.Dpi);
 
-        // A matrix symbol has the same quiet zone on all four sides.
-        int quietZone = options.IncludeQuietZones ? (int)symbol.LeadingQuietZone : 0;
+        // Most matrix symbols have the same quiet zone on all four sides; Code One versions S and T have none
+        // above.
+        bool quiet = options.IncludeQuietZones;
+        int leadingZone = quiet ? (int)symbol.LeadingQuietZone : 0;
+        int trailingZone = quiet ? (int)symbol.TrailingQuietZone : 0;
+        int topZone = quiet ? (int)symbol.TopQuietZone : 0;
+        int bottomZone = quiet ? (int)symbol.BottomQuietZone : 0;
         int columns = symbol.Columns;
         int rows = symbol.MatrixRows;
 
@@ -63,8 +67,8 @@ internal static class MatrixEmitter
         // module is not a whole number of pixels, the modules alternate between two widths, and a corner
         // between pixels would make that pattern depend on the width of the quiet zone, so the two outer
         // rings of a finder pattern could round to different widths.
-        double symbolLeft = Math.Round(origin.X + ((double)quietZone * moduleWidth));
-        double symbolTop = Math.Round(origin.Y + ((double)quietZone * moduleWidth));
+        double symbolLeft = Math.Round(origin.X + ((double)leadingZone * moduleWidth));
+        double symbolTop = Math.Round(origin.Y + ((double)topZone * moduleWidth));
 
         // The quiet zones and the modules set the drawn area, and the human readable interpretation below
         // the symbol extends it: downwards by its lines, and to either side by a line wider than the
@@ -72,30 +76,42 @@ internal static class MatrixEmitter
         // The quiet zone surrounds the ink of the text as it surrounds the modules, so the clear space
         // beside a line is the clear space beside the symbol, whatever room the font leaves around its
         // glyphs.
-        float clearSpace = quietZone * moduleWidth;
+        float leftClearSpace = leadingZone * moduleWidth;
+        float rightClearSpace = trailingZone * moduleWidth;
+        float bottomClearSpace = bottomZone * moduleWidth;
         float areaLeft = origin.X;
-        float areaRight = origin.X + ((columns + quietZone + quietZone) * moduleWidth);
-        float areaBottom = origin.Y + ((rows + quietZone + quietZone) * moduleWidth);
+        float areaRight = origin.X + ((columns + leadingZone + trailingZone) * moduleWidth);
+        float areaBottom = origin.Y + ((rows + topZone + bottomZone) * moduleWidth);
         ReadOnlySpan<BarcodeTextPlacement> text = symbol.Text;
         Font? font = text.Length == 0 ? null : options.Font;
         RichTextOptions? textOptions = font is null ? null : BarcodeTextOptionsFactory.Create(font, options.Dpi);
+        Font? scaledFont = null;
+
+        // The drawing pass places each line from what the measuring pass measured, three values a line: the
+        // left and top edges of the ink and the renderable width.
+        using PooledBuffer<float> lineBuffer = font is null ? default : new(text.Length * 3);
+        Span<float> lineData = lineBuffer.Span;
         if (font is not null && textOptions is not null)
         {
             for (int t = 0; t < text.Length; t++)
             {
                 BarcodeTextPlacement placement = text[t];
-                textOptions.Font = placement.FontScale == 1F ? font : new Font(font, font.Size * placement.FontScale);
+                textOptions.Font = ScaledFont(font, placement.FontScale, ref scaledFont);
                 textOptions.Origin = PointF.Empty;
                 textOptions.TextAlignment = placement.Alignment == BarcodeTextAlignment.Left ? TextAlignment.Start : TextAlignment.Center;
                 TextMetrics metrics = TextMeasurer.Measure(symbol.TextOf(in placement), textOptions);
+                Span<float> line = lineData.Slice(t * 3, 3);
+                line[0] = metrics.Bounds.Left;
+                line[1] = metrics.Bounds.Top;
+                line[2] = metrics.RenderableBounds.Width;
 
                 // The ink of the first line starts on the text edge, which rounds onto the pixel grid as the
                 // module edges do.
-                float textLeft = BarEmitter.TextOrigin(placement, metrics, (float)symbolLeft, moduleWidth);
+                float textLeft = BarEmitter.TextOrigin(placement, line[0], line[2], (float)symbolLeft, moduleWidth);
                 float textTop = (float)Math.Round(symbolTop + ((double)placement.TextEdge * moduleWidth)) - metrics.Bounds.Top;
-                areaLeft = MathF.Min(areaLeft, textLeft + metrics.Bounds.Left - clearSpace);
-                areaRight = MathF.Max(areaRight, textLeft + metrics.Bounds.Right + clearSpace);
-                areaBottom = MathF.Max(areaBottom, textTop + metrics.Bounds.Bottom + clearSpace);
+                areaLeft = MathF.Min(areaLeft, textLeft + metrics.Bounds.Left - leftClearSpace);
+                areaRight = MathF.Max(areaRight, textLeft + metrics.Bounds.Right + rightClearSpace);
+                areaBottom = MathF.Max(areaBottom, textTop + metrics.Bounds.Bottom + bottomClearSpace);
             }
         }
 
@@ -163,26 +179,27 @@ internal static class MatrixEmitter
             runCount += bytes[rowStart] & bytes[rowStart - 1];
         }
 
-        // A Swiss cross covers a square at the centre of the symbol whose edges need not fall on module edges.
-        // A run under the square splits into its parts outside it, up to four, and the black parts of the
-        // cross join the runs, so one fill draws both. The square and the cross edges round onto the pixel
-        // grid as the module edges do. This pass counts the parts, so the array is sized exactly.
-        float crossSize = symbol.SwissCrossSize;
-        double crossLeft = symbolLeft + ((columns - crossSize) / 2D * moduleWidth);
-        double crossTop = symbolTop + ((rows - crossSize) / 2D * moduleWidth);
-        double crossSide = (double)crossSize * moduleWidth;
+        // An overlay graphic covers a square at the centre of the symbol whose edges need not fall on module
+        // edges. A run under the square splits into its parts outside it, up to four, and the dark parts of
+        // the graphic join the runs, so one fill draws both. The square and the graphic edges round onto the
+        // pixel grid as the module edges do. This pass counts the parts, so the array is sized exactly.
+        float overlaySize = symbol.OverlaySize;
+        ReadOnlySpan<float> edges = symbol.OverlayEdges;
+        double overlayLeft = symbolLeft + ((columns - overlaySize) / 2D * moduleWidth);
+        double overlayTop = symbolTop + ((rows - overlaySize) / 2D * moduleWidth);
+        double overlaySide = (double)overlaySize * moduleWidth;
         RectangleF hole = RectangleF.Empty;
         InlineArray4<RectangleF> pieceStorage = default;
         Span<RectangleF> pieces = pieceStorage;
-        if (crossSize > 0)
+        if (overlaySize > 0)
         {
             hole = RectangleF.FromLTRB(
-                (float)Math.Round(crossLeft),
-                (float)Math.Round(crossTop),
-                (float)Math.Round(crossLeft + crossSide),
-                (float)Math.Round(crossTop + crossSide));
+                (float)Math.Round(overlayLeft),
+                (float)Math.Round(overlayTop),
+                (float)Math.Round(overlayLeft + overlaySide),
+                (float)Math.Round(overlayTop + overlaySide));
 
-            runCount += SwissCross.DarkEdges.Length / 4;
+            runCount += edges.Length / 4;
             for (int r = 0; r < rows; r++)
             {
                 float rowTop = (float)Math.Round(symbolTop + ((double)r * moduleWidth));
@@ -253,7 +270,7 @@ internal static class MatrixEmitter
                 pathTop = MathF.Min(pathTop, rowTop);
                 pathRight = MathF.Max(pathRight, runRight);
                 pathBottom = MathF.Max(pathBottom, rowBottom);
-                if (crossSize == 0)
+                if (overlaySize == 0)
                 {
                     runs[index++] = run;
                     continue;
@@ -266,19 +283,18 @@ internal static class MatrixEmitter
             }
         }
 
-        // The cross graphic scales from its own units to the side of the square. Its black parts lie within
-        // the square, which lies within the symbol, so the module edges still bound the path.
-        if (crossSize > 0)
+        // The graphic scales from its own units to the side of the square. Its dark parts lie within the
+        // square, which lies within the symbol, so the module edges still bound the path.
+        if (overlaySize > 0)
         {
-            double scale = crossSide / SwissCross.Side;
-            ReadOnlySpan<float> edges = SwissCross.DarkEdges;
+            double scale = overlaySide / symbol.OverlayUnit;
             for (int e = 0; e < edges.Length; e += 4)
             {
                 runs[index++] = RectangleF.FromLTRB(
-                    (float)Math.Round(crossLeft + (edges[e] * scale)),
-                    (float)Math.Round(crossTop + (edges[e + 1] * scale)),
-                    (float)Math.Round(crossLeft + (edges[e + 2] * scale)),
-                    (float)Math.Round(crossTop + (edges[e + 3] * scale)));
+                    (float)Math.Round(overlayLeft + (edges[e] * scale)),
+                    (float)Math.Round(overlayTop + (edges[e + 1] * scale)),
+                    (float)Math.Round(overlayLeft + (edges[e + 2] * scale)),
+                    (float)Math.Round(overlayTop + (edges[e + 3] * scale)));
             }
         }
 
@@ -290,19 +306,42 @@ internal static class MatrixEmitter
             {
                 BarcodeTextPlacement placement = text[t];
                 ReadOnlySpan<char> characters = symbol.TextOf(in placement);
-                textOptions.Font = placement.FontScale == 1F ? font : new Font(font, font.Size * placement.FontScale);
-                textOptions.Origin = PointF.Empty;
+                ReadOnlySpan<float> line = lineData.Slice(t * 3, 3);
+                textOptions.Font = ScaledFont(font, placement.FontScale, ref scaledFont);
                 textOptions.TextAlignment = placement.Alignment == BarcodeTextAlignment.Left ? TextAlignment.Start : TextAlignment.Center;
-                TextMetrics metrics = TextMeasurer.Measure(characters, textOptions);
                 textOptions.Origin = new PointF(
-                    BarEmitter.TextOrigin(placement, metrics, (float)symbolLeft, moduleWidth),
-                    (float)Math.Round(symbolTop + ((double)placement.TextEdge * moduleWidth)) - metrics.Bounds.Top);
+                    BarEmitter.TextOrigin(placement, line[0], line[2], (float)symbolLeft, moduleWidth),
+                    (float)Math.Round(symbolTop + ((double)placement.TextEdge * moduleWidth)) - line[1]);
 
                 canvas.DrawText(textOptions, characters, options.BarBrush, null);
             }
         }
 
         return bounds;
+    }
+
+    /// <summary>
+    /// Returns the font a placement renders in: the font itself at a scale of 1, or the scaled font, built on
+    /// first use and again only when the scale changes.
+    /// </summary>
+    /// <param name="font">The font of the human readable interpretation.</param>
+    /// <param name="scale">The scale of the placement.</param>
+    /// <param name="scaledFont">The scaled font of the last scaled placement, or <see langword="null"/>.</param>
+    /// <returns>The font for the placement.</returns>
+    private static Font ScaledFont(Font font, float scale, ref Font? scaledFont)
+    {
+        if (scale == 1F)
+        {
+            return font;
+        }
+
+        float size = font.Size * scale;
+        if (scaledFont is null || scaledFont.Size != size)
+        {
+            scaledFont = new Font(font, size);
+        }
+
+        return scaledFont;
     }
 
     /// <summary>

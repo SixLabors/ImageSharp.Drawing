@@ -1,9 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
-using SixLabors.ImageSharp.Drawing.Helpers;
-
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -64,15 +61,7 @@ internal static class DeutschePostData
         Guard.NotNull(text, nameof(text));
         Guard.MustBeBetweenOrEqualTo(text.Length, digits, digits + 1, nameof(text));
 
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
-        while (codePoints.MoveNext())
-        {
-            CodePoint current = codePoints.Current;
-            if (!current.IsAsciiDigit())
-            {
-                throw new ArgumentException($"A Deutsche Post number carries only digits; got {current.ToDisplayString()}.", nameof(text));
-            }
-        }
+        BarcodeSymbology.ValidateDigits(text);
 
         int sum = 0;
         for (int i = 0; i < digits; i++)

@@ -618,6 +618,166 @@ public class AztecCodeSymbologyTests
         Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(symbology, new string('0', 127), new BarcodeOptions()));
     }
 
+    /// <summary>
+    /// Section 7.3.2.2: one B/S carries at most 31 + 2047 bytes, so 2079 bytes take two. The expected grid is the
+    /// grid of Zint for the same bytes at the same error correction.
+    /// </summary>
+    [Fact]
+    public void SplitsByteRunsLongerThanOneByteShift()
+    {
+        const string expected =
+            "2eb7773bbb9dddaeeeb7773bbb9dddaeeeb76|" +
+            "335999cccce66673335999cccce6667333598|" +
+            "2b9dddaeeeb7773bbb9dddaeeeb7773bbb9de|" +
+            "2ce66673335999cccce66673335999cccce64|" +
+            "dab7773bbb9dddaeeeb7773bbb9dddaeeeb7a|" +
+            "fb5999cccce66673335999cccce6667333592|" +
+            "a69dddaeeeb7773bbb9dddaeeeb7773bbb9ee|" +
+            "2ee66673335999cccce66673335999cccce4c|" +
+            "1997773bbb9dddaeeeb7773bbb9dddaeeebba|" +
+            "5555555555555555555555555555555555554|" +
+            "fb99998ccca666333319998ccca6663333132|" +
+            "e675ddeeeef7777bbbddddeeeef7777bbbeee|" +
+            "eeb666333319998ccca666333319998ccc8cc|" +
+            "d9cd777bbbddddeeeef7777bbbddddeeef7ba|" +
+            "fb9d998ccca666333319998ccca6663332332|" +
+            "e6735deeeef7777bbbddddeeeef7777bbdeee|" +
+            "aeb766333319998ccca666333319998cc98cc|" +
+            "99ccd77bbbddddeeeef7777bbbddddeef77ba|" +
+            "bb9dd98ccca666333319998ccca6663326332|" +
+            "667335eeeef7777bbbddddeeeef7777bddeee|" +
+            "eeb776333319998ccca666333319998c998cc|" +
+            "99cccd7bbbddddeeeef7777bbbddddef777ba|" +
+            "bb9ddd8ccca666333319998ccca6663266332|" +
+            "6673336eeef7777bbbddddeeeef7777dddeee|" +
+            "eeb777333319998ccca6663333199989998cc|" +
+            "5555555555555555555555555555555555554|" +
+            "998cccabbb9dddaeeeb7773bbb9dddb7773ba|" +
+            "bbddddeccce66673335999cccce6666666732|" +
+            "6633331aeeb7773bbb9dddaeeeb7779dddaee|" +
+            "eef7777b335999cccce666733359995999ccc|" +
+            "998ccca6bb9dddaeeeb7773bbb9ddeb7773ba|" +
+            "bbddddeecce66673335999cccce664e666732|" +
+            "66333319aeb7773bbb9dddaeeeb77b9dddaee|" +
+            "eef7777bb35999cccce666733359935999ccc|" +
+            "998ccca66b9dddaeeeb7773bbb9deeb7773ba|" +
+            "bbddddeeece66673335999cccce64ce666732|" +
+            "663333199ab7773bbb9dddaeeeb7bb9dddaee|" +
+            "eef7777bbb5999cccce666733359335999ccc|" +
+            "998ccca6669dddaeeeb7773bbb9eeeb7773ba|" +
+            "bbddddeeeee66673335999cccce4cce666732|" +
+            "663333199997773bbb9dddaeeebbbb9dddaee|" +
+            "5555555555555555555555555555555555554|" +
+            "eeb7773bbb99998ccca6663333133319998cc|" +
+            "99cccce66675ddeeeef7777bbbeeeef7777ba|" +
+            "bb9dddaeeeb666333319998ccc8ccca666332|" +
+            "6673335999cd777bbbddddeeef7bbbddddeee|" +
+            "eeb7773bbb9d998ccca6663332333319998cc|" +
+            "99cccce6667326f675603772fdeeeef7777ba|" +
+            "bb9dddaeeeb77f168501cdbd398ccca666332|" +
+            "6673335999ccb07b5ad43e5e777bbbddddeee|" +
+            "eeb7773bbb9dff0829afd6aa56333319998cc|" +
+            "99cccce666730ff072fee04a1deeeef7777ba|" +
+            "bb9dddaeeeb769907e88b9ad698ccca666332|" +
+            "6673335999cc885488d61cf0977bbbddddeee|" +
+            "eeb7773bbb9dbe2ae180a6a346333319998cc|" +
+            "99cccce666733267e1676c4b7deeeef7777ba|" +
+            "bb9dddaeeeb760978488bdae398ccca666332|" +
+            "5555555555555555555555555555555555554|" +
+            "66333319998c8a9068829129c73bbb9dddaee|" +
+            "eef7777bbbdd9f54c7e1cfd65673335999ccc|" +
+            "998ccca666337a9f70a814888daeeeb7773ba|" +
+            "bbddddeeeef75dc4e977bdf219cccce666732|" +
+            "66333319998c910f78b49c83673bbb9dddaee|" +
+            "eef7777bbbdd85dfde7b197d4673335999ccc|" +
+            "998ccca666332c3ccd0aff264daeeeb7773ba|" +
+            "bbddddeeeef77de98dea0c5fd9cccce666732|" +
+            "66333319998c9b167f2ad13c473bbb9dddaee|" +
+            "eef7777bbbdd93ecffffc0e54673335999ccc|" +
+            "998ccca666335e155001de9fbdaeeeb7773ba|" +
+            "bbddddeeeef76742b7fd7dc6e9cccce666732|" +
+            "66333319998ca3093405dea5873bbb9dddaee|" +
+            "eef7777bbbddf0d235f5dff54673335999ccc|" +
+            "998ccca66633621995150da99daeeeb7773ba|" +
+            "5555555555555555555555555555555555554|" +
+            "bb9dddaeeeb76b8715155eb3c98ccca666332|" +
+            "6673335999cccc4835f5a6c0c77bbbddddeee|" +
+            "eeb7773bbb9d8818b40528bd76333319998cc|" +
+            "99cccce6667321f117fdd2799deeeef7777ba|" +
+            "bb9dddaeeeb7539f100112bf898ccca666332|" +
+            "6673335999ccd24d9fffb672877bbbddddeee|" +
+            "eeb7773bbb9da735ca1c0cbfa6333319998cc|" +
+            "99cccce6667326ee6560867d5deeeef7777ba|" +
+            "bb9dddaeeeb75c018901a511298ccca666332|" +
+            "6673335999ccfad55be48f51377bbbddddeee|" +
+            "eeb7773bbb9dd93c88a650b2d6333319998cc|" +
+            "99cccce666732f74205409de9deeeef7777ba|" +
+            "bb9dddaeeeb77a918ca53118998ccca666332|" +
+            "6673335999cca2d30fec82f9c77bbbddddeee|" +
+            "eeb7773bbb9dba372b0b211716333319998cc|" +
+            "5555555555555555555555555555555555554|" +
+            "998ccca666337297ad9986b8adaeeeb7773ba|" +
+            "bbddddeeeef7175803caae6f99cccce666732|" +
+            "66333319998cc9a9ae033b9fc73bbb9dddaee|" +
+            "eef7777bbbdd874599eee2c6a673335999ccc|" +
+            "998ccca66633763710012509bdaeeeb7773ba|" +
+            "bbddddeeeef776d13ac99777c9cccce666732|" +
+            "66333319998cbea67f191e98873bbb9dddaee|" +
+            "eef7777bbbddfa699c6e5f43c673335999ccc|" +
+            "998ccca666326719d49a5d2a4daeeeb7773ba|" +
+            "bbddddeeeef7bbcef87ea650f9cccce666732|" +
+            "663333199989998ccca66633373bbb9dddaee|" +
+            "eef7777bbbdeeef7777bbbddd673335999ccc|" +
+            "998ccca6662666333319998ccdaeeeb7773ba|" +
+            "bbddddeeeefbbbddddeeeef775cccce666732|" +
+            "663333199919998ccca66633333bbb9dddaee|" +
+            "5555555555555555555555555555555555554|" +
+            "eeb7773bbbaeeeb7773bbb9ddd333319998cc|" +
+            "99cccce664e66673335999cccceeeef7777ba|" +
+            "bb9dddaeef3bbb9dddaeeeb7772ccca666332|" +
+            "66733359935999cccce66673335bbbddddeee|" +
+            "eeb7773bbdaeeeb7773bbb9dddab3319998cc|" +
+            "99cccce64ce66673335999cccce6eef7777ba|" +
+            "bb9dddaef73bbb9dddaeeeb7773acca666332|" +
+            "66733359335999cccce666733359bbddddeee|" +
+            "eeb7773bddaeeeb7773bbb9dddaeb319998cc|" +
+            "99cccce4cce66673335999cccce66ef7777ba|" +
+            "bb9dddaf773bbb9dddaeeeb7773baca666332|" +
+            "66733353335999cccce6667333599bddddeee|" +
+            "eeb7773dddaeeeb7773bbb9dddaeeb19998cc|" +
+            "99cccccccce66673335999cccce666f7777ba|" +
+            "bb9dddb7773bbb9dddaeeeb7773bbaa666332|" +
+            "5555555555555555555555555555555555554|" +
+            "663332333319998ccca666333319999dddaee|" +
+            "eef777ddddeeeef7777bbbddddeeeed999ccc|" +
+            "998cc98ccca666333319998ccca66637773ba|" +
+            "bbdddef7777bbbddddeeeef7777bbbd666732|" +
+            "663326333319998ccca666333319998dddaee|" +
+            "eef77bddddeeeef7777bbbddddeeeef599ccc|" +
+            "998c998ccca666333319998ccca66633773ba|" +
+            "bbddeef7777bbbddddeeeef7777bbbdd66732|" +
+            "663266333319998ccca666333319998cddaee|" +
+            "eef7bbddddeeeef7777bbbddddeeeef759ccc|" +
+            "9989998ccca666333319998ccca66633373ba|" +
+            "bbdeeef7777bbbddddeeeef7777bbbddd6732|" +
+            "662666333319998ccca666333319998ccdaee|" +
+            "eefbbbddddeeeef7777bbbddddeeeef775ccc|" +
+            "9919998ccca666333319998ccca66633333ba|" +
+            "5555555555555555555555555555555555554|" +
+            "bbaeeeb7773bbb9dddaeeeb7773bbb9ddd332|" +
+            "64e66673335999cccce66673335999cccceee|" +
+            "ef3bbb9dddaeeeb7773bbb9dddaeeeb7772cc|" +
+            "935999cccce66673335999cccce66673335ba|" +
+            "bdaeeeb7773bbb9dddaeeeb7773bbb9dddab2|" +
+            "4ce66673335999cccce66673335999cccce6e|" +
+            "f73bbb9dddaeeeb7773bbb9dddaeeeb7773ac|" +
+            "335999cccce66673335999cccce666733359a|" +
+            "ddaeeeb7773bbb9dddaeeeb7773bbb9dddaea";
+
+        SymbolEncoder.Encode(new AztecCodeSymbology(10), new string('é', 2079), new BarcodeOptions(), (ref symbol) =>
+            Assert.Equal(expected, SymbolEncoder.ModuleGrid(ref symbol)));
+    }
+
     private static BarcodeSymbology Create(string kind, int percentage, int layers)
         => kind switch
         {

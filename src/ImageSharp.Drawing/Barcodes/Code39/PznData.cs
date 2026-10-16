@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
@@ -66,15 +65,7 @@ internal static class PznData
         Guard.NotNull(text, nameof(text));
         Guard.MustBeBetweenOrEqualTo(text.Length, digits, digits + 1, nameof(text));
 
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
-        while (codePoints.MoveNext())
-        {
-            CodePoint current = codePoints.Current;
-            if (!current.IsAsciiDigit())
-            {
-                throw new ArgumentException($"A PZN carries only digits; got {current.ToDisplayString()}.", nameof(text));
-            }
-        }
+        BarcodeSymbology.ValidateDigits(text);
 
         // IFA: "The sum is formed across the products and divided by 11. The whole number remainder is the
         // check digit."

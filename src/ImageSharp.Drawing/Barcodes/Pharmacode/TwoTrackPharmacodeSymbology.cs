@@ -41,11 +41,6 @@ public sealed class TwoTrackPharmacodeSymbology : BarcodeSymbology
     private const int QuietZone = 6;
 
     /// <summary>
-    /// The largest number of bars a symbol carries.
-    /// </summary>
-    private const int MaximumBars = 16;
-
-    /// <summary>
     /// The height of the full bar in modules when the caller sets none: 8 mm at the 1 mm module.
     /// </summary>
     private const float NominalBarHeight = 8F;

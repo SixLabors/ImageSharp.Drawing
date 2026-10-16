@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
@@ -67,15 +66,7 @@ public sealed class MsiSymbology : BarcodeSymbology
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, MsiEncoder.MaximumLength, nameof(text));
 
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
-        while (codePoints.MoveNext())
-        {
-            CodePoint current = codePoints.Current;
-            if (!current.IsAsciiDigit())
-            {
-                throw new ArgumentException($"MSI carries only digits; got {current.ToDisplayString()}.", nameof(text));
-            }
-        }
+        BarcodeSymbology.ValidateDigits(text);
 
         // The symbol carries the digits and at most two check digits. The text is at most MaximumLength
         // digits, so a short symbol works inline and a longer one rents its digits once.

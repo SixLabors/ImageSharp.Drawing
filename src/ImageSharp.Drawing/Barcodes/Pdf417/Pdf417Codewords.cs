@@ -409,74 +409,54 @@ internal static class Pdf417Codewords
     /// </summary>
     /// <param name="codewords">The data codewords followed by room for the error correction codewords.</param>
     /// <param name="count">The number of error correction codewords, 2 to 512.</param>
-    public static void AppendErrorCorrection(Span<int> codewords, int count)
+    /// <param name="alpha">The scratch for the generator coefficients, at least <paramref name="count"/> plus one long.</param>
+    public static void AppendErrorCorrection(Span<int> codewords, int count, Span<int> alpha)
     {
-        // The generator polynomial g(x) = (x - 3)(x - 3^2) ... (x - 3^k), expanded one factor at a time.
-        // Multiplying by (x - r) gives each coefficient as the coefficient below it less r times itself,
-        // so the update runs from the top down in place. The coefficients of x^0 to x^(k-1) are the
-        // alpha values of Annex F; the coefficient of x^k is 1. Each factor reads the coefficient above the
-        // product before it writes it, so the coefficients start zero. Levels 0 to 5 take at most 64
-        // coefficients, which stay inline; a higher level rents its coefficients once.
-        InlineArray65<int> alphaStorage = default;
-        PooledBuffer<int> rented = default;
-        bool inline = count < 65;
-        Span<int> alpha = inline
-            ? ((Span<int>)alphaStorage)[..(count + 1)]
-            : (rented = new PooledBuffer<int>(count + 1)).Span;
-
-        try
+        // The generator polynomial g(x) = (x - 3)(x - 3^2) ... (x - 3^k) of section 5.10, expanded one factor
+        // at a time. Multiplying by (x - r) gives each coefficient as the coefficient below it less r times
+        // itself, so the update runs from the top down in place. The coefficient of x^k is 1. Each factor
+        // reads the coefficient above the product before it writes it, so the coefficients start zero.
+        alpha = alpha[..(count + 1)];
+        alpha.Clear();
+        alpha[0] = 1;
+        int root = 1;
+        for (int degree = 1; degree <= count; degree++)
         {
-            // The inline coefficients start zero; a rented array holds the values of its last use.
-            if (!inline)
+            root = (root * 3) % Modulus;
+            int negated = Modulus - root;
+            for (int j = degree; j > 0; j--)
             {
-                alpha.Clear();
+                alpha[j] = (alpha[j - 1] + (negated * alpha[j])) % Modulus;
             }
 
-            alpha[0] = 1;
-            int root = 1;
-            for (int degree = 1; degree <= count; degree++)
-            {
-                root = (root * 3) % Modulus;
-                int negated = Modulus - root;
-                for (int j = degree; j > 0; j--)
-                {
-                    alpha[j] = (alpha[j - 1] + (negated * alpha[j])) % Modulus;
-                }
-
-                alpha[0] = (negated * alpha[0]) % Modulus;
-            }
-
-            // The division of d(x) x^k by g(x) of section 5.10, step 3, with the error correction
-            // codewords E(k-1) to E(0) as the register. The register lives in place of the error
-            // correction codewords, E(j) at index dataCount + k - 1 - j, so the codewords come out most
-            // significant first.
-            int dataCount = codewords.Length - count;
-            Span<int> register = codewords[dataCount..];
-            register.Clear();
-            for (int i = 0; i < dataCount; i++)
-            {
-                int t1 = (codewords[i] + register[0]) % Modulus;
-                for (int j = count - 1; j > 0; j--)
-                {
-                    int t3 = Modulus - ((t1 * alpha[j]) % Modulus);
-                    register[count - 1 - j] = (register[count - j] + t3) % Modulus;
-                }
-
-                register[count - 1] = (Modulus - ((t1 * alpha[0]) % Modulus)) % Modulus;
-            }
-
-            // Step 4: each codeword is the complement of its register value.
-            for (int j = 0; j < count; j++)
-            {
-                if (register[j] != 0)
-                {
-                    register[j] = Modulus - register[j];
-                }
-            }
+            alpha[0] = (negated * alpha[0]) % Modulus;
         }
-        finally
+
+        // The division of d(x) x^k by g(x) of section 5.10, step 3, with the error correction codewords
+        // E(k-1) to E(0) as the register. The register lives in place of the error correction codewords,
+        // E(j) at index dataCount + k - 1 - j, so the codewords come out most significant first.
+        int dataCount = codewords.Length - count;
+        Span<int> register = codewords[dataCount..];
+        register.Clear();
+        for (int i = 0; i < dataCount; i++)
         {
-            rented.Dispose();
+            int t1 = (codewords[i] + register[0]) % Modulus;
+            for (int j = count - 1; j > 0; j--)
+            {
+                int t3 = Modulus - ((t1 * alpha[j]) % Modulus);
+                register[count - 1 - j] = (register[count - j] + t3) % Modulus;
+            }
+
+            register[count - 1] = (Modulus - ((t1 * alpha[0]) % Modulus)) % Modulus;
+        }
+
+        // Step 4: each codeword is the complement of its register value.
+        for (int j = 0; j < count; j++)
+        {
+            if (register[j] != 0)
+            {
+                register[j] = Modulus - register[j];
+            }
         }
     }
 

@@ -18,8 +18,7 @@ internal static class MsiEncoder
     public const int MaximumLength = 500;
 
     /// <summary>
-    /// The quiet zone in modules on each side: the 10X of Code 39 and Codabar, since no document gives
-    /// one for MSI.
+    /// The quiet zone in modules on each side.
     /// </summary>
     public const int QuietZone = 10;
 
@@ -46,7 +45,7 @@ internal static class MsiEncoder
 
     /// <summary>
     /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no
-    /// height: the 15 per cent of Code 39 and Codabar, since no document gives one for MSI.
+    /// height: 15 per cent.
     /// </summary>
     private const float NominalBarHeightFraction = 0.15F;
 
@@ -135,11 +134,7 @@ internal static class MsiEncoder
         runs[written++] = 2;
         runs[written] = 1;
 
-        int widthInModules = 0;
-        for (int i = 0; i < runs.Length; i++)
-        {
-            widthInModules += runs[i];
-        }
+        int widthInModules = BarcodeSymbol.RunWidth(runs);
 
         float barHeight = options.ResolveBarHeight(xDimension, widthInModules * NominalBarHeightFraction);
         heights.Fill(barHeight);

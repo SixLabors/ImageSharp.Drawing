@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
@@ -66,15 +65,7 @@ public sealed class Code32Symbology : BarcodeSymbology
         Guard.NotNull(text, nameof(text));
         Guard.MustBeBetweenOrEqualTo(text.Length, Digits, Digits + 1, nameof(text));
 
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
-        while (codePoints.MoveNext())
-        {
-            CodePoint current = codePoints.Current;
-            if (!current.IsAsciiDigit())
-            {
-                throw new ArgumentException($"An AIC code carries only digits; got {current.ToDisplayString()}.", nameof(text));
-            }
-        }
+        BarcodeSymbology.ValidateDigits(text);
 
         // Section 3: the code "è composto da nove cifre di cui la prima è la cifra zero".
         if (text[0] != '0')

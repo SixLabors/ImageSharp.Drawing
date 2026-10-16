@@ -12,12 +12,25 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// </summary>
 public sealed class BarcodeOptions
 {
+    private float dpi = 96F;
+    private double? xDimension;
+    private double? barHeight;
+
     /// <summary>
     /// Gets or sets the resolution in dots per inch. One module draws <see cref="XDimension"/> / 25.4 x
     /// <see cref="Dpi"/> pixels wide, and text renders at this resolution. The default is 96, the CSS
     /// reference pixel: "1px = 1/96th of 1in".
     /// </summary>
-    public float Dpi { get; set; } = 96F;
+    /// <exception cref="ArgumentOutOfRangeException">The value is not greater than zero.</exception>
+    public float Dpi
+    {
+        get => this.dpi;
+        set
+        {
+            Guard.MustBeGreaterThan(value, 0, nameof(this.Dpi));
+            this.dpi = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the X dimension in millimetres: the width of the narrowest element of the symbology,
@@ -27,13 +40,39 @@ public sealed class BarcodeOptions
     /// of the symbol. Where the specification gives no X dimension, it is one point,
     /// <see cref="BarcodeSymbology.PointXDimension"/>.
     /// </summary>
-    public double? XDimension { get; set; }
+    /// <exception cref="ArgumentOutOfRangeException">The value is not greater than zero.</exception>
+    public double? XDimension
+    {
+        get => this.xDimension;
+        set
+        {
+            if (value is double x)
+            {
+                Guard.MustBeGreaterThan(x, 0, nameof(this.XDimension));
+            }
+
+            this.xDimension = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the bar height in millimetres. Set <see langword="null"/> to take the nominal height
     /// that the symbology specification gives.
     /// </summary>
-    public double? BarHeight { get; set; }
+    /// <exception cref="ArgumentOutOfRangeException">The value is not greater than zero.</exception>
+    public double? BarHeight
+    {
+        get => this.barHeight;
+        set
+        {
+            if (value is double height)
+            {
+                Guard.MustBeGreaterThan(height, 0, nameof(this.BarHeight));
+            }
+
+            this.barHeight = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the brush used to fill the bars and dark modules.

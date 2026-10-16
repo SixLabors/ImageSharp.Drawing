@@ -170,6 +170,12 @@ internal static class QrEncoder
     private const int MicroFormatMask = 0b100010001000101;
 
     /// <summary>
+    /// The field of the error correction, section 6.5.2: GF(2^8) with the primitive polynomial
+    /// x^8 + x^4 + x^3 + x^2 + 1, 285 decimal.
+    /// </summary>
+    private static readonly GaloisField Field = new(256, 285);
+
+    /// <summary>
     /// The symbol sizes, Micro QR Code versions M1 to M4, QR Code versions 1 to 40 and then Rectangular
     /// Micro QR Code versions R7x43 to R17x139. Each carries its data modules (Table 1 of ISO/IEC 18004),
     /// its error correction codewords and blocks for levels L, M, Q and H (Table 9, -1 where the level does
@@ -714,7 +720,7 @@ internal static class QrEncoder
     }
 
     /// <summary>
-    /// Divides the message into mode segments for a version group, section 6.2 and Annex J. At each position
+    /// Divides the message into mode segments for a version group. At each position
     /// a run of digits or Alphanumeric characters that is long enough to pay for its indicators starts a
     /// segment of its own; a shorter run stays in the current mode.
     /// </summary>
@@ -1074,7 +1080,7 @@ internal static class QrEncoder
         int perBlock = errorCount / blocks;
         InlineArray32<int> generatorStorage = default;
         Span<int> generator = ((Span<int>)generatorStorage)[..perBlock];
-        GaloisField field = GaloisField.QrCode;
+        GaloisField field = Field;
         field.Generator(0, generator);
 
         // Table 9: the blocks with fewer data codewords come first, and each later block has one more.
@@ -1585,8 +1591,10 @@ internal static class QrEncoder
             }
         }
 
-        // N4: 10 points for each full 5% the proportion of dark modules is away from 50%.
-        int k = (int)(Math.Abs((dark * 100.0 / (n * n)) - 50) / 5);
+        // N4: 10 points for each full 5% the proportion of dark modules is away from 50%. The steps are
+        // |100 dark / n^2 - 50| / 5, which integers give exactly as |20 dark - 10 n^2| / n^2.
+        int area = n * n;
+        int k = Math.Abs((20 * dark) - (10 * area)) / area;
         return lines + blocks + (10 * k);
     }
 

@@ -186,7 +186,10 @@ internal static class MicroPdf417Encoder
         Span<int> codewords = ((Span<int>)codewordStorage)[..(c * r)];
         data.CopyTo(codewords);
         codewords[data.Length..^k].Fill(Pdf417Codewords.Pad);
-        Pdf417Codewords.AppendErrorCorrection(codewords, k);
+
+        // The symbol holds at most 256 codewords, so the generator coefficients fit inline too.
+        InlineArray256<int> alphaStorage = default;
+        Pdf417Codewords.AppendErrorCorrection(codewords, k, alphaStorage);
 
         BuildRows(codewords, c, r, sizes[size + 3], sizes[size + 4], sizes[size + 5], options, ref symbol);
     }

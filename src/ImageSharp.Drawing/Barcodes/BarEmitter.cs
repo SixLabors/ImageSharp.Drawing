@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using SixLabors.Fonts;
+using SixLabors.ImageSharp.Drawing.Helpers;
 using SixLabors.ImageSharp.Drawing.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
@@ -12,6 +13,13 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// </summary>
 internal static class BarEmitter
 {
+    /// <summary>
+    /// The smallest size in points that the text of a linear or stacked symbol prints at. Section 8.1 of the
+    /// ISBN Users' Manual: "The ISBN should always be printed in type large enough to be easily legible
+    /// (i.e., 9-point or larger)." Section 7 of the ISMN Users' Manual gives the same floor.
+    /// </summary>
+    private const float MinimumTextPoints = 9F;
+
     /// <summary>
     /// Renders the symbol onto the canvas.
     /// </summary>
@@ -45,8 +53,6 @@ internal static class BarEmitter
     /// <returns>The area the symbol covers, including any text that overhangs the bars.</returns>
     private static RectangleF Layout(DrawingCanvas? canvas, ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
     {
-        Guard.MustBeGreaterThan(options.Dpi, 0, nameof(options.Dpi));
-        Guard.MustBeGreaterThan(symbol.XDimension, 0, nameof(options.XDimension));
         float moduleWidth = (float)(symbol.XDimension / 25.4 * options.Dpi);
 
         ReadOnlySpan<BarcodeRow> rows = symbol.Rows;
@@ -120,9 +126,9 @@ internal static class BarEmitter
         Font? scaledFont = null;
 
         // Every text line prints at 9 point or larger, the one size floor the standards state.
-        Font? digitFont = options.Font is null || options.Font.Size >= EanUpcEncoder.MinimumTextPoints
+        Font? digitFont = options.Font is null || options.Font.Size >= MinimumTextPoints
             ? options.Font
-            : new Font(options.Font, EanUpcEncoder.MinimumTextPoints);
+            : new Font(options.Font, MinimumTextPoints);
 
         // A digit prints inside its own symbol character, so its size is capped to that cell and the
         // text cannot run into its neighbour. The floor wins over the cap where the two disagree.
@@ -167,7 +173,7 @@ internal static class BarEmitter
             }
 
             float size = MathF.Min(MathF.Max(digitFont.Size, sizeAtMinimum), sizeAtMaximum);
-            float capped = MathF.Max(MathF.Min(size, cap), MathF.Max(sizeAtMinimum, EanUpcEncoder.MinimumTextPoints));
+            float capped = MathF.Max(MathF.Min(size, cap), MathF.Max(sizeAtMinimum, MinimumTextPoints));
             if (capped != digitFont.Size)
             {
                 digitFont = new Font(digitFont, capped);
@@ -193,6 +199,11 @@ internal static class BarEmitter
         RichTextOptions? digitOptions = null;
         RichTextOptions? scaledOptions = null;
         RichTextOptions? captionOptions = null;
+
+        // The drawing pass places each line from what the measuring pass measured, three values a line: the
+        // left edge of the ink, the renderable width and the baseline of a line below the bars.
+        using PooledBuffer<float> lineBuffer = digitFont is null || text.IsEmpty ? default : new(text.Length * 3);
+        Span<float> lineData = lineBuffer.Span;
 
         // Every line drawn in one font shares one rise, so the lines share a baseline and their glyphs sit
         // level with each other. The rise is the tallest ink any of those lines carries, which a cap height
@@ -230,7 +241,13 @@ internal static class BarEmitter
                 }
                 else
                 {
-                    measureOptions = scaledOptions ??= BarcodeTextOptionsFactory.Create(font, options.Dpi);
+                    // The scaled font changes when the scale does, and the options follow it.
+                    if (scaledOptions?.Font != font)
+                    {
+                        scaledOptions = BarcodeTextOptionsFactory.Create(font, options.Dpi);
+                    }
+
+                    measureOptions = scaledOptions;
                 }
 
                 // The rectangle is the union of the glyph bounds and the advance, and both are anchored at
@@ -239,7 +256,10 @@ internal static class BarEmitter
                 measureOptions.Origin = PointF.Empty;
 
                 TextMetrics metrics = TextMeasurer.Measure(characters, measureOptions);
-                float textLeft = TextOrigin(placement, metrics, symbolLeft, moduleWidth * stretch);
+                Span<float> line = lineData.Slice(i * 3, 3);
+                line[0] = metrics.Bounds.Left;
+                line[1] = metrics.RenderableBounds.Width;
+                float textLeft = TextOrigin(placement, line[0], line[1], symbolLeft, moduleWidth * stretch);
                 backgroundLeft = MathF.Min(backgroundLeft, textLeft);
                 backgroundRight = MathF.Max(backgroundRight, textLeft + metrics.RenderableBounds.Width);
 
@@ -254,11 +274,12 @@ internal static class BarEmitter
 
                     // The quiet zone digits of a UPC symbol print smaller than the rest of the line. The
                     // tallest line sets where the line sits, and every line on it shares that baseline.
-                    LineMetrics line = metrics.LineMetrics[0];
-                    if (line.LineHeight > belowHeight)
+                    LineMetrics lineMetrics = metrics.LineMetrics[0];
+                    line[2] = lineMetrics.Baseline;
+                    if (lineMetrics.LineHeight > belowHeight)
                     {
-                        belowHeight = line.LineHeight;
-                        belowBaseline = line.Baseline;
+                        belowHeight = lineMetrics.LineHeight;
+                        belowBaseline = lineMetrics.Baseline;
                     }
 
                     belowInk = MathF.Min(belowInk, metrics.Bounds.Top);
@@ -355,12 +376,7 @@ internal static class BarEmitter
             canvas.Fill(options.Background, new RectanglePolygon(bounds.X, bounds.Y, bounds.Width, bounds.Height));
         }
 
-        int barCount = 0;
-        for (int r = 0; r < rows.Length; r++)
-        {
-            barCount += rows[r].BarCount;
-        }
-
+        int barCount = barHeights.Length;
         int frameCount = frame > 0 ? (sides ? 4 : 2) : 0;
         int identificationCount = (upperIdentificationBar ? 1 : 0) + (lowerIdentificationBar ? 1 : 0);
 
@@ -508,7 +524,6 @@ internal static class BarEmitter
         {
             BarcodeTextPlacement placement = text[i];
             ReadOnlySpan<char> characters = symbol.TextOf(in placement);
-            Font font = ResolveFont(placement, characters, digitFont, ref captionFont, ref scaledFont, options, moduleWidth * stretch);
 
             // The edge the reader sees is what rounds onto the device pixel grid, as the bar edges do. The
             // ink of a line below the bars starts on the text edge, and the ink of a line above the bars
@@ -516,27 +531,34 @@ internal static class BarEmitter
             float textEdge = MathF.Round(origin.Y + ((topBand + placement.TextEdge) * moduleWidth));
             float baseline = textEdge - belowInk + belowBaseline;
 
+            // The measuring pass built the options of the caption and the digits. The scaled options follow
+            // the scaled font as they did there.
             RichTextOptions textOptions;
             if (placement.IsCaption)
             {
-                textOptions = captionOptions ??= BarcodeTextOptionsFactory.Create(font, options.Dpi);
+                textOptions = captionOptions!;
             }
             else if (placement.FontScale == 1F)
             {
-                textOptions = digitOptions ??= BarcodeTextOptionsFactory.Create(font, options.Dpi);
+                textOptions = digitOptions!;
             }
             else
             {
-                textOptions = scaledOptions ??= BarcodeTextOptionsFactory.Create(font, options.Dpi);
+                Font font = ResolveFont(placement, characters, digitFont, ref captionFont, ref scaledFont, options, moduleWidth * stretch);
+                if (scaledOptions!.Font != font)
+                {
+                    scaledOptions = BarcodeTextOptionsFactory.Create(font, options.Dpi);
+                }
+
+                textOptions = scaledOptions;
             }
 
-            textOptions.Origin = PointF.Empty;
-            TextMetrics lineMetrics = TextMeasurer.Measure(characters, textOptions);
+            ReadOnlySpan<float> line = lineData.Slice(i * 3, 3);
             float textY = placement.Side == BarcodeTextSide.AboveBars
                 ? textEdge - aboveInk
-                : baseline - lineMetrics.LineMetrics[0].Baseline;
+                : baseline - line[2];
 
-            textOptions.Origin = new PointF(TextOrigin(placement, lineMetrics, symbolLeft, moduleWidth * stretch), textY);
+            textOptions.Origin = new PointF(TextOrigin(placement, line[0], line[1], symbolLeft, moduleWidth * stretch), textY);
             canvas.DrawText(textOptions, characters, options.BarBrush, null);
         }
 
@@ -551,20 +573,21 @@ internal static class BarEmitter
     /// span.
     /// </summary>
     /// <param name="placement">The placement.</param>
-    /// <param name="metrics">The measured line.</param>
+    /// <param name="inkLeft">The left edge of the ink of the measured line, from <see cref="TextMetrics.Bounds"/>.</param>
+    /// <param name="renderableWidth">The width of the measured line, from <see cref="TextMetrics.RenderableBounds"/>.</param>
     /// <param name="symbolLeft">The x of the first bar, in pixels.</param>
     /// <param name="moduleWidth">The module width in pixels, stretched to the drawn bar block.</param>
     /// <returns>The x origin in pixels.</returns>
-    public static float TextOrigin(BarcodeTextPlacement placement, TextMetrics metrics, float symbolLeft, float moduleWidth)
+    public static float TextOrigin(BarcodeTextPlacement placement, float inkLeft, float renderableWidth, float symbolLeft, float moduleWidth)
     {
         float left = MathF.Round(symbolLeft + (placement.Left * moduleWidth));
         if (placement.Alignment == BarcodeTextAlignment.Left)
         {
-            return left - metrics.Bounds.Left;
+            return left - inkLeft;
         }
 
         float right = MathF.Round(symbolLeft + (placement.Right * moduleWidth));
-        return ((left + right) * 0.5F) - (metrics.RenderableBounds.Width * 0.5F);
+        return ((left + right) * 0.5F) - (renderableWidth * 0.5F);
     }
 
     /// <summary>
@@ -600,7 +623,7 @@ internal static class BarEmitter
     {
         if (placement.IsCaption)
         {
-            captionFont ??= EanUpcEncoder.ResolveCaptionFont(characters, placement.Right - placement.Left, moduleWidth, options);
+            captionFont ??= ResolveCaptionFont(characters, placement.Right - placement.Left, moduleWidth, options);
             return captionFont;
         }
 
@@ -618,5 +641,30 @@ internal static class BarEmitter
         }
 
         return scaledFont;
+    }
+
+    /// <summary>
+    /// Resolves the font an ISBN, ISMN or ISSN caption prints in. Under
+    /// <see cref="BarcodeOptions.FitCaptionToSymbolWidth"/> the size is the one that spans the bars.
+    /// Otherwise the font keeps its own size. The 9 point floor wins over both, because it is the one
+    /// size rule the standards state, and a caption that cannot fit at 9 point widens the drawing.
+    /// </summary>
+    /// <param name="caption">The caption text.</param>
+    /// <param name="spanModules">The width the caption prints across, in modules.</param>
+    /// <param name="moduleWidth">The width of one module in pixels.</param>
+    /// <param name="options">The options that carry the fonts and the resolution.</param>
+    /// <returns>The font to print the caption with.</returns>
+    private static Font ResolveCaptionFont(ReadOnlySpan<char> caption, float spanModules, float moduleWidth, BarcodeOptions options)
+    {
+        Font font = options.CaptionFont ?? options.Font!;
+        float size = font.Size;
+        if (options.FitCaptionToSymbolWidth)
+        {
+            float width = TextMeasurer.Measure(caption, BarcodeTextOptionsFactory.Create(font, options.Dpi)).RenderableBounds.Width;
+            size = font.Size * spanModules * moduleWidth / width;
+        }
+
+        size = MathF.Max(size, MinimumTextPoints);
+        return size == font.Size ? font : new Font(font, size);
     }
 }

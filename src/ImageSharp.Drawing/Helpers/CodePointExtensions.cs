@@ -32,4 +32,18 @@ internal static class CodePointExtensions
     /// <returns><see langword="true"/> if the code point is an ASCII digit; otherwise <see langword="false"/>.</returns>
     public static bool IsAsciiDigit(this CodePoint codePoint)
         => codePoint.IsAscii && char.IsAsciiDigit((char)codePoint.Value);
+
+    /// <summary>
+    /// Returns the code point that starts at an index of the text: a surrogate pair as the one code point it
+    /// encodes, and a lone surrogate as itself.
+    /// </summary>
+    /// <param name="text">The text.</param>
+    /// <param name="index">The index of the first UTF-16 code unit of the code point.</param>
+    /// <returns>The code point.</returns>
+    public static CodePoint CodePointAt(this ReadOnlySpan<char> text, int index)
+    {
+        SpanCodePointEnumerator codePoints = text[index..].EnumerateCodePoints();
+        codePoints.MoveNext();
+        return codePoints.Current;
+    }
 }

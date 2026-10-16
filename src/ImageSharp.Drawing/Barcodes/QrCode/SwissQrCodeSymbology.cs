@@ -71,7 +71,7 @@ public sealed class SwissQrCodeSymbology : BarcodeSymbology
             // Sections 6.1 and 6.4: level M and the smallest version, drawn 46 mm wide with the 7 mm cross at
             // the same scale.
             QrEncoder.BuildSymbol(bytes[..written], false, QrFormat.Full, QrErrorCorrectionLevel.M, 0, options.XDimension, SwissCross.SymbolWidth, ref symbol);
-            symbol.AddSwissCross((float)(SwissCross.Width / SwissCross.SymbolWidth * symbol.Columns));
+            symbol.AddOverlay((float)(SwissCross.Width / SwissCross.SymbolWidth * symbol.Columns), SwissCross.Side, SwissCross.DarkEdges);
         }
         finally
         {

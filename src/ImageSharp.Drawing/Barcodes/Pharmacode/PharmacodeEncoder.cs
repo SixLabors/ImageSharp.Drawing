@@ -1,8 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
-using SixLabors.ImageSharp.Drawing.Helpers;
+using System.Globalization;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
@@ -35,18 +34,8 @@ internal static class PharmacodeEncoder
             throw new ArgumentException($"Pharmacode carries a number of up to {digits} digits; got {text.Length} characters.", nameof(text));
         }
 
-        int value = 0;
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
-        while (codePoints.MoveNext())
-        {
-            CodePoint current = codePoints.Current;
-            if (!current.IsAsciiDigit())
-            {
-                throw new ArgumentException($"Pharmacode carries only digits; got {current.ToDisplayString()}.", nameof(text));
-            }
-
-            value = (value * 10) + (current.Value - '0');
-        }
+        BarcodeSymbology.ValidateDigits(text);
+        int value = int.Parse(text, NumberStyles.None, CultureInfo.InvariantCulture);
 
         if (value < minimum || value > maximum)
         {

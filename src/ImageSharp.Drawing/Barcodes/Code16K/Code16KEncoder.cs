@@ -69,50 +69,45 @@ internal static class Code16KEncoder
     public const int Pad = 103;
 
     /// <summary>
-    /// The shift character of code sets A and B: Shift B in code set A and Shift A in code set B, Table 2.
-    /// </summary>
-    private const int Shift = 98;
-
-    /// <summary>
-    /// The Code C character of code sets A and B, Table 2.
-    /// </summary>
-    private const int LatchC = 99;
-
-    /// <summary>
-    /// The Code B character of code sets A and C, Table 2.
-    /// </summary>
-    private const int LatchB = 100;
-
-    /// <summary>
-    /// The Code A character of code sets B and C, Table 2.
-    /// </summary>
-    private const int LatchA = 101;
-
-    /// <summary>
-    /// The double shift of code sets A and B, Double Shift B and Double Shift A, and the single Shift B
-    /// of code set C, Table 2.
+    /// The double shift of code sets A and B, Double Shift B in code set A and Double Shift A in code set B,
+    /// Table 2. Code sets A and B take the values 98 to 101 of Code 128: Shift, Code C, Code B and Code A.
     /// </summary>
     private const int DoubleShift = 104;
 
     /// <summary>
-    /// Double Shift C in code sets A and B, and Double Shift B in code set C, Table 2.
+    /// Double Shift C in code sets A and B, Table 2.
     /// </summary>
     private const int DoubleShiftC = 105;
 
     /// <summary>
-    /// Triple Shift C in code sets A and B, and Triple Shift B in code set C, Table 2.
+    /// Triple Shift C in code sets A and B, Table 2.
     /// </summary>
     private const int TripleShiftC = 106;
 
     /// <summary>
-    /// The pattern of the value 106, the one symbol character Table 2 defines beyond the Code 128 set,
-    /// packed as <see cref="Code128Encoder.Patterns"/> packs its patterns.
+    /// Shift B in code set C, Table 2: the value of <see cref="DoubleShift"/> in code sets A and B.
     /// </summary>
-    private const uint TripleShiftPattern = 0x6211133;
+    private const int CodeSetCShiftB = 104;
 
     /// <summary>
-    /// The number of data symbol characters a symbol of a given row count carries: five per row, less
-    /// the starting symbol character and the two check characters.
+    /// Double Shift B in code set C, Table 2: the value of <see cref="DoubleShiftC"/> in code sets A and B.
+    /// </summary>
+    private const int CodeSetCDoubleShiftB = 105;
+
+    /// <summary>
+    /// Triple Shift B in code set C, Table 2: the value of <see cref="TripleShiftC"/> in code sets A and B.
+    /// </summary>
+    private const int CodeSetCTripleShiftB = 106;
+
+    /// <summary>
+    /// The pattern of the value 106, the one symbol character Table 2 defines beyond the Code 128 set,
+    /// packed as <see cref="Patterns"/> packs its patterns.
+    /// </summary>
+    private const uint TripleShiftPattern = 0x211133;
+
+    /// <summary>
+    /// The symbol characters a symbol carries beyond its data: the starting symbol character and the two
+    /// check characters.
     /// </summary>
     private const int Overhead = 3;
 
@@ -123,15 +118,74 @@ internal static class Code16KEncoder
     private const int MaximumText = ((MaximumRows * CharactersPerRow) - Overhead) * 2;
 
     /// <summary>
+    /// The symbol character value of Shift, which changes code set A to B, or B to A, for one character.
+    /// </summary>
+    private const int Shift = 98;
+
+    /// <summary>
+    /// The symbol character value of Code C, which changes code set A or B to code set C.
+    /// </summary>
+    private const int LatchC = 99;
+
+    /// <summary>
+    /// The symbol character value of Code B, which changes code set A or C to code set B.
+    /// </summary>
+    private const int LatchB = 100;
+
+    /// <summary>
+    /// The symbol character value of Code A, which changes code set B or C to code set A.
+    /// </summary>
+    private const int LatchA = 101;
+
+    /// <summary>
+    /// The code sets of the Code 128 symbol characters.
+    /// </summary>
+    private enum CodeSet
+    {
+        /// <summary>
+        /// Code set A: ASCII 32 to 95 as 0 to 63 and the control characters 0 to 31 as 64 to 95.
+        /// </summary>
+        A,
+
+        /// <summary>
+        /// Code set B: ASCII 32 to 127 as 0 to 95.
+        /// </summary>
+        B,
+
+        /// <summary>
+        /// Code set C: the digit pairs 00 to 99 as 0 to 99.
+        /// </summary>
+        C,
+    }
+
+    /// <summary>
+    /// Gets the element widths of the symbol characters 0 to 105, the Code 128 patterns of Table 2, packed four
+    /// bits per element, the first element in the highest bits: six elements each, three spaces and three
+    /// bars of one to four modules.
+    /// </summary>
+    private static ReadOnlySpan<uint> Patterns =>
+    [
+        0x212222, 0x222122, 0x222221, 0x121223, 0x121322, 0x131222, 0x122213, 0x122312,
+        0x132212, 0x221213, 0x221312, 0x231212, 0x112232, 0x122132, 0x122231, 0x113222,
+        0x123122, 0x123221, 0x223211, 0x221132, 0x221231, 0x213212, 0x223112, 0x312131,
+        0x311222, 0x321122, 0x321221, 0x312212, 0x322112, 0x322211, 0x212123, 0x212321,
+        0x232121, 0x111323, 0x131123, 0x131321, 0x112313, 0x132113, 0x132311, 0x211313,
+        0x231113, 0x231311, 0x112133, 0x112331, 0x132131, 0x113123, 0x113321, 0x133121,
+        0x313121, 0x211331, 0x231131, 0x213113, 0x213311, 0x213131, 0x311123, 0x311321,
+        0x331121, 0x312113, 0x312311, 0x332111, 0x314111, 0x221411, 0x431111, 0x111224,
+        0x111422, 0x121124, 0x121421, 0x141122, 0x141221, 0x112214, 0x112412, 0x122114,
+        0x122411, 0x142112, 0x142211, 0x241211, 0x221114, 0x413111, 0x241112, 0x134111,
+        0x111242, 0x121142, 0x121241, 0x114212, 0x124112, 0x124211, 0x411212, 0x421112,
+        0x421211, 0x212141, 0x214121, 0x412121, 0x111143, 0x111341, 0x131141, 0x114113,
+        0x114311, 0x411113, 0x411311, 0x113141, 0x114131, 0x311141, 0x411131, 0x211412,
+        0x211214, 0x211232,
+    ];
+
+    /// <summary>
     /// Gets the eight start patterns of Table 4, bar, space, bar and space, one nibble each. Table 5 gives
     /// the stop patterns the same widths with the bars and spaces exchanged.
     /// </summary>
     private static ReadOnlySpan<ushort> StartPatterns => [0x3211, 0x2221, 0x2122, 0x1411, 0x1132, 0x1231, 0x1114, 0x3112];
-
-    /// <summary>
-    /// Gets the start pattern value of every row, Table 6.
-    /// </summary>
-    private static ReadOnlySpan<byte> RowStartValues => [0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7];
 
     /// <summary>
     /// Gets the stop pattern value of every row, Table 6.
@@ -218,15 +272,15 @@ internal static class Code16KEncoder
         {
             char c = text[p];
             digits[p] = (byte)(char.IsAsciiDigit(c) ? digits[p + 1] + 1 : 0);
-            nextControl[p] = IsControl(c) ? (byte)0 : Saturate(nextControl[p + 1]);
-            nextLower[p] = IsLower(c) ? (byte)0 : Saturate(nextLower[p + 1]);
+            nextControl[p] = OnlyInSetA(c) ? (byte)0 : Saturate(nextControl[p + 1]);
+            nextLower[p] = OnlyInSetB(c) ? (byte)0 : Saturate(nextLower[p + 1]);
         }
 
         // A data character costs at most two symbol characters, a shift and itself, and the symbol adds
         // the starting symbol character and the two check characters; the pad fills the rest of the rows.
         int count = 1;
         int i = 0;
-        int set;
+        CodeSet set;
         int mode;
 
         // Appendix G rule 1: the starting mode, Table 3. Modes 5 and 6 imply a Shift B or a Double Shift B
@@ -235,43 +289,43 @@ internal static class Code16KEncoder
         if (digits[0] >= 2 && (digits[0] & 1) == 0)
         {
             mode = 2;
-            set = 'C';
+            set = CodeSet.C;
         }
         else if (digits[0] >= 3)
         {
             mode = 5;
-            set = 'C';
-            values[count++] = ValueB(text[i++]);
+            set = CodeSet.C;
+            values[count++] = ValueIn(CodeSet.B, text[i++]);
         }
-        else if (n >= 1 && IsInB(text[0]) && digits[1] >= 2 && (digits[1] & 1) == 0)
+        else if (n >= 1 && InSetB(text[0]) && digits[1] >= 2 && (digits[1] & 1) == 0)
         {
             mode = 5;
-            set = 'C';
-            values[count++] = ValueB(text[i++]);
+            set = CodeSet.C;
+            values[count++] = ValueIn(CodeSet.B, text[i++]);
         }
-        else if (n >= 1 && IsInB(text[0]) && digits[1] >= 3)
+        else if (n >= 1 && InSetB(text[0]) && digits[1] >= 3)
         {
             mode = 6;
-            set = 'C';
-            values[count++] = ValueB(text[i++]);
-            values[count++] = ValueB(text[i++]);
+            set = CodeSet.C;
+            values[count++] = ValueIn(CodeSet.B, text[i++]);
+            values[count++] = ValueIn(CodeSet.B, text[i++]);
         }
-        else if (n >= 2 && IsInB(text[0]) && IsInB(text[1]) && digits[2] >= 2 && (digits[2] & 1) == 0)
+        else if (n >= 2 && InSetB(text[0]) && InSetB(text[1]) && digits[2] >= 2 && (digits[2] & 1) == 0)
         {
             mode = 6;
-            set = 'C';
-            values[count++] = ValueB(text[i++]);
-            values[count++] = ValueB(text[i++]);
+            set = CodeSet.C;
+            values[count++] = ValueIn(CodeSet.B, text[i++]);
+            values[count++] = ValueIn(CodeSet.B, text[i++]);
         }
         else if (nextControl[0] < nextLower[0])
         {
             mode = 0;
-            set = 'A';
+            set = CodeSet.A;
         }
         else
         {
             mode = 1;
-            set = 'B';
+            set = CodeSet.B;
         }
 
         // Rules 3, 4 and 5: the next symbol character from the data that remains, in the current code set.
@@ -279,33 +333,33 @@ internal static class Code16KEncoder
         {
             char c = text[i];
             int run = digits[i];
-            if (set == 'A')
+            if (set == CodeSet.A)
             {
-                if (IsLower(c) && nextControl[i + 1] < nextLower[i + 1])
+                if (OnlyInSetB(c) && nextControl[i + 1] < nextLower[i + 1])
                 {
                     values[count++] = Shift;
-                    values[count++] = ValueB(c);
+                    values[count++] = ValueIn(CodeSet.B, c);
                     i++;
                 }
-                else if (i + 1 < n && IsLower(c) && IsLower(text[i + 1]) && nextControl[i + 2] < nextLower[i + 2])
+                else if (i + 1 < n && OnlyInSetB(c) && OnlyInSetB(text[i + 1]) && nextControl[i + 2] < nextLower[i + 2])
                 {
                     values[count++] = DoubleShift;
-                    values[count++] = ValueB(c);
-                    values[count++] = ValueB(text[i + 1]);
+                    values[count++] = ValueIn(CodeSet.B, c);
+                    values[count++] = ValueIn(CodeSet.B, text[i + 1]);
                     i += 2;
                 }
-                else if (IsLower(c))
+                else if (OnlyInSetB(c))
                 {
                     values[count++] = LatchB;
-                    set = 'B';
+                    set = CodeSet.B;
                 }
-                else if (run == 4 && i + 4 < n && IsInA(text[i + 4]))
+                else if (run == 4 && i + 4 < n && InSetA(text[i + 4]))
                 {
                     values[count++] = DoubleShiftC;
                     count = WritePairs(text, i, 2, values, count);
                     i += 4;
                 }
-                else if (run == 6 && i + 6 < n && IsInA(text[i + 6]))
+                else if (run == 6 && i + 6 < n && InSetA(text[i + 6]))
                 {
                     values[count++] = TripleShiftC;
                     count = WritePairs(text, i, 3, values, count);
@@ -314,41 +368,41 @@ internal static class Code16KEncoder
                 else if (run >= 4 && (run & 1) == 0)
                 {
                     values[count++] = LatchC;
-                    set = 'C';
+                    set = CodeSet.C;
                 }
                 else
                 {
-                    values[count++] = ValueA(c);
+                    values[count++] = ValueIn(CodeSet.A, c);
                     i++;
                 }
             }
-            else if (set == 'B')
+            else if (set == CodeSet.B)
             {
-                if (IsControl(c) && nextLower[i + 1] < nextControl[i + 1])
+                if (OnlyInSetA(c) && nextLower[i + 1] < nextControl[i + 1])
                 {
                     values[count++] = Shift;
-                    values[count++] = ValueA(c);
+                    values[count++] = ValueIn(CodeSet.A, c);
                     i++;
                 }
-                else if (i + 1 < n && IsControl(c) && IsControl(text[i + 1]) && nextLower[i + 2] < nextControl[i + 2])
+                else if (i + 1 < n && OnlyInSetA(c) && OnlyInSetA(text[i + 1]) && nextLower[i + 2] < nextControl[i + 2])
                 {
                     values[count++] = DoubleShift;
-                    values[count++] = ValueA(c);
-                    values[count++] = ValueA(text[i + 1]);
+                    values[count++] = ValueIn(CodeSet.A, c);
+                    values[count++] = ValueIn(CodeSet.A, text[i + 1]);
                     i += 2;
                 }
-                else if (IsControl(c))
+                else if (OnlyInSetA(c))
                 {
                     values[count++] = LatchA;
-                    set = 'A';
+                    set = CodeSet.A;
                 }
-                else if (run == 4 && i + 4 < n && IsInB(text[i + 4]))
+                else if (run == 4 && i + 4 < n && InSetB(text[i + 4]))
                 {
                     values[count++] = DoubleShiftC;
                     count = WritePairs(text, i, 2, values, count);
                     i += 4;
                 }
-                else if (run == 6 && i + 6 < n && IsInB(text[i + 6]))
+                else if (run == 6 && i + 6 < n && InSetB(text[i + 6]))
                 {
                     values[count++] = TripleShiftC;
                     count = WritePairs(text, i, 3, values, count);
@@ -357,11 +411,11 @@ internal static class Code16KEncoder
                 else if (run >= 4 && (run & 1) == 0)
                 {
                     values[count++] = LatchC;
-                    set = 'C';
+                    set = CodeSet.C;
                 }
                 else
                 {
-                    values[count++] = ValueB(c);
+                    values[count++] = ValueIn(CodeSet.B, c);
                     i++;
                 }
             }
@@ -372,51 +426,56 @@ internal static class Code16KEncoder
                     count = WritePairs(text, i, 1, values, count);
                     i += 2;
                 }
-                else if (i + 1 < n && IsInB(c) && digits[i + 1] >= 2 && (digits[i + 1] & 1) == 0)
+                else if (i + 1 < n && InSetB(c) && digits[i + 1] >= 2 && (digits[i + 1] & 1) == 0)
                 {
-                    values[count++] = DoubleShift;
-                    values[count++] = ValueB(c);
+                    values[count++] = CodeSetCShiftB;
+                    values[count++] = ValueIn(CodeSet.B, c);
                     i++;
                 }
-                else if (i + 1 < n && IsInB(c) && digits[i + 1] >= 3)
+                else if (i + 1 < n && InSetB(c) && digits[i + 1] >= 3)
                 {
-                    values[count++] = DoubleShiftC;
-                    values[count++] = ValueB(c);
-                    values[count++] = ValueB(text[i + 1]);
+                    values[count++] = CodeSetCDoubleShiftB;
+                    values[count++] = ValueIn(CodeSet.B, c);
+                    values[count++] = ValueIn(CodeSet.B, text[i + 1]);
                     i += 2;
                 }
-                else if (i + 2 < n && IsInB(c) && IsInB(text[i + 1]) && digits[i + 2] >= 2 && (digits[i + 2] & 1) == 0)
+                else if (i + 2 < n && InSetB(c) && InSetB(text[i + 1]) && digits[i + 2] >= 2 && (digits[i + 2] & 1) == 0)
                 {
-                    values[count++] = DoubleShiftC;
-                    values[count++] = ValueB(c);
-                    values[count++] = ValueB(text[i + 1]);
+                    values[count++] = CodeSetCDoubleShiftB;
+                    values[count++] = ValueIn(CodeSet.B, c);
+                    values[count++] = ValueIn(CodeSet.B, text[i + 1]);
                     i += 2;
                 }
-                else if (i + 3 < n && IsInB(c) && IsInB(text[i + 1]) && digits[i + 2] >= 3)
+                else if (i + 3 < n && InSetB(c) && InSetB(text[i + 1]) && digits[i + 2] >= 3)
                 {
-                    values[count++] = TripleShiftC;
-                    values[count++] = ValueB(c);
-                    values[count++] = ValueB(text[i + 1]);
-                    values[count++] = ValueB(text[i + 2]);
+                    values[count++] = CodeSetCTripleShiftB;
+                    values[count++] = ValueIn(CodeSet.B, c);
+                    values[count++] = ValueIn(CodeSet.B, text[i + 1]);
+                    values[count++] = ValueIn(CodeSet.B, text[i + 2]);
                     i += 3;
                 }
-                else if (i + 3 < n && IsInB(c) && IsInB(text[i + 1]) && IsInB(text[i + 2]) && digits[i + 3] >= 2 && (digits[i + 3] & 1) == 0)
+                else if (i + 3 < n
+                    && InSetB(c)
+                    && InSetB(text[i + 1])
+                    && InSetB(text[i + 2])
+                    && digits[i + 3] >= 2
+                    && (digits[i + 3] & 1) == 0)
                 {
-                    values[count++] = TripleShiftC;
-                    values[count++] = ValueB(c);
-                    values[count++] = ValueB(text[i + 1]);
-                    values[count++] = ValueB(text[i + 2]);
+                    values[count++] = CodeSetCTripleShiftB;
+                    values[count++] = ValueIn(CodeSet.B, c);
+                    values[count++] = ValueIn(CodeSet.B, text[i + 1]);
+                    values[count++] = ValueIn(CodeSet.B, text[i + 2]);
                     i += 3;
                 }
                 else if (nextControl[i] < nextLower[i])
                 {
                     values[count++] = LatchA;
-                    set = 'A';
+                    set = CodeSet.A;
                 }
                 else
                 {
                     values[count++] = LatchB;
-                    set = 'B';
+                    set = CodeSet.B;
                 }
             }
         }
@@ -473,7 +532,6 @@ internal static class Code16KEncoder
         int rowCount = values.Length / CharactersPerRow;
         double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
         float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
-        ReadOnlySpan<uint> patterns = Code128Encoder.Patterns;
 
         // Section 2.1: start, guard bar, five characters and stop, 4 + 1 + 30 + 4 elements, on a bar at both
         // ends. A separator between two rows is one bar across the row width.
@@ -485,29 +543,19 @@ internal static class Code16KEncoder
             // Table 2 starts every character on a space, which the guard bar leads into.
             Span<int> runs = symbol.AddRow(rowRuns, out Span<float> heights, out _);
             heights.Fill(barHeight);
-            int index = 0;
-            ushort start = StartPatterns[RowStartValues[row]];
-            for (int shift = 12; shift >= 0; shift -= 4)
-            {
-                runs[index++] = (start >> shift) & 0xF;
-            }
 
+            // Table 6 starts the rows with the start patterns 0 to 7 in turn.
+            int index = 0;
+            AppendPattern(StartPatterns[row & 7], 4, runs, ref index);
             runs[index++] = 1;
             for (int k = 0; k < CharactersPerRow; k++)
             {
                 int value = values[(row * CharactersPerRow) + k];
-                uint pattern = value == TripleShiftC ? TripleShiftPattern : patterns[value];
-                for (int shift = 20; shift >= 0; shift -= 4)
-                {
-                    runs[index++] = (int)((pattern >> shift) & 0xF);
-                }
+                uint pattern = value == TripleShiftC ? TripleShiftPattern : Patterns[value];
+                AppendPattern(pattern, 6, runs, ref index);
             }
 
-            ushort stop = StartPatterns[RowStopValues[row]];
-            for (int shift = 12; shift >= 0; shift -= 4)
-            {
-                runs[index++] = (stop >> shift) & 0xF;
-            }
+            AppendPattern(StartPatterns[RowStopValues[row]], 4, runs, ref index);
 
             if (row < rowCount - 1)
             {
@@ -530,7 +578,33 @@ internal static class Code16KEncoder
     }
 
     /// <summary>
-    /// Writes digit pairs as code set C values.
+    /// Returns the symbol character value of a character in code set A or B: code set A runs from the space
+    /// at value 0 through to the control characters, and code set B from the space through to the delete
+    /// character.
+    /// </summary>
+    /// <param name="set">The code set, A or B.</param>
+    /// <param name="character">The character.</param>
+    /// <returns>The symbol character value.</returns>
+    private static int ValueIn(CodeSet set, char character)
+        => set == CodeSet.A && character < 32 ? character + 64 : character - 32;
+
+    /// <summary>
+    /// Returns whether only code set A carries a character: the control characters 0 to 31.
+    /// </summary>
+    /// <param name="character">The character.</param>
+    /// <returns><see langword="true"/> when only code set A carries it.</returns>
+    private static bool OnlyInSetA(char character) => character < 32;
+
+    /// <summary>
+    /// Returns whether only code set B carries a character: the lower case letters and the characters above
+    /// them, 96 to 127.
+    /// </summary>
+    /// <param name="character">The character.</param>
+    /// <returns><see langword="true"/> when only code set B carries it.</returns>
+    private static bool OnlyInSetB(char character) => character >= 96;
+
+    /// <summary>
+    /// Writes digit pairs as code set C values, each pair the value 0 to 99 it reads as.
     /// </summary>
     /// <param name="text">The text being encoded.</param>
     /// <param name="start">The index of the first digit.</param>
@@ -550,62 +624,39 @@ internal static class Code16KEncoder
     }
 
     /// <summary>
-    /// Returns the code set A value of a character: ASCII 32 to 95 as 0 to 63 and ASCII 0 to 31 as 64 to
-    /// 95, section 2.2.1.
+    /// Writes the element widths of a pattern packed as <see cref="Patterns"/> packs them.
     /// </summary>
-    /// <param name="c">The character.</param>
-    /// <returns>The value.</returns>
-    private static int ValueA(char c)
-        => c < 32 ? c + 64 : c - 32;
+    /// <param name="pattern">The pattern, four bits per element, the first element in the highest bits.</param>
+    /// <param name="elements">The number of elements.</param>
+    /// <param name="runs">The run widths in modules to write.</param>
+    /// <param name="index">The position in <paramref name="runs"/>, advanced past the elements.</param>
+    private static void AppendPattern(uint pattern, int elements, Span<int> runs, ref int index)
+    {
+        for (int shift = (elements - 1) * 4; shift >= 0; shift -= 4)
+        {
+            runs[index++] = (int)((pattern >> shift) & 0xF);
+        }
+    }
 
     /// <summary>
-    /// Returns the code set B value of a character: ASCII 32 to 127 as 0 to 95, section 2.2.2.
+    /// Returns whether code set A carries a character: ASCII 0 to 95.
     /// </summary>
-    /// <param name="c">The character.</param>
-    /// <returns>The value.</returns>
-    private static int ValueB(char c)
-        => c - 32;
+    /// <param name="character">The character.</param>
+    /// <returns><see langword="true"/> when code set A carries it.</returns>
+    private static bool InSetA(char character) => !OnlyInSetB(character);
 
     /// <summary>
-    /// Returns whether a character is a control character, the Appendix G class of ASCII 0 to 31, which
-    /// code set A alone carries.
+    /// Returns whether code set B carries a character: ASCII 32 to 127.
     /// </summary>
-    /// <param name="c">The character.</param>
-    /// <returns>Whether the character is a control character.</returns>
-    private static bool IsControl(char c)
-        => c < 32;
+    /// <param name="character">The character.</param>
+    /// <returns><see langword="true"/> when code set B carries it.</returns>
+    private static bool InSetB(char character) => !OnlyInSetA(character);
 
     /// <summary>
-    /// Returns whether a character is lower case, the Appendix G class of ASCII 96 to 127, which code set
-    /// B alone carries.
-    /// </summary>
-    /// <param name="c">The character.</param>
-    /// <returns>Whether the character is lower case.</returns>
-    private static bool IsLower(char c)
-        => c >= 96;
-
-    /// <summary>
-    /// Returns whether code set A carries a character.
-    /// </summary>
-    /// <param name="c">The character.</param>
-    /// <returns>Whether code set A carries the character.</returns>
-    private static bool IsInA(char c)
-        => c <= 95;
-
-    /// <summary>
-    /// Returns whether code set B carries a character.
-    /// </summary>
-    /// <param name="c">The character.</param>
-    /// <returns>Whether code set B carries the character.</returns>
-    private static bool IsInB(char c)
-        => c >= 32;
-
-    /// <summary>
-    /// Returns the distance from the position before: one more than the given distance, or none when
-    /// the given distance is none.
+    /// Returns the distance from the position before: one more than the given distance, held at the
+    /// maximum, so a run longer than a byte still compares as further away.
     /// </summary>
     /// <param name="distance">The distance from the next position.</param>
     /// <returns>The distance from this position.</returns>
-    private static byte Saturate(byte distance)
-        => distance == byte.MaxValue ? byte.MaxValue : (byte)(distance + 1);
+    private static byte Saturate(byte distance) => distance == byte.MaxValue ? distance : (byte)(distance + 1);
 }

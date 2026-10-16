@@ -258,7 +258,7 @@ public class CodablockFSymbologyTests
     /// <returns>The character values, one data row after another.</returns>
     private static int[] DataRowValues(ref BarcodeSymbol symbol)
     {
-        ReadOnlySpan<uint> patterns = Code128Encoder.Patterns;
+        ReadOnlySpan<uint> patterns = Code128Patterns.Patterns;
         List<int> values = [];
 
         // The data rows stand between the top edge bar and the separators, at the odd row indexes.
@@ -269,9 +269,9 @@ public class CodablockFSymbologyTests
             int index = 0;
             while (index < runs.Length)
             {
-                // A pattern packs its element count in the leading nibble, then the elements.
+                // A pattern packs its elements four bits each, the first in the highest bits.
                 int elements = runs.Length - index == 7 ? 7 : 6;
-                uint pattern = (uint)elements;
+                uint pattern = 0;
                 for (int e = 0; e < elements; e++)
                 {
                     pattern = (pattern << 4) | (uint)runs[index + e];

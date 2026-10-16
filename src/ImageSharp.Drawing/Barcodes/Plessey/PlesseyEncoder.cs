@@ -56,7 +56,7 @@ internal static class PlesseyEncoder
 
     /// <summary>
     /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no
-    /// height: the 15 per cent of Code 39 and Codabar, since no document gives one for Plessey Code.
+    /// height: 15 per cent.
     /// </summary>
     private const float NominalBarHeightFraction = 0.15F;
 
@@ -179,11 +179,7 @@ internal static class PlesseyEncoder
             runs[written++] = Stop[i];
         }
 
-        int widthInModules = 0;
-        for (int i = 0; i < runs.Length; i++)
-        {
-            widthInModules += runs[i];
-        }
+        int widthInModules = BarcodeSymbol.RunWidth(runs);
 
         float barHeight = options.ResolveBarHeight(xDimension, widthInModules * NominalBarHeightFraction);
         heights.Fill(barHeight);

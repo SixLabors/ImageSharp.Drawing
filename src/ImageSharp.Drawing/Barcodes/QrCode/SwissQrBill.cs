@@ -424,11 +424,25 @@ internal static class SwissQrBill
     /// <param name="element">The element the line holds, for the message.</param>
     /// <exception cref="ArgumentException">The line holds another value.</exception>
     private static void CheckFixed(ReadOnlySpan<char> text, ReadOnlySpan<int> bounds, int index, string expected, string element)
+        => CheckFixed(text, bounds, index, expected, element, null);
+
+    /// <summary>
+    /// Checks a line that holds a fixed value of the address of a party. The message names the element and
+    /// the party only when the check fails, so a valid line builds no text.
+    /// </summary>
+    /// <param name="text">The data.</param>
+    /// <param name="bounds">The start and the end of each line.</param>
+    /// <param name="index">The index of the line.</param>
+    /// <param name="expected">The fixed value.</param>
+    /// <param name="element">The element the line holds, for the message.</param>
+    /// <param name="party">The party the address belongs to, for the message, or <see langword="null"/>.</param>
+    /// <exception cref="ArgumentException">The line holds another value.</exception>
+    private static void CheckFixed(ReadOnlySpan<char> text, ReadOnlySpan<int> bounds, int index, string expected, string element, string? party)
     {
         ReadOnlySpan<char> line = Line(text, bounds, index);
         if (!line.SequenceEqual(expected))
         {
-            throw new ArgumentException($"Line {index + 1} of a Swiss QR Code, {element}, is '{expected}'; got '{line}'.", nameof(text));
+            throw new ArgumentException($"Line {index + 1} of a Swiss QR Code, {Describe(element, party)}, is '{expected}'; got '{line}'.", nameof(text));
         }
     }
 
@@ -444,6 +458,21 @@ internal static class SwissQrBill
     /// <param name="element">The element the line holds, for the message.</param>
     /// <exception cref="ArgumentException">The line is shorter or longer, or blanks fill it to the maximum length.</exception>
     private static void CheckLength(ReadOnlySpan<char> text, ReadOnlySpan<int> bounds, int index, int minimum, int maximum, string element)
+        => CheckLength(text, bounds, index, minimum, maximum, element, null);
+
+    /// <summary>
+    /// Checks the length of a line of the address of a party, as the overload without a party does. The
+    /// message names the element and the party only when the check fails, so a valid line builds no text.
+    /// </summary>
+    /// <param name="text">The data.</param>
+    /// <param name="bounds">The start and the end of each line.</param>
+    /// <param name="index">The index of the line.</param>
+    /// <param name="minimum">The fewest characters.</param>
+    /// <param name="maximum">The most characters.</param>
+    /// <param name="element">The element the line holds, for the message.</param>
+    /// <param name="party">The party the address belongs to, for the message, or <see langword="null"/>.</param>
+    /// <exception cref="ArgumentException">The line is shorter or longer, or blanks fill it to the maximum length.</exception>
+    private static void CheckLength(ReadOnlySpan<char> text, ReadOnlySpan<int> bounds, int index, int minimum, int maximum, string element, string? party)
     {
         ReadOnlySpan<char> line = Line(text, bounds, index);
         int length = line.Length;
@@ -451,18 +480,27 @@ internal static class SwissQrBill
         {
             throw new ArgumentException(
                 minimum == 0
-                    ? $"Line {index + 1} of a Swiss QR Code, {element}, is at most {maximum} characters; got {length}."
-                    : $"Line {index + 1} of a Swiss QR Code, {element}, is {minimum} to {maximum} characters; got {length}.",
+                    ? $"Line {index + 1} of a Swiss QR Code, {Describe(element, party)}, is at most {maximum} characters; got {length}."
+                    : $"Line {index + 1} of a Swiss QR Code, {Describe(element, party)}, is {minimum} to {maximum} characters; got {length}.",
                 nameof(text));
         }
 
         if (length == maximum && line[^1] == ' ')
         {
             throw new ArgumentException(
-                $"Line {index + 1} of a Swiss QR Code, {element}, is padded with blanks to {maximum} characters, which section 4.1.3 forbids.",
+                $"Line {index + 1} of a Swiss QR Code, {Describe(element, party)}, is padded with blanks to {maximum} characters, which section 4.1.3 forbids.",
                 nameof(text));
         }
     }
+
+    /// <summary>
+    /// Names an element for a message: the element alone, or the element of a party.
+    /// </summary>
+    /// <param name="element">The element.</param>
+    /// <param name="party">The party, or <see langword="null"/>.</param>
+    /// <returns>The name.</returns>
+    private static string Describe(string element, string? party)
+        => party is null ? element : $"{element} of {party}";
 
     /// <summary>
     /// Checks the seven lines of a structured address, Table 8: the address type "S", a name of 1 to 70
@@ -476,12 +514,12 @@ internal static class SwissQrBill
     /// <exception cref="ArgumentException">A line does not follow its definition.</exception>
     private static void CheckAddress(ReadOnlySpan<char> text, ReadOnlySpan<int> bounds, int first, string party)
     {
-        CheckFixed(text, bounds, first, "S", $"the address type of {party}");
-        CheckLength(text, bounds, first + 1, 1, 70, $"the name of {party}");
-        CheckLength(text, bounds, first + 2, 0, 70, $"the street of {party}");
-        CheckLength(text, bounds, first + 3, 0, 16, $"the building number of {party}");
-        CheckLength(text, bounds, first + 4, 1, 16, $"the postal code of {party}");
-        CheckLength(text, bounds, first + 5, 1, 35, $"the town of {party}");
+        CheckFixed(text, bounds, first, "S", "the address type", party);
+        CheckLength(text, bounds, first + 1, 1, 70, "the name", party);
+        CheckLength(text, bounds, first + 2, 0, 70, "the street", party);
+        CheckLength(text, bounds, first + 3, 0, 16, "the building number", party);
+        CheckLength(text, bounds, first + 4, 1, 16, "the postal code", party);
+        CheckLength(text, bounds, first + 5, 1, 35, "the town", party);
 
         ReadOnlySpan<char> country = Line(text, bounds, first + 6);
         if (!Iso3166.IsAlpha2Code(country))

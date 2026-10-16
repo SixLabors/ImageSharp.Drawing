@@ -4,10 +4,9 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The COOP 2 of 5 symbology. No published document describes it, and its patterns are those of the
-/// main reference implementation. It carries the digits 0 to 9, each in three bars and two spaces of
-/// which two elements are wide, with its own assignment of patterns to digits. A symbol carries a start
-/// pattern, the digits, an optional check digit and a stop pattern.
+/// The COOP 2 of 5 symbology. No published document describes it. It carries the digits 0 to 9, each in
+/// three bars and two spaces of which two elements are wide, with its own assignment of patterns to digits.
+/// A symbol carries a start pattern, the digits, an optional check digit and a stop pattern.
 /// <para>
 /// The check digit is the modulo 10 calculation of Appendix C of AIM USS-I 2/5. The printed line shows
 /// the digits the symbol carries and, by default, the check digit.

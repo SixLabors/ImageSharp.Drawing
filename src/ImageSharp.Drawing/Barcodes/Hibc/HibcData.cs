@@ -14,9 +14,10 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class HibcData
 {
     /// <summary>
-    /// The largest number of characters a HIBC symbol carries.
+    /// The largest number of characters of HIBC text: 498. The flag character and the check character make
+    /// the encoded data two characters longer, 500, the most the Code 39 and Code 128 carriers take.
     /// </summary>
-    public const int MaximumLength = 500;
+    public const int MaximumLength = 498;
 
     /// <summary>
     /// The number of characters a caller holds inline for <see cref="Prepare"/> to build in. Data this
@@ -38,11 +39,6 @@ internal static class HibcData
     /// The character that begins the encoded data.
     /// </summary>
     private const char FlagCharacter = '+';
-
-    /// <summary>
-    /// The value the flag character holds in the HIBC character set.
-    /// </summary>
-    private const int FlagCharacterValue = 41;
 
     /// <summary>
     /// The character that stands in for a check character that is a space, which cannot be read as one.
@@ -85,7 +81,7 @@ internal static class HibcData
 
         // The check character covers the flag character the encoder puts in front of the data, so the
         // sum starts at the value that character holds in the set.
-        int sum = FlagCharacterValue;
+        int sum = AlphanumericCharacterSet.Value(FlagCharacter);
         int dataLength = validateCheckCharacter ? text.Length - 1 : text.Length;
         int index = 0;
         SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
@@ -108,7 +104,7 @@ internal static class HibcData
             index++;
         }
 
-        char check = AlphanumericCharacterSet.Characters[sum % AlphanumericCharacterSet.Characters.Length];
+        char check = AlphanumericCharacterSet.CheckCharacter(sum);
         if (validateCheckCharacter && text[dataLength] != check)
         {
             throw new ArgumentException(

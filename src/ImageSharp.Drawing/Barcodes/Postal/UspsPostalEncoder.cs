@@ -1,9 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
-using SixLabors.ImageSharp.Drawing.Helpers;
-
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
@@ -73,23 +70,6 @@ internal static class UspsPostalEncoder
     /// digit 0 as the exception 11000.
     /// </summary>
     private static ReadOnlySpan<byte> Digits => [0b11000, 0b00011, 0b00101, 0b00110, 0b01001, 0b01010, 0b01100, 0b10001, 0b10010, 0b10100];
-
-    /// <summary>
-    /// Validates that the text is digits alone.
-    /// </summary>
-    /// <param name="text">The text to validate.</param>
-    public static void ValidateDigits(string text)
-    {
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
-        while (codePoints.MoveNext())
-        {
-            CodePoint current = codePoints.Current;
-            if (!current.IsAsciiDigit())
-            {
-                throw new ArgumentException($"The symbology carries only digits; got {current.ToDisplayString()}.", nameof(text));
-            }
-        }
-    }
 
     /// <summary>
     /// Calculates the correction digit. Section 708.4.2.1: it is "derived from adding the numbers in the
