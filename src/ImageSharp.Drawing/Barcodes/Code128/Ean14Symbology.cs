@@ -6,19 +6,31 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// EAN-14, a GS1-128 symbol that carries one element string: the Global Trade Item Number of GS1
-/// Application Identifier (01). Section 3.3.2 of the GS1 General Specifications gives that identifier a
-/// 14 digit GTIN. Table 7-6 gives the element string a total length of 16, and section 7.9 defines the
-/// check digit.
+/// EAN-14, a GS1-128 symbol that carries one element string: the Global Trade Item Number of GS1 Application Identifier (01). Section 3.3.2 of the GS1 General
+/// Specifications gives that identifier a 14 digit GTIN. Table 7-6 gives the element string a total length of 16, and section 7.9 defines the check digit.
 /// <para>
-/// The input is the element string syntax, <c>(01)</c> and then the GTIN. Spaces are ignored. Give 13
-/// digits, and this class calculates the check digit. Give 14 digits, and this class compares the last
-/// digit with the calculated one. The interpretation prints the number as the caller grouped it, with a
-/// space before a calculated check digit.
+/// The input is the element string syntax, <c>(01)</c> and then the GTIN. Spaces are ignored. Give 13 digits, and this class calculates the check digit. Give
+/// 14 digits, and this class compares the last digit with the calculated one. The interpretation prints the number as the caller grouped it, with a space
+/// before a calculated check digit.
 /// </para>
 /// </summary>
 public sealed class Ean14Symbology : BarcodeSymbology
 {
+    /// <summary>
+    /// The length of the GTIN of Application Identifier (01), section 3.3.2.
+    /// </summary>
+    private const int GtinLength = 14;
+
+    /// <summary>
+    /// The length of the element string without grouping spaces: the four characters of <c>(01)</c> and the GTIN.
+    /// </summary>
+    private const int ElementStringLength = 4 + GtinLength;
+
+    /// <summary>
+    /// The longest input. The caption repeats the input, so the input is bounded too: at most one grouping space after each character of the element string.
+    /// </summary>
+    private const int MaximumInputLength = ElementStringLength * 2;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="Ean14Symbology"/> class.
     /// </summary>
@@ -30,17 +42,14 @@ public sealed class Ean14Symbology : BarcodeSymbology
     internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         Guard.NotNull(text, nameof(text));
+        Guard.MustBeLessThanOrEqualTo(text.Length, MaximumInputLength, nameof(text));
 
-        // The element string is "(01)" and 14 digits, so the longest input is 18 characters once the
-        // spaces the caller may group the number with are dropped. The caption repeats the input, so the
-        // input is bounded too: at most one grouping space after each of those characters.
-        Guard.MustBeLessThanOrEqualTo(text.Length, 36, nameof(text));
         InlineArray18<char> compactStorage = default;
         Span<char> compact = compactStorage;
         int length = 0;
-        for (int i = 0; i < text.Length; i++)
+        foreach (char character in text)
         {
-            if (text[i] == ' ')
+            if (character == ' ')
             {
                 continue;
             }
@@ -50,14 +59,12 @@ public sealed class Ean14Symbology : BarcodeSymbology
                 throw new ArgumentException("EAN-14 takes the (01) application identifier and 13 or 14 digits.", nameof(text));
             }
 
-            compact[length++] = text[i];
+            compact[length++] = character;
         }
 
-        if (length is not (17 or 18))
+        if (length is not (ElementStringLength - 1 or ElementStringLength))
         {
-            throw new ArgumentException(
-                $"EAN-14 takes the (01) application identifier and 13 or 14 digits; got {length} characters.",
-                nameof(text));
+            throw new ArgumentException($"EAN-14 takes the (01) application identifier and 13 or 14 digits; got {length} characters.", nameof(text));
         }
 
         if (!compact[..4].SequenceEqual("(01)"))
@@ -68,23 +75,21 @@ public sealed class Ean14Symbology : BarcodeSymbology
         ReadOnlySpan<char> supplied = compact[4..length];
         BarcodeSymbology.ValidateDigits(supplied);
 
-        int check = Gs1Data.ComputeCheckDigit(supplied[..13]);
-        if (supplied.Length == 14 && supplied[13] - '0' != check)
+        int check = Gs1Data.ComputeCheckDigit(supplied[..(GtinLength - 1)]);
+        if (supplied.Length == GtinLength && supplied[^1] - '0' != check)
         {
-            throw new ArgumentException($"Incorrect EAN-14 check digit: expected {check}, got {supplied[13]}.", nameof(text));
+            throw new ArgumentException($"Incorrect EAN-14 check digit: expected {check}, got {supplied[^1]}.", nameof(text));
         }
 
-        // The symbol carries the identifier and the fourteen digits with no separator, because Table 7-6
-        // gives this element string a predefined length.
+        // The symbol carries the identifier and the fourteen digits with no separator, because Table 7-6 gives this element string a predefined length.
         InlineArray16<char> encodedStorage = default;
         Span<char> encoded = encodedStorage;
         "01".CopyTo(encoded);
-        supplied[..13].CopyTo(encoded[2..]);
-        encoded[15] = (char)('0' + check);
+        supplied[..(GtinLength - 1)].CopyTo(encoded[2..]);
+        encoded[^1] = (char)('0' + check);
 
-        // The caption is the input as given, with the check digit after a space when the input left it
-        // out.
-        ReadOnlySpan<char> suffix = supplied.Length == 14 ? [] : [' ', (char)('0' + check)];
+        // The caption is the input as given, with the check digit after a space when the input left it out.
+        ReadOnlySpan<char> suffix = supplied.Length == GtinLength ? [] : [' ', (char)('0' + check)];
         Code128Encoder.BuildSymbol(encoded, true, [], text, suffix, options, ref symbol);
     }
 }

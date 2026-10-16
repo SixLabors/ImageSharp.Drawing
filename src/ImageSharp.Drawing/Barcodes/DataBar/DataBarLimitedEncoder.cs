@@ -4,28 +4,25 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Encodation for GS1 DataBar Limited. A symbol carries the item identification of GS1 Application
-/// Identifier (01), with an indicator digit of 0 or 1, as two symbol characters with a check character
-/// between them that encodes a modulo 89 check value. A narrow space and bar lead the symbol, and a narrow
-/// space, a narrow bar and a space of five modules close it.
+/// Encodation for GS1 DataBar Limited. A symbol carries the item identification of GS1 Application Identifier (01), with an indicator digit of 0 or 1, as two
+/// symbol characters with a check character between them that encodes a modulo 89 check value. A narrow space and bar lead the symbol, and a narrow space, a
+/// narrow bar and a space of five modules close it.
 /// <para>
-/// The 13 digits before the check digit form a number below 2 x 10^12. It splits into a left and a right
-/// character value modulo 2013571. A symbol character is 14 elements, an odd set of 7 and an even set of 7
-/// interleaved, over 26 modules. Its group gives the module count and the widest element of each set, and
-/// its value within the group gives the width of every element.
+/// The 13 digits before the check digit form a number below 2 x 10^12. It splits into a left and a right character value modulo 2013571. A symbol character is
+/// 14 elements, an odd set of 7 and an even set of 7 interleaved, over 26 modules. Its group gives the module count and the widest element of each set, and its
+/// value within the group gives the width of every element.
 /// </para>
 /// </summary>
 internal static class DataBarLimitedEncoder
 {
     /// <summary>
-    /// The nominal X dimension in millimetres, the target X dimension of Table 5-50 of the GS1 General
-    /// Specifications.
+    /// The nominal X dimension in millimetres, the target X dimension of Table 5-50 of the GS1 General Specifications.
     /// </summary>
     public const double NominalXDimension = 0.33;
 
     /// <summary>
-    /// The height in modules. Section 5.5.2.2 of the GS1 General Specifications: "The minimum height SHALL
-    /// be 10X", which Table 5-50 gives as the target height too.
+    /// The height in modules. Section 5.5.2.2 of the GS1 General Specifications: "The minimum height SHALL be 10X", which Table 5-50 gives as the target height
+    /// too.
     /// </summary>
     public const float Height = 10F;
 
@@ -35,8 +32,7 @@ internal static class DataBarLimitedEncoder
     public const int Width = 79;
 
     /// <summary>
-    /// The number of elements: the leading guard pair, two symbol characters and the check character of 14
-    /// elements each, and the closing guard of three.
+    /// The number of elements: the leading guard pair, two symbol characters and the check character of 14 elements each, and the closing guard of three.
     /// </summary>
     private const int ElementCount = 47;
 
@@ -56,8 +52,7 @@ internal static class DataBarLimitedEncoder
     private static ReadOnlySpan<int> GroupSum => [0, 183064, 820064, 1000776, 1491021, 1979845, 1996939];
 
     /// <summary>
-    /// Gets the number of even set combinations of each group. A value within a group splits into the odd
-    /// and the even set value by this number.
+    /// Gets the number of even set combinations of each group. A value within a group splits into the odd and the even set value by this number.
     /// </summary>
     private static ReadOnlySpan<int> EvenCombinations => [28, 728, 6454, 203, 2408, 1, 16632];
 
@@ -67,8 +62,7 @@ internal static class DataBarLimitedEncoder
     private static ReadOnlySpan<byte> OddModules => [17, 13, 9, 15, 11, 19, 7];
 
     /// <summary>
-    /// Gets the widest element of the odd set of each group. The widest element of the even set is nine
-    /// less this.
+    /// Gets the widest element of the odd set of each group. The widest element of the even set is nine less this.
     /// </summary>
     private static ReadOnlySpan<byte> OddWidest => [6, 5, 3, 5, 4, 8, 1];
 
@@ -82,9 +76,8 @@ internal static class DataBarLimitedEncoder
     ];
 
     /// <summary>
-    /// Gets the check character pattern of each check value, an index into the 21 x 21 patterns of two sets of
-    /// six elements over eight modules with no element wider than three. The quotient by 21 selects the
-    /// widths of the first set and the remainder those of the second.
+    /// Gets the check character pattern of each check value, an index into the 21 x 21 patterns of two sets of six elements over eight modules with no element
+    /// wider than three. The quotient by 21 selects the widths of the first set and the remainder those of the second.
     /// </summary>
     private static ReadOnlySpan<ushort> CheckSequence =>
     [
@@ -119,9 +112,8 @@ internal static class DataBarLimitedEncoder
             value = (value * 10) + (gtin[i] - '0');
         }
 
-        // The element widths start with the guard space, so a zero width bar leads the runs, and the
-        // symbol ends on the five module space, so a zero width bar closes them. Both zero width bars are
-        // the zeros the symbol storage starts with.
+        // The element widths start with the guard space, so a zero width bar leads the runs, and the symbol ends on the five module space, so a zero width bar
+        // closes them. Both zero width bars are the zeros the symbol storage starts with.
         double xDimension = options.XDimension ?? NominalXDimension;
         Span<int> runs = symbol.BeginLinear(ElementCount + 2, xDimension, out Span<float> heights, out _);
         Span<int> widths = runs.Slice(1, ElementCount);
@@ -146,11 +138,10 @@ internal static class DataBarLimitedEncoder
             int withinGroup = character - GroupSum[group];
 
             // Combinations without a one module element are excluded from the even set only.
-            DataBarWidths.Calculate(odd, withinGroup / EvenCombinations[group], OddModules[group], 7, OddWidest[group], false);
-            DataBarWidths.Calculate(even, withinGroup % EvenCombinations[group], 26 - OddModules[group], 7, 9 - OddWidest[group], true);
+            DataBarWidths.Calculate(odd, withinGroup / EvenCombinations[group], OddModules[group], OddWidest[group], false);
+            DataBarWidths.Calculate(even, withinGroup % EvenCombinations[group], 26 - OddModules[group], 9 - OddWidest[group], true);
 
-            // The left character follows the guard pair and the right character follows the check
-            // character.
+            // The left character follows the guard pair and the right character follows the check character.
             Span<int> elements = widths.Slice(c == 0 ? 2 : 30, 14);
             for (int k = 0; k < 7; k++)
             {
@@ -160,13 +151,12 @@ internal static class DataBarLimitedEncoder
             }
         }
 
-        // The check character is two sets of six elements over eight modules, interleaved, and a narrow
-        // space and bar.
+        // The check character is two sets of six elements over eight modules, interleaved, and a narrow space and bar.
         int sequence = CheckSequence[check % CheckModulus];
         Span<int> first = sets[..6];
         Span<int> second = sets.Slice(6, 6);
-        DataBarWidths.Calculate(first, sequence / 21, 8, 6, 3, false);
-        DataBarWidths.Calculate(second, sequence % 21, 8, 6, 3, false);
+        DataBarWidths.Calculate(first, sequence / 21, 8, 3, false);
+        DataBarWidths.Calculate(second, sequence % 21, 8, 3, false);
         Span<int> checkElements = widths.Slice(16, 14);
         for (int k = 0; k < 6; k++)
         {
@@ -184,8 +174,7 @@ internal static class DataBarLimitedEncoder
         float barHeight = options.ResolveBarHeight(xDimension, Height);
         heights.Fill(barHeight);
 
-        // Section 4.14 of the GS1 General Specifications prints an element string with its Application
-        // Identifier in parentheses.
+        // Section 4.14 of the GS1 General Specifications prints an element string with its Application Identifier in parentheses.
         DataBarEncoder.AddCaption(gtin, Width, barHeight, options, ref symbol);
         symbol.EndLinear(0, 0);
     }

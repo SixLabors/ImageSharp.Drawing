@@ -4,8 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// One component of the data of a GS1 Application Identifier: its character set, its length, whether it
-/// may be left out, and the checks its content takes.
+/// One component of the data of a GS1 Application Identifier: its character set, its length, whether it may be left out, and the checks its content takes.
 /// </summary>
 internal readonly struct Gs1Component
 {

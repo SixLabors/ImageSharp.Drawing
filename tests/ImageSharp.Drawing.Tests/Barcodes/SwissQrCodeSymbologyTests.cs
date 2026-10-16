@@ -6,11 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="SwissQrCodeSymbology"/> against the Swiss Implementation Guidelines for the
-/// QR-bill version 2.4. The valid data is the six examples of Annex A, Tables 17 to 22, with the names as the
-/// payment parts print them. Each expected grid is the module grid of an independent reference
-/// implementation at level M with Kanji mode off. Each rejected input changes one line of an example so that
-/// it breaks one rule of the guidelines.
+/// Encoder tests for <see cref="SwissQrCodeSymbology"/> against the Swiss Implementation Guidelines for the QR-bill version 2.4. The valid data is the six
+/// examples of Annex A, Tables 17 to 22, with the names as the payment parts print them. Each expected grid is the module grid of an independent reference
+/// implementation at level M with Kanji mode off. Each rejected input changes one line of an example so that it breaks one rule of the guidelines.
 /// </summary>
 public class SwissQrCodeSymbologyTests
 {
@@ -49,9 +47,8 @@ public class SwissQrCodeSymbologyTests
     ];
 
     /// <summary>
-    /// Annex A, Table 20: an IBAN with a Creditor Reference. Table 20 prints the reference
-    /// RF720191230100405JSH0438, whose check digits fail the modulo 97-10 check section 2.12.2 requires: the
-    /// remainder is 49, not 1. The check digits of that reference body are 24.
+    /// Annex A, Table 20: an IBAN with a Creditor Reference. Table 20 prints the reference RF720191230100405JSH0438, whose check digits fail the modulo 97-10
+    /// check section 2.12.2 requires: the remainder is 49, not 1. The check digits of that reference body are 24.
     /// </summary>
     private static readonly string[] Example4 =
     [
@@ -84,8 +81,8 @@ public class SwissQrCodeSymbologyTests
     ];
 
     /// <summary>
-    /// Gets the cases of <see cref="MatchesReferenceGrid"/>: each example of Annex A, Example 1 also with
-    /// CR LF, and Example 3 with a message of characters that take two and three bytes in UTF-8.
+    /// Gets the cases of <see cref="MatchesReferenceGrid"/>: each example of Annex A, Example 1 also with CR LF, and Example 3 with a message of characters
+    /// that take two and three bytes in UTF-8.
     /// </summary>
     public static TheoryData<string, string, int, string> MatchesReferenceGridData { get; } = new()
     {
@@ -564,8 +561,8 @@ public class SwissQrCodeSymbologyTests
     };
 
     /// <summary>
-    /// Gets the cases of <see cref="RejectsALineOutsideItsDefinition"/>: an example, the number of a line of
-    /// Table 8, and a value for that line that breaks its definition.
+    /// Gets the cases of <see cref="RejectsALineOutsideItsDefinition"/>: an example, the number of a line of Table 8, and a value for that line that breaks its
+    /// definition.
     /// </summary>
     public static TheoryData<string, int, string> RejectsALineOutsideItsDefinitionData { get; } = new()
     {
@@ -598,8 +595,7 @@ public class SwissQrCodeSymbologyTests
         { nameof(Example1), 12, "S" },
         { nameof(Example1), 13, "Max Muster" },
 
-        // Line 19, the amount: no leading zeros, a point and two decimals, at most 12 characters, and at
-        // least 0.01 outside a notification.
+        // Line 19, the amount: no leading zeros, a point and two decimals, at most 12 characters, and at least 0.01 outside a notification.
         { nameof(Example1), 19, "050.00" },
         { nameof(Example1), 19, "50.0" },
         { nameof(Example1), 19, "50,00" },
@@ -619,8 +615,7 @@ public class SwissQrCodeSymbologyTests
         { nameof(Example1), 27, string.Empty },
         { nameof(Example3), 22, "Simon Muster" },
 
-        // Lines 28 and 29: QRR with a QR-IBAN and a QR reference, SCOR with an IBAN and a Creditor Reference,
-        // and NON with an IBAN and no reference.
+        // Lines 28 and 29: QRR with a QR-IBAN and a QR reference, SCOR with an IBAN and a Creditor Reference, and NON with an IBAN and no reference.
         { nameof(Example1), 28, "XYZ" },
         { nameof(Example1), 28, "SCOR" },
         { nameof(Example1), 28, "NON" },
@@ -645,8 +640,8 @@ public class SwissQrCodeSymbologyTests
         { nameof(Example1), 30, new string('A', 141) },
         { nameof(Example1), 31, "EPX" },
 
-        // Line 32, the billing information: // and a name of two characters first, and at most 140
-        // characters with the message. Lines 33 and 34, the alternative procedures: at most 100 characters.
+        // Line 32, the billing information: // and a name of two characters first, and at most 140 characters with the message. Lines 33 and 34, the
+        // alternative procedures: at most 100 characters.
         { nameof(Example2), 32, "S1/10/1234" },
         { nameof(Example2), 32, "//S" },
         { nameof(Example2), 30, new string('A', 100) },
@@ -663,8 +658,7 @@ public class SwissQrCodeSymbologyTests
         });
 
     /// <summary>
-    /// Section 6.4: the symbol is 46 x 46 mm without its quiet zone, whatever its version. At 254 dots per
-    /// inch a millimetre is 10 pixels.
+    /// Section 6.4: the symbol is 46 x 46 mm without its quiet zone, whatever its version. At 254 dots per inch a millimetre is 10 pixels.
     /// </summary>
     /// <param name="example">The example of Annex A.</param>
     [Theory]
@@ -709,9 +703,8 @@ public class SwissQrCodeSymbologyTests
         => Assert.Throws<ArgumentException>(() => Encode(With(Lines(example), line, value)));
 
     /// <summary>
-    /// Section 4.1.4: the lines up to the trailer must be present, the billing information and the
-    /// alternative procedures are the only further lines, and the lines are separated by CR LF or by LF, the
-    /// same one throughout.
+    /// Section 4.1.4: the lines up to the trailer must be present, the billing information and the alternative procedures are the only further lines, and the
+    /// lines are separated by CR LF or by LF, the same one throughout.
     /// </summary>
     [Fact]
     public void RejectsLinesOutsideTheStructure()
@@ -723,8 +716,7 @@ public class SwissQrCodeSymbologyTests
     }
 
     /// <summary>
-    /// Section 4.1.1 permits U+0020 to U+007E, U+00A0 to U+017F, U+0218 to U+021B and U+20AC, and section 6.2
-    /// permits at most 997 characters.
+    /// Section 4.1.1 permits U+0020 to U+007E, U+00A0 to U+017F, U+0218 to U+021B and U+20AC, and section 6.2 permits at most 997 characters.
     /// </summary>
     [Fact]
     public void RejectsCharactersOutsideSectionFourOneOneAndLongData()
@@ -736,9 +728,8 @@ public class SwissQrCodeSymbologyTests
     }
 
     /// <summary>
-    /// Data the guidelines permit beyond the examples: no billing information or alternative procedure
-    /// lines, the amount 0.00 with a notification text of section 4.4, an amount below 1.00 and the largest
-    /// amount, a Creditor Reference in small letters, which the banks read without regard to case, and a
+    /// Data the guidelines permit beyond the examples: no billing information or alternative procedure lines, the amount 0.00 with a notification text of
+    /// section 4.4, an amount below 1.00 and the largest amount, a Creditor Reference in small letters, which the banks read without regard to case, and a
     /// Creditor Reference in EUR.
     /// </summary>
     [Fact]
@@ -759,8 +750,7 @@ public class SwissQrCodeSymbologyTests
     }
 
     /// <summary>
-    /// Annex B, Figure 22: the 26 digits 21000000000313947143000901 take the check digit 7, the QR reference
-    /// of Example 2.
+    /// Annex B, Figure 22: the 26 digits 21000000000313947143000901 take the check digit 7, the QR reference of Example 2.
     /// </summary>
     [Fact]
     public void AcceptsTheCheckDigitOfFigureTwentyTwo()
@@ -819,6 +809,5 @@ public class SwissQrCodeSymbologyTests
     /// Encodes the text with the default options.
     /// </summary>
     /// <param name="text">The text to encode.</param>
-    private static void Encode(string text)
-        => SymbolEncoder.Encode(new SwissQrCodeSymbology(), text, new BarcodeOptions());
+    private static void Encode(string text) => SymbolEncoder.Encode(new SwissQrCodeSymbology(), text, new BarcodeOptions());
 }

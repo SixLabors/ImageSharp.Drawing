@@ -7,9 +7,8 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The Telepen symbology. It carries all 128 ASCII characters without shift characters, between the
-/// start code _ and the stop code z, which the printed line does not show. Every symbol carries the
-/// modulo 127 check character, which the printed line does not show either.
+/// The Telepen symbology. It carries all 128 ASCII characters without shift characters, between the start code _ and the stop code z, which the printed line
+/// does not show. Every symbol carries the modulo 127 check character, which the printed line does not show either.
 /// </summary>
 public sealed class TelepenSymbology : BarcodeSymbology
 {
@@ -20,8 +19,7 @@ public sealed class TelepenSymbology : BarcodeSymbology
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, TelepenEncoder.MaximumLength, nameof(text));
 
-        // One value for each character, so the buffer never grows: short text works inline and longer text
-        // rents once.
+        // One value for each character, so the buffer never grows: short text works inline and longer text rents once.
         InlineArray64<int> bufferStorage = default;
         ValueListBuilder<int> buffer = text.Length <= TelepenEncoder.InlineBufferLength ? new(bufferStorage) : new(text.Length);
         try

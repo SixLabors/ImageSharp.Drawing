@@ -6,16 +6,15 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="PostnetSymbology"/> and <see cref="PlanetSymbology"/>. Each expected bar
-/// string is the sequence of full (F) and half (H) bars written out from the digit table of section
-/// 708.4.2.1 of the Domestic Mail Manual. The five digit POSTNET and eleven digit PLANET strings match
-/// the reference implementation's raw encoding API.
+/// Encoder tests for <see cref="PostnetSymbology"/> and <see cref="PlanetSymbology"/>. Each expected bar string is the sequence of full (F) and half (H) bars
+/// written out from the digit table of section 708.4.2.1 of the Domestic Mail Manual. The five digit POSTNET and eleven digit PLANET strings match the
+/// reference implementation's raw encoding API.
 /// </summary>
 public class UspsPostalSymbologyTests
 {
     /// <summary>
-    /// The five digit symbol 01234 is a frame bar, the digits 0 to 4, the correction digit 0, which makes
-    /// the sum 10, and a frame bar: 32 bars. The nine and eleven digit symbols carry 52 and 62 bars.
+    /// The five digit symbol 01234 is a frame bar, the digits 0 to 4, the correction digit 0, which makes the sum 10, and a frame bar: 32 bars. The nine and
+    /// eleven digit symbols carry 52 and 62 bars.
     /// </summary>
     /// <param name="text">The digits to encode.</param>
     /// <param name="bars">The bars from the left, F for full and H for half.</param>
@@ -27,8 +26,8 @@ public class UspsPostalSymbologyTests
         => Assert.Equal(bars, Encode(new PostnetSymbology(), text));
 
     /// <summary>
-    /// PLANET inverts the bars: the two bars of each digit that POSTNET makes full are half bars. The
-    /// correction digit of 01234567890 is 5, because the digits add to 45.
+    /// PLANET inverts the bars: the two bars of each digit that POSTNET makes full are half bars. The correction digit of 01234567890 is 5, because the digits
+    /// add to 45.
     /// </summary>
     /// <param name="text">The digits to encode.</param>
     /// <param name="bars">The bars from the left, F for full and H for half.</param>
@@ -39,10 +38,9 @@ public class UspsPostalSymbologyTests
         => Assert.Equal(bars, Encode(new PlanetSymbology(), text));
 
     /// <summary>
-    /// Section 708.4.2.5 of the Domestic Mail Manual: bars 0.020 inch wide at 22 bars per inch, full bars
-    /// 0.125 inch high and half bars 0.050 inch high. At the 0.020 inch module a bar is 11 run units, a
-    /// space is 14, the run unit is 1/11 module, a full bar is 6.25 modules and a half bar 2.5, with the
-    /// half bars standing on the baseline.
+    /// Section 708.4.2.5 of the Domestic Mail Manual: bars 0.020 inch wide at 22 bars per inch, full bars 0.125 inch high and half bars 0.050 inch high. At the
+    /// 0.020 inch module a bar is 11 run units, a space is 14, the run unit is 1/11 module, a full bar is 6.25 modules and a half bar 2.5, with the half bars
+    /// standing on the baseline.
     /// </summary>
     [Fact]
     public void DrawsTheDimensionsOfSectionSevenZeroEightFourTwoFive()

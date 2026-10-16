@@ -9,24 +9,20 @@ using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="DataMatrixSymbology"/>, <see cref="DataMatrixRectangularSymbology"/> and
-/// <see cref="DataMatrixRectangularExtensionSymbology"/>. Each expected grid is the module grid of an
-/// independent reference implementation, taken through its raw encoding API, so the encodation schemes,
-/// the symbol size, the pad codewords, the error correction and the module placement all show up here.
-/// A grid row is the modules from the left as hexadecimal digits, the leftmost module the most significant
-/// bit, padded with light modules to whole digits.
+/// Encoder tests for <see cref="DataMatrixSymbology"/>, <see cref="DataMatrixRectangularSymbology"/> and <see cref="DataMatrixRectangularExtensionSymbology"/>.
+/// Each expected grid is the module grid of an independent reference implementation, taken through its raw encoding API, so the encodation schemes, the symbol
+/// size, the pad codewords, the error correction and the module placement all show up here. A grid row is the modules from the left as hexadecimal digits, the
+/// leftmost module the most significant bit, padded with light modules to whole digits.
 /// </summary>
 public class DataMatrixSymbologyTests
 {
     /// <summary>
-    /// The 45 characters of the Royal Mail fields of the example in Table 5 of the Mailmark barcode
-    /// definition document.
+    /// The 45 characters of the Royal Mail fields of the example in Table 5 of the Mailmark barcode definition document.
     /// </summary>
     private const string Mailmark2DFields = "JGB 012100123412345678AB19XY1A 0             ";
 
     /// <summary>
-    /// ISO/IEC 16022 Table 2: an ASCII character is its value plus 1, and a pair of digits is 130 plus the
-    /// value of the pair.
+    /// ISO/IEC 16022 Table 2: an ASCII character is its value plus 1, and a pair of digits is 130 plus the value of the pair.
     /// </summary>
     [Fact]
     public void DataMatrix_AsciiEncodationMatchesTableTwo()
@@ -36,25 +32,23 @@ public class DataMatrixSymbologyTests
     }
 
     /// <summary>
-    /// ISO/IEC 16022 Table 2: a character above 127 takes the Upper Shift, 235, then its value less 128,
-    /// plus 1.
+    /// ISO/IEC 16022 Table 2: a character above 127 takes the Upper Shift, 235, then its value less 128, plus 1.
     /// </summary>
     [Fact]
     public void DataMatrix_ExtendedAsciiTakesTheUpperShift()
         => Assert.Equal([235, 0xE9 - 128 + 1], Codewords("é", [3]));
 
     /// <summary>
-    /// Section 5.6.2 of the GS1 General Specifications: the Function 1 Symbol Character is encoded at the
-    /// beginning of the data, and ISO/IEC 16022 Table 2 gives it the codeword 232.
+    /// Section 5.6.2 of the GS1 General Specifications: the Function 1 Symbol Character is encoded at the beginning of the data, and ISO/IEC 16022 Table 2
+    /// gives it the codeword 232.
     /// </summary>
     [Fact]
     public void Gs1DataMatrix_StartsWithFnc1()
         => Assert.Equal([232, 130 + 1], Codewords([-1, '0', '1'], [3], 0));
 
     /// <summary>
-    /// ISO/IEC 16022 Table 2 gives the 05 Macro and 06 Macro only as the ASCII codewords 236 and 237. A Macro
-    /// stands for the message header, so it is the first codeword even when the data after it suits Base 256
-    /// or C40 encodation.
+    /// ISO/IEC 16022 Table 2 gives the 05 Macro and 06 Macro only as the ASCII codewords 236 and 237. A Macro stands for the message header, so it is the first
+    /// codeword even when the data after it suits Base 256 or C40 encodation.
     /// </summary>
     /// <param name="macro">The Macro message value.</param>
     /// <param name="codeword">The codeword of the Macro.</param>
@@ -71,10 +65,8 @@ public class DataMatrixSymbologyTests
     }
 
     /// <summary>
-    /// Section 5.6.2 of the GS1 General Specifications: the finder pattern is a solid L one module wide on
-    /// the left and bottom edges, and the opposite edges alternate, with the upper right corner module
-    /// light. Section 5.6.3.2: a symbol of 32 x 32 or more is divided into data regions by alignment
-    /// patterns.
+    /// Section 5.6.2 of the GS1 General Specifications: the finder pattern is a solid L one module wide on the left and bottom edges, and the opposite edges
+    /// alternate, with the upper right corner module light. Section 5.6.3.2: a symbol of 32 x 32 or more is divided into data regions by alignment patterns.
     /// </summary>
     [Theory]
     [InlineData("1234", 10, 10)]
@@ -103,8 +95,8 @@ public class DataMatrixSymbologyTests
         });
 
     /// <summary>
-    /// Tables 5-32 and 5-33 of the GS1 General Specifications: the data codeword capacity of each size.
-    /// Data of exactly that many codewords takes that size, and one codeword more takes the next size.
+    /// Tables 5-32 and 5-33 of the GS1 General Specifications: the data codeword capacity of each size. Data of exactly that many codewords takes that size,
+    /// and one codeword more takes the next size.
     /// </summary>
     [Theory]
     [InlineData(3, 10, 10, 12, 12)]
@@ -118,8 +110,7 @@ public class DataMatrixSymbologyTests
     }
 
     /// <summary>
-    /// Table 5-33 of the GS1 General Specifications: the rectangular sizes hold 5, 10, 16, 22, 32 and 49
-    /// data codewords.
+    /// Table 5-33 of the GS1 General Specifications: the rectangular sizes hold 5, 10, 16, 22, 32 and 49 data codewords.
     /// </summary>
     [Theory]
     [InlineData(5, 8, 18)]
@@ -159,8 +150,7 @@ public class DataMatrixSymbologyTests
     }
 
     /// <summary>
-    /// Section 5.6.2 of the GS1 General Specifications: the quiet zone is one module wide on all four
-    /// sides.
+    /// Section 5.6.2 of the GS1 General Specifications: the quiet zone is one module wide on all four sides.
     /// </summary>
     [Fact]
     public void DataMatrix_QuietZoneIsOneModule()
@@ -769,10 +759,9 @@ public class DataMatrixSymbologyTests
         => AssertGrid(Create(format, version), text, rows, columns, expected);
 
     /// <summary>
-    /// Capital letters, then pairs of a small and a capital letter. The pairs cost the same in ASCII and C40
-    /// encodation, so no scheme wins early and each look-ahead test reads to the end of the pairs. The test
-    /// runs with each vector width and without vector hardware, so the vector scan and the one-at-a-time scan
-    /// of the look-ahead test must make the same choices. The grids come from bwip-js (dmlookahead.mjs).
+    /// Capital letters, then pairs of a small and a capital letter. The pairs cost the same in ASCII and C40 encodation, so no scheme wins early and each
+    /// look-ahead test reads to the end of the pairs. The test runs with each vector width and without vector hardware, so the vector scan and the
+    /// one-at-a-time scan of the look-ahead test must make the same choices. The grids come from bwip-js (dmlookahead.mjs).
     /// </summary>
     [Fact]
     public void DataMatrix_LookAheadOverLongRuns_MatchesReferenceGrid()
@@ -863,8 +852,8 @@ public class DataMatrixSymbologyTests
     };
 
     /// <summary>
-    /// The GS1 and HIBC data layers over Data Matrix: the Function 1 Symbol Character first and between
-    /// variable length element strings, or the HIBC flag character, data and check character.
+    /// The GS1 and HIBC data layers over Data Matrix: the Function 1 Symbol Character first and between variable length element strings, or the HIBC flag
+    /// character, data and check character.
     /// </summary>
     /// <param name="symbology">The symbology name of the reference implementation.</param>
     /// <param name="text">The text to encode.</param>
@@ -898,9 +887,8 @@ public class DataMatrixSymbologyTests
         => Assert.Throws<ArgumentException>(() => Encode(new Gs1DataMatrixSymbology(), "0109521234543213"));
 
     /// <summary>
-    /// Example 1 of section 2.3 of the GS1 DataMatrix Guideline prints the element strings below the symbol,
-    /// one on each line, with the Application Identifiers in parentheses, as Figure 4-6 of the GS1 General
-    /// Specifications prefers.
+    /// Example 1 of section 2.3 of the GS1 DataMatrix Guideline prints the element strings below the symbol, one on each line, with the Application Identifiers
+    /// in parentheses, as Figure 4-6 of the GS1 General Specifications prefers.
     /// </summary>
     [Fact]
     public void Gs1DataMatrix_PrintsOneElementStringOnEachLine()
@@ -914,8 +902,8 @@ public class DataMatrixSymbologyTests
     }
 
     /// <summary>
-    /// Rule 3b of section 4.14 of the GS1 General Specifications: when Application Identifier (8200)
-    /// appears, its URL does not appear in the human readable interpretation.
+    /// Rule 3b of section 4.14 of the GS1 General Specifications: when Application Identifier (8200) appears, its URL does not appear in the human readable
+    /// interpretation.
     /// </summary>
     [Fact]
     public void Gs1DataMatrix_LeavesTheUrlOfApplicationIdentifier8200OutOfTheText()
@@ -926,9 +914,8 @@ public class DataMatrixSymbologyTests
     }
 
     /// <summary>
-    /// Rule 1c of section 4.14 of the GS1 General Specifications: the human readable interpretation follows
-    /// the order of the encoded data, which for a GS1 Digital Link URI is the primary key and its qualifiers
-    /// in the path, then the data attributes in the query string. The values print decoded, and the URI
+    /// Rule 1c of section 4.14 of the GS1 General Specifications: the human readable interpretation follows the order of the encoded data, which for a GS1
+    /// Digital Link URI is the primary key and its qualifiers in the path, then the data attributes in the query string. The values print decoded, and the URI
     /// itself does not print.
     /// </summary>
     [Fact]
@@ -945,8 +932,7 @@ public class DataMatrixSymbologyTests
     }
 
     /// <summary>
-    /// Figure 3 of ANSI/HIBC 2.6 prints the same string below a Data Matrix symbol as below the linear
-    /// symbols, between asterisks.
+    /// Figure 3 of ANSI/HIBC 2.6 prints the same string below a Data Matrix symbol as below the linear symbols, between asterisks.
     /// </summary>
     [Fact]
     public void HibcDataMatrix_PrintsTheDataBetweenDelimiters()
@@ -959,8 +945,8 @@ public class DataMatrixSymbologyTests
     }
 
     /// <summary>
-    /// The figure of section 4.3.3 of ANSI/HIBC 2.6 prints concatenated primary and secondary data on two
-    /// lines, broken after the "/" that joins them, with the check character of the whole string.
+    /// The figure of section 4.3.3 of ANSI/HIBC 2.6 prints concatenated primary and secondary data on two lines, broken after the "/" that joins them, with the
+    /// check character of the whole string.
     /// </summary>
     [Fact]
     public void HibcDataMatrix_BreaksConcatenatedDataAfterTheJoin()
@@ -971,9 +957,8 @@ public class DataMatrixSymbologyTests
     }
 
     /// <summary>
-    /// Section 4.14 rule 2a.iii of the GS1 General Specifications: the font is at least 2 mm high. A point is
-    /// 1/72 inch, so a smaller font prints as the font of 2 mm and measures the same. ANSI/HIBC 2.6 states
-    /// no size, so HIBC text keeps the size of the caller.
+    /// Section 4.14 rule 2a.iii of the GS1 General Specifications: the font is at least 2 mm high. A point is 1/72 inch, so a smaller font prints as the font
+    /// of 2 mm and measures the same. ANSI/HIBC 2.6 states no size, so HIBC text keeps the size of the caller.
     /// </summary>
     [Fact]
     public void Gs1DataMatrix_TextIsAtLeastTwoMillimetresHigh()
@@ -1009,8 +994,8 @@ public class DataMatrixSymbologyTests
     }
 
     /// <summary>
-    /// Section 2.3 and Table 4 of the Mailmark barcode definition document: the data starts with the latch
-    /// to C40 encodation, codeword 230, and the Royal Mail fields encode in C40 encodation.
+    /// Section 2.3 and Table 4 of the Mailmark barcode definition document: the data starts with the latch to C40 encodation, codeword 230, and the Royal Mail
+    /// fields encode in C40 encodation.
     /// </summary>
     [Fact]
     public void Mailmark2D_StartsWithTheC40Latch()
@@ -1025,16 +1010,15 @@ public class DataMatrixSymbologyTests
         int[] codewords = Codewords(message, [36], 45);
         Assert.Equal(230, codewords[0]);
 
-        // C40 encodation packs three values as 1600 x C1 + 40 x C2 + C3 + 1, and the basic set gives the
-        // capital letters A to Z the values 14 to 39, so "JGB" is 23, 20 and 15.
+        // C40 encodation packs three values as 1600 x C1 + 40 x C2 + C3 + 1, and the basic set gives the capital letters A to Z the values 14 to 39, so "JGB"
+        // is 23, 20 and 15.
         int packed = (1600 * 23) + (40 * 20) + 15 + 1;
         Assert.Equal(packed >> 8, codewords[1]);
         Assert.Equal(packed & 0xFF, codewords[2]);
     }
 
     /// <summary>
-    /// Section 2.4 of the Mailmark barcode definition document: a clear zone of four modules, and the
-    /// recommended module size of 0.5 mm.
+    /// Section 2.4 of the Mailmark barcode definition document: a clear zone of four modules, and the recommended module size of 0.5 mm.
     /// </summary>
     [Fact]
     public void Mailmark2D_ClearZoneAndModuleSizeFollowSectionTwoFour()
@@ -1276,8 +1260,7 @@ public class DataMatrixSymbologyTests
     };
 
     /// <summary>
-    /// Table 1 of the Mailmark barcode definition document: type 7 is 24 x 24 modules, type 9 32 x 32 and
-    /// type 29 16 x 48.
+    /// Table 1 of the Mailmark barcode definition document: type 7 is 24 x 24 modules, type 9 32 x 32 and type 29 16 x 48.
     /// </summary>
     /// <param name="type">The barcode type.</param>
     /// <param name="text">The text to encode.</param>
@@ -1290,8 +1273,8 @@ public class DataMatrixSymbologyTests
         => AssertGrid(new Mailmark2DSymbology(type), text, rows, columns, expected);
 
     /// <summary>
-    /// Table 2 and Appendix A of the Mailmark barcode definition document: each Royal Mail field takes its
-    /// legitimate values, padded with spaces to its fixed length.
+    /// Table 2 and Appendix A of the Mailmark barcode definition document: each Royal Mail field takes its legitimate values, padded with spaces to its fixed
+    /// length.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]
@@ -1310,9 +1293,8 @@ public class DataMatrixSymbologyTests
         => Assert.Throws<ArgumentException>(() => Encode(new Mailmark2DSymbology(Mailmark2DType.Type9), text));
 
     /// <summary>
-    /// Appendix A, Table 14 of the Mailmark barcode definition document: the destination post code plus
-    /// DPS may be spaces, an outward code alone or the full post code with its delivery point, and the
-    /// return to sender post code may be spaces or the outward and inward codes.
+    /// Appendix A, Table 14 of the Mailmark barcode definition document: the destination post code plus DPS may be spaces, an outward code alone or the full
+    /// post code with its delivery point, and the return to sender post code may be spaces or the outward and inward codes.
     /// </summary>
     /// <param name="destination">The destination post code plus DPS field.</param>
     /// <param name="returnToSender">The return to sender post code field.</param>
@@ -1515,9 +1497,8 @@ public class DataMatrixSymbologyTests
     };
 
     /// <summary>
-    /// GS1 Digital Link URIs that follow the GS1 Digital Link Standard: URI Syntax: a primary key with its
-    /// qualifiers in order, data attributes and an extension parameter in the query string, and custom path
-    /// segments before the key. The symbol carries the URI as it is.
+    /// GS1 Digital Link URIs that follow the GS1 Digital Link Standard: URI Syntax: a primary key with its qualifiers in order, data attributes and an
+    /// extension parameter in the query string, and custom path segments before the key. The symbol carries the URI as it is.
     /// </summary>
     /// <param name="text">The URI.</param>
     /// <param name="rows">The expected number of rows.</param>
@@ -1529,10 +1510,9 @@ public class DataMatrixSymbologyTests
         => AssertGrid(new Gs1DigitalLinkDataMatrixSymbology(), text, rows, columns, expected);
 
     /// <summary>
-    /// URIs the GS1 Digital Link Standard: URI Syntax does not allow: a scheme other than http or https
-    /// (section 4.11), a GTIN of fewer than 14 digits (section 4.1), key qualifiers out of order (section
-    /// 4.9), a key qualifier in the query string, no primary key in the path, and data an Application
-    /// Identifier does not allow.
+    /// URIs the GS1 Digital Link Standard: URI Syntax does not allow: a scheme other than http or https (section 4.11), a GTIN of fewer than 14 digits (section
+    /// 4.1), key qualifiers out of order (section 4.9), a key qualifier in the query string, no primary key in the path, and data an Application Identifier
+    /// does not allow.
     /// </summary>
     /// <param name="text">The URI.</param>
     [Theory]
@@ -1548,8 +1528,8 @@ public class DataMatrixSymbologyTests
         => Assert.Throws<ArgumentException>(() => Encode(new Gs1DigitalLinkDataMatrixSymbology(), text));
 
     /// <summary>
-    /// Encodes the long run inputs and compares each grid with its reference grid. The method is static, because
-    /// the feature test runner runs it in a child process.
+    /// Encodes the long run inputs and compares each grid with its reference grid. The method is static, because the feature test runner runs it in a child
+    /// process.
     /// </summary>
     private static void RunLookAheadOverLongRuns()
     {
@@ -1840,8 +1820,7 @@ public class DataMatrixSymbologyTests
         => SymbolEncoder.Read(symbology, text, new BarcodeOptions(), static (ref symbol) => (symbol.MatrixRows, symbol.Columns));
 
     /// <summary>
-    /// Encodes the text with the default options and compares the size and the modules of the symbol
-    /// with the reference.
+    /// Encodes the text with the default options and compares the size and the modules of the symbol with the reference.
     /// </summary>
     /// <param name="symbology">The symbology to encode with.</param>
     /// <param name="text">The text to encode.</param>

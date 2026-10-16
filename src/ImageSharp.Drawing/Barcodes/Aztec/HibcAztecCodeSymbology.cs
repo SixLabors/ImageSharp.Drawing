@@ -6,19 +6,18 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// HIBC Aztec Code, a Health Industry Bar Code carried by an Aztec Code symbol. The symbol carries the flag
-/// character, the data and the modulo 43 check character, in the smallest symbol that holds them.
+/// HIBC Aztec Code, a Health Industry Bar Code carried by an Aztec Code symbol. The symbol carries the flag character, the data and the modulo 43 check
+/// character, in the smallest symbol that holds them.
 /// <para>
-/// When a font is set, that same string prints below the symbol between delimiters, and a check character
-/// that is a space prints as an underscore. Primary and secondary data that the symbol joins with "/" print
-/// on two lines, broken after the "/".
+/// When a font is set, that same string prints below the symbol between delimiters, and a check character that is a space prints as an underscore. Primary and
+/// secondary data that the symbol joins with "/" print on two lines, broken after the "/".
 /// </para>
 /// </summary>
 public sealed class HibcAztecCodeSymbology : BarcodeSymbology
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="HibcAztecCodeSymbology"/> class at the recommended error
-    /// correction level of 23 percent, calculating the check character from the data.
+    /// Initializes a new instance of the <see cref="HibcAztecCodeSymbology"/> class at the recommended error correction level of 23 percent, calculating the
+    /// check character from the data.
     /// </summary>
     public HibcAztecCodeSymbology()
         : this(AztecEncoder.DefaultErrorCorrectionPercentage, false)
@@ -26,13 +25,10 @@ public sealed class HibcAztecCodeSymbology : BarcodeSymbology
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="HibcAztecCodeSymbology"/> class at the recommended error
-    /// correction level of 23 percent.
+    /// Initializes a new instance of the <see cref="HibcAztecCodeSymbology"/> class at the recommended error correction level of 23 percent.
     /// </summary>
-    /// <param name="validateCheckCharacter">
-    /// Whether the last character of the input is the check character, which the encoder validates
-    /// against the data, rather than data the encoder appends a check character to.
-    /// </param>
+    /// <param name="validateCheckCharacter"> Whether the last character of the input is the check character, which the encoder validates against the data,
+    /// rather than data the encoder appends a check character to. </param>
     public HibcAztecCodeSymbology(bool validateCheckCharacter)
         : this(AztecEncoder.DefaultErrorCorrectionPercentage, validateCheckCharacter)
     {
@@ -41,14 +37,10 @@ public sealed class HibcAztecCodeSymbology : BarcodeSymbology
     /// <summary>
     /// Initializes a new instance of the <see cref="HibcAztecCodeSymbology"/> class.
     /// </summary>
-    /// <param name="errorCorrectionPercentage">
-    /// The minimum percentage of the symbol capacity that error correction takes, 5 to 95. Three more check
-    /// codewords are always added.
-    /// </param>
-    /// <param name="validateCheckCharacter">
-    /// Whether the last character of the input is the check character, which the encoder validates
-    /// against the data, rather than data the encoder appends a check character to.
-    /// </param>
+    /// <param name="errorCorrectionPercentage"> The minimum percentage of the symbol capacity that error correction takes, 5 to 95. Three more check codewords
+    /// are always added. </param>
+    /// <param name="validateCheckCharacter"> Whether the last character of the input is the check character, which the encoder validates against the data,
+    /// rather than data the encoder appends a check character to. </param>
     public HibcAztecCodeSymbology(int errorCorrectionPercentage, bool validateCheckCharacter)
     {
         Guard.MustBeBetweenOrEqualTo(errorCorrectionPercentage, 5, 95, nameof(errorCorrectionPercentage));
@@ -77,13 +69,7 @@ public sealed class HibcAztecCodeSymbology : BarcodeSymbology
         try
         {
             HibcData.Prepare(text, this.ValidateCheckCharacter, ref encoded);
-            AztecEncoder.BuildSymbol(
-                encoded.AsSpan(),
-                AztecFormat.Auto,
-                this.ErrorCorrectionPercentage,
-                0,
-                options.XDimension ?? PointXDimension,
-                ref symbol);
+            AztecEncoder.BuildSymbol(encoded.AsSpan(), AztecFormat.Auto, this.ErrorCorrectionPercentage, 0, options.XDimension ?? PointXDimension, ref symbol);
 
             if (options.Font is not null)
             {

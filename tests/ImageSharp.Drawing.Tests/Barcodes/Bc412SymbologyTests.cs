@@ -6,9 +6,8 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Bc412Symbology"/>. Each expected run string is the alternating bar and
-/// space module widths, starting with a bar, from the reference implementation's raw encoding API in its
-/// SEMI form. The reference ends on the last bar of the stop character, so the strings compare directly.
+/// Encoder tests for <see cref="Bc412Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, from the
+/// reference implementation's raw encoding API in its SEMI form. The reference ends on the last bar of the stop character, so the strings compare directly.
 /// </summary>
 public class Bc412SymbologyTests
 {
@@ -35,11 +34,9 @@ public class Bc412SymbologyTests
         => Assert.Equal(reference, Encode(text));
 
     /// <summary>
-    /// For BC412AB the symbol is B, the check character counted as 0, C, 4, 1, 2, A and B, whose values
-    /// are 25, 0, 20, 11, 15, 17, 7 and 25. The odd positions add to 67, which leaves 32, the even
-    /// positions add to 53, which leaves 18 and doubles to 36, and 68 leaves 33. Then 33 times 17 is 561,
-    /// which leaves 1, and the character with value 1 is R. The printed line shows it after the first
-    /// data character.
+    /// For BC412AB the symbol is B, the check character counted as 0, C, 4, 1, 2, A and B, whose values are 25, 0, 20, 11, 15, 17, 7 and 25. The odd positions
+    /// add to 67, which leaves 32, the even positions add to 53, which leaves 18 and doubles to 36, and 68 leaves 33. Then 33 times 17 is 561, which leaves 1,
+    /// and the character with value 1 is R. The printed line shows it after the first data character.
     /// </summary>
     [Fact]
     public void CalculatesTheCheckCharacterAfterTheFirstDataCharacter()
@@ -50,8 +47,8 @@ public class Bc412SymbologyTests
     }
 
     /// <summary>
-    /// A supplied check character in the second position is validated against the data and carried
-    /// once, so the symbol is the one the calculated check character produces.
+    /// A supplied check character in the second position is validated against the data and carried once, so the symbol is the one the calculated check
+    /// character produces.
     /// </summary>
     [Fact]
     public void ValidatesASuppliedCheckCharacter()
@@ -63,9 +60,8 @@ public class Bc412SymbologyTests
     }
 
     /// <summary>
-    /// The start character is three modules, every character is twelve, and the stop character is
-    /// three, so a symbol of N data characters and its check character spans 12(N + 1) + 6 modules
-    /// before its quiet zones.
+    /// The start character is three modules, every character is twelve, and the stop character is three, so a symbol of N data characters and its check
+    /// character spans 12(N + 1) + 6 modules before its quiet zones.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]

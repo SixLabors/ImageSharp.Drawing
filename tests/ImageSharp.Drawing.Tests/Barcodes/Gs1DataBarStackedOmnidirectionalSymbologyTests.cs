@@ -6,9 +6,8 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Gs1DataBarStackedOmnidirectionalSymbology"/>. Each expected row is the 50
-/// modules of the upper row, the three separator rows and the lower row, 1 for dark, taken from an
-/// independent reference implementation through its raw encoding API and confirmed by a second one.
+/// Encoder tests for <see cref="Gs1DataBarStackedOmnidirectionalSymbology"/>. Each expected row is the 50 modules of the upper row, the three separator rows
+/// and the lower row, 1 for dark, taken from an independent reference implementation through its raw encoding API and confirmed by a second one.
 /// </summary>
 public class Gs1DataBarStackedOmnidirectionalSymbologyTests
 {
@@ -58,8 +57,7 @@ public class Gs1DataBarStackedOmnidirectionalSymbologyTests
             "10100011111101010101111111000001000111110101011101"
         },
 
-        // The right finder pattern has value 3, so the lower separator carries a single dark module over the
-        // start of the three module finder bar.
+        // The right finder pattern has value 3, so the lower separator carries a single dark module over the start of the three module finder bar.
         {
             "(01)00000000000000",
             "01010100100000000100011111111001011111110010101010|" +
@@ -78,9 +76,8 @@ public class Gs1DataBarStackedOmnidirectionalSymbologyTests
             SymbolEncoder.Read(new Gs1DataBarStackedOmnidirectionalSymbology(), text, new BarcodeOptions(), SymbolEncoder.RowModuleStrings));
 
     /// <summary>
-    /// Section 5.5.2.1.4 of the GS1 General Specifications gives a width of 50X and "a 3X high separator
-    /// pattern between two rows". The nominal rows are 46X each, the 95X of Table 5-44. No quiet zone is
-    /// required.
+    /// Section 5.5.2.1.4 of the GS1 General Specifications gives a width of 50X and "a 3X high separator pattern between two rows". The nominal rows are 46X
+    /// each, the 95X of Table 5-44. No quiet zone is required.
     /// </summary>
     [Fact]
     public void Gs1DataBarStackedOmnidirectional_IsFiftyModulesWideAndNinetyFiveHigh()

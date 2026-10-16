@@ -4,8 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Specifies the PosiCode version, which sets the character set, the distances between the bar
-/// centres, and the start and stop characters.
+/// Specifies the PosiCode version, which sets the character set, the distances between the bar centres, and the start and stop characters.
 /// </summary>
 public enum PosiCodeVersion
 {
@@ -20,14 +19,12 @@ public enum PosiCodeVersion
     B,
 
     /// <summary>
-    /// Limited PosiCode A, which carries the digits 0 to 9, the letters A to Z, the hyphen and the full
-    /// stop.
+    /// Limited PosiCode A, which carries the digits 0 to 9, the letters A to Z, the hyphen and the full stop.
     /// </summary>
     LimitedA,
 
     /// <summary>
-    /// Limited PosiCode B, with the wider bar centre distances, which carries the same characters as
-    /// <see cref="LimitedA"/>.
+    /// Limited PosiCode B, with the wider bar centre distances, which carries the same characters as <see cref="LimitedA"/>.
     /// </summary>
     LimitedB,
 }

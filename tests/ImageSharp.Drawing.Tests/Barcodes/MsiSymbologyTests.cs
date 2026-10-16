@@ -6,9 +6,8 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="MsiSymbology"/>. Each expected run string is the alternating bar and
-/// space module widths, starting with a bar, from the reference implementation's raw encoding API. The
-/// reference ends on the last bar of the stop character, so the strings compare directly.
+/// Encoder tests for <see cref="MsiSymbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, from the
+/// reference implementation's raw encoding API. The reference ends on the last bar of the stop character, so the strings compare directly.
 /// </summary>
 public class MsiSymbologyTests
 {
@@ -19,9 +18,8 @@ public class MsiSymbologyTests
         => Assert.Equal(reference, Encode(text, MsiCheckDigit.None));
 
     /// <summary>
-    /// The expected runs are the reference implementation's for each check digit calculation. For 1234567 the
-    /// modulo 10 check digit is 4, the IBM modulo 11 check digit is 4 as well, because the weighted sum
-    /// 106 leaves 7, and the NCR modulo 11 check digit is 9, because the weighted sum 112 leaves 2.
+    /// The expected runs are the reference implementation's for each check digit calculation. For 1234567 the modulo 10 check digit is 4, the IBM modulo 11
+    /// check digit is 4 as well, because the weighted sum 106 leaves 7, and the NCR modulo 11 check digit is 9, because the weighted sum 112 leaves 2.
     /// </summary>
     /// <param name="checkDigit">The check digits the symbol carries.</param>
     /// <param name="reference">The reference run string with the check digits carried.</param>
@@ -36,11 +34,10 @@ public class MsiSymbologyTests
         => Assert.Equal(reference, Encode("1234567", checkDigit));
 
     /// <summary>
-    /// The printed line shows the data and, by default, the check digits. For 1234567 the modulo 10 check
-    /// digit is 4: the digits 7, 5, 3 and 1 double to 14, 10, 6 and 2, whose digits add to 1 + 4 + 1 + 0 +
-    /// 6 + 2 = 14, the digits 6, 4 and 2 add 12, and 26 lifts to 30 with 4. The second modulo 10 digit
-    /// over 12345674 is 1, and over 12345679, the NCR result, it is 0, because 9, 6, 4 and 2 double to
-    /// 18, 12, 8 and 4, whose digits add 24, the digits 7, 5, 3 and 1 add 16, and 40 is a multiple of ten.
+    /// The printed line shows the data and, by default, the check digits. For 1234567 the modulo 10 check digit is 4: the digits 7, 5, 3 and 1 double to 14,
+    /// 10, 6 and 2, whose digits add to 1 + 4 + 1 + 0 + 6 + 2 = 14, the digits 6, 4 and 2 add 12, and 26 lifts to 30 with 4. The second modulo 10 digit over
+    /// 12345674 is 1, and over 12345679, the NCR result, it is 0, because 9, 6, 4 and 2 double to 18, 12, 8 and 4, whose digits add 24, the digits 7, 5, 3 and
+    /// 1 add 16, and 40 is a multiple of ten.
     /// </summary>
     /// <param name="checkDigit">The check digits the symbol carries.</param>
     /// <param name="printCheckDigits">Whether the check digits are part of the printed line.</param>
@@ -63,8 +60,7 @@ public class MsiSymbologyTests
     }
 
     /// <summary>
-    /// The digit 6 weighs 12 in either modulo 11 calculation, which leaves 1, so its check value is 10 and
-    /// no single digit can carry it.
+    /// The digit 6 weighs 12 in either modulo 11 calculation, which leaves 1, so its check value is 10 and no single digit can carry it.
     /// </summary>
     /// <param name="checkDigit">The modulo 11 calculation.</param>
     [Theory]
@@ -76,8 +72,8 @@ public class MsiSymbologyTests
         => Assert.Throws<ArgumentException>(() => Encode("6", checkDigit));
 
     /// <summary>
-    /// The start character is three modules, every digit is four bits of three modules, and the stop
-    /// character is four modules, so a symbol of N digits spans 12N + 7 modules before its quiet zones.
+    /// The start character is three modules, every digit is four bits of three modules, and the stop character is four modules, so a symbol of N digits spans
+    /// 12N + 7 modules before its quiet zones.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]

@@ -6,8 +6,7 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// HIBC PDF417, a Health Industry Bar Code carried by a PDF417 symbol. The symbol carries the flag
-/// character, the data and the modulo 43 check character.
+/// HIBC PDF417, a Health Industry Bar Code carried by a PDF417 symbol. The symbol carries the flag character, the data and the modulo 43 check character.
 /// </summary>
 public sealed class HibcPdf417Symbology : BarcodeSymbology
 {
@@ -17,8 +16,7 @@ public sealed class HibcPdf417Symbology : BarcodeSymbology
     private const int DefaultColumns = 2;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="HibcPdf417Symbology"/> class with two data columns,
-    /// calculating the check character from the data.
+    /// Initializes a new instance of the <see cref="HibcPdf417Symbology"/> class with two data columns, calculating the check character from the data.
     /// </summary>
     public HibcPdf417Symbology()
         : this(DefaultColumns, false)
@@ -29,10 +27,8 @@ public sealed class HibcPdf417Symbology : BarcodeSymbology
     /// Initializes a new instance of the <see cref="HibcPdf417Symbology"/> class.
     /// </summary>
     /// <param name="columns">The number of data columns in a row, 1 to 30. The row count follows from the data.</param>
-    /// <param name="validateCheckCharacter">
-    /// Whether the last character of the input is the check character, which the encoder validates
-    /// against the data, rather than data the encoder appends a check character to.
-    /// </param>
+    /// <param name="validateCheckCharacter">Whether the last character of the input is the check character, which the encoder validates against the data,
+    /// rather than data the encoder appends a check character to.</param>
     public HibcPdf417Symbology(int columns, bool validateCheckCharacter)
     {
         Guard.MustBeBetweenOrEqualTo(columns, Pdf417Encoder.MinimumColumns, Pdf417Encoder.MaximumColumns, nameof(columns));

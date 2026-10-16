@@ -6,11 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Gs1DataBarExpandedSymbology"/>. Each expected value is the modules of the
-/// symbol, 1 for dark, taken from an independent reference implementation through its raw encoding API and
-/// confirmed by a second one. The inputs cover every encodation method of the compressed data field, the
-/// numeric, alphanumeric and ISO/IEC 646 modes of the general purpose field, and a single digit left at the
-/// end of the field.
+/// Encoder tests for <see cref="Gs1DataBarExpandedSymbology"/>. Each expected value is the modules of the symbol, 1 for dark, taken from an independent
+/// reference implementation through its raw encoding API and confirmed by a second one. The inputs cover every encodation method of the compressed data field,
+/// the numeric, alphanumeric and ISO/IEC 646 modes of the general purpose field, and a single digit left at the end of the field.
 /// </summary>
 public class Gs1DataBarExpandedSymbologyTests
 {
@@ -110,9 +108,8 @@ public class Gs1DataBarExpandedSymbologyTests
         => Encode(text, (ref symbol) => Assert.Equal(expected, SymbolEncoder.ModuleString(symbol.Runs)));
 
     /// <summary>
-    /// Section 5.5.2.3.1 of the GS1 General Specifications gives Figure 5-47, which encodes
-    /// (01)90614141000015(3202)000150, as 38.35 millimetres wide at an X dimension of 0.254 millimetre,
-    /// 151 modules, and 34X high. No quiet zone is required.
+    /// Section 5.5.2.3.1 of the GS1 General Specifications gives Figure 5-47, which encodes (01)90614141000015(3202)000150, as 38.35 millimetres wide at an X
+    /// dimension of 0.254 millimetre, 151 modules, and 34X high. No quiet zone is required.
     /// </summary>
     [Fact]
     public void Gs1DataBarExpanded_MatchesTheDimensionsOfFigure547()
@@ -147,8 +144,8 @@ public class Gs1DataBarExpandedSymbologyTests
     }
 
     /// <summary>
-    /// Section 4.14 rule 3b of the GS1 General Specifications: when Application Identifier (8200) appears,
-    /// its URL does not appear in the human readable interpretation, in either form of the symbol.
+    /// Section 4.14 rule 3b of the GS1 General Specifications: when Application Identifier (8200) appears, its URL does not appear in the human readable
+    /// interpretation, in either form of the symbol.
     /// </summary>
     [Fact]
     public void Gs1DataBarExpanded_LeavesTheUrlOfApplicationIdentifier8200OutOfTheText()
@@ -162,9 +159,8 @@ public class Gs1DataBarExpandedSymbologyTests
     }
 
     /// <summary>
-    /// The compressed methods carry the GTIN of Application Identifier (01) without its check digit, so a
-    /// wrong check digit is refused. A character outside the general purpose field and data longer than 21
-    /// data characters are refused too.
+    /// The compressed methods carry the GTIN of Application Identifier (01) without its check digit, so a wrong check digit is refused. A character outside the
+    /// general purpose field and data longer than 21 data characters are refused too.
     /// </summary>
     [Theory]
     [InlineData("(01)90614141000016(3202)000150")]

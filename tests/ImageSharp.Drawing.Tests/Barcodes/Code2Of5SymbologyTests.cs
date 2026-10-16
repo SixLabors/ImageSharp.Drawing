@@ -6,10 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for the five plain 2 of 5 symbologies. Each expected run string is the alternating bar
-/// and space module widths, starting with a bar, taken verbatim from an independent reference
-/// implementation through its raw encoding API. That implementation draws a wide element three modules
-/// wide for these symbologies, as this library does, so the strings compare directly.
+/// Encoder tests for the five plain 2 of 5 symbologies. Each expected run string is the alternating bar and space module widths, starting with a bar, taken
+/// verbatim from an independent reference implementation through its raw encoding API. That implementation draws a wide element three modules wide for these
+/// symbologies, as this library does, so the strings compare directly.
 /// </summary>
 public class Code2Of5SymbologyTests
 {
@@ -34,9 +33,8 @@ public class Code2Of5SymbologyTests
         => Assert.Equal(reference, Encode(symbologyType, CheckCharacterMode.None, true, text));
 
     /// <summary>
-    /// Appendix C of AIM USS-I 2/5 weights the digits 3 and 1 alternately from the right, starting with 3,
-    /// and the check digit lifts the sum to the next multiple of ten. For 1234 the sum is 12 + 3 + 6 + 1 =
-    /// 22, so the check digit is 8. The reference vectors are the ones it emits with its check digit
+    /// Appendix C of AIM USS-I 2/5 weights the digits 3 and 1 alternately from the right, starting with 3, and the check digit lifts the sum to the next
+    /// multiple of ten. For 1234 the sum is 12 + 3 + 6 + 1 = 22, so the check digit is 8. The reference vectors are the ones it emits with its check digit
     /// turned on.
     /// </summary>
     /// <param name="symbologyType">The symbology under test.</param>
@@ -51,8 +49,7 @@ public class Code2Of5SymbologyTests
         => Assert.Equal(reference, Encode(symbologyType, CheckCharacterMode.Compute, true, "1234"));
 
     /// <summary>
-    /// A supplied check digit is validated against the data and carried once, so the symbol is the one
-    /// the calculated check digit produces.
+    /// A supplied check digit is validated against the data and carried once, so the symbol is the one the calculated check digit produces.
     /// </summary>
     /// <param name="symbologyType">The symbology under test.</param>
     [Theory]
@@ -74,12 +71,9 @@ public class Code2Of5SymbologyTests
     }
 
     /// <summary>
-    /// The printed line shows the digits the symbol carries. The check digit prints by default, and a
-    /// caller can keep it off the printed line.
+    /// The printed line shows the digits the symbol carries. The check digit prints by default, and a caller can keep it off the printed line.
     /// </summary>
-    /// <param name="checkDigit">
-    /// Whether the symbol carries the check digit, and whether the encoder calculates it or validates it.
-    /// </param>
+    /// <param name="checkDigit"> Whether the symbol carries the check digit, and whether the encoder calculates it or validates it. </param>
     /// <param name="printCheckDigit">Whether the check digit is part of the printed line.</param>
     /// <param name="text">The text to encode.</param>
     /// <param name="expected">The printed line.</param>

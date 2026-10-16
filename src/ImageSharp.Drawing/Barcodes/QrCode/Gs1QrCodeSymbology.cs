@@ -6,24 +6,22 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// GS1 QR Code, section 5.7 of the GS1 General Specifications: a QR Code symbol that carries GS1 element
-/// strings. The symbol is in FNC1 first position mode, and an FNC1 character separates an element string of
-/// variable length from the next one.
+/// GS1 QR Code, section 5.7 of the GS1 General Specifications: a QR Code symbol that carries GS1 element strings. The symbol is in FNC1 first position mode,
+/// and an FNC1 character separates an element string of variable length from the next one.
 /// <para>
-/// The input is the element string syntax the standard prints: an Application Identifier in parentheses,
-/// then its data, repeated. For example, <c>(01)09521234543213(17)120508(10)ABCD1234</c>. The symbol does
-/// not carry the parentheses.
+/// The input is the element string syntax the standard prints: an Application Identifier in parentheses, then its data, repeated. For example,
+/// <c>(01)09521234543213(17)120508(10)ABCD1234</c>. The symbol does not carry the parentheses.
 /// </para>
 /// <para>
-/// When a font is set, the element strings print below the symbol, one on each line, with the Application
-/// Identifiers in parentheses. An element string of Application Identifier (8200) does not print.
+/// When a font is set, the element strings print below the symbol, one on each line, with the Application Identifiers in parentheses. An element string of
+/// Application Identifier (8200) does not print.
 /// </para>
 /// </summary>
 public sealed class Gs1QrCodeSymbology : BarcodeSymbology
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="Gs1QrCodeSymbology"/> class at error correction level M.
-    /// The symbol takes the smallest version that holds the data.
+    /// Initializes a new instance of the <see cref="Gs1QrCodeSymbology"/> class at error correction level M. The symbol takes the smallest version that holds
+    /// the data.
     /// </summary>
     public Gs1QrCodeSymbology()
         : this(QrErrorCorrectionLevel.M)
@@ -31,8 +29,7 @@ public sealed class Gs1QrCodeSymbology : BarcodeSymbology
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="Gs1QrCodeSymbology"/> class. The symbol takes the
-    /// smallest version that holds the data.
+    /// Initializes a new instance of the <see cref="Gs1QrCodeSymbology"/> class. The symbol takes the smallest version that holds the data.
     /// </summary>
     /// <param name="errorCorrectionLevel">The error correction level.</param>
     public Gs1QrCodeSymbology(QrErrorCorrectionLevel errorCorrectionLevel)

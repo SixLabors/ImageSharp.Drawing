@@ -4,16 +4,15 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The Micro QR Code symbology, ISO/IEC 18004: a square matrix of 11 x 11 to 17 x 17 modules, versions M1
-/// to M4, with one finder pattern. Version M1 carries digits only, M2 digits and the Alphanumeric
-/// characters, and M3 and M4 also the characters U+0000 to U+00FF in Byte mode. Error correction level H
-/// does not exist, level Q exists in M4 only, and M1 detects errors without correcting them.
+/// The Micro QR Code symbology, ISO/IEC 18004: a square matrix of 11 x 11 to 17 x 17 modules, versions M1 to M4, with one finder pattern. Version M1 carries
+/// digits only, M2 digits and the Alphanumeric characters, and M3 and M4 also the characters U+0000 to U+00FF in Byte mode. Error correction level H does not
+/// exist, level Q exists in M4 only, and M1 detects errors without correcting them.
 /// </summary>
 public sealed class MicroQrCodeSymbology : BarcodeSymbology
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="MicroQrCodeSymbology"/> class at error correction level
-    /// L. The symbol takes the smallest version that holds the data.
+    /// Initializes a new instance of the <see cref="MicroQrCodeSymbology"/> class at error correction level L. The symbol takes the smallest version that holds
+    /// the data.
     /// </summary>
     public MicroQrCodeSymbology()
         : this(QrErrorCorrectionLevel.L)
@@ -21,8 +20,7 @@ public sealed class MicroQrCodeSymbology : BarcodeSymbology
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="MicroQrCodeSymbology"/> class. The symbol takes the
-    /// smallest version that holds the data at the level.
+    /// Initializes a new instance of the <see cref="MicroQrCodeSymbology"/> class. The symbol takes the smallest version that holds the data at the level.
     /// </summary>
     /// <param name="errorCorrectionLevel">The error correction level, L, M or Q.</param>
     public MicroQrCodeSymbology(QrErrorCorrectionLevel errorCorrectionLevel)
@@ -57,8 +55,7 @@ public sealed class MicroQrCodeSymbology : BarcodeSymbology
     public QrErrorCorrectionLevel ErrorCorrectionLevel { get; }
 
     /// <summary>
-    /// Gets the version, 1 to 4 for M1 to M4, or <see langword="null"/> when the version follows from the
-    /// data.
+    /// Gets the version, 1 to 4 for M1 to M4, or <see langword="null"/> when the version follows from the data.
     /// </summary>
     public int? Version { get; }
 

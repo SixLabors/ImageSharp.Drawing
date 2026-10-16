@@ -9,9 +9,9 @@ using SixLabors.ImageSharp.Processing;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Golden image tests for <see cref="DrawingCanvas.DrawBarcode(BarcodeSymbology, string, BarcodeOptions, PointF)"/>.
-/// The encoder tests already pin the module sequences, so these tests cover the rendering layer: module
-/// scaling, quiet zones, guard bar extension, background painting, brushes and the human readable text.
+/// Golden image tests for <see cref="DrawingCanvas.DrawBarcode(BarcodeSymbology, string, BarcodeOptions, PointF)"/>. The encoder tests already pin the module
+/// sequences, so these tests cover the rendering layer: module scaling, quiet zones, guard bar extension, background painting, brushes and the human readable
+/// text.
 /// </summary>
 [GroupOutput("Barcodes")]
 public class DrawBarcodeTests
@@ -65,8 +65,8 @@ public class DrawBarcodeTests
         => RunTest(provider, new IsbnSymbology(), "978-0-306-40615-7", CreateTextOptions());
 
     /// <summary>
-    /// The caption prints at the size the caller gave it, rather than being scaled to the symbol width, so
-    /// it overhangs the bars and sets the width of the drawn area itself.
+    /// The caption prints at the size the caller gave it, rather than being scaled to the symbol width, so it overhangs the bars and sets the width of the
+    /// drawn area itself.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The image provider.</param>
@@ -886,8 +886,7 @@ public class DrawBarcodeTests
         => RunTest(provider, new MicroQrCodeSymbology(), "Micro QR!", CreateMatrixOptions());
 
     /// <summary>
-    /// Example 1 of Annex A of the QR-bill guidelines, Table 17, drawn at the 46 mm width of section 6.4 with
-    /// the Swiss cross of section 6.4.2 over its centre.
+    /// Example 1 of Annex A of the QR-bill guidelines, Table 17, drawn at the 46 mm width of section 6.4 with the Swiss cross of section 6.4.2 over its centre.
     /// </summary>
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
@@ -900,8 +899,8 @@ public class DrawBarcodeTests
     }
 
     /// <summary>
-    /// The 93 character message of Figure 2 of ISO/IEC 16023 at the nominal X dimension of 0.88 mm, Table 7. The
-    /// resolution makes a module 7 pixels, the module pitch of the reference image at its scale of 2.
+    /// The 93 character message of Figure 2 of ISO/IEC 16023 at the nominal X dimension of 0.88 mm, Table 7. The resolution makes a module 7 pixels, the module
+    /// pitch of the reference image at its scale of 2.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="provider">The test image provider.</param>
@@ -938,6 +937,24 @@ public class DrawBarcodeTests
     public void HanXin<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => RunTest(provider, new HanXinSymbology(), "Han Xin Code", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void DotCode<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new DotCodeSymbology(), "This is DotCode", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DotCode<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DotCodeSymbology(), "(01)09521234543213(17)240101(10)ABC123", CreateMatrixOptions());
+
+    [Theory]
+    [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+    public void Gs1DotCode_WithText<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => RunTest(provider, new Gs1DotCodeSymbology(), "(01)09521234543213(17)240101(10)ABC123", CreateMatrixTextOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
@@ -1021,11 +1038,7 @@ public class DrawBarcodeTests
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
     public void Gs1DigitalLinkQrCode_WithText<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
-        => RunTest(
-            provider,
-            new Gs1DigitalLinkQrCodeSymbology(),
-            "https://id.gs1.org/01/09521234543213/22/ABC%2D123?99=XYZ-987",
-            CreateMatrixTextOptions());
+        => RunTest(provider, new Gs1DigitalLinkQrCodeSymbology(), "https://id.gs1.org/01/09521234543213/22/ABC%2D123?99=XYZ-987", CreateMatrixTextOptions());
 
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
@@ -1038,8 +1051,8 @@ public class DrawBarcodeTests
             CreateMatrixTextOptions());
 
     /// <summary>
-    /// Without the quiet zones the symbol starts at the draw origin, the text still starts one quiet zone
-    /// below the symbol, and no clear space surrounds the text.
+    /// Without the quiet zones the symbol starts at the draw origin, the text still starts one quiet zone below the symbol, and no clear space surrounds the
+    /// text.
     /// </summary>
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
@@ -1052,8 +1065,7 @@ public class DrawBarcodeTests
     }
 
     /// <summary>
-    /// Without the quiet zones a centred line wider than the symbol shifts the rendering right, so the
-    /// line starts at the draw origin.
+    /// Without the quiet zones a centred line wider than the symbol shifts the rendering right, so the line starts at the draw origin.
     /// </summary>
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
@@ -1078,8 +1090,7 @@ public class DrawBarcodeTests
         => RunTest(provider, new Code32Symbology(), "012345676", CreateTextOptions());
 
     /// <summary>
-    /// Disabling the quiet zones must shift the first bar to the draw origin, and a non-solid brush must
-    /// flow through to the bar fill unchanged.
+    /// Disabling the quiet zones must shift the first bar to the draw origin, and a non-solid brush must flow through to the bar fill unchanged.
     /// </summary>
     [Theory]
     [WithBlankImage(1, 1, PixelTypes.Rgba32)]
@@ -1103,9 +1114,8 @@ public class DrawBarcodeTests
         => provider.RunValidatingProcessorTest(
             x =>
             {
-                // The image is the symbol, with no slack around it. The provider hands over a one pixel
-                // canvas, the measurer reports the area the symbol needs, and the canvas grows to it.
-                // Slack would hide a symbol that grew, and a shortfall would clip one.
+                // The image is the symbol, with no slack around it. The provider hands over a one pixel canvas, the measurer reports the area the symbol needs,
+                // and the canvas grows to it. Slack would hide a symbol that grew, and a shortfall would clip one.
                 RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, text, options, PointF.Empty);
                 x.Resize(new Size((int)MathF.Ceiling(bounds.Width), (int)MathF.Ceiling(bounds.Height)));
                 x.Paint(canvas => canvas.DrawBarcode(symbology, text, options, PointF.Empty));
@@ -1114,8 +1124,7 @@ public class DrawBarcodeTests
             appendSourceFileOrDescription: false);
 
     /// <summary>
-    /// The linear goldens draw at 144 dots per inch with a one point X dimension and a 50 point bar
-    /// height: 2 px modules and 100 px bars.
+    /// The linear goldens draw at 144 dots per inch with a one point X dimension and a 50 point bar height: 2 px modules and 100 px bars.
     /// </summary>
     private static BarcodeOptions CreateOptions()
         => CreateOptions(50F);
@@ -1135,8 +1144,7 @@ public class DrawBarcodeTests
         };
 
     /// <summary>
-    /// The postal and stacked goldens draw at 144 dots per inch at the X dimension and the bar height of
-    /// their specifications.
+    /// The postal and stacked goldens draw at 144 dots per inch at the X dimension and the bar height of their specifications.
     /// </summary>
     private static BarcodeOptions CreateNominalOptions()
         => new()
@@ -1164,8 +1172,8 @@ public class DrawBarcodeTests
         };
 
     /// <summary>
-    /// Draws the matrix symbols with the OCR-B font at 9 points. Its cap ink stands 0.678 em, 2.15mm, which
-    /// meets the 2mm character height of section 4.14 rule 2a.iii of the GS1 General Specifications.
+    /// Draws the matrix symbols with the OCR-B font at 9 points. Its cap ink stands 0.678 em, 2.15mm, which meets the 2mm character height of section 4.14 rule
+    /// 2a.iii of the GS1 General Specifications.
     /// </summary>
     /// <returns>The options.</returns>
     private static BarcodeOptions CreateMatrixTextOptions()
@@ -1187,9 +1195,8 @@ public class DrawBarcodeTests
     {
         BarcodeOptions options = CreateOptions(barHeight);
 
-        // GS1 prints the interpretation 2.75mm high at the 0.33mm X-dimension, so at 144 dots per inch it
-        // is 16.7px of ink. The cap ink of this font stands 0.678 em, giving 24.6px, 12.3 points, but the
-        // digit cell cap holds it to what fits a 7 module cell.
+        // GS1 prints the interpretation 2.75mm high at the 0.33mm X-dimension, so at 144 dots per inch it is 16.7px of ink. The cap ink of this font stands
+        // 0.678 em, giving 24.6px, 12.3 points, but the digit cell cap holds it to what fits a 7 module cell.
         options.Font = BarcodeFonts.OcrB.CreateFont(10.75F);
         return options;
     }

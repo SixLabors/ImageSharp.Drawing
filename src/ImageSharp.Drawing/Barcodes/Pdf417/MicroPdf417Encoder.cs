@@ -6,9 +6,8 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Builds MicroPDF417 symbols: 1 to 4 data columns between row address patterns, in one of 34 fixed
-/// sizes. The symbol characters and the error correction are those of PDF417, and the rows carry no start
-/// or stop character and no row indicators.
+/// Builds MicroPDF417 symbols: 1 to 4 data columns between row address patterns, in one of 34 fixed sizes. The symbol characters and the error correction are
+/// those of PDF417, and the rows carry no start or stop character and no row indicators.
 /// </summary>
 internal static class MicroPdf417Encoder
 {
@@ -53,14 +52,8 @@ internal static class MicroPdf417Encoder
     private const int AddressPatternElements = 6;
 
     /// <summary>
-    /// The number of values in one entry of <see cref="Sizes"/>.
-    /// </summary>
-    private const int SizeFields = 6;
-
-    /// <summary>
-    /// Gets the 34 symbol sizes in the order the encoder tries them, six values each: the data columns,
-    /// the rows, the error correction codewords, and the first left, centre and right row address
-    /// patterns. Only symbols of three or four columns carry a centre pattern.
+    /// Gets the 34 symbol sizes in the order the encoder tries them, one <see cref="SymbolSize"/> of six values each: the data columns, the rows, the error
+    /// correction codewords, and the first left, centre and right row address patterns. Only symbols of three or four columns carry a centre pattern.
     /// </summary>
     private static ReadOnlySpan<byte> Sizes =>
     [
@@ -101,8 +94,7 @@ internal static class MicroPdf417Encoder
     ];
 
     /// <summary>
-    /// Gets the 52 left and right row address patterns, each the 10 modules of three bars and three spaces
-    /// with the first module in bit 9.
+    /// Gets the 52 left and right row address patterns, each the 10 modules of three bars and three spaces with the first module in bit 9.
     /// </summary>
     private static ReadOnlySpan<short> SideAddressPatterns =>
     [
@@ -113,8 +105,7 @@ internal static class MicroPdf417Encoder
     ];
 
     /// <summary>
-    /// Gets the 52 centre row address patterns, each the 10 modules of three bars and three spaces with the
-    /// first module in bit 9.
+    /// Gets the 52 centre row address patterns, each the 10 modules of three bars and three spaces with the first module in bit 9.
     /// </summary>
     private static ReadOnlySpan<short> CentreAddressPatterns =>
     [
@@ -134,9 +125,8 @@ internal static class MicroPdf417Encoder
     /// <exception cref="ArgumentException">The data is not valid or does not fit the symbol.</exception>
     public static void BuildSymbol(ReadOnlySpan<char> text, int? columns, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        // A character takes at most two data codewords, as in PDF417, and a message format takes one macro
-        // codeword more. The text is bounded, so the builder never grows: short data works inline and
-        // longer data rents once.
+        // A character takes at most two data codewords, as in PDF417, and a message format takes one macro codeword more. The text is bounded, so the builder
+        // never grows: short data works inline and longer data rents once.
         Guard.MustBeLessThanOrEqualTo(text.Length, Pdf417Codewords.MicroMaximumLength, nameof(text));
         InlineArray64<int> dataStorage = default;
         int capacity = (2 * text.Length) + 2;
@@ -163,60 +153,47 @@ internal static class MicroPdf417Encoder
     private static void BuildSymbol(ReadOnlySpan<int> data, int? columns, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         ReadOnlySpan<byte> sizes = Sizes;
-        int size = 0;
-        while (size < sizes.Length
-            && ((columns.HasValue && columns.Value != sizes[size]) || data.Length > (sizes[size] * sizes[size + 1]) - sizes[size + 2]))
+        int offset = 0;
+        while (offset < sizes.Length && !new SymbolSize(sizes.Slice(offset, SymbolSize.Length)).Holds(data.Length, columns))
         {
-            size += SizeFields;
+            offset += SymbolSize.Length;
         }
 
-        if (size == sizes.Length)
+        if (offset == sizes.Length)
         {
             throw new ArgumentException(columns.HasValue
                 ? $"The data takes {data.Length} codewords and does not fit in a MicroPDF417 symbol of {columns.Value} columns."
                 : $"The data takes {data.Length} codewords and does not fit in a MicroPDF417 symbol.");
         }
 
-        // The data codewords, the pad codewords that fill the data region with 900, and the error
-        // correction codewords. A MicroPDF417 symbol has no Symbol Length Descriptor.
-        int c = sizes[size];
-        int r = sizes[size + 1];
-        int k = sizes[size + 2];
+        // The data codewords, the pad codewords that fill the data region with 900, and the error correction codewords. A MicroPDF417 symbol has no Symbol
+        // Length Descriptor. A symbol holds at most MaximumCodewords codewords, so they fit inline.
+        SymbolSize size = new(sizes.Slice(offset, SymbolSize.Length));
+        int k = size.ErrorCorrection;
         InlineArray256<int> codewordStorage = default;
-        Span<int> codewords = ((Span<int>)codewordStorage)[..(c * r)];
+        Span<int> codewords = ((Span<int>)codewordStorage)[..(size.Columns * size.Rows)];
         data.CopyTo(codewords);
         codewords[data.Length..^k].Fill(Pdf417Codewords.Pad);
 
-        // The symbol holds at most 256 codewords, so the generator coefficients fit inline too.
+        // The generator coefficients take one more than the error correction codewords, which are fewer than MaximumCodewords, so they fit inline too.
         InlineArray256<int> alphaStorage = default;
         Pdf417Codewords.AppendErrorCorrection(codewords, k, alphaStorage);
 
-        BuildRows(codewords, c, r, sizes[size + 3], sizes[size + 4], sizes[size + 5], options, ref symbol);
+        BuildRows(codewords, size, options, ref symbol);
     }
 
     /// <summary>
-    /// Builds the rows of the symbol: the left row address pattern, the codewords of the row with the centre
-    /// row address pattern after the first column of three or the second of four, the right row address
-    /// pattern and a single module bar.
+    /// Builds the rows of the symbol: the left row address pattern, the codewords of the row with the centre row address pattern after the first column of
+    /// three or the second of four, the right row address pattern and a single module bar.
     /// </summary>
     /// <param name="codewords">The codewords in row order, error correction codewords included.</param>
-    /// <param name="c">The number of data columns.</param>
-    /// <param name="r">The number of rows.</param>
-    /// <param name="left">The left row address pattern of the first row, counted from 1.</param>
-    /// <param name="centre">The centre row address pattern of the first row, counted from 1.</param>
-    /// <param name="right">The right row address pattern of the first row, counted from 1.</param>
+    /// <param name="size">The symbol size.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
-    private static void BuildRows(
-        ReadOnlySpan<int> codewords,
-        int c,
-        int r,
-        int left,
-        int centre,
-        int right,
-        BarcodeOptions options,
-        ref BarcodeSymbol symbol)
+    private static void BuildRows(ReadOnlySpan<int> codewords, SymbolSize size, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
+        int c = size.Columns;
+        int r = size.Rows;
         bool hasCentre = c >= 3;
         int centreAfter = c - 2;
         int runCount = (2 * AddressPatternElements) + (c * Pdf417Patterns.ElementCount) + 1 + (hasCentre ? AddressPatternElements : 0);
@@ -228,11 +205,10 @@ internal static class MicroPdf417Encoder
         symbol.BeginStacked(r, r * runCount, r * ((runCount + 1) >> 1), xDimension);
         for (int row = 0; row < r; row++)
         {
-            // Each row address pattern steps through its table from the first one of the size, and the
-            // cluster of the row follows the left pattern: every third pattern shares one of the three
-            // clusters.
-            int leftIndex = (row + left - 1) % AddressPatternCount;
-            int cluster = (row + left - 1) % 3;
+            // Each row address pattern steps through its table from the first one of the size, and the cluster of the row follows the left pattern: every third
+            // pattern shares one of the three clusters.
+            int leftIndex = (row + size.LeftPattern - 1) % AddressPatternCount;
+            int cluster = (row + size.LeftPattern - 1) % 3;
             ReadOnlySpan<int> clusterPatterns = patterns.Slice(cluster * Pdf417Patterns.CodewordCount, Pdf417Patterns.CodewordCount);
 
             Span<int> runs = symbol.AddRow(runCount, out Span<float> heights, out _);
@@ -243,18 +219,80 @@ internal static class MicroPdf417Encoder
             {
                 if (hasCentre && column == centreAfter)
                 {
-                    int centreModules = CentreAddressPatterns[(row + centre - 1) % AddressPatternCount];
+                    int centreModules = CentreAddressPatterns[(row + size.CentrePattern - 1) % AddressPatternCount];
                     Pdf417Patterns.AppendElements(runs, ref index, centreModules, AddressPatternModules, AddressPatternElements);
                 }
 
                 Pdf417Patterns.AppendCharacter(runs, ref index, clusterPatterns[codewords[(row * c) + column]]);
             }
 
-            int rightModules = SideAddressPatterns[(row + right - 1) % AddressPatternCount];
+            int rightModules = SideAddressPatterns[(row + size.RightPattern - 1) % AddressPatternCount];
             Pdf417Patterns.AppendElements(runs, ref index, rightModules, AddressPatternModules, AddressPatternElements);
             runs[index] = 1;
         }
 
         symbol.EndStacked(0F, QuietZone, QuietZone, QuietZone, QuietZone);
+    }
+
+    /// <summary>
+    /// One MicroPDF417 symbol size: a view of the six bytes of an entry of <see cref="Sizes"/>.
+    /// </summary>
+    private readonly ref struct SymbolSize
+    {
+        /// <summary>
+        /// The number of bytes of an entry of <see cref="Sizes"/>.
+        /// </summary>
+        public const int Length = 6;
+
+        /// <summary>
+        /// The six bytes of the entry.
+        /// </summary>
+        private readonly ReadOnlySpan<byte> entry;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SymbolSize"/> struct.
+        /// </summary>
+        /// <param name="entry">The six bytes of the entry.</param>
+        public SymbolSize(ReadOnlySpan<byte> entry) => this.entry = entry;
+
+        /// <summary>
+        /// Gets the number of data columns.
+        /// </summary>
+        public int Columns => this.entry[0];
+
+        /// <summary>
+        /// Gets the number of rows.
+        /// </summary>
+        public int Rows => this.entry[1];
+
+        /// <summary>
+        /// Gets the number of error correction codewords.
+        /// </summary>
+        public int ErrorCorrection => this.entry[2];
+
+        /// <summary>
+        /// Gets the left row address pattern of the first row, counted from 1.
+        /// </summary>
+        public int LeftPattern => this.entry[3];
+
+        /// <summary>
+        /// Gets the centre row address pattern of the first row, counted from 1, or 0 for a symbol of one or two columns.
+        /// </summary>
+        public int CentrePattern => this.entry[4];
+
+        /// <summary>
+        /// Gets the right row address pattern of the first row, counted from 1.
+        /// </summary>
+        public int RightPattern => this.entry[5];
+
+        /// <summary>
+        /// Returns whether the size holds the data codewords: it has the requested columns, if any, and its matrix less the error correction codewords holds
+        /// the data.
+        /// </summary>
+        /// <param name="dataLength">The number of data codewords.</param>
+        /// <param name="columns">The requested number of data columns, or <see langword="null"/> for any.</param>
+        /// <returns><see langword="true"/> when the size holds the data.</returns>
+        public bool Holds(int dataLength, int? columns)
+            => (!columns.HasValue || columns.Value == this.Columns) && dataLength <= (this.Columns * this.Rows) - this.ErrorCorrection;
     }
 }

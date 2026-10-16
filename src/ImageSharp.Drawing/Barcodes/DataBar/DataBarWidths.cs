@@ -4,25 +4,23 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The element width algorithm every GS1 DataBar symbol character uses. A set of k elements over n modules
-/// has a fixed number of width combinations, and a value selects one of them in order: the widths are
-/// chosen element by element, each as narrow as the count of combinations still ahead of the value allows.
+/// The element width algorithm every GS1 DataBar symbol character uses. A set of k elements over n modules has a fixed number of width combinations, and a
+/// value selects one of them in order: the widths are chosen element by element, each as narrow as the count of combinations still ahead of the value allows.
 /// </summary>
 internal static class DataBarWidths
 {
     /// <summary>
     /// Writes the element widths that encode a value.
     /// </summary>
-    /// <param name="widths">The buffer of <paramref name="elements"/> widths.</param>
+    /// <param name="widths">The buffer that receives the widths, one for each element.</param>
     /// <param name="value">The value, from zero to one less than the number of combinations.</param>
     /// <param name="modules">The number of modules the elements span.</param>
-    /// <param name="elements">The number of elements.</param>
     /// <param name="maxWidth">The widest an element may be, in modules.</param>
     /// <param name="noNarrow">Whether combinations without a one module element are excluded.</param>
-    public static void Calculate(Span<int> widths, int value, int modules, int elements, int maxWidth, bool noNarrow)
+    public static void Calculate(Span<int> widths, int value, int modules, int maxWidth, bool noNarrow)
     {
-        // Each bit of narrowMask is set while the element it stands for is one module wide, so the
-        // mask is zero once no element so far is narrow.
+        // Each bit of narrowMask is set while the element it stands for is one module wide, so the mask is zero once no element so far is narrow.
+        int elements = widths.Length;
         int narrowMask = 0;
         int bar;
         for (bar = 0; bar < elements - 1; bar++)
@@ -32,12 +30,10 @@ internal static class DataBarWidths
             int subValue;
             while (true)
             {
-                // The combinations of the remaining modules over the remaining elements with this element
-                // at its current width.
+                // The combinations of the remaining modules over the remaining elements with this element at its current width.
                 subValue = Combinations(modules - elementWidth - 1, elements - bar - 2);
 
-                // Less those with no one module element, when such combinations are excluded and no
-                // element so far is narrow.
+                // Less those with no one module element, when such combinations are excluded and no element so far is narrow.
                 if (noNarrow && narrowMask == 0 && modules - elementWidth - (elements - bar - 1) >= elements - bar - 1)
                 {
                     subValue -= Combinations(modules - elementWidth - (elements - bar), elements - bar - 2);
@@ -80,9 +76,8 @@ internal static class DataBarWidths
     }
 
     /// <summary>
-    /// Returns the number of combinations of r items from n, n! / (r! (n - r)!), and 1 when r exceeds n.
-    /// The product runs down from n and divides by the smaller factorial as it goes, so the intermediate
-    /// values stay small and every division is exact.
+    /// Returns the number of combinations of r items from n, n! / (r! (n - r)!), and 1 when r exceeds n. The product runs down from n and divides by the
+    /// smaller factorial as it goes, so the intermediate values stay small and every division is exact.
     /// </summary>
     /// <param name="n">The number of items.</param>
     /// <param name="r">The number chosen.</param>

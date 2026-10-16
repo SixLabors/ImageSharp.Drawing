@@ -4,8 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The content checks a component of a GS1 Application Identifier takes, by the names the GS1 Barcode
-/// Syntax Dictionary gives them.
+/// The content checks a component of a GS1 Application Identifier takes, by the names the GS1 Barcode Syntax Dictionary gives them.
 /// </summary>
 internal enum Gs1Linter
 {

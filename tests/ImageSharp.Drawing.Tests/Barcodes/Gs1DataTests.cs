@@ -6,9 +6,8 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// The GS1 data rules every GS1 symbology applies to its element strings, tested through GS1-128: the
-/// format of each Application Identifier, and the invalid pairs and mandatory associations of section 4.13
-/// of the GS1 General Specifications.
+/// The GS1 data rules every GS1 symbology applies to its element strings, tested through GS1-128: the format of each Application Identifier, and the invalid
+/// pairs and mandatory associations of section 4.13 of the GS1 General Specifications.
 /// </summary>
 public class Gs1DataTests
 {
@@ -34,8 +33,7 @@ public class Gs1DataTests
         => Assert.Throws<ArgumentException>(() => Encode("(01)09521234543214"));
 
     /// <summary>
-    /// Section 3.4.7: a date is YYMMDD with a real month and day, and a day of 00 when the day is not
-    /// needed. February 2026 has 28 days.
+    /// Section 3.4.7: a date is YYMMDD with a real month and day, and a day of 00 when the day is not needed. February 2026 has 28 days.
     /// </summary>
     /// <param name="date">The date.</param>
     [Theory]
@@ -46,8 +44,7 @@ public class Gs1DataTests
         => Assert.Throws<ArgumentException>(() => Encode("(01)09521234543213(17)" + date));
 
     /// <summary>
-    /// Section 7.11, Table 7-20: the data of an alphanumeric Application Identifier uses GS1 AI encodable
-    /// character set 82, which has no tilde or space.
+    /// Section 7.11, Table 7-20: the data of an alphanumeric Application Identifier uses GS1 AI encodable character set 82, which has no tilde or space.
     /// </summary>
     /// <param name="batch">The batch or lot number.</param>
     [Theory]
@@ -57,8 +54,7 @@ public class Gs1DataTests
         => Assert.Throws<ArgumentException>(() => Encode("(01)09521234543213(10)" + batch));
 
     /// <summary>
-    /// An Application Identifier the GS1 General Specifications do not allocate has no format, so it is
-    /// rejected, and so is data longer than the format allows.
+    /// An Application Identifier the GS1 General Specifications do not allocate has no format, so it is rejected, and so is data longer than the format allows.
     /// </summary>
     /// <param name="text">The element strings.</param>
     [Theory]
@@ -68,9 +64,8 @@ public class Gs1DataTests
         => Assert.Throws<ArgumentException>(() => Encode(text));
 
     /// <summary>
-    /// Section 4.13.1, Table 4-4: GTIN with the count of units contained (37), Serial Number (21) with the
-    /// third party controlled serialised extension (235), and two GTINs of different values, may not appear
-    /// together.
+    /// Section 4.13.1, Table 4-4: GTIN with the count of units contained (37), Serial Number (21) with the third party controlled serialised extension (235),
+    /// and two GTINs of different values, may not appear together.
     /// </summary>
     /// <param name="text">The element strings.</param>
     [Theory]
@@ -81,9 +76,8 @@ public class Gs1DataTests
         => Assert.Throws<ArgumentException>(() => Encode(text));
 
     /// <summary>
-    /// Section 4.13.2, Table 4-5: a batch or lot number requires a GTIN, a GTIN of contained trade items, a
-    /// Made-to-Order GTIN, an ITIP or an ITIP of contained trade items, and an expiration date requires the
-    /// item it dates.
+    /// Section 4.13.2, Table 4-5: a batch or lot number requires a GTIN, a GTIN of contained trade items, a Made-to-Order GTIN, an ITIP or an ITIP of contained
+    /// trade items, and an expiration date requires the item it dates.
     /// </summary>
     /// <param name="text">The element strings.</param>
     [Theory]
@@ -101,9 +95,8 @@ public class Gs1DataTests
         => Assert.Null(Record.Exception(() => Encode("(01)09521234543213(01)09521234543213")));
 
     /// <summary>
-    /// The country of origin (422) is an ISO 3166-1 numeric code, the ship to country (4307) an ISO 3166-1
-    /// alpha-2 code and the currency of an amount payable (3932) an ISO 4217 numeric code: 276 and DE are
-    /// Germany and 978 is the euro.
+    /// The country of origin (422) is an ISO 3166-1 numeric code, the ship to country (4307) an ISO 3166-1 alpha-2 code and the currency of an amount payable
+    /// (3932) an ISO 4217 numeric code: 276 and DE are Germany and 978 is the euro.
     /// </summary>
     /// <param name="text">The element strings.</param>
     [Theory]
@@ -117,8 +110,7 @@ public class Gs1DataTests
         => Assert.Null(Record.Exception(() => Encode(text)));
 
     /// <summary>
-    /// The codes 999 and 000, and the letters XX, are not in ISO 3166-1 or ISO 4217, and AE, APX and the
-    /// lower case bx are not package type codes.
+    /// The codes 999 and 000, and the letters XX, are not in ISO 3166-1 or ISO 4217, and AE, APX and the lower case bx are not package type codes.
     /// </summary>
     /// <param name="text">The element strings.</param>
     [Theory]

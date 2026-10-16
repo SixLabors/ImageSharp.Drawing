@@ -4,8 +4,8 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The position of one element string in a buffer, its Application Identifier and its data, with the
-/// dictionary entry of the Application Identifier, which is found once when the element string is parsed.
+/// The position of one element string in a buffer, its Application Identifier and its data, with the dictionary entry of the Application Identifier, which is
+/// found once when the element string is parsed.
 /// </summary>
 internal readonly struct Gs1Element
 {

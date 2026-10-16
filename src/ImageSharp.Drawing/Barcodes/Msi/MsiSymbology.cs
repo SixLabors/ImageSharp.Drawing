@@ -6,14 +6,12 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The MSI symbology, also called Modified Plessey. It carries the digits 0 to 9 between a start
-/// character and a stop character, which the printed line does not show.
+/// The MSI symbology, also called Modified Plessey. It carries the digits 0 to 9 between a start character and a stop character, which the printed line does
+/// not show.
 /// <para>
-/// The symbology is not self-checking, and the application chooses the check digits. The modulo 10
-/// calculation is the common one, and the modulo 11 calculation exists with the IBM weights 2 to 7 and
-/// the NCR weights 2 to 9. Each can be followed by a second modulo 10 check digit over the data and the
-/// first. A modulo 11 check value of 10 cannot be carried in one digit, and the encoder rejects data
-/// whose check value is 10. The check digits print after the data by default.
+/// The symbology is not self-checking, and the application chooses the check digits. The modulo 10 calculation is the common one, and the modulo 11 calculation
+/// exists with the IBM weights 2 to 7 and the NCR weights 2 to 9. Each can be followed by a second modulo 10 check digit over the data and the first. A modulo
+/// 11 check value of 10 cannot be carried in one digit, and the encoder rejects data whose check value is 10. The check digits print after the data by default.
 /// </para>
 /// </summary>
 public sealed class MsiSymbology : BarcodeSymbology
@@ -39,9 +37,7 @@ public sealed class MsiSymbology : BarcodeSymbology
     /// Initializes a new instance of the <see cref="MsiSymbology"/> class.
     /// </summary>
     /// <param name="checkDigit">The check digits the symbol carries after its data.</param>
-    /// <param name="printCheckDigits">
-    /// Whether the check digits the symbol carries are part of the human readable interpretation.
-    /// </param>
+    /// <param name="printCheckDigits"> Whether the check digits the symbol carries are part of the human readable interpretation. </param>
     public MsiSymbology(MsiCheckDigit checkDigit, bool printCheckDigits)
     {
         this.CheckDigit = checkDigit;
@@ -54,8 +50,8 @@ public sealed class MsiSymbology : BarcodeSymbology
     public MsiCheckDigit CheckDigit { get; }
 
     /// <summary>
-    /// Gets a value indicating whether the check digits the symbol carries are part of the human
-    /// readable interpretation. A symbol that carries none prints none either way.
+    /// Gets a value indicating whether the check digits the symbol carries are part of the human readable interpretation. A symbol that carries none prints
+    /// none either way.
     /// </summary>
     public bool PrintCheckDigits { get; }
 
@@ -68,10 +64,10 @@ public sealed class MsiSymbology : BarcodeSymbology
 
         BarcodeSymbology.ValidateDigits(text);
 
-        // The symbol carries the digits and at most two check digits. The text is at most MaximumLength
-        // digits, so a short symbol works inline and a longer one rents its digits once.
+        // The symbol carries the digits and at most two check digits. The text is at most MaximumLength digits, so a short symbol works inline and a longer one
+        // rents its digits once.
         InlineArray64<char> carriedStorage = default;
-        int capacity = text.Length + 2;
+        int capacity = text.Length + MsiEncoder.MaximumCheckDigits;
         ValueStringBuilder carried = capacity <= MsiEncoder.InlineBufferLength ? new(carriedStorage) : new(capacity);
         try
         {

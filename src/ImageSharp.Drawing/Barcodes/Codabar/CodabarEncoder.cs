@@ -4,16 +4,14 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Encodation for the Codabar symbology, which ANSI/AIM BC3-1995 and BS EN 798:1995 define. Every symbol
-/// character has seven elements, four bars and three spaces, of which two or three are wide, and a narrow
-/// inter-character gap follows it. Section 4.2 of BS EN 798 gives the structure: a quiet zone, a start
+/// Encodation for the Codabar symbology, which ANSI/AIM BC3-1995 and BS EN 798:1995 define. Every symbol character has seven elements, four bars and three
+/// spaces, of which two or three are wide, and a narrow inter-character gap follows it. Section 4.2 of BS EN 798 gives the structure: a quiet zone, a start
 /// character, one or more data characters, a stop character and a quiet zone.
 /// </summary>
 internal static class CodabarEncoder
 {
     /// <summary>
-    /// The characters the symbology encodes, in pattern order: the sixteen data characters, then the
-    /// four start and stop characters.
+    /// The characters the symbology encodes, in pattern order: the sixteen data characters, then the four start and stop characters.
     /// </summary>
     public const string Characters = "0123456789-$:/.+ABCD";
 
@@ -38,15 +36,13 @@ internal static class CodabarEncoder
     private const int ElementsPerCharacter = 7;
 
     /// <summary>
-    /// The width of a wide element in modules: the only whole number in the wide to narrow ratio range
-    /// of 2.25:1 to 3:1.
+    /// The width of a wide element in modules: the only whole number in the wide to narrow ratio range of 2.25:1 to 3:1.
     /// </summary>
     private const int WideElement = 3;
 
     /// <summary>
-    /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no
-    /// height. Section 4.4.1 (d) of BS EN 798 gives a minimum of 5.0 mm or 15 per cent of the symbol
-    /// width, whichever is greater.
+    /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no height. Section 4.4.1 (d) of BS EN 798 gives a minimum
+    /// of 5.0 mm or 15 per cent of the symbol width, whichever is greater.
     /// </summary>
     private const float NominalBarHeightFraction = 0.15F;
 
@@ -56,10 +52,8 @@ internal static class CodabarEncoder
     private const float MinimumBarHeightMillimetres = 5F;
 
     /// <summary>
-    /// Gets the element widths of every character, one bit per element, most significant element first,
-    /// in bar and space order: a set bit is a wide element and a clear bit a narrow one. The gap that
-    /// follows the character is not in the pattern. The entries are in the order of
-    /// <see cref="Characters"/>.
+    /// Gets the element widths of every character, one bit per element, most significant element first, in bar and space order: a set bit is a wide element and
+    /// a clear bit a narrow one. The gap that follows the character is not in the pattern. The entries are in the order of <see cref="Characters"/>.
     /// </summary>
     private static ReadOnlySpan<byte> Patterns =>
     [
@@ -68,9 +62,8 @@ internal static class CodabarEncoder
     ];
 
     /// <summary>
-    /// Returns the value of a character, which is its index in <see cref="Characters"/>. The letters
-    /// T, N, * and E are the alternative names of the start and stop characters A, B, C and D, and take
-    /// the same values.
+    /// Returns the value of a character, which is its index in <see cref="Characters"/>. The letters T, N, * and E are the alternative names of the start and
+    /// stop characters A, B, C and D, and take the same values.
     /// </summary>
     /// <param name="codePoint">The code point to value.</param>
     /// <returns>The value, or -1 when the character is not in the set.</returns>
@@ -91,10 +84,9 @@ internal static class CodabarEncoder
     };
 
     /// <summary>
-    /// Calculates the modulo 16 check character over a symbol. Annex A.3 of BS EN 798 leaves the check
-    /// character to the application. The values of the start character, the data characters and the stop
-    /// character are added, and the check character is the one whose value lifts the sum to the next
-    /// multiple of sixteen.
+    /// Calculates the modulo 16 check character over a symbol. Annex A.3 of BS EN 798 leaves the check character to the application. The values of the start
+    /// character, the data characters and the stop character are added, and the check character is the one whose value lifts the sum to the next multiple of
+    /// sixteen.
     /// </summary>
     /// <param name="head">The start character and the data.</param>
     /// <param name="stop">The stop character.</param>
@@ -102,21 +94,19 @@ internal static class CodabarEncoder
     public static char CheckCharacter(ReadOnlySpan<char> head, char stop)
     {
         int sum = Value(stop);
-        for (int i = 0; i < head.Length; i++)
+        foreach (char c in head)
         {
-            sum += Value(head[i]);
+            sum += Value(c);
         }
 
         return Characters[(FirstStartStop - (sum % FirstStartStop)) % FirstStartStop];
     }
 
     /// <summary>
-    /// Encodes the characters and builds the symbol. The runs carry the start character, the data, an
-    /// optional check character and the stop character, each followed by its inter-character gap except
-    /// the stop character, so the runs end on a bar. The check character sits before the stop character.
-    /// Codabar carries no guard bars, so every bar runs the full height, and the human readable
-    /// interpretation sits below the symbol: the start character and the data, the check character when it
-    /// prints, and the stop character.
+    /// Encodes the characters and builds the symbol. The runs carry the start character, the data, an optional check character and the stop character, each
+    /// followed by its inter-character gap except the stop character, so the runs end on a bar. The check character sits before the stop character. Codabar
+    /// carries no guard bars, so every bar runs the full height, and the human readable interpretation sits below the symbol: the start character and the data,
+    /// the check character when it prints, and the stop character.
     /// </summary>
     /// <param name="head">The start character and the data, already validated.</param>
     /// <param name="stop">The stop character, already validated.</param>
@@ -131,9 +121,9 @@ internal static class CodabarEncoder
         Span<int> runs = symbol.BeginLinear((characters * (ElementsPerCharacter + 1)) - 1, xDimension, out Span<float> heights, out _);
         int written = 0;
 
-        for (int i = 0; i < head.Length; i++)
+        foreach (char c in head)
         {
-            Append(runs, ref written, Value(head[i]), true);
+            Append(runs, ref written, Value(c), true);
         }
 
         if (check is not null)

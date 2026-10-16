@@ -6,11 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Gs1DataBarOmnidirectionalSymbology"/>. Each expected sequence is the
-/// alternating bar and space module widths, starting with a zero width bar before the guard space, taken
-/// from an independent reference implementation through its raw encoding API and confirmed by a second
-/// one. A sequence carries the guard patterns, the four symbol characters and the two finder patterns that
-/// encode the check value.
+/// Encoder tests for <see cref="Gs1DataBarOmnidirectionalSymbology"/>. Each expected sequence is the alternating bar and space module widths, starting with a
+/// zero width bar before the guard space, taken from an independent reference implementation through its raw encoding API and confirmed by a second one. A
+/// sequence carries the guard patterns, the four symbol characters and the two finder patterns that encode the check value.
 /// </summary>
 public class Gs1DataBarOmnidirectionalSymbologyTests
 {
@@ -32,9 +30,8 @@ public class Gs1DataBarOmnidirectionalSymbologyTests
         => Assert.Equal(Runs("(01)00012345678905"), Runs("(01)0001234567890"));
 
     /// <summary>
-    /// Section 5.5.2.1.1 of the GS1 General Specifications: "Its dimensions are 96X wide, starting with a 1X
-    /// space and ending with a 1X bar". No quiet zone is required, and the nominal height is the 46X of
-    /// Table 5-44.
+    /// Section 5.5.2.1.1 of the GS1 General Specifications: "Its dimensions are 96X wide, starting with a 1X space and ending with a 1X bar". No quiet zone is
+    /// required, and the nominal height is the 46X of Table 5-44.
     /// </summary>
     [Fact]
     public void Gs1DataBarOmnidirectional_IsNinetySixModulesWideAndFortySixHigh()
@@ -75,8 +72,8 @@ public class Gs1DataBarOmnidirectionalSymbologyTests
     }
 
     /// <summary>
-    /// The symbol carries Application Identifier (01) and its 14 digit GTIN, so anything else is refused,
-    /// and a given check digit must be the one section 7.9 calculates.
+    /// The symbol carries Application Identifier (01) and its 14 digit GTIN, so anything else is refused, and a given check digit must be the one section 7.9
+    /// calculates.
     /// </summary>
     [Theory]
     [InlineData("0952123454321")]

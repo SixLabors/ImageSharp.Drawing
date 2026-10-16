@@ -9,8 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal enum AztecFormat
 {
     /// <summary>
-    /// The smallest symbol in the sequence of section 11.5: compact symbols of 1 to 4 layers, then
-    /// full-range symbols of 4 to 32 layers.
+    /// The smallest symbol in the sequence of section 11.5: compact symbols of 1 to 4 layers, then full-range symbols of 4 to 32 layers.
     /// </summary>
     Auto,
 

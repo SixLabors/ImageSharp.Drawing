@@ -6,9 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// The table of <see cref="Gs1SyntaxDictionary"/> against the GS1 Barcode Syntax Dictionary release it
-/// comes from, gs1-syntax-dictionary.txt, release 2026-01-27, as GS1 publishes it. The test parses the release
-/// file in the syntax its header defines and compares every entry, so a change of release is a checked diff.
+/// The table of <see cref="Gs1SyntaxDictionary"/> against the GS1 Barcode Syntax Dictionary release it comes from, gs1-syntax-dictionary.txt, release
+/// 2026-01-27, as GS1 publishes it. The test parses the release file in the syntax its header defines and compares every entry, so a change of release is a
+/// checked diff.
 /// </summary>
 public class Gs1SyntaxDictionaryTests
 {
@@ -79,8 +79,7 @@ public class Gs1SyntaxDictionaryTests
     }
 
     /// <summary>
-    /// Compares one line of the dictionary, in the syntax "AIs [Flags] Specification [Attributes...] [# Title]",
-    /// with its table entry.
+    /// Compares one line of the dictionary, in the syntax "AIs [Flags] Specification [Attributes...] [# Title]", with its table entry.
     /// </summary>
     /// <param name="line">The dictionary line.</param>
     /// <param name="entry">The table entry.</param>

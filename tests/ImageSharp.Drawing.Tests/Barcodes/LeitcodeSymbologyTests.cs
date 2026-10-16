@@ -6,18 +6,16 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="LeitcodeSymbology"/>. The expected run string is the alternating bar and
-/// space module widths, starting with a bar, taken verbatim from an independent reference implementation
-/// through its raw encoding API. That implementation draws a wide element two modules wide and emits a
-/// narrow space after the stop pattern, so the test widens every wide element to the three modules this
-/// library draws and drops the trailing space before it compares. The number is the worked example the
-/// Deutsche Post documentation gives.
+/// Encoder tests for <see cref="LeitcodeSymbology"/>. The expected run string is the alternating bar and space module widths, starting with a bar, taken
+/// verbatim from an independent reference implementation through its raw encoding API. That implementation draws a wide element two modules wide and emits a
+/// narrow space after the stop pattern, so the test widens every wide element to the three modules this library draws and drops the trailing space before it
+/// compares. The number is the worked example the Deutsche Post documentation gives.
 /// </summary>
 public class LeitcodeSymbologyTests
 {
     /// <summary>
-    /// The reference emits the same symbol whether the check digit is supplied or calculated, so both
-    /// forms of the documented example compare against one vector.
+    /// The reference emits the same symbol whether the check digit is supplied or calculated, so both forms of the documented example compare against one
+    /// vector.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]
@@ -31,9 +29,8 @@ public class LeitcodeSymbologyTests
     }
 
     /// <summary>
-    /// The documentation weights the digits 4 and 9 alternately from the first, so 2134807501640 gives
-    /// 8 + 9 + 12 + 36 + 32 + 0 + 28 + 45 + 0 + 9 + 24 + 36 + 0 = 239, and "239 Modulo 10 = 9,
-    /// Ergänzung zu 10 = 1". A supplied check digit that disagrees is rejected.
+    /// The documentation weights the digits 4 and 9 alternately from the first, so 2134807501640 gives 8 + 9 + 12 + 36 + 32 + 0 + 28 + 45 + 0 + 9 + 24 + 36 + 0
+    /// = 239, and "239 Modulo 10 = 9, Ergänzung zu 10 = 1". A supplied check digit that disagrees is rejected.
     /// </summary>
     [Fact]
     public void CalculatesTheDeutschePostCheckDigit()
@@ -46,8 +43,7 @@ public class LeitcodeSymbologyTests
     }
 
     /// <summary>
-    /// A Leitcode is thirteen data digits and an optional check digit, so anything else is rejected, as is
-    /// a non-digit.
+    /// A Leitcode is thirteen data digits and an optional check digit, so anything else is rejected, as is a non-digit.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]
@@ -59,8 +55,8 @@ public class LeitcodeSymbologyTests
         => Assert.ThrowsAny<ArgumentException>(() => Encode(text));
 
     /// <summary>
-    /// Deutsche Post permits a narrow module of 0.375 mm to 0.5 mm and requires a height of at least 25 mm.
-    /// A symbol without an X dimension of the caller draws at 0.5 mm with bars of 50 modules, 25 mm.
+    /// Deutsche Post permits a narrow module of 0.375 mm to 0.5 mm and requires a height of at least 25 mm. A symbol without an X dimension of the caller draws
+    /// at 0.5 mm with bars of 50 modules, 25 mm.
     /// </summary>
     [Fact]
     public void DefaultsToTheWidestModuleAndTheLeastHeight()

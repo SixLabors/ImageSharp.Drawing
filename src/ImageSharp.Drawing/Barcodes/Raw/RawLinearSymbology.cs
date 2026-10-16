@@ -7,10 +7,8 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// A custom linear symbology whose input is the symbol itself: the digits 1 to 9 give the widths in
-/// modules of the bars and spaces in turn, starting with a bar. An even number of digits ends on a
-/// space, which the symbol keeps behind a bar of zero width. The symbol has no quiet zones and prints no
-/// line.
+/// A custom linear symbology whose input is the symbol itself: the digits 1 to 9 give the widths in modules of the bars and spaces in turn, starting with a
+/// bar. An even number of digits ends on a space, which the symbol keeps behind a bar of zero width. The symbol has no quiet zones and prints no line.
 /// </summary>
 public sealed class RawLinearSymbology : BarcodeSymbology
 {
@@ -31,8 +29,7 @@ public sealed class RawLinearSymbology : BarcodeSymbology
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
 
-        // An even count of widths ends on a space, so a zero width bar closes the runs. The storage starts
-        // zero, so that bar needs no write.
+        // An even count of widths ends on a space, so a zero width bar closes the runs. The storage starts zero, so that bar needs no write.
         bool endsOnSpace = (text.Length & 1) == 0;
         double xDimension = options.XDimension ?? PointXDimension;
         Span<int> runs = symbol.BeginLinear(text.Length + (endsOnSpace ? 1 : 0), xDimension, out Span<float> heights, out _);
@@ -47,8 +44,9 @@ public sealed class RawLinearSymbology : BarcodeSymbology
                 throw new ArgumentException($"A raw symbol carries only the digits 1 to 9; got {current.ToDisplayString()}.", nameof(text));
             }
 
-            runs[index++] = current.Value - '0';
-            widthInModules += current.Value - '0';
+            int width = current.Value - '0';
+            runs[index++] = width;
+            widthInModules += width;
         }
 
         float barHeight = options.ResolveBarHeight(xDimension, widthInModules * NominalBarHeightFraction);

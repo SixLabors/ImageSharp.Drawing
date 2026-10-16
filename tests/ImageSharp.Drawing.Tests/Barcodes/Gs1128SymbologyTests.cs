@@ -6,10 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Gs1128Symbology"/>. Each expected run string is the alternating bar and
-/// space module widths, starting with a bar, taken from an independent reference implementation through
-/// its raw encoding API. The runs carry the double character start pattern of section 5.4.2, the code set
-/// switches the encoder chose, any separator, the check character and the stop character.
+/// Encoder tests for <see cref="Gs1128Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, taken from an
+/// independent reference implementation through its raw encoding API. The runs carry the double character start pattern of section 5.4.2, the code set switches
+/// the encoder chose, any separator, the check character and the stop character.
 /// </summary>
 public class Gs1128SymbologyTests
 {
@@ -37,8 +36,8 @@ public class Gs1128SymbologyTests
         => Assert.Equal(expected, Encode(text));
 
     /// <summary>
-    /// Section 4.14 rule 2c requires parentheses around the Application Identifiers in the human readable
-    /// interpretation, and rule 2b keeps the separators out of it.
+    /// Section 4.14 rule 2c requires parentheses around the Application Identifiers in the human readable interpretation, and rule 2b keeps the separators out
+    /// of it.
     /// </summary>
     [Fact]
     public void PrintsElementStringsWithParentheses()
@@ -52,8 +51,7 @@ public class Gs1128SymbologyTests
     }
 
     /// <summary>
-    /// Section 4.14 rule 3b: when Application Identifier (8200) appears, its URL does not appear in the
-    /// human readable interpretation.
+    /// Section 4.14 rule 3b: when Application Identifier (8200) appears, its URL does not appear in the human readable interpretation.
     /// </summary>
     [Fact]
     public void LeavesTheUrlOfApplicationIdentifier8200OutOfTheText()

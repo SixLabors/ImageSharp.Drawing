@@ -6,11 +6,10 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Gs1DataBarExpandedStackedSymbology"/>. Each expected value is the module rows
-/// of the symbol from the top down, separator rows included, 1 for dark, taken from an independent reference
-/// implementation through its raw encoding API and confirmed by a second one. The inputs cover rows of two,
-/// four, six and eight segments: rows whose colours alternate, rows that read right to left, a partial last
-/// row that moves one module right, and a symbol length raised by one so the last row holds two segments.
+/// Encoder tests for <see cref="Gs1DataBarExpandedStackedSymbology"/>. Each expected value is the module rows of the symbol from the top down, separator rows
+/// included, 1 for dark, taken from an independent reference implementation through its raw encoding API and confirmed by a second one. The inputs cover rows
+/// of two, four, six and eight segments: rows whose colours alternate, rows that read right to left, a partial last row that moves one module right, and a
+/// symbol length raised by one so the last row holds two segments.
 /// </summary>
 public class Gs1DataBarExpandedStackedSymbologyTests
 {
@@ -187,10 +186,8 @@ public class Gs1DataBarExpandedStackedSymbologyTests
             SymbolEncoder.Read(new Gs1DataBarExpandedStackedSymbology(segments), text, new BarcodeOptions(), SymbolEncoder.RowModuleStrings));
 
     /// <summary>
-    /// Section 5.5.2.3.2 of the GS1 General Specifications gives Figure 5-48, which encodes
-    /// (01)90614141000015(3202)000150 in two rows of four segments, as 25.91 millimetres wide by 18.03
-    /// millimetres high at an X dimension of 0.254 millimetre: 102 modules by 71, two rows of 34X and a
-    /// separator of 3X.
+    /// Section 5.5.2.3.2 of the GS1 General Specifications gives Figure 5-48, which encodes (01)90614141000015(3202)000150 in two rows of four segments, as
+    /// 25.91 millimetres wide by 18.03 millimetres high at an X dimension of 0.254 millimetre: 102 modules by 71, two rows of 34X and a separator of 3X.
     /// </summary>
     [Fact]
     public void Gs1DataBarExpandedStacked_MatchesTheDimensionsOfFigure548()
@@ -235,8 +232,7 @@ public class Gs1DataBarExpandedStackedSymbologyTests
     }
 
     /// <summary>
-    /// Section 5.5.2.3.2: "It can be printed in widths of 2 to 20 segments", and a row holds whole segment
-    /// pairs.
+    /// Section 5.5.2.3.2: "It can be printed in widths of 2 to 20 segments", and a row holds whole segment pairs.
     /// </summary>
     [Theory]
     [InlineData(0)]

@@ -6,13 +6,11 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="QrCodeSymbology"/>, <see cref="MicroQrCodeSymbology"/>,
-/// <see cref="D3AqrSymbology"/> and the GS1, GS1 Digital Link and HIBC QR Code symbologies. Each
-/// expected grid is the module grid of an independent reference implementation, taken through its raw
-/// encoding API with the error correction level fixed and Kanji mode off, so the mode segments, the version,
-/// the error correction, the module placement, the data mask and the format and version information all show
-/// up here. A grid row is the modules from the left as hexadecimal digits, the leftmost module the most
-/// significant bit, padded with light modules to whole digits.
+/// Encoder tests for <see cref="QrCodeSymbology"/>, <see cref="MicroQrCodeSymbology"/>, <see cref="D3AqrSymbology"/> and the GS1, GS1 Digital Link and HIBC QR
+/// Code symbologies. Each expected grid is the module grid of an independent reference implementation, taken through its raw encoding API with the error
+/// correction level fixed and Kanji mode off, so the mode segments, the version, the error correction, the module placement, the data mask and the format and
+/// version information all show up here. A grid row is the modules from the left as hexadecimal digits, the leftmost module the most significant bit, padded
+/// with light modules to whole digits.
 /// </summary>
 public class QrCodeSymbologyTests
 {
@@ -1645,8 +1643,7 @@ public class QrCodeSymbologyTests
     }
 
     /// <summary>
-    /// Section 5.3.7 of ISO/IEC 18004: the quiet zone is 4X wide around a QR Code symbol and 2X wide around a
-    /// Micro QR Code symbol.
+    /// Section 5.3.7 of ISO/IEC 18004: the quiet zone is 4X wide around a QR Code symbol and 2X wide around a Micro QR Code symbol.
     /// </summary>
     [Fact]
     public void QuietZoneFollowsSectionFiveThreeSeven()
@@ -1673,8 +1670,7 @@ public class QrCodeSymbologyTests
     /// Section 6.3.4: Byte mode carries ISO/IEC 8859-1, so a character above U+00FF is rejected.
     /// </summary>
     [Fact]
-    public void QrCode_RejectsCharactersAboveTheByteRange()
-        => Assert.Throws<ArgumentException>(() => Encode(new QrCodeSymbology(), "Ā"));
+    public void QrCode_RejectsCharactersAboveTheByteRange() => Assert.Throws<ArgumentException>(() => Encode(new QrCodeSymbology(), "Ā"));
 
     /// <summary>
     /// Sections 6.3.3 and 6.3.4: version M1 holds digits only, and M2 has no Byte mode.
@@ -1687,8 +1683,7 @@ public class QrCodeSymbologyTests
     }
 
     /// <summary>
-    /// Section 6.5.1 and Table 13: Micro QR Code has no level H, M1 has error detection only and only M4 has
-    /// level Q.
+    /// Section 6.5.1 and Table 13: Micro QR Code has no level H, M1 has error detection only and only M4 has level Q.
     /// </summary>
     [Fact]
     public void MicroQrCode_RejectsLevelsTheVersionDoesNotHave()
@@ -1699,9 +1694,8 @@ public class QrCodeSymbologyTests
     }
 
     /// <summary>
-    /// Gets the cases of <see cref="D3Aqr_MatchesReferenceGrid"/>: every host ratio, hosts small enough to
-    /// widen the offset and large enough not to, and categories with each arm empty, full, and of odd and
-    /// even parity.
+    /// Gets the cases of <see cref="D3Aqr_MatchesReferenceGrid"/>: every host ratio, hosts small enough to widen the offset and large enough not to, and
+    /// categories with each arm empty, full, and of odd and even parity.
     /// </summary>
     public static TheoryData<string, int, D3AqrHostRatio, int, string> D3Aqr_MatchesReferenceGridData { get; } = new()
     {
@@ -2579,8 +2573,7 @@ public class QrCodeSymbologyTests
     };
 
     /// <summary>
-    /// The host, the D3 component and the category bits and parity produce the grid of cells of the
-    /// reference implementation.
+    /// The host, the D3 component and the category bits and parity produce the grid of cells of the reference implementation.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="category">The category.</param>
@@ -3028,17 +3021,15 @@ public class QrCodeSymbologyTests
     }
 
     [Fact]
-    public void HibcQrCode_RejectsAnIncorrectCheckCharacter()
-        => Assert.Throws<ArgumentException>(() => Encode(new HibcQrCodeSymbology(true), "A123BJC5D6E70"));
+    public void HibcQrCode_RejectsAnIncorrectCheckCharacter() => Assert.Throws<ArgumentException>(() => Encode(new HibcQrCodeSymbology(true), "A123BJC5D6E70"));
 
     [Fact]
     public void Gs1QrCode_RejectsDataOutsideElementStringSyntax()
         => Assert.Throws<ArgumentException>(() => Encode(new Gs1QrCodeSymbology(), "0109521234543213"));
 
     /// <summary>
-    /// Section 5.7.4.7 of the GS1 General Specifications gives GS1 QR Code the human readable interpretation
-    /// rules of section 4.14, the rules GS1 DataMatrix follows: one element string on each line, with the
-    /// Application Identifiers in parentheses, and no URL of Application Identifier (8200).
+    /// Section 5.7.4.7 of the GS1 General Specifications gives GS1 QR Code the human readable interpretation rules of section 4.14, the rules GS1 DataMatrix
+    /// follows: one element string on each line, with the Application Identifiers in parentheses, and no URL of Application Identifier (8200).
     /// </summary>
     [Fact]
     public void Gs1QrCode_PrintsOneElementStringOnEachLine()
@@ -3055,9 +3046,8 @@ public class QrCodeSymbologyTests
     }
 
     /// <summary>
-    /// Rule 1c of section 4.14 of the GS1 General Specifications: the human readable interpretation follows
-    /// the order of the encoded data, which for a GS1 Digital Link URI is the primary key and its qualifiers
-    /// in the path, then the data attributes in the query string. The URI itself does not print.
+    /// Rule 1c of section 4.14 of the GS1 General Specifications: the human readable interpretation follows the order of the encoded data, which for a GS1
+    /// Digital Link URI is the primary key and its qualifiers in the path, then the data attributes in the query string. The URI itself does not print.
     /// </summary>
     [Fact]
     public void Gs1DigitalLinkQrCode_PrintsTheElementStringsOfTheUri()
@@ -3073,8 +3063,8 @@ public class QrCodeSymbologyTests
     }
 
     /// <summary>
-    /// Section 3.0 of ANSI/HIBC 2.6 gives every symbology the same interpretation between asterisks, and the
-    /// figure of section 4.3.3 breaks concatenated data after the "/" that joins it.
+    /// Section 3.0 of ANSI/HIBC 2.6 gives every symbology the same interpretation between asterisks, and the figure of section 4.3.3 breaks concatenated data
+    /// after the "/" that joins it.
     /// </summary>
     [Fact]
     public void HibcQrCode_PrintsTheDataBetweenDelimiters()
@@ -3105,8 +3095,7 @@ public class QrCodeSymbologyTests
     /// </summary>
     /// <param name="symbology">The symbology to encode with.</param>
     /// <param name="text">The text to encode.</param>
-    private static void Encode(BarcodeSymbology symbology, string text)
-        => SymbolEncoder.Encode(symbology, text, new BarcodeOptions());
+    private static void Encode(BarcodeSymbology symbology, string text) => SymbolEncoder.Encode(symbology, text, new BarcodeOptions());
 
     /// <summary>
     /// Returns the digits 0 to 9 repeated to a length.

@@ -6,34 +6,30 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Encodation for GS1 DataBar Expanded and GS1 DataBar Expanded Stacked. A symbol carries GS1 element strings
-/// as a bit stream cut into 12 bit symbol characters, preceded by a check character that encodes a modulo
-/// 211 check value and the symbol length. A finder pattern follows every second symbol character.
+/// Encodation for GS1 DataBar Expanded and GS1 DataBar Expanded Stacked. A symbol carries GS1 element strings as a bit stream cut into 12 bit symbol
+/// characters, preceded by a check character that encodes a modulo 211 check value and the symbol length. A finder pattern follows every second symbol
+/// character.
 /// <para>
-/// The bit stream starts with a linkage bit and an encodation method. Common sequences of element strings
-/// that start with Application Identifier (01) compress into a fixed length field, and whatever remains is
-/// encoded in the general purpose field in numeric, alphanumeric or ISO/IEC 646 mode. A symbol character is
-/// 8 elements over 17 modules, an odd set of 4 and an even set of 4 interleaved, and its group gives the
-/// module count and the widest element of each set.
+/// The bit stream starts with a linkage bit and an encodation method. Common sequences of element strings that start with Application Identifier (01) compress
+/// into a fixed length field, and whatever remains is encoded in the general purpose field in numeric, alphanumeric or ISO/IEC 646 mode. A symbol character is
+/// 8 elements over 17 modules, an odd set of 4 and an even set of 4 interleaved, and its group gives the module count and the widest element of each set.
 /// </para>
 /// </summary>
 internal static class DataBarExpandedEncoder
 {
     /// <summary>
-    /// The nominal X dimension in millimetres, the target X dimension of Table 5-44 of the GS1 General
-    /// Specifications.
+    /// The nominal X dimension in millimetres, the target X dimension of Table 5-44 of the GS1 General Specifications.
     /// </summary>
     public const double NominalXDimension = 0.33;
 
     /// <summary>
-    /// The height of a row in modules. Section 5.5.2.3.1 of the GS1 General Specifications gives "34X high",
-    /// and Table 5-44 gives 11.23 millimetres, 34X, at the target X dimension.
+    /// The height of a row in modules. Section 5.5.2.3.1 of the GS1 General Specifications gives "34X high", and Table 5-44 gives 11.23 millimetres, 34X, at
+    /// the target X dimension.
     /// </summary>
     public const float RowHeight = 34F;
 
     /// <summary>
-    /// The fewest segments in a row of a stacked symbol. Section 5.5.2.3.2: "It can be printed in widths of
-    /// 2 to 20 segments".
+    /// The fewest segments in a row of a stacked symbol. Section 5.5.2.3.2: "It can be printed in widths of 2 to 20 segments".
     /// </summary>
     public const int MinimumSegments = 2;
 
@@ -43,34 +39,46 @@ internal static class DataBarExpandedEncoder
     public const int MaximumStackedSegments = 20;
 
     /// <summary>
-    /// The most data characters a symbol carries. Section 2.6.10 of the GS1 General Specifications: GS1
-    /// DataBar Expanded Versions "SHALL NOT be used when symbols require more than 74 numeric or 41
-    /// alphabetic characters of data".
+    /// The most data characters a symbol carries. Section 2.6.10 of the GS1 General Specifications: GS1 DataBar Expanded Versions "SHALL NOT be used when
+    /// symbols require more than 74 numeric or 41 alphabetic characters of data".
     /// </summary>
     public const int MaximumDataCharacters = 74;
 
     /// <summary>
-    /// The height of each of the three separator rows between two rows of a stacked symbol, in modules.
-    /// Section 5.5.2.3.2: "Its structure includes a 3X high separator pattern between rows."
+    /// The height of each of the three separator rows between two rows of a stacked symbol, in modules. Section 5.5.2.3.2: "Its structure includes a 3X high
+    /// separator pattern between rows."
     /// </summary>
     private const float SeparatorHeight = 1F;
 
     /// <summary>
-    /// The most symbol characters a symbol carries, the check character and 21 data characters. Section
-    /// 5.5.2.3.1: "from 4 to 22 symbol characters".
+    /// The most symbol characters a symbol carries, the check character and 21 data characters. Section 5.5.2.3.1: "from 4 to 22 symbol characters".
     /// </summary>
     private const int MaximumSymbolCharacters = 22;
 
     /// <summary>
-    /// The most bits of the data characters, 21 of 12 bits.
+    /// The most data characters a symbol carries, the symbol characters after the check character.
     /// </summary>
-    private const int MaximumBits = 252;
+    private const int MaximumDataSymbolCharacters = MaximumSymbolCharacters - 1;
 
     /// <summary>
-    /// The width in modules of the widest row: two guard pairs, 20 symbol characters of 17 modules and 10
-    /// finder patterns of 15.
+    /// The number of data bits one data character carries.
     /// </summary>
-    private const int MaximumRowWidth = 4 + (MaximumStackedSegments * 17) + (MaximumStackedSegments / 2 * 15);
+    private const int BitsPerSymbolCharacter = 12;
+
+    /// <summary>
+    /// The number of modules of a symbol character.
+    /// </summary>
+    private const int CharacterModules = 17;
+
+    /// <summary>
+    /// The number of modules of a finder pattern.
+    /// </summary>
+    private const int FinderModules = 15;
+
+    /// <summary>
+    /// The width in modules of the widest row: two guard pairs, 20 symbol characters and 10 finder patterns.
+    /// </summary>
+    private const int MaximumRowWidth = 4 + (MaximumStackedSegments * CharacterModules) + (MaximumStackedSegments / 2 * FinderModules);
 
     /// <summary>
     /// The modulus of the check value.
@@ -78,19 +86,71 @@ internal static class DataBarExpandedEncoder
     private const int CheckModulus = 211;
 
     /// <summary>
-    /// The general purpose field mode for digits and the separator, two per seven bits.
+    /// The encodation methods, which the encodation method field after the linkage bit selects. Each member names the bits of its field.
     /// </summary>
-    private const int NumericMode = 1;
+    private enum EncodationMethod
+    {
+        /// <summary>
+        /// Method 1: Application Identifier (01) in a compressed field, then the general purpose field.
+        /// </summary>
+        Gtin,
+
+        /// <summary>
+        /// Method 00: the general purpose field alone.
+        /// </summary>
+        GeneralPurpose,
+
+        /// <summary>
+        /// Method 0100: Application Identifiers (01) and (3103).
+        /// </summary>
+        MetricWeight,
+
+        /// <summary>
+        /// Method 0101: Application Identifiers (01) and (3202) or (3203).
+        /// </summary>
+        PoundWeight,
+
+        /// <summary>
+        /// Method 01100: Application Identifiers (01) and (392x), then the general purpose field.
+        /// </summary>
+        Price,
+
+        /// <summary>
+        /// Method 01101: Application Identifiers (01) and (393x), then the general purpose field.
+        /// </summary>
+        PriceWithCurrency,
+
+        /// <summary>
+        /// Methods 0111000 to 0111111: Application Identifiers (01), (310x) or (320x), and (11), (13), (15) or (17) or no date.
+        /// </summary>
+        WeightAndDate,
+    }
 
     /// <summary>
-    /// The general purpose field mode for digits, capital letters and five punctuation characters.
+    /// The modes of the general purpose field. The class of a character is the mode with the fewest bits that carries it.
     /// </summary>
-    private const int AlphanumericMode = 2;
+    private enum GeneralFieldMode : byte
+    {
+        /// <summary>
+        /// The class of a character the field cannot carry.
+        /// </summary>
+        None,
 
-    /// <summary>
-    /// The general purpose field mode for the ISO/IEC 646 characters GS1 element strings use.
-    /// </summary>
-    private const int Iso646Mode = 3;
+        /// <summary>
+        /// Digits and the separator, two per seven bits.
+        /// </summary>
+        Numeric,
+
+        /// <summary>
+        /// Digits, capital letters and five punctuation characters.
+        /// </summary>
+        Alphanumeric,
+
+        /// <summary>
+        /// The ISO/IEC 646 characters GS1 element strings use.
+        /// </summary>
+        Iso646,
+    }
 
     /// <summary>
     /// Gets the punctuation characters ISO/IEC 646 mode encodes, in the order of their values from 232.
@@ -103,8 +163,7 @@ internal static class DataBarExpandedEncoder
     private static ReadOnlySpan<int> GroupSum => [0, 348, 1388, 2948, 3988];
 
     /// <summary>
-    /// Gets the number of even set combinations of each group. A value within a group splits into the odd
-    /// and the even set value by this number.
+    /// Gets the number of even set combinations of each group. A value within a group splits into the odd and the even set value by this number.
     /// </summary>
     private static ReadOnlySpan<byte> EvenCombinations => [4, 20, 52, 104, 204];
 
@@ -114,14 +173,13 @@ internal static class DataBarExpandedEncoder
     private static ReadOnlySpan<byte> OddModules => [12, 10, 8, 6, 4];
 
     /// <summary>
-    /// Gets the widest element of the odd set of each group. The widest element of the even set is nine
-    /// less this.
+    /// Gets the widest element of the odd set of each group. The widest element of the even set is nine less this.
     /// </summary>
     private static ReadOnlySpan<byte> OddWidest => [7, 5, 4, 3, 1];
 
     /// <summary>
-    /// Gets the element widths of the twelve finder patterns, five each: A1, A2, B1, B2, C1, C2, D1, D2,
-    /// E1, E2, F1 and F2. A version 2 finder is its version 1 finder reversed.
+    /// Gets the element widths of the twelve finder patterns, five each: A1, A2, B1, B2, C1, C2, D1, D2, E1, E2, F1 and F2. A version 2 finder is its version 1
+    /// finder reversed.
     /// </summary>
     private static ReadOnlySpan<byte> FinderWidths =>
     [
@@ -140,8 +198,8 @@ internal static class DataBarExpandedEncoder
     ];
 
     /// <summary>
-    /// Gets the finder pattern sequences, one per symbol length. The sequence of a symbol with 2r + 3 or 2r
-    /// + 4 symbol characters has r + 2 finders and starts at r (r + 3) / 2.
+    /// Gets the finder pattern sequences, one per symbol length. The sequence of a symbol with 2r + 3 or 2r + 4 symbol characters has r + 2 finders and starts
+    /// at r (r + 3) / 2.
     /// </summary>
     private static ReadOnlySpan<byte> FinderSequences =>
     [
@@ -158,9 +216,8 @@ internal static class DataBarExpandedEncoder
     ];
 
     /// <summary>
-    /// Gets the check weights, 8 for each side of each finder pattern: the character to its left and the
-    /// character to its right, in the element order the symbol carries them. The check character to the
-    /// left of the first finder carries no weight.
+    /// Gets the check weights, 8 for each side of each finder pattern: the character to its left and the character to its right, in the element order the
+    /// symbol carries them. The check character to the left of the first finder carries no weight.
     /// </summary>
     private static ReadOnlySpan<byte> CheckWeights =>
     [
@@ -205,9 +262,8 @@ internal static class DataBarExpandedEncoder
         int symbolCharacters = EncodeCharacters(text, MaximumSymbolCharacters, characters);
         ReadOnlySpan<byte> finders = Finders(symbolCharacters);
 
-        // A zero width bar, the guard space and bar, the characters with a finder after every second one, and
-        // the guard space and bar. The symbol ends on a bar or a space, so a zero width bar closes the runs
-        // when it ends on a space. The zero width bars are the zeros the symbol storage starts with.
+        // A zero width bar, the guard space and bar, the characters with a finder after every second one, and the guard space and bar. The symbol ends on a bar
+        // or a space, so a zero width bar closes the runs when it ends on a space. The zero width bars are the zeros the symbol storage starts with.
         int elements = 3 + (symbolCharacters * 8) + (finders.Length * 5) + 2;
         double xDimension = options.XDimension ?? NominalXDimension;
         Span<int> runs = symbol.BeginLinear(elements + ((elements & 1) == 0 ? 1 : 0), xDimension, out Span<float> heights, out _);
@@ -220,10 +276,9 @@ internal static class DataBarExpandedEncoder
             position += 8;
             if ((c & 1) == 0)
             {
-                ReadOnlySpan<byte> finder = FinderWidths.Slice(finders[c / 2] * 5, 5);
-                for (int k = 0; k < 5; k++)
+                foreach (byte width in FinderWidths.Slice(finders[c / 2] * 5, 5))
                 {
-                    runs[position++] = finder[k];
+                    runs[position++] = width;
                 }
             }
         }
@@ -234,14 +289,10 @@ internal static class DataBarExpandedEncoder
         float barHeight = options.ResolveBarHeight(xDimension, RowHeight);
         heights.Fill(barHeight);
 
-        int width = 0;
-        foreach (int run in runs)
-        {
-            width += run;
-        }
-
         if (options.Font is not null)
         {
+            // The two guard pairs and the fixed module counts of the characters and the finders give the width.
+            int width = 4 + (symbolCharacters * CharacterModules) + (finders.Length * FinderModules);
             symbol.ReserveText(1, caption.Length);
             symbol.AddText(caption, 0F, width, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
         }
@@ -250,9 +301,8 @@ internal static class DataBarExpandedEncoder
     }
 
     /// <summary>
-    /// Builds GS1 DataBar Expanded Stacked: rows of the given number of segments, a segment being a symbol
-    /// character, with a separator of three one module rows between two rows. A row of an even number of
-    /// segment pairs reads right to left on every second row, and the last row may be partial.
+    /// Builds GS1 DataBar Expanded Stacked: rows of the given number of segments, a segment being a symbol character, with a separator of three one module rows
+    /// between two rows. A row of an even number of segment pairs reads right to left on every second row, and the last row may be partial.
     /// </summary>
     /// <param name="text">The prepared element strings, with a separator after every variable length element string but the last.</param>
     /// <param name="segments">The number of segments in a full row, even and from 2 to 20.</param>
@@ -276,38 +326,34 @@ internal static class DataBarExpandedEncoder
         InlineArray256<int> characterStorage = default;
         Span<int> characters = ((Span<int>)characterStorage)[..(MaximumSymbolCharacters * 8)];
         int symbolCharacters = EncodeCharacters(text, segments, characters);
-        ReadOnlySpan<byte> finders = Finders(symbolCharacters);
-        int rowCount = (symbolCharacters + segments - 1) / segments;
         double xDimension = options.XDimension ?? NominalXDimension;
         float rowHeight = options.ResolveBarHeight(xDimension, RowHeight);
 
-        // The buffer holds a row, the separator row that is its inverse, and the middle separator row, each
-        // one module wider than the widest row, since a partial last row can move one module right. It is
-        // rented once, outside the row loops.
+        // The buffer holds a row, the separator row that is its inverse, and the middle separator row, each one module wider than the widest row, since a
+        // partial last row can move one module right. It is rented once, outside the row loops.
         int stride = MaximumRowWidth + 1;
         PooledBuffer<byte> buffer = new(stride * 3);
         try
         {
-            Span<byte> row = buffer.Span[..stride];
-            Span<byte> separator = buffer.Span.Slice(stride, stride);
+            StackedRowComposer rows = new(characters, symbolCharacters, segments, buffer.Span[..stride], buffer.Span.Slice(stride, stride));
             Span<byte> middle = buffer.Span.Slice(stride * 2, stride);
+            int rowCount = rows.RowCount;
 
-            // The run count of a row is known only once its modules are composed, so a first pass composes
-            // every row to count the runs, and the symbol reserves its storage once. Between two rows stand
-            // the separator of the upper row, the middle separator and the separator of the lower row.
-            int width = 0;
+            // The run count of a row is known only once its modules are composed, so a first pass composes every row to count the runs, and the symbol reserves
+            // its storage once. Between two rows stand the separator of the upper row, the middle separator and the separator of the lower row.
             int runCount = 0;
             int barCount = 0;
             for (int r = 0; r < rowCount; r++)
             {
-                ComposeRow(r, rowCount, segments, symbolCharacters, characters, finders, row, separator, ref width);
-                int rowRuns = DataBarRows.RunCount(row[..width]);
-                int separatorRuns = DataBarRows.RunCount(separator[..width]);
+                rows.Compose(r);
+                int rowRuns = DataBarRows.RunCount(rows.Row);
+                int separatorRuns = DataBarRows.RunCount(rows.Separator);
                 int separatorUses = (r > 0 ? 1 : 0) + (r < rowCount - 1 ? 1 : 0);
                 runCount += rowRuns + (separatorUses * separatorRuns);
                 barCount += ((rowRuns + 1) >> 1) + (separatorUses * ((separatorRuns + 1) >> 1));
             }
 
+            int width = rows.Width;
             ComposeMiddle(middle[..width]);
             int middleRuns = DataBarRows.RunCount(middle[..width]);
             runCount += (rowCount - 1) * middleRuns;
@@ -316,16 +362,16 @@ internal static class DataBarExpandedEncoder
             symbol.BeginStacked((rowCount * 4) - 3, runCount, barCount, xDimension);
             for (int r = 0; r < rowCount; r++)
             {
-                ComposeRow(r, rowCount, segments, symbolCharacters, characters, finders, row, separator, ref width);
+                rows.Compose(r);
                 if (r > 0)
                 {
-                    DataBarRows.AddRow(separator[..width], SeparatorHeight, ref symbol);
+                    DataBarRows.AddRow(rows.Separator, SeparatorHeight, ref symbol);
                 }
 
-                DataBarRows.AddRow(row[..width], rowHeight, ref symbol);
+                DataBarRows.AddRow(rows.Row, rowHeight, ref symbol);
                 if (r < rowCount - 1)
                 {
-                    DataBarRows.AddRow(separator[..width], SeparatorHeight, ref symbol);
+                    DataBarRows.AddRow(rows.Separator, SeparatorHeight, ref symbol);
                     DataBarRows.AddRow(middle[..width], SeparatorHeight, ref symbol);
                 }
             }
@@ -347,118 +393,8 @@ internal static class DataBarExpandedEncoder
     }
 
     /// <summary>
-    /// Composes the modules of one row of a stacked symbol and of the separator row that is its inverse.
-    /// </summary>
-    /// <param name="r">The row index from the top.</param>
-    /// <param name="rowCount">The number of rows.</param>
-    /// <param name="segments">The number of segments in a full row.</param>
-    /// <param name="symbolCharacters">The number of symbol characters.</param>
-    /// <param name="characters">The element widths of the symbol characters, 8 each.</param>
-    /// <param name="finders">The finder pattern values.</param>
-    /// <param name="row">The buffer that receives the modules of the row, 1 for dark.</param>
-    /// <param name="separator">The buffer that receives the modules of the separator row.</param>
-    /// <param name="width">The width of the symbol in modules, set by the first row, which is a full row.</param>
-    private static void ComposeRow(
-        int r,
-        int rowCount,
-        int segments,
-        int symbolCharacters,
-        ReadOnlySpan<int> characters,
-        ReadOnlySpan<byte> finders,
-        Span<byte> row,
-        Span<byte> separator,
-        ref int width)
-    {
-        // A row of segments that is not a whole number of segment pairs on both sides starts every second
-        // row with its guard bar, so the colours of the row alternate from row to row.
-        int length = 0;
-        byte colour = (byte)((segments & 3) != 0 && (r & 1) == 1 ? 1 : 0);
-        AppendElement(row, ref length, ref colour, 1);
-        AppendElement(row, ref length, ref colour, 1);
-        int first = r * segments;
-        int last = Math.Min(first + segments, symbolCharacters);
-        int finderCount = 0;
-        for (int c = first; c < last; c++)
-        {
-            for (int k = 0; k < 8; k++)
-            {
-                AppendElement(row, ref length, ref colour, characters[(c * 8) + k]);
-            }
-
-            if ((c & 1) == 0)
-            {
-                ReadOnlySpan<byte> finder = FinderWidths.Slice(finders[c / 2] * 5, 5);
-                for (int k = 0; k < 5; k++)
-                {
-                    AppendElement(row, ref length, ref colour, finder[k]);
-                }
-
-                finderCount++;
-            }
-        }
-
-        AppendElement(row, ref length, ref colour, 1);
-        AppendElement(row, ref length, ref colour, 1);
-
-        // The separator is the inverse of the row, inside four light modules at each end. Over the 15
-        // modules of a finder pattern the light modules break into narrow elements instead, so the
-        // separator does not read as part of the finder. A finder follows the 2 guard modules and the 17
-        // of the first character, and every 49 modules after that pairs of finders stand 98 apart.
-        Span<byte> rowModules = row[..length];
-        Span<byte> separatorModules = separator[..length];
-        for (int i = 0; i < length; i++)
-        {
-            separatorModules[i] = (byte)(1 - rowModules[i]);
-        }
-
-        for (int start = 19; start <= length - 13; start += 98)
-        {
-            AlternateOverFinder(rowModules, separatorModules, start);
-        }
-
-        for (int start = 68; start <= length - 13; start += 98)
-        {
-            AlternateOverFinder(rowModules, separatorModules, start);
-        }
-
-        separatorModules[..4].Clear();
-        separatorModules[^4..].Clear();
-
-        // With a whole number of segment pairs on both sides every second row reads right to left. A
-        // partial last row with an odd number of finders keeps its direction and moves one module right.
-        if ((segments & 3) == 0 && (r & 1) == 1)
-        {
-            if (r == rowCount - 1 && last - first < segments && (finderCount & 1) == 1)
-            {
-                row[..length].CopyTo(row[1..]);
-                separator[..length].CopyTo(separator[1..]);
-                row[0] = 0;
-                separator[0] = 0;
-                length++;
-            }
-            else
-            {
-                row[..length].Reverse();
-                separator[..length].Reverse();
-            }
-        }
-
-        // The first row is a full row, and a shorter last row fills to its width with light modules.
-        if (r == 0)
-        {
-            width = length;
-        }
-        else
-        {
-            row[length..width].Clear();
-            separator[length..width].Clear();
-        }
-    }
-
-    /// <summary>
-    /// Encodes the data into the element widths of the symbol characters, 8 each, in the order the symbol
-    /// carries them: the check character, then the data characters. A data character that stands to the
-    /// right of a finder pattern reads in reverse.
+    /// Encodes the data into the element widths of the symbol characters, 8 each, in the order the symbol carries them: the check character, then the data
+    /// characters. A data character that stands to the right of a finder pattern reads in reverse.
     /// </summary>
     /// <param name="text">The prepared element strings.</param>
     /// <param name="segments">The number of segments in a row, which the symbol length avoids leaving one alone on the last row.</param>
@@ -466,28 +402,21 @@ internal static class DataBarExpandedEncoder
     /// <returns>The number of symbol characters.</returns>
     private static int EncodeCharacters(ReadOnlySpan<char> text, int segments, Span<int> characters)
     {
-        InlineArray256<byte> bitStorage = default;
-        Span<byte> bits = ((Span<byte>)bitStorage)[..MaximumBits];
-        int dataCharacters = EncodeBits(text, segments, bits) / 12;
+        InlineArray24<int> valueStorage = default;
+        Span<int> values = ((Span<int>)valueStorage)[..MaximumDataSymbolCharacters];
+        int dataCharacters = EncodeBits(text, segments, values) / BitsPerSymbolCharacter;
         int symbolCharacters = dataCharacters + 1;
         ReadOnlySpan<byte> finders = Finders(symbolCharacters);
 
-        // The check value is the weighted sum of the data character widths modulo 211, and the check
-        // character adds the symbol length to it.
+        // The check value is the weighted sum of the data character widths modulo 211, and the check character adds the symbol length to it.
         InlineArray8<int> setStorage = default;
         Span<int> sets = setStorage;
         int check = 0;
         for (int d = 0; d < dataCharacters; d++)
         {
-            int value = 0;
-            for (int b = 0; b < 12; b++)
-            {
-                value = (value << 1) | bits[(d * 12) + b];
-            }
-
             // A data character to the right of a finder, the first of each pair, reads in reverse.
             Span<int> widths = characters.Slice((d + 1) * 8, 8);
-            CharacterWidths(value, sets, widths, (d & 1) == 0);
+            CharacterWidths(values[d], sets, widths, (d & 1) == 0);
 
             // Data character d is the right character of finder (d + 1) / 2, or the left one when d is odd.
             int finder = finders[(d + 1) / 2];
@@ -522,8 +451,8 @@ internal static class DataBarExpandedEncoder
         Span<int> even = sets[4..];
 
         // Combinations without a one module element are excluded from the odd set only.
-        DataBarWidths.Calculate(odd, withinGroup / EvenCombinations[group], OddModules[group], 4, OddWidest[group], true);
-        DataBarWidths.Calculate(even, withinGroup % EvenCombinations[group], 17 - OddModules[group], 4, 9 - OddWidest[group], false);
+        DataBarWidths.Calculate(odd, withinGroup / EvenCombinations[group], OddModules[group], OddWidest[group], true);
+        DataBarWidths.Calculate(even, withinGroup % EvenCombinations[group], CharacterModules - OddModules[group], 9 - OddWidest[group], false);
         for (int k = 0; k < 4; k++)
         {
             if (reverse)
@@ -551,21 +480,24 @@ internal static class DataBarExpandedEncoder
     }
 
     /// <summary>
-    /// Writes the data bits: the linkage bit, the encodation method, the variable length field, the
-    /// compressed data field and the general purpose field, padded to a whole number of data characters.
+    /// Writes the data bits: the linkage bit, the encodation method, the variable length field, the compressed data field and the general purpose field, padded
+    /// to a whole number of data characters.
     /// </summary>
     /// <param name="text">The prepared element strings.</param>
     /// <param name="segments">The number of segments in a row.</param>
-    /// <param name="bits">The buffer of bits, one per byte.</param>
+    /// <param name="values">The buffer that receives the 12 bit value of each data character.</param>
     /// <returns>The number of bits, a multiple of 12.</returns>
-    private static int EncodeBits(ReadOnlySpan<char> text, int segments, Span<byte> bits)
+    private static int EncodeBits(ReadOnlySpan<char> text, int segments, Span<int> values)
     {
         int length = text.Length;
-        int method = length >= 16 && text[0] == '0' && text[1] == '1' ? 1 : 2;
+        EncodationMethod method = length >= 16 && text[0] == '0' && text[1] == '1' ? EncodationMethod.Gtin : EncodationMethod.GeneralPurpose;
 
-        // A variable measure GTIN, whose indicator digit is 9, followed by a weight or a price takes one of
-        // the shorter fixed length methods.
-        if (method == 1 && length >= 20 && text[2] == '9' && text[16] == '3')
+        // The last three bits of a weight and date method: the date Application Identifier 11, 13, 15 or 17 as 0, 2, 4 or 6, plus 1 for a weight in pounds. A
+        // symbol with no date takes the bits of AI (11).
+        int weightAndDate = 0;
+
+        // A variable measure GTIN, whose indicator digit is 9, followed by a weight or a price takes one of the shorter fixed length methods.
+        if (method == EncodationMethod.Gtin && length >= 20 && text[2] == '9' && text[16] == '3')
         {
             if (length >= 26 && text[17] is '1' or '2' && text[18] == '0')
             {
@@ -573,20 +505,22 @@ internal static class DataBarExpandedEncoder
                 int weight = Number(text, 20, 6);
                 if (weight is >= 0 and <= 99999)
                 {
+                    int poundBit = metric ? 0 : 1;
                     if (length == 26)
                     {
-                        // Section 5.5.2.3.3 of the GS1 General Specifications: up to 32.767 kilograms in
-                        // AI (3103), 99.99 pounds in AI (3202) or 22.767 pounds in AI (3203). Other weights
-                        // take the weight and date method with no date.
+                        // Section 5.5.2.3.3 of the GS1 General Specifications: up to 32.767 kilograms in AI (3103), 99.99 pounds in AI (3202) or 22.767 pounds
+                        // in AI (3203). Other weights take the weight and date method with no date.
                         bool limited = metric
                             ? text[19] == '3' && weight <= 32767
                             : (text[19] == '2' && weight <= 9999) || (text[19] == '3' && weight <= 22767);
-                        method = limited ? (metric ? 3 : 4) : (metric ? 7 : 8);
+                        method = limited ? (metric ? EncodationMethod.MetricWeight : EncodationMethod.PoundWeight) : EncodationMethod.WeightAndDate;
+                        weightAndDate = poundBit;
                     }
                     else if (length == 34 && text[26] == '1' && text[27] is '1' or '3' or '5' or '7' && Date(text, 28) >= 0)
                     {
                         // A production, packaging, best before or expiration date follows the weight.
-                        method = (metric ? 6 : 7) + (text[27] - '0');
+                        method = EncodationMethod.WeightAndDate;
+                        weightAndDate = text[27] - '1' + poundBit;
                     }
                 }
             }
@@ -594,18 +528,18 @@ internal static class DataBarExpandedEncoder
             {
                 if (text[18] == '2')
                 {
-                    method = 5;
+                    method = EncodationMethod.Price;
                 }
                 else if (length >= 23 && text[18] == '3' && Number(text, 20, 3) >= 0)
                 {
-                    method = 6;
+                    method = EncodationMethod.PriceWithCurrency;
                 }
             }
         }
 
-        // Every method but the second encodes the GTIN without its check digit, so the check digit must be
-        // the one that the 13 digits before it give.
-        if (method != 2)
+        // Every method but the general purpose method encodes the GTIN without its check digit, so the check digit must be the one that the 13 digits before it
+        // give.
+        if (method != EncodationMethod.GeneralPurpose)
         {
             ReadOnlySpan<char> gtin = text.Slice(2, 14);
             BarcodeSymbology.ValidateDigits(gtin);
@@ -617,163 +551,165 @@ internal static class DataBarExpandedEncoder
             }
         }
 
-        int position = 0;
-        Append(bits, ref position, 0, 1);
+        BitWriter bits = new(values);
+        bits.Append(0, 1);
         int variableLength = -1;
         int read;
         switch (method)
         {
-            case 1:
-                Append(bits, ref position, 1, 1);
-                variableLength = position;
-                Append(bits, ref position, 0, 2);
-                Append(bits, ref position, text[2] - '0', 4);
-                AppendGtin(bits, ref position, text);
+            case EncodationMethod.Gtin:
+                bits.Append(1, 1);
+                variableLength = bits.Position;
+                bits.Append(0, 2);
+                bits.Append(text[2] - '0', 4);
+                AppendGtin(ref bits, text);
                 read = 16;
                 break;
 
-            case 2:
-                Append(bits, ref position, 0, 2);
-                variableLength = position;
-                Append(bits, ref position, 0, 2);
+            case EncodationMethod.GeneralPurpose:
+                bits.Append(0, 2);
+                variableLength = bits.Position;
+                bits.Append(0, 2);
                 read = 0;
                 break;
 
-            case 3:
-            case 4:
-                Append(bits, ref position, method == 3 ? 0b0100 : 0b0101, 4);
-                AppendGtin(bits, ref position, text);
-                Append(bits, ref position, Number(text, 20, 6) + (method == 4 && text[19] == '3' ? 10000 : 0), 15);
+            case EncodationMethod.MetricWeight:
+            case EncodationMethod.PoundWeight:
+                bool poundWeight = method == EncodationMethod.PoundWeight;
+                bits.Append(poundWeight ? 0b0101 : 0b0100, 4);
+                AppendGtin(ref bits, text);
+                bits.Append(Number(text, 20, 6) + (poundWeight && text[19] == '3' ? 10000 : 0), 15);
                 read = 26;
                 break;
 
-            case 5:
-            case 6:
-                Append(bits, ref position, method == 5 ? 0b01100 : 0b01101, 5);
-                variableLength = position;
-                Append(bits, ref position, 0, 2);
-                AppendGtin(bits, ref position, text);
-                Append(bits, ref position, text[19] - '0', 2);
-                if (method == 6)
+            case EncodationMethod.Price:
+            case EncodationMethod.PriceWithCurrency:
+                bool currency = method == EncodationMethod.PriceWithCurrency;
+                bits.Append(currency ? 0b01101 : 0b01100, 5);
+                variableLength = bits.Position;
+                bits.Append(0, 2);
+                AppendGtin(ref bits, text);
+                bits.Append(text[19] - '0', 2);
+                if (currency)
                 {
-                    Append(bits, ref position, Number(text, 20, 3), 10);
+                    bits.Append(Number(text, 20, 3), 10);
                 }
 
-                read = method == 5 ? 20 : 23;
+                read = currency ? 23 : 20;
                 break;
 
             default:
-                // The weight field carries the last digit of the identifier and the five digits after the
-                // weight's leading zero. The date field carries 38400 when there is no date.
-                Append(bits, ref position, 0b0111000 + (method - 7), 7);
-                AppendGtin(bits, ref position, text);
-                Append(bits, ref position, ((text[19] - '0') * 100000) + Number(text, 21, 5), 20);
-                Append(bits, ref position, length == 34 ? Date(text, 28) : 38400, 16);
+                // The weight and date methods. The weight field carries the last digit of the identifier and the five digits after the weight's leading zero.
+                // The date field carries 38400 when there is no date.
+                bits.Append(0b0111000 + weightAndDate, 7);
+                AppendGtin(ref bits, text);
+                bits.Append(((text[19] - '0') * 100000) + Number(text, 21, 5), 20);
+                bits.Append(length == 34 ? Date(text, 28) : 38400, 16);
                 read = length;
                 break;
         }
 
-        int mode = EncodeGeneralField(text[read..], bits, ref position, out char lastDigit);
+        GeneralFieldMode mode = EncodeGeneralField(text[read..], ref bits, out char lastDigit);
 
-        int symbolCharacters = SymbolCharacters(position, segments);
-        int remainder = (12 * (symbolCharacters - 1)) - position;
+        int symbolCharacters = SymbolCharacters(bits.Position, segments);
+        int remainder = (BitsPerSymbolCharacter * (symbolCharacters - 1)) - bits.Position;
         if (lastDigit != '\0')
         {
-            // A single digit left at the end takes four bits as its value plus one when four to six bits
-            // remain to the end of the last character, and otherwise seven bits as a pair with a separator.
+            // A single digit left at the end takes four bits as its value plus one when four to six bits remain to the end of the last character, and otherwise
+            // seven bits as a pair with a separator.
             if (remainder is >= 4 and <= 6)
             {
-                Append(bits, ref position, lastDigit - '0' + 1, 4);
+                bits.Append(lastDigit - '0' + 1, 4);
             }
             else
             {
-                Append(bits, ref position, ((lastDigit - '0') * 11) + 10 + 8, 7);
+                bits.Append(((lastDigit - '0') * 11) + 10 + 8, 7);
             }
 
-            symbolCharacters = SymbolCharacters(position, segments);
-            remainder = (12 * (symbolCharacters - 1)) - position;
+            symbolCharacters = SymbolCharacters(bits.Position, segments);
+            remainder = (BitsPerSymbolCharacter * (symbolCharacters - 1)) - bits.Position;
         }
 
         if (symbolCharacters > MaximumSymbolCharacters)
         {
             throw new ArgumentException(
-                $"GS1 DataBar Expanded carries at most {MaximumSymbolCharacters - 1} data characters; the data needs more.",
+                $"GS1 DataBar Expanded carries at most {MaximumDataSymbolCharacters} data characters; the data needs more.",
                 nameof(text));
         }
 
-        // The pad starts with the numeric to alphanumeric latch when the field ends in numeric mode, and
-        // then repeats 00100 to the end of the last data character.
-        int end = position + remainder;
-        int pad = 0;
-        if (mode == NumericMode)
+        // The pad starts with the numeric to alphanumeric latch, or as much of it as fits, when the field ends in numeric mode, and then repeats 00100 to the
+        // end of the last data character.
+        int end = bits.Position + remainder;
+        if (mode == GeneralFieldMode.Numeric)
         {
-            while (pad < 4 && position < end)
-            {
-                bits[position++] = 0;
-                pad++;
-            }
+            bits.Append(0, Math.Min(4, remainder));
         }
 
-        for (int k = 0; position < end; k = (k + 1) % 5)
+        for (int k = 0; bits.Position < end; k = (k + 1) % 5)
         {
-            bits[position++] = (byte)(k == 2 ? 1 : 0);
+            bits.Append(k == 2 ? 1 : 0, 1);
         }
 
-        // The variable length field gives whether the number of symbol characters is odd and whether it
-        // exceeds 14.
+        // The variable length field gives whether the number of symbol characters is odd and whether it exceeds 14.
         if (variableLength >= 0)
         {
-            bits[variableLength] = (byte)(symbolCharacters & 1);
-            bits[variableLength + 1] = (byte)(symbolCharacters > 14 ? 1 : 0);
+            bits.Set(variableLength, symbolCharacters & 1);
+            bits.Set(variableLength + 1, symbolCharacters > 14 ? 1 : 0);
         }
 
-        return position;
+        return bits.Position;
     }
 
     /// <summary>
-    /// Encodes the general purpose text. Numeric mode carries two digits or a digit and a separator per
-    /// seven bits, alphanumeric mode a character per five or six bits, and ISO/IEC 646 mode a character per
-    /// five, seven or eight bits. Each mode latches to another when the characters ahead favour it.
+    /// Encodes the general purpose text. Numeric mode carries two digits or a digit and a separator per seven bits, alphanumeric mode a character per five or
+    /// six bits, and ISO/IEC 646 mode a character per five, seven or eight bits. Each mode latches to another when the characters ahead favour it.
     /// </summary>
     /// <param name="text">The characters of the general purpose text, the end of the prepared text.</param>
-    /// <param name="bits">The buffer of bits.</param>
-    /// <param name="position">The bit position.</param>
+    /// <param name="bits">The bit writer.</param>
     /// <param name="lastDigit">A single digit left at the end in numeric mode, or zero.</param>
     /// <returns>The mode at the end of the text.</returns>
-    private static int EncodeGeneralField(ReadOnlySpan<char> text, Span<byte> bits, ref int position, out char lastDigit)
+    private static GeneralFieldMode EncodeGeneralField(ReadOnlySpan<char> text, ref BitWriter bits, out char lastDigit)
     {
+        // The latch decisions look up to ten characters ahead, so every character is classified once. The text is a tail of the prepared text, which
+        // Gs1Data.PreparedCapacity bounds to 122 characters for MaximumDataCharacters, so the classes fit inline.
+        InlineArray128<GeneralFieldMode> classStorage = default;
+        Span<GeneralFieldMode> classes = ((Span<GeneralFieldMode>)classStorage)[..text.Length];
+        for (int k = 0; k < text.Length; k++)
+        {
+            classes[k] = ClassOf(text[k]);
+            if (classes[k] == GeneralFieldMode.None)
+            {
+                throw new ArgumentException($"GS1 DataBar Expanded cannot carry the character U+{(int)text[k]:X4}.", nameof(text));
+            }
+        }
+
         lastDigit = '\0';
-        int mode = NumericMode;
+        GeneralFieldMode mode = GeneralFieldMode.Numeric;
         int i = 0;
         while (i < text.Length)
         {
             char c = text[i];
-            int type = TypeOf(c);
-            if (type == 0)
-            {
-                throw new ArgumentException($"GS1 DataBar Expanded cannot carry the character U+{(int)c:X4}.", nameof(text));
-            }
-
+            GeneralFieldMode type = classes[i];
             switch (mode)
             {
-                case NumericMode:
+                case GeneralFieldMode.Numeric:
                     if (i < text.Length - 1)
                     {
-                        if (type != NumericMode || TypeOf(text[i + 1]) != NumericMode)
+                        if (type != GeneralFieldMode.Numeric || classes[i + 1] != GeneralFieldMode.Numeric)
                         {
-                            Append(bits, ref position, 0b0000, 4);
-                            mode = AlphanumericMode;
+                            bits.Append(0b0000, 4);
+                            mode = GeneralFieldMode.Alphanumeric;
                         }
                         else
                         {
-                            Append(bits, ref position, (11 * NumericValue(c)) + NumericValue(text[i + 1]) + 8, 7);
+                            bits.Append((11 * NumericValue(c)) + NumericValue(text[i + 1]) + 8, 7);
                             i += 2;
                         }
                     }
-                    else if (type != NumericMode)
+                    else if (type != GeneralFieldMode.Numeric)
                     {
-                        Append(bits, ref position, 0b0000, 4);
-                        mode = AlphanumericMode;
+                        bits.Append(0b0000, 4);
+                        mode = GeneralFieldMode.Alphanumeric;
                     }
                     else
                     {
@@ -783,37 +719,37 @@ internal static class DataBarExpandedEncoder
 
                     break;
 
-                case AlphanumericMode:
+                case GeneralFieldMode.Alphanumeric:
                     if (c == Gs1Data.Separator)
                     {
-                        Append(bits, ref position, 0b01111, 5);
-                        mode = NumericMode;
+                        bits.Append(0b01111, 5);
+                        mode = GeneralFieldMode.Numeric;
                         i++;
                     }
-                    else if (type == Iso646Mode)
+                    else if (type == GeneralFieldMode.Iso646)
                     {
-                        Append(bits, ref position, 0b00100, 5);
-                        mode = Iso646Mode;
+                        bits.Append(0b00100, 5);
+                        mode = GeneralFieldMode.Iso646;
                     }
-                    else if (Next(text, i, 6, NumericMode, 0) || EndsNumeric(text, i))
+                    else if (Next(classes, i, 6, GeneralFieldMode.Numeric) || EndsNumeric(classes, i))
                     {
                         // Six numeric characters ahead, or four or five that end the text.
-                        Append(bits, ref position, 0b000, 3);
-                        mode = NumericMode;
+                        bits.Append(0b000, 3);
+                        mode = GeneralFieldMode.Numeric;
                     }
                     else if (char.IsAsciiDigit(c))
                     {
-                        Append(bits, ref position, c - 43, 5);
+                        bits.Append(c - 43, 5);
                         i++;
                     }
                     else if (char.IsAsciiLetterUpper(c))
                     {
-                        Append(bits, ref position, c - 33, 6);
+                        bits.Append(c - 33, 6);
                         i++;
                     }
                     else
                     {
-                        Append(bits, ref position, "*,-./".IndexOf(c) + 58, 6);
+                        bits.Append("*,-./".IndexOf(c) + 58, 6);
                         i++;
                     }
 
@@ -822,42 +758,42 @@ internal static class DataBarExpandedEncoder
                 default:
                     if (c == Gs1Data.Separator)
                     {
-                        Append(bits, ref position, 0b01111, 5);
-                        mode = NumericMode;
+                        bits.Append(0b01111, 5);
+                        mode = GeneralFieldMode.Numeric;
                         i++;
                         break;
                     }
 
                     // A latch out of ISO/IEC 646 mode needs no ISO/IEC 646 only character in the next ten.
-                    bool noIso646Ahead = NoneAhead(text, i, 10, Iso646Mode);
-                    if (noIso646Ahead && Next(text, i, 4, NumericMode, 0))
+                    bool noIso646Ahead = NoneAhead(classes, i, 10, GeneralFieldMode.Iso646);
+                    if (noIso646Ahead && Next(classes, i, 4, GeneralFieldMode.Numeric))
                     {
-                        Append(bits, ref position, 0b000, 3);
-                        mode = NumericMode;
+                        bits.Append(0b000, 3);
+                        mode = GeneralFieldMode.Numeric;
                     }
-                    else if (noIso646Ahead && Next(text, i, 5, AlphanumericMode, NumericMode))
+                    else if (noIso646Ahead && Next(classes, i, 5, GeneralFieldMode.Alphanumeric, GeneralFieldMode.Numeric))
                     {
-                        Append(bits, ref position, 0b00100, 5);
-                        mode = AlphanumericMode;
+                        bits.Append(0b00100, 5);
+                        mode = GeneralFieldMode.Alphanumeric;
                     }
                     else if (char.IsAsciiDigit(c))
                     {
-                        Append(bits, ref position, c - 43, 5);
+                        bits.Append(c - 43, 5);
                         i++;
                     }
                     else if (char.IsAsciiLetterUpper(c))
                     {
-                        Append(bits, ref position, c - 1, 7);
+                        bits.Append(c - 1, 7);
                         i++;
                     }
                     else if (char.IsAsciiLetterLower(c))
                     {
-                        Append(bits, ref position, c - 7, 7);
+                        bits.Append(c - 7, 7);
                         i++;
                     }
                     else
                     {
-                        Append(bits, ref position, Iso646Punctuation.IndexOf(c) + 232, 8);
+                        bits.Append(Iso646Punctuation.IndexOf(c) + 232, 8);
                         i++;
                     }
 
@@ -869,9 +805,8 @@ internal static class DataBarExpandedEncoder
     }
 
     /// <summary>
-    /// Returns the number of symbol characters that carry a number of data bits: the data characters rounded
-    /// up, and the check character. A symbol carries at least four, and one more when a stacked symbol would
-    /// otherwise leave a single symbol character on its last row.
+    /// Returns the number of symbol characters that carry a number of data bits: the data characters rounded up, and the check character. A symbol carries at
+    /// least four, and one more when a stacked symbol would otherwise leave a single symbol character on its last row.
     /// </summary>
     /// <param name="bitCount">The number of data bits.</param>
     /// <param name="segments">The number of segments in a row.</param>
@@ -888,61 +823,21 @@ internal static class DataBarExpandedEncoder
     }
 
     /// <summary>
-    /// Appends the 12 digits of the GTIN after its indicator digit as four groups of three digits in ten
-    /// bits each.
+    /// Appends the 12 digits of the GTIN after its indicator digit as four groups of three digits in ten bits each.
     /// </summary>
-    /// <param name="bits">The buffer of bits.</param>
-    /// <param name="position">The bit position.</param>
+    /// <param name="bits">The bit writer.</param>
     /// <param name="text">The prepared element strings, which start with Application Identifier (01).</param>
-    private static void AppendGtin(Span<byte> bits, ref int position, ReadOnlySpan<char> text)
+    private static void AppendGtin(ref BitWriter bits, ReadOnlySpan<char> text)
     {
         for (int i = 3; i < 15; i += 3)
         {
-            Append(bits, ref position, Number(text, i, 3), 10);
+            bits.Append(Number(text, i, 3), 10);
         }
     }
 
     /// <summary>
-    /// Appends a value as a number of bits, most significant first.
-    /// </summary>
-    /// <param name="bits">The buffer of bits.</param>
-    /// <param name="position">The bit position.</param>
-    /// <param name="value">The value.</param>
-    /// <param name="count">The number of bits.</param>
-    private static void Append(Span<byte> bits, ref int position, int value, int count)
-    {
-        // Bits past the buffer cannot fit the largest symbol. The position still counts them, so the symbol
-        // character count after the general purpose field rejects the data.
-        int end = position + count;
-        if (end <= bits.Length)
-        {
-            for (int bit = count - 1; bit >= 0; bit--)
-            {
-                bits[position++] = (byte)((value >> bit) & 1);
-            }
-        }
-
-        position = end;
-    }
-
-    /// <summary>
-    /// Appends an element of a row and switches the colour for the next one.
-    /// </summary>
-    /// <param name="row">The modules of the row.</param>
-    /// <param name="length">The number of modules written.</param>
-    /// <param name="colour">The module value of the element, 1 for dark.</param>
-    /// <param name="width">The width of the element in modules.</param>
-    private static void AppendElement(Span<byte> row, ref int length, ref byte colour, int width)
-    {
-        row.Slice(length, width).Fill(colour);
-        length += width;
-        colour = (byte)(1 - colour);
-    }
-
-    /// <summary>
-    /// Rewrites the 15 separator modules over a finder pattern. Under a dark module the separator is light.
-    /// Under a light module it is dark after a dark row module, and otherwise the opposite of the separator
-    /// module to its left.
+    /// Rewrites the 15 separator modules over a finder pattern. Under a dark module the separator is light. Under a light module it is dark after a dark row
+    /// module, and otherwise the opposite of the separator module to its left.
     /// </summary>
     /// <param name="row">The row the separator touches.</param>
     /// <param name="separator">The separator row.</param>
@@ -958,8 +853,7 @@ internal static class DataBarExpandedEncoder
     }
 
     /// <summary>
-    /// Composes the middle separator row: narrow dark and light modules alternating, inside four light
-    /// modules at each end.
+    /// Composes the middle separator row: narrow dark and light modules alternating, inside four light modules at each end.
     /// </summary>
     /// <param name="middle">The buffer that receives the modules, one for each module of the symbol width.</param>
     private static void ComposeMiddle(Span<byte> middle)
@@ -974,25 +868,24 @@ internal static class DataBarExpandedEncoder
     }
 
     /// <summary>
-    /// Returns the character class of a general purpose field character: numeric for a digit or the
-    /// separator, alphanumeric for a capital letter or one of <c>* , - . /</c>, ISO/IEC 646 for a small
-    /// letter, a space or the other punctuation, and zero for a character the field cannot carry.
+    /// Returns the character class of a general purpose field character: numeric for a digit or the separator, alphanumeric for a capital letter or one of <c>*
+    /// , - . /</c>, ISO/IEC 646 for a small letter, a space or the other punctuation, and none for a character the field cannot carry.
     /// </summary>
     /// <param name="c">The character.</param>
     /// <returns>The class.</returns>
-    private static int TypeOf(char c)
+    private static GeneralFieldMode ClassOf(char c)
     {
         if (c == Gs1Data.Separator || char.IsAsciiDigit(c))
         {
-            return NumericMode;
+            return GeneralFieldMode.Numeric;
         }
 
         if (char.IsAsciiLetterUpper(c) || c is '*' or ',' or '-' or '.' or '/')
         {
-            return AlphanumericMode;
+            return GeneralFieldMode.Alphanumeric;
         }
 
-        return char.IsAsciiLetterLower(c) || Iso646Punctuation.Contains(c) ? Iso646Mode : 0;
+        return char.IsAsciiLetterLower(c) || Iso646Punctuation.Contains(c) ? GeneralFieldMode.Iso646 : GeneralFieldMode.None;
     }
 
     /// <summary>
@@ -1004,26 +897,35 @@ internal static class DataBarExpandedEncoder
         => c == Gs1Data.Separator ? 10 : c - '0';
 
     /// <summary>
-    /// Returns whether the next characters, from the given one on, are all of one class or, when given, of a
-    /// second class.
+    /// Returns whether the next characters, from the given one on, are all of one class.
     /// </summary>
-    /// <param name="field">The field.</param>
+    /// <param name="classes">The class of every character of the field.</param>
     /// <param name="start">The first character.</param>
     /// <param name="count">The number of characters.</param>
     /// <param name="type">The class.</param>
-    /// <param name="alternative">A second class, or zero.</param>
     /// <returns>Whether that many characters remain and all are of the class.</returns>
-    private static bool Next(ReadOnlySpan<char> field, int start, int count, int type, int alternative)
+    private static bool Next(ReadOnlySpan<GeneralFieldMode> classes, int start, int count, GeneralFieldMode type)
+        => Next(classes, start, count, type, type);
+
+    /// <summary>
+    /// Returns whether the next characters, from the given one on, are all of one of two classes.
+    /// </summary>
+    /// <param name="classes">The class of every character of the field.</param>
+    /// <param name="start">The first character.</param>
+    /// <param name="count">The number of characters.</param>
+    /// <param name="type">The class.</param>
+    /// <param name="alternative">The second class.</param>
+    /// <returns>Whether that many characters remain and each is of one of the classes.</returns>
+    private static bool Next(ReadOnlySpan<GeneralFieldMode> classes, int start, int count, GeneralFieldMode type, GeneralFieldMode alternative)
     {
-        if (start + count > field.Length)
+        if (start + count > classes.Length)
         {
             return false;
         }
 
-        for (int i = start; i < start + count; i++)
+        foreach (GeneralFieldMode c in classes.Slice(start, count))
         {
-            int t = TypeOf(field[i]);
-            if (t != type && (alternative == 0 || t != alternative))
+            if (c != type && c != alternative)
             {
                 return false;
             }
@@ -1035,26 +937,25 @@ internal static class DataBarExpandedEncoder
     /// <summary>
     /// Returns whether four or five numeric characters end the field from the given one on.
     /// </summary>
-    /// <param name="field">The field.</param>
+    /// <param name="classes">The class of every character of the field.</param>
     /// <param name="start">The first character.</param>
     /// <returns>Whether the rest of the field is four or five numeric characters.</returns>
-    private static bool EndsNumeric(ReadOnlySpan<char> field, int start)
-        => field.Length - start is 4 or 5 && Next(field, start, field.Length - start, NumericMode, 0);
+    private static bool EndsNumeric(ReadOnlySpan<GeneralFieldMode> classes, int start)
+        => classes.Length - start is 4 or 5 && Next(classes, start, classes.Length - start, GeneralFieldMode.Numeric);
 
     /// <summary>
     /// Returns whether none of the next characters, or the characters to the end, are of a class.
     /// </summary>
-    /// <param name="field">The field.</param>
+    /// <param name="classes">The class of every character of the field.</param>
     /// <param name="start">The first character.</param>
     /// <param name="count">The number of characters.</param>
     /// <param name="type">The class.</param>
     /// <returns>Whether none of them is of the class.</returns>
-    private static bool NoneAhead(ReadOnlySpan<char> field, int start, int count, int type)
+    private static bool NoneAhead(ReadOnlySpan<GeneralFieldMode> classes, int start, int count, GeneralFieldMode type)
     {
-        int end = Math.Min(start + count, field.Length);
-        for (int i = start; i < end; i++)
+        foreach (GeneralFieldMode c in classes[start..Math.Min(start + count, classes.Length)])
         {
-            if (TypeOf(field[i]) == type)
+            if (c == type)
             {
                 return false;
             }
@@ -1087,8 +988,8 @@ internal static class DataBarExpandedEncoder
     }
 
     /// <summary>
-    /// Reads a date of six digits, YYMMDD, as the value the weight and date methods carry: the year times
-    /// 384, the month less one times 32, and the day. A day of zero stands for the last day of the month.
+    /// Reads a date of six digits, YYMMDD, as the value the weight and date methods carry: the year times 384, the month less one times 32, and the day. A day
+    /// of zero stands for the last day of the month.
     /// </summary>
     /// <param name="text">The text.</param>
     /// <param name="start">The first digit.</param>
@@ -1104,5 +1005,248 @@ internal static class DataBarExpandedEncoder
         }
 
         return (year * 384) + ((month - 1) * 32) + day;
+    }
+
+    /// <summary>
+    /// Writes the data bits, most significant first, straight into the 12 bit values of the data characters. Bit 0 of the stream is bit 11 of the first value.
+    /// </summary>
+    private ref struct BitWriter
+    {
+        /// <summary>
+        /// The values of the data characters.
+        /// </summary>
+        private readonly Span<int> values;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="BitWriter"/> struct.
+        /// </summary>
+        /// <param name="values">The values of the data characters.</param>
+        public BitWriter(Span<int> values) => this.values = values;
+
+        /// <summary>
+        /// Gets the number of bits appended, which counts the bits past the buffer too.
+        /// </summary>
+        public int Position { get; private set; }
+
+        /// <summary>
+        /// Appends a value as a number of bits, most significant first.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="count">The number of bits.</param>
+        public void Append(int value, int count)
+        {
+            // Bits past the buffer cannot fit the largest symbol. The position still counts them, so the symbol character count after the general purpose field
+            // rejects the data.
+            int end = this.Position + count;
+            if (end <= this.values.Length * BitsPerSymbolCharacter)
+            {
+                for (int bit = count - 1; bit >= 0; bit--)
+                {
+                    this.Set(this.Position++, (value >> bit) & 1);
+                }
+            }
+
+            this.Position = end;
+        }
+
+        /// <summary>
+        /// Sets one bit of the stream.
+        /// </summary>
+        /// <param name="index">The index of the bit in the stream.</param>
+        /// <param name="bit">The bit, 0 or 1.</param>
+        public readonly void Set(int index, int bit)
+        {
+            int shift = BitsPerSymbolCharacter - 1 - (index % BitsPerSymbolCharacter);
+            ref int value = ref this.values[index / BitsPerSymbolCharacter];
+            value = (value & ~(1 << shift)) | (bit << shift);
+        }
+    }
+
+    /// <summary>
+    /// Composes the rows of a stacked symbol one at a time, each with the separator row that is its inverse, into a row buffer and a separator buffer the
+    /// caller owns. Both buffers hold the widest row and one module more, since a partial last row can move one module right.
+    /// </summary>
+    private ref struct StackedRowComposer
+    {
+        /// <summary>
+        /// The element widths of the symbol characters, 8 each.
+        /// </summary>
+        private readonly ReadOnlySpan<int> characters;
+
+        /// <summary>
+        /// The finder pattern values, an index into <see cref="FinderWidths"/> each.
+        /// </summary>
+        private readonly ReadOnlySpan<byte> finders;
+
+        /// <summary>
+        /// The modules of the row, 1 for dark.
+        /// </summary>
+        private readonly Span<byte> row;
+
+        /// <summary>
+        /// The modules of the separator row.
+        /// </summary>
+        private readonly Span<byte> separator;
+
+        /// <summary>
+        /// The number of segments in a full row.
+        /// </summary>
+        private readonly int segments;
+
+        /// <summary>
+        /// The number of symbol characters.
+        /// </summary>
+        private readonly int symbolCharacters;
+
+        /// <summary>
+        /// The number of modules of the row written so far.
+        /// </summary>
+        private int length;
+
+        /// <summary>
+        /// The module value of the next element, 1 for dark.
+        /// </summary>
+        private byte colour;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="StackedRowComposer"/> struct.
+        /// </summary>
+        /// <param name="characters">The element widths of the symbol characters, 8 each.</param>
+        /// <param name="symbolCharacters">The number of symbol characters.</param>
+        /// <param name="segments">The number of segments in a full row.</param>
+        /// <param name="row">The buffer that receives the modules of a row.</param>
+        /// <param name="separator">The buffer that receives the modules of its separator row.</param>
+        public StackedRowComposer(ReadOnlySpan<int> characters, int symbolCharacters, int segments, Span<byte> row, Span<byte> separator)
+        {
+            this.characters = characters;
+            this.finders = Finders(symbolCharacters);
+            this.row = row;
+            this.separator = separator;
+            this.segments = segments;
+            this.symbolCharacters = symbolCharacters;
+            this.RowCount = (symbolCharacters + segments - 1) / segments;
+        }
+
+        /// <summary>
+        /// Gets the number of rows.
+        /// </summary>
+        public int RowCount { get; }
+
+        /// <summary>
+        /// Gets the width of the symbol in modules, which the first row sets because it is a full row.
+        /// </summary>
+        public int Width { get; private set; }
+
+        /// <summary>
+        /// Gets the modules of the last composed row, 1 for dark.
+        /// </summary>
+        public readonly ReadOnlySpan<byte> Row => this.row[..this.Width];
+
+        /// <summary>
+        /// Gets the modules of the separator row of the last composed row.
+        /// </summary>
+        public readonly ReadOnlySpan<byte> Separator => this.separator[..this.Width];
+
+        /// <summary>
+        /// Composes the modules of one row and of its separator row. Row 0 must be composed first, since it sets the width.
+        /// </summary>
+        /// <param name="r">The row index from the top.</param>
+        public void Compose(int r)
+        {
+            // A row of segments that is not a whole number of segment pairs on both sides starts every second row with its guard bar, so the colours of the row
+            // alternate from row to row.
+            this.length = 0;
+            this.colour = (byte)((this.segments & 3) != 0 && (r & 1) == 1 ? 1 : 0);
+            this.AppendElement(1);
+            this.AppendElement(1);
+            int first = r * this.segments;
+            int last = Math.Min(first + this.segments, this.symbolCharacters);
+            int finderCount = 0;
+            for (int c = first; c < last; c++)
+            {
+                foreach (int width in this.characters.Slice(c * 8, 8))
+                {
+                    this.AppendElement(width);
+                }
+
+                if ((c & 1) == 0)
+                {
+                    foreach (byte width in FinderWidths.Slice(this.finders[c / 2] * 5, 5))
+                    {
+                        this.AppendElement(width);
+                    }
+
+                    finderCount++;
+                }
+            }
+
+            this.AppendElement(1);
+            this.AppendElement(1);
+
+            // The separator is the inverse of the row, inside four light modules at each end. Over the 15 modules of a finder pattern the light modules break
+            // into narrow elements instead, so the separator does not read as part of the finder. A finder follows the 2 guard modules and the 17 of the first
+            // character, and every 49 modules after that pairs of finders stand 98 apart.
+            int rowLength = this.length;
+            Span<byte> rowModules = this.row[..rowLength];
+            Span<byte> separatorModules = this.separator[..rowLength];
+            for (int i = 0; i < rowLength; i++)
+            {
+                separatorModules[i] = (byte)(1 - rowModules[i]);
+            }
+
+            for (int start = 19; start <= rowLength - 13; start += 98)
+            {
+                AlternateOverFinder(rowModules, separatorModules, start);
+            }
+
+            for (int start = 68; start <= rowLength - 13; start += 98)
+            {
+                AlternateOverFinder(rowModules, separatorModules, start);
+            }
+
+            separatorModules[..4].Clear();
+            separatorModules[^4..].Clear();
+
+            // With a whole number of segment pairs on both sides every second row reads right to left. A partial last row with an odd number of finders keeps
+            // its direction and moves one module right.
+            if ((this.segments & 3) == 0 && (r & 1) == 1)
+            {
+                if (r == this.RowCount - 1 && last - first < this.segments && (finderCount & 1) == 1)
+                {
+                    rowModules.CopyTo(this.row[1..]);
+                    separatorModules.CopyTo(this.separator[1..]);
+                    this.row[0] = 0;
+                    this.separator[0] = 0;
+                    rowLength++;
+                }
+                else
+                {
+                    rowModules.Reverse();
+                    separatorModules.Reverse();
+                }
+            }
+
+            // The first row is a full row, and a shorter last row fills to its width with light modules.
+            if (r == 0)
+            {
+                this.Width = rowLength;
+            }
+            else
+            {
+                this.row[rowLength..this.Width].Clear();
+                this.separator[rowLength..this.Width].Clear();
+            }
+        }
+
+        /// <summary>
+        /// Appends an element to the row and switches the colour for the next one.
+        /// </summary>
+        /// <param name="width">The width of the element in modules.</param>
+        private void AppendElement(int width)
+        {
+            this.row.Slice(this.length, width).Fill(this.colour);
+            this.length += width;
+            this.colour = (byte)(1 - this.colour);
+        }
     }
 }

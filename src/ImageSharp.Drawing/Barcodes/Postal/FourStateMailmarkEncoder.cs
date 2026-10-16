@@ -1,18 +1,13 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Numerics;
-
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Encodation for the Royal Mail 4-state Mailmark barcodes C and L, from the Royal Mail Mailmark barcode
-/// C and barcode L encoding and decoding instructions, release 1b. Section 2.2 converts the application
-/// string to six external user fields, each to an integer internal user field, the six to one
-/// consolidated data value, the value to data numbers of 30 or 32 values, adds Reed-Solomon check
-/// numbers over a Galois field of 32 values, converts the numbers to six-bit symbols, reorders the
-/// symbols into extender groups and maps the bits of every group to the ascenders and descenders of
-/// three bars.
+/// Encodation for the Royal Mail 4-state Mailmark barcodes C and L, from the Royal Mail Mailmark barcode C and barcode L encoding and decoding instructions,
+/// release 1b. Section 2.2 converts the application string to six external user fields, each to an integer internal user field, the six to one consolidated
+/// data value, the value to data numbers of 30 or 32 values, adds Reed-Solomon check numbers over a Galois field of 32 values, converts the numbers to six-bit
+/// symbols, reorders the symbols into extender groups and maps the bits of every group to the ascenders and descenders of three bars.
 /// </summary>
 internal static class FourStateMailmarkEncoder
 {
@@ -37,9 +32,8 @@ internal static class FourStateMailmarkEncoder
     public const string FormatCharacters = "01234";
 
     /// <summary>
-    /// The allowed characters of the Version ID field, Table 2, in value order. Section 2.2.1: the
-    /// encoding process "is valid only for cases in which the value of the Version ID External User
-    /// Field is 1".
+    /// The allowed characters of the Version ID field, Table 2, in value order. Section 2.2.1: the encoding process "is valid only for cases in which the value
+    /// of the Version ID External User Field is 1".
     /// </summary>
     public const string VersionCharacters = "1234";
 
@@ -59,16 +53,15 @@ internal static class FourStateMailmarkEncoder
     public const string LimitedAlphabetic = "ABDEFGHJLNPQRSTUWXYZ";
 
     /// <summary>
-    /// The international designation of the destination field, section 2.2.2: "a nine-character string
-    /// with five trailing spaces", whose internal user field value is zero.
+    /// The international designation of the destination field, section 2.2.2: "a nine-character string with five trailing spaces", whose internal user field
+    /// value is zero.
     /// </summary>
     public const string International = "XY11     ";
 
     /// <summary>
-    /// Table 5, the symbols of the numbers with 32 values and of the check numbers: the six-bit values
-    /// with an odd number of binary 1s, in ascending order.
+    /// The length of the Destination Post Code plus DPS field.
     /// </summary>
-    private static readonly byte[] OddSymbols = BuildSymbols(true);
+    private const int DestinationLength = 9;
 
     /// <summary>
     /// The Galois field of 32 values, section 2.2.5: the primitive polynomial x^5 + x^2 + 1.
@@ -76,29 +69,33 @@ internal static class FourStateMailmarkEncoder
     private static readonly GaloisField Field = new(32, 37);
 
     /// <summary>
-    /// Table 5, the symbols of the numbers with 30 values: the six-bit values with a non-zero, even
-    /// number of binary 1s, in ascending order.
+    /// Gets Table 5, the symbols of the numbers with 32 values and of the check numbers: the six-bit values with an odd number of binary 1s, in ascending
+    /// order.
     /// </summary>
-    private static readonly byte[] EvenSymbols = BuildSymbols(false);
-
-    /// <summary>
-    /// The six character patterns of a domestic sorting code, section 2.2.2, in the order the steps test
-    /// them: F for full alphabetic, N for numeric, L for limited alphabetic and S for a space.
-    /// </summary>
-    private static readonly string[] PostcodePatterns =
+    private static ReadOnlySpan<byte> OddSymbols =>
     [
-        "FNFNLLNLS",
-        "FFNNLLNLS",
-        "FFNNNLLNL",
-        "FFNFNLLNL",
-        "FNNLLNLSS",
-        "FNNNLLNLS",
+        1, 2, 4, 7, 8, 11, 13, 14, 16, 19, 21, 22, 25, 26, 28, 31,
+        32, 35, 37, 38, 41, 42, 44, 47, 49, 50, 52, 55, 56, 59, 61, 62
     ];
 
     /// <summary>
-    /// Gets the value the accumulator holds before the characters of each pattern are added: 1 for the
-    /// first pattern, and the steps 6, 8, 10, 12 and 14 add 5,408,000,000, 5,408,000,000, 54,080,000,000,
-    /// 140,608,000,000 and 208,000,000 before the next.
+    /// Gets Table 5, the symbols of the numbers with 30 values: the first 30 six-bit values with a non-zero, even number of binary 1s, in ascending order.
+    /// </summary>
+    private static ReadOnlySpan<byte> EvenSymbols =>
+    [
+        3, 5, 6, 9, 10, 12, 15, 17, 18, 20, 23, 24, 27, 29, 30,
+        33, 34, 36, 39, 40, 43, 45, 46, 48, 51, 53, 54, 57, 58, 60
+    ];
+
+    /// <summary>
+    /// Gets the six character patterns of a domestic sorting code, section 2.2.2, nine characters each in the order the steps test them: F for full alphabetic,
+    /// N for numeric, L for limited alphabetic and S for a space.
+    /// </summary>
+    private static ReadOnlySpan<byte> PostcodePatterns => "FNFNLLNLS"u8 + "FFNNLLNLS"u8 + "FFNNNLLNL"u8 + "FFNFNLLNL"u8 + "FNNLLNLSS"u8 + "FNNNLLNLS"u8;
+
+    /// <summary>
+    /// Gets the value the accumulator holds before the characters of each pattern are added: 1 for the first pattern, and the steps 6, 8, 10, 12 and 14 add
+    /// 5,408,000,000, 5,408,000,000, 54,080,000,000, 140,608,000,000 and 208,000,000 before the next.
     /// </summary>
     private static ReadOnlySpan<ulong> PostcodeOffsets =>
     [
@@ -111,26 +108,22 @@ internal static class FourStateMailmarkEncoder
     ];
 
     /// <summary>
-    /// Gets the generator polynomial of barcode C, section 2.2.5, from the x^6 term down:
-    /// x^6 + 17x^5 + 26x^4 + 30x^3 + 27x^2 + 30x + 24.
+    /// Gets the generator polynomial of barcode C, section 2.2.5, from the x^6 term down: x^6 + 17x^5 + 26x^4 + 30x^3 + 27x^2 + 30x + 24.
     /// </summary>
     private static ReadOnlySpan<byte> GeneratorC => [1, 17, 26, 30, 27, 30, 24];
 
     /// <summary>
-    /// Gets the generator polynomial of barcode L, section 2.2.5, from the x^7 term down:
-    /// x^7 + 5x^6 + 9x^5 + 5x^4 + 26x^3 + 17x^2 + 25x + 22.
+    /// Gets the generator polynomial of barcode L, section 2.2.5, from the x^7 term down: x^7 + 5x^6 + 9x^5 + 5x^4 + 26x^3 + 17x^2 + 25x + 22.
     /// </summary>
     private static ReadOnlySpan<byte> GeneratorL => [1, 5, 9, 5, 26, 17, 25, 22];
 
     /// <summary>
-    /// Gets Table 6 of barcode C: the extender group of each data symbol D0 to D15 and check symbol C0
-    /// to C5.
+    /// Gets Table 6 of barcode C: the extender group of each data symbol D0 to D15 and check symbol C0 to C5.
     /// </summary>
     private static ReadOnlySpan<byte> ExtenderGroupsC => [3, 5, 7, 11, 13, 14, 16, 17, 19, 0, 1, 2, 4, 6, 8, 9, 10, 12, 15, 18, 20, 21];
 
     /// <summary>
-    /// Gets Table 6 of barcode L: the extender group of each data symbol D0 to D18 and check symbol C0
-    /// to C6.
+    /// Gets Table 6 of barcode L: the extender group of each data symbol D0 to D18 and check symbol C0 to C6.
     /// </summary>
     private static ReadOnlySpan<byte> ExtenderGroupsL => [2, 5, 7, 8, 13, 14, 15, 16, 21, 22, 23, 0, 1, 3, 4, 6, 9, 10, 11, 12, 17, 18, 19, 20, 24, 25];
 
@@ -154,8 +147,8 @@ internal static class FourStateMailmarkEncoder
     public static void Encode(string text, Span<FourState> states)
     {
         bool isL = text.Length == LengthL;
+        const int itemIdLength = 8;
         int supplyChainLength = isL ? 6 : 2;
-        int itemIdLength = 8;
 
         int format = FieldValue(text, 0, 1, FormatCharacters, "Format");
         int version = FieldValue(text, 1, 1, VersionCharacters, "Version ID");
@@ -198,9 +191,8 @@ internal static class FourStateMailmarkEncoder
     }
 
     /// <summary>
-    /// Section 2.2.2: converts the Destination Post Code plus DPS field to its internal user field value.
-    /// The international designation is 0, and a domestic sorting code is the offset of its character
-    /// pattern plus the mixed radix value of its non-space characters.
+    /// Section 2.2.2: converts the Destination Post Code plus DPS field to its internal user field value. The international designation is 0, and a domestic
+    /// sorting code is the offset of its character pattern plus the mixed radix value of its non-space characters.
     /// </summary>
     /// <param name="text">The application string.</param>
     /// <param name="start">The index of the nine characters of the field in <paramref name="text"/>.</param>
@@ -208,21 +200,21 @@ internal static class FourStateMailmarkEncoder
     /// <exception cref="ArgumentException">The field is neither the international designation nor a domestic sorting code.</exception>
     public static ulong DestinationValue(string text, int start)
     {
-        ReadOnlySpan<char> field = text.AsSpan(start, 9);
+        ReadOnlySpan<char> field = text.AsSpan(start, DestinationLength);
         if (field.SequenceEqual(International))
         {
             return 0;
         }
 
-        for (int pattern = 0; pattern < PostcodePatterns.Length; pattern++)
+        for (int pattern = 0; pattern < PostcodeOffsets.Length; pattern++)
         {
-            string types = PostcodePatterns[pattern];
+            ReadOnlySpan<byte> types = PostcodePatterns.Slice(pattern * DestinationLength, DestinationLength);
             ulong value = 0;
             bool matches = true;
             for (int i = 0; i < types.Length && matches; i++)
             {
                 char c = field[i];
-                switch (types[i])
+                switch ((char)types[i])
                 {
                     case 'F':
                         matches = c is >= 'A' and <= 'Z';
@@ -255,9 +247,8 @@ internal static class FourStateMailmarkEncoder
     }
 
     /// <summary>
-    /// Section 2.2.4: divides the consolidated data value into data numbers, the least significant
-    /// first, by 32 for the numbers with 32 values and by 30 for the rest; the most significant number
-    /// is the last quotient.
+    /// Section 2.2.4: divides the consolidated data value into data numbers, the least significant first, by 32 for the numbers with 32 values and by 30 for
+    /// the rest; the most significant number is the last quotient.
     /// </summary>
     /// <param name="consolidated">The consolidated data value.</param>
     /// <param name="numbers">The buffer that receives the data numbers, D0 first.</param>
@@ -276,17 +267,16 @@ internal static class FourStateMailmarkEncoder
     }
 
     /// <summary>
-    /// Section 2.2.5: the check numbers are the remainder of the data polynomial, whose first number is
-    /// its highest term, multiplied by x to the number of check numbers and divided by the generator
-    /// polynomial over the Galois field of 32 values.
+    /// Section 2.2.5: the check numbers are the remainder of the data polynomial, whose first number is its highest term, multiplied by x to the number of
+    /// check numbers and divided by the generator polynomial over the Galois field of 32 values.
     /// </summary>
     /// <param name="data">The data numbers.</param>
     /// <param name="generator">The generator polynomial coefficients as section 2.2.5 prints them, highest term first.</param>
     /// <param name="check">The buffer that receives the check numbers, C0 first.</param>
     public static void CheckNumbers(ReadOnlySpan<int> data, ReadOnlySpan<byte> generator, Span<int> check)
     {
-        // The field takes the coefficients from the x^0 term up, with the leading 1 implied, so the printed
-        // order reverses. Barcode L has the most check numbers, 7.
+        // The field takes the coefficients from the x^0 term up, with the leading 1 implied, so the printed order reverses. Barcode L has the most check
+        // numbers, 7.
         int checkCount = generator.Length - 1;
         InlineArray8<int> coefficientStorage = default;
         Span<int> coefficients = ((Span<int>)coefficientStorage)[..checkCount];
@@ -299,9 +289,8 @@ internal static class FourStateMailmarkEncoder
     }
 
     /// <summary>
-    /// Section 2.2.8, Table 7: every extender group fills three bars. Its high three bits are the
-    /// ascenders and its low three bits the descenders of an even numbered group, and the reverse of an
-    /// odd numbered group, with the most significant bit at the leftmost bar.
+    /// Section 2.2.8, Table 7: every extender group fills three bars. Its high three bits are the ascenders and its low three bits the descenders of an even
+    /// numbered group, and the reverse of an odd numbered group, with the most significant bit at the leftmost bar.
     /// </summary>
     /// <param name="extenderGroups">The extender groups in physical order.</param>
     /// <param name="states">The buffer that receives the bar states.</param>
@@ -316,22 +305,16 @@ internal static class FourStateMailmarkEncoder
             for (int bar = 0; bar < BarsPerGroup; bar++)
             {
                 int bit = 2 - bar;
-                bool ascender = ((ascenders >> bit) & 1) != 0;
-                bool descender = ((descenders >> bit) & 1) != 0;
-                states[(group * BarsPerGroup) + bar] = ascender && descender
-                    ? FourState.Full
-                    : ascender
-                        ? FourState.Ascender
-                        : descender
-                            ? FourState.Descender
-                            : FourState.Tracker;
+                FourState ascender = ((ascenders >> bit) & 1) != 0 ? FourState.Ascender : FourState.Tracker;
+                FourState descender = ((descenders >> bit) & 1) != 0 ? FourState.Descender : FourState.Tracker;
+                states[(group * BarsPerGroup) + bar] = ascender | descender;
             }
         }
     }
 
     /// <summary>
-    /// Section 2.2.2: converts a field to its internal user field value, in which each allowed character
-    /// has its index in the array of allowed characters as its value.
+    /// Section 2.2.2: converts a field to its internal user field value, in which each allowed character has its index in the array of allowed characters as
+    /// its value.
     /// </summary>
     /// <param name="text">The application string.</param>
     /// <param name="start">The index of the field in <paramref name="text"/>.</param>
@@ -355,26 +338,5 @@ internal static class FourStateMailmarkEncoder
         }
 
         return value;
-    }
-
-    /// <summary>
-    /// Builds Table 5: the six-bit values with an odd, or a non-zero even, number of binary 1s, in ascending
-    /// order.
-    /// </summary>
-    /// <param name="odd">Whether the values have an odd number of binary 1s.</param>
-    /// <returns>The 32 odd or the 30 even values.</returns>
-    private static byte[] BuildSymbols(bool odd)
-    {
-        byte[] symbols = new byte[odd ? 32 : 30];
-        int count = 0;
-        for (int value = 1; count < symbols.Length; value++)
-        {
-            if ((BitOperations.PopCount((uint)value) & 1) == (odd ? 1 : 0))
-            {
-                symbols[count++] = (byte)value;
-            }
-        }
-
-        return symbols;
     }
 }

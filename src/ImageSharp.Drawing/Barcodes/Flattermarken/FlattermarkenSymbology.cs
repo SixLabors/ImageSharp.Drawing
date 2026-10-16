@@ -4,14 +4,12 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The Flattermarken symbology. The valid characters are "0".."9", the print ratio is 1:1, the module
-/// width is 2 to 3 mm and the symbol height is 5 to 10 mm. Every digit takes a window of nine modules. A
-/// digit from 1 to 9 is one bar of one module at the position the digit names from the left of its
-/// window, and the digit 0 leaves its window blank. The printed line shows the digits as given.
+/// The Flattermarken symbology. The valid characters are "0".."9", the print ratio is 1:1, the module width is 2 to 3 mm and the symbol height is 5 to 10 mm.
+/// Every digit takes a window of nine modules. A digit from 1 to 9 is one bar of one module at the position the digit names from the left of its window, and
+/// the digit 0 leaves its window blank. The printed line shows the digits as given.
 /// <para>
-/// A symbol that starts or ends with a blank part of a window begins or ends with a bar of zero width,
-/// so the windows keep their width. The quiet zone is "Application dependent" and is zero. The bar
-/// height when the caller sets none is 5 modules, the 10 mm height at the 2 mm module.
+/// A symbol that starts or ends with a blank part of a window begins or ends with a bar of zero width, so the windows keep their width. The quiet zone is
+/// "Application dependent" and is zero. The bar height when the caller sets none is 5 modules, the 10 mm height at the 2 mm module.
 /// </para>
 /// </summary>
 public sealed class FlattermarkenSymbology : BarcodeSymbology
@@ -45,15 +43,14 @@ public sealed class FlattermarkenSymbology : BarcodeSymbology
 
         BarcodeSymbology.ValidateDigits(text);
 
-        // One bar and one space per digit at most, plus a zero width bar at either end. The symbol reserves
-        // that many runs and keeps those written.
+        // One bar and one space per digit at most, plus a zero width bar at either end. The symbol reserves that many runs and keeps those written.
         double xDimension = options.XDimension ?? XDimension;
         Span<int> buffer = symbol.BeginLinear((text.Length * 2) + 3, xDimension, out Span<float> heights, out _);
         int written = 0;
         int space = 0;
-        for (int i = 0; i < text.Length; i++)
+        foreach (char c in text)
         {
-            int digit = text[i] - '0';
+            int digit = c - '0';
             if (digit == 0)
             {
                 space += Window;

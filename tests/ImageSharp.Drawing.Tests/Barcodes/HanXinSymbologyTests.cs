@@ -6,16 +6,15 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="HanXinSymbology"/>. Each expected grid is the module grid of an independent
-/// reference implementation, bwip-js, one row of hexadecimal digits per line, four modules per digit and the last
-/// digit padded with light modules. The vectors cover the four error correction levels, Numeric and Byte
-/// segments, and versions with no alignment patterns up to six rows of them.
+/// Encoder tests for <see cref="HanXinSymbology"/>. Each expected grid is the module grid of an independent reference implementation, bwip-js, one row of
+/// hexadecimal digits per line, four modules per digit and the last digit padded with light modules. The vectors cover the four error correction levels,
+/// Numeric and Byte segments, and versions with no alignment patterns up to six rows of them.
 /// </summary>
 public class HanXinSymbologyTests
 {
     /// <summary>
-    /// Gets the cases of <see cref="MatchesReferenceGrid"/>: the error correction level, the version (0 for the
-    /// smallest that holds the data), the text, the side and the grid.
+    /// Gets the cases of <see cref="MatchesReferenceGrid"/>: the error correction level, the version (0 for the smallest that holds the data), the text, the
+    /// side and the grid.
     /// </summary>
     public static TheoryData<HanXinErrorCorrectionLevel, int, string, int, string> MatchesReferenceGridData { get; } = new()
     {

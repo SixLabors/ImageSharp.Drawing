@@ -6,13 +6,11 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The United States Postal Service Intelligent Mail barcode, which USPS-B-3200 revision H defines. The
-/// text is a 20-digit tracking code followed by a routing code of 0, 5, 9 or 11 digits, so the symbol
-/// carries 20, 25, 29 or 31 digits. Section 2.1.3: the second digit of the barcode identifier "shall be
-/// constrained to the range of 0-4". The symbol is 65 bars. Section 2.4.3: the printed line is the fields
-/// of the tracking code, the barcode identifier, the service type identifier, the mailer ID of 6 or 9
-/// digits and the serial number, then the 5-digit ZIP Code, the 4-digit add-on and the remaining 2
-/// digits of the routing code, "separated with a space added between data fields".
+/// The United States Postal Service Intelligent Mail barcode, which USPS-B-3200 revision H defines. The text is a 20-digit tracking code followed by a routing
+/// code of 0, 5, 9 or 11 digits, so the symbol carries 20, 25, 29 or 31 digits. Section 2.1.3: the second digit of the barcode identifier "shall be constrained
+/// to the range of 0-4". The symbol is 65 bars. Section 2.4.3: the printed line is the fields of the tracking code, the barcode identifier, the service type
+/// identifier, the mailer ID of 6 or 9 digits and the serial number, then the 5-digit ZIP Code, the 4-digit add-on and the remaining 2 digits of the routing
+/// code, "separated with a space added between data fields".
 /// </summary>
 public sealed class IntelligentMailSymbology : BarcodeSymbology
 {
@@ -45,9 +43,8 @@ public sealed class IntelligentMailSymbology : BarcodeSymbology
     }
 
     /// <summary>
-    /// Builds the line of section 2.4.3. Section 2.1.3 C gives the mailer ID as "a unique, 6-or 9- digit
-    /// number" whose 9-digit range is 900000000 to 999999999, so a mailer ID that starts with 9 is 9
-    /// digits and the serial number 6, and otherwise 6 and 9.
+    /// Builds the line of section 2.4.3. Section 2.1.3 C gives the mailer ID as "a unique, 6-or 9- digit number" whose 9-digit range is 900000000 to 999999999,
+    /// so a mailer ID that starts with 9 is 9 digits and the serial number 6, and otherwise 6 and 9.
     /// </summary>
     /// <param name="text">The digits, already validated.</param>
     /// <param name="line">The buffer that receives the line.</param>

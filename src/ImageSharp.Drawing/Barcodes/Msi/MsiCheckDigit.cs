@@ -4,8 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Specifies which check digits an MSI symbol carries after its data. The symbology is not
-/// self-checking, and the application chooses the calculation.
+/// Specifies which check digits an MSI symbol carries after its data. The symbology is not self-checking, and the application chooses the calculation.
 /// </summary>
 public enum MsiCheckDigit
 {
@@ -15,9 +14,8 @@ public enum MsiCheckDigit
     None,
 
     /// <summary>
-    /// One modulo 10 check digit. Every other digit from the right is doubled, the digits of the
-    /// products and the remaining digits are added, and the check digit lifts the sum to the next
-    /// multiple of ten.
+    /// One modulo 10 check digit. Every other digit from the right is doubled, the digits of the products and the remaining digits are added, and the check
+    /// digit lifts the sum to the next multiple of ten.
     /// </summary>
     Modulo10,
 
@@ -27,15 +25,13 @@ public enum MsiCheckDigit
     Modulo1010,
 
     /// <summary>
-    /// One modulo 11 check digit with the IBM weights 2 to 7. The digits are weighted from the right,
-    /// starting at 2 and returning to 2 after 7, and the check digit lifts the weighted sum to the next
-    /// multiple of eleven.
+    /// One modulo 11 check digit with the IBM weights 2 to 7. The digits are weighted from the right, starting at 2 and returning to 2 after 7, and the check
+    /// digit lifts the weighted sum to the next multiple of eleven.
     /// </summary>
     Modulo11,
 
     /// <summary>
-    /// A modulo 11 check digit with the IBM weights, then a modulo 10 check digit calculated over the
-    /// data and the first.
+    /// A modulo 11 check digit with the IBM weights, then a modulo 10 check digit calculated over the data and the first.
     /// </summary>
     Modulo1110,
 
@@ -45,8 +41,7 @@ public enum MsiCheckDigit
     NcrModulo11,
 
     /// <summary>
-    /// A modulo 11 check digit with the NCR weights, then a modulo 10 check digit calculated over the
-    /// data and the first.
+    /// A modulo 11 check digit with the NCR weights, then a modulo 10 check digit calculated over the data and the first.
     /// </summary>
     NcrModulo1110,
 }

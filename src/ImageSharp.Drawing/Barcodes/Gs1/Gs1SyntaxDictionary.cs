@@ -4,17 +4,16 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The GS1 Application Identifiers and the rules of their data, from the GS1 Barcode Syntax Dictionary,
-/// release 2026-01-27, which GS1 maintains in step with release 26 of the GS1 General Specifications.
+/// The GS1 Application Identifiers and the rules of their data, from the GS1 Barcode Syntax Dictionary, release 2026-01-27, which GS1 maintains in step with
+/// release 26 of the GS1 General Specifications.
 /// </summary>
 internal static class Gs1SyntaxDictionary
 {
     /// <summary>
-    /// The entries, one for each Application Identifier or range of them, in the lexical order of their first
-    /// Application Identifier, each with its title from the dictionary. An entry gives the first and last
-    /// Application Identifier, whether the element string has a predefined length, whether it may be a GS1
-    /// Digital Link data attribute, the components of its data, its requisite rules, its excluded
-    /// Application Identifiers, and its GS1 Digital Link qualifier sequences when it is a primary key.
+    /// The entries, one for each Application Identifier or range of them, in the lexical order of their first Application Identifier, each with its title from
+    /// the dictionary. An entry gives the first and last Application Identifier, whether the element string has a predefined length, whether it may be a GS1
+    /// Digital Link data attribute, the components of its data, its requisite rules, its excluded Application Identifiers, and its GS1 Digital Link qualifier
+    /// sequences when it is a primary key.
     /// </summary>
     private static readonly Gs1ApplicationIdentifier[] Table =
     [
@@ -832,8 +831,8 @@ internal static class Gs1SyntaxDictionary
     /// <returns>The index, or -1 when the identifier is not an allocated Application Identifier.</returns>
     public static int IndexOf(ReadOnlySpan<char> identifier)
     {
-        // The entries are in lexical order, and no Application Identifier is a prefix of another, so the
-        // only entry that can hold the identifier is the last one whose first identifier is not after it.
+        // The entries are in lexical order, and no Application Identifier is a prefix of another, so the only entry that can hold the identifier is the last
+        // one whose first identifier is not after it.
         int low = 0;
         int high = Table.Length - 1;
         int candidate = -1;

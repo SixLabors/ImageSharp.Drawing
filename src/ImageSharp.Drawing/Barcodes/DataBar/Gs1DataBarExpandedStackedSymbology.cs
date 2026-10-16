@@ -6,23 +6,19 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// GS1 DataBar Expanded Stacked, GS1 DataBar Expanded in rows for a symbol area or a print mechanism that is
-/// not wide enough for a single row. Section 5.5.2.3.2 of the GS1 General Specifications: "It can be printed
-/// in widths of 2 to 20 segments and can have from 2 to 11 rows. Its structure includes a 3X high separator
-/// pattern between rows." Each row is 34X high, and the bar height of the options sets each row. No quiet
-/// zone is required.
+/// GS1 DataBar Expanded Stacked, GS1 DataBar Expanded in rows for a symbol area or a print mechanism that is not wide enough for a single row. Section
+/// 5.5.2.3.2 of the GS1 General Specifications: "It can be printed in widths of 2 to 20 segments and can have from 2 to 11 rows. Its structure includes a 3X
+/// high separator pattern between rows." Each row is 34X high, and the bar height of the options sets each row. No quiet zone is required.
 /// <para>
-/// The input is the element string syntax the standard prints, each Application Identifier in parentheses
-/// followed by its data. When the first element string is Application Identifier (01), its check digit must
-/// be correct. The human readable interpretation prints the element strings on one line, except an element
+/// The input is the element string syntax the standard prints, each Application Identifier in parentheses followed by its data. When the first element string
+/// is Application Identifier (01), its check digit must be correct. The human readable interpretation prints the element strings on one line, except an element
 /// string of Application Identifier (8200), which does not print.
 /// </para>
 /// </summary>
 public sealed class Gs1DataBarExpandedStackedSymbology : BarcodeSymbology
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="Gs1DataBarExpandedStackedSymbology"/> class with four
-    /// segments in a row.
+    /// Initializes a new instance of the <see cref="Gs1DataBarExpandedStackedSymbology"/> class with four segments in a row.
     /// </summary>
     public Gs1DataBarExpandedStackedSymbology()
         : this(4)
@@ -61,8 +57,7 @@ public sealed class Gs1DataBarExpandedStackedSymbology : BarcodeSymbology
         {
             Gs1Data.Prepare(text, ref encoded);
 
-            // The interpretation is never longer than the text, which PreparedCapacity bounds to 122
-            // characters, so the inline buffer always holds it.
+            // The interpretation is never longer than the text, which PreparedCapacity bounds to 122 characters, so the inline buffer always holds it.
             InlineArray128<char> readableStorage = default;
             Span<char> readable = readableStorage;
             int readableLength = options.Font is null ? 0 : Gs1Data.WriteReadable(text, false, readable);

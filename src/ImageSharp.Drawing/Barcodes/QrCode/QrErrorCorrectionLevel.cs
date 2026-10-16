@@ -4,8 +4,8 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The error correction levels of QR Code, Table 8 of ISO/IEC 18004. A higher level recovers a larger part
-/// of a damaged symbol and holds less data in a symbol of the same size.
+/// The error correction levels of QR Code, Table 8 of ISO/IEC 18004. A higher level recovers a larger part of a damaged symbol and holds less data in a symbol
+/// of the same size.
 /// </summary>
 public enum QrErrorCorrectionLevel
 {

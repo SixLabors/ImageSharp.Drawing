@@ -6,9 +6,8 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="HibcCode39Symbology"/>. Each expected run string is the alternating bar and
-/// space module widths, starting with a bar, taken from an independent reference implementation through
-/// its raw encoding API, less the gap it emits after the stop character. A HIBC Code 39 carries the same
+/// Encoder tests for <see cref="HibcCode39Symbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, taken
+/// from an independent reference implementation through its raw encoding API, less the gap it emits after the stop character. A HIBC Code 39 carries the same
 /// data a HIBC Code 128 does, drawn by Code 39, so these also prove the shared data layer.
 /// </summary>
 public class HibcCode39SymbologyTests
@@ -38,22 +37,19 @@ public class HibcCode39SymbologyTests
         => Assert.Equal(expected, Encode(new HibcCode39Symbology(), text));
 
     /// <summary>
-    /// A caller who has already calculated the check character supplies it, and the symbol carries it
-    /// once, so the runs match those of the same data with the check character left off.
+    /// A caller who has already calculated the check character supplies it, and the symbol carries it once, so the runs match those of the same data with the
+    /// check character left off.
     /// </summary>
     [Fact]
     public void ValidatesASuppliedCheckCharacter()
-        => Assert.Equal(
-            Encode(new HibcCode39Symbology(), "A123BJC5D6E71"),
-            Encode(new HibcCode39Symbology(true), "A123BJC5D6E71G"));
+        => Assert.Equal(Encode(new HibcCode39Symbology(), "A123BJC5D6E71"), Encode(new HibcCode39Symbology(true), "A123BJC5D6E71G"));
 
     [Fact]
     public void RejectsWrongCheckCharacter()
         => Assert.Throws<ArgumentException>(() => Encode(new HibcCode39Symbology(true), "A123BJC5D6E71H"));
 
     /// <summary>
-    /// HIBC carries the Code 39 character set, so anything outside it is rejected, as is empty data and
-    /// data beyond the length the symbology allows.
+    /// HIBC carries the Code 39 character set, so anything outside it is rejected, as is empty data and data beyond the length the symbology allows.
     /// </summary>
     [Theory]
     [InlineData("")]
@@ -68,9 +64,8 @@ public class HibcCode39SymbologyTests
         => Assert.ThrowsAny<ArgumentException>(() => Encode(new HibcCode39Symbology(), new string('A', 501)));
 
     /// <summary>
-    /// The interpretation is the encoded data between delimiters, so it shows the flag character and the
-    /// check character the caller did not type, and a check character that is a space shows as an
-    /// underscore.
+    /// The interpretation is the encoded data between delimiters, so it shows the flag character and the check character the caller did not type, and a check
+    /// character that is a space shows as an underscore.
     /// </summary>
     [Theory]
     [InlineData("A123BJC5D6E71", "*+A123BJC5D6E71G*")]
@@ -84,8 +79,8 @@ public class HibcCode39SymbologyTests
     }
 
     /// <summary>
-    /// The data already carries the HIBC check character, so Code 39 adds none of its own: the symbol is
-    /// the flag character, the data and the one check character between the start and stop characters.
+    /// The data already carries the HIBC check character, so Code 39 adds none of its own: the symbol is the flag character, the data and the one check
+    /// character between the start and stop characters.
     /// </summary>
     [Fact]
     public void AddsNoCode39CheckCharacter()

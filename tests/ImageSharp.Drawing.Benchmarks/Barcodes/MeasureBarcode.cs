@@ -7,8 +7,7 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Benchmarks.Barcodes;
 
 /// <summary>
-/// Measures the encodation of linear and stacked symbols through the public measuring API, which encodes
-/// the full symbol and lays out its bars and text.
+/// Measures the encodation of linear and stacked symbols through the public measuring API, which encodes the full symbol and lays out its bars and text.
 /// </summary>
 public class MeasureBarcode
 {

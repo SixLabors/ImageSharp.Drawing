@@ -6,17 +6,16 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for the Aztec Code symbologies. Each expected grid is the module grid of an independent
-/// reference implementation, one row of hexadecimal digits per line, four modules per digit with the
-/// leftmost module the most significant bit. That implementation never picks a compact symbol on its own, so
-/// the reference for an automatic size is the first symbol in the order of section 11.5 of ISO/IEC 24778
-/// that holds the data: compact 1 to 4 layers, then full-range 4 to 32 layers.
+/// Encoder tests for the Aztec Code symbologies. Each expected grid is the module grid of an independent reference implementation, one row of hexadecimal
+/// digits per line, four modules per digit with the leftmost module the most significant bit. That implementation never picks a compact symbol on its own, so
+/// the reference for an automatic size is the first symbol in the order of section 11.5 of ISO/IEC 24778 that holds the data: compact 1 to 4 layers, then
+/// full-range 4 to 32 layers.
 /// </summary>
 public class AztecCodeSymbologyTests
 {
     /// <summary>
-    /// Gets the cases of <see cref="MatchesReferenceGrid"/>: the symbology, the text, the error correction
-    /// percentage, the layers (0 for the smallest symbol), the side, and the grid.
+    /// Gets the cases of <see cref="MatchesReferenceGrid"/>: the symbology, the text, the error correction percentage, the layers (0 for the smallest symbol),
+    /// the side, and the grid.
     /// </summary>
     public static TheoryData<string, string, int, int, int, string> MatchesReferenceGridData { get; } = new()
     {
@@ -548,8 +547,7 @@ public class AztecCodeSymbologyTests
         });
 
     /// <summary>
-    /// Annex A of ISO/IEC 24778: a rune is the 11 x 11 Core Symbol of a compact symbol whose mode message
-    /// carries the value.
+    /// Annex A of ISO/IEC 24778: a rune is the 11 x 11 Core Symbol of a compact symbol whose mode message carries the value.
     /// </summary>
     /// <param name="text">The value.</param>
     /// <param name="expected">The reference grid.</param>
@@ -578,8 +576,7 @@ public class AztecCodeSymbologyTests
         => Assert.ThrowsAny<ArgumentException>(() => SymbolEncoder.Encode(new AztecRuneSymbology(), text, new BarcodeOptions()));
 
     /// <summary>
-    /// Section 4.1 a) of ISO/IEC 24778: the default interpretation covers the 256 byte values, U+0000 to
-    /// U+00FF.
+    /// Section 4.1 a) of ISO/IEC 24778: the default interpretation covers the 256 byte values, U+0000 to U+00FF.
     /// </summary>
     [Fact]
     public void RejectsCharactersAboveLatin1()
@@ -594,18 +591,15 @@ public class AztecCodeSymbologyTests
             Assert.Equal(0F, symbol.LeadingQuietZone));
 
     /// <summary>
-    /// Table 1 of ISO/IEC 24778: a compact symbol holds at most 76 codewords, so data that needs more fills
-    /// no compact symbol.
+    /// Table 1 of ISO/IEC 24778: a compact symbol holds at most 76 codewords, so data that needs more fills no compact symbol.
     /// </summary>
     [Fact]
     public void CompactRejectsDataBeyondFourLayers()
-        => Assert.Throws<ArgumentException>(
-            () => SymbolEncoder.Encode(new AztecCodeCompactSymbology(), new string('a', 200), new BarcodeOptions()));
+        => Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new AztecCodeCompactSymbology(), new string('a', 200), new BarcodeOptions()));
 
     /// <summary>
-    /// Section 7.2.3 of ISO/IEC 24778: the message length of a compact symbol has 6 bits, "from one up to 64
-    /// codewords". Digits take a 5-bit D/L and 4 bits each, so 126 digits fill 509 bits, 64 codewords of 8
-    /// bits, and 127 digits fill 513 bits, 65 codewords. At 5 percent the 4-layer compact symbol of 76
+    /// Section 7.2.3 of ISO/IEC 24778: the message length of a compact symbol has 6 bits, "from one up to 64 codewords". Digits take a 5-bit D/L and 4 bits
+    /// each, so 126 digits fill 509 bits, 64 codewords of 8 bits, and 127 digits fill 513 bits, 65 codewords. At 5 percent the 4-layer compact symbol of 76
     /// codewords has room for the 65 codewords and their 7 check codewords, but the length cannot say 65.
     /// </summary>
     [Fact]
@@ -619,8 +613,8 @@ public class AztecCodeSymbologyTests
     }
 
     /// <summary>
-    /// Section 7.3.2.2: one B/S carries at most 31 + 2047 bytes, so 2079 bytes take two. The expected grid is the
-    /// grid of Zint for the same bytes at the same error correction.
+    /// Section 7.3.2.2: one B/S carries at most 31 + 2047 bytes, so 2079 bytes take two. The expected grid is the grid of Zint for the same bytes at the same
+    /// error correction.
     /// </summary>
     [Fact]
     public void SplitsByteRunsLongerThanOneByteShift()

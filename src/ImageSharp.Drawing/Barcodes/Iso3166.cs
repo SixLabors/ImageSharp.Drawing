@@ -9,10 +9,14 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 internal static class Iso3166
 {
     /// <summary>
-    /// Gets the ISO 3166-1 alpha-2 country codes as a bit field, code XY at bit index
-    /// 26 x (X - 'A') + (Y - 'A'), bit n at bit 7 - (n mod 8) of byte n div 8. A bit past the end of the
-    /// field is clear, so the trailing zero bytes are left out. The constant bytes compile into the assembly
-    /// data, so reading them allocates nothing.
+    /// The number of letters A to Z, the number of codes in each row of <see cref="Alpha2Codes"/>.
+    /// </summary>
+    private const int LetterCount = 26;
+
+    /// <summary>
+    /// Gets the ISO 3166-1 alpha-2 country codes as a bit field, code XY at bit index 26 x (X - 'A') + (Y - 'A'), bit n at bit 7 - (n mod 8) of byte n div 8. A
+    /// bit past the end of the field is clear, so the trailing zero bytes are left out. The constant bytes compile into the assembly data, so reading them
+    /// allocates nothing.
     /// </summary>
     private static ReadOnlySpan<byte> Alpha2Codes =>
     [
@@ -25,8 +29,8 @@ internal static class Iso3166
     ];
 
     /// <summary>
-    /// Gets the ISO 3166-1 numeric country codes 000 to 999 as a bit field, code n at bit 7 - (n mod 8) of
-    /// byte n div 8. The constant bytes compile into the assembly data, so reading them allocates nothing.
+    /// Gets the ISO 3166-1 numeric country codes 000 to 999 as a bit field, code n at bit 7 - (n mod 8) of byte n div 8. The constant bytes compile into the
+    /// assembly data, so reading them allocates nothing.
     /// </summary>
     private static ReadOnlySpan<byte> NumericCodes =>
     [
@@ -40,8 +44,7 @@ internal static class Iso3166
     ];
 
     /// <summary>
-    /// Returns whether the characters are an ISO 3166-1 alpha-2 country code: two capital letters that name
-    /// an assigned code.
+    /// Returns whether the characters are an ISO 3166-1 alpha-2 country code: two capital letters that name an assigned code.
     /// </summary>
     /// <param name="code">The characters.</param>
     /// <returns><see langword="true"/> when they are a country code.</returns>
@@ -52,7 +55,7 @@ internal static class Iso3166
             return false;
         }
 
-        return IsSet(Alpha2Codes, (26 * (code[0] - 'A')) + (code[1] - 'A'));
+        return IsSet(Alpha2Codes, (LetterCount * (code[0] - 'A')) + (code[1] - 'A'));
     }
 
     /// <summary>
@@ -63,8 +66,8 @@ internal static class Iso3166
     public static bool IsNumericCode(int code) => IsSet(NumericCodes, code);
 
     /// <summary>
-    /// Returns whether a bit is set in a bit field whose bytes hold their bits from the most significant. A
-    /// bit past the end of the field is clear, so trailing zero bytes are left out of the fields.
+    /// Returns whether a bit is set in a bit field whose bytes hold their bits from the most significant. A bit past the end of the field is clear, so trailing
+    /// zero bytes are left out of the fields.
     /// </summary>
     /// <param name="field">The bit field.</param>
     /// <param name="bit">The bit index.</param>

@@ -4,12 +4,9 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The Facing Identification Mark of the United States Postal Service. The input is the pattern letter,
-/// A to E.
-/// Each pattern is nine positions, a bar or a space, on a pitch of two modules of 1/32 inch: A is
-/// 110010011, B is 101101101, C is 110101011, D is 111010111 and E is 101000101. The bars are 1/32 inch
-/// wide and 5/8 inch high, so a pattern is 17 modules wide and 20 modules high. The mark carries no
-/// data and prints no line.
+/// The Facing Identification Mark of the United States Postal Service. The input is the pattern letter, A to E. Each pattern is nine positions, a bar or a
+/// space, on a pitch of two modules of 1/32 inch: A is 110010011, B is 101101101, C is 110101011, D is 111010111 and E is 101000101. The bars are 1/32 inch
+/// wide and 5/8 inch high, so a pattern is 17 modules wide and 20 modules high. The mark carries no data and prints no line.
 /// </summary>
 public sealed class FacingIdentificationMarkSymbology : BarcodeSymbology
 {
@@ -17,6 +14,11 @@ public sealed class FacingIdentificationMarkSymbology : BarcodeSymbology
     /// The number of positions in a pattern.
     /// </summary>
     private const int Positions = 9;
+
+    /// <summary>
+    /// The distance between positions in modules.
+    /// </summary>
+    private const int Pitch = 2;
 
     /// <summary>
     /// The nominal X dimension in millimetres: the 1/32 inch bar width.
@@ -42,9 +44,8 @@ public sealed class FacingIdentificationMarkSymbology : BarcodeSymbology
             throw new ArgumentException($"A Facing Identification Mark is one of the patterns A to E; got \"{text}\".", nameof(text));
         }
 
-        // Every bar is one module, and the space to the next bar is one module for every empty
-        // position between them plus one for the pitch. A bar and a space for every position bounds the
-        // runs, and the symbol keeps those written.
+        // Every bar is one module, so the space to the next bar is the pitch less that module, plus one pitch for every empty position between them. A bar and
+        // a space for every position bounds the runs, and the symbol keeps those written.
         int pattern = Patterns[text[0] - 'A'];
         double xDimension = options.XDimension ?? XDimension;
         Span<int> buffer = symbol.BeginLinear((Positions * 2) - 1, xDimension, out Span<float> heights, out _);
@@ -54,13 +55,13 @@ public sealed class FacingIdentificationMarkSymbology : BarcodeSymbology
         {
             if (((pattern >> position) & 1) == 0)
             {
-                space += 2;
+                space += Pitch;
                 continue;
             }
 
             if (written > 0)
             {
-                buffer[written++] = space + 1;
+                buffer[written++] = space + Pitch - 1;
             }
 
             buffer[written++] = 1;

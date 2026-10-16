@@ -1,29 +1,24 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Encodation for Code 49, AIM USS-49. Section 2.1: a symbol is 2 to 8 rows, and each row is a start
-/// pattern, four symbol characters of 16 modules and a stop pattern, 70 modules in all. A symbol character
-/// carries two code characters of value 0 to 48, W = 49 C1 + C2, in the parity Table 2 gives its row and
-/// column. Every row ends in a row check character, and the last row carries the row count, the mode and
-/// the symbol check characters of section 2.1.4.
+/// Encodation for Code 49, AIM USS-49. Section 2.1: a symbol is 2 to 8 rows, and each row is a start pattern, four symbol characters of 16 modules and a stop
+/// pattern, 70 modules in all. A symbol character carries two code characters of value 0 to 48, W = 49 C1 + C2, in the parity Table 2 gives its row and column.
+/// Every row ends in a row check character, and the last row carries the row count, the mode and the symbol check characters of section 2.1.4.
 /// </summary>
 internal static class Code49Encoder
 {
     /// <summary>
-    /// The quiet zone in modules before the start pattern: the "ten modules adjacent to the start
-    /// pattern" of section 3.4.
+    /// The quiet zone in modules before the start pattern: the "ten modules adjacent to the start pattern" of section 3.4.
     /// </summary>
     public const int LeadingQuietZone = 10;
 
     /// <summary>
-    /// The quiet zone in modules after the stop pattern: the "one module adjacent to the stop pattern"
-    /// of section 3.4.
+    /// The quiet zone in modules after the stop pattern: the "one module adjacent to the stop pattern" of section 3.4.
     /// </summary>
     public const int TrailingQuietZone = 1;
 
@@ -78,15 +73,13 @@ internal static class Code49Encoder
     public const int ShiftTwo = 44;
 
     /// <summary>
-    /// The code character value of the numeric shift, Table 6, which section 2.2.1 also makes the pad
-    /// character: "When one or more numeric shifts appear immediately preceding the symbol check
-    /// characters, they are pad characters and do not represent data."
+    /// The code character value of the numeric shift, Table 6, which section 2.2.1 also makes the pad character: "When one or more numeric shifts appear
+    /// immediately preceding the symbol check characters, they are pad characters and do not represent data."
     /// </summary>
     public const int NumericShift = 48;
 
     /// <summary>
-    /// The shortest digit run the numeric encodation method of section 2.2.2 compresses: five, the
-    /// length of one block.
+    /// The shortest digit run the numeric encodation method of section 2.2.2 compresses: five, the length of one block.
     /// </summary>
     public const int NumericRun = 5;
 
@@ -101,28 +94,55 @@ internal static class Code49Encoder
     private const int NumericBlock = 5;
 
     /// <summary>
-    /// The number a four digit remainder is added to, section 2.2.2: "48²C1 + 48C2 + C3 = 100,000 plus
-    /// the four digits to be represented".
+    /// The number a four digit remainder is added to, section 2.2.2: "48²C1 + 48C2 + C3 = 100,000 plus the four digits to be represented".
     /// </summary>
     private const int FourDigitOffset = 100000;
 
     /// <summary>
-    /// The longest text a symbol carries: the 81 numeric characters of Table 1, which exceed its 49
-    /// alphanumeric ones.
+    /// The longest text a symbol carries: the 81 numeric characters of Table 1, which exceed its 49 alphanumeric ones.
     /// </summary>
     private const int MaximumText = 81;
 
     /// <summary>
-    /// The number of runs in a row: the start bar and space, four bars and four spaces per symbol
-    /// character, and the stop bar. Every symbol character begins with a bar and ends with a space, so no
-    /// two runs merge.
+    /// The number of runs in a row: the start bar and space, four bars and four spaces per symbol character, and the stop bar. Every symbol character begins
+    /// with a bar and ends with a space, so no two runs merge.
     /// </summary>
     private const int RowRunCount = 2 + (SymbolCharactersPerRow * 8) + 1;
 
     /// <summary>
-    /// Gets the check character weights of Table 5 in the order of the symbol characters. The X weights
-    /// start at the first entry, the Y weights at the second and the Z weights at the third; the row count
-    /// character weighs 20, 16 and 38.
+    /// The base of the numeric encodation method of section 2.2.2, in which a block of digits converts to code characters of value 0 to 47.
+    /// </summary>
+    private const int NumericBase = 48;
+
+    /// <summary>
+    /// The starting modes of Table 8 that the encoder uses, with their mode values.
+    /// </summary>
+    private enum StartingMode
+    {
+        /// <summary>
+        /// The data starts in the alphanumeric set with no shift.
+        /// </summary>
+        Alphanumeric = 0,
+
+        /// <summary>
+        /// The data starts with the numeric shift, in the numeric encodation method.
+        /// </summary>
+        Numeric = 2,
+
+        /// <summary>
+        /// The data starts with Shift 1.
+        /// </summary>
+        ShiftOne = 4,
+
+        /// <summary>
+        /// The data starts with Shift 2.
+        /// </summary>
+        ShiftTwo = 5,
+    }
+
+    /// <summary>
+    /// Gets the check character weights of Table 5 in the order of the symbol characters. The X weights start at the first entry, the Y weights at the second
+    /// and the Z weights at the third; the row count character weighs 20, 16 and 38.
     /// </summary>
     private static ReadOnlySpan<byte> Weights =>
     [
@@ -130,8 +150,8 @@ internal static class Code49Encoder
     ];
 
     /// <summary>
-    /// Gets the parity of the four symbol characters of rows 1 to 7, Table 2, one bit per symbol
-    /// character from the left, a set bit for odd parity. The last row is always even.
+    /// Gets the parity of the four symbol characters of rows 1 to 7, Table 2, one bit per symbol character from the left, a set bit for odd parity. The last
+    /// row is always even.
     /// </summary>
     private static ReadOnlySpan<byte> RowParity => [0b1001, 0b0101, 0b1100, 0b0011, 0b1010, 0b0110, 0b1111];
 
@@ -142,7 +162,8 @@ internal static class Code49Encoder
     /// <param name="readable">The human readable interpretation.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
-    /// <exception cref="ArgumentException">The text is empty, carries a character the symbology cannot encode, or holds more data than eight rows carry.</exception>
+    /// <exception cref="ArgumentException">The text is empty, carries a character the symbology cannot encode, or holds more data than eight rows
+    /// carry.</exception>
     public static void BuildSymbol(ReadOnlySpan<char> text, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         // Eight code characters for each of at most eight rows.
@@ -152,14 +173,14 @@ internal static class Code49Encoder
     }
 
     /// <summary>
-    /// Encodes text into the code characters of the whole symbol, eight per row: the data with its shift
-    /// characters, the pad, the row check characters, the row count character and the symbol check
-    /// characters, laid out as Table 3 does.
+    /// Encodes text into the code characters of the whole symbol, eight per row: the data with its shift characters, the pad, the row check characters, the row
+    /// count character and the symbol check characters, laid out as Table 3 does.
     /// </summary>
     /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
     /// <param name="codes">The buffer that receives the code character values, eight per row for eight rows.</param>
     /// <returns>The number of code character values, eight per row.</returns>
-    /// <exception cref="ArgumentException">The text is empty, carries a character the symbology cannot encode, or holds more data than eight rows carry.</exception>
+    /// <exception cref="ArgumentException">The text is empty, carries a character the symbology cannot encode, or holds more data than eight rows
+    /// carry.</exception>
     public static int Encode(ReadOnlySpan<char> text, Span<int> codes)
     {
         if (text.Length == 0)
@@ -167,16 +188,10 @@ internal static class Code49Encoder
             throw new ArgumentException("Code 49 needs at least one character.", nameof(text));
         }
 
-        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
-        while (codePoints.MoveNext())
+        int invalid = text.IndexOfAnyExceptInRange('\0', '\u007F');
+        if (invalid >= 0)
         {
-            CodePoint current = codePoints.Current;
-            if (!current.IsAscii)
-            {
-                throw new ArgumentException(
-                    $"Code 49 encodes ASCII 0 to 127; {current.ToDisplayString()} is outside that range.",
-                    nameof(text));
-            }
+            throw new ArgumentException($"Code 49 encodes ASCII 0 to 127; {text.CodePointAt(invalid).ToDisplayString()} is outside that range.", nameof(text));
         }
 
         int n = text.Length;
@@ -214,7 +229,7 @@ internal static class Code49Encoder
                     continue;
                 }
 
-                int value = Table7(text[i], out int shift);
+                int value = CodeCharacter(text[i], out int shift);
                 if (shift != 0)
                 {
                     values[count++] = shift;
@@ -238,29 +253,19 @@ internal static class Code49Encoder
         }
 
         // Table 8: a leading numeric shift or shift is the starting mode rather than a code character.
-        int mode = 0;
-        int first = 0;
-        if (values[0] == NumericShift)
+        StartingMode mode = values[0] switch
         {
-            mode = 2;
-            first = 1;
-        }
-        else if (values[0] == ShiftOne)
-        {
-            mode = 4;
-            first = 1;
-        }
-        else if (values[0] == ShiftTwo)
-        {
-            mode = 5;
-            first = 1;
-        }
+            NumericShift => StartingMode.Numeric,
+            ShiftOne => StartingMode.ShiftOne,
+            ShiftTwo => StartingMode.ShiftTwo,
+            _ => StartingMode.Alphanumeric,
+        };
 
-        int dataCount = count - first;
+        ReadOnlySpan<int> data = values[(mode == StartingMode.Alphanumeric ? 0 : 1)..count];
+        int dataCount = data.Length;
 
-        // Section 2.1.4 and Table 4: a symbol of up to six rows has two symbol check characters and one
-        // of seven or eight rows has three, so the last row holds two data code characters in the first
-        // case and none in the second. Every other row holds seven and its row check character.
+        // Section 2.1.4 and Table 4: a symbol of up to six rows has two symbol check characters and one of seven or eight rows has three, so the last row holds
+        // two data code characters in the first case and none in the second. Every other row holds seven and its row check character.
         int rows = MinimumRows;
         while (rows <= MaximumRows && Capacity(rows) < dataCount)
         {
@@ -274,36 +279,32 @@ internal static class Code49Encoder
                 nameof(text));
         }
 
+        // The data fills the data positions of the rows in order, and the numeric shift pads the positions it leaves.
         codes = codes[..(rows * CodeCharactersPerRow)];
-        int next = first;
         for (int row = 0; row < rows; row++)
         {
             int perRow = row < rows - 1 ? 7 : (rows <= 6 ? 2 : 0);
-            for (int j = 0; j < perRow; j++)
-            {
-                codes[(row * CodeCharactersPerRow) + j] = next < count ? values[next++] : NumericShift;
-            }
+            Span<int> slots = codes.Slice(row * CodeCharactersPerRow, perRow);
+            int taken = Math.Min(perRow, data.Length);
+            data[..taken].CopyTo(slots);
+            slots[taken..].Fill(NumericShift);
+            data = data[taken..];
         }
 
         // Section 2.1.2: the last code character of every row is the modulo 49 sum of the other seven.
         for (int row = 0; row < rows - 1; row++)
         {
-            int sum = 0;
-            for (int j = 0; j < 7; j++)
-            {
-                sum += codes[(row * CodeCharactersPerRow) + j];
-            }
-
-            codes[(row * CodeCharactersPerRow) + 7] = sum % RowModulus;
+            Span<int> rowCodes = codes.Slice(row * CodeCharactersPerRow, CodeCharactersPerRow);
+            rowCodes[7] = RowCheckCharacter(rowCodes);
         }
 
         // Section 2.1.3: Cr7 = 7(r - 2) + M.
         int last = (rows - 1) * CodeCharactersPerRow;
-        int rowCount = (7 * (rows - MinimumRows)) + mode;
+        int rowCount = (7 * (rows - MinimumRows)) + (int)mode;
         codes[last + 6] = rowCount;
 
-        // Formula 2 with the weights of Table 5: the symbol characters of every row but the last, in
-        // order, then Wr1 for the Y and X sums and Wr2 for the X sum.
+        // Formula 2 with the weights of Table 5: the symbol characters of every row but the last, in order, then Wr1 for the Y and X sums and Wr2 for the X
+        // sum.
         ReadOnlySpan<byte> weights = Weights;
         long x = 20L * rowCount;
         long y = 16L * rowCount;
@@ -342,19 +343,13 @@ internal static class Code49Encoder
         codes[last + 4] = wr3 / RowModulus;
         codes[last + 5] = wr3 % RowModulus;
 
-        int lastSum = 0;
-        for (int j = 0; j < 7; j++)
-        {
-            lastSum += codes[last + j];
-        }
-
-        codes[last + 7] = lastSum % RowModulus;
+        codes[last + 7] = RowCheckCharacter(codes[last..]);
         return codes.Length;
     }
 
     /// <summary>
-    /// Writes the symbol from its code characters: one row of bars per eight, one module separator bars
-    /// between the rows, and the top and bottom separator bars of section 2.1.
+    /// Writes the symbol from its code characters: one row of bars per eight, one module separator bars between the rows, and the top and bottom separator bars
+    /// of section 2.1.
     /// </summary>
     /// <param name="codes">The code character values, eight per row.</param>
     /// <param name="readable">The human readable interpretation.</param>
@@ -374,19 +369,15 @@ internal static class Code49Encoder
         symbol.BeginStacked(rowCount + separators, (rowCount * RowRunCount) + separators, (rowCount * ((RowRunCount + 1) >> 1)) + separators, xDimension);
         for (int row = 0; row < rowCount; row++)
         {
-            // Section 2.1.5: the start pattern is a one module bar and a one module space, and the stop
-            // pattern a four module bar. Every symbol character begins with a bar and ends with a space,
-            // so the row is one run of bits from the start bar to the stop bar.
+            // Section 2.1.5: the start pattern is a one module bar and a one module space, and the stop pattern a four module bar. Every symbol character
+            // begins with a bar and ends with a space, so the row is one run of bits from the start bar to the stop bar.
             int parity = row < rowCount - 1 ? parities[row] : 0;
             Span<int> runs = symbol.AddRow(RowRunCount, out Span<float> heights, out _);
             heights.Fill(barHeight);
-            int length = 0;
-            bool bar;
-            runs[length] = 1;
-            length++;
-            runs[length] = 1;
-            length++;
-            bar = false;
+            runs[0] = 1;
+            runs[1] = 1;
+            int length = 2;
+            bool bar = false;
             for (int j = 0; j < SymbolCharactersPerRow; j++)
             {
                 int w = SymbolCharacter(codes, (row * CodeCharactersPerRow) + (j * 2));
@@ -407,7 +398,7 @@ internal static class Code49Encoder
                 }
             }
 
-            runs[length++] = 4;
+            runs[length] = 4;
             if (row < rowCount - 1)
             {
                 Span<int> separator = symbol.AddRow(1, out Span<float> separatorHeight, out _);
@@ -416,8 +407,7 @@ internal static class Code49Encoder
             }
         }
 
-        // Appendix C: the human readable interpretation "may accompany the symbol. It should not
-        // interfere with the symbol itself nor the quiet zones."
+        // Appendix C: the human readable interpretation "may accompany the symbol. It should not interfere with the symbol itself nor the quiet zones."
         float heightInModules = (rowCount * barHeight) + ((rowCount + 1) * SeparatorHeight);
         if (options.Font is not null && readable.Length > 0)
         {
@@ -429,13 +419,28 @@ internal static class Code49Encoder
     }
 
     /// <summary>
-    /// Returns the number of data code characters a symbol of the given row count carries: seven per
-    /// row before the last, and two in the last row of a symbol with up to six rows, Table 4.
+    /// Returns the number of data code characters a symbol of the given row count carries: seven per row before the last, and two in the last row of a symbol
+    /// with up to six rows, Table 4.
     /// </summary>
     /// <param name="rows">The number of rows.</param>
     /// <returns>The number of data code characters.</returns>
-    private static int Capacity(int rows)
-        => (7 * (rows - 1)) + (rows <= 6 ? 2 : 0);
+    private static int Capacity(int rows) => (7 * (rows - 1)) + (rows <= 6 ? 2 : 0);
+
+    /// <summary>
+    /// Returns the row check character of a row, section 2.1.2: the modulo 49 sum of its first seven code characters.
+    /// </summary>
+    /// <param name="row">The code characters of the row, from its first.</param>
+    /// <returns>The row check character.</returns>
+    private static int RowCheckCharacter(ReadOnlySpan<int> row)
+    {
+        int sum = 0;
+        foreach (int code in row[..7])
+        {
+            sum += code;
+        }
+
+        return sum % RowModulus;
+    }
 
     /// <summary>
     /// Returns the value of the symbol character at a code character position, Formula 1: W = 49 C1 + C2.
@@ -447,9 +452,8 @@ internal static class Code49Encoder
         => (codes[index] * RowModulus) + codes[index + 1];
 
     /// <summary>
-    /// Writes a run of digits by the numeric encodation method of section 2.2.2: three code characters
-    /// per five digits, then one for a remainder of one, two for three, three for four with 100,000
-    /// added, and a run whose remainder is two ends in four digits then three.
+    /// Writes a run of digits by the numeric encodation method of section 2.2.2: three code characters per five digits, then one for a remainder of one, two
+    /// for three, three for four with 100,000 added, and a run whose remainder is two ends in four digits then three.
     /// </summary>
     /// <param name="digits">The digit run.</param>
     /// <param name="values">The buffer the code characters are written to.</param>
@@ -488,21 +492,21 @@ internal static class Code49Encoder
     /// <summary>
     /// Writes a number as code characters in base 48, most significant first.
     /// </summary>
-    /// <param name="number">The number.</param>
+    /// <param name="number">The number, less than 48 to the power of <paramref name="characters"/>.</param>
     /// <param name="characters">The number of code characters.</param>
     /// <param name="values">The buffer the code characters are written to.</param>
     /// <param name="count">The number of values written so far.</param>
     /// <returns>The number of values written after the number.</returns>
     private static int WriteBase48(int number, int characters, Span<int> values, int count)
     {
-        for (int k = characters - 1; k >= 0; k--)
+        int divisor = 1;
+        for (int k = 1; k < characters; k++)
         {
-            int divisor = 1;
-            for (int d = 0; d < k; d++)
-            {
-                divisor *= 48;
-            }
+            divisor *= NumericBase;
+        }
 
+        for (; divisor > 0; divisor /= NumericBase)
+        {
             values[count++] = number / divisor;
             number %= divisor;
         }
@@ -518,22 +522,22 @@ internal static class Code49Encoder
     private static int Number(ReadOnlySpan<char> digits)
     {
         int value = 0;
-        for (int k = 0; k < digits.Length; k++)
+        foreach (char digit in digits)
         {
-            value = (value * 10) + (digits[k] - '0');
+            value = (value * 10) + (digit - '0');
         }
 
         return value;
     }
 
     /// <summary>
-    /// Returns the code character of an ASCII character by Table 7, with the Shift 1 or Shift 2 that
-    /// precedes it when the character is outside the alphanumeric set of Table 6.
+    /// Returns the code character of an ASCII character by Table 7, with the Shift 1 or Shift 2 that precedes it when the character is outside the alphanumeric
+    /// set of Table 6.
     /// </summary>
     /// <param name="c">The character.</param>
     /// <param name="shift">The shift code character that precedes the value, or zero for none.</param>
     /// <returns>The code character value from Table 6.</returns>
-    private static int Table7(char c, out int shift)
+    private static int CodeCharacter(char c, out int shift)
     {
         shift = 0;
         if (c < 32)

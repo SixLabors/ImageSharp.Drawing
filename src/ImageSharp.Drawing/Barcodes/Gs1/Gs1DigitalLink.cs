@@ -7,16 +7,13 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Validates a GS1 Digital Link URI, the GS1 Digital Link Standard: URI Syntax, release 1.7.0: the scheme
-/// and the host, the primary identification key and its key qualifiers in the path, and the data
-/// attributes in the query string, with the GS1 data rules applied to every Application Identifier the URI
-/// carries.
+/// Validates a GS1 Digital Link URI, the GS1 Digital Link Standard: URI Syntax, release 1.7.0: the scheme and the host, the primary identification key and its
+/// key qualifiers in the path, and the data attributes in the query string, with the GS1 data rules applied to every Application Identifier the URI carries.
 /// </summary>
 internal static class Gs1DigitalLink
 {
     /// <summary>
-    /// The characters a URI may carry, RFC 3986: the unreserved characters, the reserved characters and the
-    /// percent sign of percent-encoding.
+    /// The characters a URI may carry, RFC 3986: the unreserved characters, the reserved characters and the percent sign of percent-encoding.
     /// </summary>
     private static readonly SearchValues<char> UriCharacters =
         SearchValues.Create("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~:/?#[]@!$&'()*+,;=%");
@@ -30,10 +27,9 @@ internal static class Gs1DigitalLink
         => Validate(uri, false, default);
 
     /// <summary>
-    /// Validates the URI and writes the human readable interpretation of the element strings it carries,
-    /// each on a line of its own as <see cref="Gs1Data.WriteReadable(ReadOnlySpan{char}, ReadOnlySpan{char}, bool, Span{char}, int)"/>
-    /// writes it, in the order of the URI: the primary key and its qualifiers in the path, then the data
-    /// attributes in the query string.
+    /// Validates the URI and writes the human readable interpretation of the element strings it carries, each on a line of its own as
+    /// <see cref="Gs1Data.WriteReadable(ReadOnlySpan{char}, ReadOnlySpan{char}, bool, Span{char}, int)"/> writes it, in the order of the URI: the primary key
+    /// and its qualifiers in the path, then the data attributes in the query string.
     /// </summary>
     /// <param name="uri">The URI.</param>
     /// <param name="readable">The buffer the interpretation is written to, <see cref="ReadableCapacity"/> long.</param>
@@ -43,10 +39,9 @@ internal static class Gs1DigitalLink
         => Validate(uri, true, readable);
 
     /// <summary>
-    /// Returns the number of characters <see cref="Validate(ReadOnlySpan{char}, Span{char})"/>
-    /// writes at most for a URI. Every decoded Application Identifier and value character comes from at
-    /// least one character of the URI, and each element string adds two parentheses and a line break to
-    /// them. The URI holds at most a quarter of its length in element strings.
+    /// Returns the number of characters <see cref="Validate(ReadOnlySpan{char}, Span{char})"/> writes at most for a URI. Every decoded Application Identifier
+    /// and value character comes from at least one character of the URI, and each element string adds two parentheses and a line break to them. The URI holds
+    /// at most a quarter of its length in element strings.
     /// </summary>
     /// <param name="uriLength">The length of the URI.</param>
     /// <returns>The capacity the interpretation needs.</returns>
@@ -83,8 +78,7 @@ internal static class Gs1DigitalLink
             throw new ArgumentException("A GS1 Digital Link URI starts with http:// or https://.", nameof(uri));
         }
 
-        // The host runs to the first slash. Section 4.11 gives it no user information, so it carries no
-        // "@", and it cannot be empty.
+        // The host runs to the first slash. Section 4.11 gives it no user information, so it carries no "@", and it cannot be empty.
         int slash = rest.IndexOf('/');
         if (slash <= 0 || rest[..slash].Contains('@'))
         {
@@ -107,11 +101,10 @@ internal static class Gs1DigitalLink
             path = path[..question];
         }
 
-        // The decoded Application Identifiers and values collect in one buffer, which the GS1 data rules
-        // then read through the element positions. Every decoded character comes from at least one
-        // character of the URI, so the buffer never holds more characters than the URI. An element takes
-        // at least four characters of the URI, "AI=v" in the query or "/AI/v" in the path, so the URI
-        // holds at most a quarter of its length in elements. Neither builder grows.
+        // The decoded Application Identifiers and values collect in one buffer, which the GS1 data rules then read through the element positions. Every decoded
+        // character comes from at least one character of the URI, so the buffer never holds more characters than the URI. An element takes at least four
+        // characters of the URI, "AI=v" in the query or "/AI/v" in the path, so the URI holds at most a quarter of its length in elements. Neither builder
+        // grows.
         InlineArray64<char> bufferStorage = default;
         InlineArray16<Gs1Element> elementStorage = default;
         int elementCapacity = (uri.Length / 4) + 1;
@@ -126,8 +119,7 @@ internal static class Gs1DigitalLink
             ReadOnlySpan<Gs1Element> parsed = elements.AsSpan();
             Gs1ApplicationIdentifier key = parsed[0].Entry;
 
-            // Section 4.9: the path is the key and then its qualifiers, in the order of one of the qualifier
-            // sequences of the key, any of them left out.
+            // Section 4.9: the path is the key and then its qualifiers, in the order of one of the qualifier sequences of the key, any of them left out.
             if (!IsKeyPath(key, decoded, parsed[1..pathCount], -1, default))
             {
                 throw new ArgumentException(
@@ -176,9 +168,8 @@ internal static class Gs1DigitalLink
     }
 
     /// <summary>
-    /// Parses the path: optional segments of the host, then the primary identification key and its
-    /// qualifiers as "/AI/value" pairs to the end. The key is the rightmost pair whose Application
-    /// Identifier is a primary key, with every pair after it an Application Identifier too.
+    /// Parses the path: optional segments of the host, then the primary identification key and its qualifiers as "/AI/value" pairs to the end. The key is the
+    /// rightmost pair whose Application Identifier is a primary key, with every pair after it an Application Identifier too.
     /// </summary>
     /// <param name="path">The path, from its first "/".</param>
     /// <param name="buffer">The buffer the decoded Application Identifiers and values are written to.</param>
@@ -186,9 +177,8 @@ internal static class Gs1DigitalLink
     /// <returns>The number of element strings in the path.</returns>
     private static int ParsePath(ReadOnlySpan<char> path, ref ValueStringBuilder buffer, ref ValueListBuilder<Gs1Element> elements)
     {
-        // Walk back over the pairs from the end until a pair's Application Identifier is a primary key.
-        // A segment that is not an Application Identifier ends the walk, because the pairs must run to the
-        // end of the path.
+        // Walk back over the pairs from the end until a pair's Application Identifier is a primary key. A segment that is not an Application Identifier ends
+        // the walk, because the pairs must run to the end of the path.
         int keyStart = -1;
         int end = path.Length;
         while (end > 0)
@@ -252,9 +242,8 @@ internal static class Gs1DigitalLink
     }
 
     /// <summary>
-    /// Parses the query string. Section 4.11 separates the parameters with "&amp;" or ";". A parameter with
-    /// an all-digit key is an Application Identifier, and section 4.10.1 reserves those keys for it. Any
-    /// other parameter is an extension, which carries no GS1 data.
+    /// Parses the query string. Section 4.11 separates the parameters with "&amp;" or ";". A parameter with an all-digit key is an Application Identifier, and
+    /// section 4.10.1 reserves those keys for it. Any other parameter is an extension, which carries no GS1 data.
     /// </summary>
     /// <param name="query">The query string, without "?".</param>
     /// <param name="buffer">The buffer the decoded Application Identifiers and values are written to.</param>
@@ -307,8 +296,8 @@ internal static class Gs1DigitalLink
         buffer.Append(identifier);
         int dataStart = buffer.Length;
 
-        // RFC 3986 percent-encoding: "%" and two hexadecimal digits stand for one character. A "%" without
-        // two hexadecimal digits stays as it is, and the data rules then judge it.
+        // RFC 3986 percent-encoding: "%" and two hexadecimal digits stand for one character. A "%" without two hexadecimal digits stays as it is, and the data
+        // rules then judge it.
         for (int i = 0; i < value.Length; i++)
         {
             char c = value[i];
@@ -340,8 +329,8 @@ internal static class Gs1DigitalLink
     private static int HexValue(char c) => c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10;
 
     /// <summary>
-    /// Returns whether the qualifiers in the path, with one more qualifier inserted when one is given, form
-    /// one of the qualifier sequences of the key in order, with any of its qualifiers left out.
+    /// Returns whether the qualifiers in the path, with one more qualifier inserted when one is given, form one of the qualifier sequences of the key in order,
+    /// with any of its qualifiers left out.
     /// </summary>
     /// <param name="key">The entry of the primary key.</param>
     /// <param name="buffer">The buffer the element strings are in.</param>

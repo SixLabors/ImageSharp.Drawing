@@ -6,9 +6,8 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="PlesseySymbology"/>. Each expected run string is the alternating bar and
-/// space module widths, starting with a bar, from the reference implementation's raw encoding API. The
-/// reference ends on the last bar of the reversed start code, so the strings compare directly.
+/// Encoder tests for <see cref="PlesseySymbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, from the
+/// reference implementation's raw encoding API. The reference ends on the last bar of the reversed start code, so the strings compare directly.
 /// </summary>
 public class PlesseySymbologyTests
 {
@@ -24,11 +23,9 @@ public class PlesseySymbologyTests
         => Assert.Equal(reference, Encode(text));
 
     /// <summary>
-    /// The check characters hold the eight bit remainder of the data bits divided by the generator
-    /// polynomial x^8 + x^7 + x^6 + x^5 + x^3 + 1, low four bits first. The data bits of a single 0 are
-    /// all zero, so the remainder is zero. A single F is the bits 1111, which the division reduces to the
-    /// remainder whose low and high halves are 2 and 1. The expected lines are the reference
-    /// implementation's for the same data.
+    /// The check characters hold the eight bit remainder of the data bits divided by the generator polynomial x^8 + x^7 + x^6 + x^5 + x^3 + 1, low four bits
+    /// first. The data bits of a single 0 are all zero, so the remainder is zero. A single F is the bits 1111, which the division reduces to the remainder
+    /// whose low and high halves are 2 and 1. The expected lines are the reference implementation's for the same data.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="expected">The printed line with the check characters.</param>
@@ -47,8 +44,7 @@ public class PlesseySymbologyTests
     }
 
     /// <summary>
-    /// Supplied check characters are validated against the data and carried once, so the symbol is the
-    /// one the calculated check characters produce.
+    /// Supplied check characters are validated against the data and carried once, so the symbol is the one the calculated check characters produce.
     /// </summary>
     [Fact]
     public void ValidatesSuppliedCheckCharacters()
@@ -61,8 +57,7 @@ public class PlesseySymbologyTests
     }
 
     /// <summary>
-    /// The printed line shows the data and, by default, the check characters. It never shows the start
-    /// code or the reversed start code.
+    /// The printed line shows the data and, by default, the check characters. It never shows the start code or the reversed start code.
     /// </summary>
     /// <param name="validateCheckCharacters">Whether the input ends with the check characters.</param>
     /// <param name="printCheckCharacters">Whether the check characters are part of the printed line.</param>
@@ -82,9 +77,8 @@ public class PlesseySymbologyTests
     }
 
     /// <summary>
-    /// The start code is four bits of five modules, every character is four bits of five modules, the two
-    /// check characters are eight bits, and the end is a five module termination bar and four more bits,
-    /// so a symbol of N data characters spans 20N + 85 modules before its quiet zones.
+    /// The start code is four bits of five modules, every character is four bits of five modules, the two check characters are eight bits, and the end is a
+    /// five module termination bar and four more bits, so a symbol of N data characters spans 20N + 85 modules before its quiet zones.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     [Theory]

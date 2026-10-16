@@ -4,19 +4,15 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The two digit EAN/UPC add-on symbology, which the GS1 General Specifications specify. It carries the
-/// issue number on an ISSN periodical barcode. The symbol starts with the add-on guard pattern 01011. Each
-/// digit takes a seven module character from number set A or B, with a 01 delineator between them. The
-/// number set parity carries the two digit value modulo four.
+/// The two digit EAN/UPC add-on symbology, which the GS1 General Specifications specify. It carries the issue number on an ISSN periodical barcode. The symbol
+/// starts with the add-on guard pattern 01011. Each digit takes a seven module character from number set A or B, with a 01 delineator between them. The number
+/// set parity carries the two digit value modulo four.
 /// <para>
-/// The human readable interpretation prints above the bars. The leading quiet zone absorbs the leading
-/// space module of the guard pattern.
+/// The human readable interpretation prints above the bars. The leading quiet zone absorbs the leading space module of the guard pattern.
 /// </para>
 /// </summary>
 public sealed class Ean2Symbology : BarcodeSymbology
 {
-    private const int Width = 20;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="Ean2Symbology"/> class.
     /// </summary>
@@ -36,25 +32,9 @@ public sealed class Ean2Symbology : BarcodeSymbology
 
         BarcodeSymbology.ValidateDigits(text);
 
-        // GS1 General Specifications: the two-digit value modulo four selects the parity pattern, where
-        // 0 = AA, 1 = AB, 2 = BA and 3 = BB. The remainder bits map to the number sets directly: a set bit is B.
+        // GS1 General Specifications: the two-digit value modulo four selects the parity pattern, where 0 = AA, 1 = AB, 2 = BA and 3 = BB. The remainder bits
+        // map to the number sets directly: a set bit is B.
         int parity = ((10 * (text[0] - '0')) + (text[1] - '0')) % 4;
-
-        InlineArray32<byte> moduleStorage = default;
-        Span<byte> modules = ((Span<byte>)moduleStorage)[..Width];
-        int position = 0;
-        EanUpcEncoder.AppendPattern(modules, ref position, 0b1011, 4);
-        for (int i = 0; i < 2; i++)
-        {
-            if (i > 0)
-            {
-                EanUpcEncoder.AppendPattern(modules, ref position, 0b01, 2);
-            }
-
-            ReadOnlySpan<byte> numberSet = ((parity >> (1 - i)) & 1) == 0 ? EanUpcEncoder.NumberSetA : EanUpcEncoder.NumberSetB;
-            EanUpcEncoder.AppendPattern(modules, ref position, numberSet[text[i] - '0'], 7);
-        }
-
-        AddOnLayout.Build(modules, text, options, ref symbol);
+        AddOnLayout.Build(text, parity, options, ref symbol);
     }
 }

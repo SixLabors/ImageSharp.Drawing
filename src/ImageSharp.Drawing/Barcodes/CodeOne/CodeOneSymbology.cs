@@ -4,16 +4,14 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The Code One symbology of the AIM USA Uniform Symbology Specification Code One: a matrix of square modules
-/// with a centre pattern of horizontal bars and vertical risers. Versions A to H carry the characters U+0000 to
-/// U+00FF, versions S carry up to 18 digits, and versions T carry data in a symbol 16 rows high. By default the
-/// symbol is the smallest of versions A to H that holds the data.
+/// The Code One symbology of the AIM USA Uniform Symbology Specification Code One: a matrix of square modules with a centre pattern of horizontal bars and
+/// vertical risers. Versions A to H carry the characters U+0000 to U+00FF, versions S carry up to 18 digits, and versions T carry data in a symbol 16 rows
+/// high. By default the symbol is the smallest of versions A to H that holds the data.
 /// </summary>
 public sealed class CodeOneSymbology : BarcodeSymbology
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="CodeOneSymbology"/> class that takes the smallest of
-    /// versions A to H that holds the data.
+    /// Initializes a new instance of the <see cref="CodeOneSymbology"/> class that takes the smallest of versions A to H that holds the data.
     /// </summary>
     public CodeOneSymbology()
     {
@@ -30,8 +28,7 @@ public sealed class CodeOneSymbology : BarcodeSymbology
     }
 
     /// <summary>
-    /// Gets the version, or <see langword="null"/> when the symbol takes the smallest of versions A to H that
-    /// holds the data.
+    /// Gets the version, or <see langword="null"/> when the symbol takes the smallest of versions A to H that holds the data.
     /// </summary>
     public CodeOneVersion? Version { get; }
 

@@ -6,22 +6,19 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Shared encodation for the plain 2 of 5 symbologies: Industrial, IATA, Matrix, COOP and Datalogic. No
-/// published standard defines them. Every digit has the weights 1, 2, 4 and 7 and a parity element, and
-/// two of its five elements are wide.
+/// Shared encodation for the plain 2 of 5 symbologies: Industrial, IATA, Matrix, COOP and Datalogic. No published standard defines them. Every digit has the
+/// weights 1, 2, 4 and 7 and a parity element, and two of its five elements are wide.
 /// <para>
-/// Industrial and IATA encode a digit in five bars with a narrow space after each bar, so a digit is ten
-/// elements. Matrix, COOP and Datalogic encode a digit in three bars and two spaces with a narrow space
-/// after them, so a digit is six elements. The check digit is optional in every variant and is the
-/// modulo 10 calculation of Appendix C of AIM USS-I 2/5. No document gives a wide element width, a quiet
-/// zone or a bar height for these symbologies; the values are those of Interleaved 2 of 5.
+/// Industrial and IATA encode a digit in five bars with a narrow space after each bar, so a digit is ten elements. Matrix, COOP and Datalogic encode a digit in
+/// three bars and two spaces with a narrow space after them, so a digit is six elements. The check digit is optional in every variant and is the modulo 10
+/// calculation of Appendix C of AIM USS-I 2/5. No document gives a wide element width, a quiet zone or a bar height for these symbologies; the values are those
+/// of Interleaved 2 of 5.
 /// </para>
 /// </summary>
 internal static class Code2Of5Encoder
 {
     /// <summary>
-    /// The largest number of digits a symbol carries. None of the symbologies fixes a
-    /// maximum of its own.
+    /// The largest number of digits a symbol carries. None of the symbologies fixes a maximum of its own.
     /// </summary>
     public const int MaximumLength = 500;
 
@@ -31,8 +28,7 @@ internal static class Code2Of5Encoder
     private const int QuietZone = 10;
 
     /// <summary>
-    /// The number of digits a symbol holds inline. Data this long covers the labels the symbologies are used
-    /// for, and longer data rents its buffer once.
+    /// The number of digits a symbol holds inline. Data this long covers the labels the symbologies are used for, and longer data rents its buffer once.
     /// </summary>
     private const int InlineBufferLength = 64;
 
@@ -42,8 +38,13 @@ internal static class Code2Of5Encoder
     private const int WideElement = 3;
 
     /// <summary>
-    /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no
-    /// height: 15 per cent, and at least <see cref="MinimumBarHeightMillimetres"/>.
+    /// The number of elements in a digit pattern: the weights 1, 2, 4 and 7 and the parity element.
+    /// </summary>
+    private const int PatternElements = 5;
+
+    /// <summary>
+    /// The bar height as a fraction of the symbol width, quiet zones excluded, when the caller sets no height: 15 per cent, and at least
+    /// <see cref="MinimumBarHeightMillimetres"/>.
     /// </summary>
     private const float NominalBarHeightFraction = 0.15F;
 
@@ -53,23 +54,20 @@ internal static class Code2Of5Encoder
     private const float MinimumBarHeightMillimetres = 6.35F;
 
     /// <summary>
-    /// The number of elements of one digit of Industrial and IATA 2 of 5: five bars, each with a narrow
-    /// space after it.
+    /// The number of elements of one digit of Industrial and IATA 2 of 5: five bars, each with a narrow space after it.
     /// </summary>
     private const int BarElementsPerDigit = 10;
 
     /// <summary>
-    /// The number of elements of one digit of Matrix, COOP and Datalogic 2 of 5: three bars and two
-    /// spaces, with a narrow space after them.
+    /// The number of elements of one digit of Matrix, COOP and Datalogic 2 of 5: three bars and two spaces, with a narrow space after them.
     /// </summary>
     private const int MatrixElementsPerDigit = 6;
 
     /// <summary>
-    /// Gets the element widths of every digit, one bit per element, most significant element first: a set
-    /// bit is a wide element and a clear bit a narrow one. Every digit has the weights 1, 2, 4 and 7 and a
-    /// parity element, and two of its five elements are wide. Industrial and IATA read the five bits as bars.
-    /// Matrix and Datalogic read them as a bar, a space, a bar, a space and a bar. The narrow spaces that
-    /// separate the elements and the digits are not in the pattern.
+    /// Gets the element widths of every digit, one bit per element, most significant element first: a set bit is a wide element and a clear bit a narrow one.
+    /// Every digit has the weights 1, 2, 4 and 7 and a parity element, and two of its five elements are wide. Industrial and IATA read the five bits as bars.
+    /// Matrix and Datalogic read them as a bar, a space, a bar, a space and a bar. The narrow spaces that separate the elements and the digits are not in the
+    /// pattern.
     /// </summary>
     private static ReadOnlySpan<byte> Patterns =>
     [
@@ -78,8 +76,8 @@ internal static class Code2Of5Encoder
     ];
 
     /// <summary>
-    /// Gets the element widths of every digit of COOP 2 of 5, in the layout of <see cref="Patterns"/>. COOP
-    /// assigns the same ten patterns to the digits in a different order.
+    /// Gets the element widths of every digit of COOP 2 of 5, in the layout of <see cref="Patterns"/>. COOP assigns the same ten patterns to the digits in a
+    /// different order.
     /// </summary>
     private static ReadOnlySpan<byte> CoopPatterns =>
     [
@@ -93,13 +91,8 @@ internal static class Code2Of5Encoder
     /// <param name="text">The digits to encode.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="variant">The symbology whose patterns to use.</param>
-    /// <param name="checkDigit">
-    /// Whether the symbol carries the modulo 10 check digit, and whether the encoder calculates it or
-    /// validates it.
-    /// </param>
-    /// <param name="printCheckDigit">
-    /// Whether a check digit the symbol carries is part of the human readable interpretation.
-    /// </param>
+    /// <param name="checkDigit"> Whether the symbol carries the modulo 10 check digit, and whether the encoder calculates it or validates it. </param>
+    /// <param name="printCheckDigit"> Whether a check digit the symbol carries is part of the human readable interpretation. </param>
     /// <param name="symbol">The symbol to write.</param>
     public static void Encode(
         string text,
@@ -128,8 +121,8 @@ internal static class Code2Of5Encoder
             throw new ArgumentException($"Incorrect check digit: expected {check}, got {text[^1]}.", nameof(text));
         }
 
-        // The digits the symbol carries are the data and the check digit. The text is at most
-        // MaximumLength digits, so a short symbol works inline and a longer one rents its digits once.
+        // The digits the symbol carries are the data and the check digit. The text is at most MaximumLength digits, so a short symbol works inline and a longer
+        // one rents its digits once.
         int carried = data.Length + (check is null ? 0 : 1);
         InlineArray64<char> digitStorage = default;
         PooledBuffer<char> rented = default;
@@ -145,8 +138,7 @@ internal static class Code2Of5Encoder
             }
 
             ReadOnlySpan<char> readable = check is null || printCheckDigit ? encoded : encoded[..^1];
-            BeginRuns(encoded, variant, options.XDimension ?? BarcodeSymbology.PointXDimension, ref symbol, out Span<float> heights);
-            EndSymbol(heights, readable, options, ref symbol);
+            BuildSymbol(encoded, readable, variant, options, ref symbol);
         }
         finally
         {
@@ -155,9 +147,8 @@ internal static class Code2Of5Encoder
     }
 
     /// <summary>
-    /// Calculates the modulo 10 check digit of Appendix C of AIM USS-I 2/5: the digits are weighted 3 and 1
-    /// alternately from the rightmost digit, which takes 3, and the check digit lifts the sum to the next
-    /// multiple of ten.
+    /// Calculates the modulo 10 check digit of Appendix C of AIM USS-I 2/5: the digits are weighted 3 and 1 alternately from the rightmost digit, which takes
+    /// 3, and the check digit lifts the sum to the next multiple of ten.
     /// </summary>
     /// <param name="digits">The data digits.</param>
     /// <returns>The check digit value.</returns>
@@ -175,44 +166,21 @@ internal static class Code2Of5Encoder
     }
 
     /// <summary>
-    /// Ends a symbol whose runs are written. The 2 of 5 symbologies carry no guard bars, so every bar runs
-    /// the full height, and the human readable interpretation sits below the symbol.
-    /// </summary>
-    /// <param name="heights">The bar heights to write.</param>
-    /// <param name="readable">The human readable interpretation.</param>
-    /// <param name="options">The options that control layout choices.</param>
-    /// <param name="symbol">The symbol to write.</param>
-    private static void EndSymbol(Span<float> heights, ReadOnlySpan<char> readable, BarcodeOptions options, ref BarcodeSymbol symbol)
-    {
-        int widthInModules = BarcodeSymbol.RunWidth(symbol.Runs);
-        float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / symbol.XDimension));
-        float barHeight = options.ResolveBarHeight(symbol.XDimension, nominalBarHeight);
-        heights.Fill(barHeight);
-
-        if (options.Font is not null && readable.Length > 0)
-        {
-            symbol.ReserveText(1, readable.Length);
-            symbol.AddText(readable, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
-        }
-
-        symbol.EndLinear(QuietZone, QuietZone);
-    }
-
-    /// <summary>
-    /// Begins the symbol and writes the alternating bar and space run widths, starting with the first bar
-    /// of the start pattern and ending on the last bar of the stop pattern.
+    /// Encodes digits and builds the symbol. The runs alternate bar and space, start with the first bar of the start pattern and end on the last bar of the
+    /// stop pattern. The 2 of 5 symbologies carry no guard bars, so every bar runs the full height, and the human readable interpretation sits below the
+    /// symbol.
     /// </summary>
     /// <param name="digits">The digits to encode, the check digit included, already validated.</param>
+    /// <param name="readable">The human readable interpretation.</param>
     /// <param name="variant">The symbology whose patterns to use.</param>
-    /// <param name="xDimension">The X dimension in millimetres, <see cref="BarcodeSymbol.XDimension"/>.</param>
+    /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
-    /// <param name="heights">The bar heights of the symbol, to write.</param>
-    private static void BeginRuns(
+    private static void BuildSymbol(
         ReadOnlySpan<char> digits,
+        ReadOnlySpan<char> readable,
         Code2Of5Variant variant,
-        double xDimension,
-        ref BarcodeSymbol symbol,
-        out Span<float> heights)
+        BarcodeOptions options,
+        ref BarcodeSymbol symbol)
     {
         ReadOnlySpan<byte> start = StartPattern(variant);
         ReadOnlySpan<byte> stop = StopPattern(variant);
@@ -220,20 +188,20 @@ internal static class Code2Of5Encoder
         bool barsOnly = variant is Code2Of5Variant.Industrial or Code2Of5Variant.Iata;
         int elementsPerDigit = barsOnly ? BarElementsPerDigit : MatrixElementsPerDigit;
 
-        Span<int> runs = symbol.BeginLinear((digits.Length * elementsPerDigit) + start.Length + stop.Length, xDimension, out heights, out _);
+        double xDimension = options.XDimension ?? BarcodeSymbology.PointXDimension;
+        int runCount = (digits.Length * elementsPerDigit) + start.Length + stop.Length;
+        Span<int> runs = symbol.BeginLinear(runCount, xDimension, out Span<float> heights, out _);
         int written = 0;
-
-        for (int i = 0; i < start.Length; i++)
+        foreach (byte width in start)
         {
-            runs[written++] = start[i];
+            runs[written++] = width;
         }
 
-        // Industrial and IATA put a narrow space after every bar. The other variants put one narrow
-        // space after the five elements of the digit.
-        for (int i = 0; i < digits.Length; i++)
+        // Industrial and IATA put a narrow space after every bar. The other variants put one narrow space after the five elements of the digit.
+        foreach (char digit in digits)
         {
-            int pattern = patterns[digits[i] - '0'];
-            for (int bit = 4; bit >= 0; bit--)
+            int pattern = patterns[digit - '0'];
+            for (int bit = PatternElements - 1; bit >= 0; bit--)
             {
                 runs[written++] = ((pattern >> bit) & 1) != 0 ? WideElement : 1;
                 if (barsOnly)
@@ -248,15 +216,27 @@ internal static class Code2Of5Encoder
             }
         }
 
-        for (int i = 0; i < stop.Length; i++)
+        foreach (byte width in stop)
         {
-            runs[written++] = stop[i];
+            runs[written++] = width;
         }
+
+        int widthInModules = BarcodeSymbol.RunWidth(runs);
+        float nominalBarHeight = MathF.Max(widthInModules * NominalBarHeightFraction, (float)(MinimumBarHeightMillimetres / xDimension));
+        float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);
+        heights.Fill(barHeight);
+
+        if (options.Font is not null && readable.Length > 0)
+        {
+            symbol.ReserveText(1, readable.Length);
+            symbol.AddText(readable, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + BarcodeTextPlacement.Clearance);
+        }
+
+        symbol.EndLinear(QuietZone, QuietZone);
     }
 
     /// <summary>
-    /// Gets the start pattern of a variant in bar and space order, as <see cref="Code2Of5Variant"/>
-    /// describes it.
+    /// Gets the start pattern of a variant in bar and space order, as <see cref="Code2Of5Variant"/> describes it.
     /// </summary>
     /// <param name="variant">The symbology.</param>
     /// <returns>The run widths of the start pattern.</returns>
@@ -269,8 +249,7 @@ internal static class Code2Of5Encoder
     };
 
     /// <summary>
-    /// Gets the stop pattern of a variant in bar and space order, ending on a bar, as
-    /// <see cref="Code2Of5Variant"/> describes it.
+    /// Gets the stop pattern of a variant in bar and space order, ending on a bar, as <see cref="Code2Of5Variant"/> describes it.
     /// </summary>
     /// <param name="variant">The symbology.</param>
     /// <returns>The run widths of the stop pattern.</returns>

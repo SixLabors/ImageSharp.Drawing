@@ -6,11 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Gs1DataBarLimitedSymbology"/>. Each expected sequence is the alternating bar
-/// and space module widths, with a zero width bar before the guard space and after the closing five module
-/// space, taken from an independent reference implementation through its raw encoding API and confirmed by a
-/// second one. A sequence carries the guard patterns, the two symbol characters and the check character
-/// between them.
+/// Encoder tests for <see cref="Gs1DataBarLimitedSymbology"/>. Each expected sequence is the alternating bar and space module widths, with a zero width bar
+/// before the guard space and after the closing five module space, taken from an independent reference implementation through its raw encoding API and
+/// confirmed by a second one. A sequence carries the guard patterns, the two symbol characters and the check character between them.
 /// </summary>
 public class Gs1DataBarLimitedSymbologyTests
 {
@@ -25,8 +23,8 @@ public class Gs1DataBarLimitedSymbologyTests
         => Encode(text, (ref symbol) => Assert.Equal(expected, SymbolEncoder.RunString(ref symbol)));
 
     /// <summary>
-    /// Section 5.5.2.2 of the GS1 General Specifications: "79X wide, starting with a 1X space and ending with
-    /// a 5X space, by 10X high", 47 elements, and no quiet zone.
+    /// Section 5.5.2.2 of the GS1 General Specifications: "79X wide, starting with a 1X space and ending with a 5X space, by 10X high", 47 elements, and no
+    /// quiet zone.
     /// </summary>
     [Fact]
     public void Gs1DataBarLimited_IsSeventyNineModulesWideAndTenHigh()
@@ -57,8 +55,8 @@ public class Gs1DataBarLimitedSymbologyTests
     }
 
     /// <summary>
-    /// Section 5.5.2.2: a GTIN-14 must have the indicator digit 1, so a first digit above 1 is refused. The
-    /// check digit is calculated for the 13 digit inputs, so only the first digit is wrong in them.
+    /// Section 5.5.2.2: a GTIN-14 must have the indicator digit 1, so a first digit above 1 is refused. The check digit is calculated for the 13 digit inputs,
+    /// so only the first digit is wrong in them.
     /// </summary>
     [Theory]
     [InlineData("(01)2501234567890")]

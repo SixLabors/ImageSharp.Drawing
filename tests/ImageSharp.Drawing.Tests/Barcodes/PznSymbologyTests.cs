@@ -6,10 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Pzn8Symbology"/> and <see cref="Pzn7Symbology"/>. Each expected run string
-/// is the alternating bar and space module widths, starting with a bar, taken from an independent reference
-/// implementation through its raw encoding API, less the gap it emits after the stop character. The check
-/// digit and the printed line come from the IFA technical information documents on PZN coding.
+/// Encoder tests for <see cref="Pzn8Symbology"/> and <see cref="Pzn7Symbology"/>. Each expected run string is the alternating bar and space module widths,
+/// starting with a bar, taken from an independent reference implementation through its raw encoding API, less the gap it emits after the stop character. The
+/// check digit and the printed line come from the IFA technical information documents on PZN coding.
 /// </summary>
 public class PznSymbologyTests
 {
@@ -27,9 +26,8 @@ public class PznSymbologyTests
         => Assert.Equal(expected, Encode(new Pzn7Symbology(), text));
 
     /// <summary>
-    /// The worked example in the IFA check digit document: the digits 2758089 weighted 1 to 7 give the
-    /// products 2, 14, 15, 32, 0, 48 and 63, which sum to 174; 174 divided by 11 leaves 9, so the complete
-    /// PZN is 27580899.
+    /// The worked example in the IFA check digit document: the digits 2758089 weighted 1 to 7 give the products 2, 14, 15, 32, 0, 48 and 63, which sum to 174;
+    /// 174 divided by 11 leaves 9, so the complete PZN is 27580899.
     /// </summary>
     [Fact]
     public void MatchesTheWorkedCheckDigitExample()
@@ -41,22 +39,19 @@ public class PznSymbologyTests
     }
 
     /// <summary>
-    /// The PZN of the worked PPN example in the same document is 03752864, whose check digit is therefore
-    /// the trailing 4.
+    /// The PZN of the worked PPN example in the same document is 03752864, whose check digit is therefore the trailing 4.
     /// </summary>
     [Fact]
     public void AcceptsTheCheckDigitOfTheWorkedPpnExample()
-        => Assert.Equal(
-            Encode(new Pzn8Symbology(), "0375286"),
-            Encode(new Pzn8Symbology(), "03752864"));
+        => Assert.Equal(Encode(new Pzn8Symbology(), "0375286"), Encode(new Pzn8Symbology(), "03752864"));
 
     [Fact]
     public void RejectsWrongCheckDigit()
         => Assert.Throws<ArgumentException>(() => Encode(new Pzn8Symbology(), "27580891"));
 
     /// <summary>
-    /// IFA: "If the remainder is the number 10, this digit sequence is not used as PZN." The digits
-    /// 0000003 weight the trailing 3 by seven, giving 21, and 21 divided by 11 leaves 10.
+    /// IFA: "If the remainder is the number 10, this digit sequence is not used as PZN." The digits 0000003 weight the trailing 3 by seven, giving 21, and 21
+    /// divided by 11 leaves 10.
     /// </summary>
     [Fact]
     public void RejectsADigitSequenceThatLeavesTen()
@@ -66,8 +61,7 @@ public class PznSymbologyTests
     }
 
     /// <summary>
-    /// A PZN8 carries seven digits and a check digit, and a PZN7 six and a check digit, so anything else
-    /// is rejected, as is a non-digit.
+    /// A PZN8 carries seven digits and a check digit, and a PZN7 six and a check digit, so anything else is rejected, as is a non-digit.
     /// </summary>
     [Theory]
     [InlineData("275808")]
@@ -77,8 +71,8 @@ public class PznSymbologyTests
         => Assert.ThrowsAny<ArgumentException>(() => Encode(new Pzn8Symbology(), text));
 
     /// <summary>
-    /// IFA prints the term PZN and the identifier separated with a space "for better readability", and
-    /// says "the spaces and the term PZN are not represented in the barcode".
+    /// IFA prints the term PZN and the identifier separated with a space "for better readability", and says "the spaces and the term PZN are not represented in
+    /// the barcode".
     /// </summary>
     [Fact]
     public void PrintsTheTermAndIdentifierWithoutEncodingThem()
@@ -90,16 +84,16 @@ public class PznSymbologyTests
     }
 
     /// <summary>
-    /// IFA gives a nominal code height of 10 mm at the nominal module width of 0.25 mm, which is 40
-    /// modules, and that height changes with the module width rather than with the symbol length.
+    /// IFA gives a nominal code height of 10 mm at the nominal module width of 0.25 mm, which is 40 modules, and that height changes with the module width
+    /// rather than with the symbol length.
     /// </summary>
     [Fact]
     public void DefaultsTheBarHeightToTheNominalCodeHeight()
         => Assert.Equal(40F, SymbolEncoder.Read(new Pzn8Symbology(), "03752864", new BarcodeOptions(), static (ref symbol) => symbol.BarHeights[0]));
 
     /// <summary>
-    /// IFA gives a nominal module width of 0.25 mm, so a symbol without an X dimension of the caller draws
-    /// its modules at 0.25 mm and its 40 module bars 10 mm high. An X dimension of the caller replaces it.
+    /// IFA gives a nominal module width of 0.25 mm, so a symbol without an X dimension of the caller draws its modules at 0.25 mm and its 40 module bars 10 mm
+    /// high. An X dimension of the caller replaces it.
     /// </summary>
     [Fact]
     public void DefaultsTheModuleWidthToTheNominalModuleWidth()
@@ -111,8 +105,7 @@ public class PznSymbologyTests
     }
 
     /// <summary>
-    /// The symbol carries the identifier, the digits and the check digit, and Code 39 adds no check
-    /// character of its own.
+    /// The symbol carries the identifier, the digits and the check digit, and Code 39 adds no check character of its own.
     /// </summary>
     [Fact]
     public void AddsNoCode39CheckCharacter()

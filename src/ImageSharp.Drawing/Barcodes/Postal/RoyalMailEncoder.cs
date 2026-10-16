@@ -7,8 +7,8 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Shared encodation for the Royal Mail 4-State Customer Code and the symbologies that reuse its
-/// character set: every character is four bars, of which two carry an ascender and two a descender.
+/// Shared encodation for the Royal Mail 4-State Customer Code and the symbologies that reuse its character set: every character is four bars, of which two
+/// carry an ascender and two a descender.
 /// </summary>
 internal static class RoyalMailEncoder
 {
@@ -28,14 +28,13 @@ internal static class RoyalMailEncoder
     public const int BarsPerCharacter = 4;
 
     /// <summary>
-    /// The check characters in the order of the checksum calculation table, which the upper half value
-    /// selects the row of and the lower half value the column of.
+    /// The check characters in the order of the checksum calculation table, which the upper half value selects the row of and the lower half value the column
+    /// of.
     /// </summary>
     private const string CheckTable = "ZUVWXY501234B6789AHCDEFGNIJKLMTOPQRS";
 
     /// <summary>
-    /// Gets the bar states of every character, four per character in the order of
-    /// <see cref="Characters"/>, as <see cref="FourState"/> values.
+    /// Gets the bar states of every character, four per character in the order of <see cref="Characters"/>, as <see cref="FourState"/> values.
     /// </summary>
     private static ReadOnlySpan<byte> Patterns =>
     [
@@ -88,10 +87,9 @@ internal static class RoyalMailEncoder
     }
 
     /// <summary>
-    /// Calculates the check character. The upper half of a character is the ascenders of its four bars
-    /// weighted 4, 2, 1 and 0 from the left, and the lower half its descenders weighted the same. Each
-    /// half value of 6 counts as 0. The half values of all the data characters are added, each total is
-    /// reduced modulo 6, and the two remainders select the row and the column of the checksum table.
+    /// Calculates the check character. The upper half of a character is the ascenders of its four bars weighted 4, 2, 1 and 0 from the left, and the lower half
+    /// its descenders weighted the same. Each half value of 6 counts as 0. The half values of all the data characters are added, each total is reduced modulo
+    /// 6, and the two remainders select the row and the column of the checksum table.
     /// </summary>
     /// <param name="text">The data characters, already validated.</param>
     /// <returns>The check character.</returns>
@@ -101,20 +99,20 @@ internal static class RoyalMailEncoder
         int lower = 0;
         InlineArray4<FourState> stateStorage = default;
         Span<FourState> states = stateStorage;
-        for (int i = 0; i < text.Length; i++)
+        foreach (char c in text)
         {
-            Append(Value(text[i]), states);
+            Append(Value(c), states);
             int characterUpper = 0;
             int characterLower = 0;
             for (int bar = 0; bar < BarsPerCharacter; bar++)
             {
                 int weight = 4 >> bar;
-                if (states[bar] is FourState.Ascender or FourState.Full)
+                if ((states[bar] & FourState.Ascender) != 0)
                 {
                     characterUpper += weight;
                 }
 
-                if (states[bar] is FourState.Descender or FourState.Full)
+                if ((states[bar] & FourState.Descender) != 0)
                 {
                     characterLower += weight;
                 }

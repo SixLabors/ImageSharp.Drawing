@@ -4,16 +4,14 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The Data Matrix ECC 200 symbology, ISO/IEC 16022: a matrix of square modules inside a finder pattern,
-/// a solid L on the left and bottom edges and alternating modules on the top and right edges. A symbol is
-/// one of 24 square sizes, 10 x 10 to 144 x 144, or six rectangular sizes, 8 x 18 to 16 x 48. It carries the
+/// The Data Matrix ECC 200 symbology, ISO/IEC 16022: a matrix of square modules inside a finder pattern, a solid L on the left and bottom edges and alternating
+/// modules on the top and right edges. A symbol is one of 24 square sizes, 10 x 10 to 144 x 144, or six rectangular sizes, 8 x 18 to 16 x 48. It carries the
 /// characters U+0000 to U+00FF with Reed-Solomon error correction.
 /// </summary>
 public sealed class DataMatrixSymbology : BarcodeSymbology
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="DataMatrixSymbology"/> class. The symbol takes the
-    /// smallest square size that holds the data.
+    /// Initializes a new instance of the <see cref="DataMatrixSymbology"/> class. The symbol takes the smallest square size that holds the data.
     /// </summary>
     public DataMatrixSymbology()
     {

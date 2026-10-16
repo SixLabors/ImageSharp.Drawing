@@ -4,18 +4,16 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Builds the symbol of a height modulated postal symbology from its bar states. The bars are one width
-/// and equally spaced, and the four states differ in height and vertical position alone.
+/// Builds the symbol of a height modulated postal symbology from its bar states. The bars are one width and equally spaced, and the four states differ in
+/// height and vertical position alone.
 /// </summary>
 internal static class FourStateEncoder
 {
     /// <summary>
-    /// The dimensions the Royal Mail 4-state symbologies share, from Table 11 of the Royal Mail Mailmark
-    /// barcode definition document: a bar width of 0.54 mm, ascender and descender bars of 1.90 mm, a
-    /// tracker bar of 1.30 mm, a full bar of 5.10 mm and a pitch of 21.2 bars per inch, with the clear
-    /// zone of section 3.5.2, "at least 2mm around all edges", which also stands between the bars and
-    /// the human readable interpretation. At the 0.54 mm module a run unit of 0.01 mm is 1/54 module, a
-    /// bar is 54 units and a pitch of 1.20 mm, which is 21.17 bars per inch, leaves a space of 66 units.
+    /// The dimensions the Royal Mail 4-state symbologies share, from Table 11 of the Royal Mail Mailmark barcode definition document: a bar width of 0.54 mm,
+    /// ascender and descender bars of 1.90 mm, a tracker bar of 1.30 mm, a full bar of 5.10 mm and a pitch of 21.2 bars per inch, with the clear zone of
+    /// section 3.5.2, "at least 2mm around all edges", which also stands between the bars and the human readable interpretation. At the 0.54 mm module a run
+    /// unit of 0.01 mm is 1/54 module, a bar is 54 units and a pitch of 1.20 mm, which is 21.17 bars per inch, leaves a space of 66 units.
     /// </summary>
     public static readonly FourStateMetrics RoyalMail = new(
         0.54,
@@ -59,8 +57,8 @@ internal static class FourStateEncoder
         for (int i = 0; i < barCount; i++)
         {
             FourState state = states[i];
-            bool up = state is FourState.Ascender or FourState.Full;
-            bool down = state is FourState.Descender or FourState.Full;
+            bool up = (state & FourState.Ascender) != 0;
+            bool down = (state & FourState.Descender) != 0;
             tops[i] = up ? 0F : ascender;
             heights[i] = tracker + (up ? ascender : 0F) + (down ? descender : 0F);
         }

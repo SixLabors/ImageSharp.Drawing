@@ -15,10 +15,7 @@ public static class BarcodeMeasurer
     /// <param name="text">The text to encode.</param>
     /// <param name="options">The sizing and painting options.</param>
     /// <param name="origin">The top left corner the barcode would draw from, in pixels.</param>
-    /// <returns>
-    /// The union of the symbol, including any quiet zones, and the human readable interpretation if the
-    /// barcode was to be rendered.
-    /// </returns>
+    /// <returns>The union of the symbol, including any quiet zones, and the human readable interpretation if the barcode was to be rendered.</returns>
     /// <exception cref="ArgumentException">The text is not valid for the symbology.</exception>
     public static RectangleF MeasureRenderableBounds(BarcodeSymbology symbology, string text, BarcodeOptions options, PointF origin)
     {
@@ -31,7 +28,7 @@ public static class BarcodeMeasurer
             symbology.Encode(text, options, ref symbol);
             return symbol.Kind switch
             {
-                BarcodeSymbolKind.Matrix => MatrixEmitter.Measure(ref symbol, options, origin),
+                BarcodeSymbolKind.Matrix or BarcodeSymbolKind.Dotted => MatrixEmitter.Measure(ref symbol, options, origin),
                 BarcodeSymbolKind.Hexagonal => HexagonalEmitter.Measure(ref symbol, options, origin),
                 _ => BarEmitter.Measure(ref symbol, options, origin),
             };

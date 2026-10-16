@@ -7,9 +7,8 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="IntelligentMailSymbology"/>. Every expected value is from the four worked
-/// examples of Appendix C of USPS-B-3200 revision H, Tables 13 to 16, which share the tracking code
-/// 01234567094987654321 and add a routing code of 0, 5, 9 or 11 digits.
+/// Encoder tests for <see cref="IntelligentMailSymbology"/>. Every expected value is from the four worked examples of Appendix C of USPS-B-3200 revision H,
+/// Tables 13 to 16, which share the tracking code 01234567094987654321 and add a routing code of 0, 5, 9 or 11 digits.
 /// </summary>
 public class IntelligentMailSymbologyTests
 {
@@ -46,8 +45,8 @@ public class IntelligentMailSymbologyTests
     }
 
     /// <summary>
-    /// Steps 3 to 5 of Example 4, Table 16: the codewords after the orientation and frame check sequence
-    /// changes, and the characters with the frame check sequence bits applied.
+    /// Steps 3 to 5 of Example 4, Table 16: the codewords after the orientation and frame check sequence changes, and the characters with the frame check
+    /// sequence bits applied.
     /// </summary>
     [Fact]
     public void ConvertsExampleFourToCodewordsAndCharacters()
@@ -65,8 +64,8 @@ public class IntelligentMailSymbologyTests
     }
 
     /// <summary>
-    /// Step 5 of Example 1, Table 13, whose codewords below 1287 all select Table 19 and whose frame
-    /// check sequence bits 0, 4 and 6 negate characters A, E and G.
+    /// Step 5 of Example 1, Table 13, whose codewords below 1287 all select Table 19 and whose frame check sequence bits 0, 4 and 6 negate characters A, E and
+    /// G.
     /// </summary>
     [Fact]
     public void ConvertsExampleOneToCharacters()
@@ -90,9 +89,8 @@ public class IntelligentMailSymbologyTests
         => Assert.Equal(bars, SymbolEncoder.Read(new IntelligentMailSymbology(), text, new BarcodeOptions(), States));
 
     /// <summary>
-    /// Figure 6 at the 0.020 inch module: bars of 11 run units of 1/550 inch, spaces of 14, a full bar of
-    /// 0.145 inch, a tracker of 0.048 inch, an extender of 0.0485 inch above or below it, and a clear zone
-    /// of 0.125 inch at each end.
+    /// Figure 6 at the 0.020 inch module: bars of 11 run units of 1/550 inch, spaces of 14, a full bar of 0.145 inch, a tracker of 0.048 inch, an extender of
+    /// 0.0485 inch above or below it, and a clear zone of 0.125 inch at each end.
     /// </summary>
     [Fact]
     public void DrawsTheDimensionsOfFigureSix()
@@ -128,11 +126,9 @@ public class IntelligentMailSymbologyTests
         });
 
     /// <summary>
-    /// Section 2.4.3: the fields of the tracking code and the groups of the routing code, separated by
-    /// spaces, with the example "01 234 567094 987654321 01234 5678 91" for the fourth example of Table
-    /// 5. A mailer ID that starts with 9 is 9 digits and leaves a 6-digit serial number. Section 2.4.2
-    /// aligns the left edge of the line with the leftmost bar, and section 2.4.1 keeps it at least
-    /// 0.028 inch below the bars.
+    /// Section 2.4.3: the fields of the tracking code and the groups of the routing code, separated by spaces, with the example "01 234 567094 987654321 01234
+    /// 5678 91" for the fourth example of Table 5. A mailer ID that starts with 9 is 9 digits and leaves a 6-digit serial number. Section 2.4.2 aligns the left
+    /// edge of the line with the leftmost bar, and section 2.4.1 keeps it at least 0.028 inch below the bars.
     /// </summary>
     /// <param name="text">The digits.</param>
     /// <param name="expected">The printed line.</param>
@@ -168,8 +164,7 @@ public class IntelligentMailSymbologyTests
         => Assert.ThrowsAny<ArgumentException>(() => SymbolEncoder.Encode(new IntelligentMailSymbology(), text, new BarcodeOptions()));
 
     /// <summary>
-    /// Reads the bar states of a symbol from the bar tops and heights: F for a full bar, A for an
-    /// ascender, D for a descender and T for a tracker.
+    /// Reads the bar states of a symbol from the bar tops and heights: F for a full bar, A for an ascender, D for a descender and T for a tracker.
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
     /// <returns>The bar states.</returns>

@@ -7,8 +7,8 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Benchmarks.Barcodes;
 
 /// <summary>
-/// Measures the encodation of Han Xin Code symbols through the public measuring API, which encodes the full
-/// symbol: the segments, the error correction, the module placement and the mask choice.
+/// Measures the encodation of Han Xin Code symbols through the public measuring API, which encodes the full symbol: the segments, the error correction, the
+/// module placement and the mask choice.
 /// </summary>
 public class EncodeHanXin
 {
@@ -25,8 +25,8 @@ public class EncodeHanXin
     /// Gets the texts to encode.
     /// </summary>
     /// <returns>
-    /// A short URL, 6500 digits and 2684 characters of lowercase text. At the default level L2, the digits and
-    /// the text both need one of the largest versions, where the mask choice scores the most modules.
+    /// A short URL, 6500 digits and 2684 characters of lowercase text. At the default level L2, the digits and the text both need one of the largest versions,
+    /// where the mask choice scores the most modules.
     /// </returns>
     public static IEnumerable<string> Texts()
     {

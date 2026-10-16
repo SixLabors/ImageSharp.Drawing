@@ -4,8 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// One row of bars and spaces in a linear or stacked symbol: where its runs and bars are in the symbol
-/// storage, and where it stands.
+/// One row of bars and spaces in a linear or stacked symbol: where its runs and bars are in the symbol storage, and where it stands.
 /// </summary>
 internal readonly struct BarcodeRow
 {

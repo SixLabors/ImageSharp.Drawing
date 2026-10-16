@@ -6,16 +6,13 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="RoyalMailSymbology"/>, <see cref="KixSymbology"/> and
-/// <see cref="DaftSymbology"/>. Each expected bar string is the sequence of bar states, A for an
-/// ascender, D for a descender, F for a full bar and T for a tracker, from the reference
-/// implementation's raw encoding API.
+/// Encoder tests for <see cref="RoyalMailSymbology"/>, <see cref="KixSymbology"/> and <see cref="DaftSymbology"/>. Each expected bar string is the sequence of
+/// bar states, A for an ascender, D for a descender, F for a full bar and T for a tracker, from the reference implementation's raw encoding API.
 /// </summary>
 public class RoyalMailSymbologyTests
 {
     /// <summary>
-    /// A symbol is a start bar with an ascender, four bars per character, four for the check character
-    /// and a full stop bar.
+    /// A symbol is a start bar with an ascender, four bars per character, four for the check character and a full stop bar.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="bars">The bar states from the left.</param>
@@ -42,9 +39,8 @@ public class RoyalMailSymbologyTests
         => Assert.Equal("FATDAFTDAD", Encode(new DaftSymbology(), "FATDAFTDAD"));
 
     /// <summary>
-    /// The check character of the checksum calculation table. The reference symbol carries it in the four
-    /// bars before the stop bar: T D A T for LE28HS9Z, which is the pattern of 9, F D T F for B31HQ, the
-    /// pattern of W, and A D D A for SN34RD1A, the pattern of K.
+    /// The check character of the checksum calculation table. The reference symbol carries it in the four bars before the stop bar: T D A T for LE28HS9Z, which
+    /// is the pattern of 9, F D T F for B31HQ, the pattern of W, and A D D A for SN34RD1A, the pattern of K.
     /// </summary>
     /// <param name="text">The data.</param>
     /// <param name="expected">The check character.</param>
@@ -56,10 +52,9 @@ public class RoyalMailSymbologyTests
         => Assert.Equal(expected, RoyalMailEncoder.CheckCharacter(text));
 
     /// <summary>
-    /// Table 11 of the Mailmark barcode definition document at the 0.54 mm module: bars of 54 run units
-    /// of 0.01 mm, spaces of 66, a tracker of 1.30 mm, ascenders and descenders of 1.90 mm, a full bar of
-    /// 5.10 mm and a clear zone of 2 mm. A tracker stands 1.90 mm down, a descender starts there too, and
-    /// an ascender and a full bar start at the top.
+    /// Table 11 of the Mailmark barcode definition document at the 0.54 mm module: bars of 54 run units of 0.01 mm, spaces of 66, a tracker of 1.30 mm,
+    /// ascenders and descenders of 1.90 mm, a full bar of 5.10 mm and a clear zone of 2 mm. A tracker stands 1.90 mm down, a descender starts there too, and an
+    /// ascender and a full bar start at the top.
     /// </summary>
     [Fact]
     public void DrawsTheDimensionsOfTableEleven()
@@ -136,8 +131,7 @@ public class RoyalMailSymbologyTests
         => SymbolEncoder.Read(symbology, text, new BarcodeOptions(), States);
 
     /// <summary>
-    /// Reads the bar states of a symbol from the bar tops and heights: F for a full bar, A for an
-    /// ascender, D for a descender and T for a tracker.
+    /// Reads the bar states of a symbol from the bar tops and heights: F for a full bar, A for an ascender, D for a descender and T for a tracker.
     /// </summary>
     /// <param name="symbol">The encoded symbol.</param>
     /// <returns>The bar states.</returns>

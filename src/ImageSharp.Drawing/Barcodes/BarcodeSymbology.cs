@@ -6,9 +6,8 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// A barcode symbology: one machine readable encoding scheme. A symbology validates the input and applies
-/// the check character rules of its specification. It then encodes the input into a symbol. The canvas
-/// draws that symbol through
+/// A barcode symbology: one machine readable encoding scheme. A symbology validates the input and applies the check character rules of its specification. It
+/// then encodes the input into a symbol. The canvas draws that symbol through
 /// <see cref="Processing.DrawingCanvas.DrawBarcode(BarcodeSymbology, string, BarcodeOptions, PointF)"/>.
 /// </summary>
 public abstract class BarcodeSymbology
@@ -26,8 +25,8 @@ public abstract class BarcodeSymbology
     }
 
     /// <summary>
-    /// Validates the given text and encodes it into a device-independent symbol measured in modules.
-    /// The text length is checked against the maximum of the symbology before any buffer is sized from it.
+    /// Validates the given text and encodes it into a device-independent symbol measured in modules. The text length is checked against the maximum of the
+    /// symbology before any buffer is sized from it.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="options">The options that control layout choices made during encoding.</param>
@@ -36,8 +35,8 @@ public abstract class BarcodeSymbology
     internal abstract void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol);
 
     /// <summary>
-    /// Validates that the text is the ASCII digits 0 to 9 alone. The vectorized search finds the first other
-    /// character, and only then is the code point there decoded for the message.
+    /// Validates that the text is the ASCII digits 0 to 9 alone. The vectorized search finds the first other character, and only then is the code point there
+    /// decoded for the message.
     /// </summary>
     /// <param name="text">The text.</param>
     /// <exception cref="ArgumentException">The text has a character that is not a digit.</exception>

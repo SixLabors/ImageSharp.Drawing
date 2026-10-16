@@ -4,8 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The error correction levels of Han Xin Code. A higher level recovers a larger part of a damaged symbol and
-/// holds less data in a symbol of the same version.
+/// The error correction levels of Han Xin Code. A higher level recovers a larger part of a damaged symbol and holds less data in a symbol of the same version.
 /// </summary>
 public enum HanXinErrorCorrectionLevel
 {

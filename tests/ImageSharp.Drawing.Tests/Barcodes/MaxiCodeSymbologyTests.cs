@@ -6,15 +6,15 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="MaxiCodeSymbology"/>. Each expected grid is the 33 x 30 module grid of an
-/// independent reference implementation, one row of hexadecimal digits per line, four modules per digit and
-/// the last digit padded with light modules. The modules of the odd rows stand half a module to the right.
+/// Encoder tests for <see cref="MaxiCodeSymbology"/>. Each expected grid is the 33 x 30 module grid of an independent reference implementation, one row of
+/// hexadecimal digits per line, four modules per digit and the last digit padded with light modules. The modules of the odd rows stand half a module to the
+/// right.
 /// </summary>
 public class MaxiCodeSymbologyTests
 {
     /// <summary>
-    /// Gets the cases of <see cref="MatchesReferenceGrid"/>: the mode (0 for automatic), the text and the
-    /// grid. The 93 character message is the message of Figure 2 of ISO/IEC 16023.
+    /// Gets the cases of <see cref="MatchesReferenceGrid"/>: the mode (0 for automatic), the text and the grid. The 93 character message is the message of
+    /// Figure 2 of ISO/IEC 16023.
     /// </summary>
     public static TheoryData<int, string, string> MatchesReferenceGridData { get; } = new()
     {
@@ -366,8 +366,8 @@ public class MaxiCodeSymbologyTests
     }
 
     /// <summary>
-    /// Section 4.11.5 of ISO/IEC 16023: "1W on the left and right sides" and "1Y on the top and bottom", and
-    /// section 4.11.6: the symbol with its quiet zones "is 32X wide by (34Y + V) high".
+    /// Section 4.11.5 of ISO/IEC 16023: "1W on the left and right sides" and "1Y on the top and bottom", and section 4.11.6: the symbol with its quiet zones
+    /// "is 32X wide by (34Y + V) high".
     /// </summary>
     [Fact]
     public void QuietZonesAndSizeFollowSection411()
@@ -380,9 +380,8 @@ public class MaxiCodeSymbologyTests
         });
 
     /// <summary>
-    /// A structured carrier message needs its postal code, country code and class of service, each followed
-    /// by a group separator. A mode 2 postal code is 1 to 9 digits, a mode 3 postal code 1 to 6 characters,
-    /// and the country code and the class of service are three digits.
+    /// A structured carrier message needs its postal code, country code and class of service, each followed by a group separator. A mode 2 postal code is 1 to
+    /// 9 digits, a mode 3 postal code 1 to 6 characters, and the country code and the class of service are three digits.
     /// </summary>
     /// <param name="mode">The mode.</param>
     /// <param name="text">The text.</param>
@@ -395,14 +394,12 @@ public class MaxiCodeSymbologyTests
     [InlineData(2, "152382802\u001D84\u001D001\u001D")]
     [InlineData(2, "152382802\u001D840\u001D01A\u001D")]
     public void RejectsMalformedStructuredCarrier(int mode, string text)
-        => Assert.Throws<ArgumentException>(
-            () => SymbolEncoder.Encode(new MaxiCodeSymbology((MaxiCodeMode)mode), text, new BarcodeOptions()));
+        => Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new MaxiCodeSymbology((MaxiCodeMode)mode), text, new BarcodeOptions()));
 
     /// <summary>
-    /// Without a mode the symbol takes mode 5 when the data fits and mode 4 otherwise, so it matches the symbol
-    /// of that mode. The data ends in code set C, which has no pad codeword: 71 or 80 characters of code set
-    /// A, the lock into code set C and four characters of code set C need 77 or 86 codewords. 77 fill mode 5
-    /// with no latch back to code set A, and 86 take mode 4, whose pads follow a latch back to code set A.
+    /// Without a mode the symbol takes mode 5 when the data fits and mode 4 otherwise, so it matches the symbol of that mode. The data ends in code set C,
+    /// which has no pad codeword: 71 or 80 characters of code set A, the lock into code set C and four characters of code set C need 77 or 86 codewords. 77
+    /// fill mode 5 with no latch back to code set A, and 86 take mode 4, whose pads follow a latch back to code set A.
     /// </summary>
     /// <param name="capitals">The number of capital letters before the four accented letters.</param>
     /// <param name="mode">The mode the data takes.</param>

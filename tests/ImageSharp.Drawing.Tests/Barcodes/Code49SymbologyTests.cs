@@ -6,11 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="Code49Symbology"/>. Each expected row is the alternating bar and space
-/// module widths of one row, starting with a bar, taken from an independent reference implementation
-/// through its raw encoding API. A row carries its start pattern, four symbol characters in the parity of
-/// Table 2 and its stop pattern, so the encodation, the row check characters, the row count character and
-/// the symbol check characters all show up here.
+/// Encoder tests for <see cref="Code49Symbology"/>. Each expected row is the alternating bar and space module widths of one row, starting with a bar, taken
+/// from an independent reference implementation through its raw encoding API. A row carries its start pattern, four symbol characters in the parity of Table 2
+/// and its stop pattern, so the encodation, the row check characters, the row count character and the symbol check characters all show up here.
 /// </summary>
 public class Code49SymbologyTests
 {
@@ -109,9 +107,8 @@ public class Code49SymbologyTests
         });
 
     /// <summary>
-    /// Section 2.3.7 works "EXAMPLE 2" through to its code character matrix: the data with the row check
-    /// character 41, then the last row with the two symbol check characters 1729 and 895 as code
-    /// character pairs, the row count character 0 and the row check character 22.
+    /// Section 2.3.7 works "EXAMPLE 2" through to its code character matrix: the data with the row check character 41, then the last row with the two symbol
+    /// check characters 1729 and 895 as code character pairs, the row count character 0 and the row check character 22.
     /// </summary>
     [Fact]
     public void Code49_MatchesTheWorkedExampleOfSection237()
@@ -131,14 +128,13 @@ public class Code49SymbologyTests
         int[] codes = Codes(text);
         Assert.Equal(expected, codes[..expected.Length]);
 
-        // Table 8: a symbol that starts in numeric encodation has starting mode 2, and section 2.1.3
-        // puts it in Cr7 of a two row symbol as 7(2 - 2) + 2.
+        // Table 8: a symbol that starts in numeric encodation has starting mode 2, and section 2.1.3 puts it in Cr7 of a two row symbol as 7(2 - 2) + 2.
         Assert.Equal(2, codes[^2]);
     }
 
     /// <summary>
-    /// Section 2.1: every row is 70 modules, and a one module separator bar stands between rows. Section
-    /// 3.4 gives ten modules of quiet zone before the start pattern and one after the stop pattern.
+    /// Section 2.1: every row is 70 modules, and a one module separator bar stands between rows. Section 3.4 gives ten modules of quiet zone before the start
+    /// pattern and one after the stop pattern.
     /// </summary>
     [Fact]
     public void Code49_RowsAreSeventyModulesWithSeparators()
@@ -161,8 +157,8 @@ public class Code49SymbologyTests
         });
 
     /// <summary>
-    /// Section 3.6.2: H = ((h + g) r + g) X. The bars are 8X, the recommended minimum of section 3.3,
-    /// when no height is set, and a bar height in millimetres sets every data row.
+    /// Section 3.6.2: H = ((h + g) r + g) X. The bars are 8X, the recommended minimum of section 3.3, when no height is set, and a bar height in millimetres
+    /// sets every data row.
     /// </summary>
     [Fact]
     public void Code49_HeightFollowsSection362()
@@ -184,8 +180,7 @@ public class Code49SymbologyTests
     }
 
     /// <summary>
-    /// Appendix C: the human readable interpretation prints below the symbol, clear of the bottom
-    /// separator bar. Without a font there is no text.
+    /// Appendix C: the human readable interpretation prints below the symbol, clear of the bottom separator bar. Without a font there is no text.
     /// </summary>
     [Fact]
     public void Code49_TextPrintsBelowTheBottomSeparator()
@@ -205,8 +200,7 @@ public class Code49SymbologyTests
     }
 
     /// <summary>
-    /// Table 7 covers ASCII 0 to 127 and nothing else, Table 1 caps the data at 49 alphanumeric or 81
-    /// numeric characters, and an empty symbol carries no data.
+    /// Table 7 covers ASCII 0 to 127 and nothing else, Table 1 caps the data at 49 alphanumeric or 81 numeric characters, and an empty symbol carries no data.
     /// </summary>
     [Fact]
     public void Code49_RejectsInvalidInput()

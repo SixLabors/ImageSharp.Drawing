@@ -4,8 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The pitch of the D3 component of a D3 AQR symbol against the modules of its host QR Code symbol: the
-/// width of one D3 module in host modules.
+/// The pitch of the D3 component of a D3 AQR symbol against the modules of its host QR Code symbol: the width of one D3 module in host modules.
 /// </summary>
 public enum D3AqrHostRatio
 {

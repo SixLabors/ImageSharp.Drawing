@@ -6,10 +6,9 @@ using SixLabors.ImageSharp.Drawing.Barcodes;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Encoder tests for <see cref="PosiCodeSymbology"/>. Each expected run string is the alternating bar
-/// and space module widths, starting with a bar, from the reference implementation's raw encoding API,
-/// joined with commas because a space can be wider than nine modules. The reference ends on the last bar
-/// of the stop character, so the strings compare directly.
+/// Encoder tests for <see cref="PosiCodeSymbology"/>. Each expected run string is the alternating bar and space module widths, starting with a bar, from the
+/// reference implementation's raw encoding API, joined with commas because a space can be wider than nine modules. The reference ends on the last bar of the
+/// stop character, so the strings compare directly.
 /// </summary>
 public class PosiCodeSymbologyTests
 {
@@ -72,10 +71,9 @@ public class PosiCodeSymbologyTests
     };
 
     /// <summary>
-    /// One vector per version for the same data, then the paths through the character sets of the
-    /// standard versions: a latch to the small letters, a shift for one small letter, the symbols of
-    /// set 0, shifts to the control characters of set 2, and the function 4 switching of characters at
-    /// or above 128, both as single shifts and as a mode change for a run of five.
+    /// One vector per version for the same data, then the paths through the character sets of the standard versions: a latch to the small letters, a shift for
+    /// one small letter, the symbols of set 0, shifts to the control characters of set 2, and the function 4 switching of characters at or above 128, both as
+    /// single shifts and as a mode change for a run of five.
     /// </summary>
     /// <param name="version">The version.</param>
     /// <param name="text">The text to encode.</param>

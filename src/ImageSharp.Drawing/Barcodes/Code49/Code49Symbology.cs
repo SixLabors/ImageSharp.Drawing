@@ -4,9 +4,8 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The Code 49 symbology, AIM USS-49. A symbol is 2 to 8 rows of four symbol characters, each carrying
-/// two code characters, and carries the full ASCII character set with a row check character in every row
-/// and two or three modulo 2401 symbol check characters in the last.
+/// The Code 49 symbology, AIM USS-49. A symbol is 2 to 8 rows of four symbol characters, each carrying two code characters, and carries the full ASCII
+/// character set with a row check character in every row and two or three modulo 2401 symbol check characters in the last.
 /// </summary>
 public sealed class Code49Symbology : BarcodeSymbology
 {

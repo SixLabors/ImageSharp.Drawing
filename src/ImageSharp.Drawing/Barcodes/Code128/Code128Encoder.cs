@@ -1,23 +1,19 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Shared encodation for the Code 128 symbology family. Section 5.4 of the GS1 General Specifications
-/// describes the symbology and names ISO/IEC 15417 as its full definition. Every symbol character is six
-/// elements wide, three bars and three spaces of one to four modules, and carries eleven modules. The
-/// stop character is the one exception: seven elements over thirteen modules.
+/// Shared encodation for the Code 128 symbology family. Section 5.4 of the GS1 General Specifications describes the symbology and names ISO/IEC 15417 as its
+/// full definition. Every symbol character is six elements wide, three bars and three spaces of one to four modules, and carries eleven modules. The stop
+/// character is the one exception: seven elements over thirteen modules.
 /// <para>
-/// A GS1 symbol starts with Start C and a Function 1 character, step 1 of section 5.4.7.6 of the GS1 General
-/// Specifications. Other text starts in code set C before four or more digits or before two digits that are
-/// the whole text, and otherwise in the one of code sets A and B that carries the first character only one
-/// of them carries. A run of four or more digits changes to code set C, after its first digit when the run
-/// is odd, as step 3 does. A character that only the other of code sets A and B carries takes a Shift when
-/// the next such character is in the current code set, and a code set change otherwise.
+/// A GS1 symbol starts with Start C and a Function 1 character, step 1 of section 5.4.7.6 of the GS1 General Specifications. Other text starts in code set C
+/// before four or more digits or before two digits that are the whole text, and otherwise in the one of code sets A and B that carries the first character only
+/// one of them carries. A run of four or more digits changes to code set C, after its first digit when the run is odd, as step 3 does. A character that only
+/// the other of code sets A and B carries takes a Shift when the next such character is in the current code set, and a code set change otherwise.
 /// </para>
 /// </summary>
 internal static class Code128Encoder
@@ -28,8 +24,8 @@ internal static class Code128Encoder
     public const int QuietZone = 10;
 
     /// <summary>
-    /// The symbol character value of the Function 1 character. Section 5.4.2 places it directly after the
-    /// start character to mark a GS1-128 symbol, and section 5.4.3.4.2 uses it as a field separator.
+    /// The symbol character value of the Function 1 character. Section 5.4.2 places it directly after the start character to mark a GS1-128 symbol, and section
+    /// 5.4.3.4.2 uses it as a field separator.
     /// </summary>
     public const int FunctionOne = 102;
 
@@ -39,8 +35,7 @@ internal static class Code128Encoder
     public const int MaximumLength = 500;
 
     /// <summary>
-    /// The nominal X dimension in millimetres: the 0.495 mm of logistic units scanned in general
-    /// distribution, Table 5-51 of the GS1 General Specifications.
+    /// The nominal X dimension in millimetres: the 0.495 mm of logistic units scanned in general distribution, Table 5-51 of the GS1 General Specifications.
     /// </summary>
     public const double NominalXDimension = 0.495;
 
@@ -90,22 +85,39 @@ internal static class Code128Encoder
     private const int CheckModulus = 103;
 
     /// <summary>
-    /// The longest input that encodes in the inline buffers: 128 values, two for each character, and 192
-    /// distance bytes, three for each character. Section 5.4.1 caps a GS1-128 symbol at 48 data characters,
-    /// so every conforming GS1-128 symbol encodes inline.
+    /// The element count of a symbol character, section 5.4.1: three bars and three spaces.
+    /// </summary>
+    private const int ElementsPerCharacter = 6;
+
+    /// <summary>
+    /// The element count of the stop character, section 5.4.1: four bars and three spaces.
+    /// </summary>
+    private const int StopElements = 7;
+
+    /// <summary>
+    /// The width of a symbol character in modules, section 5.4.7.2.
+    /// </summary>
+    private const int ModulesPerCharacter = 11;
+
+    /// <summary>
+    /// The width of the stop character in modules, section 5.4.7.2.
+    /// </summary>
+    private const int StopModules = 13;
+
+    /// <summary>
+    /// The longest input that encodes in the inline buffers: 128 values, two for each character, and 192 distance bytes, three for each character. Section
+    /// 5.4.1 caps a GS1-128 symbol at 48 data characters, so every conforming GS1-128 symbol encodes inline.
     /// </summary>
     private const int InlineLength = 64;
 
     /// <summary>
-    /// The nominal bar height in modules: the minimum symbol height of 31.75 mm at the X dimension of
-    /// 0.495 mm, Table 5-51 of the GS1 General Specifications.
+    /// The nominal bar height in modules: the minimum symbol height of 31.75 mm at the X dimension of 0.495 mm, Table 5-51 of the GS1 General Specifications.
     /// </summary>
     private const float NominalBarHeight = (float)(31.75 / NominalXDimension);
 
     /// <summary>
-    /// Gets the element widths of every symbol character, packed four bits per element, the first element
-    /// in the highest bits. Table 5-25 of the GS1 General Specifications lists them: six elements each, three
-    /// bars and three spaces of one to four modules, except the stop character, <see cref="Stop"/>, which
+    /// Gets the element widths of every symbol character, packed four bits per element, the first element in the highest bits. Table 5-25 of the GS1 General
+    /// Specifications lists them: six elements each, three bars and three spaces of one to four modules, except the stop character, <see cref="Stop"/>, which
     /// takes seven.
     /// </summary>
     private static ReadOnlySpan<uint> Patterns =>
@@ -127,15 +139,13 @@ internal static class Code128Encoder
     ];
 
     /// <summary>
-    /// Encodes text and builds the symbol. The runs carry the start character, the code set switches, the
-    /// check character of section 5.4.3.6 and the stop character, whose seven elements end the list on a
-    /// bar. Every symbology in the family shares this step, so only the encodation differs between them.
-    /// Code 128 carries no guard bars, so every bar runs the full height, and section 5.4.7.3 prints the
-    /// human readable interpretation below the symbol.
+    /// Encodes text and builds the symbol. The runs carry the start character, the code set switches, the check character of section 5.4.3.6 and the stop
+    /// character, whose seven elements end the list on a bar. Every symbology in the family shares this step, so only the encodation differs between them. Code
+    /// 128 carries no guard bars, so every bar runs the full height, and section 5.4.7.3 prints the human readable interpretation below the symbol.
     /// </summary>
     /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
-    /// <param name="gs1">Whether this is a GS1 symbol. Such a symbol carries a Function 1 character after
-    /// its start character, and encodes every <see cref="Gs1Data.Separator"/> in the text as another one.</param>
+    /// <param name="gs1">Whether this is a GS1 symbol. Such a symbol carries a Function 1 character after its start character, and encodes every
+    /// <see cref="Gs1Data.Separator"/> in the text as another one.</param>
     /// <param name="readablePrefix">The characters of the human readable interpretation before its body.</param>
     /// <param name="readableBody">The body of the human readable interpretation.</param>
     /// <param name="readableSuffix">The characters of the human readable interpretation after its body.</param>
@@ -165,13 +175,12 @@ internal static class Code128Encoder
             ref symbol);
 
     /// <summary>
-    /// Encodes text and builds the symbol at the dimensions of an application standard that sets its own
-    /// X dimension, bar height and space between the bars and the human readable interpretation, and
-    /// that can print a second line above the bars.
+    /// Encodes text and builds the symbol at the dimensions of an application standard that sets its own X dimension, bar height and space between the bars and
+    /// the human readable interpretation, and that can print a second line above the bars.
     /// </summary>
     /// <param name="text">The text to encode. Every character must be ASCII 0 to 127.</param>
-    /// <param name="gs1">Whether this is a GS1 symbol. Such a symbol carries a Function 1 character after
-    /// its start character, and encodes every <see cref="Gs1Data.Separator"/> in the text as another one.</param>
+    /// <param name="gs1">Whether this is a GS1 symbol. Such a symbol carries a Function 1 character after its start character, and encodes every
+    /// <see cref="Gs1Data.Separator"/> in the text as another one.</param>
     /// <param name="readablePrefix">The characters of the human readable interpretation before its body.</param>
     /// <param name="readableBody">The body of the human readable interpretation.</param>
     /// <param name="readableSuffix">The characters of the human readable interpretation after its body.</param>
@@ -199,25 +208,17 @@ internal static class Code128Encoder
     {
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
 
-        // Section 5.4.3.3 gives the three code sets ASCII 0 to 127 between them, so anything above that is
-        // rejected. Walking code points rather than UTF-16 units reports a surrogate pair as the one
-        // character it is.
-        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
-        while (codePoints.MoveNext())
+        // Section 5.4.3.3 gives the three code sets ASCII 0 to 127 between them, so anything above that is rejected. The message decodes the code point at the
+        // first such unit, so a surrogate pair reports as the one character it is.
+        int invalid = text.IndexOfAnyExceptInRange('\0', '\u007F');
+        if (invalid >= 0)
         {
-            CodePoint current = codePoints.Current;
-            if (!current.IsAscii)
-            {
-                throw new ArgumentException(
-                    $"Code 128 encodes ASCII 0 to 127; {current.ToDisplayString()} is outside that range.",
-                    nameof(text));
-            }
+            throw new ArgumentException($"Code 128 encodes ASCII 0 to 127; {text.CodePointAt(invalid).ToDisplayString()} is outside that range.", nameof(text));
         }
 
-        // A shift costs one extra symbol character, so two per input character bounds the run, and the
-        // start, the optional Function 1, the check and the stop add four more. The text is at most
-        // MaximumLength characters, so the buffers are bounded: short text works inline, and longer text
-        // rents each buffer once.
+        // A shift costs one extra symbol character, so two per input character bounds the run, and the start, the optional Function 1, the check and the stop
+        // add four more. The text is at most MaximumLength characters, so the buffers are bounded: short text works inline, and longer text rents each buffer
+        // once.
         int capacity = (text.Length * 2) + 4;
         int lookahead = text.Length + 1;
         InlineArray128<int> valueStorage = default;
@@ -233,18 +234,12 @@ internal static class Code128Encoder
 
         try
         {
-            Span<byte> nextOnlyInA = distances[..lookahead];
-            Span<byte> nextOnlyInB = distances.Slice(lookahead, lookahead);
-            Span<byte> digitsFromEven = distances.Slice(lookahead * 2, lookahead);
-            int count = Encode(text, gs1, values, nextOnlyInA, nextOnlyInB, digitsFromEven);
+            int count = new Encodation(text, gs1, values, distances[..(lookahead * 3)]).Run();
 
-            // Section 5.4.1 gives every symbol character six elements. Only the stop character differs,
-            // with the four bars and three spaces that close the symbol.
-            Span<int> runs = symbol.BeginLinear(((count - 1) * 6) + 7, xDimension, out Span<float> heights, out _);
+            // The stop character is always the last value, so every other value takes the six elements and eleven modules of an ordinary character.
+            Span<int> runs = symbol.BeginLinear(((count - 1) * ElementsPerCharacter) + StopElements, xDimension, out Span<float> heights, out _);
             WriteRuns(values[..count], runs);
-
-            // Section 5.4.7.2: a symbol character is 11 modules and the stop character 13.
-            int widthInModules = (11 * (count - 1)) + 13;
+            int widthInModules = ((count - 1) * ModulesPerCharacter) + StopModules;
 
             float barHeight = options.ResolveBarHeight(xDimension, nominalBarHeight);
             heights.Fill(barHeight);
@@ -253,17 +248,9 @@ internal static class Code128Encoder
             if (options.Font is not null && readableLength + above.Length > 0)
             {
                 symbol.ReserveText(above.IsEmpty ? 1 : 2, readableLength + above.Length);
-                symbol.AddText(
-                    readablePrefix,
-                    readableBody,
-                    readableSuffix,
-                    0F,
-                    widthInModules,
-                    BarcodeTextSide.BelowBars,
-                    barHeight + textClearance);
+                symbol.AddText(readablePrefix, readableBody, readableSuffix, 0F, widthInModules, BarcodeTextSide.BelowBars, barHeight + textClearance);
 
-                // The line above the bars spans the symbol and its quiet zones, which the emitter keeps
-                // it within.
+                // The line above the bars spans the symbol and its quiet zones, which the emitter keeps it within.
                 if (!above.IsEmpty)
                 {
                     symbol.AddText(above, -QuietZone, widthInModules + QuietZone, BarcodeTextSide.AboveBars, -aboveClearance);
@@ -280,157 +267,6 @@ internal static class Code128Encoder
     }
 
     /// <summary>
-    /// Encodes text into symbol character values.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="gs1">Whether this is a GS1 symbol.</param>
-    /// <param name="values">The buffer the symbol character values are written to.</param>
-    /// <param name="nextOnlyInA">Scratch for the distance to the next character only code set A carries.</param>
-    /// <param name="nextOnlyInB">Scratch for the distance to the next character only code set B carries.</param>
-    /// <param name="digitsFromEven">Scratch for the digits a code set C run carries from each position.</param>
-    /// <returns>The number of symbol character values written.</returns>
-    private static int Encode(
-        ReadOnlySpan<char> text,
-        bool gs1,
-        Span<int> values,
-        Span<byte> nextOnlyInA,
-        Span<byte> nextOnlyInB,
-        Span<byte> digitsFromEven)
-    {
-        // The distance to the next character that only one of code sets A and B can carry. Whichever comes
-        // first decides which set to start in and which to latch back to. The walk runs backwards, so the
-        // distances have to be held; everything else the encoder needs is one step ahead of the write.
-        // Both saturate at the buffer length, which is further than any comparison can reach.
-        nextOnlyInA[text.Length] = byte.MaxValue;
-        nextOnlyInB[text.Length] = byte.MaxValue;
-        digitsFromEven[text.Length] = 0;
-
-        // The same digit count one character out of step is read only at the position after, so the walk
-        // carries it.
-        byte digitsFromOdd = 0;
-        for (int i = text.Length - 1; i >= 0; i--)
-        {
-            // A separator encodes as a Function 1 character, which every code set carries, so it never
-            // forces a set of its own.
-            bool separator = gs1 && text[i] == Gs1Data.Separator;
-            nextOnlyInA[i] = !separator && OnlyInSetA(text[i]) ? (byte)0 : SaturatingIncrement(nextOnlyInA[i + 1]);
-            nextOnlyInB[i] = !separator && OnlyInSetB(text[i]) ? (byte)0 : SaturatingIncrement(nextOnlyInB[i + 1]);
-
-            // The digits a code set C run would carry from here, counted on the two parities code set C
-            // packs against. A separator carries two, because code set C encodes the Function 1 in the one
-            // symbol character a digit pair would take, so a run of digits continues across it.
-            if (separator)
-            {
-                digitsFromEven[i] = SaturatingAdd(digitsFromEven[i + 1], 2);
-                digitsFromOdd = 0;
-            }
-            else if (char.IsAsciiDigit(text[i]))
-            {
-                digitsFromEven[i] = SaturatingAdd(digitsFromOdd, 1);
-                digitsFromOdd = SaturatingAdd(digitsFromEven[i + 1], 1);
-            }
-            else
-            {
-                digitsFromEven[i] = 0;
-                digitsFromOdd = 0;
-            }
-        }
-
-        int written = 0;
-        Code128CodeSet set = ChooseStartSet(text, gs1, nextOnlyInA, nextOnlyInB, digitsFromEven, values, ref written);
-        if (gs1)
-        {
-            values[written++] = FunctionOne;
-        }
-
-        int position = 0;
-        while (position < text.Length)
-        {
-            if (gs1 && text[position] == Gs1Data.Separator)
-            {
-                values[written++] = FunctionOne;
-                position++;
-                continue;
-            }
-
-            int digits = digitsFromEven[position];
-            if (set != Code128CodeSet.C && digits >= 4)
-            {
-                if ((digits & 1) == 0)
-                {
-                    values[written++] = LatchC;
-                    set = Code128CodeSet.C;
-                    continue;
-                }
-
-                // An odd run starts one character late, so the current set takes the first digit and code
-                // set C takes the even remainder.
-                values[written++] = ValueIn(set, text[position++]);
-                if (digitsFromEven[position] >= 4)
-                {
-                    values[written++] = LatchC;
-                    set = Code128CodeSet.C;
-                    continue;
-                }
-            }
-
-            char character = text[position];
-            if (set == Code128CodeSet.B && OnlyInSetA(character))
-            {
-                if (position < text.Length - 1 && nextOnlyInB[position + 1] < nextOnlyInA[position + 1])
-                {
-                    values[written++] = Shift;
-                    values[written++] = ValueIn(Code128CodeSet.A, character);
-                    position++;
-                    continue;
-                }
-
-                values[written++] = LatchA;
-                set = Code128CodeSet.A;
-                continue;
-            }
-
-            if (set == Code128CodeSet.A && OnlyInSetB(character))
-            {
-                if (position < text.Length - 1 && nextOnlyInA[position + 1] < nextOnlyInB[position + 1])
-                {
-                    values[written++] = Shift;
-                    values[written++] = ValueIn(Code128CodeSet.B, character);
-                    position++;
-                    continue;
-                }
-
-                values[written++] = LatchB;
-                set = Code128CodeSet.B;
-                continue;
-            }
-
-            if (set == Code128CodeSet.C && digits < 2)
-            {
-                bool intoA = nextOnlyInA[position] < nextOnlyInB[position];
-                values[written++] = intoA ? LatchA : LatchB;
-                set = intoA ? Code128CodeSet.A : Code128CodeSet.B;
-                continue;
-            }
-
-            if (set == Code128CodeSet.C)
-            {
-                values[written++] = ((text[position] - '0') * 10) + (text[position + 1] - '0');
-                position += 2;
-                continue;
-            }
-
-            values[written++] = ValueIn(set, character);
-            position++;
-        }
-
-        values[written] = ComputeCheckCharacter(values[..written]);
-        written++;
-        values[written++] = Stop;
-        return written;
-    }
-
-    /// <summary>
     /// Increments a saturating distance, so a run longer than a byte still compares as further away.
     /// </summary>
     /// <param name="value">The distance to increment.</param>
@@ -443,8 +279,7 @@ internal static class Code128Encoder
     /// <param name="value">The count to add to.</param>
     /// <param name="amount">The amount to add.</param>
     /// <returns>The new count.</returns>
-    private static byte SaturatingAdd(byte value, int amount)
-        => value + amount >= byte.MaxValue ? byte.MaxValue : (byte)(value + amount);
+    private static byte SaturatingAdd(byte value, int amount) => value + amount >= byte.MaxValue ? byte.MaxValue : (byte)(value + amount);
 
     /// <summary>
     /// Writes the run lengths of symbol character values, starting with a bar.
@@ -455,10 +290,10 @@ internal static class Code128Encoder
     {
         ReadOnlySpan<uint> patterns = Patterns;
         int index = 0;
-        for (int i = 0; i < values.Length; i++)
+        foreach (int value in values)
         {
-            uint pattern = patterns[values[i]];
-            int elements = values[i] == Stop ? 7 : 6;
+            uint pattern = patterns[value];
+            int elements = value == Stop ? StopElements : ElementsPerCharacter;
             for (int shift = (elements - 1) * 4; shift >= 0; shift -= 4)
             {
                 runs[index++] = (int)((pattern >> shift) & 0xF);
@@ -467,60 +302,8 @@ internal static class Code128Encoder
     }
 
     /// <summary>
-    /// Chooses the code set the symbol starts in and writes its start character.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="gs1">Whether this is a GS1 symbol.</param>
-    /// <param name="nextOnlyInA">The distance to the next character only code set A carries.</param>
-    /// <param name="nextOnlyInB">The distance to the next character only code set B carries.</param>
-    /// <param name="digitsFromEven">The digits a code set C run carries from each position.</param>
-    /// <param name="values">The buffer the start character is written to.</param>
-    /// <param name="written">The write position, advanced by one.</param>
-    /// <returns>The code set the symbol starts in.</returns>
-    private static Code128CodeSet ChooseStartSet(
-        ReadOnlySpan<char> text,
-        bool gs1,
-        ReadOnlySpan<byte> nextOnlyInA,
-        ReadOnlySpan<byte> nextOnlyInB,
-        ReadOnlySpan<byte> digitsFromEven,
-        Span<int> values,
-        ref int written)
-    {
-        // Step 1 of section 5.4.7.6 begins a GS1 symbol with start character C and a Function 1
-        // character. An Application Identifier opens every such symbol with two or more digits, so the
-        // pair code set C packs pays for the switch out of it, and the symbol is never longer for it.
-        if (gs1)
-        {
-            values[written++] = StartC;
-            return Code128CodeSet.C;
-        }
-
-        if (text.Length == 0)
-        {
-            values[written++] = StartB;
-            return Code128CodeSet.B;
-        }
-
-        int digits = digitsFromEven[0];
-        if ((text.Length == 2 && digits == 2) || digits >= 4)
-        {
-            values[written++] = StartC;
-            return Code128CodeSet.C;
-        }
-
-        if (nextOnlyInA[0] < nextOnlyInB[0])
-        {
-            values[written++] = StartA;
-            return Code128CodeSet.A;
-        }
-
-        values[written++] = StartB;
-        return Code128CodeSet.B;
-    }
-
-    /// <summary>
-    /// Computes the symbol check character. Section 5.4.3.6 weights the start character by one and each
-    /// following character by its position, sums the products and takes the remainder modulo 103.
+    /// Computes the symbol check character. Section 5.4.3.6 weights the start character by one and each following character by its position, sums the products
+    /// and takes the remainder modulo 103.
     /// </summary>
     /// <param name="values">The symbol character values, starting with the start character.</param>
     /// <returns>The symbol check character value.</returns>
@@ -536,25 +319,24 @@ internal static class Code128Encoder
     }
 
     /// <summary>
-    /// Determines whether only code set A carries the character. Section 5.4.3.3.1 gives code set A the
-    /// control characters, which code set B replaces with the lower case letters.
+    /// Determines whether only code set A carries the character. Section 5.4.3.3.1 gives code set A the control characters, which code set B replaces with the
+    /// lower case letters.
     /// </summary>
     /// <param name="character">The character to classify.</param>
     /// <returns><see langword="true"/> when only code set A carries it.</returns>
     private static bool OnlyInSetA(char character) => character < 32;
 
     /// <summary>
-    /// Determines whether only code set B carries the character. Section 5.4.3.3.2 gives code set B the
-    /// lower case letters and the characters above them, which code set A replaces with control codes.
+    /// Determines whether only code set B carries the character. Section 5.4.3.3.2 gives code set B the lower case letters and the characters above them, which
+    /// code set A replaces with control codes.
     /// </summary>
     /// <param name="character">The character to classify.</param>
     /// <returns><see langword="true"/> when only code set B carries it.</returns>
     private static bool OnlyInSetB(char character) => character >= 96;
 
     /// <summary>
-    /// Returns the symbol character value of a character in the given code set. Code set A runs from the
-    /// space at value zero through to the control characters, and code set B from the space through to the
-    /// delete character.
+    /// Returns the symbol character value of a character in the given code set. Code set A runs from the space at value zero through to the control characters,
+    /// and code set B from the space through to the delete character.
     /// </summary>
     /// <param name="set">The code set to encode in.</param>
     /// <param name="character">The character to encode.</param>
@@ -567,5 +349,247 @@ internal static class Code128Encoder
         }
 
         return character - 32;
+    }
+
+    /// <summary>
+    /// The state of one encodation: the text, the look-ahead the code set choices read, and the symbol character values written so far.
+    /// </summary>
+    private ref struct Encodation
+    {
+        /// <summary>
+        /// The text to encode.
+        /// </summary>
+        private readonly ReadOnlySpan<char> text;
+
+        /// <summary>
+        /// Whether this is a GS1 symbol, which encodes every <see cref="Gs1Data.Separator"/> as a Function 1 character.
+        /// </summary>
+        private readonly bool gs1;
+
+        /// <summary>
+        /// The buffer the symbol character values are written to.
+        /// </summary>
+        private readonly Span<int> values;
+
+        /// <summary>
+        /// The distance from each position to the next character only code set A carries, one entry per position and one past the end.
+        /// </summary>
+        private readonly Span<byte> nextOnlyInA;
+
+        /// <summary>
+        /// The distance from each position to the next character only code set B carries, one entry per position and one past the end.
+        /// </summary>
+        private readonly Span<byte> nextOnlyInB;
+
+        /// <summary>
+        /// The digits a code set C run carries from each position, one entry per position and one past the end.
+        /// </summary>
+        private readonly Span<byte> digitsFromEven;
+
+        /// <summary>
+        /// The number of symbol character values written.
+        /// </summary>
+        private int written;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Encodation"/> struct and measures the look-ahead.
+        /// </summary>
+        /// <param name="text">The text to encode.</param>
+        /// <param name="gs1">Whether this is a GS1 symbol.</param>
+        /// <param name="values">The buffer the symbol character values are written to, of at least twice the text length plus four.</param>
+        /// <param name="lookahead">Scratch for the three look-ahead tables, each one entry longer than the text.</param>
+        public Encodation(ReadOnlySpan<char> text, bool gs1, Span<int> values, Span<byte> lookahead)
+        {
+            int stride = text.Length + 1;
+            this.text = text;
+            this.gs1 = gs1;
+            this.values = values;
+            this.nextOnlyInA = lookahead[..stride];
+            this.nextOnlyInB = lookahead.Slice(stride, stride);
+            this.digitsFromEven = lookahead.Slice(stride * 2, stride);
+            this.written = 0;
+            this.MeasureLookahead();
+        }
+
+        /// <summary>
+        /// Encodes the text, then writes the check character and the stop character.
+        /// </summary>
+        /// <returns>The number of symbol character values written.</returns>
+        public int Run()
+        {
+            ReadOnlySpan<char> text = this.text;
+            Code128CodeSet set = this.ChooseStartSet();
+            if (this.gs1)
+            {
+                this.values[this.written++] = FunctionOne;
+            }
+
+            int position = 0;
+            while (position < text.Length)
+            {
+                if (this.gs1 && text[position] == Gs1Data.Separator)
+                {
+                    this.values[this.written++] = FunctionOne;
+                    position++;
+                    continue;
+                }
+
+                int digits = this.digitsFromEven[position];
+                if (set != Code128CodeSet.C && digits >= 4)
+                {
+                    if ((digits & 1) == 0)
+                    {
+                        this.values[this.written++] = LatchC;
+                        set = Code128CodeSet.C;
+                        continue;
+                    }
+
+                    // An odd run starts one character late, so the current set takes the first digit and code set C takes the even remainder.
+                    this.values[this.written++] = ValueIn(set, text[position++]);
+                    if (this.digitsFromEven[position] >= 4)
+                    {
+                        this.values[this.written++] = LatchC;
+                        set = Code128CodeSet.C;
+                        continue;
+                    }
+                }
+
+                char character = text[position];
+                if (set == Code128CodeSet.B && OnlyInSetA(character))
+                {
+                    // A shift serves one character when the next character only one of the two sets carries belongs to the current set.
+                    if (position < text.Length - 1 && this.nextOnlyInB[position + 1] < this.nextOnlyInA[position + 1])
+                    {
+                        this.values[this.written++] = Shift;
+                        this.values[this.written++] = ValueIn(Code128CodeSet.A, character);
+                        position++;
+                        continue;
+                    }
+
+                    this.values[this.written++] = LatchA;
+                    set = Code128CodeSet.A;
+                    continue;
+                }
+
+                if (set == Code128CodeSet.A && OnlyInSetB(character))
+                {
+                    if (position < text.Length - 1 && this.nextOnlyInA[position + 1] < this.nextOnlyInB[position + 1])
+                    {
+                        this.values[this.written++] = Shift;
+                        this.values[this.written++] = ValueIn(Code128CodeSet.B, character);
+                        position++;
+                        continue;
+                    }
+
+                    this.values[this.written++] = LatchB;
+                    set = Code128CodeSet.B;
+                    continue;
+                }
+
+                if (set == Code128CodeSet.C && digits < 2)
+                {
+                    bool intoA = this.nextOnlyInA[position] < this.nextOnlyInB[position];
+                    this.values[this.written++] = intoA ? LatchA : LatchB;
+                    set = intoA ? Code128CodeSet.A : Code128CodeSet.B;
+                    continue;
+                }
+
+                if (set == Code128CodeSet.C)
+                {
+                    this.values[this.written++] = ((text[position] - '0') * 10) + (text[position + 1] - '0');
+                    position += 2;
+                    continue;
+                }
+
+                this.values[this.written++] = ValueIn(set, character);
+                position++;
+            }
+
+            this.values[this.written] = ComputeCheckCharacter(this.values[..this.written]);
+            this.written++;
+            this.values[this.written++] = Stop;
+            return this.written;
+        }
+
+        /// <summary>
+        /// Fills the look-ahead tables in one backward walk. The distance to the next character that only one of code sets A and B can carry decides which set
+        /// to start in and which to latch back to. The walk runs backwards, so the distances have to be held; everything else the encoder needs is one step
+        /// ahead of the write. Both distances saturate at the byte maximum, which is further than any comparison can reach.
+        /// </summary>
+        private readonly void MeasureLookahead()
+        {
+            ReadOnlySpan<char> text = this.text;
+            Span<byte> nextOnlyInA = this.nextOnlyInA;
+            Span<byte> nextOnlyInB = this.nextOnlyInB;
+            Span<byte> digitsFromEven = this.digitsFromEven;
+            nextOnlyInA[text.Length] = byte.MaxValue;
+            nextOnlyInB[text.Length] = byte.MaxValue;
+            digitsFromEven[text.Length] = 0;
+
+            // The same digit count one character out of step is read only at the position after, so the walk carries it.
+            byte digitsFromOdd = 0;
+            for (int i = text.Length - 1; i >= 0; i--)
+            {
+                // A separator encodes as a Function 1 character, which every code set carries, so it never forces a set of its own.
+                bool separator = this.gs1 && text[i] == Gs1Data.Separator;
+                nextOnlyInA[i] = !separator && OnlyInSetA(text[i]) ? (byte)0 : SaturatingIncrement(nextOnlyInA[i + 1]);
+                nextOnlyInB[i] = !separator && OnlyInSetB(text[i]) ? (byte)0 : SaturatingIncrement(nextOnlyInB[i + 1]);
+
+                // The digits a code set C run would carry from here, counted on the two parities code set C packs against. A separator carries two, because
+                // code set C encodes the Function 1 in the one symbol character a digit pair would take, so a run of digits continues across it.
+                if (separator)
+                {
+                    digitsFromEven[i] = SaturatingAdd(digitsFromEven[i + 1], 2);
+                    digitsFromOdd = 0;
+                }
+                else if (char.IsAsciiDigit(text[i]))
+                {
+                    digitsFromEven[i] = SaturatingAdd(digitsFromOdd, 1);
+                    digitsFromOdd = SaturatingAdd(digitsFromEven[i + 1], 1);
+                }
+                else
+                {
+                    digitsFromEven[i] = 0;
+                    digitsFromOdd = 0;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Chooses the code set the symbol starts in and writes its start character.
+        /// </summary>
+        /// <returns>The code set the symbol starts in.</returns>
+        private Code128CodeSet ChooseStartSet()
+        {
+            // Step 1 of section 5.4.7.6 begins a GS1 symbol with start character C and a Function 1 character. An Application Identifier opens every such
+            // symbol with two or more digits, so the pair code set C packs pays for the switch out of it, and the symbol is never longer for it.
+            if (this.gs1)
+            {
+                this.values[this.written++] = StartC;
+                return Code128CodeSet.C;
+            }
+
+            if (this.text.Length == 0)
+            {
+                this.values[this.written++] = StartB;
+                return Code128CodeSet.B;
+            }
+
+            int digits = this.digitsFromEven[0];
+            if ((this.text.Length == 2 && digits == 2) || digits >= 4)
+            {
+                this.values[this.written++] = StartC;
+                return Code128CodeSet.C;
+            }
+
+            if (this.nextOnlyInA[0] < this.nextOnlyInB[0])
+            {
+                this.values[this.written++] = StartA;
+                return Code128CodeSet.A;
+            }
+
+            this.values[this.written++] = StartB;
+            return Code128CodeSet.B;
+        }
     }
 }

@@ -4,16 +4,14 @@
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// The one-track Pharmacode symbology, which the Laetus Pharmacode Guide defines. It carries one number
-/// from 3 to 131070 in two to sixteen bars, read from the right: a thin bar in position n has the value
-/// 2 to the power n - 1 and a thick bar twice that, as the table of section 4.3 gives. Section 4.4 builds
-/// the code from the value Z: while Z is not zero, an even Z takes a thick bar in the lowest position
-/// left and becomes (Z - 2) / 2, and an odd Z takes a thin bar and becomes (Z - 1) / 2.
+/// The one-track Pharmacode symbology, which the Laetus Pharmacode Guide defines. It carries one number from 3 to 131070 in two to sixteen bars, read from the
+/// right: a thin bar in position n has the value 2 to the power n - 1 and a thick bar twice that, as the table of section 4.3 gives. Section 4.4 builds the
+/// code from the value Z: while Z is not zero, an even Z takes a thick bar in the lowest position left and becomes (Z - 2) / 2, and an odd Z takes a thin bar
+/// and becomes (Z - 1) / 2.
 /// <para>
-/// Section 1.2 gives the standard dimensions: a thin bar of 0.5 mm, a thick bar of 1.5 mm, a gap of
-/// 1.0 mm and a height of 8.0 mm, so at the 0.5 mm module a thin bar is 1 module, a thick bar 3, a gap
-/// 2 and the height 16. The quiet zone is 6 mm on either side of the symbol, which is 12 modules. The
-/// printed line shows the number as given.
+/// Section 1.2 gives the standard dimensions: a thin bar of 0.5 mm, a thick bar of 1.5 mm, a gap of 1.0 mm and a height of 8.0 mm, so at the 0.5 mm module a
+/// thin bar is 1 module, a thick bar 3, a gap 2 and the height 16. The quiet zone is 6 mm on either side of the symbol, which is 12 modules. The printed line
+/// shows the number as given.
 /// </para>
 /// </summary>
 public sealed class PharmacodeSymbology : BarcodeSymbology
@@ -76,17 +74,15 @@ public sealed class PharmacodeSymbology : BarcodeSymbology
 
         double xDimension = options.XDimension ?? XDimension;
         Span<int> runs = symbol.BeginLinear((count * 2) - 1, xDimension, out Span<float> heights, out _);
-        int widthInModules = 0;
+
+        // The bars were found from the right end, so they are written in reverse, with a gap between each pair.
+        runs.Fill(Gap);
         for (int i = 0; i < count; i++)
         {
             runs[i * 2] = bars[count - 1 - i];
-            widthInModules += runs[i * 2];
-            if (i < count - 1)
-            {
-                runs[(i * 2) + 1] = Gap;
-                widthInModules += Gap;
-            }
         }
+
+        int widthInModules = BarcodeSymbol.RunWidth(runs);
 
         float barHeight = options.ResolveBarHeight(xDimension, NominalBarHeight);
         heights.Fill(barHeight);

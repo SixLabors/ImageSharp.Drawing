@@ -7,9 +7,8 @@ using SixLabors.ImageSharp.Drawing.Helpers;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// A custom height modulated symbology whose input is the bar states themselves: D for a descender, A
-/// for an ascender, F for a full bar and T for a tracker. The bars have the dimensions of Table 11 of
-/// the Royal Mail Mailmark barcode definition document. The symbol has no quiet zone and prints no line.
+/// A custom height modulated symbology whose input is the bar states themselves: D for a descender, A for an ascender, F for a full bar and T for a tracker.
+/// The bars have the dimensions of Table 11 of the Royal Mail Mailmark barcode definition document. The symbol has no quiet zone and prints no line.
 /// </summary>
 public sealed class DaftSymbology : BarcodeSymbology
 {
@@ -38,8 +37,7 @@ public sealed class DaftSymbology : BarcodeSymbology
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
 
-        // One bar for each letter. The text is at most MaximumLength letters, so a short symbol works
-        // inline and a longer one rents its states once.
+        // One bar for each letter. The text is at most MaximumLength letters, so a short symbol works inline and a longer one rents its states once.
         InlineArray128<FourState> stateStorage = default;
         PooledBuffer<FourState> rented = default;
         Span<FourState> states = text.Length <= 128
