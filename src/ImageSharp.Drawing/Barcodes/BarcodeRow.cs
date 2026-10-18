@@ -27,13 +27,19 @@ internal readonly struct BarcodeRow
     /// <param name="row">The row whose storage the new row takes.</param>
     /// <param name="top">The top of the row in modules from the top of the symbol.</param>
     /// <param name="height">The height of the row in modules: the lowest bar bottom of the row.</param>
-    public BarcodeRow(in BarcodeRow row, float top, float height)
+    /// <param name="inkTop">The highest bar top of the row, in modules from the top of the row.</param>
+    /// <param name="inkStart">The left edge of the first bar of the row that is not empty, in run units from the start of the row.</param>
+    /// <param name="inkEnd">The right edge of the last bar of the row that is not empty, in run units from the start of the row.</param>
+    public BarcodeRow(in BarcodeRow row, float top, float height, float inkTop, int inkStart, int inkEnd)
     {
         this.RunStart = row.RunStart;
         this.RunCount = row.RunCount;
         this.BarStart = row.BarStart;
         this.Top = top;
         this.Height = height;
+        this.InkTop = inkTop;
+        this.InkStart = inkStart;
+        this.InkEnd = inkEnd;
     }
 
     /// <summary>
@@ -65,4 +71,19 @@ internal readonly struct BarcodeRow
     /// Gets the height of the row in modules: the lowest bar bottom of the row.
     /// </summary>
     public float Height { get; }
+
+    /// <summary>
+    /// Gets the highest bar top of the row, in modules from the top of the row.
+    /// </summary>
+    public float InkTop { get; }
+
+    /// <summary>
+    /// Gets the left edge of the first bar of the row that is not empty, in run units from the start of the row, or -1 when the row has no ink.
+    /// </summary>
+    public int InkStart { get; }
+
+    /// <summary>
+    /// Gets the right edge of the last bar of the row that is not empty, in run units from the start of the row.
+    /// </summary>
+    public int InkEnd { get; }
 }

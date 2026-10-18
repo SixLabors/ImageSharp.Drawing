@@ -6,7 +6,7 @@ using SixLabors.ImageSharp.Drawing.Processing;
 namespace SixLabors.ImageSharp.Drawing.Barcodes;
 
 /// <summary>
-/// Converts a hexagonal <see cref="BarcodeSymbol"/>, the form of MaxiCode, into canvas commands: the dark hexagons and the three dark rings of the finder in
+/// Measures and draws a hexagonal <see cref="BarcodeSymbol"/>, the form of MaxiCode. The draw puts the dark hexagons and the three dark rings of the finder in
 /// one fill of one path. The dimensions are section 4.11 of ISO/IEC 16023.
 /// </summary>
 internal static class HexagonalEmitter
@@ -36,103 +36,230 @@ internal static class HexagonalEmitter
     private static ReadOnlySpan<double> FinderRadii => [0.51, 1.18, 1.86, 2.53, 3.20, 3.87];
 
     /// <summary>
-    /// Renders the symbol onto the canvas.
+    /// Measures the symbol without drawing anything.
+    /// </summary>
+    /// <param name="symbol">The encoded hexagonal symbol.</param>
+    /// <param name="options">The sizing and painting options.</param>
+    /// <param name="origin">The top left corner of the barcode, in pixels.</param>
+    /// <returns>The measured layout of the symbol.</returns>
+    public static BarcodeMetrics Measure(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
+        => new HexagonLayout(ref symbol, options, origin).Metrics;
+
+    /// <summary>
+    /// Draws the symbol onto the canvas.
     /// </summary>
     /// <param name="canvas">The canvas to render onto.</param>
     /// <param name="symbol">The encoded hexagonal symbol.</param>
     /// <param name="options">The sizing and painting options.</param>
-    /// <param name="origin">The top left corner of the symbol and its quiet zones, in pixels.</param>
-    public static void Emit(DrawingCanvas canvas, ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
-        => Layout(canvas, ref symbol, options, origin);
-
-    /// <summary>
-    /// Measures the area the symbol covers without drawing anything.
-    /// </summary>
-    /// <param name="symbol">The encoded hexagonal symbol.</param>
-    /// <param name="options">The sizing and painting options.</param>
-    /// <param name="origin">The top left corner the symbol would draw from, in pixels.</param>
-    /// <returns>The area the symbol and its quiet zones cover.</returns>
-    public static RectangleF Measure(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
-        => Layout(null, ref symbol, options, origin);
-
-    /// <summary>
-    /// Lays the symbol out and, when a canvas is supplied, draws it, so the measured area and the drawn area are the same.
-    /// </summary>
-    /// <param name="canvas">The canvas to render onto, or <see langword="null"/> to measure only.</param>
-    /// <param name="symbol">The encoded hexagonal symbol.</param>
-    /// <param name="options">The sizing and painting options.</param>
-    /// <param name="origin">The top left corner of the symbol and its quiet zones, in pixels.</param>
-    /// <returns>The area the symbol and its quiet zones cover.</returns>
-    private static RectangleF Layout(DrawingCanvas? canvas, ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
+    /// <param name="origin">The top left corner of the barcode, in pixels.</param>
+    /// <param name="background">The brush that fills the renderable bounds before the modules draw, or <see langword="null"/> for none.</param>
+    /// <returns>The measured layout of the symbol, the same as <see cref="Measure"/> returns.</returns>
+    public static BarcodeMetrics Draw(DrawingCanvas canvas, ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin, Brush? background)
     {
-        double pixelsPerMillimetre = options.Dpi / BarcodeOptions.MillimetresPerInch;
-        double x = symbol.XDimension * pixelsPerMillimetre;
+        HexagonLayout layout = new(ref symbol, options, origin);
 
-        // Table 7: V = (2/√3)W, the height of a module, and Y = (1.5/√3)W, the distance between rows.
-        double v = 2 / Math.Sqrt(3) * x;
-        double y = 1.5 / Math.Sqrt(3) * x;
-
-        float sides = options.IncludeQuietZones ? symbol.LeadingQuietZone + symbol.TrailingQuietZone : 0;
-        float ends = options.IncludeQuietZones ? symbol.TopQuietZone + symbol.BottomQuietZone : 0;
-        double left = origin.X + (options.IncludeQuietZones ? symbol.LeadingQuietZone * x : 0);
-        double top = origin.Y + (options.IncludeQuietZones ? symbol.TopQuietZone * x : 0);
-        RectangleF bounds = RectangleF.FromLTRB(
-            MathF.Floor(origin.X),
-            MathF.Floor(origin.Y),
-            MathF.Ceiling((float)(origin.X + ((symbol.WidthInModules + sides) * x))),
-            MathF.Ceiling((float)(origin.Y + ((symbol.HeightInModules + ends) * x))));
-
-        if (canvas is null)
+        BarcodeMetrics metrics = layout.Metrics;
+        if (background is not null)
         {
-            return bounds;
+            RectangleF renderable = metrics.RenderableBounds;
+            canvas.Fill(background, new RectanglePolygon(renderable.X, renderable.Y, renderable.Width, renderable.Height));
         }
 
-        if (options.Background is not null)
-        {
-            canvas.Fill(options.Background, new RectanglePolygon(bounds.X, bounds.Y, bounds.Width, bounds.Height));
-        }
-
-        ReadOnlySpan<bool> modules = symbol.Modules;
-        int columns = symbol.Columns;
-
-        // The pointed hexagons stand on their centres, the odd rows half a module to the right. A dark hexagon keeps the shape of its module at the reduced
-        // width and height. The path retains the centres until the canvas flushes, so it owns the array, sized by a count of the dark modules.
-        double reduction = DarkHexagonReduction * pixelsPerMillimetre;
-        SizeF halfSize = new((float)((x - reduction) / 2), (float)((v - reduction) / 2));
-        PointF[] centres = new PointF[modules.Count(true)];
-        int index = 0;
-        for (int row = 0; row < symbol.MatrixRows; row++)
-        {
-            ReadOnlySpan<bool> rowModules = modules.Slice(row * columns, columns);
-            double centreY = top + (v / 2) + (row * y);
-            double shift = (row & 1) == 1 ? x / 2 : 0;
-            for (int column = 0; column < columns; column++)
-            {
-                if (rowModules[column])
-                {
-                    centres[index++] = new PointF((float)(left + shift + ((column + 0.5) * x)), (float)centreY);
-                }
-            }
-        }
-
-        // The symbol region holds every hexagon, so it bounds the path. The path of the hexagons comes first, then one path for each dark ring.
-        RectangleF symbolRegion = new((float)left, (float)top, (float)(symbol.WidthInModules * x), (float)(symbol.HeightInModules * x));
+        // The path of the hexagons comes first, then one path for each dark ring. Each dark ring is its outer circle with the inner circle wound the other
+        // way, which the nonzero rule leaves light. Each ring takes the next pair of transitions of Table 8.
         ReadOnlySpan<double> radii = FinderRadii;
         IPath[] paths = new IPath[1 + (radii.Length / 2)];
-        paths[0] = new BarcodePath(centres, halfSize, symbolRegion);
-
-        // Each dark ring is its outer circle with the inner circle wound the other way, which the nonzero rule leaves light. The radii of Table 8 scale with
-        // the X dimension, and each ring takes the next pair of transitions.
-        PointF centre = new((float)(left + ((FinderColumn + 0.5) * x)), (float)(top + (v / 2) + (FinderRow * y)));
-        double radiusScale = symbol.XDimension / TableXDimension * pixelsPerMillimetre;
+        paths[0] = new BarcodePath(layout.Centres(ref symbol), layout.HalfSize, layout.HexagonInk);
         for (int ring = 1; ring < paths.Length; ring++)
         {
-            float inner = (float)(radii[(ring * 2) - 2] * radiusScale);
-            float outer = (float)(radii[(ring * 2) - 1] * radiusScale);
-            paths[ring] = new ComplexPolygon(new EllipsePolygon(centre, outer), new EllipsePolygon(centre, inner).Reverse());
+            float inner = (float)(radii[(ring * 2) - 2] * layout.RadiusScale);
+            float outer = (float)(radii[(ring * 2) - 1] * layout.RadiusScale);
+            paths[ring] = new ComplexPolygon(new EllipsePolygon(layout.FinderCentre, outer), new EllipsePolygon(layout.FinderCentre, inner).Reverse());
         }
 
         canvas.Fill(options.BarBrush, new ComplexPolygon(paths));
-        return bounds;
+        return metrics;
+    }
+
+    /// <summary>
+    /// The layout of a hexagonal symbol: where its hexagons and its finder stand, from one origin. The measure and the draw read one layout.
+    /// </summary>
+    private readonly ref struct HexagonLayout
+    {
+        /// <summary>
+        /// The origin of the barcode, in pixels.
+        /// </summary>
+        private readonly PointF origin;
+
+        /// <summary>
+        /// The left edge of the symbol, in pixels.
+        /// </summary>
+        private readonly double left;
+
+        /// <summary>
+        /// The top edge of the symbol, in pixels.
+        /// </summary>
+        private readonly double top;
+
+        /// <summary>
+        /// The width of a module, W, in pixels.
+        /// </summary>
+        private readonly double x;
+
+        /// <summary>
+        /// The height of a module, V, in pixels.
+        /// </summary>
+        private readonly double v;
+
+        /// <summary>
+        /// The distance between rows, Y, in pixels.
+        /// </summary>
+        private readonly double y;
+
+        /// <summary>
+        /// The barcode at the origin, in pixels.
+        /// </summary>
+        private readonly RectangleF advance;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="HexagonLayout"/> struct.
+        /// </summary>
+        /// <param name="symbol">The encoded hexagonal symbol.</param>
+        /// <param name="options">The sizing and painting options.</param>
+        /// <param name="origin">The top left corner of the barcode, in pixels.</param>
+        public HexagonLayout(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
+        {
+            this.origin = origin;
+            double pixelsPerMillimetre = options.Dpi / BarcodeOptions.MillimetresPerInch;
+            double x = symbol.XDimension * pixelsPerMillimetre;
+            this.x = x;
+
+            // Table 7: V = (2/√3)W, the height of a module, and Y = (1.5/√3)W, the distance between rows.
+            this.v = 2 / Math.Sqrt(3) * x;
+            this.y = 1.5 / Math.Sqrt(3) * x;
+
+            float sides = options.IncludeQuietZones ? symbol.LeadingQuietZone + symbol.TrailingQuietZone : 0;
+            float ends = options.IncludeQuietZones ? symbol.TopQuietZone + symbol.BottomQuietZone : 0;
+            this.left = origin.X + (options.IncludeQuietZones ? symbol.LeadingQuietZone * x : 0);
+            this.top = origin.Y + (options.IncludeQuietZones ? symbol.TopQuietZone * x : 0);
+            this.advance = new RectangleF(origin.X, origin.Y, (float)((symbol.WidthInModules + sides) * x), (float)((symbol.HeightInModules + ends) * x));
+
+            // A dark hexagon keeps the shape of its module at the reduced width and height.
+            double reduction = DarkHexagonReduction * pixelsPerMillimetre;
+            this.HalfSize = new SizeF((float)((x - reduction) / 2), (float)((this.v - reduction) / 2));
+
+            // The radii of Table 8 scale with the X dimension.
+            this.FinderCentre = new PointF((float)(this.left + ((FinderColumn + 0.5) * x)), (float)(this.top + (this.v / 2) + (FinderRow * this.y)));
+            this.RadiusScale = symbol.XDimension / TableXDimension * pixelsPerMillimetre;
+
+            // The ink of the hexagons comes from the first and the last dark module of each row, which a vectorized search finds, so no hexagon is visited.
+            // A hexagon reaches half its reduced width to each side of its centre and half its reduced height above and below it.
+            ReadOnlySpan<bool> modules = symbol.Modules;
+            int columns = symbol.Columns;
+            float inkLeft = float.MaxValue;
+            float inkRight = float.MinValue;
+            int firstRow = -1;
+            int lastRow = -1;
+            for (int row = 0; row < symbol.MatrixRows; row++)
+            {
+                ReadOnlySpan<bool> rowModules = modules.Slice(row * columns, columns);
+                int first = rowModules.IndexOf(true);
+                if (first < 0)
+                {
+                    continue;
+                }
+
+                firstRow = firstRow < 0 ? row : firstRow;
+                lastRow = row;
+                inkLeft = MathF.Min(inkLeft, this.CentreX(row, first) - this.HalfSize.Width);
+                inkRight = MathF.Max(inkRight, this.CentreX(row, rowModules.LastIndexOf(true)) + this.HalfSize.Width);
+            }
+
+            this.HexagonInk = RectangleF.FromLTRB(
+                inkLeft,
+                this.CentreY(firstRow) - this.HalfSize.Height,
+                inkRight,
+                this.CentreY(lastRow) + this.HalfSize.Height);
+
+            // The ink is the union of the hexagons and the outermost dark ring of the finder. As in text measuring, the advance is relative to the origin,
+            // and the bounds and the renderable bounds are absolute.
+            float radius = (float)(FinderRadii[^1] * this.RadiusScale);
+            RectangleF finder = new(this.FinderCentre.X - radius, this.FinderCentre.Y - radius, 2 * radius, 2 * radius);
+            RectangleF bounds = RectangleF.Union(this.HexagonInk, finder);
+            this.Metrics = new BarcodeMetrics(
+                new RectangleF(0, 0, this.advance.Width, this.advance.Height),
+                bounds,
+                RectangleF.Union(this.advance, bounds));
+        }
+
+        /// <summary>
+        /// Gets the union of the dark hexagons, in pixels.
+        /// </summary>
+        public RectangleF HexagonInk { get; }
+
+        /// <summary>
+        /// Gets the metrics of the layout.
+        /// </summary>
+        public BarcodeMetrics Metrics { get; }
+
+        /// <summary>
+        /// Gets half the width and half the height of every dark hexagon, in pixels.
+        /// </summary>
+        public SizeF HalfSize { get; }
+
+        /// <summary>
+        /// Gets the centre of the finder, in pixels.
+        /// </summary>
+        public PointF FinderCentre { get; }
+
+        /// <summary>
+        /// Gets the factor from the radii of Table 8 in millimetres to pixels.
+        /// </summary>
+        public double RadiusScale { get; }
+
+        /// <summary>
+        /// Returns the centre of every dark hexagon. The pointed hexagons stand on their centres, the odd rows half a module to the right. The path retains the
+        /// centres until the canvas flushes, so it owns the array, sized by a count of the dark modules.
+        /// </summary>
+        /// <param name="symbol">The encoded symbol.</param>
+        /// <returns>The centres, in pixels.</returns>
+        public PointF[] Centres(ref BarcodeSymbol symbol)
+        {
+            ReadOnlySpan<bool> modules = symbol.Modules;
+            int columns = symbol.Columns;
+            PointF[] centres = new PointF[modules.Count(true)];
+            int index = 0;
+            for (int row = 0; row < symbol.MatrixRows; row++)
+            {
+                ReadOnlySpan<bool> rowModules = modules.Slice(row * columns, columns);
+                float centreY = this.CentreY(row);
+                for (int column = 0; column < columns; column++)
+                {
+                    if (rowModules[column])
+                    {
+                        centres[index++] = new PointF(this.CentreX(row, column), centreY);
+                    }
+                }
+            }
+
+            return centres;
+        }
+
+        /// <summary>
+        /// Returns the x of the centre of a module, in pixels. The odd rows stand half a module to the right.
+        /// </summary>
+        /// <param name="row">The row of the module.</param>
+        /// <param name="column">The column of the module.</param>
+        /// <returns>The x in pixels.</returns>
+        private float CentreX(int row, int column)
+            => (float)(this.left + ((row & 1) == 1 ? this.x / 2 : 0) + ((column + 0.5) * this.x));
+
+        /// <summary>
+        /// Returns the y of the centres of a row of modules, in pixels.
+        /// </summary>
+        /// <param name="row">The row.</param>
+        /// <returns>The y in pixels.</returns>
+        private float CentreY(int row)
+            => (float)(this.top + (this.v / 2) + (row * this.y));
     }
 }

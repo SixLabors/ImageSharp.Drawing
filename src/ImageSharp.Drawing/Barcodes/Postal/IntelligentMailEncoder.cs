@@ -44,8 +44,8 @@ internal static class IntelligentMailEncoder
     /// The dimensions of Figure 6, which gives every vertical dimension as a minimum and a maximum from the centerline: a full bar of 0.125 to 0.165 inch, a
     /// tracker of 0.039 to 0.057 inch and an ascender or descender bar of 0.083 to 0.111 inch. The metrics are the middle of each range: a full bar of 0.145
     /// inch, a tracker of 0.048 inch and an extender of 0.0485 inch above or below it. The bar width of 0.020 inch, the pitch of 22 bars per inch and the clear
-    /// zone of 0.125 inch on each end are the POSTNET dimensions. Section 2.4.1 keeps the human readable information at least 0.028 inch below the bars, and
-    /// section 2.4.2 aligns "the left edge of the leftmost digit" with the leftmost bar.
+    /// zone of 0.125 inch on each end are the POSTNET dimensions. Section 2.3.2 gives a clear zone of 0.028 inch above and below the bars. Section 2.4.1 keeps
+    /// the human readable information at least 0.028 inch below the bars, and section 2.4.2 aligns "the left edge of the leftmost digit" with the leftmost bar.
     /// </summary>
     public static readonly FourStateMetrics Metrics = new(
         UspsPostalEncoder.NominalXDimension,
@@ -56,6 +56,7 @@ internal static class IntelligentMailEncoder
         (float)(0.048 / 0.020),
         (float)((0.145 - 0.048) / 2 / 0.020),
         UspsPostalEncoder.ClearZone,
+        UspsPostalEncoder.VerticalClearZone,
         BarcodeTextSide.BelowBars,
         (float)(0.028 / 0.020),
         BarcodeTextAlignment.Left);

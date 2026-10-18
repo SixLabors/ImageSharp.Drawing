@@ -22,120 +22,42 @@ internal static class MatrixEmitter
     private const int OverlayRectangleEdges = 4;
 
     /// <summary>
-    /// Renders the symbol onto the canvas.
+    /// Measures the symbol without drawing anything.
+    /// </summary>
+    /// <param name="symbol">The encoded matrix symbol.</param>
+    /// <param name="options">The sizing and painting options.</param>
+    /// <param name="origin">The top left corner of the barcode, in pixels.</param>
+    /// <returns>The measured layout of the symbol.</returns>
+    public static BarcodeMetrics Measure(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
+    {
+        using PooledBuffer<MeasuredLine> lineBuffer = CreateLineBuffer(ref symbol, options);
+
+        return new MatrixLayout(ref symbol, options, origin, lineBuffer.Span).Metrics;
+    }
+
+    /// <summary>
+    /// Draws the symbol onto the canvas.
     /// </summary>
     /// <param name="canvas">The canvas to render onto.</param>
     /// <param name="symbol">The encoded matrix symbol.</param>
     /// <param name="options">The sizing and painting options.</param>
-    /// <param name="origin">The top left corner of everything the call draws, in pixels.</param>
-    public static void Emit(DrawingCanvas canvas, ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
-        => Layout(canvas, ref symbol, options, origin);
-
-    /// <summary>
-    /// Measures the area the symbol covers without drawing anything, so a caller can size the image before it draws.
-    /// </summary>
-    /// <param name="symbol">The encoded matrix symbol.</param>
-    /// <param name="options">The sizing and painting options.</param>
-    /// <param name="origin">The top left corner the symbol would draw from, in pixels.</param>
-    /// <returns>The area the symbol covers, including the quiet zones when they are drawn and the text.</returns>
-    public static RectangleF Measure(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
-        => Layout(null, ref symbol, options, origin);
-
-    /// <summary>
-    /// Lays the symbol out and, when a canvas is supplied, draws it. Both callers share one pass, so the measured area and the drawn area cannot drift apart.
-    /// </summary>
-    /// <param name="canvas">The canvas to render onto, or <see langword="null"/> to measure only.</param>
-    /// <param name="symbol">The encoded matrix symbol.</param>
-    /// <param name="options">The sizing and painting options.</param>
-    /// <param name="origin">The top left corner of everything the call draws, in pixels.</param>
-    /// <returns>The area the symbol covers.</returns>
-    private static RectangleF Layout(DrawingCanvas? canvas, ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin)
+    /// <param name="origin">The top left corner of the barcode, in pixels.</param>
+    /// <param name="background">The brush that fills the renderable bounds before the modules draw, or <see langword="null"/> for none.</param>
+    /// <returns>The measured layout of the symbol, the same as <see cref="Measure"/> returns.</returns>
+    public static BarcodeMetrics Draw(DrawingCanvas canvas, ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin, Brush? background)
     {
-        float moduleWidth = (float)(symbol.XDimension / BarcodeOptions.MillimetresPerInch * options.Dpi);
+        using PooledBuffer<MeasuredLine> lineBuffer = CreateLineBuffer(ref symbol, options);
 
-        // Most matrix symbols have the same quiet zone on all four sides; Code One versions S and T have none above.
-        bool quiet = options.IncludeQuietZones;
-        int leadingZone = quiet ? (int)symbol.LeadingQuietZone : 0;
-        int trailingZone = quiet ? (int)symbol.TrailingQuietZone : 0;
-        int topZone = quiet ? (int)symbol.TopQuietZone : 0;
-        int bottomZone = quiet ? (int)symbol.BottomQuietZone : 0;
-        int columns = symbol.Columns;
-        int rows = symbol.MatrixRows;
-
-        // Each edge rounds from its exact position onto the device pixel grid, so the modules stay crisp and rounding cannot drift across the symbol. The
-        // positions are products of a whole module count and the module width, calculated in double from the corner of the symbol, and the edge two neighbours
-        // share rounds to one pixel for both. The corner itself starts on a whole pixel: when a module is not a whole number of pixels, the modules alternate
-        // between two widths, and a corner between pixels would make that pattern depend on the width of the quiet zone, so the two outer rings of a finder
-        // pattern could round to different widths.
-        double symbolLeft = Math.Round(origin.X + ((double)leadingZone * moduleWidth));
-        double symbolTop = Math.Round(origin.Y + ((double)topZone * moduleWidth));
-
-        // The quiet zones and the modules set the drawn area, and the human readable interpretation below the symbol extends it: downwards by its lines, and to
-        // either side by a line wider than the symbol. The lines of a placement stand within their block as the placement stands on its span. The quiet zone
-        // surrounds the ink of the text as it surrounds the modules, so the clear space beside a line is the clear space beside the symbol, whatever room the
-        // font leaves around its glyphs.
-        float leftClearSpace = leadingZone * moduleWidth;
-        float rightClearSpace = trailingZone * moduleWidth;
-        float bottomClearSpace = bottomZone * moduleWidth;
-        float areaLeft = origin.X;
-        float areaRight = origin.X + ((columns + leadingZone + trailingZone) * moduleWidth);
-        float areaBottom = origin.Y + ((rows + topZone + bottomZone) * moduleWidth);
-        ReadOnlySpan<BarcodeTextPlacement> text = symbol.Text;
-        Font? font = text.Length == 0 ? null : options.Font;
-        RichTextOptions? textOptions = font is null ? null : BarcodeTextOptionsFactory.Create(font, options.Dpi);
-        Font? scaledFont = null;
-
-        // The drawing pass places each line from what the measuring pass measured.
-        using PooledBuffer<MeasuredLine> lineBuffer = font is null ? default : new(text.Length);
-        Span<MeasuredLine> lines = lineBuffer.Span;
-        if (font is not null && textOptions is not null)
+        MatrixLayout layout = new(ref symbol, options, origin, lineBuffer.Span);
+        BarcodeMetrics metrics = layout.Metrics;
+        if (background is not null)
         {
-            for (int t = 0; t < text.Length; t++)
-            {
-                BarcodeTextPlacement placement = text[t];
-                textOptions.Font = ScaledFont(font, placement.FontScale, ref scaledFont);
-                textOptions.Origin = PointF.Empty;
-                textOptions.TextAlignment = placement.Alignment == BarcodeTextAlignment.Left ? TextAlignment.Start : TextAlignment.Center;
-                TextMetrics metrics = TextMeasurer.Measure(symbol.TextOf(in placement), textOptions);
-                MeasuredLine line = new(metrics.Bounds.Left, metrics.Bounds.Top, metrics.RenderableBounds.Width);
-                lines[t] = line;
-
-                // The ink of the first line starts on the text edge, which rounds onto the pixel grid as the module edges do.
-                float textLeft = BarEmitter.TextOrigin(placement, line.InkLeft, line.RenderableWidth, (float)symbolLeft, moduleWidth);
-                float textTop = (float)Math.Round(symbolTop + ((double)placement.TextEdge * moduleWidth)) - metrics.Bounds.Top;
-                areaLeft = MathF.Min(areaLeft, textLeft + metrics.Bounds.Left - leftClearSpace);
-                areaRight = MathF.Max(areaRight, textLeft + metrics.Bounds.Right + rightClearSpace);
-                areaBottom = MathF.Max(areaBottom, textTop + metrics.Bounds.Bottom + bottomClearSpace);
-            }
-        }
-
-        // When a line overhangs the symbol on the left, the whole rendering shifts right by a whole number of pixels so the leftmost element starts at the
-        // origin without moving the modules off the pixel grid.
-        float shift = MathF.Ceiling(origin.X - areaLeft);
-        if (shift > 0)
-        {
-            symbolLeft += shift;
-            areaLeft += shift;
-            areaRight += shift;
-        }
-
-        // Every module edge rounds onto the pixel grid, so the bounds snap outward on both axes to contain the rounded edges.
-        float left = MathF.Floor(areaLeft);
-        float top = MathF.Floor(origin.Y);
-        RectangleF bounds = new(left, top, MathF.Ceiling(areaRight) - left, MathF.Ceiling(areaBottom) - top);
-
-        if (canvas is null)
-        {
-            return bounds;
-        }
-
-        if (options.Background is not null)
-        {
-            canvas.Fill(options.Background, new RectanglePolygon(bounds.X, bounds.Y, bounds.Width, bounds.Height));
+            RectangleF renderable = metrics.RenderableBounds;
+            canvas.Fill(background, new RectanglePolygon(renderable.X, renderable.Y, renderable.Width, renderable.Height));
         }
 
         // A dotted symbol draws each dark module as a dot, a colour symbol draws runs of each colour, and every other matrix symbol draws runs of dark modules.
-        ModuleGrid grid = new(symbolLeft, symbolTop, moduleWidth);
+        ModuleGrid grid = layout.Grid;
         switch (symbol.Kind)
         {
             case BarcodeSymbolKind.Dotted:
@@ -149,25 +71,18 @@ internal static class MatrixEmitter
                 break;
         }
 
-        if (font is not null && textOptions is not null)
-        {
-            for (int t = 0; t < text.Length; t++)
-            {
-                BarcodeTextPlacement placement = text[t];
-                ReadOnlySpan<char> characters = symbol.TextOf(in placement);
-                MeasuredLine line = lines[t];
-                textOptions.Font = ScaledFont(font, placement.FontScale, ref scaledFont);
-                textOptions.TextAlignment = placement.Alignment == BarcodeTextAlignment.Left ? TextAlignment.Start : TextAlignment.Center;
-                textOptions.Origin = new PointF(
-                    BarEmitter.TextOrigin(placement, line.InkLeft, line.RenderableWidth, (float)symbolLeft, moduleWidth),
-                    (float)Math.Round(symbolTop + ((double)placement.TextEdge * moduleWidth)) - line.InkTop);
-
-                canvas.DrawText(textOptions, characters, options.BarBrush, null);
-            }
-        }
-
-        return bounds;
+        layout.DrawText(canvas, options.BarBrush);
+        return metrics;
     }
+
+    /// <summary>
+    /// Rents the buffer that holds the measured lines of the symbol: one line for each text placement when the options carry a font, and none otherwise.
+    /// </summary>
+    /// <param name="symbol">The encoded symbol.</param>
+    /// <param name="options">The sizing and painting options.</param>
+    /// <returns>The line buffer.</returns>
+    private static PooledBuffer<MeasuredLine> CreateLineBuffer(ref BarcodeSymbol symbol, BarcodeOptions options)
+        => options.Font is null || symbol.Text.IsEmpty ? default : new(symbol.Text.Length);
 
     /// <summary>
     /// Fills the dark modules of a matrix symbol: each run of adjacent dark modules in a row is one rectangle, and the dark parts of an overlay graphic join
@@ -532,32 +447,211 @@ internal static class MatrixEmitter
     }
 
     /// <summary>
-    /// What the measuring pass measured of one line, so the drawing pass places the line without measuring it again.
+    /// The layout of a matrix symbol: where its modules and each text line stand, from one origin. The measure and the draw read one layout.
     /// </summary>
-    private readonly struct MeasuredLine
+    private ref struct MatrixLayout
+    {
+        /// <summary>
+        /// The measured lines, one for each text placement, or none when the options carry no font.
+        /// </summary>
+        private readonly Span<MeasuredLine> lines;
+
+        /// <summary>
+        /// The prepared text block of the one text placement, which the layout measures and the draw renders, or <see langword="null"/> when the symbol prints
+        /// no text. A matrix symbol has at most one text placement, also when its text has line breaks.
+        /// </summary>
+        private readonly TextBlock? block;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="MatrixLayout"/> struct.
+        /// </summary>
+        /// <param name="symbol">The encoded matrix symbol.</param>
+        /// <param name="options">The sizing and painting options.</param>
+        /// <param name="origin">The top left corner of the barcode, in pixels.</param>
+        /// <param name="lines">The measured lines to write, one for each text placement, or empty when the options carry no font.</param>
+        public MatrixLayout(ref BarcodeSymbol symbol, BarcodeOptions options, PointF origin, Span<MeasuredLine> lines)
+        {
+            this.lines = lines;
+            float moduleWidth = (float)(symbol.XDimension / BarcodeOptions.MillimetresPerInch * options.Dpi);
+
+            // Most matrix symbols have the same quiet zone on all four sides. Code One versions S and T have none above.
+            bool quiet = options.IncludeQuietZones;
+            int leadingZone = quiet ? (int)symbol.LeadingQuietZone : 0;
+            int trailingZone = quiet ? (int)symbol.TrailingQuietZone : 0;
+            int topZone = quiet ? (int)symbol.TopQuietZone : 0;
+            int bottomZone = quiet ? (int)symbol.BottomQuietZone : 0;
+            int columns = symbol.Columns;
+            int rows = symbol.MatrixRows;
+
+            // The text is measured first, because its line boxes set where the symbol stands.
+            ReadOnlySpan<BarcodeTextPlacement> text = symbol.Text;
+            Font? font = options.Font;
+            if (font is not null && !lines.IsEmpty)
+            {
+                // The block keeps the options it was prepared with, its font and alignment included. The block shapes the text once, and the draw renders the
+                // same block at the place the layout gives it.
+                BarcodeTextPlacement placement = text[0];
+                Font? scaledFont = null;
+                RichTextOptions textOptions = new(BarcodeTextOptionsFactory.Create(font, options.Dpi))
+                {
+                    Font = ScaledFont(font, placement.FontScale, ref scaledFont),
+                    TextAlignment = placement.Alignment == BarcodeTextAlignment.Left ? TextAlignment.Start : TextAlignment.Center,
+                };
+
+                this.block = new TextBlock(symbol.TextOf(in placement), textOptions);
+                TextMetrics metrics = this.block.Measure(-1);
+                lines[0] = new MeasuredLine(metrics.Advance, metrics.Bounds, metrics.RenderableBounds.Width);
+            }
+
+            // The layout box: the barcode and the line box of each line, in exact positions relative to the top left corner of the barcode. Nothing in this
+            // box rounds, as nothing in the layout box of text rounds. The ink of each line starts on its text edge.
+            float leadingOffset = leadingZone * moduleWidth;
+            float topOffset = topZone * moduleWidth;
+            float layoutLeft = 0;
+            float layoutTop = 0;
+            float layoutRight = (columns + leadingZone + trailingZone) * moduleWidth;
+            float layoutBottom = (rows + topZone + bottomZone) * moduleWidth;
+            for (int t = 0; t < lines.Length; t++)
+            {
+                BarcodeTextPlacement placement = text[t];
+                MeasuredLine line = lines[t];
+                float cellLeft = leadingOffset + (placement.Left * moduleWidth);
+                float x = placement.Alignment == BarcodeTextAlignment.Left
+                    ? cellLeft - line.Ink.Left
+                    : ((cellLeft + leadingOffset + (placement.Right * moduleWidth)) * 0.5F) - (line.RenderableWidth * 0.5F);
+                float y = topOffset + (placement.TextEdge * moduleWidth) - line.Ink.Top;
+                layoutLeft = MathF.Min(layoutLeft, x + line.Advance.Left);
+                layoutTop = MathF.Min(layoutTop, y + line.Advance.Top);
+                layoutRight = MathF.Max(layoutRight, x + line.Advance.Right);
+                layoutBottom = MathF.Max(layoutBottom, y + line.Advance.Bottom);
+            }
+
+            // The origin is the top left corner of the layout box, as it is for text. A line wider than the symbol moves the symbol right.
+            PointF symbolOrigin = new(origin.X - layoutLeft, origin.Y - layoutTop);
+            RectangleF advance = new(origin.X, origin.Y, layoutRight - layoutLeft, layoutBottom - layoutTop);
+
+            // Each edge rounds from its exact position onto the device pixel grid, so the modules stay crisp and rounding cannot drift across the symbol. The
+            // positions are products of a whole module count and the module width, calculated in double from the corner of the symbol, and the edge two
+            // neighbours share rounds to one pixel for both. The corner itself starts on a whole pixel. When a module is not a whole number of pixels, the
+            // modules alternate between two widths, and a corner between pixels would make that pattern depend on the width of the quiet zone, so the two outer
+            // rings of a finder pattern could round to different widths.
+            double symbolLeft = Math.Round(symbolOrigin.X + leadingOffset);
+            double symbolTop = Math.Round(symbolOrigin.Y + topOffset);
+            this.Grid = new ModuleGrid(symbolLeft, symbolTop, moduleWidth);
+
+            // The bounds are the exact ink. A run of modules draws between two module edges, which round onto the pixel grid. A dot fills its cell exactly, so
+            // its edges are the cell edges. The outermost dark modules set the ink, and the symbol always has at least one.
+            ReadOnlySpan<byte> marks = symbol.Kind == BarcodeSymbolKind.Colored
+                ? MemoryMarshal.Cast<BarcodeModuleColor, byte>(symbol.ModuleColors)
+                : MemoryMarshal.Cast<bool, byte>(symbol.Modules);
+
+            int firstRow = -1;
+            int lastRow = -1;
+            int firstColumn = columns;
+            int lastColumn = -1;
+            for (int r = 0; r < rows; r++)
+            {
+                // A light module is the byte 0 in both module forms: false, and BarcodeModuleColor.Light. The searches are vectorized.
+                ReadOnlySpan<byte> row = marks.Slice(r * columns, columns);
+                int first = row.IndexOfAnyExcept((byte)0);
+                if (first < 0)
+                {
+                    continue;
+                }
+
+                firstRow = firstRow < 0 ? r : firstRow;
+                lastRow = r;
+                firstColumn = Math.Min(firstColumn, first);
+                lastColumn = Math.Max(lastColumn, row.LastIndexOfAnyExcept((byte)0));
+            }
+
+            RectangleF bounds = symbol.Kind == BarcodeSymbolKind.Dotted
+                ? RectangleF.FromLTRB(
+                    (float)(symbolLeft + ((double)firstColumn * moduleWidth)),
+                    (float)(symbolTop + ((double)firstRow * moduleWidth)),
+                    (float)(symbolLeft + ((double)(lastColumn + 1) * moduleWidth)),
+                    (float)(symbolTop + ((double)(lastRow + 1) * moduleWidth)))
+                : RectangleF.FromLTRB(
+                    this.Grid.ColumnEdge(firstColumn),
+                    this.Grid.RowEdge(firstRow),
+                    this.Grid.ColumnEdge(lastColumn + 1),
+                    this.Grid.RowEdge(lastRow + 1));
+
+            // The ink of the first line starts on the text edge, which rounds onto the pixel grid as the module edges do.
+            for (int t = 0; t < lines.Length; t++)
+            {
+                BarcodeTextPlacement placement = text[t];
+                ref MeasuredLine line = ref lines[t];
+                line.X = BarEmitter.TextOrigin(placement, line.Ink.Left, line.RenderableWidth, (float)symbolLeft, moduleWidth);
+                line.Y = (float)Math.Round(symbolTop + ((double)placement.TextEdge * moduleWidth)) - line.Ink.Top;
+                bounds = RectangleF.Union(bounds, new RectangleF(line.X + line.Ink.X, line.Y + line.Ink.Y, line.Ink.Width, line.Ink.Height));
+            }
+
+            // As in text measuring, the advance is relative to the origin, and the bounds and the renderable bounds are absolute.
+            this.Metrics = new BarcodeMetrics(new RectangleF(0, 0, advance.Width, advance.Height), bounds, RectangleF.Union(advance, bounds));
+        }
+
+        /// <summary>
+        /// Gets the module grid of the symbol on the page.
+        /// </summary>
+        public readonly ModuleGrid Grid { get; }
+
+        /// <summary>
+        /// Gets the metrics of the layout.
+        /// </summary>
+        public readonly BarcodeMetrics Metrics { get; }
+
+        /// <summary>
+        /// Draws the text where the layout put it. The text renders its prepared block, so it is not shaped again.
+        /// </summary>
+        /// <param name="canvas">The canvas to render onto.</param>
+        /// <param name="brush">The brush of the text.</param>
+        public readonly void DrawText(DrawingCanvas canvas, Brush brush)
+        {
+            if (this.block is not null)
+            {
+                canvas.DrawText(this.block, new PointF(this.lines[0].X, this.lines[0].Y), -1, brush, null);
+            }
+        }
+    }
+
+    /// <summary>
+    /// What the layout measured of one line and where it put the line, so the draw draws the line without measuring it again.
+    /// </summary>
+    private struct MeasuredLine
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="MeasuredLine"/> struct.
         /// </summary>
-        /// <param name="inkLeft">The left edge of the ink, from <see cref="TextMetrics.Bounds"/>.</param>
-        /// <param name="inkTop">The top edge of the ink, from <see cref="TextMetrics.Bounds"/>.</param>
+        /// <param name="advance">The line box of the line, from <see cref="TextMetrics.Advance"/>, relative to its origin.</param>
+        /// <param name="ink">The glyph ink of the line, from <see cref="TextMetrics.Bounds"/>, relative to its origin.</param>
         /// <param name="renderableWidth">The width of the line, from <see cref="TextMetrics.RenderableBounds"/>.</param>
-        public MeasuredLine(float inkLeft, float inkTop, float renderableWidth)
+        public MeasuredLine(FontRectangle advance, FontRectangle ink, float renderableWidth)
         {
-            this.InkLeft = inkLeft;
-            this.InkTop = inkTop;
+            this.Advance = advance;
+            this.Ink = ink;
             this.RenderableWidth = renderableWidth;
         }
 
         /// <summary>
-        /// Gets the left edge of the ink, from <see cref="TextMetrics.Bounds"/>.
+        /// Gets or sets the x origin of the line, in pixels. The layout sets it once the symbol has its position.
         /// </summary>
-        public float InkLeft { get; }
+        public float X { get; set; }
 
         /// <summary>
-        /// Gets the top edge of the ink, from <see cref="TextMetrics.Bounds"/>.
+        /// Gets or sets the y origin of the line, in pixels. The layout sets it once the symbol has its position.
         /// </summary>
-        public float InkTop { get; }
+        public float Y { get; set; }
+
+        /// <summary>
+        /// Gets the line box of the line, from <see cref="TextMetrics.Advance"/>, relative to its origin.
+        /// </summary>
+        public FontRectangle Advance { get; }
+
+        /// <summary>
+        /// Gets the glyph ink of the line, from <see cref="TextMetrics.Bounds"/>, relative to its origin.
+        /// </summary>
+        public FontRectangle Ink { get; }
 
         /// <summary>
         /// Gets the width of the line, from <see cref="TextMetrics.RenderableBounds"/>.

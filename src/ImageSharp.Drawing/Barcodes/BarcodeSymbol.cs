@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.Drawing.Helpers;
@@ -294,14 +295,29 @@ internal struct BarcodeSymbol : IDisposable
     }
 
     /// <summary>
-    /// Returns the width of a row of runs in modules, for an encoder that places its text or sizes its bars from the width before the symbol ends.
+    /// Returns the width of a row of runs in run units, for an encoder that places its text or sizes its bars from the width before the symbol ends, and for
+    /// the ink edges of each row.
     /// </summary>
-    /// <param name="runs">The alternating bar and space run widths in modules.</param>
-    /// <returns>The width in modules.</returns>
+    /// <param name="runs">The alternating bar and space run widths in run units.</param>
+    /// <returns>The width in run units.</returns>
     public static int RunWidth(ReadOnlySpan<int> runs)
     {
+        // Each lane of the vector adds every lane-count-th run, and the lanes add together at the end. Integer addition is exact, so the sum equals the
+        // scalar sum in any order. The scalar loop adds the runs that do not fill a vector.
         int width = 0;
-        for (int i = 0; i < runs.Length; i++)
+        int i = 0;
+        if (Vector.IsHardwareAccelerated && runs.Length >= Vector<int>.Count)
+        {
+            Vector<int> lanes = Vector<int>.Zero;
+            for (; i <= runs.Length - Vector<int>.Count; i += Vector<int>.Count)
+            {
+                lanes += new Vector<int>(runs[i..]);
+            }
+
+            width = Vector.Sum(lanes);
+        }
+
+        for (; i < runs.Length; i++)
         {
             width += runs[i];
         }
@@ -349,9 +365,31 @@ internal struct BarcodeSymbol : IDisposable
     /// <param name="runUnit">The width of one run unit in modules.</param>
     /// <param name="uniformBars">Whether every bar is one width at one pitch.</param>
     public void EndLinear(float leadingQuietZone, float trailingQuietZone, float bearerBarThickness, float runUnit, bool uniformBars)
+        => this.EndLinear(leadingQuietZone, trailingQuietZone, 0F, 0F, bearerBarThickness, runUnit, uniformBars);
+
+    /// <summary>
+    /// Ends a linear symbol that has quiet zones above and below it.
+    /// </summary>
+    /// <param name="leadingQuietZone">The quiet zone before the symbol, in modules.</param>
+    /// <param name="trailingQuietZone">The quiet zone after the symbol, in modules.</param>
+    /// <param name="topQuietZone">The quiet zone above the symbol, in modules.</param>
+    /// <param name="bottomQuietZone">The quiet zone below the symbol, in modules.</param>
+    /// <param name="bearerBarThickness">The thickness of the bearer bar in modules, or zero for none.</param>
+    /// <param name="runUnit">The width of one run unit in modules.</param>
+    /// <param name="uniformBars">Whether every bar is one width at one pitch.</param>
+    public void EndLinear(
+        float leadingQuietZone,
+        float trailingQuietZone,
+        float topQuietZone,
+        float bottomQuietZone,
+        float bearerBarThickness,
+        float runUnit,
+        bool uniformBars)
     {
         this.LeadingQuietZone = leadingQuietZone;
         this.TrailingQuietZone = trailingQuietZone;
+        this.TopQuietZone = topQuietZone;
+        this.BottomQuietZone = bottomQuietZone;
         this.FrameThickness = bearerBarThickness;
         this.RunUnit = runUnit;
         this.UniformBars = uniformBars;
@@ -756,28 +794,59 @@ internal struct BarcodeSymbol : IDisposable
         ReadOnlySpan<float> tops = this.BarTops;
         Span<BarcodeRow> rows = Slice<BarcodeRow>(this.layoutBuffer, 0, this.rowCount);
 
-        // A double holds each product of a whole run and the run unit exactly, so the width carries no rounding error from the runs it adds.
+        // The product of a whole number of run units and the run unit is exact in a double, so the width carries no rounding error.
         BarcodeRow first = rows[0];
-        double width = 0;
-        for (int i = first.RunStart; i < first.RunStart + first.RunCount; i++)
-        {
-            width += runs[i] * (double)this.RunUnit;
-        }
+        this.WidthInModules = (float)(RunWidth(runs.Slice(first.RunStart, first.RunCount)) * (double)this.RunUnit);
 
-        this.WidthInModules = (float)width;
-
-        // Each row is as tall as its lowest bar bottom. Each row top adds every row above it, so the sum is in double and each top converts to float once.
+        // Each row is as tall as its lowest bar bottom, and its ink starts at its highest bar top. The encoders give an empty bar the height of its row, so
+        // the bars alone give both. Each row top adds every row above it, so the sum is in double and each top converts to float once.
         double top = firstTop;
         for (int r = 0; r < rows.Length; r++)
         {
             BarcodeRow row = rows[r];
+            ReadOnlySpan<float> rowTops = tops.Slice(row.BarStart, row.BarCount);
+            ReadOnlySpan<float> rowHeights = heights.Slice(row.BarStart, row.BarCount);
             float height = 0;
-            for (int i = row.BarStart; i < row.BarStart + row.BarCount; i++)
+            float inkTop = float.MaxValue;
+            for (int i = 0; i < rowTops.Length; i++)
             {
-                height = MathF.Max(height, tops[i] + heights[i]);
+                height = MathF.Max(height, rowTops[i] + rowHeights[i]);
+                inkTop = MathF.Min(inkTop, rowTops[i]);
             }
 
-            rows[r] = new BarcodeRow(row, (float)top, height);
+            // The ink edges are the left edge of the first bar that is not empty and the right edge of the last. A row can start with an empty bar, so
+            // that it starts with a space, and it can end with a space. A short walk from each end of the row passes those runs, so no run between is read.
+            // A row of spaces alone has no ink, and its ink start is -1.
+            ReadOnlySpan<int> rowRuns = runs.Slice(row.RunStart, row.RunCount);
+            int start = 0;
+            int inkStart = 0;
+            while (start < rowRuns.Length && rowRuns[start] == 0)
+            {
+                inkStart += start + 1 < rowRuns.Length ? rowRuns[start + 1] : 0;
+                start += 2;
+            }
+
+            int inkEnd = 0;
+            if (start >= rowRuns.Length)
+            {
+                inkStart = -1;
+            }
+            else
+            {
+                // Runs alternate bar and space from a bar, so the last bar is the last even index. The space after it, if the row ends with one, and each
+                // empty bar before it with the space before that bar, are the trailing runs.
+                int end = (rowRuns.Length - 1) & ~1;
+                int trailing = end + 1 < rowRuns.Length ? rowRuns[end + 1] : 0;
+                while (rowRuns[end] == 0)
+                {
+                    trailing += rowRuns[end - 1];
+                    end -= 2;
+                }
+
+                inkEnd = RunWidth(rowRuns) - trailing;
+            }
+
+            rows[r] = new BarcodeRow(row, (float)top, height, inkTop, inkStart, inkEnd);
             top += height;
         }
 

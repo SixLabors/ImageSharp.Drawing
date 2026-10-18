@@ -151,8 +151,8 @@ public class IntelligentMailPackageSymbologyTests
         const string text = "(420)123456789(92)12391234567812345670";
         RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, options, PointF.Empty, text);
 
-        using Image<L8> image = new((int)MathF.Ceiling(bounds.Right), (int)MathF.Ceiling(bounds.Bottom), new L8(255));
-        image.Mutate(x => x.Paint(canvas => canvas.DrawBarcode(symbology, options, PointF.Empty, text)));
+        using Image<L8> image = new((int)MathF.Ceiling(bounds.Width), (int)MathF.Ceiling(bounds.Height), new L8(255));
+        image.Mutate(x => x.Paint(canvas => canvas.DrawBarcode(symbology, options, new PointF(-bounds.X, -bounds.Y), text)));
 
         // A row is dark when any pixel in it is dark. The dark rows form bands from the top down: the upper identification bar, the banner, the bars, the PIC
         // and the lower identification bar.

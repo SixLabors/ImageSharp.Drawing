@@ -808,7 +808,10 @@ public class HanXinSymbologyTests
     [Fact]
     public void RejectsDataBeyondTheVersion()
         => Assert.Throws<ArgumentException>(
-            () => SymbolEncoder.Encode(new HanXinSymbology(HanXinErrorCorrectionLevel.L4, 1), "This text needs more than version 1 holds", new BarcodeOptions()));
+            () => SymbolEncoder.Encode(
+                new HanXinSymbology(HanXinErrorCorrectionLevel.L4, 1),
+                "This text needs more than version 1 holds",
+                new BarcodeOptions()));
 
     /// <summary>
     /// Han Xin Code carries the 256 byte values, U+0000 to U+00FF.

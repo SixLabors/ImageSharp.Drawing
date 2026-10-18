@@ -79,7 +79,40 @@ internal readonly struct FourStateMetrics
         BarcodeTextSide textSide,
         float textClearance,
         BarcodeTextAlignment textAlignment)
+        : this(xDimension, runUnit, barUnits, spaceUnits, ascender, tracker, descender, quietZone, 0F, textSide, textClearance, textAlignment)
     {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FourStateMetrics"/> struct.
+    /// </summary>
+    /// <param name="xDimension">The bar width in millimetres, which is one module.</param>
+    /// <param name="runUnit">The width of one run unit in modules.</param>
+    /// <param name="barUnits">The width of a bar in run units.</param>
+    /// <param name="spaceUnits">The width of the space between bars in run units.</param>
+    /// <param name="ascender">The height of the ascender part above the tracker, in modules.</param>
+    /// <param name="tracker">The height of the tracker, in modules.</param>
+    /// <param name="descender">The height of the descender part below the tracker, in modules.</param>
+    /// <param name="quietZone">The clear zone at each end of the symbol, in modules.</param>
+    /// <param name="verticalQuietZone">The clear zone above and below the symbol, in modules.</param>
+    /// <param name="textSide">The side of the bars the human readable interpretation stands on.</param>
+    /// <param name="textClearance">The clear space between the bars and the human readable interpretation, in modules.</param>
+    /// <param name="textAlignment">Where the human readable interpretation stands within the symbol width.</param>
+    public FourStateMetrics(
+        double xDimension,
+        float runUnit,
+        int barUnits,
+        int spaceUnits,
+        float ascender,
+        float tracker,
+        float descender,
+        float quietZone,
+        float verticalQuietZone,
+        BarcodeTextSide textSide,
+        float textClearance,
+        BarcodeTextAlignment textAlignment)
+    {
+        this.VerticalQuietZone = verticalQuietZone;
         this.XDimension = xDimension;
         this.RunUnit = runUnit;
         this.BarUnits = barUnits;
@@ -147,6 +180,11 @@ internal readonly struct FourStateMetrics
     /// Gets where the human readable interpretation stands within the symbol width.
     /// </summary>
     public BarcodeTextAlignment TextAlignment { get; }
+
+    /// <summary>
+    /// Gets the clear zone above and below the symbol, in modules.
+    /// </summary>
+    public float VerticalQuietZone { get; }
 
     /// <summary>
     /// Gets the height of a full bar in modules.

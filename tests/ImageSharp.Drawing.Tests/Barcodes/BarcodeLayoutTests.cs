@@ -154,6 +154,71 @@ public class BarcodeLayoutTests
     }
 
     /// <summary>
+    /// The ink bounds hold every pixel the bars, the frame, the identification bars and the text draw. The symbol draws with no background, so every pixel
+    /// that is not transparent is ink.
+    /// </summary>
+    /// <param name="name">The name of the case.</param>
+    [Theory]
+    [InlineData("IntelligentMailPackage")]
+    [InlineData("AustraliaPost")]
+    [InlineData("Ean5")]
+    [InlineData("Isbn")]
+    [InlineData("Itf14")]
+    [InlineData("Gs1DataMatrix")]
+    [InlineData("MaxiCode")]
+    [InlineData("DotCode")]
+    public void InkStaysInsideTheMeasuredInkBounds(string name)
+    {
+        (BarcodeSymbology symbology, string text) = name switch
+        {
+            "IntelligentMailPackage" => ((BarcodeSymbology)new IntelligentMailPackageSymbology("USPS TRACKING #"), "(420)123456789(92)12391234567812345670"),
+            "AustraliaPost" => (new AustraliaPostSymbology(), "6254516251ABC123"),
+            "Ean5" => (new Ean5Symbology(), "52495"),
+            "Isbn" => (new IsbnSymbology(), "978-0-306-40615-7"),
+            "Itf14" => (new Itf14Symbology(), "15400141288763"),
+            "Gs1DataMatrix" => (new Gs1DataMatrixSymbology(), "(01)09521234543213(17)120508(10)ABCD1234"),
+            "MaxiCode" => (new MaxiCodeSymbology(), "THIS IS A MAXICODE SYMBOL"),
+            _ => (new DotCodeSymbology(), "This is DotCode"),
+        };
+
+        BarcodeOptions options = new() { Dpi = 144F, Font = BarcodeFonts.OcrB.CreateFont(10.75F) };
+        PointF origin = new(Margin + 0.3F, Margin + 0.3F);
+        BarcodeMetrics metrics = BarcodeMeasurer.Measure(symbology, options, origin, text);
+        RectangleF renderable = metrics.RenderableBounds;
+        using Image<Rgba32> image = new((int)MathF.Ceiling(renderable.Right) + Margin, (int)MathF.Ceiling(renderable.Bottom) + Margin);
+        image.Mutate(x => x.Paint(canvas => canvas.DrawBarcode(symbology, options, origin, text)));
+
+        int drawnLeft = int.MaxValue;
+        int drawnTop = int.MaxValue;
+        int drawnRight = int.MinValue;
+        int drawnBottom = int.MinValue;
+        image.ProcessPixelRows(accessor =>
+        {
+            for (int y = 0; y < accessor.Height; y++)
+            {
+                Span<Rgba32> row = accessor.GetRowSpan(y);
+                for (int x = 0; x < row.Length; x++)
+                {
+                    if (row[x].A != 0)
+                    {
+                        drawnLeft = Math.Min(drawnLeft, x);
+                        drawnTop = Math.Min(drawnTop, y);
+                        drawnRight = Math.Max(drawnRight, x);
+                        drawnBottom = Math.Max(drawnBottom, y);
+                    }
+                }
+            }
+        });
+
+        // The pixels the ink bounds touch. A pixel at index i covers the half open span from i to i + 1.
+        RectangleF bounds = metrics.Bounds;
+        Assert.InRange(drawnLeft, (int)MathF.Floor(bounds.Left), (int)MathF.Ceiling(bounds.Right) - 1);
+        Assert.InRange(drawnRight, (int)MathF.Floor(bounds.Left), (int)MathF.Ceiling(bounds.Right) - 1);
+        Assert.InRange(drawnTop, (int)MathF.Floor(bounds.Top), (int)MathF.Ceiling(bounds.Bottom) - 1);
+        Assert.InRange(drawnBottom, (int)MathF.Floor(bounds.Top), (int)MathF.Ceiling(bounds.Bottom) - 1);
+    }
+
+    /// <summary>
     /// Measures the symbol, draws it at that same origin onto a larger image, and asserts that every pixel the draw call touched lies inside the measured
     /// rectangle.
     /// </summary>
@@ -217,12 +282,12 @@ public class BarcodeLayoutTests
             }
         });
 
-        // The pixels wholly inside the measured rectangle. A pixel at index i covers the half open span from i to i + 1, so the first one inside starts at the
-        // near edge and the last one ends on the far edge.
-        int left = (int)MathF.Ceiling(bounds.Left);
-        int top = (int)MathF.Ceiling(bounds.Top);
-        int right = (int)MathF.Floor(bounds.Right) - 1;
-        int bottom = (int)MathF.Floor(bounds.Bottom) - 1;
+        // The pixels the measured rectangle touches. The rectangle is exact, so an edge between two pixels covers part of the pixel it falls in. A pixel at
+        // index i covers the half open span from i to i + 1, so the first pixel touched holds the near edge and the last one holds the far edge.
+        int left = (int)MathF.Floor(bounds.Left);
+        int top = (int)MathF.Floor(bounds.Top);
+        int right = (int)MathF.Ceiling(bounds.Right) - 1;
+        int bottom = (int)MathF.Ceiling(bounds.Bottom) - 1;
 
         Assert.InRange(drawnLeft, left, right);
         Assert.InRange(drawnRight, left, right);

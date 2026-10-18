@@ -51,8 +51,10 @@ internal static class AustraliaPostEncoder
         (float)(1.3 / 0.5),
         (float)(1.85 / 0.5),
         (float)(6 / 0.5),
+        (float)(2 / 0.5),
         BarcodeTextSide.AboveBars,
-        (float)(2 / 0.5));
+        (float)(2 / 0.5),
+        BarcodeTextAlignment.Centered);
 
     /// <summary>
     /// The field of the parity symbols: GF(64) with the primitive polynomial 1 + x + x^6.

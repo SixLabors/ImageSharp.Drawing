@@ -1103,10 +1103,35 @@ public sealed class DrawingCanvas<TPixel> : DrawingCanvas
     }
 
     /// <inheritdoc />
-    public override RectangleF MeasureBarcode(BarcodeSymbology symbology, BarcodeOptions options, PointF origin, ReadOnlySpan<char> text)
+    public override BarcodeMetrics MeasureBarcode(BarcodeSymbology symbology, BarcodeOptions options, PointF origin, ReadOnlySpan<char> text)
     {
         this.EnsureNotDisposed();
-        return BarcodeMeasurer.MeasureRenderableBounds(symbology, options, origin, text);
+        return BarcodeMeasurer.Measure(symbology, options, origin, text);
+    }
+
+    /// <inheritdoc />
+    public override BarcodeMetrics MeasureBarcode(
+        CompositeBarcodeSymbology symbology,
+        BarcodeOptions options,
+        PointF origin,
+        ReadOnlySpan<char> first,
+        ReadOnlySpan<char> second)
+    {
+        this.EnsureNotDisposed();
+        return BarcodeMeasurer.Measure(symbology, options, origin, first, second);
+    }
+
+    /// <inheritdoc />
+    public override BarcodeMetrics MeasureBarcode(
+        CompositeBarcodeSymbology symbology,
+        BarcodeOptions options,
+        PointF origin,
+        ReadOnlySpan<char> first,
+        ReadOnlySpan<char> second,
+        ReadOnlySpan<char> third)
+    {
+        this.EnsureNotDisposed();
+        return BarcodeMeasurer.Measure(symbology, options, origin, first, second, third);
     }
 
     /// <inheritdoc />

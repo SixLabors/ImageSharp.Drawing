@@ -62,8 +62,10 @@ internal static class JapanPostEncoder
         (float)(1.2 / 0.6),
         (float)(1.2 / 0.6),
         (float)(2 / 0.6),
+        (float)(2 / 0.6),
         BarcodeTextSide.BelowBars,
-        (float)(2 / 0.6));
+        (float)(2 / 0.6),
+        BarcodeTextAlignment.Centered);
 
     /// <summary>
     /// Gets the bar states of every code value, three per code, as <see cref="FourState"/> values: the digits 0 to 9, the hyphen and CC1 to CC8.

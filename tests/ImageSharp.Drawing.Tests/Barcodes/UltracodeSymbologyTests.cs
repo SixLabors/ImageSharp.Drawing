@@ -308,7 +308,8 @@ public class UltracodeSymbologyTests
     /// </summary>
     [Fact]
     public void RejectsDataBeyondTheLargestSymbol()
-        => Assert.Throws<ArgumentException>(() => SymbolEncoder.Encode(new UltracodeSymbology(UltracodeErrorCorrectionLevel.EC5), new string('A', 203), new BarcodeOptions()));
+        => Assert.Throws<ArgumentException>(
+            () => SymbolEncoder.Encode(new UltracodeSymbology(UltracodeErrorCorrectionLevel.EC5), new string('A', 203), new BarcodeOptions()));
 
     /// <summary>
     /// Ultracode carries the 256 byte values, U+0000 to U+00FF.

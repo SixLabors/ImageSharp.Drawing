@@ -48,6 +48,12 @@ internal static class UspsPostalEncoder
     public const float ClearZone = 6.25F;
 
     /// <summary>
+    /// The clear zone in modules above and below the bars: the "0.028 inch above and below the barcode" of section 2.3.2 of USPS-B-3200, at the 0.020 inch
+    /// module, for the same reason as <see cref="ClearZone"/>.
+    /// </summary>
+    public const float VerticalClearZone = 1.4F;
+
+    /// <summary>
     /// The number of bars in one digit.
     /// </summary>
     public const int BarsPerDigit = 5;
@@ -126,6 +132,6 @@ internal static class UspsPostalEncoder
             symbol.AddText(readable, 0F, widthInModules, BarcodeTextSide.BelowBars, fullBar + TextClearance);
         }
 
-        symbol.EndLinear(ClearZone, ClearZone, 0F, RunUnit, true);
+        symbol.EndLinear(ClearZone, ClearZone, VerticalClearZone, VerticalClearZone, 0F, RunUnit, true);
     }
 }

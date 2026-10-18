@@ -1121,10 +1121,11 @@ public class DrawBarcodeTests
             x =>
             {
                 // The image is the symbol, with no slack around it. The provider hands over a one pixel canvas, the measurer reports the area the symbol needs,
-                // and the canvas grows to it. Slack would hide a symbol that grew, and a shortfall would clip one.
+                // and the canvas grows to it. Slack would hide a symbol that grew, and a shortfall would clip one. Text can extend above the symbol or to the
+                // left of it, so the symbol draws at the origin that puts the measured area at the corner of the image.
                 RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, options, PointF.Empty, text);
                 x.Resize(new Size((int)MathF.Ceiling(bounds.Width), (int)MathF.Ceiling(bounds.Height)));
-                x.Paint(canvas => canvas.DrawBarcode(symbology, options, PointF.Empty, text));
+                x.Paint(canvas => canvas.DrawBarcode(symbology, options, new PointF(-bounds.X, -bounds.Y), text));
             },
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);

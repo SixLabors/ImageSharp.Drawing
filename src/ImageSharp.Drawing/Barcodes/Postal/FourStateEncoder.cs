@@ -24,8 +24,10 @@ internal static class FourStateEncoder
         (float)(1.30 / 0.54),
         (float)(1.90 / 0.54),
         (float)(2 / 0.54),
+        (float)(2 / 0.54),
         BarcodeTextSide.BelowBars,
-        (float)(2 / 0.54));
+        (float)(2 / 0.54),
+        BarcodeTextAlignment.Centered);
 
     /// <summary>
     /// Builds the symbol from bar states.
@@ -73,6 +75,6 @@ internal static class FourStateEncoder
             symbol.AddText(readable, 0F, widthInModules, metrics.TextSide, textEdge, metrics.TextAlignment);
         }
 
-        symbol.EndLinear(metrics.QuietZone, metrics.QuietZone, 0F, metrics.RunUnit, true);
+        symbol.EndLinear(metrics.QuietZone, metrics.QuietZone, metrics.VerticalQuietZone, metrics.VerticalQuietZone, 0F, metrics.RunUnit, true);
     }
 }
