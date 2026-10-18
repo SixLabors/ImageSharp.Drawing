@@ -43,9 +43,8 @@ public sealed class MaxiCodeSymbology : BarcodeSymbology
     public MaxiCodeMode? Mode { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         MaxiCodeEncoder.BuildSymbol(text, this.Mode, options.XDimension ?? NominalXDimension, ref symbol);
     }
 }

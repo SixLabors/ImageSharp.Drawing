@@ -429,10 +429,8 @@ internal static class Gs1Data
     /// <param name="text">The element string.</param>
     /// <param name="gtin">The buffer the 14 digits are written to.</param>
     /// <exception cref="ArgumentException">The element string is not (01) and 13 or 14 digits, or the check digit is wrong.</exception>
-    public static void ReadGtin(string text, Span<char> gtin)
+    public static void ReadGtin(ReadOnlySpan<char> text, Span<char> gtin)
     {
-        Guard.NotNull(text, nameof(text));
-
         if (text.Length is not (17 or 18))
         {
             throw new ArgumentException(
@@ -440,12 +438,12 @@ internal static class Gs1Data
                 nameof(text));
         }
 
-        if (!text.AsSpan(0, 4).SequenceEqual("(01)"))
+        if (!text.Slice(0, 4).SequenceEqual("(01)"))
         {
             throw new ArgumentException("The element string begins with the (01) application identifier.", nameof(text));
         }
 
-        ReadOnlySpan<char> digits = text.AsSpan(4);
+        ReadOnlySpan<char> digits = text.Slice(4);
         BarcodeSymbology.ValidateDigits(digits);
 
         int check = ComputeCheckDigit(digits[..13]);

@@ -58,9 +58,8 @@ public sealed class PlesseySymbology : BarcodeSymbology
     public bool PrintCheckCharacters { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, PlesseyEncoder.MaximumLength, nameof(text));
 
         int minimum = this.ValidateCheckCharacters ? PlesseyEncoder.CheckCharacterCount + 1 : 1;
@@ -69,7 +68,7 @@ public sealed class PlesseySymbology : BarcodeSymbology
             throw new ArgumentException($"Plessey carries at least one data character; got {text.Length} characters.", nameof(text));
         }
 
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
+        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
         while (codePoints.MoveNext())
         {
             CodePoint current = codePoints.Current;
@@ -79,13 +78,13 @@ public sealed class PlesseySymbology : BarcodeSymbology
             }
         }
 
-        ReadOnlySpan<char> data = this.ValidateCheckCharacters ? text.AsSpan(0, text.Length - PlesseyEncoder.CheckCharacterCount) : text;
+        ReadOnlySpan<char> data = this.ValidateCheckCharacters ? text.Slice(0, text.Length - PlesseyEncoder.CheckCharacterCount) : text;
         InlineArray2<char> checkStorage = default;
         Span<char> checks = checkStorage;
         PlesseyEncoder.CheckCharacters(data, checks);
-        if (this.ValidateCheckCharacters && !text.AsSpan(data.Length).SequenceEqual(checks))
+        if (this.ValidateCheckCharacters && !text.Slice(data.Length).SequenceEqual(checks))
         {
-            throw new ArgumentException($"Incorrect check characters: expected {checks}, got {text.AsSpan(data.Length)}.", nameof(text));
+            throw new ArgumentException($"Incorrect check characters: expected {checks}, got {text.Slice(data.Length)}.", nameof(text));
         }
 
         // The symbol carries the data and the two check characters, which a validated text already ends with. The interpretation prints the check characters

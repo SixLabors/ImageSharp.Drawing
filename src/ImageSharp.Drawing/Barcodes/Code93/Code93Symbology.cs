@@ -22,10 +22,8 @@ public sealed class Code93Symbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
-
         Code93Encoder.Validate(text);
 
         Code93Encoder.BuildSymbol(text, text, options, ref symbol);

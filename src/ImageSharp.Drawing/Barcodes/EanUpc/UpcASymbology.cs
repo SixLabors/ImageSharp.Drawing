@@ -32,10 +32,8 @@ public sealed class UpcASymbology : BarcodeSymbology
     private static ReadOnlySpan<int> GuardBars => [0, 1, 2, 3, 14, 15, 26, 27, 28, 29];
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
-
         InlineArray12<char> digitStorage = default;
         ReadOnlySpan<char> digits = EanUpcEncoder.ValidateAndApplyCheckDigit(text, 11, digitStorage);
 

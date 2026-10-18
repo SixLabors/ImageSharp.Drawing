@@ -53,9 +53,8 @@ public sealed class AztecCodeSymbology : BarcodeSymbology
     public int? Layers { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         AztecEncoder.BuildSymbol(
             text,
             this.Layers is null ? AztecFormat.Auto : AztecFormat.Full,

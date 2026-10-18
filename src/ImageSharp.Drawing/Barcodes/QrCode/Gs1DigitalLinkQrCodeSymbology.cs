@@ -58,10 +58,8 @@ public sealed class Gs1DigitalLinkQrCodeSymbology : BarcodeSymbology
     public int? Version { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
-
         // The URI encodes as plain data, so no URI longer than the largest symbol holds is parsed.
         Guard.MustBeLessThanOrEqualTo(text.Length, QrEncoder.MaximumLength, nameof(text));
         int version = this.Version ?? 0;

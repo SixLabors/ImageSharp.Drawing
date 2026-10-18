@@ -10,8 +10,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
 /// Layout contract tests for the barcode rendering layer. A caller sizes an image from the rectangle
-/// <see cref="DrawingCanvas.MeasureBarcode(BarcodeSymbology, BarcodeOptions, PointF, string)"/> returns, so everything the matching draw call renders must land
-/// inside that rectangle.
+/// <see cref="DrawingCanvas.MeasureBarcode(BarcodeSymbology, BarcodeOptions, PointF, ReadOnlySpan{char})"/> returns, so everything the matching draw call
+/// renders must land inside that rectangle.
 /// <para>
 /// Bar edges and text baselines round onto the device pixel grid. A fractional origin or a fractional module width therefore moves ink away from the unrounded
 /// layout position, by up to half a pixel in either direction. The golden tests all draw from a whole pixel origin, where rounding is the identity, so they

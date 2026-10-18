@@ -31,9 +31,8 @@ public sealed class SwissQrCodeSymbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, SwissQrBill.MaximumLength, nameof(text));
         SwissQrBill.Validate(text);
 

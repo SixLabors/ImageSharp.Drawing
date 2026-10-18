@@ -52,9 +52,8 @@ public sealed class AztecCodeCompactSymbology : BarcodeSymbology
     public int? Layers { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         AztecEncoder.BuildSymbol(
             text,
             AztecFormat.Compact,

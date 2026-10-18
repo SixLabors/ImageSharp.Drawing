@@ -11,9 +11,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 public sealed class JapanPostSymbology : BarcodeSymbology
 {
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         if (text.Length == 0)
         {
             throw new ArgumentException("The Japan Post barcode carries at least one character.", nameof(text));

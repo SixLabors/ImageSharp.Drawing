@@ -30,10 +30,8 @@ public sealed class Gs1128Symbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
-
         InlineArray64<char> bufferStorage = default;
         int capacity = Gs1Data.PreparedCapacity(text, MaximumDataCharacters);
         ValueStringBuilder encoded = capacity <= Gs1Data.InlineBufferLength ? new(bufferStorage) : new(capacity);

@@ -41,10 +41,8 @@ public sealed class Mailmark2DSymbology : BarcodeSymbology
     public Mailmark2DType Type { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
-
         if (text.Length < RoyalMailLength)
         {
             throw new ArgumentException(
@@ -52,7 +50,7 @@ public sealed class Mailmark2DSymbology : BarcodeSymbology
                 nameof(text));
         }
 
-        ReadOnlySpan<char> fields = text.AsSpan(0, RoyalMailLength);
+        ReadOnlySpan<char> fields = text.Slice(0, RoyalMailLength);
 
         // Section 2.1: every Royal Mail field uses the C40 basic set, the capital letters, the digits and space.
         for (int i = 0; i < fields.Length; i++)

@@ -59,9 +59,8 @@ public sealed class Code39Symbology : BarcodeSymbology
     public bool PrintCheckCharacter { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         Code39Encoder.Validate(text);
 
         // Validate mode reads the last character as the check character, so at least one data character comes before it.
@@ -70,7 +69,7 @@ public sealed class Code39Symbology : BarcodeSymbology
             throw new ArgumentException("A supplied check character follows at least one data character.", nameof(text));
         }
 
-        ReadOnlySpan<char> data = this.CheckCharacter == CheckCharacterMode.Validate ? text.AsSpan(0, text.Length - 1) : text;
+        ReadOnlySpan<char> data = this.CheckCharacter == CheckCharacterMode.Validate ? text.Slice(0, text.Length - 1) : text;
         char? check = this.CheckCharacter == CheckCharacterMode.None ? null : Code39Encoder.CheckCharacter(data);
         if (this.CheckCharacter == CheckCharacterMode.Validate && text[^1] != check)
         {

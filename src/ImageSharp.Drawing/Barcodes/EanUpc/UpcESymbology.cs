@@ -51,10 +51,8 @@ public sealed class UpcESymbology : BarcodeSymbology
     private static ReadOnlySpan<int> GuardBars => [0, 1, 14, 15, 16];
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
-
         if (text.Length is not (7 or 8))
         {
             throw new ArgumentException(
@@ -107,8 +105,8 @@ public sealed class UpcESymbology : BarcodeSymbology
         {
             float textLine = barHeight + BarcodeTextPlacement.Clearance;
             symbol.ReserveText(8, 8);
-            symbol.AddText(text.AsSpan(0, 1), -9F, -2F, BarcodeTextSide.BelowBars, textLine, EanUpcEncoder.QuietZoneDigitScale);
-            EanUpcEncoder.AddDigits(text.AsSpan(1, 6), 3F, 7F, BarcodeTextSide.BelowBars, textLine, ref symbol);
+            symbol.AddText(text.Slice(0, 1), -9F, -2F, BarcodeTextSide.BelowBars, textLine, EanUpcEncoder.QuietZoneDigitScale);
+            EanUpcEncoder.AddDigits(text.Slice(1, 6), 3F, 7F, BarcodeTextSide.BelowBars, textLine, ref symbol);
             symbol.AddText([(char)('0' + check)], 52F, 59F, BarcodeTextSide.BelowBars, textLine, EanUpcEncoder.QuietZoneDigitScale);
         }
 

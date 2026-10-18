@@ -82,13 +82,6 @@ public class IntelligentMailPackageSymbologyTests
         => Assert.Throws<ArgumentNullException>(() => new IntelligentMailPackageSymbology(null!));
 
     /// <summary>
-    /// Null text is a caller error.
-    /// </summary>
-    [Fact]
-    public void RejectsNullText()
-        => Assert.Throws<ArgumentNullException>(() => Encode(null!));
-
-    /// <summary>
     /// Empty text matches no construct.
     /// </summary>
     [Fact]

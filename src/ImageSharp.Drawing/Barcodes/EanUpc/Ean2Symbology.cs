@@ -21,10 +21,8 @@ public sealed class Ean2Symbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
-
         if (text.Length != 2)
         {
             throw new ArgumentException($"EAN-2 requires exactly 2 digits; got {text.Length} characters.", nameof(text));

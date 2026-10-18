@@ -80,10 +80,10 @@ internal static class JapanPostEncoder
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="codes">The buffer of <see cref="CodeCount"/> values that receives the codes, filled with CC4 after the data.</param>
-    public static void Codes(string text, Span<byte> codes)
+    public static void Codes(ReadOnlySpan<char> text, Span<byte> codes)
     {
         int count = 0;
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
+        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
         while (codePoints.MoveNext())
         {
             int value = codePoints.Current.Value;

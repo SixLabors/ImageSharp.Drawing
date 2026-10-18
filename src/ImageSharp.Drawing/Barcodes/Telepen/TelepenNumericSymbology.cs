@@ -14,9 +14,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 public sealed class TelepenNumericSymbology : BarcodeSymbology
 {
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, TelepenEncoder.MaximumLength, nameof(text));
 
@@ -31,7 +30,7 @@ public sealed class TelepenNumericSymbology : BarcodeSymbology
         ValueListBuilder<int> buffer = capacity <= TelepenEncoder.InlineBufferLength / 2 ? new(bufferStorage) : new(capacity);
         try
         {
-            SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
+            SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
             int index = 0;
             int first = 0;
             while (codePoints.MoveNext())

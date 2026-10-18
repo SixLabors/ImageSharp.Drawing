@@ -58,9 +58,8 @@ public sealed class CodabarSymbology : BarcodeSymbology
     public bool PrintCheckCharacter { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, CodabarEncoder.MaximumLength, nameof(text));
 
         // A start character, at least one data character, the check character when the caller supplies one, and a stop character.
@@ -71,7 +70,7 @@ public sealed class CodabarSymbology : BarcodeSymbology
                 $"Codabar carries a start character, at least one data character and a stop character; got {text.Length} characters.", nameof(text));
         }
 
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
+        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
         int index = 0;
         while (codePoints.MoveNext())
         {
@@ -93,11 +92,11 @@ public sealed class CodabarSymbology : BarcodeSymbology
         // The symbol carries the start character and the data, then the check character, then the stop character. A supplied check character stands before the
         // stop character in the text.
         char stop = text[^1];
-        ReadOnlySpan<char> head = text.AsSpan(0, text.Length - 1);
+        ReadOnlySpan<char> head = text.Slice(0, text.Length - 1);
         char? check = null;
         if (this.CheckCharacter == CheckCharacterMode.Validate)
         {
-            head = text.AsSpan(0, text.Length - 2);
+            head = text.Slice(0, text.Length - 2);
             check = CodabarEncoder.CheckCharacter(head, stop);
             if (text[^2] != check)
             {

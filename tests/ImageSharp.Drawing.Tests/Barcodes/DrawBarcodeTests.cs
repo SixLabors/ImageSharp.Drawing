@@ -9,9 +9,9 @@ using SixLabors.ImageSharp.Processing;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Golden image tests for <see cref="DrawingCanvas.DrawBarcode(BarcodeSymbology, BarcodeOptions, PointF, string)"/>. The encoder tests already pin the module
-/// sequences, so these tests cover the rendering layer: module scaling, quiet zones, guard bar extension, background painting, brushes and the human readable
-/// text.
+/// Golden image tests for <see cref="DrawingCanvas.DrawBarcode(BarcodeSymbology, BarcodeOptions, PointF, ReadOnlySpan{char})"/>. The encoder tests already
+/// pin the module sequences, so these tests cover the rendering layer: module scaling, quiet zones, guard bar extension, background painting, brushes and the
+/// human readable text.
 /// </summary>
 [GroupOutput("Barcodes")]
 public class DrawBarcodeTests

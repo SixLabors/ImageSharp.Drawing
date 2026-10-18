@@ -95,14 +95,13 @@ internal static class Code2Of5Encoder
     /// <param name="printCheckDigit"> Whether a check digit the symbol carries is part of the human readable interpretation. </param>
     /// <param name="symbol">The symbol to write.</param>
     public static void Encode(
-        string text,
+        ReadOnlySpan<char> text,
         BarcodeOptions options,
         Code2Of5Variant variant,
         CheckCharacterMode checkDigit,
         bool printCheckDigit,
         ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
 
@@ -114,7 +113,7 @@ internal static class Code2Of5Encoder
 
         BarcodeSymbology.ValidateDigits(text);
 
-        ReadOnlySpan<char> data = checkDigit == CheckCharacterMode.Validate ? text.AsSpan(0, text.Length - 1) : text;
+        ReadOnlySpan<char> data = checkDigit == CheckCharacterMode.Validate ? text.Slice(0, text.Length - 1) : text;
         int? check = checkDigit == CheckCharacterMode.None ? null : CheckDigit(data);
         if (checkDigit == CheckCharacterMode.Validate && text[^1] - '0' != check)
         {

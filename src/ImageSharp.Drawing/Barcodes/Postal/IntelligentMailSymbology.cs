@@ -15,9 +15,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 public sealed class IntelligentMailSymbology : BarcodeSymbology
 {
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         if (text.Length is not (20 or 25 or 29 or 31))
         {
             throw new ArgumentException(
@@ -49,24 +48,24 @@ public sealed class IntelligentMailSymbology : BarcodeSymbology
     /// <param name="text">The digits, already validated.</param>
     /// <param name="line">The buffer that receives the line.</param>
     /// <returns>The length of the line.</returns>
-    private static int HumanReadable(string text, Span<char> line)
+    private static int HumanReadable(ReadOnlySpan<char> text, Span<char> line)
     {
         int mailerIdLength = text[5] == '9' ? 9 : 6;
         ValueStringBuilder builder = new(line);
-        builder.Append(text.AsSpan(0, 2));
+        builder.Append(text.Slice(0, 2));
         builder.Append(' ');
-        builder.Append(text.AsSpan(2, 3));
+        builder.Append(text.Slice(2, 3));
         builder.Append(' ');
-        builder.Append(text.AsSpan(5, mailerIdLength));
+        builder.Append(text.Slice(5, mailerIdLength));
         builder.Append(' ');
-        builder.Append(text.AsSpan(5 + mailerIdLength, IntelligentMailEncoder.TrackingLength - 5 - mailerIdLength));
+        builder.Append(text.Slice(5 + mailerIdLength, IntelligentMailEncoder.TrackingLength - 5 - mailerIdLength));
 
         int position = IntelligentMailEncoder.TrackingLength;
         ReadOnlySpan<int> groups = [5, 4, 2];
         for (int i = 0; i < groups.Length && position < text.Length; i++)
         {
             builder.Append(' ');
-            builder.Append(text.AsSpan(position, groups[i]));
+            builder.Append(text.Slice(position, groups[i]));
             position += groups[i];
         }
 

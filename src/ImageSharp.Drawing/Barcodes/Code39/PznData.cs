@@ -54,9 +54,8 @@ internal static class PznData
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
     /// <exception cref="ArgumentException">The text is not a valid Pharmazentralnummer.</exception>
-    public static void BuildSymbol(string text, int digits, BarcodeOptions options, ref BarcodeSymbol symbol)
+    public static void BuildSymbol(ReadOnlySpan<char> text, int digits, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         Guard.MustBeBetweenOrEqualTo(text.Length, digits, digits + 1, nameof(text));
 
         BarcodeSymbology.ValidateDigits(text);
@@ -85,7 +84,7 @@ internal static class PznData
         InlineArray10<char> encodedStorage = default;
         Span<char> encoded = ((Span<char>)encodedStorage)[..(digits + 2)];
         encoded[0] = Identifier;
-        text.AsSpan(0, digits).CopyTo(encoded[1..]);
+        text.Slice(0, digits).CopyTo(encoded[1..]);
         encoded[^1] = (char)('0' + check);
 
         Code39Encoder.BuildSymbol(

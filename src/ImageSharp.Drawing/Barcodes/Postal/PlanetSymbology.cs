@@ -11,9 +11,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 public sealed class PlanetSymbology : BarcodeSymbology
 {
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         if (text.Length is not (11 or 13))
         {
             throw new ArgumentException($"PLANET carries 11 or 13 digits; got {text.Length} characters.", nameof(text));
@@ -24,7 +23,7 @@ public sealed class PlanetSymbology : BarcodeSymbology
         // At most thirteen digits and the correction digit.
         InlineArray14<char> digitStorage = default;
         Span<char> digits = ((Span<char>)digitStorage)[..(text.Length + 1)];
-        text.AsSpan().CopyTo(digits);
+        text.CopyTo(digits);
         digits[^1] = (char)('0' + UspsPostalEncoder.CorrectionDigit(text));
         UspsPostalEncoder.BuildSymbol(digits, text, options, false, ref symbol);
     }

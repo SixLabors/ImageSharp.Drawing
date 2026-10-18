@@ -17,10 +17,9 @@ public sealed class AztecRuneSymbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
-        if (text.Length is < 1 or > 3 || text.AsSpan().ContainsAnyExceptInRange('0', '9'))
+        if (text.Length is < 1 or > 3 || text.ContainsAnyExceptInRange('0', '9'))
         {
             throw new ArgumentException("An Aztec Rune carries a value of 0 to 255 in decimal digits.", nameof(text));
         }

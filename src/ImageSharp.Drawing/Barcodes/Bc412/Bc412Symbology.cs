@@ -36,10 +36,8 @@ public sealed class Bc412Symbology : BarcodeSymbology
     public bool ValidateCheckCharacter { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
-
         int supplied = this.ValidateCheckCharacter ? 1 : 0;
         int dataLength = text.Length - supplied;
         if (dataLength < Bc412Encoder.MinimumLength || dataLength > Bc412Encoder.MaximumLength)
@@ -49,7 +47,7 @@ public sealed class Bc412Symbology : BarcodeSymbology
                 nameof(text));
         }
 
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
+        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
         while (codePoints.MoveNext())
         {
             CodePoint current = codePoints.Current;
@@ -64,7 +62,7 @@ public sealed class Bc412Symbology : BarcodeSymbology
         InlineArray18<char> dataStorage = default;
         Span<char> data = dataStorage;
         data[0] = text[0];
-        text.AsSpan(1 + supplied).CopyTo(data[1..]);
+        text.Slice(1 + supplied).CopyTo(data[1..]);
         data = data[..dataLength];
 
         char check = Bc412Encoder.CheckCharacter(data);

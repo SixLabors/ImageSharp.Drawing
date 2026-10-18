@@ -17,10 +17,8 @@ public sealed class Code128Symbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
-
         Code128Encoder.BuildSymbol(text, false, [], text, [], options, ref symbol);
     }
 }

@@ -35,9 +35,8 @@ public sealed class ChannelCodeSymbology : BarcodeSymbology
     public bool ShortFinder { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         if (text.Length < ChannelCodeEncoder.MinimumLength || text.Length > ChannelCodeEncoder.MaximumLength)
         {
             throw new ArgumentException(

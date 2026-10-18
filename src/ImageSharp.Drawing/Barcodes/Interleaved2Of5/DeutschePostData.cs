@@ -48,9 +48,8 @@ internal static class DeutschePostData
     /// <param name="digits">The number of data digits the code carries, excluding the check digit.</param>
     /// <param name="encoded">The buffer the data digits and the check digit are written to, one longer than <paramref name="digits"/>.</param>
     /// <exception cref="ArgumentException">The text is not a valid Deutsche Post number.</exception>
-    public static void Prepare(string text, int digits, Span<char> encoded)
+    public static void Prepare(ReadOnlySpan<char> text, int digits, Span<char> encoded)
     {
-        Guard.NotNull(text, nameof(text));
         Guard.MustBeBetweenOrEqualTo(text.Length, digits, digits + 1, nameof(text));
 
         BarcodeSymbology.ValidateDigits(text);
@@ -67,7 +66,7 @@ internal static class DeutschePostData
             throw new ArgumentException($"Incorrect check digit: expected {check}, got {text[digits]}.", nameof(text));
         }
 
-        text.AsSpan(0, digits).CopyTo(encoded);
+        text.Slice(0, digits).CopyTo(encoded);
         encoded[digits] = (char)('0' + check);
     }
 }

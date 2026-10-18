@@ -17,7 +17,7 @@ public static class BarcodeMeasurer
     /// <param name="text">The text to encode.</param>
     /// <returns>The union of the symbol, including any quiet zones, and the human readable interpretation if the barcode was to be rendered.</returns>
     /// <exception cref="ArgumentException">The text is not valid for the symbology.</exception>
-    public static RectangleF MeasureRenderableBounds(BarcodeSymbology symbology, BarcodeOptions options, PointF origin, string text)
+    public static RectangleF MeasureRenderableBounds(BarcodeSymbology symbology, BarcodeOptions options, PointF origin, ReadOnlySpan<char> text)
     {
         Guard.NotNull(symbology, nameof(symbology));
         Guard.NotNull(options, nameof(options));

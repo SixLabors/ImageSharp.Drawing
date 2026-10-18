@@ -18,9 +18,8 @@ internal static class PharmacodeEncoder
     /// <param name="minimum">The smallest value the symbology carries.</param>
     /// <param name="maximum">The largest value the symbology carries.</param>
     /// <returns>The value.</returns>
-    public static int ParseValue(string text, int minimum, int maximum)
+    public static int ParseValue(ReadOnlySpan<char> text, int minimum, int maximum)
     {
-        Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
 
         int digits = 1;

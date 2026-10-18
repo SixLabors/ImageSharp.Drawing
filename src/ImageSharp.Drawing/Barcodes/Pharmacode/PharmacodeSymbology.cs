@@ -57,7 +57,7 @@ public sealed class PharmacodeSymbology : BarcodeSymbology
     private const float NominalBarHeight = 16F;
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         int value = PharmacodeEncoder.ParseValue(text, MinimumValue, MaximumValue);
 

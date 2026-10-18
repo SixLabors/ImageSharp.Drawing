@@ -26,17 +26,15 @@ public sealed class IssnSymbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
-
         ReadOnlySpan<char> issn = text;
         ReadOnlySpan<char> variant = "00";
         int space = text.IndexOf(' ');
         if (space >= 0)
         {
-            issn = text.AsSpan(0, space);
-            variant = text.AsSpan(space + 1);
+            issn = text.Slice(0, space);
+            variant = text.Slice(space + 1);
         }
 
         if (variant.Length != 2 || variant.ContainsAnyExceptInRange('0', '9'))

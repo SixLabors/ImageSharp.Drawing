@@ -59,10 +59,8 @@ public sealed class Gs1DotCodeSymbology : BarcodeSymbology
     public int? Rows { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
-
         // The message is an FNC1 and the prepared element strings, so it holds one less than the encoder's maximum.
         InlineArray64<char> bufferStorage = default;
         int capacity = Gs1Data.PreparedCapacity(text, DotCodeEncoder.MaximumLength - 1);

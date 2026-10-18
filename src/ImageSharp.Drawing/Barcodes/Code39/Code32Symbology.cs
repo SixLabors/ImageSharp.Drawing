@@ -60,9 +60,8 @@ public sealed class Code32Symbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         Guard.MustBeBetweenOrEqualTo(text.Length, Digits, Digits + 1, nameof(text));
 
         BarcodeSymbology.ValidateDigits(text);
@@ -96,7 +95,7 @@ public sealed class Code32Symbology : BarcodeSymbology
 
         InlineArray10<char> printedStorage = default;
         Span<char> printed = ((Span<char>)printedStorage)[..(Digits + 1)];
-        text.AsSpan(0, Digits).CopyTo(printed);
+        text.Slice(0, Digits).CopyTo(printed);
         printed[Digits] = (char)('0' + check);
 
         int number = 0;

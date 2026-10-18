@@ -54,6 +54,6 @@ public sealed class Iata2Of5Symbology : BarcodeSymbology
     public bool PrintCheckDigit { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
         => Code2Of5Encoder.Encode(text, options, Code2Of5Variant.Iata, this.CheckDigit, this.PrintCheckDigit, ref symbol);
 }

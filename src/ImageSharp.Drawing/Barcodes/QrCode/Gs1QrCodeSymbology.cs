@@ -61,10 +61,8 @@ public sealed class Gs1QrCodeSymbology : BarcodeSymbology
     public int? Version { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
-
         InlineArray64<char> bufferStorage = default;
         int capacity = Gs1Data.PreparedCapacity(text, QrEncoder.MaximumLength);
         ValueStringBuilder encoded = capacity <= Gs1Data.InlineBufferLength ? new(bufferStorage) : new(capacity);

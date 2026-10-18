@@ -31,9 +31,8 @@ public sealed class DaftSymbology : BarcodeSymbology
         0F);
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
 
@@ -46,7 +45,7 @@ public sealed class DaftSymbology : BarcodeSymbology
         try
         {
             int index = 0;
-            SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
+            SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
             while (codePoints.MoveNext())
             {
                 CodePoint current = codePoints.Current;

@@ -24,10 +24,8 @@ public sealed class IsmnSymbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
-
         // An ISMN is at most seventeen characters: thirteen digits and four hyphens. Longer text is rejected before any buffer, so the hyphenless form fits
         // eighteen inline characters.
         Guard.MustBeLessThanOrEqualTo(text.Length, 17, nameof(text));
@@ -60,7 +58,7 @@ public sealed class IsmnSymbology : BarcodeSymbology
             captionPrefix = "ISMN 979-0-";
 
             // Hyphens can stand before and after the M, so the digits start after the M and its hyphens.
-            captionBody = EanUpcEncoder.TakeHyphenatedPrefix(text.AsSpan(text.IndexOf('M') + 1).TrimStart('-'), 8);
+            captionBody = EanUpcEncoder.TakeHyphenatedPrefix(text.Slice(text.IndexOf('M') + 1).TrimStart('-'), 8);
         }
         else if (!mForm && body.Length is 12 or 13 && body.StartsWith("9790", StringComparison.Ordinal))
         {

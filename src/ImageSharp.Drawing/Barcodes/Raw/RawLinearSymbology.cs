@@ -23,9 +23,8 @@ public sealed class RawLinearSymbology : BarcodeSymbology
     private const float NominalBarHeightFraction = 0.15F;
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, MaximumLength, nameof(text));
 
@@ -35,7 +34,7 @@ public sealed class RawLinearSymbology : BarcodeSymbology
         Span<int> runs = symbol.BeginLinear(text.Length + (endsOnSpace ? 1 : 0), xDimension, out Span<float> heights, out _);
         int widthInModules = 0;
         int index = 0;
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
+        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
         while (codePoints.MoveNext())
         {
             CodePoint current = codePoints.Current;

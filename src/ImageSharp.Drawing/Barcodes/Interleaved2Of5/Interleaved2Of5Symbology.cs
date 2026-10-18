@@ -58,9 +58,8 @@ public sealed class Interleaved2Of5Symbology : BarcodeSymbology
     public bool PrintCheckDigit { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, Interleaved2Of5Encoder.MaximumLength, nameof(text));
 
@@ -72,7 +71,7 @@ public sealed class Interleaved2Of5Symbology : BarcodeSymbology
 
         BarcodeSymbology.ValidateDigits(text);
 
-        ReadOnlySpan<char> data = this.CheckDigit == CheckCharacterMode.Validate ? text.AsSpan(0, text.Length - 1) : text;
+        ReadOnlySpan<char> data = this.CheckDigit == CheckCharacterMode.Validate ? text.Slice(0, text.Length - 1) : text;
         int? check = this.CheckDigit == CheckCharacterMode.None ? null : Interleaved2Of5Encoder.CheckDigit(data);
         if (this.CheckDigit == CheckCharacterMode.Validate && text[^1] - '0' != check)
         {

@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 /// <summary>
 /// A barcode symbology: one machine readable encoding scheme. A symbology validates the input and applies the check character rules of its specification. It
 /// then encodes the input into a symbol. The canvas draws that symbol through
-/// <see cref="Processing.DrawingCanvas.DrawBarcode(BarcodeSymbology, BarcodeOptions, PointF, string)"/>.
+/// <see cref="Processing.DrawingCanvas.DrawBarcode(BarcodeSymbology, BarcodeOptions, PointF, ReadOnlySpan{char})"/>.
 /// </summary>
 public abstract class BarcodeSymbology
 {
@@ -32,7 +32,7 @@ public abstract class BarcodeSymbology
     /// <param name="options">The options that control layout choices made during encoding.</param>
     /// <param name="symbol">The symbol to write. It is empty on entry.</param>
     /// <exception cref="ArgumentException">The text is not valid for the symbology.</exception>
-    internal abstract void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol);
+    internal abstract void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol);
 
     /// <summary>
     /// Validates that the text is the ASCII digits 0 to 9 alone. The vectorized search finds the first other character, and only then is the code point there

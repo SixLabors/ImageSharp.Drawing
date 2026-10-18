@@ -42,9 +42,8 @@ public sealed class Itf14Symbology : BarcodeSymbology
     private const float BearerBarThickness = (float)(4.83 / XDimension);
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
 
         // The interpretation repeats the input, which may group the digits with spaces, so the input is bounded at one grouping space after each digit.
@@ -53,7 +52,7 @@ public sealed class Itf14Symbology : BarcodeSymbology
         Span<char> digits = digitStorage;
         int count = 0;
         bool hasSpaces = false;
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
+        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
         while (codePoints.MoveNext())
         {
             CodePoint current = codePoints.Current;

@@ -54,10 +54,8 @@ public sealed class Gs1NorthAmericanCouponSymbology : BarcodeSymbology
     public int Segments { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
-
         if (!text.StartsWith("(8110)", StringComparison.Ordinal))
         {
             throw new ArgumentException("A GS1 North American Coupon carries a single element string, Application Identifier (8110).", nameof(text));

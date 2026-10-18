@@ -59,13 +59,12 @@ public sealed class Code11Symbology : BarcodeSymbology
     public bool PrintCheckCharacters { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
         Guard.MustBeLessThanOrEqualTo(text.Length, Code11Encoder.MaximumLength, nameof(text));
 
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
+        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
         while (codePoints.MoveNext())
         {
             CodePoint current = codePoints.Current;
@@ -95,7 +94,7 @@ public sealed class Code11Symbology : BarcodeSymbology
                 throw new ArgumentException("Code 11 carries at least one data character before its check characters.", nameof(text));
             }
 
-            data = text.AsSpan(0, text.Length - checkCount);
+            data = text.Slice(0, text.Length - checkCount);
         }
         else if (this.CheckCharacters == CheckCharacterMode.Compute)
         {
@@ -111,9 +110,9 @@ public sealed class Code11Symbology : BarcodeSymbology
                 checks[1] = Code11Encoder.Characters[Code11Encoder.CheckK(data, checkC)];
             }
 
-            if (this.CheckCharacters == CheckCharacterMode.Validate && !text.AsSpan(data.Length).SequenceEqual(checks[..checkCount]))
+            if (this.CheckCharacters == CheckCharacterMode.Validate && !text.Slice(data.Length).SequenceEqual(checks[..checkCount]))
             {
-                throw new ArgumentException($"Incorrect check characters: expected {checks[..checkCount]}, got {text.AsSpan(data.Length)}.", nameof(text));
+                throw new ArgumentException($"Incorrect check characters: expected {checks[..checkCount]}, got {text.Slice(data.Length)}.", nameof(text));
             }
         }
 

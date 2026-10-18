@@ -22,7 +22,7 @@ public sealed class Gs1DataBarOmnidirectionalSymbology : BarcodeSymbology
     }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         InlineArray14<char> gtinStorage = default;
         Span<char> gtin = gtinStorage;

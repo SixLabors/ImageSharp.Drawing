@@ -12,9 +12,8 @@ namespace SixLabors.ImageSharp.Drawing.Barcodes;
 public sealed class PostnetSymbology : BarcodeSymbology
 {
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         if (text.Length is not (5 or 9 or 11))
         {
             throw new ArgumentException($"POSTNET carries 5, 9 or 11 digits; got {text.Length} characters.", nameof(text));
@@ -25,7 +24,7 @@ public sealed class PostnetSymbology : BarcodeSymbology
         // At most eleven digits and the correction digit.
         InlineArray12<char> digitStorage = default;
         Span<char> digits = ((Span<char>)digitStorage)[..(text.Length + 1)];
-        text.AsSpan().CopyTo(digits);
+        text.CopyTo(digits);
         digits[^1] = (char)('0' + UspsPostalEncoder.CorrectionDigit(text));
         UspsPostalEncoder.BuildSymbol(digits, text, options, true, ref symbol);
     }

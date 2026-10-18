@@ -91,9 +91,8 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
     public bool PrintCheckCharacter { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         Guard.MustBeGreaterThan(text.Length, 0, nameof(text));
 
         // Each character substitutes to one or two symbol characters, and the symbol carries at most Code39Encoder.MaximumLength of them, so longer text cannot
@@ -102,11 +101,11 @@ public sealed class Code39ExtendedSymbology : BarcodeSymbology
         Guard.MustBeLessThanOrEqualTo(text.Length, Code39Encoder.MaximumLength, nameof(text));
 
         // The message decodes the code point at the first unit outside ASCII, so a surrogate pair reports as the one character it is.
-        int invalid = text.AsSpan().IndexOfAnyExceptInRange('\0', '\u007F');
+        int invalid = text.IndexOfAnyExceptInRange('\0', '\u007F');
         if (invalid >= 0)
         {
             throw new ArgumentException(
-                $"Code 39 Extended encodes ASCII 0 to 127; {text.AsSpan().CodePointAt(invalid).ToDisplayString()} is outside that range.",
+                $"Code 39 Extended encodes ASCII 0 to 127; {text.CodePointAt(invalid).ToDisplayString()} is outside that range.",
                 nameof(text));
         }
 

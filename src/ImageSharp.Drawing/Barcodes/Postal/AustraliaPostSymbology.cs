@@ -34,9 +34,8 @@ public sealed class AustraliaPostSymbology : BarcodeSymbology
     public AustraliaPostEncodingTable CustomerInformationTable { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         AustraliaPostEncoder.Encode(text, this.CustomerInformationTable, options, ref symbol);
     }
 }

@@ -97,7 +97,7 @@ internal static class AustraliaPostEncoder
     /// <param name="table">The encoding table of the customer information.</param>
     /// <param name="options">The options that control layout choices.</param>
     /// <param name="symbol">The symbol to write.</param>
-    public static void Encode(string text, AustraliaPostEncodingTable table, BarcodeOptions options, ref BarcodeSymbol symbol)
+    public static void Encode(ReadOnlySpan<char> text, AustraliaPostEncodingTable table, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
         if (text.Length < FixedDigits)
         {
@@ -106,21 +106,21 @@ internal static class AustraliaPostEncoder
                 nameof(text));
         }
 
-        ReadOnlySpan<char> formatControlCode = text.AsSpan(0, 2);
+        ReadOnlySpan<char> formatControlCode = text.Slice(0, 2);
         int barCount = BarCount(formatControlCode);
         if (barCount == 0)
         {
             throw new ArgumentException($"The format control code is 00, 11, 45, 59, 62, 87 or 92; got {text[..2]}.", nameof(text));
         }
 
-        ReadOnlySpan<char> sortingCode = text.AsSpan(2, 8);
+        ReadOnlySpan<char> sortingCode = text.Slice(2, 8);
         BarcodeSymbology.ValidateDigits(sortingCode);
         if (formatControlCode is "00" && sortingCode is not "00000000")
         {
-            throw new ArgumentException($"The Null Customer Barcode is only valid with the sorting code 00000000; got {text.Substring(2, 8)}.", nameof(text));
+            throw new ArgumentException($"The Null Customer Barcode is only valid with the sorting code 00000000; got {text.Slice(2, 8)}.", nameof(text));
         }
 
-        ReadOnlySpan<char> customer = text.AsSpan(FixedDigits);
+        ReadOnlySpan<char> customer = text.Slice(FixedDigits);
         int barsPerCharacter = table == AustraliaPostEncodingTable.Numeric ? 2 : 3;
         int customerBars = barCount - CustomerFieldStart - TrailingBars;
         if (customer.Length * barsPerCharacter > customerBars)
@@ -136,7 +136,7 @@ internal static class AustraliaPostEncoder
         values[0] = 1;
         values[1] = 3;
         int bar = 2;
-        foreach (char digit in text.AsSpan(0, FixedDigits))
+        foreach (char digit in text.Slice(0, FixedDigits))
         {
             bar = AppendNumeric(digit, values, bar);
         }
@@ -246,16 +246,16 @@ internal static class AustraliaPostEncoder
     /// <param name="parity">The parity symbols.</param>
     /// <param name="line">The buffer that receives the text representation.</param>
     /// <returns>The length of the text representation.</returns>
-    private static int TextRepresentation(string text, ReadOnlySpan<int> parity, Span<char> line)
+    private static int TextRepresentation(ReadOnlySpan<char> text, ReadOnlySpan<int> parity, Span<char> line)
     {
         ValueStringBuilder builder = new(line);
-        builder.Append(text.AsSpan(0, 2));
+        builder.Append(text.Slice(0, 2));
         builder.Append(' ');
-        builder.Append(text.AsSpan(2, 8));
+        builder.Append(text.Slice(2, 8));
         if (text.Length > FixedDigits)
         {
             builder.Append(' ');
-            builder.Append(text.AsSpan(FixedDigits));
+            builder.Append(text.Slice(FixedDigits));
         }
 
         foreach (int value in parity)

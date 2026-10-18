@@ -60,10 +60,8 @@ public sealed class D3AqrSymbology : BarcodeSymbology
     public D3AqrHostRatio HostRatio { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
-
         // A cell is half a D3 module. Half a D3 module is 1 cell and a host module 1 cell at a ratio of 2, 5 and 4 cells at 2.5, and 3 and 2 cells at 3, so
         // both fall on whole cells.
         (int half, int hostCellSize) = this.HostRatio switch

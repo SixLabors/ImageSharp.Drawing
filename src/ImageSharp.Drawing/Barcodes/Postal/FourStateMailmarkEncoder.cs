@@ -144,7 +144,7 @@ internal static class FourStateMailmarkEncoder
     /// </summary>
     /// <param name="text">The application string, of 22 or 26 characters.</param>
     /// <param name="states">The buffer that receives the bar states.</param>
-    public static void Encode(string text, Span<FourState> states)
+    public static void Encode(ReadOnlySpan<char> text, Span<FourState> states)
     {
         bool isL = text.Length == LengthL;
         const int itemIdLength = 8;
@@ -198,9 +198,9 @@ internal static class FourStateMailmarkEncoder
     /// <param name="start">The index of the nine characters of the field in <paramref name="text"/>.</param>
     /// <returns>The internal user field value.</returns>
     /// <exception cref="ArgumentException">The field is neither the international designation nor a domestic sorting code.</exception>
-    public static ulong DestinationValue(string text, int start)
+    public static ulong DestinationValue(ReadOnlySpan<char> text, int start)
     {
-        ReadOnlySpan<char> field = text.AsSpan(start, DestinationLength);
+        ReadOnlySpan<char> field = text.Slice(start, DestinationLength);
         if (field.SequenceEqual(International))
         {
             return 0;
@@ -323,7 +323,7 @@ internal static class FourStateMailmarkEncoder
     /// <param name="fieldName">The name of the field in the error message.</param>
     /// <returns>The internal user field value.</returns>
     /// <exception cref="ArgumentException">The field has a character that is not allowed.</exception>
-    private static int FieldValue(string text, int start, int length, string allowed, string fieldName)
+    private static int FieldValue(ReadOnlySpan<char> text, int start, int length, string allowed, string fieldName)
     {
         int value = 0;
         for (int i = start; i < start + length; i++)

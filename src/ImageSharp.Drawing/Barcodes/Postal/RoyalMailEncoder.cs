@@ -60,9 +60,9 @@ internal static class RoyalMailEncoder
     /// Validates that the text is capital letters and digits alone.
     /// </summary>
     /// <param name="text">The text to validate.</param>
-    public static void Validate(string text)
+    public static void Validate(ReadOnlySpan<char> text)
     {
-        SpanCodePointEnumerator codePoints = text.AsSpan().EnumerateCodePoints();
+        SpanCodePointEnumerator codePoints = text.EnumerateCodePoints();
         while (codePoints.MoveNext())
         {
             CodePoint current = codePoints.Current;

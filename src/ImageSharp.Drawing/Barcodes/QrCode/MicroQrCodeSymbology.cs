@@ -60,9 +60,8 @@ public sealed class MicroQrCodeSymbology : BarcodeSymbology
     public int? Version { get; }
 
     /// <inheritdoc/>
-    internal override void Encode(string text, BarcodeOptions options, ref BarcodeSymbol symbol)
+    internal override void Encode(ReadOnlySpan<char> text, BarcodeOptions options, ref BarcodeSymbol symbol)
     {
-        Guard.NotNull(text, nameof(text));
         QrEncoder.BuildSymbol(text, false, QrFormat.Micro, this.ErrorCorrectionLevel, this.Version ?? 0, options.XDimension ?? PointXDimension, ref symbol);
     }
 }
