@@ -534,14 +534,14 @@ public class BarcodeDecodeTests
         // The image holds the symbol and a margin on every side, measured rather than assumed, so a symbology whose symbol is wider than the next is not
         // silently clipped.
         PointF origin = new(20, 20);
-        RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, text, options, origin);
+        RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, options, origin, text);
 
         using Image<Rgba32> image = new(
             (int)MathF.Ceiling(bounds.Right) + 20,
             (int)MathF.Ceiling(bounds.Bottom) + 20,
             Color.White.ToPixel<Rgba32>());
 
-        image.Mutate(x => x.Paint(canvas => canvas.DrawBarcode(symbology, text, options, origin)));
+        image.Mutate(x => x.Paint(canvas => canvas.DrawBarcode(symbology, options, origin, text)));
 
         byte[] pixels = new byte[image.Width * image.Height * 4];
         image.CopyPixelDataTo(pixels);

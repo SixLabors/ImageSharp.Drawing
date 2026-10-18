@@ -10,7 +10,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
 /// Layout contract tests for the barcode rendering layer. A caller sizes an image from the rectangle
-/// <see cref="DrawingCanvas.MeasureBarcode(BarcodeSymbology, string, BarcodeOptions, PointF)"/> returns, so everything the matching draw call renders must land
+/// <see cref="DrawingCanvas.MeasureBarcode(BarcodeSymbology, BarcodeOptions, PointF, string)"/> returns, so everything the matching draw call renders must land
 /// inside that rectangle.
 /// <para>
 /// Bar edges and text baselines round onto the device pixel grid. A fractional origin or a fractional module width therefore moves ink away from the unrounded
@@ -145,7 +145,7 @@ public class BarcodeLayoutTests
     {
         BarcodeOptions options = CreateTextOptions(moduleWidth);
         PointF origin = new(Margin + fraction, Margin + fraction);
-        RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(new Itf14Symbology(), "15400141288763", options, origin);
+        RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(new Itf14Symbology(), options, origin, "15400141288763");
         Rectangle drawn = AssertEverythingDrawnStaysInsideBounds(provider, new Itf14Symbology(), "15400141288763", options, fraction, moduleWidth);
 
         Assert.Equal((int)bounds.Left, drawn.Left);
@@ -175,7 +175,7 @@ public class BarcodeLayoutTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         PointF origin = new(Margin + fraction, Margin + fraction);
-        RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, text, options, origin);
+        RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, options, origin, text);
         using Image<TPixel> image = provider.GetImage();
 
         // The image stays transparent so that every pixel the draw call touches is rendered content: the background fill, the bars and the human readable
@@ -183,7 +183,7 @@ public class BarcodeLayoutTests
         image.Mutate(x =>
         {
             x.Resize(new Size((int)MathF.Ceiling(bounds.Right) + Margin, (int)MathF.Ceiling(bounds.Bottom) + Margin));
-            x.Paint(canvas => canvas.DrawBarcode(symbology, text, options, origin));
+            x.Paint(canvas => canvas.DrawBarcode(symbology, options, origin, text));
         });
 
         image.DebugSave(

@@ -968,16 +968,16 @@ public class DataMatrixSymbologyTests
 
         const string gs1 = "(01)03453120000011(17)191125(10)ABCD1234";
         Assert.Equal(
-            BarcodeMeasurer.MeasureRenderableBounds(new Gs1DataMatrixSymbology(), gs1, minimum, PointF.Empty),
-            BarcodeMeasurer.MeasureRenderableBounds(new Gs1DataMatrixSymbology(), gs1, small, PointF.Empty));
+            BarcodeMeasurer.MeasureRenderableBounds(new Gs1DataMatrixSymbology(), minimum, PointF.Empty, gs1),
+            BarcodeMeasurer.MeasureRenderableBounds(new Gs1DataMatrixSymbology(), small, PointF.Empty, gs1));
 
         Assert.Equal(
-            BarcodeMeasurer.MeasureRenderableBounds(new Gs1DigitalLinkDataMatrixSymbology(), "https://id.gs1.org/01/09521234543213", minimum, PointF.Empty),
-            BarcodeMeasurer.MeasureRenderableBounds(new Gs1DigitalLinkDataMatrixSymbology(), "https://id.gs1.org/01/09521234543213", small, PointF.Empty));
+            BarcodeMeasurer.MeasureRenderableBounds(new Gs1DigitalLinkDataMatrixSymbology(), minimum, PointF.Empty, "https://id.gs1.org/01/09521234543213"),
+            BarcodeMeasurer.MeasureRenderableBounds(new Gs1DigitalLinkDataMatrixSymbology(), small, PointF.Empty, "https://id.gs1.org/01/09521234543213"));
 
         Assert.NotEqual(
-            BarcodeMeasurer.MeasureRenderableBounds(new HibcDataMatrixSymbology(), "A123BJC5D6E71", minimum, PointF.Empty),
-            BarcodeMeasurer.MeasureRenderableBounds(new HibcDataMatrixSymbology(), "A123BJC5D6E71", small, PointF.Empty));
+            BarcodeMeasurer.MeasureRenderableBounds(new HibcDataMatrixSymbology(), minimum, PointF.Empty, "A123BJC5D6E71"),
+            BarcodeMeasurer.MeasureRenderableBounds(new HibcDataMatrixSymbology(), small, PointF.Empty, "A123BJC5D6E71"));
     }
 
     /// <summary>

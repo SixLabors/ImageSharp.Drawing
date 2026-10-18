@@ -42,5 +42,5 @@ public class EncodeDataMatrix
     /// </summary>
     /// <returns>The renderable bounds.</returns>
     [Benchmark]
-    public RectangleF Encode() => BarcodeMeasurer.MeasureRenderableBounds(this.symbology, this.Text, this.options, PointF.Empty);
+    public RectangleF Encode() => BarcodeMeasurer.MeasureRenderableBounds(this.symbology, this.options, PointF.Empty, this.Text);
 }

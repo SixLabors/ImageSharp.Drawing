@@ -232,11 +232,11 @@ public abstract partial class DrawingCanvas
     /// regular fill and text commands of this canvas.
     /// </summary>
     /// <param name="symbology">The barcode symbology to encode with.</param>
-    /// <param name="text">The text to encode.</param>
     /// <param name="options">The sizing and painting options.</param>
     /// <param name="origin">The top left corner of everything the call draws, including any text that overhangs the symbol, in pixels.</param>
+    /// <param name="text">The text to encode.</param>
     /// <exception cref="ArgumentException">The text is not valid for the symbology.</exception>
-    public void DrawBarcode(BarcodeSymbology symbology, string text, BarcodeOptions options, PointF origin)
+    public void DrawBarcode(BarcodeSymbology symbology, BarcodeOptions options, PointF origin, string text)
     {
         Guard.NotNull(symbology, nameof(symbology));
         Guard.NotNull(options, nameof(options));
@@ -270,13 +270,13 @@ public abstract partial class DrawingCanvas
     /// Measures the full renderable bounds of a barcode in pixel units.
     /// </summary>
     /// <param name="symbology">The barcode symbology to encode with.</param>
-    /// <param name="text">The text to encode.</param>
     /// <param name="options">The sizing and painting options.</param>
     /// <param name="origin">The top left corner the barcode would draw from, in pixels.</param>
+    /// <param name="text">The text to encode.</param>
     /// <returns>
     /// The union of the symbol, including any quiet zones, and the human readable interpretation if the
     /// barcode was to be rendered.
     /// </returns>
     /// <exception cref="ArgumentException">The text is not valid for the symbology.</exception>
-    public abstract RectangleF MeasureBarcode(BarcodeSymbology symbology, string text, BarcodeOptions options, PointF origin);
+    public abstract RectangleF MeasureBarcode(BarcodeSymbology symbology, BarcodeOptions options, PointF origin, string text);
 }

@@ -667,7 +667,7 @@ public class SwissQrCodeSymbologyTests
     public void Is46MillimetresWide(string example)
     {
         BarcodeOptions options = new() { Dpi = 254F, IncludeQuietZones = false };
-        RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(new SwissQrCodeSymbology(), Payload(example, "\n"), options, PointF.Empty);
+        RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(new SwissQrCodeSymbology(), options, PointF.Empty, Payload(example, "\n"));
         Assert.Equal(new SizeF(460F, 460F), bounds.Size);
     }
 

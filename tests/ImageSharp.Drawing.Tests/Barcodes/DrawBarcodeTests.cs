@@ -9,7 +9,7 @@ using SixLabors.ImageSharp.Processing;
 namespace SixLabors.ImageSharp.Drawing.Tests.Barcodes;
 
 /// <summary>
-/// Golden image tests for <see cref="DrawingCanvas.DrawBarcode(BarcodeSymbology, string, BarcodeOptions, PointF)"/>. The encoder tests already pin the module
+/// Golden image tests for <see cref="DrawingCanvas.DrawBarcode(BarcodeSymbology, BarcodeOptions, PointF, string)"/>. The encoder tests already pin the module
 /// sequences, so these tests cover the rendering layer: module scaling, quiet zones, guard bar extension, background painting, brushes and the human readable
 /// text.
 /// </summary>
@@ -1122,9 +1122,9 @@ public class DrawBarcodeTests
             {
                 // The image is the symbol, with no slack around it. The provider hands over a one pixel canvas, the measurer reports the area the symbol needs,
                 // and the canvas grows to it. Slack would hide a symbol that grew, and a shortfall would clip one.
-                RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, text, options, PointF.Empty);
+                RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, options, PointF.Empty, text);
                 x.Resize(new Size((int)MathF.Ceiling(bounds.Width), (int)MathF.Ceiling(bounds.Height)));
-                x.Paint(canvas => canvas.DrawBarcode(symbology, text, options, PointF.Empty));
+                x.Paint(canvas => canvas.DrawBarcode(symbology, options, PointF.Empty, text));
             },
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);

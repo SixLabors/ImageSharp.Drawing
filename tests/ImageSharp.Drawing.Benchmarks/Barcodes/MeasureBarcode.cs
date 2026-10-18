@@ -40,5 +40,5 @@ public class MeasureBarcode
     /// </summary>
     /// <returns>The renderable bounds.</returns>
     [Benchmark]
-    public RectangleF Measure() => BarcodeMeasurer.MeasureRenderableBounds(this.symbology, this.text, this.options, PointF.Empty);
+    public RectangleF Measure() => BarcodeMeasurer.MeasureRenderableBounds(this.symbology, this.options, PointF.Empty, this.text);
 }

@@ -156,10 +156,10 @@ public class IntelligentMailPackageSymbologyTests
         BarcodeOptions options = new() { Dpi = 300F, Font = BarcodeFonts.OcrB.CreateFont(points) };
         IntelligentMailPackageSymbology symbology = new("USPS TRACKING #");
         const string text = "(420)123456789(92)12391234567812345670";
-        RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, text, options, PointF.Empty);
+        RectangleF bounds = BarcodeMeasurer.MeasureRenderableBounds(symbology, options, PointF.Empty, text);
 
         using Image<L8> image = new((int)MathF.Ceiling(bounds.Right), (int)MathF.Ceiling(bounds.Bottom), new L8(255));
-        image.Mutate(x => x.Paint(canvas => canvas.DrawBarcode(symbology, text, options, PointF.Empty)));
+        image.Mutate(x => x.Paint(canvas => canvas.DrawBarcode(symbology, options, PointF.Empty, text)));
 
         // A row is dark when any pixel in it is dark. The dark rows form bands from the top down: the upper identification bar, the banner, the bars, the PIC
         // and the lower identification bar.
