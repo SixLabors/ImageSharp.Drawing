@@ -175,9 +175,9 @@ internal static class Gs1Data
     }
 
     /// <summary>
-    /// Parses the element string syntax the standard prints, an Application Identifier in parentheses followed by its data, repeated, validates each element
-    /// string and the pairs they form, and writes the data a symbol carries. The symbol does not carry the parentheses; section 4.14 rule 2c requires them in
-    /// the human readable interpretation alone.
+    /// Parses the element string syntax the standard prints, an Application Identifier in parentheses followed by its data, repeated, validates the element
+    /// strings as one whole symbol with <see cref="ValidateSymbol"/>, and writes the data a symbol carries. The symbol does not carry the parentheses;
+    /// section 4.14 rule 2c requires them in the human readable interpretation alone.
     /// </summary>
     /// <param name="text">The element strings to parse.</param>
     /// <param name="encoded"> The builder the encoded data is written to: each Application Identifier and its data in turn, with a <see cref="Separator"/>
@@ -567,7 +567,7 @@ internal static class Gs1Data
         for (int i = 0; i < elements.Length; i++)
         {
             ReadOnlySpan<char> identifier = elements[i].Identifier(buffer);
-            if (identifier.Length != pattern.Length || identifier.SequenceEqual(ignore))
+            if (identifier.Length != pattern.Length || (!ignore.IsEmpty && identifier.SequenceEqual(ignore)))
             {
                 continue;
             }

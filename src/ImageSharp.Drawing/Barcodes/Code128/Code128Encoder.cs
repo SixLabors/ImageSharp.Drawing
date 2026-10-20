@@ -135,9 +135,10 @@ internal static class Code128Encoder
     private const int StopModules = 13;
 
     /// <summary>
-    /// The character count the inline buffers are sized for: 128 values, two for each ASCII character or three for each character above 127, and 256
-    /// look-ahead bytes, four for each character. The values also hold five characters that are not text, so ASCII text of at most 61 characters encodes
-    /// inline. Section 5.4.4.3 caps a GS1-128 symbol at 48 data characters of ASCII, so every conforming GS1-128 symbol encodes inline.
+    /// The character count the inline buffers are sized for: 128 values, two for each character of ASCII text or three for each character of text that has a
+    /// character above 127, and 256 look-ahead bytes, four for each character. The values also hold five characters that are not text, so ASCII text of at
+    /// most 61 characters encodes inline. Section 5.4.4.3 caps a GS1-128 symbol at 48 data characters of ASCII, so every conforming GS1-128 symbol encodes
+    /// inline.
     /// </summary>
     private const int InlineLength = 64;
 

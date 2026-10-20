@@ -52,22 +52,22 @@ public class Code128SymbologyTests
     /// </summary>
     [Fact]
     public void Code128_RejectsCharactersAboveLatin1()
-        => Assert.Throws<ArgumentException>(() => Encode("\u0100"));
+        => Assert.Throws<ArgumentException>(() => Encode("Ā"));
 
     /// <summary>
     /// Note 3 of Annex E of ISO/IEC 15417 encodes a run of one to four characters above 127, or one to two at the end of the data, with a single FNC4 before
-    /// each character. A longer run takes two FNC4 characters before it and, when data follows, two after it. Each of \u00e9, \u00e0 and A is in code set B, so no code
+    /// each character. A longer run takes two FNC4 characters before it and, when data follows, two after it. Each of é, à and A is in code set B, so no code
     /// set change or Shift adds to the count. Clause 4.4.3 gives the width as 11(C + 2) + 2 modules, where C counts the symbol characters with the check
     /// character.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <param name="symbolCharacters">The symbol characters C, with the check character.</param>
     [Theory]
-    [InlineData("\u00e9", 1 + 1 + 1)]
-    [InlineData("\u00e9\u00e0", 2 + 2 + 1)]
-    [InlineData("\u00e9\u00e0\u00e9", 2 + 3 + 1)]
-    [InlineData("\u00e9\u00e0\u00e9\u00e0A", 4 + 4 + 1 + 1)]
-    [InlineData("\u00e9\u00e0\u00e9\u00e0\u00e9A", 2 + 5 + 2 + 1 + 1)]
+    [InlineData("é", 1 + 1 + 1)]
+    [InlineData("éà", 2 + 2 + 1)]
+    [InlineData("éàé", 2 + 3 + 1)]
+    [InlineData("éàéàA", 4 + 4 + 1 + 1)]
+    [InlineData("éàéàéA", 2 + 5 + 2 + 1 + 1)]
     public void Code128_EncodesCharactersAbove127WithFnc4(string text, int symbolCharacters)
         => Encode(text, (ref symbol) => Assert.Equal((11 * (symbolCharacters + 2)) + 2, symbol.WidthInModules));
 

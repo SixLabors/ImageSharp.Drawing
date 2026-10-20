@@ -57,7 +57,7 @@ public class MicroPdf417SymbologyTests
     /// </summary>
     [Fact]
     public void MicroPdf417_RejectsCharactersAboveTheByteRange()
-        => Assert.Throws<ArgumentException>(() => Encode(new MicroPdf417Symbology(), "Micro\u0100"));
+        => Assert.Throws<ArgumentException>(() => Encode(new MicroPdf417Symbology(), "MicroĀ"));
 
     /// <summary>
     /// The constructor rejects a column count outside 1 to 4.

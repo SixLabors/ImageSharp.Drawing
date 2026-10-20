@@ -220,7 +220,7 @@ public class Pdf417SymbologyTests
     /// </summary>
     [Fact]
     public void Pdf417_RejectsCharactersAboveTheByteRange()
-        => Assert.Throws<ArgumentException>(() => Encode(new Pdf417Symbology(), "PDF\u0100"));
+        => Assert.Throws<ArgumentException>(() => Encode(new Pdf417Symbology(), "PDFĀ"));
 
     /// <summary>
     /// Empty data throws.
@@ -241,7 +241,8 @@ public class Pdf417SymbologyTests
     /// Compaction characters, 1 108 Byte Compaction characters or 2 710 Numeric Compaction characters. A symbology that chooses its own columns and level
     /// encodes each maximum.
     /// </summary>
-    /// <param name="character">The character the data repeats: an upper case letter for Text Compaction, é for Byte Compaction, or the digits.</param>
+    /// <param name="character">The character the data repeats: an upper case letter for Text Compaction, é for Byte Compaction, or the digit 0 for Numeric
+    /// Compaction.</param>
     /// <param name="length">The number of characters.</param>
     [Theory]
     [InlineData('A', 1850)]

@@ -729,7 +729,7 @@ internal static class QrEncoder
                     int pending = -1;
                     foreach (int value in data)
                     {
-                        int alphanumeric = AlphanumericValue(value < 0 ? '%' : value);
+                        int alphanumeric = AlphanumericValue(value is Fnc1 or DataPercent ? '%' : value);
                         for (int repeat = value == DataPercent ? 2 : 1; repeat > 0; repeat--)
                         {
                             if (pending < 0)
@@ -1752,6 +1752,9 @@ internal static class QrEncoder
             {
                 int value = message[i];
                 bool digit = value is >= '0' and <= '9';
+
+                // A % of the data counts as one Alphanumeric character here, although Alphanumeric mode writes it as %%. The run lengths only choose the
+                // segments, and BitLength counts each segment exactly.
                 bool alpha = value is Fnc1 or DataPercent || AlphanumericValue(value) >= 10;
 
                 numeric[i] = digit ? numeric[i + 1] + 1 : 0;
